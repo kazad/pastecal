@@ -17,6 +17,7 @@ Firebase integration - get firebase project
 
 Coding features:
 * Hook up firebase
+* Have events handle all-day
 * Use Vue to manage state and URLs
 * Make a single page app on firebase hosting
 * Have functions to export cal for google calendar etc
@@ -81,8 +82,32 @@ tailwindcss
 
 <body>
     <h1>WebCal</h1>
-    <p> WebCal lets you create a shared, editable calendar with a secret URL. No logins, no sigups, click and edit.</p>
-    <p>"Pastebin for calendars"</p>
+    <p> Make a shared, editable calendar with one 1 click. No signup needed.</p>
+    <input type="readonly" value="webcal.com/cal/" />
+    <!--    <input type="text" value="Title" />
+    <pre contenteditable="true">
+      Event Name
+      Event Date and Time
+      Location / URL 
+      Notes
+    </pre>
+-->
+
+    <a href="javascript:Utils.clearEvents(); Utils.render(); return false;">clear</a>
+    <div id="calendar" style="width: 95%; height: 600px; border: 1px solid #ccc;">
+
+    </div>
+
+    <script>
+        var calendar = new tui.Calendar('#calendar', {
+            defaultView: 'week',
+            taskView: false,
+            useCreationPopup: true,
+            useDetailPopup: true,
+        });
+    </script>
+    <div></div>
+    <br />
     <p>
         Features:
     <ul>
@@ -93,30 +118,6 @@ tailwindcss
         <li>No-login to embed your calendar in any page</li>
     </ul>
     </p>
-
-    <input type="readonly" value="webcal.com/cal/abcd12https://nhn.github.io/tui.calendar3" />
-    <input type="text" value="Title" />
-    <pre contenteditable="true">
-      Event Name
-      Event Date and Time
-      Location / URL 
-      Notes
-    </pre>
-
-    <a href="javascript:Utils.clearEvents(); Utils.render(); return false;">clear</a>
-    <div id="calendar" style="width: 95%; height: 600px; border: 1px solid #ccc;">
-
-    </div>
-
-    <script>
-        var calendar = new tui.Calendar('#calendar', {
-            defaultView: 'week',
-            useCreationPopup: true,
-            useDetailPopup: true,
-        });
-    </script>
-    <div></div>
-    <br />
     <p> Now you can write your simple static site with nice semantic html, and Water.css will manage the styling for
         you. </p>
     <div class="row">
