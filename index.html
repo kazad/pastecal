@@ -3,26 +3,42 @@
 <!-- TODO
 
 Other cals: https://demo.mobiscroll.com/javascript/eventcalendar#
+ * Can load from google calendar
 https://fullcalendar.io/docs/initialize-globals
 pastecal - pastebin for calendars
+Other themes: https://igoradamenko.github.io/awsm.css/download.html 
+
+Tell Joey if we make the website: https://github.com/joereynolds/what-to-code#websites
 
 Features: 
 Firebase integration - get firebase project
 * embed calc 
+* hashtags to tag calendar
+
+Coding features:
+* Hook up firebase
+* Use Vue to manage state and URLs
+* Make a single page app on firebase hosting
+* Have functions to export cal for google calendar etc
 
 pastecal.com
 calpaste.com
 
+UI: https://daisyui.com/
+tailwindcss
 -->
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title>HTML 5 Boilerplate</title>
+    <title>PasteCal</title>
     <link rel="stylesheet" href="style.css">
+    <!--
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css">
-
+-->
+    <!-- CDN Development (always latest) -->
+    <link rel="stylesheet" href="https://unpkg.com/style.css">
     <!-- calendar TUI -->
     <link rel="stylesheet" type="text/css" href="https://uicdn.toast.com/tui-calendar/latest/tui-calendar.css" />
 
@@ -60,7 +76,8 @@ calpaste.com
       Notes
     </pre>
 
-    <div id="calendar" style="width: 95%; height: 500px; border: 1px solid #ccc;">
+    <a href="javascript:Utils.clearEvents(); Utils.render(); return false;">clear</a>
+    <div id="calendar" style="width: 95%; height: 600px; border: 1px solid #ccc;">
 
     </div>
 
@@ -71,7 +88,8 @@ calpaste.com
             useDetailPopup: true,
         });
     </script>
-
+    <div></div>
+    <br />
     <p> Now you can write your simple static site with nice semantic html, and Water.css will manage the styling for
         you. </p>
     <div class="row">
@@ -253,6 +271,7 @@ calpaste.com
     <h6>Heading 6</h6>
     <footer> <a href="#">Back to top ⬆</a> </footer>
 
+    <script src="index.js"></script>
 </body>
 
 </html>
