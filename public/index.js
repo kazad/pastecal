@@ -75,10 +75,13 @@ Utils.updateEvent = function (e) {
   console.log("update event", e);
 
   // need better way to turn items from ScheduleEvent to a JSON object
-  e.id = e.schedule.id;
-  e.title = e.schedule.title;
-  e.start = e.schedule.start;
-  e.end = e.schedule.end;
+  e = { ...e.schedule, ...e.changes };
+  e.id = e.id ?? e.schedule.id;
+  //e.title = e.schedule.title;
+  // e.start = e.schedule.start;
+  // e.end = e.schedule.end;
+  // console.log("merged", e);
+
   Utils.deleteEvent(e);
   Utils.createEvent(e);
 
@@ -89,7 +92,7 @@ Utils.updateEvent = function (e) {
 
 Utils.deleteEvent = function (e) {
   console.log("delete event", e);
-  e.id = e.schedule.id;
+  e.id = e.id ?? e.schedule.id;
   _calstore.events = _calstore.events.filter((ev) => ev.id != e.id);
   Utils.sync();
 };
@@ -133,3 +136,5 @@ var DEFAULT_EVENTS = [
 ];
 
 Utils.render();
+
+// do the firebase setup
