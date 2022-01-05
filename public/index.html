@@ -23,7 +23,7 @@ Firebase integration - get firebase project
 * hashtags to tag calendar
 
 Coding features:
-* Hook up firebase
+* DONE: Hook up firebase
 * Switch to fullcalendar -- can use google cal as well
 * Have events handle all-day
 * Use Vue to manage state and URLs
@@ -31,6 +31,12 @@ Coding features:
 * Have functions to export cal for google calendar etc
 * Have an autogen date (YYMMDD.ITEM) so (220103.1) as YOUR calc.
 * Or, have a private name (zad if you want)
+* Description for calendar (tags, etc)
+
+* Have 10 possible categories. Can rename the categories as you want.
+* Get a clean look like this: https://ui.toast.com/tui-calendar
+* Have an options view
+* Have default timezone (?). How to handle this.
 
 * pastecal.com/#hz
 
@@ -105,9 +111,15 @@ Use cases:
             }
 
             // subscribe to live updates
-            static livesync() {
+            static subscribe(slug) {
+                this.slug = slug;
                 if (this.slug) {
-                    db.child(this.slug);
+                    db.child(this.slug).on('value', data => {
+                        console.log("got data from slug");
+                        var events = data.val().events;
+                        _calstore.events = events;
+                        Utils.render();
+                    })
                 }
             }
 
@@ -154,6 +166,11 @@ Use cases:
     <div id="app">
         https://pastecal.com/<input id="slug" readonly type="text" v-model="slug"></input>
         <button @click="create">Create</button>
+
+        <button @click="month">Month</button>
+        <button @click="week">Week</button>
+        <button @click="day">Day</button>
+
         <!-- <button @click="clearAll">Clear everything</button> -->
     </div>
     <div id="calendar" style="width: 95%; height: 600px; border: 1px solid #ccc;">
@@ -161,10 +178,11 @@ Use cases:
     <script>
         const CalendarVueApp = {
             data() {
+                console.log("Vue: data()");
                 var urlslug = window.location.pathname.split("/")[1];
                 var random = nanoid(6);
                 var slug = urlslug ?? random;
-                CalendarDataService.slug = slug;
+                CalendarDataService.subscribe(slug);
 
                 return {
                     message: 'Cal stuff here',
@@ -173,6 +191,7 @@ Use cases:
             },
 
             setup() {
+                console.log("Vue:setup()");
                 window.calendar = new tui.Calendar('#calendar', {
                     defaultView: 'week',
                     taskView: false,
@@ -180,9 +199,9 @@ Use cases:
                     useDetailPopup: true,
                 });
 
+                CalendarDataService.subscribe();
                 Utils.init();
                 Utils.render();
-                console.log("setup");
             },
 
             methods: {
