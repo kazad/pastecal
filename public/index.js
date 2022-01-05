@@ -1,8 +1,35 @@
+// nanoid library
+let nanoid = (t = 21) => {
+  let e = "",
+    r = crypto.getRandomValues(new Uint8Array(t));
+  for (; t--; ) {
+    let n = 63 & r[t];
+    e +=
+      n < 36
+        ? n.toString(36)
+        : n < 62
+        ? (n - 26).toString(36).toUpperCase()
+        : n < 63
+        ? "_"
+        : "-";
+  }
+  return e;
+};
+
 var Utils = {};
 
 // can we make this a mutator, where the get/set of a property on this automatically syncs to localstorage?
 // TODO: find localstorage sync?
 var _calstore = {};
+var _calid = null;
+
+// setup firebase
+Utils.loadCalendar = function () {
+  var DB = app.database().ref();
+
+  // get the calendar to load from the URL...
+  // or... autogenerate one
+};
 
 Utils.init = function () {
   _calstore = JSON.parse(localStorage.getItem("_calstore")) ?? {};
@@ -44,6 +71,9 @@ Utils.init = function () {
 
 Utils.sync = function () {
   localStorage.setItem("_calstore", JSON.stringify(_calstore));
+
+  // save to firebase as well
+  CalendarDataService.sync();
 };
 /* 
 id: '1',
@@ -112,7 +142,7 @@ Utils.render = function () {
   calendar.createSchedules(Utils.getEvents());
 };
 
-Utils.init();
+// Utils.init();
 
 var DEFAULT_EVENTS = [
   {
@@ -135,6 +165,4 @@ var DEFAULT_EVENTS = [
   },
 ];
 
-Utils.render();
-
-// do the firebase setup
+// Utils.render();
