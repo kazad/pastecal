@@ -10,8 +10,8 @@ let nanoid = (t = 21) => {
         : n < 62
         ? (n - 26).toString(36).toUpperCase()
         : n < 63
-        ? "_"
-        : "-";
+        ? nanoid(1) // replace with another random character
+        : nanoid(1);
   }
   return e;
 };

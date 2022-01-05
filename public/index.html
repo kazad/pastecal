@@ -24,6 +24,7 @@ Firebase integration - get firebase project
 
 Coding features:
 * DONE: Hook up firebase
+* Put in a textbox for editing 
 * Switch to fullcalendar -- can use google cal as well
 * Have events handle all-day
 * Use Vue to manage state and URLs
@@ -43,12 +44,12 @@ Coding features:
 make a calc with the following chars:
 * 0-9a-zA-Z underscore and dash. That's it. No dot. No slashes. Just simple items.
 
-pastecal.com
-calpaste.com
+DONE: pastecal.com
+DONE: calpaste.com
 
 UI: https://daisyui.com/
 tailwindcss
-
+* Try to clone some forms using tailwindCSS components? Or daisyUI? Make it look clean.
 
 Use cases:
 
@@ -164,13 +165,13 @@ Use cases:
         }
     </style>
     <div id="app">
-        https://pastecal.com/<input id="slug" readonly type="text" v-model="slug"></input>
+        https://pastecal.com/<input id="slug" type="text" v-model="slug2"></input>
         <button @click="create">Create</button>
 
         <button @click="month">Month</button>
         <button @click="week">Week</button>
         <button @click="day">Day</button>
-
+        {{ slug2 }}
         <!-- <button @click="clearAll">Clear everything</button> -->
     </div>
     <div id="calendar" style="width: 95%; height: 600px; border: 1px solid #ccc;">
@@ -180,13 +181,23 @@ Use cases:
             data() {
                 console.log("Vue: data()");
                 var urlslug = window.location.pathname.split("/")[1];
+
+                // TODO: Make function to check valid URL slug
+                if (urlslug.match(/^[a-zA-Z0-9_\-]+$/) && urlslug.length < 15) {
+
+                } else {
+                    urlslug = null;
+                }
+
                 var random = nanoid(6);
-                var slug = urlslug ?? random;
-                CalendarDataService.subscribe(slug);
+                var finalslug = urlslug ?? random;
+                CalendarDataService.subscribe(finalslug);
+                console.log("slug", random, urlslug, finalslug);
 
                 return {
                     message: 'Cal stuff here',
-                    slug: slug
+                    slug: finalslug,
+                    slug2: finalslug
                 }
             },
 
