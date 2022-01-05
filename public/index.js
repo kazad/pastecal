@@ -20,10 +20,10 @@ var Utils = {};
 
 // can we make this a mutator, where the get/set of a property on this automatically syncs to localstorage?
 // TODO: find localstorage sync?
-var _calstore = {};
+var _calstore = _calstore ?? {};
 
 Utils.init = function () {
-  _calstore = JSON.parse(localStorage.getItem("_calstore")) ?? {};
+  _calstore = _calstore ?? JSON.parse(localStorage.getItem("_calstore")) ?? {};
   _calstore.events = _calstore.events ?? [];
   Utils.sync();
   console.log(_calstore);
