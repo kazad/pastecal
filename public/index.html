@@ -38,6 +38,7 @@ Coding features:
 * Get a clean look like this: https://ui.toast.com/tui-calendar
 * Have an options view
 * Have default timezone (?). How to handle this.
+* TODO: watch out for creating a new calc and having it sync/overwrite the others you visit. Clear each time.
 
 * pastecal.com/#hz
 
@@ -165,13 +166,14 @@ Use cases:
         }
     </style>
     <div id="app">
-        https://pastecal.com/<input id="slug" type="text" v-model="slug2"></input>
+        https://pastecal.com/<input id="slug" type="text" :disabled="isExisting" v-model="slug"></input>
         <button @click="create">Create</button>
 
+        <!-- 
         <button @click="month">Month</button>
         <button @click="week">Week</button>
         <button @click="day">Day</button>
-        {{ slug2 }}
+        -->
         <!-- <button @click="clearAll">Clear everything</button> -->
     </div>
     <div id="calendar" style="width: 95%; height: 600px; border: 1px solid #ccc;">
@@ -181,11 +183,13 @@ Use cases:
             data() {
                 console.log("Vue: data()");
                 var urlslug = window.location.pathname.split("/")[1];
+                var exists = false;
 
-                // TODO: Make function to check valid URL slug
+                // TODO: Make function to check valid URL slug exists. Then we can set exists.
                 if (urlslug.match(/^[a-zA-Z0-9_\-]+$/) && urlslug.length < 15) {
-
+                    exists = true;
                 } else {
+                    // should redirect back to homepage if we have a bad url;
                     urlslug = null;
                 }
 
@@ -197,7 +201,7 @@ Use cases:
                 return {
                     message: 'Cal stuff here',
                     slug: finalslug,
-                    slug2: finalslug
+                    isExisting: exists
                 }
             },
 
