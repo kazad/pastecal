@@ -21,15 +21,6 @@ var Utils = {};
 // can we make this a mutator, where the get/set of a property on this automatically syncs to localstorage?
 // TODO: find localstorage sync?
 var _calstore = {};
-var _calid = null;
-
-// setup firebase
-Utils.loadCalendar = function () {
-  var DB = app.database().ref();
-
-  // get the calendar to load from the URL...
-  // or... autogenerate one
-};
 
 Utils.init = function () {
   _calstore = JSON.parse(localStorage.getItem("_calstore")) ?? {};
@@ -71,19 +62,19 @@ Utils.init = function () {
 
 Utils.sync = function () {
   localStorage.setItem("_calstore", JSON.stringify(_calstore));
-
-  // save to firebase as well
   CalendarDataService.sync();
 };
-/* 
-id: '1',
-        calendarId: '1',
-        title: 'my schedule',
-        category: 'time',
-        dueDateClass: '',
-        start: '2018-01-18T22:30:00+09:00',
-        end: '2018-01-19T02:30:00+09:00'
-    }
+/*
+schema:
+  { 
+  id: '1',
+  calendarId: '1',
+  title: 'my schedule',
+  category: 'time',
+  dueDateClass: '',
+  start: '2018-01-18T22:30:00+09:00',
+   end: '2018-01-19T02:30:00+09:00'
+   }
 */
 
 Utils.createEvent = function (e) {
@@ -107,17 +98,9 @@ Utils.updateEvent = function (e) {
   // need better way to turn items from ScheduleEvent to a JSON object
   e = { ...e.schedule, ...e.changes };
   e.id = e.id ?? e.schedule.id;
-  //e.title = e.schedule.title;
-  // e.start = e.schedule.start;
-  // e.end = e.schedule.end;
-  // console.log("merged", e);
-
   Utils.deleteEvent(e);
   Utils.createEvent(e);
-
   // easier: do a delete, then create
-  // _calstore.events = _calstore.events.map((ev) => (ev.id == e.id ? e : ev));
-  // Utils.sync();
 };
 
 Utils.deleteEvent = function (e) {
@@ -138,31 +121,5 @@ Utils.getEvents = function () {
 
 Utils.render = function () {
   calendar.clear();
-  //  calendar.createSchedules(DEFAULT_EVENTS);
   calendar.createSchedules(Utils.getEvents());
 };
-
-// Utils.init();
-
-var DEFAULT_EVENTS = [
-  {
-    id: "1",
-    calendarId: "1",
-    title: "my schedule",
-    category: "time",
-    dueDateClass: "",
-    start: "2022-01-03T22:30:00+09:00",
-    end: "2022-01-05T02:30:00+09:00",
-  },
-  {
-    id: "2",
-    calendarId: "1",
-    title: "second schedule",
-    category: "time",
-    dueDateClass: "",
-    start: "2022-01-04T17:30:00+09:00",
-    end: "2022-01-04T17:31:00+09:00",
-  },
-];
-
-// Utils.render();

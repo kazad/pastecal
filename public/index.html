@@ -104,6 +104,13 @@ Use cases:
                 return db;
             }
 
+            // subscribe to live updates
+            static livesync() {
+                if (this.slug) {
+                    db.child(this.slug);
+                }
+            }
+
             static sync() {
                 if (this.slug && _calstore) {
                     this.createWithId(this.slug, _calstore);
