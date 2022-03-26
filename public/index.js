@@ -18,6 +18,8 @@ let nanoid = (t = 21) => {
 
 var Utils = {};
 
+Utils.nanoid = nanoid;
+
 // can we make this a mutator, where the get/set of a property on this automatically syncs to localstorage?
 // TODO: find localstorage sync?
 var _calstore = _calstore ?? {};
