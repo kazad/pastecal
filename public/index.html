@@ -12,6 +12,7 @@ Use cases:
 * Visiting homepage, entering ID, creates the calendar with that shortcode
 * Visiting homepage, have random shortcode (shortID) prepopulated
 * Visiting pastecal.com/ID creates the calendar (prefilled option to create)
+* Visiting homepage, have a list of your recent calcs on the side
 
 -->
 
@@ -37,8 +38,9 @@ Use cases:
     <script src="https://uicdn.toast.com/tui.time-picker/latest/tui-time-picker.min.js"></script>
     <script src="https://uicdn.toast.com/tui.date-picker/latest/tui-date-picker.min.js"></script>
     <script src="https://uicdn.toast.com/tui-calendar/latest/tui-calendar.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.20.1/moment.min.js"></script>
 
-    <script src="https://unpkg.com/vue@next"></script>
+    <script src="https://unpkg.com/vue@3"></script>
     <!-- firebase -->
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-compat.js"></script>
     <script>
@@ -57,15 +59,35 @@ Use cases:
 
         // Initialize Firebase
         firebase.initializeApp(firebaseConfig);
-        console.log("firebase loaded", firebase);
+
+        nanoid = (t = 21) => {
+            let e = "",
+                r = crypto.getRandomValues(new Uint8Array(t));
+            for (; t--;) {
+                let n = 63 & r[t];
+                e +=
+                    n < 36
+                        ? n.toString(36)
+                        : n < 62
+                            ? (n - 26).toString(36).toUpperCase()
+                            : n < 63
+                                ? nanoid(1) // replace with another random character
+                                : nanoid(1);
+            }
+            return e;
+        };
+        Utils = {};
+        Utils.nanoid = nanoid;
 
         class Event {
+            // being created from a TUI event
             constructor(options) {
-                this.id = Utils.nanoid(6);
+                this.id = Utils.nanoid(8);
                 this.title = options.title;
+                this.body = options.body || "";
                 this.description = options.description || "";
-                this.start = options.start;
-                this.end = options.end;
+                this.start = options.start._date.toISOString();
+                this.end = options.end._date.toISOString();
                 this.repeat = "";
             }
         }
@@ -76,6 +98,44 @@ Use cases:
                 this.title = title || "New Calendar";
                 this.events = events || [];
                 this.options = options || {};
+            }
+
+            // return events in TUI format
+            getTUIEvents() {
+                return this.events.map(e => {
+                    e.category = e.category || "time";
+                    return e;
+                });
+            }
+
+            getDHTMLXEvents() {
+                return this.events.map(e => {
+                    return {
+                        id: e.id,
+                        start_date: e.start,
+                        end_date: e.end,
+                        text: e.title
+                    }
+                });
+            }
+
+            addEvent(e) {
+                var event = new Event(e);
+                this.events.push(event);
+                CalendarDataService.sync(this);
+            }
+
+            deleteEvent(eventToDelete) {
+                this.events = this.events.filter(e => e.id !== eventToDelete.id);
+                CalendarDataService.sync(this);
+            }
+
+            updateEvent(updatedEvent) {
+                var event = this.events.find(e => e.id === updatedEvent.id);
+                if (event) {
+                    Object.assign(event, updatedEvent);
+                }
+                CalendarDataService.sync(this);
             }
         }
 
@@ -93,18 +153,21 @@ Use cases:
                 this.slug = slug;
                 if (this.slug) {
                     this.db.child(this.slug).on('value', data => {
-                        console.log("got data from slug");
-                        var events = data.val().events;
-                        _calstore.events = events;
-                        Utils.render();
+                        console.log(`loaded ${slug}`, data.val());
+                        // var events = data.val().events;
+                        // update calendar object in vue app
+                        // app.calendar = data.val();
+                        var calendar = data.val();
+                        if (calendar && calendar.id) {
+                            app.setCalendarData(calendar);
+                        }
                     })
                 }
             }
 
-            static sync() {
-                if (this.slug && _calstore) {
-                    this.createWithId(this.slug, _calstore);
-                    console.log("data sync");
+            static sync(calendar) {
+                if (calendar && calendar.id) {
+                    this.db.child(calendar.id).set(calendar);
                 }
             }
 
@@ -125,7 +188,9 @@ Use cases:
             }
         }
     </script>
+    <!--
     <script src="index.js"></script>
+-->
 </head>
 
 <body>
@@ -141,6 +206,8 @@ Use cases:
         }
     </style>
     <div id="app">
+        <pre>{{calendar}}</pre>
+
         <h2>{{calendar.title}} ({{calendar.id}})</h2>
         <div v-if="isExisting">
             <a :href="calendar.id">https://pastecal.com/{{calendar.id}}</a>
@@ -159,73 +226,121 @@ Use cases:
     </div>
     <div id="calendar_wrap" style="width: 95%; height: 600px; border: 1px solid #ccc;">
     </div>
-    <script>
-        const CalendarVueApp = {
-            data() {
-                console.log("Vue: data()");
-                var urlslug = window.location.pathname.split("/")[1];
-                var exists = false;
 
-                // TODO: Make function to check valid URL slug exists. Then we can set exists.
-                if (urlslug.match(/^[a-zA-Z0-9_\-]+$/) && urlslug.length < 40) {
-                    exists = true;
-                } else {
-                    // should redirect back to homepage if we have a bad url;
-                    urlslug = null;
-                }
 
-                var id = urlslug ?? Utils.nanoid(6);
-                CalendarDataService.subscribe(id);
-                var cal = new Calendar(id, "New Calendar", []);
+    <script src="https://cdn.dhtmlx.com/scheduler/5.3/dhtmlxscheduler.js?"></script>
+    <xlink rel="stylesheet" href="https://cdn.dhtmlx.com/scheduler/5.3/dhtmlxscheduler.css">
+        <link rel="stylesheet" href="https://docs.dhtmlx.com/scheduler/codebase/dhtmlxscheduler_material.css?v=5.3.13">
 
-                return {
-                    isExisting: exists,
-                    calendar: cal
-                }
-            },
+        <div id="cal2_wrap" style="height: 600px;">
+            <div id="scheduler_here" class="dhx_cal_container" style='width:100%; height:100%'>
+                <div class="dhx_cal_navline">
+                    <div class="dhx_cal_prev_button">&nbsp;</div>
+                    <div class="dhx_cal_next_button">&nbsp;</div>
+                    <div class="dhx_cal_today_button"></div>
+                    <div class="dhx_cal_date"></div>
+                    <div class="dhx_cal_tab" name="day_tab" style="right:204px;"></div>
+                    <div class="dhx_cal_tab" name="week_tab" style="right:140px;"></div>
+                    <div class="dhx_cal_tab" name="month_tab" style="right:76px;"></div>
+                </div>
+                <div class="dhx_cal_header">
+                </div>
+                <div class="dhx_cal_data">
+                </div>
+            </div>
+        </div>
+        <script>
+            window.addEventListener("DOMContentLoaded", function () {
+                scheduler.init('scheduler_here', new Date(), "week");
 
-            setup() {
-                console.log("Vue:setup()");
-                window.calendar_view = new tui.Calendar('#calendar_wrap', {
-                    defaultView: 'week',
-                    taskView: false,
-                    useCreationPopup: true,
-                    useDetailPopup: true,
-                });
-            },
+                // load events            scheduler.load("../common/events.json");
+            });
+        </script>
+        <script>
+            const CalendarVueApp = {
+                data() {
+                    console.log("Vue: data()");
+                    var urlslug = window.location.pathname.split("/")[1];
+                    var exists = false;
 
-            methods: {
-                create() {
-                    events = Utils.getEvents();
-                    console.log("Create", this.calendar.id, _calstore);
-                    CalendarDataService.createWithId(this.calendar.id, _calstore);
+                    // TODO: Make function to check valid URL slug exists. Then we can set exists.
+                    if (urlslug.match(/^[a-zA-Z0-9_\-]+$/) && urlslug.length < 40) {
+                        exists = true;
+                    } else {
+                        // should redirect back to homepage if we have a bad url;
+                        urlslug = null;
+                    }
+
+                    var id = urlslug ?? Utils.nanoid(8);
+                    CalendarDataService.subscribe(id);
+                    var cal = new Calendar(id, "New Calendar", []);
+
+                    return {
+                        isExisting: exists,
+                        calendar: cal,
+                    }
                 },
 
-                clearAll() {
-                    Utils.clearEvents();
-                    Utils.render();
-                    console.log('clear');
+                setup(props, context) {
+                    console.log("Vue:setup()", props, context);
+                    window.calendar_view = new tui.Calendar('#calendar_wrap', {
+                        defaultView: 'month',
+                        taskView: false,
+                        useCreationPopup: true,
+                        useDetailPopup: true,
+                    });
+
+                    calendar_view.on({
+                        beforeCreateSchedule: function (e) {
+                            console.log("beforeCreateSchedule", e);
+                            console.log(app);
+                            app.calendar.addEvent(e);
+                        },
+                        beforeUpdateSchedule: function (e) {
+                            console.log("beforeUpdateSchedule", e);
+                            app.calendar.updateEvent(e);
+                        },
+                        beforeDeleteSchedule: function (e) {
+                            console.log("beforeDeleteSchedule", e);
+                            app.calendar.deleteEvent(e);
+                        },
+                    })
+                },
+
+                methods: {
+                    create() {
+                        CalendarDataService.sync(this.calendar);
+                        // TODO: redirect to the new location
+                    },
+
+                    setCalendarData(data) {
+                        this.calendar = Object.assign(this.calendar, data); // keep as calendar object
+                        calendar_view.clear();
+                        calendar_view.createSchedules(this.calendar.getTUIEvents());
+
+                        scheduler.parse(this.calendar.getDHTMLXEvents());
+                    },
+
+                    clearAll() {
+                        console.log('clear');
+                    }
                 }
-            }
-        };
+            };
 
-        const app = Vue.createApp(CalendarVueApp).mount('#app');
-    </script>
+            const app = Vue.createApp(CalendarVueApp).mount('#app');
+        </script>
 
-    <script>
-    </script>
-    <div></div>
-    <br />
-    <p>
-        Features:
-    <ul>
-        <li>Simple calendar UX</li>
-        <li>Share with anyone with a link</li>
-        <li>Daily revision history for changes</li>
-        <!-- <li>Add calendar with iCal subscription</li> -->
-        <li>No-login to embed your calendar in any page</li>
-    </ul>
-    </p>
+        <br />
+        <p>
+            Features:
+        <ul>
+            <li>Simple calendar UX</li>
+            <li>Share with anyone with a link</li>
+            <li>Daily revision history for changes</li>
+            <!-- <li>Add calendar with iCal subscription</li> -->
+            <li>No-login to embed your calendar in any page</li>
+        </ul>
+        </p>
 
 </body>
 
