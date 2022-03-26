@@ -14,6 +14,9 @@ Use cases:
 * Visiting pastecal.com/ID creates the calendar (prefilled option to create)
 * Visiting homepage, have a list of your recent calcs on the side
 
+TODO:
+* Have data parsing to only load the named fields, not the extra ones added by the program
+
 -->
 
 <head>
@@ -83,11 +86,19 @@ Use cases:
             // being created from a TUI event
             constructor(options) {
                 this.id = Utils.nanoid(8);
-                this.title = options.title;
-                this.body = options.body || "";
-                this.description = options.description || "";
-                this.start = options.start._date.toISOString();
-                this.end = options.end._date.toISOString();
+                this.title = options.text || options.title;
+
+                // from DHTMLX
+                if (options.start_date && options.end_date) {
+                    this.start = options.start_date.toISOString()
+                    this.end = options.end_date.toISOString();
+                }
+
+                // from TUI
+                if (options.start && options.start._date) {
+                    this.start = options.start._date.toISOString();
+                    this.end = options.end._date.toISOString();
+                }
                 this.repeat = "";
             }
         }
@@ -133,7 +144,10 @@ Use cases:
             updateEvent(updatedEvent) {
                 var event = this.events.find(e => e.id === updatedEvent.id);
                 if (event) {
-                    Object.assign(event, updatedEvent);
+                    var updated = new Event(updatedEvent);
+                    Object.assign(event, updated);
+                } else {
+                    console.log("Event not found", updatedEvent);
                 }
                 CalendarDataService.sync(this);
             }
@@ -207,10 +221,11 @@ Use cases:
     </style>
     <div id="app">
         <pre>{{calendar}}</pre>
-
-        <h2>{{calendar.title}} ({{calendar.id}})</h2>
-        <div v-if="isExisting">
-            <a :href="calendar.id">https://pastecal.com/{{calendar.id}}</a>
+        <div style="text-align: center">
+            <div v-if="isExisting">
+                <a :href="calendar.id">https://pastecal.com/{{calendar.id}}</a>
+            </div>
+            <h2>{{calendar.title}}</h2>
         </div>
         <div v-if="!isExisting">
             https://pastecal.com/<input id="slug" type="text" :disabled="isExisting" v-model="calendar.id"></input>
@@ -224,9 +239,8 @@ Use cases:
         -->
         <!-- <button @click="clearAll">Clear everything</button> -->
     </div>
-    <div id="calendar_wrap" style="width: 95%; height: 600px; border: 1px solid #ccc;">
+    <div id="calendar_wrap" style="display: none; width: 95%; height: 600px; border: 1px solid #ccc;">
     </div>
-
 
     <script src="https://cdn.dhtmlx.com/scheduler/5.3/dhtmlxscheduler.js?"></script>
     <xlink rel="stylesheet" href="https://cdn.dhtmlx.com/scheduler/5.3/dhtmlxscheduler.css">
@@ -283,6 +297,7 @@ Use cases:
 
                 setup(props, context) {
                     console.log("Vue:setup()", props, context);
+                    /*
                     window.calendar_view = new tui.Calendar('#calendar_wrap', {
                         defaultView: 'month',
                         taskView: false,
@@ -305,6 +320,21 @@ Use cases:
                             app.calendar.deleteEvent(e);
                         },
                     })
+                    */
+
+                    scheduler.init("scheduler_here", new Date(), "week");
+                    scheduler.attachEvent("onEventAdded", (id, ev) => {
+                        console.log("onEventAdded", id, ev);
+                        app.calendar.addEvent(ev);
+                    });
+                    scheduler.attachEvent("onEventChanged", (id, ev) => {
+                        console.log("onEventChanged", id, ev);
+                        app.calendar.updateEvent(ev);
+                    });
+                    scheduler.attachEvent("onEventDeleted", (id, ev) => {
+                        console.log("onEventDeleted", id, ev);
+                        app.calendar.deleteEvent(ev);
+                    });
                 },
 
                 methods: {
@@ -315,9 +345,9 @@ Use cases:
 
                     setCalendarData(data) {
                         this.calendar = Object.assign(this.calendar, data); // keep as calendar object
-                        calendar_view.clear();
-                        calendar_view.createSchedules(this.calendar.getTUIEvents());
-
+                        // calendar_view.clear();
+                        // calendar_view.createSchedules(this.calendar.getTUIEvents());
+                        scheduler.clearAll();
                         scheduler.parse(this.calendar.getDHTMLXEvents());
                     },
 
