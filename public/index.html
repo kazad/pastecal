@@ -277,8 +277,9 @@ TODO:
             <div style="text-align: left;">
                 <a href="/">PasteCal</a>: Shared calendars, no logins
             </div>
-            <div style="text-align: center;" class="title" @click="editTitle = true;">
-                <span v-if="!editTitle" style="cursor: pointer;" title="Click to edit">{{calendar.title}}</span>
+            <div style="text-align: center;" class="title">
+                <span v-if="!editTitle" style="cursor: pointer;" @click="editTitle = true"
+                    title="Click to edit">{{calendar.title}}</span>
                 <input type="text" v-if="editTitle" v-model="calendar.title" @keyup.enter="setTitle($event)">
             </div>
             <div class="recents" style="display: none;">
@@ -418,9 +419,9 @@ TODO:
                 },
 
                 setTitle(event) {
-                    if (event.target.value) {
+                    if (event.target.value.trim()) {
                         this.editTitle = false;
-                        this.calendar.title = event.target.value;
+                        this.calendar.title = event.target.value.trim();
 
                         // only save if save has been clicked before
                         if (this.isExisting) {
