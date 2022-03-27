@@ -17,6 +17,7 @@ Use cases:
 TODO:
 * DONE: Figure out creation and permissions issue
 * TODO: Rename Calendar Title
+* DONE: Visiting URL directly (/doesnotexist) should have button to create
 
 * Have data parsing to only load the named fields, not the extra ones added by the program
 * DONE: Full 24 hours
@@ -180,6 +181,7 @@ transform: scale(0.7);
                         // app.calendar = data.val();
                         var calendar = data.val();
                         if (calendar && calendar.id) {
+                            app.isExisting = true;
                             app.setCalendarData(calendar);
                         }
                     })
@@ -217,8 +219,9 @@ transform: scale(0.7);
 <body>
     <style>
         body {
-            max-width: 99%;
-            margin: 0px auto;
+            max-width: 100%;
+            padding: 0px 5px;
+            margin: 5px auto;
             font-family: Roboto, Arial, sans-serif;
         }
 
@@ -284,7 +287,7 @@ transform: scale(0.7);
 
         <div class="topbar">
             <div style="text-align: left;">
-                PasteCal: Shared calendar &amp; no login
+                PasteCal: Shared calendar, no login
             </div>
             <div style="text-align: center;" class="title">
                 {{calendar.title}}
@@ -345,11 +348,10 @@ transform: scale(0.7);
             data() {
                 console.log("Vue: data()");
                 var urlslug = window.location.pathname.split("/")[1];
-                var exists = false;
 
                 // TODO: Make function to check valid URL slug exists. Then we can set exists.
                 if (urlslug.match(/^[a-zA-Z0-9_\-]+$/) && urlslug.length < 40) {
-                    exists = true;
+                    // slug is ok
                 } else {
                     // should redirect back to homepage if we have a bad url;
                     urlslug = null;
@@ -360,9 +362,9 @@ transform: scale(0.7);
                 var cal = new Calendar(id, "New Calendar", []);
 
                 return {
-                    isExisting: exists,
+                    isExisting: false, // set by callback
                     calendar: cal,
-                    recents: [{ title: "Test", id: "test" }, { title: "Test2", id: "test2" }]
+                    recents: []
                 }
             },
 
