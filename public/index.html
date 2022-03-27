@@ -16,6 +16,8 @@ Use cases:
 
 TODO:
 * Have data parsing to only load the named fields, not the extra ones added by the program
+* OPTIONS: Full 24 hours
+* BUG: pressing enter with lightbox closes it
 
 -->
 
@@ -30,20 +32,8 @@ TODO:
 -->
     <!-- CDN Development (always latest) -->
     <link rel="stylesheet" href="https://unpkg.com/style.css">
-    <!-- calendar TUI -->
-    <link rel="stylesheet" type="text/css" href="https://uicdn.toast.com/tui-calendar/latest/tui-calendar.css" />
-
-    <!-- If you use the default popups, use this. -->
-    <link rel="stylesheet" type="text/css" href="https://uicdn.toast.com/tui.date-picker/latest/tui-date-picker.css" />
-    <link rel="stylesheet" type="text/css" href="https://uicdn.toast.com/tui.time-picker/latest/tui-time-picker.css" />
-
-    <script src="https://uicdn.toast.com/tui.code-snippet/v1.5.2/tui-code-snippet.min.js"></script>
-    <script src="https://uicdn.toast.com/tui.time-picker/latest/tui-time-picker.min.js"></script>
-    <script src="https://uicdn.toast.com/tui.date-picker/latest/tui-date-picker.min.js"></script>
-    <script src="https://uicdn.toast.com/tui-calendar/latest/tui-calendar.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.20.1/moment.min.js"></script>
-
     <script src="https://unpkg.com/vue@3"></script>
+
     <!-- firebase -->
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-compat.js"></script>
     <script>
@@ -89,6 +79,11 @@ TODO:
                 this.title = options.text || options.title;
 
                 // from DHTMLX
+                this.start = options.start;
+                this.end = options.end;
+
+                this.repeat = "";
+
                 if (options.start_date && options.end_date) {
                     this.start = options.start_date.toISOString()
                     this.end = options.end_date.toISOString();
@@ -99,7 +94,6 @@ TODO:
                     this.start = options.start._date.toISOString();
                     this.end = options.end._date.toISOString();
                 }
-                this.repeat = "";
             }
         }
 
@@ -208,15 +202,31 @@ TODO:
 </head>
 
 <body>
-    <h1>WebCal: No-login shared calendar</h1>
+    <h6>Shared calendar, no login</h6>
     <style>
         body {
-            max-width: 95%;
+            max-width: 99%;
             margin: 0px auto;
         }
 
         #app input#slug {
             width: 200px;
+        }
+
+        .dhx_lightbox_time_select {
+            width: 120px !important;
+        }
+
+        .dhx_cal_ltext {
+            height: 200px !important;
+        }
+
+        .dhx_cal_light {
+            width: 550px !important;
+        }
+
+        textarea.dhx_cal_editor {
+            padding: 1px 2px !important;
         }
     </style>
     <div id="app">
@@ -239,14 +249,11 @@ TODO:
         -->
         <!-- <button @click="clearAll">Clear everything</button> -->
     </div>
-    <div id="calendar_wrap" style="display: none; width: 95%; height: 600px; border: 1px solid #ccc;">
-    </div>
-
     <script src="https://cdn.dhtmlx.com/scheduler/5.3/dhtmlxscheduler.js?"></script>
     <xlink rel="stylesheet" href="https://cdn.dhtmlx.com/scheduler/5.3/dhtmlxscheduler.css">
         <link rel="stylesheet" href="https://docs.dhtmlx.com/scheduler/codebase/dhtmlxscheduler_material.css?v=5.3.13">
 
-        <div id="cal2_wrap" style="height: 600px;">
+        <div id="cal2_wrap" style="height: 1000px;">
             <div id="scheduler_here" class="dhx_cal_container" style='width:100%; height:100%'>
                 <div class="dhx_cal_navline">
                     <div class="dhx_cal_prev_button">&nbsp;</div>
@@ -263,13 +270,7 @@ TODO:
                 </div>
             </div>
         </div>
-        <script>
-            window.addEventListener("DOMContentLoaded", function () {
-                scheduler.init('scheduler_here', new Date(), "week");
-
-                // load events            scheduler.load("../common/events.json");
-            });
-        </script>
+        [show extended hours]
         <script>
             const CalendarVueApp = {
                 data() {
@@ -297,32 +298,23 @@ TODO:
 
                 setup(props, context) {
                     console.log("Vue:setup()", props, context);
-                    /*
-                    window.calendar_view = new tui.Calendar('#calendar_wrap', {
-                        defaultView: 'month',
-                        taskView: false,
-                        useCreationPopup: true,
-                        useDetailPopup: true,
-                    });
 
-                    calendar_view.on({
-                        beforeCreateSchedule: function (e) {
-                            console.log("beforeCreateSchedule", e);
-                            console.log(app);
-                            app.calendar.addEvent(e);
-                        },
-                        beforeUpdateSchedule: function (e) {
-                            console.log("beforeUpdateSchedule", e);
-                            app.calendar.updateEvent(e);
-                        },
-                        beforeDeleteSchedule: function (e) {
-                            console.log("beforeDeleteSchedule", e);
-                            app.calendar.deleteEvent(e);
-                        },
-                    })
-                    */
+                    // TODO: get format string from environment
+                    // https://docs.dhtmlx.com/scheduler/settings_format.html 
+                    scheduler.config.hour_date = "%g:%i %A";
+                    scheduler.config.responsive_lightbox = true; // responsive lightbox
 
+                    // have option to show midnight - 5am
+                    scheduler.config.first_hour = 5;
+
+
+                    scheduler.config.event_duration = 60;
+                    scheduler.config.full_day = true;
+
+                    scheduler.config.mark_now = true;
+                    scheduler.config.now_date = new Date();
                     scheduler.init("scheduler_here", new Date(), "week");
+
                     scheduler.attachEvent("onEventAdded", (id, ev) => {
                         console.log("onEventAdded", id, ev);
                         app.calendar.addEvent(ev);
@@ -345,8 +337,6 @@ TODO:
 
                     setCalendarData(data) {
                         this.calendar = Object.assign(this.calendar, data); // keep as calendar object
-                        // calendar_view.clear();
-                        // calendar_view.createSchedules(this.calendar.getTUIEvents());
                         scheduler.clearAll();
                         scheduler.parse(this.calendar.getDHTMLXEvents());
                     },
