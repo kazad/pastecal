@@ -114,7 +114,7 @@ transform: scale(0.7);
         class Calendar {
             constructor(id, title, events, options) {
                 this.id = id;
-                this.title = title || "New Calendar";
+                this.title = title || "";
                 this.events = events || [];
                 this.options = options || {};
             }
@@ -188,8 +188,9 @@ transform: scale(0.7);
                 }
             }
 
+            // only sync if we have existed
             static sync(calendar) {
-                if (calendar && calendar.id) {
+                if (calendar && calendar.id && app.isExisting) {
                     this.db.child(calendar.id).set(calendar);
                 }
             }
@@ -198,8 +199,14 @@ transform: scale(0.7);
                 return this.db.push(item);
             }
 
-            static createWithId(key, value) {
-                return this.db.child(key).set(value);
+            static createWithId(key, value, success) {
+                return this.db.child(key).set(value, (error) => {
+                    if (error) {
+                        console.log("error", error);
+                    } else {
+                        success();
+                    }
+                });
             }
 
             static update(key, value) {
@@ -289,8 +296,9 @@ transform: scale(0.7);
             <div style="text-align: left;">
                 PasteCal: Shared calendar, no login
             </div>
-            <div style="text-align: center;" class="title">
-                {{calendar.title}}
+            <div style="text-align: center;" class="title" @click="editTitle = true;">
+                <span v-if="!editTitle">{{calendar.title}}</span>
+                <input type="text" v-if="editTitle" v-model="calendar.title" @keyup.enter="setTitle($event)">
             </div>
             <div class="recents" style="display: none;">
                 <select name="recents" id="recents">
@@ -359,10 +367,11 @@ transform: scale(0.7);
 
                 var id = urlslug ?? Utils.nanoid(8);
                 CalendarDataService.subscribe(id);
-                var cal = new Calendar(id, "New Calendar", []);
+                var cal = new Calendar(id, "Untitled Calendar", []);
 
                 return {
                     isExisting: false, // set by callback
+                    editTitle: false,
                     calendar: cal,
                     recents: []
                 }
@@ -421,8 +430,22 @@ transform: scale(0.7);
 
             methods: {
                 create() {
-                    CalendarDataService.sync(this.calendar);
-                    // TODO: redirect to the new location
+                    // initial create
+                    CalendarDataService.createWithId(this.calendar.id, this.calendar, () => {
+                        window.location = "/" + this.calendar.id;
+                    });
+                },
+
+                setTitle(event) {
+                    if (event.target.value) {
+                        this.editTitle = false;
+                        this.calendar.title = event.target.value;
+
+                        // only save if save has been clicked before
+                        if (this.isExisting) {
+                            CalendarDataService.sync(this.calendar);
+                        }
+                    }
                 },
 
                 setCalendarData(data) {
