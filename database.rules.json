@@ -1,6 +1,12 @@
 {
   "rules": {
     ".read": false,
-    ".write": false
+    ".write": false,
+    "calendars": {
+      "$id": {
+        ".read": true,
+        ".write": true
+      }
+    }
   }
 }
