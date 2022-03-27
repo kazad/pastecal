@@ -80,26 +80,20 @@ TODO:
         };
 
         class Event {
-            // being created from a TUI event
+            // may be created from JSON object or DHTMLX internal calendar event
             constructor(options) {
                 this.id = nanoid(8);
                 this.title = options.text || options.title;
 
-                // from DHTMLX
                 this.start = options.start;
                 this.end = options.end;
 
                 this.repeat = "";
 
+                // from DHTMLX internal object
                 if (options.start_date && options.end_date) {
-                    this.start = options.start_date.toISOString()
+                    this.start = options.start_date.toISOString();
                     this.end = options.end_date.toISOString();
-                }
-
-                // from TUI
-                if (options.start && options.start._date) {
-                    this.start = options.start._date.toISOString();
-                    this.end = options.end._date.toISOString();
                 }
             }
         }
