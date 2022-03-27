@@ -18,20 +18,30 @@ TODO:
 * Have data parsing to only load the named fields, not the extra ones added by the program
 * OPTIONS: Full 24 hours
 * BUG: pressing enter with lightbox closes it
+* TODO: Events under 40 minutes get small view: view-source:https://docs.dhtmlx.com/scheduler/samples/02_customization/27_custom_event_box.html
+* TODO: Events get color based on hashtag : https://docs.dhtmlx.com/scheduler/custom_events_color.html #work #fun etc. First tag wins
+* TODO: Button to rescale to fit
+* TODO: Change calendar title / click to edit
+* TODO: Have the recents list (saved to localstorage)
+* TODO: Make it responsive (with all-hours moved via JS to just below the nav)
+* TODO: Have it save the calendar to localstorage until you share it
+* TODO: Have a help/tour button for discussion, etc. Otherwise the app is full-fledged.
+
+transform: scale(0.7);
+    transform-origin: top;
 
 -->
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
-    <title>PasteCal</title>
-    <link rel="stylesheet" href="style.css">
+    <title>PasteCal: Shareable, no-login calendar</title>
+    <xlink rel="stylesheet" href="style.css" />
     <!--
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css">
 -->
     <!-- CDN Development (always latest) -->
-    <link rel="stylesheet" href="https://unpkg.com/style.css">
+    <xlink rel="stylesheet" href="https://unpkg.com/style.css" />
     <script src="https://unpkg.com/vue@3"></script>
 
     <!-- firebase -->
@@ -202,15 +212,19 @@ TODO:
 </head>
 
 <body>
-    <h6>Shared calendar, no login</h6>
     <style>
         body {
             max-width: 99%;
             margin: 0px auto;
+            font-family: Roboto, Arial, sans-serif;
         }
 
         #app input#slug {
-            width: 200px;
+            width: 15ch;
+        }
+
+        .dhx_cal_date {
+            font-size: 1.0rem !important;
         }
 
         .dhx_lightbox_time_select {
@@ -228,32 +242,69 @@ TODO:
         textarea.dhx_cal_editor {
             padding: 1px 2px !important;
         }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px solid #ccc;
+            padding: 5px 0px;
+            margin-top: 5px;
+            font-size: 0.8rem;
+        }
+
+        .topbar>div {
+            width: 33%;
+        }
+
+        .topbar .title {
+            font-weight: bold;
+            font-size: 1.0rem;
+        }
+
+        div.extended_hours {
+            position: absolute;
+            top: 90px;
+            z-index: 99;
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        .recents a {
+            margin-right: 0.5rem;
+        }
     </style>
     <div id="app">
-        <pre>{{calendar}}</pre>
-        <div style="text-align: center">
-            <div v-if="isExisting">
-                <a :href="calendar.id">https://pastecal.com/{{calendar.id}}</a>
+        <div class="extended_hours">
+            <input type="checkbox" id="extended" v-model="calendar.options.extended">
+            <label for="extended">All hours</label>
+        </div>
+
+        <div class="topbar">
+            <div style="text-align: left;">
+                PasteCal: Shared calendar &amp; no login
             </div>
-            <h2>{{calendar.title}}</h2>
-        </div>
-        <div v-if="!isExisting">
-            https://pastecal.com/<input id="slug" type="text" :disabled="isExisting" v-model="calendar.id"></input>
-            <button @click="create" v-if="!isExisting">Save</button>
+            <div style="text-align: center;" class="title">
+                {{calendar.title}}
+            </div>
+            <div class="recents" style="display: none;">
+                <select name="recents" id="recents">
+                    <option value="">Recently opened</option>
+                </select>
+            </div>
+            <div style="text-align:right">
+                <div v-if="isExisting">
+                    <a :href="calendar.id">https://pastecal.com/{{calendar.id}}</a>
+                </div>
+
+                <div v-if="!isExisting">
+                    https://pastecal.com/<input id="slug" type="text" :disabled="isExisting"
+                        v-model="calendar.id"></input>
+                    <button @click="create" v-if="!isExisting">Save</button>
+                </div>
+            </div>
         </div>
 
-        <!-- 
-        <button @click="month">Month</button>
-        <button @click="week">Week</button>
-        <button @click="day">Day</button>
-        -->
-        <!-- <button @click="clearAll">Clear everything</button> -->
-    </div>
-    <script src="https://cdn.dhtmlx.com/scheduler/5.3/dhtmlxscheduler.js?"></script>
-    <xlink rel="stylesheet" href="https://cdn.dhtmlx.com/scheduler/5.3/dhtmlxscheduler.css">
-        <link rel="stylesheet" href="https://docs.dhtmlx.com/scheduler/codebase/dhtmlxscheduler_material.css?v=5.3.13">
-
-        <div id="cal2_wrap" style="height: 1000px;">
+        <div id="cal2_wrap" style="width: 100%; height: 100%;">
             <div id="scheduler_here" class="dhx_cal_container" style='width:100%; height:100%'>
                 <div class="dhx_cal_navline">
                     <div class="dhx_cal_prev_button">&nbsp;</div>
@@ -270,97 +321,128 @@ TODO:
                 </div>
             </div>
         </div>
-        [show extended hours]
-        <script>
-            const CalendarVueApp = {
-                data() {
-                    console.log("Vue: data()");
-                    var urlslug = window.location.pathname.split("/")[1];
-                    var exists = false;
+        <div class="recents" style="display: none;">
+            Recents:
+            <span v-for="item in recents" :key="item.id">
+                <a :href="item.id">{{item.title}}</a>
+            </span>
+        </div>
+        <!--
+        <pre>{{calendar}}</pre>
+        -->
+    </div>
+    <script src="https://cdn.dhtmlx.com/scheduler/5.3/dhtmlxscheduler.js"></script>
+    <script
+        src="https://docs.dhtmlx.com/scheduler/codebase/ext/dhtmlxscheduler_container_autoresize.js?v=5.3.13"></script>
+    <link rel="stylesheet" href="https://cdn.dhtmlx.com/scheduler/5.3/dhtmlxscheduler.css" />
+    <link rel="stylesheet" href="https://docs.dhtmlx.com/scheduler/codebase/dhtmlxscheduler_material.css?v=5.3.13" />
 
-                    // TODO: Make function to check valid URL slug exists. Then we can set exists.
-                    if (urlslug.match(/^[a-zA-Z0-9_\-]+$/) && urlslug.length < 40) {
-                        exists = true;
-                    } else {
-                        // should redirect back to homepage if we have a bad url;
-                        urlslug = null;
-                    }
+    <script>
+        const CalendarVueApp = {
+            data() {
+                console.log("Vue: data()");
+                var urlslug = window.location.pathname.split("/")[1];
+                var exists = false;
 
-                    var id = urlslug ?? Utils.nanoid(8);
-                    CalendarDataService.subscribe(id);
-                    var cal = new Calendar(id, "New Calendar", []);
-
-                    return {
-                        isExisting: exists,
-                        calendar: cal,
-                    }
-                },
-
-                setup(props, context) {
-                    console.log("Vue:setup()", props, context);
-
-                    // TODO: get format string from environment
-                    // https://docs.dhtmlx.com/scheduler/settings_format.html 
-                    scheduler.config.hour_date = "%g:%i %A";
-                    scheduler.config.responsive_lightbox = true; // responsive lightbox
-
-                    // have option to show midnight - 5am
-                    scheduler.config.first_hour = 5;
-
-
-                    scheduler.config.event_duration = 60;
-                    scheduler.config.full_day = true;
-
-                    scheduler.config.mark_now = true;
-                    scheduler.config.now_date = new Date();
-                    scheduler.init("scheduler_here", new Date(), "week");
-
-                    scheduler.attachEvent("onEventAdded", (id, ev) => {
-                        console.log("onEventAdded", id, ev);
-                        app.calendar.addEvent(ev);
-                    });
-                    scheduler.attachEvent("onEventChanged", (id, ev) => {
-                        console.log("onEventChanged", id, ev);
-                        app.calendar.updateEvent(ev);
-                    });
-                    scheduler.attachEvent("onEventDeleted", (id, ev) => {
-                        console.log("onEventDeleted", id, ev);
-                        app.calendar.deleteEvent(ev);
-                    });
-                },
-
-                methods: {
-                    create() {
-                        CalendarDataService.sync(this.calendar);
-                        // TODO: redirect to the new location
-                    },
-
-                    setCalendarData(data) {
-                        this.calendar = Object.assign(this.calendar, data); // keep as calendar object
-                        scheduler.clearAll();
-                        scheduler.parse(this.calendar.getDHTMLXEvents());
-                    },
-
-                    clearAll() {
-                        console.log('clear');
-                    }
+                // TODO: Make function to check valid URL slug exists. Then we can set exists.
+                if (urlslug.match(/^[a-zA-Z0-9_\-]+$/) && urlslug.length < 40) {
+                    exists = true;
+                } else {
+                    // should redirect back to homepage if we have a bad url;
+                    urlslug = null;
                 }
-            };
 
-            const app = Vue.createApp(CalendarVueApp).mount('#app');
-        </script>
+                var id = urlslug ?? Utils.nanoid(8);
+                CalendarDataService.subscribe(id);
+                var cal = new Calendar(id, "New Calendar", []);
 
-        <br />
-        <p>
-            Features:
-        <ul>
-            <li>Simple calendar UX</li>
-            <li>Share with anyone with a link</li>
-            <li>Daily revision history for changes</li>
-            <!-- <li>Add calendar with iCal subscription</li> -->
-            <li>No-login to embed your calendar in any page</li>
-        </ul>
-        </p>
+                return {
+                    isExisting: exists,
+                    calendar: cal,
+                    recents: [{ title: "Test", id: "test" }, { title: "Test2", id: "test2" }]
+                }
+            },
+
+            mounted() {
+                console.log("Vue:mounted");
+
+                scheduler.xy.scale_width = 60;
+
+                // TODO: get format string from environment
+                // https://docs.dhtmlx.com/scheduler/settings_format.html 
+                scheduler.config.hour_date = "%g:%i %A";
+                scheduler.config.responsive_lightbox = true; // responsive lightbox
+                scheduler.config.separate_short_events = true;
+                scheduler.config.time_step = 15;
+
+                scheduler.config.details_on_create = true;
+                scheduler.config.details_on_dblclick = true;
+                scheduler.config.icons_select = ["icon_edit"];
+
+                // have option to show midnight - 5am
+                scheduler.config.first_hour = 5;
+                // have option for larger 30-min scale
+
+                scheduler.config.event_duration = 60;
+                scheduler.config.full_day = true;
+
+                scheduler.config.scroll_hour = new Date().getHours();
+                scheduler.config.mark_now = true;
+                scheduler.config.now_date = new Date();
+                scheduler.init("scheduler_here", new Date(), "week");
+
+                scheduler.attachEvent("onEventAdded", (id, ev) => {
+                    console.log("onEventAdded", id, ev);
+                    app.calendar.addEvent(ev);
+                });
+                scheduler.attachEvent("onEventChanged", (id, ev) => {
+                    console.log("onEventChanged", id, ev);
+                    app.calendar.updateEvent(ev);
+                });
+                scheduler.attachEvent("onEventDeleted", (id, ev) => {
+                    console.log("onEventDeleted", id, ev);
+                    app.calendar.deleteEvent(ev);
+                });
+            },
+
+            watch: {
+                'calendar.options.extended'(val) {
+                    CalendarDataService.sync(this.calendar);
+                    console.log("extended", val);
+                    scheduler.config.first_hour = val ? 0 : 5;
+                    scheduler.render();
+                }
+            },
+
+            methods: {
+                create() {
+                    CalendarDataService.sync(this.calendar);
+                    // TODO: redirect to the new location
+                },
+
+                setCalendarData(data) {
+                    this.calendar = Object.assign(this.calendar, data); // keep as calendar object
+                    scheduler.clearAll();
+                    scheduler.parse(this.calendar.getDHTMLXEvents());
+                },
+            }
+        };
+
+        const app = Vue.createApp(CalendarVueApp).mount('#app');
+    </script>
+
+    <br />
+    <!--
+    <p>
+        Features:
+    <ul>
+        <li>DONE: Simple calendar UX</li>
+        <li>DONE: Share with anyone with a link</li>
+        <li>Daily revision history for changes</li>
+        <li>No-login to embed your calendar in any page</li>
+    </ul>
+    </p>
+-->
 
 </body>
 
