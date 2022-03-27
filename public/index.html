@@ -16,24 +16,22 @@ Use cases:
 
 TODO:
 * DONE: Figure out creation and permissions issue
-* TODO: Rename Calendar Title
+* DONE: Rename Calendar Title
 * DONE: Visiting URL directly (/doesnotexist) should have button to create
+* DONE: Have mode for full 24 hours
 
-* Have data parsing to only load the named fields, not the extra ones added by the program
-* DONE: Full 24 hours
-* BUG: pressing enter with lightbox closes it
+* TODO: Have data parsing to only load the named fields, not the extra ones added by the program
+* BUG: pressing enter with lightbox closes it. Shift+Enter works.
 * TODO: Events under 40 minutes get small view: view-source:https://docs.dhtmlx.com/scheduler/samples/02_customization/27_custom_event_box.html
 * TODO: Events get color based on hashtag : https://docs.dhtmlx.com/scheduler/custom_events_color.html #work #fun etc. First tag wins
-* TODO: Button to rescale to fit
-* TODO: Change calendar title / click to edit
+* TODO: Button to rescale to fit? Small mode?
 * TODO: Have the recents list (saved to localstorage)
 * TODO: Make it responsive (with all-hours moved via JS to just below the nav)
 * TODO: Have it save the calendar to localstorage until you share it
 * TODO: Have a help/tour button for discussion, etc. Otherwise the app is full-fledged.
 
-transform: scale(0.7);
+    transform: scale(0.7);
     transform-origin: top;
-
 -->
 
 <head>
@@ -45,7 +43,6 @@ transform: scale(0.7);
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css">
 -->
     <!-- CDN Development (always latest) -->
-    <xlink rel="stylesheet" href="https://unpkg.com/style.css" />
     <script src="https://unpkg.com/vue@3"></script>
 
     <!-- firebase -->
@@ -63,8 +60,6 @@ transform: scale(0.7);
             appId: "1:912998627577:web:aa652846c2618a986d8a28",
             measurementId: "G-4J99GY9KE6"
         };
-
-        // Initialize Firebase
         firebase.initializeApp(firebaseConfig);
 
         nanoid = (t = 21) => {
@@ -83,13 +78,11 @@ transform: scale(0.7);
             }
             return e;
         };
-        Utils = {};
-        Utils.nanoid = nanoid;
 
         class Event {
             // being created from a TUI event
             constructor(options) {
-                this.id = Utils.nanoid(8);
+                this.id = nanoid(8);
                 this.title = options.text || options.title;
 
                 // from DHTMLX
@@ -117,14 +110,6 @@ transform: scale(0.7);
                 this.title = title || "";
                 this.events = events || [];
                 this.options = options || {};
-            }
-
-            // return events in TUI format
-            getTUIEvents() {
-                return this.events.map(e => {
-                    e.category = e.category || "time";
-                    return e;
-                });
             }
 
             getDHTMLXEvents() {
@@ -164,10 +149,6 @@ transform: scale(0.7);
         class CalendarDataService {
             static slug = null;
             static db = firebase.database().ref('/calendars');
-
-            static getAll() {
-                return this.db;
-            }
 
             // subscribe to live updates
             static subscribe(slug) {
@@ -297,7 +278,7 @@ transform: scale(0.7);
                 <a href="/">PasteCal</a>: Shared calendars, no logins
             </div>
             <div style="text-align: center;" class="title" @click="editTitle = true;">
-                <span v-if="!editTitle">{{calendar.title}}</span>
+                <span v-if="!editTitle" style="cursor: pointer;" title="Click to edit">{{calendar.title}}</span>
                 <input type="text" v-if="editTitle" v-model="calendar.title" @keyup.enter="setTitle($event)">
             </div>
             <div class="recents" style="display: none;">
@@ -365,7 +346,7 @@ transform: scale(0.7);
                     urlslug = null;
                 }
 
-                var id = urlslug ?? Utils.nanoid(8);
+                var id = urlslug ?? nanoid(8);
                 CalendarDataService.subscribe(id);
                 var cal = new Calendar(id, "Untitled Calendar", []);
 
