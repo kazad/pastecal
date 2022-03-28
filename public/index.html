@@ -30,16 +30,14 @@ TODO:
 
     transform: scale(0.7);
     transform-origin: top;
+
+* TODO: Readonly. Have a readonly flag.
 -->
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PasteCal: Shareable, no-login calendar</title>
-    <xlink rel="stylesheet" href="style.css" />
-    <!--
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css">
--->
     <!-- CDN Development (always latest) -->
     <script src="https://unpkg.com/vue@3"></script>
 
@@ -80,8 +78,8 @@ TODO:
         class Event {
             // may be created from JSON object or DHTMLX internal calendar event
             constructor(options) {
-                this.id = nanoid(8);
-                this.title = options.text || options.title;
+                this.id = options.Id || nanoid(8);
+                this.title = options.Subject || options.text || options.title;
 
                 this.start = options.start;
                 this.end = options.end;
@@ -92,6 +90,12 @@ TODO:
                 if (options.start_date && options.end_date) {
                     this.start = options.start_date.toISOString();
                     this.end = options.end_date.toISOString();
+                }
+
+                // for SyncFusion Internal Object
+                if (options.StartTime) {
+                    this.start = new Date(options.StartTime).toISOString();
+                    this.end = new Date(options.EndTime).toISOString();
                 }
             }
         }
@@ -113,6 +117,27 @@ TODO:
                         text: e.title
                     }
                 });
+            }
+
+            getSyncFusionEvents() {
+                return this.events.map(e => {
+                    return {
+                        Id: e.id,
+                        Subject: e.title,
+                        StartTime: e.start,
+                        EndTime: e.end,
+                        //                        IsAllDay: e.allday,
+                        Recurrence: e.repeat
+                    }
+                });
+            }
+
+            setEvents(events) {
+                console.log("setEvents()", events);
+                this.events = events.map(e => {
+                    return new Event(e);
+                });
+                CalendarDataService.sync(this);
             }
 
             addEvent(e) {
@@ -143,19 +168,17 @@ TODO:
             static db = firebase.database().ref('/calendars');
 
             // subscribe to live updates
-            static subscribe(slug) {
-                console.log("subscribe to ", slug);
+            static subscribe(slug, callback) {
+                console.log("DataService: subscribe to ", slug);
                 this.slug = slug;
                 if (this.slug) {
                     this.db.child(this.slug).on('value', data => {
-                        console.log(`loaded ${slug}`, data.val());
-                        // var events = data.val().events;
-                        // update calendar object in vue app
-                        // app.calendar = data.val();
                         var calendar = data.val();
+                        console.log(`DataService: loaded ${slug}`, calendar);
+                        var calendar = data.val();
+
                         if (calendar && calendar.id) {
-                            app.isExisting = true;
-                            app.setCalendarData(calendar);
+                            callback(calendar);
                         }
                     })
                 }
@@ -209,26 +232,6 @@ TODO:
             width: 15ch;
         }
 
-        .dhx_cal_date {
-            font-size: 1.0rem !important;
-        }
-
-        .dhx_lightbox_time_select {
-            width: 120px !important;
-        }
-
-        .dhx_cal_ltext {
-            height: 200px !important;
-        }
-
-        .dhx_cal_light {
-            width: 550px !important;
-        }
-
-        textarea.dhx_cal_editor {
-            padding: 1px 2px !important;
-        }
-
         .topbar {
             display: flex;
             justify-content: space-between;
@@ -260,19 +263,19 @@ TODO:
         }
     </style>
     <div id="app">
-        <div class="extended_hours">
+        <div style="" class="extended_hours">
             <input type="checkbox" id="extended" v-model="calendar.options.extended">
             <label for="extended">All hours</label>
         </div>
 
         <div class="topbar">
             <div style="text-align: left;">
-                <a href="/">PasteCal</a>: Shared calendars, no logins
+                <a href="/">PasteCal</a>: Zero login shared calendar
             </div>
             <div style="text-align: center;" class="title">
-                <span v-if="!editTitle" style="cursor: pointer;" @click="editTitle = true"
-                    title="Click to edit">{{calendar.title}}</span>
-                <input type="text" v-if="editTitle" v-model="calendar.title" @keyup.enter="setTitle($event)">
+                <span v-show="!editTitle" style="cursor: pointer;" @click="editTitle = true" title="Click to edit"
+                    v-text="calendar.title"></span>
+                <input type="text" v-show="editTitle" v-model="calendar.title" @keyup.enter="setTitle($event)">
             </div>
             <div class="recents" style="display: none;">
                 <select name="recents" id="recents">
@@ -293,37 +296,25 @@ TODO:
         </div>
 
         <div id="cal2_wrap" style="width: 100%; height: 100%;">
-            <div id="scheduler_here" class="dhx_cal_container" style='width:100%; height:100%'>
-                <div class="dhx_cal_navline">
-                    <div class="dhx_cal_prev_button">&nbsp;</div>
-                    <div class="dhx_cal_next_button">&nbsp;</div>
-                    <div class="dhx_cal_today_button"></div>
-                    <div class="dhx_cal_date"></div>
-                    <div class="dhx_cal_tab" name="day_tab" style="right:204px;"></div>
-                    <div class="dhx_cal_tab" name="week_tab" style="right:140px;"></div>
-                    <div class="dhx_cal_tab" name="month_tab" style="right:76px;"></div>
-                </div>
-                <div class="dhx_cal_header">
-                </div>
-                <div class="dhx_cal_data">
-                </div>
-            </div>
+            <div id="Schedule"></div>
         </div>
-        <div class="recents" style="display: none;">
-            Recents:
-            <span v-for="item in recents" :key="item.id">
-                <a :href="item.id">{{item.title}}</a>
-            </span>
-        </div>
-        <!--
-        <pre>{{calendar}}</pre>
-        -->
+        <pre v-text="calendar"></pre>
     </div>
-    <script src="https://cdn.dhtmlx.com/scheduler/5.3/dhtmlxscheduler.js"></script>
-    <script
-        src="https://docs.dhtmlx.com/scheduler/codebase/ext/dhtmlxscheduler_container_autoresize.js?v=5.3.13"></script>
-    <link rel="stylesheet" href="https://cdn.dhtmlx.com/scheduler/5.3/dhtmlxscheduler.css" />
-    <link rel="stylesheet" href="https://docs.dhtmlx.com/scheduler/codebase/dhtmlxscheduler_material.css?v=5.3.13" />
+    <!-- Syncfusion stuff-->
+    <link href="https://cdn.syncfusion.com/ej2/ej2-base/styles/material.css" rel="stylesheet" type="text/css" />
+    <link href="https://cdn.syncfusion.com/ej2/ej2-buttons/styles/material.css" rel="stylesheet" type="text/css" />
+    <link href="https://cdn.syncfusion.com/ej2/ej2-calendars/styles/material.css" rel="stylesheet" type="text/css" />
+    <link href="https://cdn.syncfusion.com/ej2/ej2-dropdowns/styles/material.css" rel="stylesheet" type="text/css" />
+    <link href="https://cdn.syncfusion.com/ej2/ej2-inputs/styles/material.css" rel="stylesheet" type="text/css" />
+    <link href="https://cdn.syncfusion.com/ej2/ej2-splitbuttons/styles/material.css" rel="stylesheet" type="text/css" />
+    <link href="https://cdn.syncfusion.com/ej2/ej2-lists/styles/material.css" rel="stylesheet" type="text/css" />
+    <link href="https://cdn.syncfusion.com/ej2/ej2-popups/styles/material.css" rel="stylesheet" type="text/css" />
+    <link href="https://cdn.syncfusion.com/ej2/ej2-navigations/styles/material.css" rel="stylesheet" type="text/css" />
+    <!-- Essential JS 2 Scheduler's material theme -->
+    <link href="https://cdn.syncfusion.com/ej2/ej2-schedule/styles/material.css" rel="stylesheet" type="text/css" />
+
+    <!-- Essential JS 2 all script -->
+    <script src="https://cdn.syncfusion.com/ej2/dist/ej2.min.js" type="text/javascript"></script>
 
     <script>
         const CalendarVueApp = {
@@ -340,65 +331,56 @@ TODO:
                 }
 
                 var id = urlslug ?? nanoid(8);
-                CalendarDataService.subscribe(id);
                 var cal = new Calendar(id, "Untitled Calendar", []);
 
                 return {
                     isExisting: false, // set by callback
                     editTitle: false,
                     calendar: cal,
-                    recents: []
+                    recents: [],
+                    liveEvents: [],     // local copy, not synced
                 }
             },
 
             mounted() {
                 console.log("Vue:mounted");
 
-                scheduler.xy.scale_width = 60;
-
-                // TODO: get format string from environment
-                // https://docs.dhtmlx.com/scheduler/settings_format.html 
-                scheduler.config.hour_date = "%g:%i %A";
-                scheduler.config.responsive_lightbox = true; // responsive lightbox
-                scheduler.config.separate_short_events = true;
-                scheduler.config.time_step = 15;
-
-                scheduler.config.details_on_create = true;
-                scheduler.config.details_on_dblclick = true;
-                scheduler.config.icons_select = ["icon_edit"];
-
-                // have option to show midnight - 5am
-                scheduler.config.first_hour = 5;
-                // have option for larger 30-min scale
-
-                scheduler.config.event_duration = 60;
-                scheduler.config.full_day = true;
-
-                scheduler.config.scroll_hour = new Date().getHours();
-                scheduler.config.mark_now = true;
-                scheduler.config.now_date = new Date();
-                scheduler.init("scheduler_here", new Date(), "week");
-
-                scheduler.attachEvent("onEventAdded", (id, ev) => {
-                    console.log("onEventAdded", id, ev);
-                    app.calendar.addEvent(ev);
+                CalendarDataService.subscribe(this.calendar.id, (c) => {
+                    this.isExisting = true;
+                    Object.assign(this.calendar, c);
                 });
-                scheduler.attachEvent("onEventChanged", (id, ev) => {
-                    console.log("onEventChanged", id, ev);
-                    app.calendar.updateEvent(ev);
-                });
-                scheduler.attachEvent("onEventDeleted", (id, ev) => {
-                    console.log("onEventDeleted", id, ev);
-                    app.calendar.deleteEvent(ev);
-                });
+
+                window.scheduleObj = new ej.schedule.Schedule();
+                scheduleObj.startHour = "05:00";
+
+                scheduleObj.actionComplete = (ev) => {
+                    switch (ev.requestType) {
+                        case 'eventChanged':
+                        case 'eventCreated':
+                        case 'eventRemoved':
+                            console.log("actionComplete()", ev, this.liveEvents);
+                            this.calendar.setEvents(this.liveEvents);
+                            break;
+                    }
+                    console.log(ev);
+                };
+
+                scheduleObj.appendTo('#Schedule');
             },
 
             watch: {
                 'calendar.options.extended'(val) {
                     CalendarDataService.sync(this.calendar);
-                    console.log("extended", val);
-                    scheduler.config.first_hour = val ? 0 : 5;
-                    scheduler.render();
+                    console.log("calendar.options.extended changed", val);
+                    scheduleObj.startHour = val ? "00:00" : "05:00";
+                },
+                'calendar.events'(val) {
+                    console.log("calendar.events changed: ", val);
+                    this.liveEvents = this.calendar.getSyncFusionEvents();
+                    scheduleObj.eventSettings.dataSource = this.liveEvents;
+
+                    // TODO: compare these events to the existing ones, update only the changed ones
+                    // scheduleObj.eventSettings.datasource = this.calendar.getSyncFusionEvents();
                 }
             },
 
@@ -421,31 +403,12 @@ TODO:
                         }
                     }
                 },
-
-                setCalendarData(data) {
-                    this.calendar = Object.assign(this.calendar, data); // keep as calendar object
-                    scheduler.clearAll();
-                    scheduler.parse(this.calendar.getDHTMLXEvents());
-                },
             }
         };
 
         const app = Vue.createApp(CalendarVueApp).mount('#app');
     </script>
-
     <br />
-    <!--
-    <p>
-        Features:
-    <ul>
-        <li>DONE: Simple calendar UX</li>
-        <li>DONE: Share with anyone with a link</li>
-        <li>Daily revision history for changes</li>
-        <li>No-login to embed your calendar in any page</li>
-    </ul>
-    </p>
--->
-
 </body>
 
 </html>
