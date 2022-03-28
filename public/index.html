@@ -80,7 +80,8 @@ TODO:
             constructor(options) {
                 this.id = options.Id || nanoid(8);
                 this.title = options.Subject || options.text || options.title;
-
+                this.description = options.Description || "";
+                this.recurrencerule = options.RecurrenceRule || "";
                 this.start = options.start;
                 this.end = options.end;
 
@@ -126,6 +127,8 @@ TODO:
                         Subject: e.title,
                         StartTime: e.start,
                         EndTime: e.end,
+                        Description: e.description,
+                        RecurrenceRule: e.recurrencerule,
                         //                        IsAllDay: e.allday,
                         Recurrence: e.repeat
                     }
@@ -169,14 +172,11 @@ TODO:
 
             // subscribe to live updates
             static subscribe(slug, callback) {
-                console.log("DataService: subscribe to ", slug);
                 this.slug = slug;
                 if (this.slug) {
                     this.db.child(this.slug).on('value', data => {
                         var calendar = data.val();
                         console.log(`DataService: loaded ${slug}`, calendar);
-                        var calendar = data.val();
-
                         if (calendar && calendar.id) {
                             callback(calendar);
                         }
