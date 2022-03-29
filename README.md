@@ -9,8 +9,6 @@ Use cases:
 
 TODO:
 
-- 5am mode
-
 FUTURE:
 
 - Event color (based on hashtag?)
@@ -18,6 +16,7 @@ FUTURE:
 - Help/tour button
 - Readonly flag
 - Password protection
+- Safer writing / conflict avoidance (https://firebase.google.com/docs/database/admin/save-data#node.js_8)
 
 DONE:
 
@@ -27,3 +26,4 @@ DONE:
 - Have mode for full 24 hours
 - Make it responsive (with all-hours moved via JS to just below the nav)
 - Have it save the calendar to localstorage until you share it
+- 5am mode
