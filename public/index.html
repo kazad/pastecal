@@ -227,33 +227,15 @@ TODO:
                 return e;
             }
 
+            import(c) {
+                Object.assign(this, c);
+            }
+
             setEvents(events) {
                 console.log("setEvents()", events);
                 this.events = events.map(e => {
                     return new Event(e);
                 });
-                CalendarDataService.sync(this);
-            }
-
-            addEvent(e) {
-                var event = new Event(e);
-                this.events.push(event);
-                CalendarDataService.sync(this);
-            }
-
-            deleteEvent(eventToDelete) {
-                this.events = this.events.filter(e => e.id !== eventToDelete.id);
-                CalendarDataService.sync(this);
-            }
-
-            updateEvent(updatedEvent) {
-                var event = this.events.find(e => e.id === updatedEvent.id);
-                if (event) {
-                    var updated = new Event(updatedEvent);
-                    Object.assign(event, updated);
-                } else {
-                    console.log("Event not found", updatedEvent);
-                }
                 CalendarDataService.sync(this);
             }
         }
@@ -387,7 +369,7 @@ TODO:
 
                 CalendarDataService.subscribe(this.calendar.id, (c) => {
                     this.isExisting = true;
-                    Object.assign(this.calendar, c);
+                    this.calendar.import(c);
                 });
 
                 window.scheduleObj = new ej.schedule.Schedule();
@@ -416,7 +398,7 @@ TODO:
                 if (!this.isExisting && this.calendar.events.length == 0 && !this.urlslug) {
                     console.log("No events, adding default");
                     var defaultEvent = this.calendar.defaultEvent("Sample event");
-                    this.calendar.addEvent(defaultEvent);
+                    this.calendar.setEvents([defaultEvent]);
                     this.loadLocalStorage();    // attempt this
                     this.updateCalendar();
                 }
@@ -438,18 +420,9 @@ TODO:
                     console.log("calendar.options.extended changed", val);
                     scheduleObj.startHour = val ? "00:00" : "05:00";
                 },
-
-                /*
-                                'calendar.events'(val) {
-                                    console.log("calendar.events changed: ", val);
-                                    this.updateCalendar();
-                                    //this.syncFusionEvents = this.calendar.getSyncFusionEvents();
-                                }
-                                */
             },
 
             methods: {
-
                 clearLocalStorage() {
                     localStorage.removeItem("calendar");
                 },
@@ -457,7 +430,7 @@ TODO:
                 loadLocalStorage() {
                     var c = JSON.parse(localStorage.getItem("calendar"));
                     if (c) {
-                        Object.assign(this.calendar, c);
+                        this.calendar.import(c);
                     }
                 },
 
