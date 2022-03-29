@@ -1,38 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-<!-- TODO
-Tell Joey if we make the website: https://github.com/joereynolds/what-to-code#websites
-
-Features: 
-
-Use cases:
-
-* Visiting homepage, entering ID, creates the calendar with that shortcode
-* Visiting homepage, have random shortcode (shortID) prepopulated
-* Visiting pastecal.com/ID creates the calendar (prefilled option to create)
-* Visiting homepage, have a list of your recent calcs on the side
-
-TODO:
-* DONE: Figure out creation and permissions issue
-* DONE: Rename Calendar Title
-* DONE: Visiting URL directly (/doesnotexist) should have button to create
-* DONE: Have mode for full 24 hours
-
-* TODO: Have data parsing to only load the named fields, not the extra ones added by the program
-* BUG: pressing enter with lightbox closes it. Shift+Enter works.
-* TODO: Events under 40 minutes get small view: view-source:https://docs.dhtmlx.com/scheduler/samples/02_customization/27_custom_event_box.html
-* TODO: Events get color based on hashtag : https://docs.dhtmlx.com/scheduler/custom_events_color.html #work #fun etc. First tag wins
-* TODO: Button to rescale to fit? Small mode?
-* TODO: Have the recents list (saved to localstorage)
-* TODO: Make it responsive (with all-hours moved via JS to just below the nav)
-* TODO: Have it save the calendar to localstorage until you share it
-* TODO: Have a help/tour button for discussion, etc. Otherwise the app is full-fledged.
-
-    transform: scale(0.7);
-    transform-origin: top;
-
-* TODO: Readonly. Have a readonly flag.
--->
 
 <head>
     <meta charset="UTF-8">
@@ -41,16 +8,10 @@ TODO:
     <!-- CDN Development (always latest) -->
     <script src="https://unpkg.com/vue@3"></script>
 
-    <!-- Syncfusion stuff-->
+    <!-- Syncfusion styles: https://ej2.syncfusion.com/documentation/appearance/theme/ -->
     <link href="https://cdn.syncfusion.com/ej2/ej2-base/styles/material.css" rel="stylesheet" type="text/css" />
-    <link href="https://cdn.syncfusion.com/ej2/ej2-buttons/styles/material.css" rel="stylesheet" type="text/css" />
-    <link href="https://cdn.syncfusion.com/ej2/ej2-calendars/styles/material.css" rel="stylesheet" type="text/css" />
-    <link href="https://cdn.syncfusion.com/ej2/ej2-dropdowns/styles/material.css" rel="stylesheet" type="text/css" />
-    <link href="https://cdn.syncfusion.com/ej2/ej2-inputs/styles/material.css" rel="stylesheet" type="text/css" />
-    <link href="https://cdn.syncfusion.com/ej2/ej2-splitbuttons/styles/material.css" rel="stylesheet" type="text/css" />
-    <link href="https://cdn.syncfusion.com/ej2/ej2-lists/styles/material.css" rel="stylesheet" type="text/css" />
-    <link href="https://cdn.syncfusion.com/ej2/ej2-popups/styles/material.css" rel="stylesheet" type="text/css" />
-    <link href="https://cdn.syncfusion.com/ej2/ej2-navigations/styles/material.css" rel="stylesheet" type="text/css" />
+    <link href="https://cdn.syncfusion.com/ej2/material.css" rel="stylesheet" type="text/css" />
+
     <!-- Essential JS 2 Scheduler's material theme -->
     <link href="https://cdn.syncfusion.com/ej2/ej2-schedule/styles/material.css" rel="stylesheet" type="text/css" />
 
@@ -83,7 +44,7 @@ TODO:
             font-size: 1.0rem;
         }
 
-        div.extended_hours {
+        div._extended_hours {
             position: absolute;
             top: 90px;
             z-index: 99;
@@ -97,7 +58,7 @@ TODO:
 
         /* syncfusion customizations */
         .e-today {
-            display: none !important;
+            xdisplay: none !important;
         }
 
         .e-schedule .e-vertical-view .e-time-cells-wrap table td,
@@ -108,8 +69,21 @@ TODO:
         .e-schedule .e-month-view .e-work-cells {
             height: 100px !important;
         }
-    </style>
 
+        td.e-header-cells.e-disable-dates::before {
+            content: '12-4 AM';
+            width: 100%;
+            margin: 0px auto;
+            margin-top: 40%;
+            text-align: center;
+            display: inline-block;
+            color: rgba(0, 0, 0, 0.54);
+        }
+
+        td.e-header-cells.e-disable-dates:hover {
+            background-color: #fafafa !important;
+        }
+    </style>
 
     <!-- Essential JS 2 all script -->
     <script src="https://cdn.syncfusion.com/ej2/dist/ej2.min.js" type="text/javascript"></script>
@@ -156,18 +130,11 @@ TODO:
             constructor(options) {
                 this.id = options.Id || options.id || uuidv4();
                 this.title = options.Subject || options.text || options.title;
-                this.description = options.Description || "";
-                this.recurrencerule = options.RecurrenceRule || "";
+                this.description = options.Description || options.description || "";
+                this.repeat = options.repeat || "";
+                this.recurrencerule = options.RecurrenceRule || options.recurrencerule || "";
                 this.start = options.start;
                 this.end = options.end;
-
-                this.repeat = "";
-
-                // from DHTMLX internal object
-                if (options.start_date && options.end_date) {
-                    this.start = options.start_date.toISOString();
-                    this.end = options.end_date.toISOString();
-                }
 
                 // for SyncFusion Internal Object
                 if (options.StartTime) {
@@ -183,17 +150,6 @@ TODO:
                 this.title = title || "";
                 this.events = events || [];
                 this.options = options || {};
-            }
-
-            getDHTMLXEvents() {
-                return this.events.map(e => {
-                    return {
-                        id: e.id,
-                        start_date: e.start,
-                        end_date: e.end,
-                        text: e.title
-                    }
-                });
             }
 
             getSyncFusionEvents() {
@@ -239,18 +195,16 @@ TODO:
 
         class CalendarDataService {
             static connected = false;
-            static slug = null;
             static db = firebase.database().ref('/calendars');
 
             // subscribe to live updates
             static subscribe(slug, callback) {
-                this.slug = slug;
-                if (this.slug) {
-                    this.db.child(this.slug).on('value', data => {
+                if (slug) {
+                    this.db.child(slug).on('value', data => {
                         var calendar = data.val();
                         // console.log(`DataService: loaded ${slug}`, calendar);
                         if (calendar && calendar.id) {
-                            this.connected = true;
+                            this.connected = slug;
                             callback(calendar);
                         }
                     })
@@ -282,7 +236,7 @@ TODO:
             static createWithId(key, value, success) {
                 return this.db.child(key).set(value, (error) => {
                     if (error) {
-                        console.log("error", error);
+                        console.log("error creating calendar", error, key, value);
                     } else {
                         success();
                     }
@@ -302,7 +256,7 @@ TODO:
 
 <body>
     <div id="app">
-        <div style="display: none;" class="extended_hours">
+        <div v-if="false" style="" class="extended_hours">
             <input type="checkbox" id="extended" v-model="calendar.options.extended">
             <label for="extended">All hours</label>
         </div>
@@ -383,6 +337,8 @@ TODO:
                 scheduleObj.startHour = "05:00";
                 scheduleObj.views = ['Day', 'Week', 'Month', 'Year', 'Agenda'];
 
+                // live binding to events
+                scheduleObj.eventSettings.dataSource = this.syncFusionEvents;
                 scheduleObj.actionComplete = (ev) => {
                     switch (ev.requestType) {
                         case 'eventChanged':
@@ -395,15 +351,17 @@ TODO:
                     console.log(ev);
                 };
 
-                // live binding to events
-                scheduleObj.eventSettings.dataSource = this.syncFusionEvents;
-
                 scheduleObj.appendTo('#Schedule');
-                // TODO: inject all hours button into the right cell
 
-                // fresh load
+                // extended hours button
+                document.addEventListener('click', (e) => {
+                    if (e.target.className == "e-header-cells e-disable-dates") {
+                        this.calendar.options.extended = !this.calendar.options.extended;
+                    }
+                });
+
+                // sample data if needed
                 if (!this.isExisting && this.calendar.events.length == 0 && !this.urlslug) {
-                    console.log("No events, adding default");
                     var defaultEvent = this.calendar.defaultEvent("Sample event");
                     this.calendar.setEvents([defaultEvent]);
                     this.loadLocalStorage();    // attempt this
