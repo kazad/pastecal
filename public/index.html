@@ -128,11 +128,29 @@ TODO:
                         StartTime: e.start,
                         EndTime: e.end,
                         Description: e.description,
-                        RecurrenceRule: e.recurrencerule,
+                        //                        RecurrenceRule: e.recurrencerule,
                         //                        IsAllDay: e.allday,
-                        Recurrence: e.repeat
+                        //                        Recurrence: e.repeat
                     }
                 });
+            }
+
+            // TODO: make a default event? Needed?
+            defaultEvent(title) {
+                var e = new Event({ title: title });
+                e.start = (new Date()).toISOString();
+
+                // create sample event at 2pm today
+                var d = new Date();
+                d.setHours(12);
+                d.setMinutes(0);
+                d.setSeconds(0);
+                d.setMilliseconds(0);
+                e.start = d.toISOString();
+                d.setHours(13);
+                e.end = d.toISOString();
+
+                return e;
             }
 
             setEvents(events) {
@@ -167,6 +185,7 @@ TODO:
         }
 
         class CalendarDataService {
+            static connected = false;
             static slug = null;
             static db = firebase.database().ref('/calendars');
 
@@ -178,6 +197,7 @@ TODO:
                         var calendar = data.val();
                         console.log(`DataService: loaded ${slug}`, calendar);
                         if (calendar && calendar.id) {
+                            this.connected = true;
                             callback(calendar);
                         }
                     })
@@ -186,7 +206,8 @@ TODO:
 
             // only sync if we have existed
             static sync(calendar) {
-                if (calendar && calendar.id && app.isExisting) {
+                if (calendar && calendar.id && this.connected) {
+                    console.log("CalendarDataService.sync()", calendar);
                     this.db.child(calendar.id).set(calendar);
                 }
             }
@@ -214,9 +235,6 @@ TODO:
             }
         }
     </script>
-    <!--
-    <script src="index.js"></script>
--->
 </head>
 
 <body>
@@ -225,7 +243,7 @@ TODO:
             max-width: 100%;
             padding: 0px 5px;
             margin: 5px auto;
-            font-family: Roboto, Arial, sans-serif;
+            font-family: "Roboto", "Segoe UI", "GeezaPro", "DejaVu Serif", "sans-serif", "-apple-system", "BlinkMacSystemFont";
         }
 
         #app input#slug {
@@ -261,16 +279,26 @@ TODO:
         .recents a {
             margin-right: 0.5rem;
         }
+
+        /* syncfusion customizations */
+        .e-today {
+            display: none !important;
+        }
+
+        .e-schedule .e-vertical-view .e-time-cells-wrap table td,
+        .e-schedule .e-vertical-view .e-work-cells {
+            height: 24px !important;
+        }
     </style>
     <div id="app">
-        <div style="" class="extended_hours">
+        <div style="display: none;" class="extended_hours">
             <input type="checkbox" id="extended" v-model="calendar.options.extended">
             <label for="extended">All hours</label>
         </div>
 
         <div class="topbar">
             <div style="text-align: left;">
-                <a href="/">PasteCal</a>: Zero login shared calendar
+                <a href="/">PasteCal</a>: Shared, no-login calendar
             </div>
             <div style="text-align: center;" class="title">
                 <span v-show="!editTitle" style="cursor: pointer;" @click="editTitle = true" title="Click to edit"
@@ -283,13 +311,13 @@ TODO:
                 </select>
             </div>
             <div style="text-align:right">
-                <div v-if="isExisting">
+                <div v-show="isExisting">
                     <a :href="calendar.id">https://pastecal.com/{{calendar.id}}</a>
                 </div>
 
-                <div v-if="!isExisting">
-                    https://pastecal.com/<input id="slug" type="text" :disabled="isExisting"
-                        v-model="calendar.id"></input>
+                <div v-show="!isExisting" style="display:none;">
+                    https://pastecal.com/<input id="slug" type="text" :disabled="isExisting" v-model="calendar.id"
+                        @keyup.enter="create"></input>
                     <button @click="create" v-if="!isExisting">Save</button>
                 </div>
             </div>
@@ -298,6 +326,7 @@ TODO:
         <div id="cal2_wrap" style="width: 100%; height: 100%;">
             <div id="Schedule"></div>
         </div>
+        <pre v-text="syncFusionEvents"></pre>
         <pre v-text="calendar"></pre>
     </div>
     <!-- Syncfusion stuff-->
@@ -338,7 +367,8 @@ TODO:
                     editTitle: false,
                     calendar: cal,
                     recents: [],
-                    liveEvents: [],     // local copy, not synced
+                    syncFusionEvents: [],     // local copy, not synced
+                    urlslug: urlslug
                 }
             },
 
@@ -352,20 +382,33 @@ TODO:
 
                 window.scheduleObj = new ej.schedule.Schedule();
                 scheduleObj.startHour = "05:00";
+                scheduleObj.views = ['Day', 'Week', 'Month', 'Year', 'Agenda'];
 
                 scheduleObj.actionComplete = (ev) => {
                     switch (ev.requestType) {
                         case 'eventChanged':
                         case 'eventCreated':
                         case 'eventRemoved':
-                            console.log("actionComplete()", ev, this.liveEvents);
-                            this.calendar.setEvents(this.liveEvents);
+                            console.log("actionComplete()", ev, this.syncFusionEvents, scheduleObj.eventsData);
+                            this.calendar.setEvents(this.syncFusionEvents);
                             break;
                     }
                     console.log(ev);
                 };
 
+                // live binding to events
+                scheduleObj.eventSettings.dataSource = this.syncFusionEvents;
+
                 scheduleObj.appendTo('#Schedule');
+                // inject all hours button into the right cell
+
+                if (!this.isExisting && this.calendar.events.length == 0 && !this.urlslug) {
+                    console.log("No events, adding default");
+                    var defaultEvent = this.calendar.defaultEvent("Sample event");
+                    this.calendar.addEvent(defaultEvent);
+                }
+
+                this.updateCalendar();
             },
 
             watch: {
@@ -376,15 +419,19 @@ TODO:
                 },
                 'calendar.events'(val) {
                     console.log("calendar.events changed: ", val);
-                    this.liveEvents = this.calendar.getSyncFusionEvents();
-                    scheduleObj.eventSettings.dataSource = this.liveEvents;
-
-                    // TODO: compare these events to the existing ones, update only the changed ones
-                    // scheduleObj.eventSettings.datasource = this.calendar.getSyncFusionEvents();
+                    this.updateCalendar();
+                    //this.syncFusionEvents = this.calendar.getSyncFusionEvents();
                 }
             },
 
             methods: {
+
+                updateCalendar() {
+                    console.log("updateCalendar()");
+                    this.syncFusionEvents = this.calendar.getSyncFusionEvents();
+                    scheduleObj.eventSettings.dataSource = this.syncFusionEvents;
+                },
+
                 create() {
                     // initial create
                     CalendarDataService.createWithId(this.calendar.id, this.calendar, () => {
