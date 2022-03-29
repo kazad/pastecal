@@ -128,19 +128,17 @@ TODO:
                         StartTime: e.start,
                         EndTime: e.end,
                         Description: e.description,
-                        //                        RecurrenceRule: e.recurrencerule,
+                        RecurrenceRule: e.recurrencerule,
                         //                        IsAllDay: e.allday,
-                        //                        Recurrence: e.repeat
+                        Recurrence: e.repeat
                     }
                 });
             }
 
-            // TODO: make a default event? Needed?
             defaultEvent(title) {
                 var e = new Event({ title: title });
-                e.start = (new Date()).toISOString();
 
-                // create sample event at 2pm today
+                // sample 1-hour event in local timezone 
                 var d = new Date();
                 d.setHours(12);
                 d.setMinutes(0);
@@ -301,9 +299,10 @@ TODO:
                 <a href="/">PasteCal</a>: Shared, no-login calendar
             </div>
             <div style="text-align: center;" class="title">
-                <span v-show="!editTitle" style="cursor: pointer;" @click="editTitle = true" title="Click to edit"
-                    v-text="calendar.title"></span>
-                <input type="text" v-show="editTitle" v-model="calendar.title" @keyup.enter="setTitle($event)">
+                <span v-show="!editTitle" style="display: none; cursor: pointer;" @click="editTitle = true"
+                    title="Click to edit" v-text="calendar.title"></span>
+                <input type="text" v-show="editTitle" style="display: none;" v-model="calendar.title"
+                    @keyup.enter="setTitle($event)">
             </div>
             <div class="recents" style="display: none;">
                 <select name="recents" id="recents">
@@ -326,8 +325,8 @@ TODO:
         <div id="cal2_wrap" style="width: 100%; height: 100%;">
             <div id="Schedule"></div>
         </div>
-        <pre v-text="syncFusionEvents"></pre>
-        <pre v-text="calendar"></pre>
+        <pre v-text="syncFusionEvents" v-if="debug"></pre>
+        <pre v-text="calendar" v-if="debug"></pre>
     </div>
     <!-- Syncfusion stuff-->
     <link href="https://cdn.syncfusion.com/ej2/ej2-base/styles/material.css" rel="stylesheet" type="text/css" />
@@ -359,8 +358,8 @@ TODO:
                     urlslug = null;
                 }
 
-                var id = urlslug ?? nanoid(8);
-                var cal = new Calendar(id, "Untitled Calendar", []);
+                var id = urlslug ?? nanoid(5);
+                var cal = new Calendar(id, "New Calendar", []);
 
                 return {
                     isExisting: false, // set by callback
@@ -368,7 +367,8 @@ TODO:
                     calendar: cal,
                     recents: [],
                     syncFusionEvents: [],     // local copy, not synced
-                    urlslug: urlslug
+                    urlslug: urlslug,
+                    debug: false
                 }
             },
 
@@ -400,31 +400,61 @@ TODO:
                 scheduleObj.eventSettings.dataSource = this.syncFusionEvents;
 
                 scheduleObj.appendTo('#Schedule');
-                // inject all hours button into the right cell
+                // TODO: inject all hours button into the right cell
 
+                // fresh load
                 if (!this.isExisting && this.calendar.events.length == 0 && !this.urlslug) {
                     console.log("No events, adding default");
                     var defaultEvent = this.calendar.defaultEvent("Sample event");
                     this.calendar.addEvent(defaultEvent);
+                    this.loadLocalStorage();    // attempt this
+                    this.updateCalendar();
                 }
-
-                this.updateCalendar();
             },
 
             watch: {
+                calendar: {
+                    handler: function (newVal, oldVal) {
+                        console.log("Vue:watch:calendar", newVal, oldVal);
+                        this.updateCalendar();
+                        if (!this.isExisting) {
+                            this.saveLocalStorage();
+                        }
+                    },
+                    deep: true
+                },
                 'calendar.options.extended'(val) {
                     CalendarDataService.sync(this.calendar);
                     console.log("calendar.options.extended changed", val);
                     scheduleObj.startHour = val ? "00:00" : "05:00";
                 },
-                'calendar.events'(val) {
-                    console.log("calendar.events changed: ", val);
-                    this.updateCalendar();
-                    //this.syncFusionEvents = this.calendar.getSyncFusionEvents();
-                }
+
+                /*
+                                'calendar.events'(val) {
+                                    console.log("calendar.events changed: ", val);
+                                    this.updateCalendar();
+                                    //this.syncFusionEvents = this.calendar.getSyncFusionEvents();
+                                }
+                                */
             },
 
             methods: {
+
+                clearLocalStorage() {
+                    localStorage.removeItem("calendar");
+                },
+
+                loadLocalStorage() {
+                    var c = JSON.parse(localStorage.getItem("calendar"));
+                    if (c) {
+                        Object.assign(this.calendar, c);
+                    }
+                },
+
+                saveLocalStorage() {
+                    console.log("Vue:saveLocalStorage");
+                    localStorage.setItem("calendar", JSON.stringify(this.calendar));
+                },
 
                 updateCalendar() {
                     console.log("updateCalendar()");
@@ -435,6 +465,7 @@ TODO:
                 create() {
                     // initial create
                     CalendarDataService.createWithId(this.calendar.id, this.calendar, () => {
+                        this.clearLocalStorage();
                         window.location = "/" + this.calendar.id;
                     });
                 },
