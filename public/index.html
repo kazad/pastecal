@@ -41,6 +41,79 @@ TODO:
     <!-- CDN Development (always latest) -->
     <script src="https://unpkg.com/vue@3"></script>
 
+    <!-- Syncfusion stuff-->
+    <link href="https://cdn.syncfusion.com/ej2/ej2-base/styles/material.css" rel="stylesheet" type="text/css" />
+    <link href="https://cdn.syncfusion.com/ej2/ej2-buttons/styles/material.css" rel="stylesheet" type="text/css" />
+    <link href="https://cdn.syncfusion.com/ej2/ej2-calendars/styles/material.css" rel="stylesheet" type="text/css" />
+    <link href="https://cdn.syncfusion.com/ej2/ej2-dropdowns/styles/material.css" rel="stylesheet" type="text/css" />
+    <link href="https://cdn.syncfusion.com/ej2/ej2-inputs/styles/material.css" rel="stylesheet" type="text/css" />
+    <link href="https://cdn.syncfusion.com/ej2/ej2-splitbuttons/styles/material.css" rel="stylesheet" type="text/css" />
+    <link href="https://cdn.syncfusion.com/ej2/ej2-lists/styles/material.css" rel="stylesheet" type="text/css" />
+    <link href="https://cdn.syncfusion.com/ej2/ej2-popups/styles/material.css" rel="stylesheet" type="text/css" />
+    <link href="https://cdn.syncfusion.com/ej2/ej2-navigations/styles/material.css" rel="stylesheet" type="text/css" />
+    <!-- Essential JS 2 Scheduler's material theme -->
+    <link href="https://cdn.syncfusion.com/ej2/ej2-schedule/styles/material.css" rel="stylesheet" type="text/css" />
+
+    <style>
+        body {
+            padding: 0px 5px;
+            margin: 5px auto;
+            font-family: "Roboto", "Segoe UI", "GeezaPro", "DejaVu Serif", "sans-serif", "-apple-system", "BlinkMacSystemFont";
+        }
+
+        #app input#slug {
+            width: 10ch;
+        }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            border-bottom: 1px solid #ccc;
+            padding: 5px 0px;
+            margin-top: 5px;
+            font-size: 0.8rem;
+        }
+
+        .topbar>div {
+            width: 33%;
+        }
+
+        .topbar .title {
+            font-weight: bold;
+            font-size: 1.0rem;
+        }
+
+        div.extended_hours {
+            position: absolute;
+            top: 90px;
+            z-index: 99;
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        .recents a {
+            margin-right: 0.5rem;
+        }
+
+        /* syncfusion customizations */
+        .e-today {
+            display: none !important;
+        }
+
+        .e-schedule .e-vertical-view .e-time-cells-wrap table td,
+        .e-schedule .e-vertical-view .e-work-cells {
+            height: 24px !important;
+        }
+
+        .e-schedule .e-month-view .e-work-cells {
+            height: 100px !important;
+        }
+    </style>
+
+
+    <!-- Essential JS 2 all script -->
+    <script src="https://cdn.syncfusion.com/ej2/dist/ej2.min.js" type="text/javascript"></script>
+
     <!-- firebase -->
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-compat.js"></script>
     <script>
@@ -57,28 +130,31 @@ TODO:
             measurementId: "G-4J99GY9KE6"
         };
         firebase.initializeApp(firebaseConfig);
+    </script>
 
-        nanoid = (t = 21) => {
-            let e = "",
-                r = crypto.getRandomValues(new Uint8Array(t));
-            for (; t--;) {
-                let n = 63 & r[t];
-                e +=
-                    n < 36
-                        ? n.toString(36)
-                        : n < 62
-                            ? (n - 26).toString(36).toUpperCase()
-                            : n < 63
-                                ? nanoid(1) // replace with another random character
-                                : nanoid(1);
+    <script>
+        let randomID = (size = 21) => {
+            // no lookalikes
+            let alphabet = '123456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+            let id = ''
+            let i = size
+            while (i--) {
+                // `| 0` is more compact and faster than `Math.floor()`.
+                id += alphabet[(Math.random() * alphabet.length) | 0]
             }
-            return e;
-        };
+            return id
+        }
+
+        function uuidv4() {
+            return ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, c =>
+                (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+            );
+        }
 
         class Event {
             // may be created from JSON object or DHTMLX internal calendar event
             constructor(options) {
-                this.id = options.Id || nanoid(8);
+                this.id = options.Id || options.id || uuidv4();
                 this.title = options.Subject || options.text || options.title;
                 this.description = options.Description || "";
                 this.recurrencerule = options.RecurrenceRule || "";
@@ -236,58 +312,6 @@ TODO:
 </head>
 
 <body>
-    <style>
-        body {
-            max-width: 100%;
-            padding: 0px 5px;
-            margin: 5px auto;
-            font-family: "Roboto", "Segoe UI", "GeezaPro", "DejaVu Serif", "sans-serif", "-apple-system", "BlinkMacSystemFont";
-        }
-
-        #app input#slug {
-            width: 15ch;
-        }
-
-        .topbar {
-            display: flex;
-            justify-content: space-between;
-            border-bottom: 1px solid #ccc;
-            padding: 5px 0px;
-            margin-top: 5px;
-            font-size: 0.8rem;
-        }
-
-        .topbar>div {
-            width: 33%;
-        }
-
-        .topbar .title {
-            font-weight: bold;
-            font-size: 1.0rem;
-        }
-
-        div.extended_hours {
-            position: absolute;
-            top: 90px;
-            z-index: 99;
-            font-size: 0.8rem;
-            color: #666;
-        }
-
-        .recents a {
-            margin-right: 0.5rem;
-        }
-
-        /* syncfusion customizations */
-        .e-today {
-            display: none !important;
-        }
-
-        .e-schedule .e-vertical-view .e-time-cells-wrap table td,
-        .e-schedule .e-vertical-view .e-work-cells {
-            height: 24px !important;
-        }
-    </style>
     <div id="app">
         <div style="display: none;" class="extended_hours">
             <input type="checkbox" id="extended" v-model="calendar.options.extended">
@@ -310,14 +334,15 @@ TODO:
                 </select>
             </div>
             <div style="text-align:right">
-                <div v-show="isExisting">
+                <div v-show="isExisting" style="display: none;">
                     <a :href="calendar.id">https://pastecal.com/{{calendar.id}}</a>
                 </div>
 
                 <div v-show="!isExisting" style="display:none;">
-                    https://pastecal.com/<input id="slug" type="text" :disabled="isExisting" v-model="calendar.id"
-                        @keyup.enter="create"></input>
-                    <button @click="create" v-if="!isExisting">Save</button>
+                    https://pastecal.com/<input id="slug" type="text" class="xe-field xe-input" :disabled="isExisting"
+                        v-model="calendar.id" @keyup.enter="create"></input>
+                    <button @click="create" v-show="!isExisting" style="margin-left: 5px;"
+                        class="e-control e-btn e-lib e-primary e-small e-flat">Save</button>
                 </div>
             </div>
         </div>
@@ -328,21 +353,6 @@ TODO:
         <pre v-text="syncFusionEvents" v-if="debug"></pre>
         <pre v-text="calendar" v-if="debug"></pre>
     </div>
-    <!-- Syncfusion stuff-->
-    <link href="https://cdn.syncfusion.com/ej2/ej2-base/styles/material.css" rel="stylesheet" type="text/css" />
-    <link href="https://cdn.syncfusion.com/ej2/ej2-buttons/styles/material.css" rel="stylesheet" type="text/css" />
-    <link href="https://cdn.syncfusion.com/ej2/ej2-calendars/styles/material.css" rel="stylesheet" type="text/css" />
-    <link href="https://cdn.syncfusion.com/ej2/ej2-dropdowns/styles/material.css" rel="stylesheet" type="text/css" />
-    <link href="https://cdn.syncfusion.com/ej2/ej2-inputs/styles/material.css" rel="stylesheet" type="text/css" />
-    <link href="https://cdn.syncfusion.com/ej2/ej2-splitbuttons/styles/material.css" rel="stylesheet" type="text/css" />
-    <link href="https://cdn.syncfusion.com/ej2/ej2-lists/styles/material.css" rel="stylesheet" type="text/css" />
-    <link href="https://cdn.syncfusion.com/ej2/ej2-popups/styles/material.css" rel="stylesheet" type="text/css" />
-    <link href="https://cdn.syncfusion.com/ej2/ej2-navigations/styles/material.css" rel="stylesheet" type="text/css" />
-    <!-- Essential JS 2 Scheduler's material theme -->
-    <link href="https://cdn.syncfusion.com/ej2/ej2-schedule/styles/material.css" rel="stylesheet" type="text/css" />
-
-    <!-- Essential JS 2 all script -->
-    <script src="https://cdn.syncfusion.com/ej2/dist/ej2.min.js" type="text/javascript"></script>
 
     <script>
         const CalendarVueApp = {
@@ -358,7 +368,7 @@ TODO:
                     urlslug = null;
                 }
 
-                var id = urlslug ?? nanoid(5);
+                var id = urlslug ?? randomID(8);
                 var cal = new Calendar(id, "New Calendar", []);
 
                 return {
