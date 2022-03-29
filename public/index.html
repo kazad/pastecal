@@ -104,15 +104,14 @@
 
     <script>
         let randomID = (size = 21) => {
-            // no lookalikes
-            let alphabet = '123456789ABCDEFGHJKLMNPQRSTUVWXYZ';
-            let id = ''
-            let i = size
+            let alphabet = '123456789ABCDEFGHJKLMNPQRSTUVWXYZ'; // no lookalikes
+            let id = '';
+            let i = size;
             while (i--) {
                 // `| 0` is more compact and faster than `Math.floor()`.
                 id += alphabet[(Math.random() * alphabet.length) | 0]
             }
-            return id
+            return id;
         }
 
         function uuidv4() {
@@ -127,7 +126,7 @@
                 this.id = options.Id || options.id || uuidv4();
                 this.title = options.Subject || options.text || options.title;
                 this.description = options.Description || options.description || "";
-                this.repeat = options.repeat || "";
+                this.repeat = options.Recurrence || options.repeat || "";
                 this.recurrencerule = options.RecurrenceRule || options.recurrencerule || "";
                 this.start = options.start;
                 this.end = options.end;
@@ -404,7 +403,6 @@
                 },
 
                 create() {
-                    // initial create
                     CalendarDataService.checkExists(this.calendar.id, () => {
                         alert("Calendar already exists, please choose another name.");
                     }, () => {
