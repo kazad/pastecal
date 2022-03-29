@@ -299,7 +299,6 @@
                 console.log("Vue: data()");
                 var urlslug = window.location.pathname.split("/")[1];
 
-                // TODO: Make function to check valid URL slug exists. Then we can set exists.
                 if (urlslug.match(/^[a-zA-Z0-9_\-]+$/) && urlslug.length < 40) {
                     // slug is ok
                 } else {
@@ -322,8 +321,6 @@
             },
 
             mounted() {
-                console.log("Vue:mounted");
-
                 CalendarDataService.subscribe(this.calendar.id, (c) => {
                     this.isExisting = true;
                     this.calendar.import(c);
@@ -356,7 +353,7 @@
                     }
                 });
 
-                // sample data if needed
+                // populate sample data if needed, or load from local storage
                 if (!this.isExisting && this.calendar.events.length == 0 && !this.urlslug) {
                     var defaultEvent = this.calendar.defaultEvent("Sample event");
                     this.calendar.setEvents([defaultEvent]);
