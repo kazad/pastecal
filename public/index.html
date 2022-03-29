@@ -216,12 +216,9 @@ TODO:
 
                 // sample 1-hour event in local timezone 
                 var d = new Date();
-                d.setHours(12);
-                d.setMinutes(0);
-                d.setSeconds(0);
-                d.setMilliseconds(0);
+                d.setHours(12, 0, 0, 0);
                 e.start = d.toISOString();
-                d.setHours(13);
+                d.setHours(13, 0, 0, 0);
                 e.end = d.toISOString();
 
                 return e;
@@ -232,7 +229,7 @@ TODO:
             }
 
             setEvents(events) {
-                console.log("setEvents()", events);
+                // console.log("setEvents()", events);
                 this.events = events.map(e => {
                     return new Event(e);
                 });
@@ -251,7 +248,7 @@ TODO:
                 if (this.slug) {
                     this.db.child(this.slug).on('value', data => {
                         var calendar = data.val();
-                        console.log(`DataService: loaded ${slug}`, calendar);
+                        // console.log(`DataService: loaded ${slug}`, calendar);
                         if (calendar && calendar.id) {
                             this.connected = true;
                             callback(calendar);
@@ -263,13 +260,23 @@ TODO:
             // only sync if we have existed
             static sync(calendar) {
                 if (calendar && calendar.id && this.connected) {
-                    console.log("CalendarDataService.sync()", calendar);
+                    // console.log("CalendarDataService.sync()", calendar);
                     this.db.child(calendar.id).set(calendar);
                 }
             }
 
             static create(item) {
                 return this.db.push(item);
+            }
+
+            static checkExists(id, callback_yes, callback_no) {
+                this.db.child(id).once('value', data => {
+                    if (data.val()) {
+                        callback_yes();
+                    } else {
+                        callback_no();
+                    }
+                });
             }
 
             static createWithId(key, value, success) {
@@ -400,24 +407,27 @@ TODO:
                     var defaultEvent = this.calendar.defaultEvent("Sample event");
                     this.calendar.setEvents([defaultEvent]);
                     this.loadLocalStorage();    // attempt this
-                    this.updateCalendar();
+                    this.updateCalendarView();
                 }
             },
 
             watch: {
                 calendar: {
+                    // sync changes to local storage or firebase
                     handler: function (newVal, oldVal) {
-                        console.log("Vue:watch:calendar", newVal, oldVal);
-                        this.updateCalendar();
+                        // console.log("Vue:watch:calendar", newVal, oldVal);
                         if (!this.isExisting) {
                             this.saveLocalStorage();
+                        } else {
+                            CalendarDataService.sync(this.calendar);
                         }
+                        this.updateCalendarView();
                     },
                     deep: true
                 },
                 'calendar.options.extended'(val) {
                     CalendarDataService.sync(this.calendar);
-                    console.log("calendar.options.extended changed", val);
+                    // console.log("calendar.options.extended changed", val);
                     scheduleObj.startHour = val ? "00:00" : "05:00";
                 },
             },
@@ -435,21 +445,23 @@ TODO:
                 },
 
                 saveLocalStorage() {
-                    console.log("Vue:saveLocalStorage");
                     localStorage.setItem("calendar", JSON.stringify(this.calendar));
                 },
 
-                updateCalendar() {
-                    console.log("updateCalendar()");
+                updateCalendarView() {
                     this.syncFusionEvents = this.calendar.getSyncFusionEvents();
                     scheduleObj.eventSettings.dataSource = this.syncFusionEvents;
                 },
 
                 create() {
                     // initial create
-                    CalendarDataService.createWithId(this.calendar.id, this.calendar, () => {
-                        this.clearLocalStorage();
-                        window.location = "/" + this.calendar.id;
+                    CalendarDataService.checkExists(this.calendar.id, () => {
+                        alert("Calendar already exists, please choose another name.");
+                    }, () => {
+                        CalendarDataService.createWithId(this.calendar.id, this.calendar, () => {
+                            this.clearLocalStorage();
+                            window.location = "/" + this.calendar.id;
+                        });
                     });
                 },
 
@@ -457,11 +469,6 @@ TODO:
                     if (event.target.value.trim()) {
                         this.editTitle = false;
                         this.calendar.title = event.target.value.trim();
-
-                        // only save if save has been clicked before
-                        if (this.isExisting) {
-                            CalendarDataService.sync(this.calendar);
-                        }
                     }
                 },
             }
