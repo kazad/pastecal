@@ -22,10 +22,6 @@
             font-family: "Roboto", "Segoe UI", "GeezaPro", "DejaVu Serif", "sans-serif", "-apple-system", "BlinkMacSystemFont";
         }
 
-        #app input#slug {
-            width: 10ch;
-        }
-
         .topbar {
             display: flex;
             justify-content: space-between;
@@ -57,8 +53,8 @@
         }
 
         /* syncfusion customizations */
-        .e-today {
-            xdisplay: none !important;
+        .e-toolbar-item.e-today {
+            display: none !important;
         }
 
         .e-schedule .e-vertical-view .e-time-cells-wrap table td,
@@ -282,7 +278,7 @@
                 </div>
 
                 <div v-show="!isExisting" style="display:none;">
-                    https://pastecal.com/<input id="slug" type="text" class="xe-field xe-input" :disabled="isExisting"
+                    https://pastecal.com/<input id="slug" type="text" style="width: 10ch;" :disabled="isExisting"
                         v-model="calendar.id" @keyup.enter="create"></input>
                     <button @click="create" v-show="!isExisting" style="margin-left: 5px;"
                         class="e-control e-btn e-lib e-primary e-small e-flat">Save</button>
