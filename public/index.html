@@ -40,18 +40,6 @@
             font-size: 1.0rem;
         }
 
-        div._extended_hours {
-            position: absolute;
-            top: 90px;
-            z-index: 99;
-            font-size: 0.8rem;
-            color: #666;
-        }
-
-        .recents a {
-            margin-right: 0.5rem;
-        }
-
         /* syncfusion customizations */
         .e-toolbar-item.e-today {
             display: none !important;
@@ -290,6 +278,7 @@
         </div>
         <pre v-text="syncFusionEvents" v-if="debug"></pre>
         <pre v-text="calendar" v-if="debug"></pre>
+        <div v-if="false">Help | About | Export | Recents</div>
     </div>
 
     <script>
