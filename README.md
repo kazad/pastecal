@@ -35,6 +35,31 @@ DONE:
 
 Security model:
 
-- All calendars are stored by GUID (firebase-generated)
-- Anyone can create an entry in the ledger. This maps a shortcodel (/zad: GUID) to the GUID. Cannot be changed once mapped.
-- If you password protect a calc, the shortcode (/zad)
+```
+calendars : {
+    $GUID : {
+        title,
+        events,
+        sharedID
+    }
+}
+
+lookup : {
+    $code : {
+       GUID: $GUID
+    }
+}
+
+shared : {
+    sharedID :  {
+        data
+    }
+}
+```
+
+- Issue: once you make a shortcode, it's in the ledger.
+- When you password protect it, we're moving it from the ledger to
+- We have server-side functions which are "registerShortcode(code, GUID)" and "protectShortcode(code, encrtyptedGUID)"
+- Once it's password protected, can't be un-protected [for simplicity]
+- One of the problems is anyone can make a test calendar, then decide to password protect it. Any user has admin access. ok.
+- We should have server-side functions which are doing the syncing here? Or keep it simple. Have the client write to the shared entry as needed.
