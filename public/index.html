@@ -79,6 +79,38 @@
         td.e-header-cells.e-disable-dates:hover {
             background-color: #fafafa !important;
         }
+
+        span.e-menu-icon.e-color-1 {
+            background: #3f51b5;
+        }
+
+        span.e-menu-icon.e-color-2 {
+            background: #e3165b;
+        }
+
+        span.e-menu-icon.e-color-3 {
+            background: #ff6652;
+        }
+
+        span.e-menu-icon.e-color-4 {
+            background: #4caf50;
+        }
+
+        span.e-menu-icon.e-color-5 {
+            background: #ff9800;
+        }
+
+        span.e-menu-icon.e-color-6 {
+            background: #03a9f4;
+        }
+
+        span.e-menu-icon.e-color-7 {
+            background: #9e9e9e;
+        }
+
+        span.e-menu-icon.e-color-8 {
+            background: #c5cae9;
+        }
     </style>
 
     <!-- Essential JS 2 all script -->
@@ -130,6 +162,7 @@
                 this.recurrencerule = options.RecurrenceRule || options.recurrencerule || "";
                 this.start = options.start;
                 this.end = options.end;
+                this.type = options.Type || options.type || 1;
 
                 // for SyncFusion Internal Object
                 if (options.StartTime) {
@@ -156,6 +189,7 @@
                         EndTime: e.end,
                         Description: e.description,
                         RecurrenceRule: e.recurrencerule,
+                        Type: e.type || 1,
                         //                        IsAllDay: e.allday,
                         Recurrence: e.repeat
                     }
@@ -336,12 +370,95 @@
                         case 'eventChanged':
                         case 'eventCreated':
                         case 'eventRemoved':
-                            // console.log("actionComplete()", ev, this.syncFusionEvents, scheduleObj.eventsData);
+                            console.log("actionComplete()", ev, this.syncFusionEvents, scheduleObj.eventsData);
                             this.calendar.setEvents(this.syncFusionEvents);
                             break;
                     }
                     // console.log(ev);
                 };
+
+                // color events based on type
+                var COLORS = [
+                    "#3f51b5",
+                    "#e3165b",
+                    "#ff6652",
+                    "#4caf50",
+                    "#ff9800",
+                    "#03a9f4",
+                    "#9e9e9e",
+                    "#c5cae9"
+                ];
+
+                scheduleObj.eventRendered = (args) => {
+                    // change color as needed
+
+                    categoryColor = COLORS[args.data.Type - 1] || COLORS[0];
+                    if (scheduleObj.currentView === 'Agenda') {
+                        args.element.firstChild.style.borderLeftColor = categoryColor;
+                    } else {
+                        args.element.style.backgroundColor = categoryColor;
+                    }
+                }
+
+                // custom display for types
+                scheduleObj.popupOpen = (args) => {
+
+                    if (args.type === 'Editor') {
+                        console.log("Editor call");
+
+                        // TODO: There is still a bug where the color won't save after editing.
+                        function setColor(id) {
+                            if (!window.btnObj) {
+                                return;
+                            }
+                            console.log("setcolor", window.btnObj);
+                            window.btnObj.element.style.background = COLORS[id - 1];
+                        }
+
+                        // Initial setup
+                        if (!args.element.querySelector('.custom-field-row')) {
+
+                            console.log("Initial args", args);
+
+                            // button dropdown
+                            let items = Array(8).fill().map((_, i) => {
+                                let id = i + 1;
+                                return { text: `Type ${id}`, value: id, iconCss: `e-color-${id}` }
+                            });
+
+                            window.btnObj = new ej.splitbuttons.DropDownButton({
+                                items: items,
+                                iconCss: 'e-type',
+                                select: (button_args) => {
+                                    console.log("select type args", button_args);
+                                    let type = button_args.item.value;
+                                    inputEle.setAttribute('value', type);
+                                    args.data.Type = type;
+                                    setColor(type);
+                                }
+                            });
+
+                            var createElement = ej.base.createElement;
+                            let row = createElement('div', { className: 'custom-field-row' });
+                            let formElement = args.element.querySelector('.e-schedule-form');
+                            formElement.firstChild.insertBefore(row, args.element.querySelector('.e-description-row'));
+                            let container = createElement('div', { className: 'custom-field-container', attrs: { name: 'Type' } });
+
+                            window.inputEle = createElement('input', {
+                                className: 'e-type e-field', attrs: { name: 'Type' }
+                            });
+                            container.appendChild(window.inputEle);
+                            row.appendChild(container);
+
+                            btnObj.appendTo(container);
+                            inputEle.setAttribute('name', 'Type');
+                            inputEle.style.display = "none";
+                            inputEle.setAttribute('value', args.data.Type);
+                        }
+
+                        setColor(args.data.Type);
+                    }
+                }
 
                 scheduleObj.appendTo('#Schedule');
 
