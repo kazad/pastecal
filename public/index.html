@@ -121,22 +121,26 @@
         }
 
         function parseDate(str) {
-            // parse YYMMDD string to Date object
             let date = null;
 
-            // remove non-digits from string: YY/MM/DD 
-            str = str.replace(/\D/g, '');
-
-            // YYMMDD
-            if (str.length === 6) {
-                date = new Date("20" + str.substring(0, 2), str.substring(2, 4) - 1, str.substring(4, 6));
+            // has non-digit separator
+            if (str.match(/\D/)) {
+                let parts = str.split(/\D/);
+                date = new Date((parts[0].length == 2 ? "20" : 0) + parts[0], parts[1] - 1, parts[2]);
             }
-            // YYYYMMDD
-            if (str.length === 8) {
-                date = new Date(str.substring(0, 4), str.substring(4, 6) - 1, str.substring(6, 8));
+            else {
+                // YYMMDD
+                if (str.length === 6) {
+                    date = new Date("20" + str.substring(0, 2), str.substring(2, 4) - 1, str.substring(4, 6));
+                }
+                // YYYYMMDD
+                if (str.length === 8) {
+                    date = new Date(str.substring(0, 4), str.substring(4, 6) - 1, str.substring(6, 8));
+                }
             }
 
-            return date;
+            // js... 
+            return date.toString() == 'Invalid Date' ? null : date;
         }
 
         class Event {
@@ -353,8 +357,8 @@
                 var date_param = url.searchParams.get("d") || url.searchParams.get("date");
                 var view_param = url.searchParams.get("v") || url.searchParams.get("view");
 
-                if (date_param) {
-                    scheduleObj.selectedDate = parseDate(date_param);
+                if (d = parseDate(date_param)) {
+                    scheduleObj.selectedDate = d;
                 }
 
                 if (view_param) {
