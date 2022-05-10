@@ -120,6 +120,25 @@
             );
         }
 
+        function parseDate(str) {
+            // parse YYMMDD string to Date object
+            let date = null;
+
+            // remove non-digits from string: YY/MM/DD 
+            str = str.replace(/\D/g, '');
+
+            // YYMMDD
+            if (str.length === 6) {
+                date = new Date(str.substring(0, 2), str.substring(2, 4) - 1, str.substring(4, 6));
+            }
+            // YYYYMMDD
+            if (str.length === 8) {
+                date = new Date(str.substring(0, 4), str.substring(4, 6) - 1, str.substring(6, 8));
+            }
+
+            return date;
+        }
+
         class Event {
             // may be created from JSON object or DHTMLX internal calendar event
             constructor(options) {
@@ -328,6 +347,32 @@
                 window.scheduleObj = new ej.schedule.Schedule();
                 scheduleObj.startHour = "05:00";
                 scheduleObj.views = ['Day', 'Week', 'Month', 'Year', 'Agenda'];
+
+                // set params from URL
+                var url = new URL(window.location.href.toLowerCase());
+                var date_param = url.searchParams.get("d") || url.searchParams.get("date");
+                var view_param = url.searchParams.get("v") || url.searchParams.get("view");
+
+                if (date_param) {
+                    scheduleObj.selectedDate = parseDate(date_param);
+                }
+
+                if (view_param) {
+                    switch (view_param.toLowerCase()) {
+                        case "day":
+                            scheduleObj.currentView = "Day"; break;
+                        case "week":
+                            scheduleObj.currentView = "Week"; break;
+                        case "month":
+                            scheduleObj.currentView = "Month"; break;
+                        case "year":
+                            scheduleObj.currentView = "Year"; break;
+                        case "agenda":
+                            scheduleObj.currentView = "Agenda"; break;
+                        default:
+                            break;
+                    }
+                }
 
                 // live binding to events
                 scheduleObj.eventSettings.dataSource = this.syncFusionEvents;
