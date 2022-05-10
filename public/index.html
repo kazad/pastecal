@@ -143,6 +143,18 @@
             return date.toString() == 'Invalid Date' ? null : date;
         }
 
+        // parse test
+        if (new Set([
+            parseDate("20220102").getTime(),
+            parseDate("220102").getTime(),
+            parseDate("2022-01-02").getTime(),
+            parseDate("22-01-02").getTime(),
+            parseDate("2022.1.2").getTime(),
+            parseDate("22-1-2").getTime()
+        ]).size !== 1) {
+            console.error("parseDate failed");
+        }
+
         class Event {
             // may be created from JSON object or DHTMLX internal calendar event
             constructor(options) {
