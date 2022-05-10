@@ -129,7 +129,7 @@
 
             // YYMMDD
             if (str.length === 6) {
-                date = new Date(str.substring(0, 2), str.substring(2, 4) - 1, str.substring(4, 6));
+                date = new Date("20" + str.substring(0, 2), str.substring(2, 4) - 1, str.substring(4, 6));
             }
             // YYYYMMDD
             if (str.length === 8) {
