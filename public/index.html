@@ -391,7 +391,6 @@
 
                 scheduleObj.eventRendered = (args) => {
                     // change color as needed
-
                     categoryColor = COLORS[args.data.Type - 1] || COLORS[0];
                     if (scheduleObj.currentView === 'Agenda') {
                         args.element.firstChild.style.borderLeftColor = categoryColor;
