@@ -152,6 +152,42 @@
             );
         }
 
+        function parseDate(str) {
+            let date = null;
+
+            // has non-digit separator
+            if (str.match(/\D/)) {
+                let parts = str.split(/\D/);
+                date = new Date((parts[0].length == 2 ? "20" : 0) + parts[0], parts[1] - 1, parts[2]);
+            }
+            else {
+                // YYMMDD
+                if (str.length === 6) {
+                    date = new Date("20" + str.substring(0, 2), str.substring(2, 4) - 1, str.substring(4, 6));
+                }
+                // YYYYMMDD
+                if (str.length === 8) {
+                    date = new Date(str.substring(0, 4), str.substring(4, 6) - 1, str.substring(6, 8));
+                }
+            }
+
+            // js silliness, no better check?
+            return date.toString() == 'Invalid Date' ? null : date;
+        }
+
+        // parse test
+        if (new Set([
+            (new Date(2022, 01 - 1, 02)).getTime(),
+            parseDate("20220102").getTime(),
+            parseDate("220102").getTime(),
+            parseDate("2022-01-02").getTime(),
+            parseDate("22-01-02").getTime(),
+            parseDate("2022.1.2").getTime(),
+            parseDate("22-1-2").getTime()
+        ]).size !== 1) {
+            console.error("parseDate failed");
+        }
+
         class Event {
             // may be created from JSON object or DHTMLX internal calendar event
             constructor(options) {
@@ -362,6 +398,37 @@
                 window.scheduleObj = new ej.schedule.Schedule();
                 scheduleObj.startHour = "05:00";
                 scheduleObj.views = ['Day', 'Week', 'Month', 'Year', 'Agenda'];
+
+                // set params from URL
+                var url = new URL(window.location.href.toLowerCase());
+                var date_param = url.searchParams.get("d") || url.searchParams.get("date");
+                var view_param = url.searchParams.get("v") || url.searchParams.get("view");
+
+                if (d = parseDate(date_param)) {
+                    scheduleObj.selectedDate = d;
+                }
+
+                if (view_param) {
+                    switch (view_param.toLowerCase()) {
+                        case "d":
+                        case "day":
+                            scheduleObj.currentView = "Day"; break;
+                        case "w":
+                        case "week":
+                            scheduleObj.currentView = "Week"; break;
+                        case "m":
+                        case "month":
+                            scheduleObj.currentView = "Month"; break;
+                        case "y":
+                        case "year":
+                            scheduleObj.currentView = "Year"; break;
+                        case "a":
+                        case "agenda":
+                            scheduleObj.currentView = "Agenda"; break;
+                        default:
+                            break;
+                    }
+                }
 
                 // live binding to events
                 scheduleObj.eventSettings.dataSource = this.syncFusionEvents;
