@@ -139,12 +139,13 @@
                 }
             }
 
-            // js... 
+            // js silliness, no better check?
             return date.toString() == 'Invalid Date' ? null : date;
         }
 
         // parse test
         if (new Set([
+            (new Date(2022, 01 - 1, 02)).getTime(),
             parseDate("20220102").getTime(),
             parseDate("220102").getTime(),
             parseDate("2022-01-02").getTime(),
