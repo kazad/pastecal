@@ -376,14 +376,19 @@
 
                 if (view_param) {
                     switch (view_param.toLowerCase()) {
+                        case "d":
                         case "day":
                             scheduleObj.currentView = "Day"; break;
+                        case "w":
                         case "week":
                             scheduleObj.currentView = "Week"; break;
+                        case "m":
                         case "month":
                             scheduleObj.currentView = "Month"; break;
+                        case "y":
                         case "year":
                             scheduleObj.currentView = "Year"; break;
+                        case "a":
                         case "agenda":
                             scheduleObj.currentView = "Agenda"; break;
                         default:
