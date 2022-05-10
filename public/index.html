@@ -123,6 +123,10 @@
         function parseDate(str) {
             let date = null;
 
+            if (!str) {
+                return date;
+            }
+
             // has non-digit separator
             if (str.match(/\D/)) {
                 let parts = str.split(/\D/);
