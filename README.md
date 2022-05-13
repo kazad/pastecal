@@ -7,17 +7,20 @@ Use cases:
 - Visiting pastecal.com/ID creates the calendar (prefilled option to create)
 - Visiting homepage, make changes, stored in localstorage. Refresh page, changes still there.
 
-TODO:
+DONE:
 
 - Add google tag manager and hotjar
+- Date and view params (pastecal.com/test?d=2022-04-1&v=day)
+- Add hotjar for feedback / recording
+- Help / tour button
+
+IN PROGRESS:
 
 FUTURE:
 
-- Add hotjar for feedback / recording
 - Style top bar similar to instacalc
 - Event color (based on hashtag?)
 - Remember recents in localstorage
-- Help/tour button
 - Readonly flag
 - Password protection
 - Safer writing / conflict avoidance (https://firebase.google.com/docs/database/admin/save-data#node.js_8)
