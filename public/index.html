@@ -52,6 +52,11 @@
             font-size: 1.0rem;
         }
 
+        #help {
+            font-size: 0.8rem;
+            color: #888;
+        }
+
         /* syncfusion customizations */
         .e-toolbar-item.e-today {
             display: none !important;
@@ -299,8 +304,10 @@
         <div class="topbar">
             <div style="text-align: left;">
                 <a href="/">PasteCal</a>: Shared, no-login calendar
+                <button v-on:click="showhelp = !showhelp" class="e-control e-btn e-lib e-primary e-small e-flat"
+                    style="color: #03a9f4">Tips</button>
             </div>
-            <div style="text-align: center;" class="title">
+            <div style=" text-align: center;" class="title">
                 <span v-show="!editTitle" style="display: none; cursor: pointer;" @click="editTitle = true"
                     title="Click to edit" v-text="calendar.title"></span>
                 <input type="text" v-show="editTitle" style="display: none;" v-model="calendar.title"
@@ -323,6 +330,23 @@
                         class="e-control e-btn e-lib e-primary e-small e-flat">Save</button>
                 </div>
             </div>
+        </div>
+
+        <div v-if="showhelp" id="help">
+            <ul>
+                <li>Pick any shortcode (pastecal.com/yourname) and click save</li>
+                <li>There's no passwords (like a wiki). Make private URLs like
+                    <code>pastecal.com/yourname-hardtoguess</code>
+                </li>
+                <li>Set the default date and view:
+                    <br />
+                    date (or d=): YYYYMMDD, YYMMDD, YYYY.MM.DD (any separator allowed)<br />
+                    view (or v=): day, week, month, year, agenda
+                    <br />
+                    <br />
+                    <code>pastecal.com/test?date=2022-04-01&amp;view=week</code>
+                </li>
+            </ul>
         </div>
 
         <div id="cal2_wrap" style="width: 100%; height: 100%;">
@@ -355,7 +379,8 @@
                     recents: [],
                     syncFusionEvents: [],     // local copy, not synced
                     urlslug: urlslug,
-                    debug: false
+                    debug: false,
+                    showhelp: false,
                 }
             },
 
