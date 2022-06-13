@@ -13,6 +13,7 @@ FUTURE:
 
 DONE:
 
+- Disable touch events for mobile (to avoid accidental changes)
 - Add google tag manager and hotjar
 - Date and view params (pastecal.com/test?d=2022-04-1&v=day)
 - Add hotjar for feedback / recording
