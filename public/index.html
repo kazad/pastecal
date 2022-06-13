@@ -433,6 +433,11 @@ Copyright (c) 2022 Kalid Azad
                     }
                 }
 
+                // disable drag and drop / resizing for touch devices
+                var touchDevice = ('ontouchstart' in document.documentElement);
+                scheduleObj.allowDragAndDrop = !touchDevice;
+                scheduleObj.allowResizing = !touchDevice;
+
                 // live binding to events
                 scheduleObj.eventSettings.dataSource = this.syncFusionEvents;
                 scheduleObj.actionComplete = (ev) => {
