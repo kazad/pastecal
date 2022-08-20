@@ -1,7 +1,5 @@
 IN PROGRESS:
 
-- Event color (based on hashtag?). (see: https://ej2.syncfusion.com/demos/ Scheduler Editor Window Editor Template)
-
 FUTURE:
 
 - Style top bar similar to instacalc
@@ -10,9 +8,11 @@ FUTURE:
 - Password protection
 - Safer writing / conflict avoidance (https://firebase.google.com/docs/database/admin/save-data#node.js_8)
 - Have public version. So, we have pastecal.com/zad (as public) and pastecal.com/zad?key=1234 as private. The key (hashed) gives the ID to subscribe to?
+- Better (official) field (see: https://ej2.syncfusion.com/demos/ Scheduler > Editor > Window > Editor Template)
 
 DONE:
 
+- Event color
 - Disable touch events for mobile (to avoid accidental changes)
 - Add google tag manager and hotjar
 - Date and view params (pastecal.com/test?d=2022-04-1&v=day)
