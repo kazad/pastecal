@@ -137,7 +137,7 @@ Copyright (c) 2022 Kalid Azad
         }
 
         span.e-menu-icon.e-color-8 {
-            background: #c5cae9;
+            background: #27282f;
         }
 
         /* custom color field location */
@@ -145,6 +145,11 @@ Copyright (c) 2022 Kalid Azad
             position: absolute;
             top: 1rem;
             right: 25px;
+        }
+
+        /* make room for color picker */
+        .e-subject-container {
+            margin-right: 50px;
         }
 
         /* hide location */
@@ -532,7 +537,7 @@ Copyright (c) 2022 Kalid Azad
                     "#ff9800",
                     "#03a9f4",
                     "#9e9e9e",
-                    "#c5cae9"
+                    "#27282f"
                 ];
 
                 scheduleObj.eventRendered = (args) => {
@@ -578,7 +583,7 @@ Copyright (c) 2022 Kalid Azad
                                 select: (button_args) => {
                                     console.log("select type args", button_args);
                                     let type = button_args.item.value;
-                                    inputEle.setAttribute('value', type);
+                                    inputEle.value = type;
                                     args.data.Type = type;
                                     setColor(type);
                                 }
@@ -598,7 +603,7 @@ Copyright (c) 2022 Kalid Azad
 
                             btnObj.appendTo(container);
                             window.inputEle.setAttribute('name', 'Type');
-                            // inputEle.style.display = "none";
+                            window.inputEle.style.display = "none";
                             window.inputEle.setAttribute('value', args.data.Type);
                         }
 
