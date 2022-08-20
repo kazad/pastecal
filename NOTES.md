@@ -1,6 +1,6 @@
 IN PROGRESS:
 
-- Event color (based on hashtag?)
+- Event color (based on hashtag?). (see: https://ej2.syncfusion.com/demos/ Scheduler Editor Window Editor Template)
 
 FUTURE:
 

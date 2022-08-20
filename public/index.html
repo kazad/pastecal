@@ -140,6 +140,13 @@ Copyright (c) 2022 Kalid Azad
             background: #c5cae9;
         }
 
+        /* custom color field location */
+        .custom-field-row-color {
+            position: absolute;
+            top: 1rem;
+            right: 25px;
+        }
+
         /* hide location */
         .e-schedule-dialog .e-subject-container {
             width: 100%;
@@ -549,12 +556,13 @@ Copyright (c) 2022 Kalid Azad
                             if (!window.btnObj) {
                                 return;
                             }
-                            console.log("setcolor", window.btnObj);
+                            console.log("setcolor", id, window.btnObj);
                             window.btnObj.element.style.background = COLORS[id - 1];
+                            window.inputEle.setAttribute('value', id);
                         }
 
                         // Initial setup
-                        if (!args.element.querySelector('.custom-field-row')) {
+                        if (!args.element.querySelector('.custom-field-row-color')) {
 
                             console.log("Initial args", args);
 
@@ -577,7 +585,7 @@ Copyright (c) 2022 Kalid Azad
                             });
 
                             var createElement = ej.base.createElement;
-                            let row = createElement('div', { className: 'custom-field-row' });
+                            let row = createElement('div', { className: 'custom-field-row-color' });
                             let formElement = args.element.querySelector('.e-schedule-form');
                             formElement.firstChild.insertBefore(row, args.element.querySelector('.e-description-row'));
                             let container = createElement('div', { className: 'custom-field-container', attrs: { name: 'Type' } });
@@ -589,9 +597,9 @@ Copyright (c) 2022 Kalid Azad
                             row.appendChild(container);
 
                             btnObj.appendTo(container);
-                            inputEle.setAttribute('name', 'Type');
-                            inputEle.style.display = "none";
-                            inputEle.setAttribute('value', args.data.Type);
+                            window.inputEle.setAttribute('name', 'Type');
+                            // inputEle.style.display = "none";
+                            window.inputEle.setAttribute('value', args.data.Type);
                         }
 
                         setColor(args.data.Type);
