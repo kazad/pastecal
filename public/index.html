@@ -1,10 +1,32 @@
+<!-- 
+Open sourced under the MIT License: https://opensource.org/licenses/MIT
+Copyright (c) 2022 Kalid Azad
+-->
 <!DOCTYPE html>
 <html lang="en">
 
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- HTML Meta Tags -->
     <title>PasteCal: Shareable, no-login calendar</title>
+    <meta name="description" content="Create a public shared calendar link, no signups needed.">
+
+    <!-- Facebook Meta Tags -->
+    <meta property="og:url" content="https://pastecal.com/">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="PasteCal: Shareable, no-login calendar">
+    <meta property="og:description" content="Create a public shared calendar link, no signups needed.">
+    <meta property="og:image" content="https://pastecal.com/img/screenshot.png">
+
+    <!-- Twitter Meta Tags -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta property="twitter:domain" content="pastecal.com">
+    <meta property="twitter:url" content="https://pastecal.com/">
+    <meta name="twitter:title" content="PasteCal: Shareable, no-login calendar">
+    <meta name="twitter:description" content="Create a public shared calendar link, no signups needed.">
+    <meta name="twitter:image" content="https://pastecal.com/img/screenshot.png">
 
     <!-- Google Tag Manager -->
     <script>(function (w, d, s, l, i) {
@@ -52,6 +74,11 @@
             font-size: 1.0rem;
         }
 
+        #help {
+            font-size: 0.8rem;
+            color: #888;
+        }
+
         /* syncfusion customizations */
         .e-toolbar-item.e-today {
             display: none !important;
@@ -73,7 +100,8 @@
             margin-top: 40%;
             text-align: center;
             display: inline-block;
-            color: rgba(0, 0, 0, 0.54);
+            color: #36b1f6;
+            cursor: pointer;
         }
 
         td.e-header-cells.e-disable-dates:hover {
@@ -110,6 +138,15 @@
 
         span.e-menu-icon.e-color-8 {
             background: #c5cae9;
+        }
+
+        /* hide location */
+        .e-schedule-dialog .e-subject-container {
+            width: 100%;
+        }
+
+        .e-location-container {
+            display: none;
         }
     </style>
 
@@ -154,6 +191,10 @@
 
         function parseDate(str) {
             let date = null;
+
+            if (!str) {
+                return date;
+            }
 
             // has non-digit separator
             if (str.match(/\D/)) {
@@ -328,9 +369,13 @@
 
         <div class="topbar">
             <div style="text-align: left;">
+                <img class="logo" src="img/calendar.craiyon.64.png"
+                    style="height: 24px; margin-top: -2px; float: left;padding: 0px 0.5em;">
                 <a href="/">PasteCal</a>: Shared, no-login calendar
+                <button v-on:click="showhelp = !showhelp" class="e-control e-btn e-lib e-primary e-small e-flat"
+                    style="color: #03a9f4">Tips</button>
             </div>
-            <div style="text-align: center;" class="title">
+            <div style=" text-align: center;" class="title">
                 <span v-show="!editTitle" style="display: none; cursor: pointer;" @click="editTitle = true"
                     title="Click to edit" v-text="calendar.title"></span>
                 <input type="text" v-show="editTitle" style="display: none;" v-model="calendar.title"
@@ -355,12 +400,33 @@
             </div>
         </div>
 
+        <div v-if="showhelp" id="help">
+            <ul>
+                <li>Pick any shortcode (pastecal.com/yourname) and click save</li>
+                <li>There's no passwords (like a wiki). Make private URLs like
+                    <code>pastecal.com/yourname-hardtoguess</code>
+                </li>
+                <li>Set the default date and view:
+                    <br />
+                    date (or d=): YYYYMMDD, YYMMDD, YYYY.MM.DD (any separator allowed)<br />
+                    view (or v=): day, week, month, year, agenda
+                    <br />
+                    <br />
+                    <code>pastecal.com/test?date=2022-04-01&amp;view=week</code>
+                </li>
+
+                <br />
+
+                - From Kalid at <a href="https://instacalc.com">instacalc</a> and <a
+                    href="https://betterexplained.com">betterexplained</a>
+            </ul>
+        </div>
+
         <div id="cal2_wrap" style="width: 100%; height: 100%;">
             <div id="Schedule"></div>
         </div>
         <pre v-text="syncFusionEvents" v-if="debug"></pre>
         <pre v-text="calendar" v-if="debug"></pre>
-        <div v-if="false">Help | About | Export | Recents</div>
     </div>
 
     <script>
@@ -385,7 +451,8 @@
                     recents: [],
                     syncFusionEvents: [],     // local copy, not synced
                     urlslug: urlslug,
-                    debug: false
+                    debug: false,
+                    showhelp: false,
                 }
             },
 
@@ -429,6 +496,11 @@
                             break;
                     }
                 }
+
+                // disable drag and drop / resizing for touch devices
+                var touchDevice = ('ontouchstart' in document.documentElement);
+                scheduleObj.allowDragAndDrop = !touchDevice;
+                scheduleObj.allowResizing = !touchDevice;
 
                 // live binding to events
                 scheduleObj.eventSettings.dataSource = this.syncFusionEvents;
@@ -607,6 +679,35 @@
         };
 
         const app = Vue.createApp(CalendarVueApp).mount('#app');
+    </script>
+
+    <script>
+        function linkify(inputText) {
+            var replacedText, replacePattern1, replacePattern2, replacePattern3;
+
+            //URLs starting with http://, https://, or ftp://
+            replacePattern1 = /(\b(https?|ftp):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/gim;
+            replacedText = inputText.replace(replacePattern1, '<a href="$1" target="_blank">$1</a>');
+
+            //URLs starting with "www." (without // before it, or it'd re-link the ones done above).
+            replacePattern2 = /(^|[^\/])(www\.[\S]+(\b|$))/gim;
+            replacedText = replacedText.replace(replacePattern2, '$1<a href="http://$2" target="_blank">$2</a>');
+
+            //Change email addresses to mailto:: links.
+            replacePattern3 = /(([a-zA-Z0-9\-\_\.])+@[a-zA-Z\_]+?(\.[a-zA-Z]{2,6})+)/gim;
+            replacedText = replacedText.replace(replacePattern3, '<a href="mailto:$1">$1</a>');
+
+            return replacedText;
+        }
+
+        // Convert links in description to clickable items. TODO: make this automatic
+        setInterval(() => {
+            var el = document.querySelector(".e-event-popup .e-description-details");
+            if (el && !el.attributes['data-processed']) {
+                el.attributes['data-processed'] = true;
+                el.innerHTML = linkify(el.innerHTML);
+            }
+        }, 250);
     </script>
     <br />
 </body>
