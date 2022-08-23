@@ -188,6 +188,14 @@ Copyright (c) 2022 Kalid Azad
     </script>
 
     <script>
+        function debounce(func, timeout = 300) {
+            let timer;
+            return (...args) => {
+                clearTimeout(timer);
+                timer = setTimeout(() => { func.apply(this, args); }, timeout);
+            };
+        }
+
         let randomID = (size = 21) => {
             let alphabet = '123456789ABCDEFGHJKLMNPQRSTUVWXYZ'; // no lookalikes
             let id = '';
@@ -338,8 +346,11 @@ Copyright (c) 2022 Kalid Azad
                 if (calendar && calendar.id && this.connected) {
                     // console.log("CalendarDataService.sync()", calendar);
                     this.db.child(calendar.id).set(calendar);
+                    console.log('CalendarDataService.sync()');
                 }
             }
+
+            static debounce_sync = debounce(CalendarDataService.sync, 1000);
 
             static create(item) {
                 return this.db.push(item);
@@ -394,6 +405,8 @@ Copyright (c) 2022 Kalid Azad
             <div style=" text-align: center;" class="title">
                 <span v-show="!editTitle" style="display: none; cursor: pointer;" @click="editTitle = true"
                     title="Click to edit" v-text="calendar.title"></span>
+                <button v-on:click="shownotes = !shownotes" class="e-control e-btn e-lib e-primary e-small e-flat"
+                    style="color: #333; position: absolute; top: -4px; font-size: 24px;">☰</button>
                 <input type="text" v-show="editTitle" style="display: none;" v-model="calendar.title"
                     @keyup.enter="setTitle($event)">
             </div>
@@ -415,7 +428,11 @@ Copyright (c) 2022 Kalid Azad
                 </div>
             </div>
         </div>
-
+        <div v-if="shownotes" id="notes"
+            style="width: 50%; min-width: 460px; height: 250px; margin: 0px auto; padding: 10px;">
+            <textarea style="width: 100%; height: 250px;" placeholder="Notes..." v-model="calendar.options.notes"
+                @keyup="setNotes($event)"></textarea>
+        </div>
         <div v-if="showhelp" id="help">
             <ul>
                 <li>Pick any shortcode (pastecal.com/yourname) and click save</li>
@@ -469,6 +486,7 @@ Copyright (c) 2022 Kalid Azad
                     urlslug: urlslug,
                     debug: false,
                     showhelp: false,
+                    shownotes: false
                 }
             },
 
@@ -560,7 +578,6 @@ Copyright (c) 2022 Kalid Azad
                     if (args.type === 'Editor') {
                         console.log("Editor call");
 
-                        // TODO: There is still a bug where the color won't save after editing.
                         function setColor(id) {
                             if (!window.btnObj) {
                                 return;
@@ -576,10 +593,8 @@ Copyright (c) 2022 Kalid Azad
                             console.log("Initial args", args);
 
                             // button dropdown
-                            let items = Array(8).fill().map((_, i) => {
-                                let id = i + 1;
-                                return { text: `Type ${id}`, value: id, iconCss: `e-color-${id}` }
-                            });
+                            // TODO: allow live edit (vs reload for types)
+                            let items = app.getTypes();
 
                             window.btnObj = new ej.splitbuttons.DropDownButton({
                                 items: items,
@@ -652,6 +667,10 @@ Copyright (c) 2022 Kalid Azad
                     // console.log("calendar.options.extended changed", val);
                     scheduleObj.startHour = val ? "00:00" : "05:00";
                 },
+                'calendar.options.notes'(val) {
+                    CalendarDataService.debounce_sync(this.calendar);
+                    console.log("watch: set notes");
+                }
             },
 
             methods: {
@@ -692,6 +711,36 @@ Copyright (c) 2022 Kalid Azad
                         this.calendar.title = event.target.value.trim();
                     }
                 },
+
+                setNotes(event) {
+                    console.log("setNotes");
+                    this.calendar.options.notes = event.target.value;
+                },
+
+                getTypes() {
+                    // attempt to parse type options
+                    let notes = this.calendar.options.notes;
+
+                    let typeTitles = [];
+                    if (notes) {
+                        // Type 1 = Some title
+                        var matches = [...notes.matchAll(/\b(Type)\s*(\d)\s*[=](.*)\b/ig)];
+                        matches.forEach(m => {
+                            typeTitles[m[2]] = m[3].trim().substring(0, 40);
+                        });
+
+                        console.log(typeTitles);
+                    }
+
+                    var types = Array(8).fill().map((_, i) => {
+                        let id = i + 1;
+                        let title = typeTitles[id] || `Type ${id}`;
+
+                        return { text: title, value: id, iconCss: `e-color-${id}` }
+                    });
+
+                    return types;
+                }
             }
         };
 
