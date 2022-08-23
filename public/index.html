@@ -719,7 +719,7 @@ Copyright (c) 2022 Kalid Azad
                         // Type 1 = Some title
                         var matches = [...notes.matchAll(/\b(Type)\s*(\d)\s*[=](.*)\b/ig)];
                         matches.forEach(m => {
-                            typeTitles[m[2]] = m[3].trim().substring(0, 40);
+                            typeTitles[m[2]] = m[3].trim().substring(0, 70);
                         });
 
                         console.log(typeTitles);
