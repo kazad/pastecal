@@ -190,10 +190,9 @@ Copyright (c) 2022 Kalid Azad
     <script>
         function debounce(func, timeout = 300) {
             let timer;
-            console.log("creating debounce", func, timeout);
             return (...args) => {
                 clearTimeout(timer);
-                timer = setTimeout(() => { console.log("applying function"); func.apply(this, args); }, timeout);
+                timer = setTimeout(() => { func.apply(this, args); }, timeout);
             };
         }
 
@@ -320,7 +319,7 @@ Copyright (c) 2022 Kalid Azad
                 this.events = events.map(e => {
                     return new Event(e);
                 });
-                CalendarDataService.sync(this);
+                CalendarDataService.debounce_sync(this);
             }
         }
 
@@ -351,7 +350,7 @@ Copyright (c) 2022 Kalid Azad
                 }
             }
 
-            static debounce_sync = debounce((cal) => (CalendarDataService.sync(cal)), 300);
+            static debounce_sync = debounce((cal) => (CalendarDataService.sync(cal)), 500);
 
             static create(item) {
                 return this.db.push(item);
@@ -659,7 +658,7 @@ Type 2 = Fun
                 calendar: {
                     // sync changes to local storage or firebase
                     handler: function (newVal, oldVal) {
-                        console.log("Vue:watch:calendar", newVal, oldVal);
+                        // console.log("Vue:watch:calendar", newVal, oldVal);
                         if (!this.isExisting) {
                             this.saveLocalStorage();
                         } else {
