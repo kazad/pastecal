@@ -28,6 +28,15 @@ Copyright (c) 2022 Kalid Azad
     <meta name="twitter:description" content="Create a public shared calendar link, no signups needed.">
     <meta name="twitter:image" content="https://pastecal.com/img/screenshot.png">
 
+    <!-- Favicons -->
+    <link rel="apple-touch-icon" sizes="180x180" href="/img/icons/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/img/icons/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/img/icons/favicon-16x16.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <link rel="mask-icon" href="/img/icons/safari-pinned-tab.svg" color="#5bbad5">
+    <meta name="msapplication-TileColor" content="#da532c">
+    <meta name="theme-color" content="#ffffff">
+
     <!-- Google Tag Manager -->
     <script>(function (w, d, s, l, i) {
             w[l] = w[l] || []; w[l].push({
@@ -417,11 +426,11 @@ Copyright (c) 2022 Kalid Azad
             </div>
             <div style="text-align:right">
                 <div v-show="isExisting" style="display: none;">
-                    <a :href="calendar.id">https://pastecal.com/{{calendar.id}}</a>
+                    <a :href="calendar.id">pastecal.com/{{calendar.id}}</a>
                 </div>
 
                 <div v-show="!isExisting" style="display:none;">
-                    https://pastecal.com/<input id="slug" type="text" style="width: 10ch;" :disabled="isExisting"
+                    pastecal.com/<input id="slug" type="text" style="width: 10ch;" :disabled="isExisting"
                         v-model="calendar.id" @keyup.enter="create"></input>
                     <button @click="create" v-show="!isExisting" style="margin-left: 5px;"
                         class="e-control e-btn e-lib e-primary e-small e-flat">Save</button>
