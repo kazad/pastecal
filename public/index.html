@@ -427,6 +427,8 @@ Copyright (c) 2022 Kalid Azad
             <div style="text-align:right">
                 <div v-show="isExisting" style="display: none;">
                     <a :href="calendar.id">pastecal.com/{{calendar.id}}</a>
+                    |
+                    <a :href="calendar.id + '.ics'">Subscribe to cal</a>
                 </div>
 
                 <div v-show="!isExisting" style="display:none;">
@@ -444,23 +446,28 @@ Copyright (c) 2022 Kalid Azad
         </div>
         <div v-if="showhelp" id="help">
             <ul>
-                <li>Pick any shortcode (pastecal.com/yourname) and click save</li>
-                <li>There's no passwords (like a wiki). Make private URLs like
+                <li>Pick a url (pastecal.com/yourname) and click save. There's no passwords (like a wiki). For secrecy
+                    use
                     <code>pastecal.com/yourname-hardtoguess</code>
                 </li>
-                <li>Set the default date and view:
+                <li>Add URL params to load a specific date or view:
                     <br />
-                    date (or d=): YYYYMMDD, YYMMDD, YYYY.MM.DD (any separator allowed)<br />
+                    date (or d=): YYYYMMDD, YYMMDD, YYYY.MM.DD<br />
                     view (or v=): day, week, month, year, agenda
                     <br />
-                    <br />
-                    <code>pastecal.com/test?date=2022-04-01&amp;view=week</code>
+                    <code>Example: https://pastecal.com/test?date=2022-04-01&amp;view=week</code>
                 </li>
                 <li>
-                    In the notes area, you can set the default labels in the color dropdown by typing:
+                    Set custom category type lables in the notes area:
                     <pre>Type 1 = Work
 Type 2 = Fun
                     </pre>
+                </li>
+                <li>
+                    Subscribe to your calendar in another app with <code>https://pastecal.com/yourcalendar.ics</code>
+                </li>
+                <li>
+                    <a href="https://github.com/kazad/pastecal/issues">Github feedback/discussions</a>
                 </li>
 
                 <br />
