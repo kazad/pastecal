@@ -3,6 +3,13 @@ const admin = require('firebase-admin');
 
 admin.initializeApp();
 
+function escapeIcsText(text) {
+    return text.replace(/\\/g, '\\\\') // Escape backslashes
+        .replace(/;/g, '\\;')   // Escape semicolons
+        .replace(/,/g, '\\,')   // Escape commas
+        .replace(/\n/g, '\\n'); // Escape newlines
+}
+
 function jsonToIcs(json, id) {
     let icsEvents = [];
 
@@ -12,8 +19,8 @@ function jsonToIcs(json, id) {
             `UID:${event.id}`,
             `DTSTART:${event.start.replace(/[-:]/g, '').replace('.000Z', 'Z')}`,
             `DTEND:${event.end.replace(/[-:]/g, '').replace('.000Z', 'Z')}`,
-            `SUMMARY:${event.title}`,
-            `DESCRIPTION:${event.description}`,
+            `SUMMARY:${escapeIcsText(event.title)}`,
+            `DESCRIPTION:${escapeIcsText(event.description)}`,
         ];
 
         if (event.recurrencerule) {
