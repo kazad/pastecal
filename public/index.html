@@ -421,7 +421,7 @@ Copyright (c) 2022 Kalid Azad
             <div style="text-align: left;">
                 <img class="logo" src="img/calendar.craiyon.64.png"
                     style="height: 24px; margin-top: -2px; float: left;padding: 0px 0.5em;">
-                <a href="/">PasteCal</a>: Shared, no-login calendar
+                <a href="/">PasteCal</a>: Zero-login shared calendars
                 <button v-on:click="showhelp = !showhelp" class="e-control e-btn e-lib e-primary e-small e-flat"
                     style="color: #03a9f4">Tips</button>
 
@@ -483,22 +483,21 @@ Copyright (c) 2022 Kalid Azad
         </div>
         <div v-if="showhelp" id="help">
             <ul>
-                <li>Pick a url (pastecal.com/yourname) and click save. No passwords (like a wiki), for privacy
-                    use
-                    <code>pastecal.com/yourname-hardtoguess</code>
+                <li>
+                    Pick a permalink (pastecal.com/somename) and click save. Anyone with the link can see/create
+                    events, no login needed. For privacy,
+                    use <code>pastecal.com/somename-hardtoguess</code>
                 </li>
 
                 <li>
-                    You can customize event color labels in the notes area, just write:
+                    Customize event labels in the note area. Just write:
                     <pre>Type 1 = Work
 Type 2 = Fun
 Type 3 = Other
                     </pre>
-
-                    and the label will appear in the color dropdown.
                 </li>
 
-                <li>Share a link to a specific date/view:
+                <li>Link to a specific date/view:
                     <code>https://pastecal.com/test?date=2024-04-01&amp;view=week</code>
                     <br />
                     <br />
@@ -511,17 +510,15 @@ Type 3 = Other
                 </li>
 
                 <li>
-                    Add your pastecal calendar to your phone/calendar app with: <br />
+                    Sync your calendar to your phone/calendar app with the ICS link:
                     <code>https://pastecal.com/yourcalendar.ics</code>
                 </li>
                 <li>
-                    Share feedback on <a href="https://github.com/kazad/pastecal/issues">Github</a>
+                    Share feedback on <a href="https://github.com/kazad/pastecal/issues">Github</a>.
+
+                    Made by Kalid from <a href="https://instacalc.com">instacalc</a> and <a
+                        href="https://betterexplained.com">betterexplained</a>.
                 </li>
-
-                <br />
-
-                - From Kalid at <a href="https://instacalc.com">instacalc</a> and <a
-                    href="https://betterexplained.com">betterexplained</a>
             </ul>
         </div>
         <div v-if="showshare" id="share" style="margin-top: 10px;">
