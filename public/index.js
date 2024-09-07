@@ -147,6 +147,10 @@ function parseHumanWrittenCalendar(entry) {
   // Apply duration if found
   if (duration && !endDate) {
     endDate = new Date(startDate.getTime() + duration);
+  } else if (!endDate && !duration) {
+    // Set default duration to 1 hour
+    const defaultDuration = 60 * 60 * 1000; // 1 hour in milliseconds
+    endDate = new Date(startDate.getTime() + defaultDuration);
   }
 
   return {
