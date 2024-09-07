@@ -186,6 +186,47 @@ Copyright (c) 2022 Kalid Azad
         }
     </style>
 
+    <style>
+        .quick-add-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .quick-add-dialog {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            width: 80%;
+            max-width: 500px;
+        }
+
+        .quick-add-dialog textarea {
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        .parsed-event {
+            background-color: #f0f0f0;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+        }
+
+        .dialog-buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+    </style>
+
     <!-- Essential JS 2 all script -->
     <script src="https://cdn.syncfusion.com/ej2/23.2.6/dist/ej2.min.js" type="text/javascript"></script>
     <script>
@@ -209,6 +250,8 @@ Copyright (c) 2022 Kalid Azad
         };
         firebase.initializeApp(firebaseConfig);
     </script>
+
+    <script src="index.js"></script>
 
     <script>
         function debounce(func, timeout = 300) {
@@ -427,6 +470,8 @@ Copyright (c) 2022 Kalid Azad
 
                 <button v-on:click="showsearch = !showsearch" class="e-control e-btn e-lib e-primary e-small e-flat"
                     style="color: #03a9f4">Search</button>
+
+                <quick-add @event-created="handleQuickAddEvent"></quick-add>
             </div>
             <div style=" text-align: center;" class="title">
                 <span v-show="!editTitle" style="display: none; cursor: pointer;" @click="editTitle = true"
@@ -540,6 +585,66 @@ Type 3 = Other
     </div>
 
     <script>
+        const QuickAdd = {
+            template: `
+    <span>
+      <button @click="showDialog" class="e-control e-btn e-lib e-primary e-small e-flat">Quick Add</button>
+      <div v-if="dialogVisible" class="quick-add-overlay">
+        <div class="quick-add-dialog">
+          <h3>Quick Add Event</h3>
+          <textarea v-model="description" placeholder="Enter event details (e.g., 'Meeting with John tomorrow at 2pm for 1 hour')" rows="3"></textarea>
+          <div v-if="parsedEvent" class="parsed-event">
+            <p><strong>Subject:</strong> {{ parsedEvent.subject }}</p>
+            <p><strong>Start:</strong> {{ formatDate(parsedEvent.startDateTime) }}</p>
+            <p><strong>End:</strong> {{ formatDate(parsedEvent.endDateTime) }}</p>
+          </div>
+          <div class="dialog-buttons">
+            <button @click="createEvent" class="e-control e-btn e-lib e-primary e-small">Create</button>
+            <button @click="hideDialog" class="e-control e-btn e-lib e-small">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </span>
+  `,
+            data() {
+                return {
+                    dialogVisible: false,
+                    description: '',
+                    parsedEvent: null
+                };
+            },
+            watch: {
+                description() {
+                    this.parseDescription();
+                }
+            },
+            methods: {
+                showDialog() {
+                    this.dialogVisible = true;
+                },
+                hideDialog() {
+                    this.dialogVisible = false;
+                    this.description = '';
+                    this.parsedEvent = null;
+                },
+                parseDescription() {
+                    // Use the parseHumanWrittenCalendar function to parse the description
+                    this.parsedEvent = Utils.parseHumanWrittenCalendar(this.description);
+                },
+                createEvent() {
+                    if (this.parsedEvent) {
+                        this.$emit('event-created', this.parsedEvent);
+                        this.hideDialog();
+                    }
+                },
+                formatDate(dateString) {
+                    if (!dateString) return '';
+                    const options = { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: 'numeric', hour12: true };
+                    return new Date(dateString).toLocaleString(undefined, options);
+                }
+            }
+        };
+
         const CalendarVueApp = {
             data() {
                 var urlslug = window.location.pathname.split("/")[1];
@@ -570,7 +675,7 @@ Type 3 = Other
 
                     showsearch: false,
                     searchQuery: '',
-                    searchResults: []
+                    searchResults: [],
                 }
             },
 
@@ -887,11 +992,21 @@ Type 3 = Other
                         hour12: true
                     };
                     return new Date(dateString).toLocaleString(undefined, options);
+                },
+
+                handleQuickAddEvent(event) {
+                    const newEvent = new Event({
+                        title: event.subject,
+                        start: event.startDateTime,
+                        end: event.endDateTime
+                    });
+                    this.calendar.events.push(newEvent);
+                    this.calendar.setEvents(this.calendar.events);
                 }
             }
         };
 
-        const app = Vue.createApp(CalendarVueApp).mount('#app');
+        const app = Vue.createApp(CalendarVueApp).component('quick-add', QuickAdd).mount('#app');
     </script>
 
     <script>
