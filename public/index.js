@@ -126,146 +126,66 @@ Utils.render = function () {
   calendar.createSchedules(Utils.getEvents());
 };
 
-// date time parsing
 function parseHumanWrittenCalendar(entry) {
-  // Define regular expressions for different components
-  const timePattern = /(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/gi;
-  const timeRangePattern = /(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*-\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm)?)/gi;
-  const datePattern = /(today|tomorrow|next\s+\w+|on\s+\d{1,2}\/\d{1,2}(?:\/\d{2,4})?|\d{1,2}\/\d{1,2}(?:\/\d{2,4})?|\w+\s+\d{1,2}(?:st|nd|rd|th)?)/gi;
-  const durationPattern = /for\s+(\d+)\s*(minutes?|hours?|days?)/gi;
-  const dayOfWeekPattern = /(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/gi;
-  const subjectPattern = /^(.+?)(?=\s+(?:at|from|on|every|tomorrow|next|today|\d{1,2}\/\d{1,2}))/i;
+  const parsedResults = chrono.parse(entry, new Date(), { forwardDate: true });
 
-  // Extract potential matches
-  const timeMatches = entry.match(timePattern) || [];
-  const timeRangeMatches = entry.match(timeRangePattern) || [];
-  const dateMatches = entry.match(datePattern) || [];
-  const durationMatches = entry.match(durationPattern) || [];
-  const dayOfWeekMatches = entry.match(dayOfWeekPattern) || [];
-  const subjectMatch = entry.match(subjectPattern);
-
-  // Initialize extracted information
-  let subject = subjectMatch ? subjectMatch[1].trim() : 'Event';
-  let startTime = timeMatches[0] || null;
-  let endTime = null;
-  let date = dateMatches[0] || null;
-  let duration = durationMatches[0] || null;
-
-  // If a time range is found, split it into start and end time
-  if (timeRangeMatches.length > 0) {
-    const rangeMatch = timeRangeMatches[0].match(timeRangePattern);
-    if (rangeMatch && rangeMatch.length >= 3) {
-      startTime = rangeMatch[1].trim();
-      endTime = rangeMatch[2].trim();
-    }
+  if (parsedResults.length === 0) {
+    return { subject: entry, startDateTime: null, endDateTime: null };
   }
 
-  // Parse the relative or absolute date into a JavaScript Date object
-  let startDate = new Date();
-  if (date) {
-    if (date.toLowerCase() === 'tomorrow') {
-      startDate.setDate(startDate.getDate() + 1);
-    } else if (date.toLowerCase() !== 'today') {
-      if (date.toLowerCase().includes('next')) {
-        const dayOfWeek = date.split(/\s+/)[1];
-        startDate = getNextWeekday(dayOfWeek);
-      } else {
-        // Handle dates like "December 15" or "12/15"
-        const parsedDate = new Date(date);
-        if (!isNaN(parsedDate.getTime())) {
-          startDate = parsedDate;
-        }
-      }
-    }
+  const result = parsedResults[0];
+  let startDate = result.start.date();
+  let endDate = result.end ? result.end.date() : null;
+
+  // Extract the parsed text and the remaining text
+  const parsedText = result.text;
+  let remainingText = entry.replace(parsedText, '').trim();
+
+  // Process duration in the remaining text
+  const { subject, duration } = extractDuration(remainingText);
+
+  // Apply duration if found
+  if (duration && !endDate) {
+    endDate = new Date(startDate.getTime() + duration);
   }
 
-  // Calculate end time if duration is specified
-  if (duration) {
-    const durationMatch = duration.match(/(\d+)\s*(minutes?|hours?|days?)/i);
-    if (durationMatch) {
-      const [, durationValue, durationUnit] = durationMatch;
-      endTime = new Date(startDate);
-      switch (durationUnit.toLowerCase()) {
-        case 'minute':
-        case 'minutes':
-          endTime.setMinutes(endTime.getMinutes() + parseInt(durationValue));
-          break;
-        case 'hour':
-        case 'hours':
-          endTime.setHours(endTime.getHours() + parseInt(durationValue));
-          break;
-        case 'day':
-        case 'days':
-          endTime.setDate(endTime.getDate() + parseInt(durationValue));
-          break;
-      }
-    }
-  }
-
-  // Format start and end times
-  try {
-    if (startTime) {
-      startDate = setTimeFromString(startDate, startTime);
-    }
-    if (endTime && typeof endTime === 'string') {
-      endTime = setTimeFromString(new Date(startDate), endTime);
-    } else if (!(endTime instanceof Date)) {
-      endTime = null;
-    }
-  } catch (error) {
-    console.error("Error parsing time:", error.message);
-    // Set default times if parsing fails
-    startDate.setHours(0, 0, 0, 0);
-    endTime = null;
-  }
-
-  // Format output
   return {
-    subject,
+    subject: subject || 'Untitled Event',
     startDateTime: startDate.toISOString(),
-    endDateTime: endTime ? endTime.toISOString() : null
+    endDateTime: endDate ? endDate.toISOString() : null
   };
 }
 
-// Helper function to find the date of the next weekday
-function getNextWeekday(weekday) {
-  const daysOfWeek = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-  const day = daysOfWeek.indexOf(weekday.toLowerCase());
-  const today = new Date();
-  const currentDay = today.getDay();
-  const daysUntilNext = (day - currentDay + 7) % 7 || 7;
-  const nextDate = new Date(today);
-  nextDate.setDate(today.getDate() + daysUntilNext);
-  return nextDate;
-}
+function extractDuration(text) {
+  const durationRegex = /(?:(?:for|in)\s+)?(\d+(?:\.\d+)?)\s*(hour|hr|minute|min|day)s?/i;
+  const match = text.match(durationRegex);
 
-// Helper function to set time from a string
-function setTimeFromString(date, timeString) {
-  if (typeof timeString !== 'string') {
-    throw new Error('Invalid time string');
+  if (!match) {
+    return { subject: text, duration: null };
   }
 
-  const timeParts = timeString.toLowerCase().match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/);
-  if (!timeParts) {
-    throw new Error('Unable to parse time string');
+  const [fullMatch, amount, unit] = match;
+  let durationMs;
+
+  switch (unit.toLowerCase()) {
+    case 'hour':
+    case 'hr':
+      durationMs = parseFloat(amount) * 60 * 60 * 1000;
+      break;
+    case 'minute':
+    case 'min':
+      durationMs = parseFloat(amount) * 60 * 1000;
+      break;
+    case 'day':
+      durationMs = parseFloat(amount) * 24 * 60 * 60 * 1000;
+      break;
+    default:
+      durationMs = 0;
   }
 
-  let [, hours, minutes = '00', meridiem] = timeParts;
-  hours = parseInt(hours);
-  minutes = parseInt(minutes);
+  const subject = text.replace(fullMatch, '').replace(/\s+/g, ' ').trim();
 
-  if (meridiem === 'pm' && hours !== 12) {
-    hours += 12;
-  } else if (meridiem === 'am' && hours === 12) {
-    hours = 0;
-  }
-
-  if (hours >= 24 || minutes >= 60) {
-    throw new Error('Invalid time values');
-  }
-
-  date.setHours(hours, minutes, 0, 0);
-  return date;
+  return { subject, duration: durationMs };
 }
 
 // Example usage and test cases
@@ -280,7 +200,7 @@ const testCases = [
   "dentist appointment tomorrow at 10am",
   "project deadline on Friday at 5pm",
   "weekly review every Friday 4-5pm",
-  "invalid time entry at 25:00",
+  "meeting with john tomorrow at 2pm for 1 hour",
   "meeting with no time specified"
 ];
 
