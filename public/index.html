@@ -601,8 +601,7 @@ Type 3 = Other
             template: `
     <span>
       <button @click="showDialog" class="e-control e-btn e-lib e-primary e-small e-flat">
-        Quick Add (
-        <kbd class="font-sans text-xs font-semibold rounded">⌘A</kbd>)
+        <span class="mobile-hide">Quick</span> Add <kbd class="mobile-hide">(⌘A)</kbd>
       </button>
       <div v-if="dialogVisible" class="quick-add-overlay">
         <div class="quick-add-dialog">
