@@ -470,7 +470,7 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
         </div>
 
         <div class="topbar">
-            <div style="text-align: left;">
+            <div style="text-align: left; flex-grow: 1;">
                 <img class="logo" src="img/calendar.craiyon.64.png"
                     style="height: 24px; margin-top: -2px; float: left;padding: 0px 0.5em;">
                 <a href="/">PasteCal</a>
@@ -606,24 +606,25 @@ Type 3 = Other
       <div v-if="dialogVisible" class="quick-add-overlay">
         <div class="quick-add-dialog">
           <h3>Quick Add Event</h3>
-          <textarea v-model="description" placeholder="Enter event details (e.g., 'Meeting with John tomorrow at 2pm for 1 hour')" rows="3"></textarea>
-          <div class="parsed-event">
-            <p><strong>Subject:</strong> {{ parsedEvent?.subject }}</p>
-            <p><strong>Start:</strong> {{ formatDate(parsedEvent?.startDateTime) }}</p>
-            <p><strong>End:</strong> {{ formatDate(parsedEvent?.endDateTime) }}</p>
-          </div>
-          <pre>
-meet someone tomorrow 2pm for 1 hour
-meeting tomorrow 2-3pm
-meeting 3/2/25 2-3pm
-meeting 2pm november 11
+          <form @submit.prevent="createEvent">
+            <textarea v-model="description" placeholder="Enter details ('Meet John tomorrow at 2pm')" rows="3" @keydown.enter.prevent="handleEnter"></textarea>
+            <div class="parsed-event">
+              <p><strong>Subject:</strong> {{ parsedEvent?.subject }}</p>
+              <p><strong>Start:</strong> {{ formatDate(parsedEvent?.startDateTime) }}</p>
+              <p><strong>End:</strong> {{ formatDate(parsedEvent?.endDateTime) }}</p>
+            </div>
+            <pre>
+lunch tomorrow 2pm for 1 hour
+appointment 9/15 at 2:30pm
+birthday party Sat 7pm to 11pm
+workout 3pm May 20 for 90 minutes
 vacation dec 11 - dec 15
             </pre>
-
-          <div class="dialog-buttons">
-            <button @click="createEvent" class="e-control e-btn e-lib e-primary e-small">Create</button>
-            <button @click="hideDialog" class="e-control e-btn e-lib e-small">Cancel</button>
-          </div>
+            <div class="dialog-buttons">
+              <button type="submit" class="e-control e-btn e-lib e-primary e-small">Create</button>
+              <button type="button" @click="hideDialog" class="e-control e-btn e-lib e-small">Cancel</button>
+            </div>
+          </form>
         </div>
       </div>
     </span>
@@ -673,15 +674,20 @@ vacation dec 11 - dec 15
                     return new Date(dateString).toLocaleString(undefined, options);
                 },
                 handleKeydown(event) {
-                    // Check for Cmd+K (Mac) or Ctrl+K (Windows/Linux)
+                    // Check for Cmd+A (Mac) or Ctrl+A (Windows/Linux)
                     if ((event.metaKey || event.ctrlKey) && event.key === 'a') {
                         event.preventDefault();
                         this.showDialog();
                     }
-
                     // Check for Escape key when dialog is visible
                     if (event.key === 'Escape' && this.dialogVisible) {
                         this.hideDialog();
+                    }
+                },
+                handleEnter(event) {
+                    // If Shift key is not pressed, submit the form
+                    if (!event.shiftKey) {
+                        this.createEvent();
                     }
                 }
             }
