@@ -68,6 +68,8 @@ exports.generateICS = functions.https.onRequest((req, res) => {
 
 /*
 // local cleanup task: Update eventIDs to be GUIDs 
+// uncomment, run locally:  
+// curl -X GET http://localhost:8081/pastecal-web/us-central1/updateEventIds
 exports.updateEventIds = functions.https.onRequest(async (req, res) => {
     try {
         const db = admin.database(); // Use this line for Realtime Database
