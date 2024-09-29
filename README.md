@@ -4,13 +4,13 @@ https://pastecal.com - zero-login shared calendar.
 
 Use cases:
 
-- From homepage, make a shared calendar with 1 click. No logins. Use the default (random) ID or pick your own.
+- Make a shared calendar a single click, no logins. Anyone with the link can view/edit the calendar (like a wiki).
+ 
+- Pick your own ID or use the random default ID. Visit pastecal.com/customID and click create.
 
-- Visiting pastecal.com/customID makes a calendar (pre-filled option to create)
+- Visit homepage, make changes, and get a private calendar without sharing (stored in localStorage). No need to publish.
 
-- Visit homepage, make changes without sharing. Your private calendar is stored in localStorage, no need to publish.
-
-- Open a calendar to specific date/view with `pastecal.com/?d={YYYYMMDD|YYMMDD|YY-MM-DD...}&v={day,week,month,year}`. Example: [pastecal.com/?d=2022-04-01&v=month](https://pastecal.com/?d=2022-04-01&v=month)
+- Open a calendar with a specific pre-filled date/view using `pastecal.com/?d={YYYYMMDD|YYMMDD|YY-MM-DD...}&v={day,week,month,year}`. Example: [pastecal.com/?d=2022-04-01&v=month](https://pastecal.com/?d=2022-04-01&v=month)
 
 Screenshots:
 
