@@ -1,5 +1,6 @@
 const functions = require('firebase-functions');
 const admin = require('firebase-admin');
+const { v4: uuidv4 } = require('uuid'); // Import uuid for generating GUIDs
 
 admin.initializeApp();
 
