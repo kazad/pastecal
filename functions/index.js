@@ -65,3 +65,51 @@ exports.generateICS = functions.https.onRequest((req, res) => {
         res.send(icsData);
     });
 });
+
+/*
+// local cleanup task: Update eventIDs to be GUIDs 
+exports.updateEventIds = functions.https.onRequest(async (req, res) => {
+    try {
+        const db = admin.database(); // Use this line for Realtime Database
+        const calendarsRef = db.ref('/calendars');
+        const snapshot = await calendarsRef.once('value');
+
+        const promises = [];
+
+        snapshot.forEach(childSnapshot => {
+            const calendarKey = childSnapshot.key; // Get the root node key
+            const calendarData = childSnapshot.val();
+
+            // Check if there are events
+            if (calendarData.events && calendarData.events.length > 0) {
+                let replacedCount = 0; // Counter for replaced IDs
+
+                // Iterate through all events
+                calendarData.events.forEach(event => {
+                    // Check if the id is a string containing a "-"
+                    const isGuid = (id) => typeof id === 'string' && id.includes('-');
+
+                    // Check if the id is not a number and not a GUID
+                    if (typeof event.id === 'number' || !isGuid(event.id)) {
+                        // Replace the event's id with a GUID
+                        event.id = uuidv4();
+                        replacedCount++; // Increment the counter
+                    }
+                });
+
+                // Update the calendar entry in the database
+                promises.push(calendarsRef.child(calendarKey).set(calendarData));
+
+                // Log the number of replaced entries for the calendar
+                console.log(`Calendar "${calendarKey}" processed: ${replacedCount} event IDs replaced.`);
+            }
+        });
+
+        await Promise.all(promises); // Wait for all updates to complete
+        res.send('Successfully updated event IDs');
+    } catch (error) {
+        console.error('Error updating event IDs:', error);
+        res.status(500).send('Error updating event IDs');
+    }
+});
+*/
