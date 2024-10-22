@@ -552,8 +552,8 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
                     : Zero-login shared calendars
                 </span>
 
-                <div class="dropdown" style="display: inline-block; margin-left: 10px;">
-                    <button @click="toggleRecents" class="buttonbar e-primary e-control e-btn e-lib e-small e-flat"
+                <div class="dropdown" style="display: inline-block; margin-left: 10px;" v-click-outside="closeRecents">
+                    <button @click.stop="toggleRecents" class="buttonbar e-primary e-control e-btn e-lib e-small e-flat"
                         title="View recent calendars" alt="Recent calendars">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
                             viewBox="0 0 16 16" aria-label="Recent calendars icon">
@@ -813,7 +813,25 @@ vacation dec 11 - dec 15
             }
         };
 
+        // Vue directive for handling clicks outside an element
+        const clickOutside = {
+            mounted(el, binding) {
+                el._clickOutside = (event) => {
+                    if (!(el === event.target || el.contains(event.target))) {
+                        binding.value(event);
+                    }
+                };
+                document.addEventListener('click', el._clickOutside);
+            },
+            unmounted(el) {
+                document.removeEventListener('click', el._clickOutside);
+            }
+        };
+
         const CalendarVueApp = {
+            directives: {
+                'click-outside': clickOutside
+            },
             data() {
                 var urlslug = window.location.pathname.split("/")[1];
 
@@ -1160,6 +1178,10 @@ vacation dec 11 - dec 15
 
                 toggleRecents() {
                     this.showRecents = !this.showRecents;
+                },
+
+                closeRecents() {
+                    this.showRecents = false;
                 },
 
                 togglePin(id) {
