@@ -1215,14 +1215,24 @@ vacation dec 11 - dec 15
             return replacedText;
         }
 
-        // Convert links in description to clickable items. TODO: make this automatic
-        setInterval(() => {
-            var el = document.querySelector(".e-event-popup .e-description-details");
-            if (el && !el.attributes['data-processed']) {
-                el.attributes['data-processed'] = true;
-                el.innerHTML = linkify(el.innerHTML);
-            }
-        }, 250);
+        // Convert links in description to clickable items using MutationObserver
+        const linkifyObserver = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.type === 'childList') {
+                    const descriptionEl = document.querySelector(".e-event-popup .e-description-details");
+                    if (descriptionEl && !descriptionEl.hasAttribute('data-processed')) {
+                        descriptionEl.setAttribute('data-processed', 'true');
+                        descriptionEl.innerHTML = linkify(descriptionEl.innerHTML);
+                    }
+                }
+            });
+        });
+
+        // Start observing the document with the configured parameters
+        linkifyObserver.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
     </script>
     <br />
 </body>
