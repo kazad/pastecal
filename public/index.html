@@ -603,12 +603,12 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
 
                 <quick-add @event-created="handleQuickAddEvent"></quick-add>
             </div>
-            <div style=" text-align: center;" class="title">
+            <div style="text-align: center; display: flex; align-items: center; justify-content: center;" class="title">
                 <span v-show="!editTitle" style="display: none; cursor: pointer;" @click="editTitle = true"
                     title="Click to edit" v-text="calendar.title"></span>
                 <button v-show="!editTitle" v-on:click="shownotes = !shownotes"
                     class="e-control e-btn e-lib e-primary e-small e-flat"
-                    style="color: #333; position: absolute; top: -4px; font-size: 24px;" title="Toggle notes"
+                    style="color: #333; font-size: 24px;" title="Toggle notes"
                     alt="Notes">
                     <div style="display: flex; align-items: center; height: 100%; padding: 5px 0;">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
