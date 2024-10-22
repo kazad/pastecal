@@ -656,7 +656,52 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
             </div>
         </div>
         <div v-if="showhelp" id="help">
-            <ul>
+            <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
+                <tr>
+                    <td style="padding: 10px; border-bottom: 1px solid #eee;">
+                        <strong>Create & Share</strong><br>
+                        Choose a URL (<code>pastecal.com/name</code>) and save. For privacy, make it hard to
+                        guess:
+                        <code>name-secretword</code><br>
+                        Anyone with the link can view/edit without logging in.
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border-bottom: 1px solid #eee;">
+                        <strong>Custom Event Type Labels</strong><br>
+                        In Notes, write:<br>
+                        <code>Type 1 = Work<br>Type 2 = Personal<br>Type 3 = Other</code>
+                        <br />
+                        <br />
+                        These names will appear in the event type dropdown.
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border-bottom: 1px solid #eee;">
+                        <strong>Link to date/view</strong><br>
+                        Link to specific views:
+                        <code>pastecal.com/cal?date=2024-04-01&view=week</code><br>
+                        <br />
+                        date formats: YYYY-MM-DD, YYMMDD, YYYY.MM.DD<br>
+                        views: day, week, month, year, agenda
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border-bottom: 1px solid #eee;">
+                        <strong>Add to calendar app</strong><br>
+                        Import the ICS link: <code>pastecal.com/name.ics</code>
+                    </td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px;">
+                        <small>Made by Kalid (<a href="https://instacalc.com">Instacalc</a>, <a
+                                href="https://betterexplained.com">Better Explained</a>) • <a
+                                href="https://github.com/kazad/pastecal/issues">Feedback</a></small>
+                    </td>
+                </tr>
+            </table>
+
+            <ul style="display: none">
                 <li>
                     Pick a permalink (pastecal.com/somename) and click save. Anyone with the link can see/create
                     events, no login needed. For privacy,
