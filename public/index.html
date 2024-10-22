@@ -65,6 +65,75 @@ Copyright (c) 2022 Kalid Azad
             font-family: "Roboto", "Segoe UI", "GeezaPro", "DejaVu Serif", "sans-serif", "-apple-system", "BlinkMacSystemFont";
         }
 
+        /* Dropdown styles */
+        .dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .dropdown-content {
+            position: absolute;
+            right: 0;
+            background-color: #fff;
+            min-width: 250px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            border-radius: 4px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .recent-item {
+            padding: 8px 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #eee;
+        }
+
+        .recent-item:hover {
+            background-color: #f5f5f5;
+        }
+
+        .recent-header {
+            padding: 8px 12px;
+            font-weight: bold;
+            background-color: #f8f8f8;
+            border-bottom: 1px solid #eee;
+            color: #666;
+        }
+
+        .recent-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .pin-btn,
+        .remove-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 2px 6px;
+            opacity: 0.6;
+        }
+
+        .pin-btn:hover,
+        .remove-btn:hover {
+            opacity: 1;
+        }
+
+        .pin-btn.pinned {
+            opacity: 1;
+            color: #03a9f4;
+        }
+
+        .no-recents {
+            padding: 12px;
+            text-align: center;
+            color: #666;
+        }
+
+
         body a {
             text-decoration: none;
             color: rgb(3, 169, 244);
@@ -90,6 +159,11 @@ Copyright (c) 2022 Kalid Azad
         .topbar .title {
             font-weight: bold;
             font-size: 1.0rem;
+        }
+
+        .topbar .buttonbar.e-btn {
+            color: rgb(3, 169, 244);
+            padding: 0px .5rem;
         }
 
         #help,
@@ -470,18 +544,62 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
         </div>
 
         <div class="topbar">
-            <div style="text-align: left; flex-grow: 1;">
+            <div class="" style="text-align: left; flex-grow: 1;">
                 <img class="logo" src="img/calendar.craiyon.64.png"
                     style="height: 24px; margin-top: -2px; float: left;padding: 0px 0.5em;">
                 <a href="/">PasteCal</a>
                 <span class="mobile-hide">
                     : Zero-login shared calendars
                 </span>
-                <button v-on:click="showhelp = !showhelp" class="e-control e-btn e-lib e-primary e-small e-flat"
-                    style="color: #03a9f4">Tips</button>
 
-                <button v-on:click="showsearch = !showsearch" class="e-control e-btn e-lib e-primary e-small e-flat"
-                    style="color: #03a9f4">Search</button>
+                <div class="dropdown" style="display: inline-block; margin-left: 10px;">
+                    <button @click="toggleRecents" class="buttonbar e-control e-btn e-lib e-small e-flat" 
+                            title="View recent calendars" alt="Recent calendars">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+                            viewBox="0 0 16 16" aria-label="Recent calendars icon">
+                            <path
+                                d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71V3.5z" />
+                            <path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0z" />
+                        </svg>
+                        <!--
+                        <span class="mobile-hide">Recents</span>
+                    -->
+                    </button>
+                    <div class="dropdown-content" v-if="showRecents">
+                        <div class="recent-header">Recently Viewed</div>
+                        <div v-for="item in recentCalendars" :key="item.id" class="recent-item">
+                            <a :href="'/' + item.id">{{ item.title }}</a>
+                            <div class="recent-actions">
+                                <button @click="togglePin(item.id)" class="pin-btn" :class="{ 'pinned': item.pinned }">
+                                    📌
+                                </button>
+                                <button @click="removeRecent(item.id)" class="remove-btn">×</button>
+                            </div>
+                        </div>
+                        <div v-if="recentCalendars.length === 0" class="no-recents">
+                            No recent calendars
+                        </div>
+                    </div>
+                </div>
+
+                <button v-on:click="showhelp = !showhelp" class="buttonbar e-control e-btn e-lib e-small e-flat"
+                        title="Show help" alt="Help">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+                        viewBox="0 0 16 16" aria-label="Help icon">
+                        <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z" />
+                        <path
+                            d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286zm1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94z" />
+                    </svg>
+                </button>
+
+                <button v-on:click="showsearch = !showsearch" class="buttonbar e-control e-btn e-lib e-small e-flat"
+                        title="Search events" alt="Search">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
+                        viewBox="0 0 16 16" aria-label="Search icon">
+                        <path
+                            d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z" />
+                    </svg>
+                </button>
 
                 <quick-add @event-created="handleQuickAddEvent"></quick-add>
             </div>
@@ -490,7 +608,8 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
                     title="Click to edit" v-text="calendar.title"></span>
                 <button v-show="!editTitle" v-on:click="shownotes = !shownotes"
                     class="e-control e-btn e-lib e-primary e-small e-flat"
-                    style="color: #333; position: absolute; top: -4px; font-size: 24px;">
+                    style="color: #333; position: absolute; top: -4px; font-size: 24px;"
+                    title="Toggle notes" alt="Notes">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                         stroke="currentColor" style="width: 20px; height: 20px; margin-top: 10px;">
                         <path stroke-linecap="round" stroke-linejoin="round"
@@ -499,11 +618,6 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
                 </button>
                 <input type="text" v-show="editTitle" style="display: none;" v-model="calendar.title"
                     @keyup.enter="setTitle($event)">
-            </div>
-            <div class="recents" style="display: none;">
-                <select name="recents" id="recents">
-                    <option value="">Recently opened</option>
-                </select>
             </div>
             <div style="text-align:right">
                 <div v-show="isExisting" style="display: none;">
@@ -599,8 +713,11 @@ Type 3 = Other
     <script>
         const QuickAdd = {
             template: `
-    <span>
-      <button @click="showDialog" class="e-control e-btn e-lib e-primary e-small e-flat">
+    <span style="
+    display: inline-flex;
+    vertical-align: top;"
+>
+      <button @click="showDialog" class="buttonbar e-control e-btn e-lib e-primary e-small e-flat">
         <span class="mobile-hide">Quick</span> Add <kbd class="mobile-hide">(⌘A)</kbd>
       </button>
       <div v-if="dialogVisible" class="quick-add-overlay">
@@ -711,7 +828,8 @@ vacation dec 11 - dec 15
                     isExisting: false, // set by callback
                     editTitle: false,
                     calendar: cal,
-                    recents: [],
+                    recentCalendars: [],
+                    showRecents: false,
                     syncFusionEvents: [],     // local copy, not synced
                     urlslug: urlslug,
                     debug: false,
@@ -728,9 +846,16 @@ vacation dec 11 - dec 15
             },
 
             mounted() {
+                // Initialize recents
+                this.recentManager = new RecentCalendars();
+                this.recentCalendars = this.recentManager.getAll();
+
                 CalendarDataService.subscribe(this.calendar.id, (c) => {
                     this.isExisting = true;
                     this.calendar.import(c);
+                    // Add to recents when calendar loads
+                    this.recentManager.add(this.calendar.id, this.calendar.title);
+                    this.recentCalendars = this.recentManager.getAll();
                 });
 
                 window.scheduleObj = new ej.schedule.Schedule();
@@ -1028,6 +1153,20 @@ vacation dec 11 - dec 15
                     let startDate = new Date(event.start);
                     scheduleObj.selectedDate = startDate;
                     scheduleObj.currentView = 'Week';
+                },
+
+                toggleRecents() {
+                    this.showRecents = !this.showRecents;
+                },
+
+                togglePin(id) {
+                    this.recentManager.togglePin(id);
+                    this.recentCalendars = this.recentManager.getAll();
+                },
+
+                removeRecent(id) {
+                    this.recentManager.remove(id);
+                    this.recentCalendars = this.recentManager.getAll();
                 },
 
                 formatDate(dateString) {
