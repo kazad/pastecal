@@ -766,7 +766,7 @@ Type 3 = Other
     vertical-align: top;"
 >
       <button @click="showDialog" class="buttonbar e-control e-btn e-lib e-primary e-small e-flat">
-        <span class="mobile-hide">Quick</span> Add <kbd class="mobile-hide">(⌘A)</kbd>
+        <span class="mobile-hide">Add</span> Event <kbd class="mobile-hide">(⌘E)</kbd>
       </button>
       <div v-if="dialogVisible" class="quick-add-overlay">
         <div class="quick-add-dialog">
@@ -840,7 +840,7 @@ vacation dec 11 - dec 15
                 },
                 handleKeydown(event) {
                     // Check for Cmd+A (Mac) or Ctrl+A (Windows/Linux)
-                    if ((event.metaKey || event.ctrlKey) && event.key === 'a') {
+                    if ((event.metaKey || event.ctrlKey) && event.key === 'e') {
                         event.preventDefault();
                         this.showDialog();
                     }
