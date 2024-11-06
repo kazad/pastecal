@@ -414,6 +414,9 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
                 this.end = options.end;
                 this.type = options.Type || options.type || 1;
 
+                this.recurrenceID = options.RecurrenceID || options.recurrenceID || null;
+                this.recurrenceException = options.RecurrenceException || options.recurrenceException || null;
+
                 // for SyncFusion Internal Object
                 if (options.StartTime) {
                     this.start = new Date(options.StartTime).toISOString();
@@ -440,8 +443,11 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
                         Description: e.description,
                         RecurrenceRule: e.recurrencerule,
                         Type: e.type || 1,
+
                         //                        IsAllDay: e.allday,
-                        Recurrence: e.repeat
+                        Recurrence: e.repeat,
+                        RecurrenceID: e.recurrenceID,
+                        RecurrenceException: e.recurrenceException
                     }
                 });
             }
