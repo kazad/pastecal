@@ -406,12 +406,12 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
             // may be created from JSON object or DHTMLX internal calendar event
             constructor(options) {
                 this.id = options.Id || options.id || uuidv4();
-                this.title = options.Subject || options.text || options.title;
+                this.title = options.Subject || options.text || options.title || "";
                 this.description = options.Description || options.description || "";
                 this.repeat = options.Recurrence || options.repeat || "";
                 this.recurrencerule = options.RecurrenceRule || options.recurrencerule || "";
-                this.start = options.start;
-                this.end = options.end;
+                this.start = options.start || null;
+                this.end = options.end || null;
                 this.type = options.Type || options.type || 1;
 
                 this.recurrenceID = options.RecurrenceID || options.recurrenceID || null;
@@ -419,8 +419,8 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
 
                 // for SyncFusion Internal Object
                 if (options.StartTime) {
-                    this.start = new Date(options.StartTime).toISOString();
-                    this.end = new Date(options.EndTime).toISOString();
+                    this.start = new Date(options.StartTime).toISOString() || null;
+                    this.end = new Date(options.EndTime).toISOString() || null;
                 }
             }
         }
@@ -785,6 +785,8 @@ Type 3 = Other
               <p><strong>End:</strong> {{ formatDate(parsedEvent?.endDateTime) }}</p>
             </div>
             <pre>
+Examples: 
+
 lunch tomorrow 2pm for 1 hour
 appointment 9/15 at 2:30pm
 birthday party Sat 7pm to 11pm
@@ -792,7 +794,7 @@ workout 3pm May 20 for 90 minutes
 vacation dec 11 - dec 15
             </pre>
             <div class="dialog-buttons">
-              <button type="submit" class="e-control e-btn e-lib e-primary e-small">Create</button>
+              <button type="submit" class="e-control e-btn e-lib e-primary e-small" :disabled="!isValidEvent">Create</button>
               <button type="button" @click="hideDialog" class="e-control e-btn e-lib e-small">Cancel</button>
             </div>
           </form>
@@ -807,6 +809,15 @@ vacation dec 11 - dec 15
                     parsedEvent: null
                 };
             },
+            computed: {
+                isValidEvent() {
+                    return this.parsedEvent &&
+                        this.parsedEvent.subject &&
+                        this.parsedEvent.startDateTime &&
+                        !isNaN(new Date(this.parsedEvent.startDateTime).getTime());
+                }
+            },
+
             watch: {
                 description() {
                     this.parseDescription();
