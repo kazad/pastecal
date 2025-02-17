@@ -422,6 +422,13 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
                     this.start = new Date(options.StartTime).toISOString() || null;
                     this.end = new Date(options.EndTime).toISOString() || null;
                 }
+
+                // Firebase saves fail with undefined properties, ensure they are null instead
+                for (let prop in this) {
+                    if (this[prop] === undefined) {
+                        this[prop] = null;
+                    }
+                }
             }
         }
 
