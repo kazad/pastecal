@@ -58,122 +58,11 @@ Copyright (c) 2022 Kalid Azad
     <!-- Essential JS 2 Scheduler's material theme -->
     <link href="https://cdn.syncfusion.com/ej2/ej2-schedule/styles/material.css" rel="stylesheet" type="text/css" />
 
+    <!-- Add Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
     <style>
-        body {
-            padding: 0px 5px;
-            margin: 5px auto;
-            font-family: "Roboto", "Segoe UI", "GeezaPro", "DejaVu Serif", "sans-serif", "-apple-system", "BlinkMacSystemFont";
-        }
-
-        /* Dropdown styles */
-        .dropdown {
-            position: relative;
-            display: inline-block;
-        }
-
-        .dropdown-content {
-            position: absolute;
-            right: 0;
-            background-color: #fff;
-            min-width: 250px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-            z-index: 1000;
-            border-radius: 4px;
-            max-height: 400px;
-            overflow-y: auto;
-        }
-
-        .recent-item {
-            padding: 8px 12px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid #eee;
-        }
-
-        .recent-item:hover {
-            background-color: #f5f5f5;
-        }
-
-        .recent-header {
-            padding: 8px 12px;
-            font-weight: bold;
-            background-color: #f8f8f8;
-            border-bottom: 1px solid #eee;
-            color: #666;
-        }
-
-        .recent-actions {
-            display: flex;
-            gap: 8px;
-        }
-
-        .pin-btn,
-        .remove-btn {
-            background: none;
-            border: none;
-            cursor: pointer;
-            padding: 2px 6px;
-            opacity: 0.6;
-        }
-
-        .pin-btn:hover,
-        .remove-btn:hover {
-            opacity: 1;
-        }
-
-        .pin-btn.pinned {
-            opacity: 1;
-            color: #03a9f4;
-        }
-
-        .no-recents {
-            padding: 12px;
-            text-align: center;
-            color: #666;
-        }
-
-
-        body a {
-            text-decoration: none;
-            color: rgb(3, 169, 244);
-        }
-
-        body a:hover {
-            text-decoration: underline;
-        }
-
-        .topbar {
-            display: flex;
-            justify-content: space-between;
-            border-bottom: 1px solid #ccc;
-            padding: 5px 0px;
-            margin-top: 5px;
-            font-size: 0.8rem;
-        }
-
-        .topbar>div {
-            width: 33%;
-        }
-
-        .topbar .title {
-            font-weight: bold;
-            font-size: 1.0rem;
-        }
-
-        .topbar .buttonbar.e-btn {
-            color: rgb(3, 169, 244);
-            padding: 0px .5rem;
-        }
-
-        #help,
-        #share,
-        #search {
-            font-size: 0.8rem;
-            color: #555;
-        }
-
-        /* syncfusion customizations */
+        /* Keep only Syncfusion customizations */
         .e-toolbar-item.e-today {
             display: none !important;
         }
@@ -198,10 +87,7 @@ Copyright (c) 2022 Kalid Azad
             cursor: pointer;
         }
 
-        td.e-header-cells.e-disable-dates:hover {
-            background-color: #fafafa !important;
-        }
-
+        /* Keep color classes for event types */
         span.e-menu-icon.e-color-1 {
             background: #3f51b5;
         }
@@ -234,25 +120,15 @@ Copyright (c) 2022 Kalid Azad
             background: #27282f;
         }
 
-        /* custom color field location */
+        /* Keep essential Syncfusion form styles */
         .custom-field-row-color {
             position: absolute;
             top: 1rem;
             right: 25px;
         }
 
-        .custom-field-row-color .e-caret {
-            color: #eee;
-        }
-
-        /* make room for color picker */
         .e-subject-container {
             margin-right: 50px;
-        }
-
-        /* hide location */
-        .e-schedule-dialog .e-subject-container {
-            width: 100%;
         }
 
         .e-location-container {
@@ -549,219 +425,186 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
     </script>
 </head>
 
-<body>
+<body class="p-1 m-1">
     <div id="app">
-        <div v-if="false" class="extended_hours">
-            <input type="checkbox" id="extended" v-model="calendar.options.extended">
-            <label for="extended">All hours</label>
-        </div>
+        <div class="flex justify-between mb-1 text-sm">
+            <div class="flex-1 text-left flex items-center">
+                <img class="h-6 -mt-0.5 float-left px-2 block" src="img/calendar.craiyon.64.png" alt="Logo">
+                <div class="flex flex-col">
+                    <a href="/"
+                        class="text-blue-500 font-medium text-sm sm:text-base hover:text-blue-600 transition-colors">PasteCal</a>
+                    <span class="text-gray-500 text-xs hidden md:inline">Easy shared calendars</span>
+                </div>
+                <!-- 
+                <a href="/" class="text-blue-500 hover:underline">PasteCal</a>
+                <span class="hidden sm:inline">: Zero-login shared calendars</span>
+                -->
 
-        <div class="topbar">
-            <div class="" style="text-align: left; flex-grow: 1;">
-                <img class="logo" src="img/calendar.craiyon.64.png"
-                    style="height: 24px; margin-top: -2px; float: left;padding: 0px 0.5em;">
-                <a href="/">PasteCal</a>
-                <span class="mobile-hide">
-                    : Zero-login shared calendars
-                </span>
-
-                <div class="dropdown" style="display: inline-block; margin-left: 10px;" v-click-outside="closeRecents">
-                    <button @click.stop="toggleRecents" class="buttonbar e-primary e-control e-btn e-lib e-small e-flat"
-                        title="View recent calendars" alt="Recent calendars">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
-                            viewBox="0 0 16 16" aria-label="Recent calendars icon">
+                <div class="inline-block ml-2 relative" v-click-outside="closeRecents">
+                    <button @click.stop="toggleRecents" class="text-blue-500 hover:bg-blue-50 px-2 py-1 rounded"
+                        title="View recent calendars">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="inline-block w-4 h-4" fill="currentColor"
+                            viewBox="0 0 16 16">
                             <path
                                 d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71V3.5z" />
                             <path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0z" />
                         </svg>
-                        <!--
-                        <span class="mobile-hide">Recents</span>
-                    -->
                     </button>
-                    <div class="dropdown-content" v-if="showRecents">
-                        <div class="recent-header">Recently Viewed</div>
-                        <div v-for="item in recentCalendars" :key="item.id" class="recent-item">
-                            <a :href="'/' + item.id">{{ item.title }}</a>
-                            <div class="recent-actions">
-                                <button @click="togglePin(item.id)" class="pin-btn" :class="{ 'pinned': item.pinned }">
+
+                    <div v-if="showRecents"
+                        class="absolute left-0 bg-white min-w-[250px] shadow-lg rounded-lg max-h-[400px] overflow-y-auto z-50">
+                        <div class="p-2 font-semibold bg-gray-50 border-b text-gray-600">Recently Viewed</div>
+                        <div v-for="item in recentCalendars" :key="item.id"
+                            class="flex justify-between items-center p-2 hover:bg-gray-50 border-b">
+                            <a :href="'/' + item.id" class="text-blue-500 hover:underline">{{ item.title }}</a>
+                            <div class="flex gap-2">
+                                <button @click="togglePin(item.id)" class="opacity-60 hover:opacity-100 px-1.5 py-0.5"
+                                    :class="{ 'text-blue-500 opacity-100': item.pinned }">
                                     📌
                                 </button>
-                                <button @click="removeRecent(item.id)" class="remove-btn">×</button>
+                                <button @click="removeRecent(item.id)"
+                                    class="opacity-60 hover:opacity-100 px-1.5 py-0.5">×</button>
                             </div>
                         </div>
-                        <div v-if="recentCalendars.length === 0" class="no-recents">
+                        <div v-if="recentCalendars.length === 0" class="p-3 text-center text-gray-600">
                             No recent calendars
                         </div>
                     </div>
                 </div>
 
-                <button v-on:click="showhelp = !showhelp"
-                    class="buttonbar e-primary e-control e-btn e-lib e-small e-flat" title="Show help" alt="Help">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
-                        viewBox="0 0 16 16" aria-label="Help icon">
+                <button v-on:click="showhelp = !showhelp" class="text-blue-500 hover:bg-blue-50 px-2 py-1 rounded"
+                    title="Show help">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="inline-block w-4 h-4" fill="currentColor"
+                        viewBox="0 0 16 16">
                         <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z" />
                         <path
                             d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286zm1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94z" />
                     </svg>
                 </button>
 
-                <button v-on:click="showsearch = !showsearch"
-                    class="buttonbar e-primary e-control e-btn e-lib e-small e-flat" title="Search events" alt="Search">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor"
-                        viewBox="0 0 16 16" aria-label="Search icon">
+                <button v-on:click="showsearch = !showsearch" class="text-blue-500 hover:bg-blue-50 px-2 py-1 rounded"
+                    title="Search events">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="inline-block w-4 h-4" fill="currentColor"
+                        viewBox="0 0 16 16">
                         <path
                             d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z" />
                     </svg>
                 </button>
 
-                <quick-add @event-created="handleQuickAddEvent"></quick-add>
+                <quick-add class="hidden lg:block" @event-created="handleQuickAddEvent"></quick-add>
             </div>
-            <div style="text-align: center; display: flex; align-items: center; justify-content: center; margin-top: -8px"
-                class="title">
-                <span v-show="!editTitle" style="display: none; cursor: pointer;" @click="editTitle = true"
-                    title="Click to edit" v-text="calendar.title"></span>
+            <div class="flex-1 text-center flex items-center justify-center">
+                <span v-show="!editTitle" @click="editTitle = true" class="font-bold" title="Click to edit"
+                    v-text="calendar.title"></span>
                 <button v-show="!editTitle" v-on:click="shownotes = !shownotes"
-                    class="e-control e-btn e-lib e-primary e-small e-flat" style="color: #333;" title="Toggle notes"
-                    alt="Notes">
-                    <div style="display: flex; align-items: center; height: 100%; padding: 5px 0;">
+                    class="e-control e-btn e-lib e-small e-flat" title="Toggle notes" alt="Notes">
+                    <div class="flex items-center">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
-                            stroke="currentColor" style="width: 20px; height: 20px;">
+                            stroke="currentColor" class="w-5 h-5">
                             <path stroke-linecap="round" stroke-linejoin="round"
                                 d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
                         </svg>
-                        <span class="mobile-hide" style="font-size: 12px; margin-left: 4px;">Notes</span>
+                        <span class="ml-1">Notes</span>
                     </div>
                 </button>
-                <input type="text" v-show="editTitle" style="display: none;" v-model="calendar.title"
-                    @keyup.enter="setTitle($event)">
+                <input type="text" v-show="editTitle" v-model="calendar.title" @keyup.enter="setTitle($event)">
             </div>
-            <div style="text-align:right">
-                <div v-show="isExisting" style="display: none;">
+            <div class="flex-1 text-right flex items-center justify-end">
+                <div v-show="isExisting">
                     <a :href="calendar.id">pastecal.com/{{calendar.id}}</a>
                     (<a href="javascript:void(0)" v-on:click="showshare = !showshare">share</a>)
                     |
                     <a :href="calendar.id + '.ics'">iCal</a>
                 </div>
 
-                <div v-show="!isExisting" style="display:none;">
-                    pastecal.com/<input id="slug" type="text" style="width: 10ch;" :disabled="isExisting"
-                        v-model="calendar.id" @keyup.enter="create"></input>
-                    <button @click="create" v-show="!isExisting" style="margin-left: 5px;"
-                        class="e-control e-btn e-lib e-primary e-small e-flat">Save</button>
+                <div v-show="!isExisting">
+                    pastecal.com/<input id="slug" class="border border-gray-300 px-1 w-24 rounded-sm" type="text"
+                        :disabled="isExisting" v-model="calendar.id" @keyup.enter="create"></input>
+                    <button @click="create" v-show="!isExisting"
+                        class="ml-1 e-control e-btn e-lib e-primary e-small e-flat">Save</button>
                 </div>
             </div>
         </div>
-        <div v-if="shownotes" id="notes"
-            style="width: 50%; min-width: 460px; height: 250px; margin: 0px auto; padding: 10px;">
-            <textarea style="width: 100%; height: 250px;" placeholder="Notes..."
-                v-model="calendar.options.notes"></textarea>
+        <div v-if="shownotes" class="w-1/2 min-w-[460px] h-[250px] mx-auto p-2.5">
+            <textarea class="w-full h-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Notes..." v-model="calendar.options.notes"></textarea>
         </div>
-        <div v-if="showsearch" id="search" style="margin-bottom: 10px;">
-            <input type="text" v-model="searchQuery" @input="searchEvents" class="search-input"
+        <div v-if="showsearch" class="mb-2.5">
+            <input type="text" v-model="searchQuery" @input="searchEvents"
+                class="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="Search events...">
 
-            <div v-if="searchResults.length > 0" class="search-results" style="max-height: 300px; overflow: auto;">
-                <div href="javascript:void(0)" v-for="event in searchResults" :key="event.id"
-                    @click="jumpToEvent(event)" style="cursor: pointer; padding: 5px 0;">
+            <div v-if="searchResults.length > 0" class="mt-2 max-h-[300px] overflow-auto">
+                <div v-for="event in searchResults" :key="event.id" @click="jumpToEvent(event)"
+                    class="cursor-pointer p-2 hover:bg-gray-50 rounded">
                     {{ event.title }}: {{ formatDate(event.start) }} - {{ formatDate(event.end) }}
-                    <br />
                 </div>
             </div>
         </div>
-        <div v-if="showhelp" id="help">
-            <table style="width: 100%; border-collapse: collapse; margin: 10px 0;">
-                <tr>
-                    <td style="padding: 10px; border-bottom: 1px solid #eee;">
-                        <strong>Create & Share</strong><br>
-                        Choose a URL (<code>pastecal.com/name</code>) and save. For privacy, make it hard to
-                        guess:
-                        <code>name-secretword</code><br>
-                        Anyone with the link can view/edit without logging in.
-                    </td>
-                </tr>
-                <tr>
-                    <td style="padding: 10px; border-bottom: 1px solid #eee;">
-                        <strong>Custom Event Type Labels</strong><br>
-                        In Notes, write:<br>
-                        <code>Type 1 = Work<br>Type 2 = Personal<br>Type 3 = Other</code>
-                        <br />
-                        <br />
-                        These names will appear in the event type dropdown.
-                    </td>
-                </tr>
-                <tr>
-                    <td style="padding: 10px; border-bottom: 1px solid #eee;">
-                        <strong>Link to date/view</strong><br>
+        <div v-if="showhelp" class="text-sm text-gray-700">
+            <div class="divide-y divide-gray-200">
+                <div class="py-4">
+                    <h3 class="font-bold mb-2">Create & Share</h3>
+                    <p class="mb-2">
+                        Choose a URL (<code class="bg-gray-100 px-1 rounded">pastecal.com/name</code>) and save.
+                        For privacy, make it hard to guess:
+                        <code class="bg-gray-100 px-1 rounded">name-secretword</code>
+                    </p>
+                    <p>Anyone with the link can view/edit without logging in.</p>
+                </div>
+
+                <div class="py-4">
+                    <h3 class="font-bold mb-2">Custom Event Type Labels</h3>
+                    <p class="mb-2">In Notes, write:</p>
+                    <pre class="bg-gray-100 p-2 rounded mb-2">Type 1 = Work
+Type 2 = Personal
+Type 3 = Other</pre>
+                    <p>These names will appear in the event type dropdown.</p>
+                </div>
+
+                <div class="py-4">
+                    <h3 class="font-bold mb-2">Link to date/view</h3>
+                    <p class="mb-2">
                         Link to specific views:
-                        <code>pastecal.com/cal?date=2024-04-01&view=week</code><br>
-                        <br />
-                        date formats: YYYY-MM-DD, YYMMDD, YYYY.MM.DD<br>
-                        views: day, week, month, year, agenda
-                    </td>
-                </tr>
-                <tr>
-                    <td style="padding: 10px; border-bottom: 1px solid #eee;">
-                        <strong>Add to calendar app</strong><br>
-                        Import the ICS link: <code>pastecal.com/name.ics</code>
-                    </td>
-                </tr>
-                <tr>
-                    <td style="padding: 10px;">
-                        <small>Made by Kalid (<a href="https://instacalc.com">Instacalc</a>, <a
-                                href="https://betterexplained.com">Better Explained</a>) • <a
-                                href="https://github.com/kazad/pastecal/issues">Feedback</a></small>
-                    </td>
-                </tr>
-            </table>
+                        <code class="bg-gray-100 px-1 rounded">pastecal.com/cal?date=2024-04-01&view=week</code>
+                    </p>
+                    <p class="mb-2">date formats: YYYY-MM-DD, YYMMDD, YYYY.MM.DD</p>
+                    <p>views: day, week, month, year, agenda</p>
+                </div>
 
-            <ul style="display: none">
-                <li>
-                    Pick a permalink (pastecal.com/somename) and click save. Anyone with the link can see/create
-                    events, no login needed. For privacy,
-                    use <code>pastecal.com/somename-hardtoguess</code>
-                </li>
+                <div class="py-4">
+                    <h3 class="font-bold mb-2">Add to calendar app</h3>
+                    <p>Import the ICS link: <code class="bg-gray-100 px-1 rounded">pastecal.com/name.ics</code></p>
+                </div>
 
-                <li>
-                    Customize event labels in the note area. Just write:
-                    <pre>Type 1 = Work
-Type 2 = Fun
-Type 3 = Other
-                    </pre>
-                </li>
-
-                <li>Link to a specific date/view:
-                    <code>https://pastecal.com/test?date=2024-04-01&amp;view=week</code>
-                    <br />
-                    <br />
-                    <ul>
-                        <li>
-                            date (or d=): YYYY-MM-DD (also: YYMMDD, YYYY.MM.DD)
-                        <li>view (or v=): day, week, month, year, agenda</li>
-                    </ul>
-                    <br />
-                </li>
-
-                <li>
-                    Sync your calendar to your phone/calendar app with the ICS link:
-                    <code>https://pastecal.com/yourcalendar.ics</code>
-                </li>
-                <li>
-                    Share feedback on <a href="https://github.com/kazad/pastecal/issues">Github</a>.
-
-                    Made by Kalid from <a href="https://instacalc.com">instacalc</a> and <a
-                        href="https://betterexplained.com">betterexplained</a>.
-                </li>
-            </ul>
+                <div class="py-4 text-xs">
+                    Made by Kalid (<a href="https://instacalc.com" class="text-blue-500 hover:underline">Instacalc</a>,
+                    <a href="https://betterexplained.com" class="text-blue-500 hover:underline">Better Explained</a>) •
+                    <a href="https://github.com/kazad/pastecal/issues"
+                        class="text-blue-500 hover:underline">Feedback</a>
+                </div>
+            </div>
         </div>
-        <div v-if="showshare" id="share" style="margin-top: 10px;">
-            <p>Share the current view:</p>
-            <input type="text" :value="currentViewLink" readonly @click="copyToClipboard" style="min-width: 400px;" />
-            <button @click="copyToClipboard($event.target.previousElementSibling)"
-                class="e-control e-btn e-lib e-primary e-small e-flat">Copy</button>
-            <p>Share the general calendar link:</p>
-            <input type="text" :value="getCalendarLink()" readonly @click="copyToClipboard" style="min-width: 400px;" />
-            <button @click="copyToClipboard($event.target.previousElementSibling)"
-                class="e-control e-btn e-lib e-primary e-small e-flat">Copy</button>
+        <div v-if="showshare" class="mt-2.5 text-sm">
+            <p class="mb-2">Share the current view:</p>
+            <div class="flex gap-2 mb-4">
+                <input type="text" :value="currentViewLink" readonly @click="copyToClipboard"
+                    class="flex-1 p-2 border rounded bg-gray-50">
+                <button @click="copyToClipboard($event.target.previousElementSibling)"
+                    class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600">
+                    Copy
+                </button>
+            </div>
+
+            <p class="mb-2">Share the general calendar link:</p>
+            <div class="flex gap-2">
+                <input type="text" :value="getCalendarLink()" readonly @click="copyToClipboard"
+                    class="flex-1 p-2 border rounded bg-gray-50">
+                <button @click="copyToClipboard($event.target.previousElementSibling)"
+                    class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600">
+                    Copy
+                </button>
+            </div>
         </div>
 
         <div id="cal2_wrap" style="width: 100%; height: 100%;">
@@ -774,24 +617,33 @@ Type 3 = Other
     <script>
         const QuickAdd = {
             template: `
-    <span style="
-    display: inline-flex;
-    vertical-align: top;"
->
-      <button @click="showDialog" class="buttonbar e-control e-btn e-lib e-primary e-small e-flat">
-        <span class="mobile-hide">Add</span> Event <kbd class="mobile-hide">(⌘E)</kbd>
-      </button>
-      <div v-if="dialogVisible" class="quick-add-overlay">
-        <div class="quick-add-dialog">
-          <h3>Quick Add Event</h3>
-          <form @submit.prevent="createEvent">
-            <textarea v-model="description" placeholder="Enter details ('Meet John tomorrow at 2pm')" rows="3" @keydown.enter.prevent="handleEnter"></textarea>
-            <div class="parsed-event">
-              <p><strong>Subject:</strong> {{ parsedEvent?.subject }}</p>
-              <p><strong>Start:</strong> {{ formatDate(parsedEvent?.startDateTime) }}</p>
-              <p><strong>End:</strong> {{ formatDate(parsedEvent?.endDateTime) }}</p>
-            </div>
-            <pre>
+    <span class="inline-flex items-start">
+        <button @click="showDialog" 
+                class="text-blue-500 hover:bg-blue-50 px-2 py-1 rounded flex items-center gap-1">
+            <span class="hidden sm:inline">Add</span> 
+            Event 
+            <kbd class="hidden sm:inline px-1.5 py-0.5 text-xs bg-gray-100 rounded">⌘E</kbd>
+        </button>
+
+        <div v-if="dialogVisible" 
+             class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="bg-white rounded-lg p-6 w-[80%] max-w-[500px]">
+                <h3 class="text-lg font-semibold mb-4">Quick Add Event</h3>
+                <form @submit.prevent="createEvent">
+                    <textarea v-model="description" 
+                             placeholder="Enter details ('Meet John tomorrow at 2pm')" 
+                             rows="3" 
+                             @keydown.enter.prevent="handleEnter"
+                             class="w-full p-2 border rounded mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </textarea>
+
+                    <div class="bg-gray-50 rounded p-4 mb-4">
+                        <p><strong>Subject:</strong> {{ parsedEvent?.subject }}</p>
+                        <p><strong>Start:</strong> {{ formatDate(parsedEvent?.startDateTime) }}</p>
+                        <p><strong>End:</strong> {{ formatDate(parsedEvent?.endDateTime) }}</p>
+                    </div>
+
+                    <pre class="bg-gray-50 p-4 rounded text-sm mb-4">
 Examples: 
 
 lunch tomorrow 2pm for 1 hour
@@ -799,14 +651,23 @@ appointment 9/15 at 2:30pm
 birthday party Sat 7pm to 11pm
 workout 3pm May 20 for 90 minutes
 vacation dec 11 - dec 15
-            </pre>
-            <div class="dialog-buttons">
-              <button type="submit" class="e-control e-btn e-lib e-primary e-small" :disabled="!isValidEvent">Create</button>
-              <button type="button" @click="hideDialog" class="e-control e-btn e-lib e-small">Cancel</button>
+                    </pre>
+
+                    <div class="flex justify-end gap-2">
+                        <button type="button" 
+                                @click="hideDialog"
+                                class="px-4 py-2 border rounded hover:bg-gray-50">
+                            Cancel
+                        </button>
+                        <button type="submit" 
+                                :disabled="!isValidEvent"
+                                class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50">
+                            Create
+                        </button>
+                    </div>
+                </form>
             </div>
-          </form>
         </div>
-      </div>
     </span>
   `,
             data() {
