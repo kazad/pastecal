@@ -441,7 +441,7 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
     <div id="app">
         <topbar class="flex justify-between items-center pb-3 border-b border-gray-100 text-sm">
             <!-- Left section -->
-            <section class="flex-1 flex flex-col md:flex-row md:items-center space-x-2 sm:space-x-4">
+            <section class="flex-1 flex flex-col md:flex-row md:items-center md:space-x-2">
                 <!-- Logo and app name -->
                 <logo class="flex items-center space-x-2 text-sm">
                     <a href="/" class="flex items-center group">
@@ -522,7 +522,7 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
             </section>
 
             <!-- Middle section - Calendar title -->
-            <section class="flex-1 flex items-center justify-center">
+            <section class="flex-1 flex flex-col md:flex-row items-center justify-center">
                 <span v-show="!editTitle" @click="editTitle = true" class="font-bold cursor-pointer"
                     title="Click to edit" v-text="calendar.title"></span>
                 <button v-show="!editTitle" v-on:click="shownotes = !shownotes"
@@ -542,16 +542,11 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
             </section>
 
             <!-- Right section -->
-            <section class="flex-1 flex items-center justify-end text-xs">
+            <section class="flex-1 flex items-end md:items-center justify-end text-xs">
                 <!-- Existing calendar info -->
                 <div v-show="isExisting" class="text-gray-500">
 
                     <a :href="calendar.id" class="text-gray-600 hover:text-blue-500 transition-colors">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
-                            stroke="currentColor" class="h-4 w-4 inline _mr-1">
-                            <path stroke-linecap="round" stroke-linejoin="round"
-                                d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
-                        </svg>
                         pastecal.com/{{calendar.id}}
                     </a>
                     <button v-on:click="showshare = !showshare"
@@ -571,14 +566,16 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
                 </div>
 
                 <!-- New calendar creation -->
-                <div v-show="!isExisting" class="flex items-center">
-                    <span class="text-gray-500">pastecal.com/</span>
-                    <input id="slug"
-                        class="border border-gray-200 focus:border-blue-400 px-1 w-20 text-xs focus:outline-none transition-colors"
-                        type="text" :disabled="isExisting" v-model="calendar.id" @keyup.enter="create">
+                <div v-show="!isExisting" class="flex items-end md:items-center flex-col md:flex-row">
+                    <div>
+                        <span class="text-gray-500">pastecal.com/</span>
+                        <input id="slug"
+                            class="border border-gray-200 focus:border-blue-400 px-1 w-20 text-xs focus:outline-none transition-colors"
+                            type="text" :disabled="isExisting" v-model="calendar.id" @keyup.enter="create">
+                    </div>
                     <button @click="create" v-show="!isExisting"
-                        class="ml-2 px-3 py-1 text-white bg-blue-500 rounded-full text-xs hover:bg-blue-600 transition-colors">
-                        Save calendar
+                        class="ml-2 mt-1 md:mt-0 px-3 max-w-16 py-1 text-white bg-blue-500 rounded-full text-xs hover:bg-blue-600 transition-colors">
+                        Save
                     </button>
                 </div>
             </section>
@@ -668,9 +665,19 @@ Type 3 = Other</pre>
                     </button>
                 </div>
 
-                <p class="mb-2">Editable calendar link</p>
-                <div class="flex gap-2">
+                <p class="mb-2">General (editable) calendar link</p>
+                <div class="flex gap-2 mb-4">
                     <input type="text" :value="getCalendarLink()" readonly @click="copyToClipboard"
+                        class="flex-1 p-2 border rounded bg-gray-50">
+                    <button @click="copyToClipboard($event.target.previousElementSibling)"
+                        class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600">
+                        Copy
+                    </button>
+                </div>
+
+                <p class="mb-2">ICS link for other apps</p>
+                <div class="flex gap-2">
+                    <input type="text" :value="getICSLink()" readonly @click="copyToClipboard"
                         class="flex-1 p-2 border rounded bg-gray-50">
                     <button @click="copyToClipboard($event.target.previousElementSibling)"
                         class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600">
@@ -1137,6 +1144,10 @@ vacation dec 11 - dec 15
 
                 getCalendarLink() {
                     return `${window.location.origin}/${this.calendar.id}`;
+                },
+
+                getICSLink() {
+                    return `${window.location.origin}/${this.calendar.id}.ics`;
                 },
 
                 startUpdateLinkTimer() {
