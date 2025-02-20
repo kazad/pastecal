@@ -445,8 +445,7 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
                 <!-- Logo and app name -->
                 <logo class="flex items-center space-x-2 text-sm">
                     <a href="/" class="flex items-center group">
-                        <img class="h-5 w-5 md:h-6 md:w-6 mr-1.5 transition-transform group-hover:scale-105"
-                            src="img/calendar.craiyon.64.png" alt="PasteCal Logo">
+                        <img class="h-5 w-5 md:h-6 md:w-6 mr-1.5" src="img/calendar.craiyon.64.png" alt="PasteCal Logo">
                         <div class="flex flex-col">
                             <span
                                 class="text-blue-500 font-medium text-sm hover:text-blue-600 transition-colors">pastecal</span>
@@ -524,31 +523,37 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
 
             <!-- Middle section - Calendar title -->
             <section class="flex-1 flex items-center justify-center">
-                <div class="relative group">
-                    <span v-show="!editTitle" @click="editTitle = true"
-                        class="font-medium text-gray-800 cursor-pointer transition-colors group-hover:text-blue-500"
-                        title="Click to edit" v-text="calendar.title"></span>
-                    <input type="text" v-show="editTitle" v-model="calendar.title" @keyup.enter="setTitle($event)"
-                        class="absolute inset-0 w-full text-center border-none bg-white focus:ring-1 focus:ring-blue-200 outline-none rounded px-1">
-                </div>
+                <span v-show="!editTitle" @click="editTitle = true" class="font-bold cursor-pointer"
+                    title="Click to edit" v-text="calendar.title"></span>
                 <button v-show="!editTitle" v-on:click="shownotes = !shownotes"
-                    class="ml-2 text-gray-400 hover:text-gray-600 p-1.5 rounded-full transition-colors flex items-center"
-                    title="Toggle notes">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
-                        stroke="currentColor" class="w-4 h-4">
-                        <path stroke-linecap="round" stroke-linejoin="round"
-                            d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-                    </svg>
-                    <span class="ml-1 hidden sm:inline text-xs">Notes</span>
+                    class="text-gray-500 hover:text-blue-500 p-1.5 rounded-full transition-colors" title="Toggle notes"
+                    alt="Notes">
+                    <div class="flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                            stroke="currentColor" class="w-5 h-5">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                        </svg>
+                        <span class="ml-1">Notes</span>
+                    </div>
                 </button>
+                <input type="text" class="border p-1" v-show="editTitle" v-model="calendar.title"
+                    @keyup.enter="setTitle($event)">
             </section>
 
             <!-- Right section -->
             <section class="flex-1 flex items-center justify-end text-xs">
                 <!-- Existing calendar info -->
                 <div v-show="isExisting" class="text-gray-500">
-                    <a :href="calendar.id"
-                        class="text-gray-600 hover:text-blue-500 transition-colors">pastecal.com/{{calendar.id}}</a>
+
+                    <a :href="calendar.id" class="text-gray-600 hover:text-blue-500 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                            stroke="currentColor" class="h-4 w-4 inline _mr-1">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+                        </svg>
+                        pastecal.com/{{calendar.id}}
+                    </a>
                     <button v-on:click="showshare = !showshare"
                         class="mx-1 text-gray-500 hover:text-blue-500 transition-colors">
                         <span class="hidden sm:inline">(share)</span>
@@ -560,214 +565,120 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
                             </svg>
                         </span>
                     </button>
-                    <span class="hidden sm:inline mx-1 text-gray-300">&middot;</span>
-                    <a :href="calendar.id + '.ics'" class="text-gray-600 hover:text-blue-500 transition-colors">iCal</a>
+                    <span class="hidden md:inline mx-1 text-gray-300">&middot;</span>
+                    <a :href="calendar.id + '.ics'"
+                        class="text-gray-600 hover:text-blue-500 transition-colors hidden md:inline">iCal</a>
                 </div>
 
                 <!-- New calendar creation -->
                 <div v-show="!isExisting" class="flex items-center">
                     <span class="text-gray-500">pastecal.com/</span>
                     <input id="slug"
-                        class="border-b border-gray-200 focus:border-blue-400 px-1 w-20 text-xs focus:outline-none transition-colors"
+                        class="border border-gray-200 focus:border-blue-400 px-1 w-20 text-xs focus:outline-none transition-colors"
                         type="text" :disabled="isExisting" v-model="calendar.id" @keyup.enter="create">
                     <button @click="create" v-show="!isExisting"
                         class="ml-2 px-3 py-1 text-white bg-blue-500 rounded-full text-xs hover:bg-blue-600 transition-colors">
-                        Save
+                        Save calendar
                     </button>
                 </div>
             </section>
         </topbar>
-        <topbar class="hidden flex justify-between mb-1 text-sm">
-            <section class="flex-1 flex flex-col md:flex-row md:items-center justify-start">
-                <div class="flex flex-col md:flex-row md:items-center">
-                    <img class="h-6 -mt-0.5 mb-2 md:mb-0 px-2 hidden md:block" src="img/calendar.craiyon.64.png"
-                        alt="Logo">
-                    <div class="flex flex-col">
-                        <a href="/"
-                            class="text-blue-500 font-medium text-sm sm:text-base hover:text-blue-600 transition-colors flex items-center">
-                            <img class="h-4 w-4 mr-1 inline md:hidden" src="img/calendar.craiyon.64.png" alt="Logo">
-                            <div>
-                                PasteCal
-                            </div>
-                        </a>
-                        <span class="text-gray-500 text-xs hidden lg:inline">Easy shared calendars</span>
+
+        <panel class="flex bg-gray-50 p-3 rounded-sm border mb-4 relative"
+            v-if="shownotes || showsearch || showhelp || showshare">
+            <button class="absolute top-0 right-0 m-4 text-gray-500 hover:text-red-500 transition-colors"
+                @click="shownotes = showsearch = showhelp = showshare = false">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                    stroke="currentColor" class="w-6 h-6">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+
+            <div v-if="shownotes" class="w-1/2 min-w-[460px] h-[250px] mx-auto p-2.5">
+                <textarea
+                    class="w-full h-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    placeholder="Notes..." v-model="calendar.options.notes"></textarea>
+            </div>
+            <div v-if="showsearch" class="mb-2.5">
+                <input type="text" v-model="searchQuery" @input="searchEvents"
+                    class="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Search events...">
+
+                <div v-if="searchResults.length > 0" class="mt-2 max-h-[300px] overflow-auto">
+                    <div v-for="event in searchResults" :key="event.id" @click="jumpToEvent(event)"
+                        class="cursor-pointer p-2 hover:bg-gray-50 rounded">
+                        {{ event.title }}: {{ formatDate(event.start) }} - {{ formatDate(event.end) }}
                     </div>
-                </div>
-                <div class="flex flex-wrap md:flex-nowrap items-center">
-                    <div class="inline-block md:ml-2 relative" v-click-outside="closeRecents">
-                        <button @click.stop="toggleRecents"
-                            class="text-blue-500 hover:bg-blue-50 p-1 md:px-2 py-1 rounded"
-                            title="View recent calendars">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="inline-block w-4 h-4" fill="currentColor"
-                                viewBox="0 0 16 16">
-                                <path
-                                    d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71V3.5z" />
-                                <path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0z" />
-                            </svg>
-                        </button>
-
-                        <div v-if="showRecents"
-                            class="absolute left-0 bg-white min-w-[250px] shadow-lg rounded-lg max-h-[400px] overflow-y-auto z-50">
-                            <div class="p-2 font-semibold bg-gray-50 border-b text-gray-600">Recently Viewed</div>
-                            <div v-for="item in recentCalendars" :key="item.id"
-                                class="flex justify-between items-center p-2 hover:bg-gray-50 border-b">
-                                <a :href="'/' + item.id" class="text-blue-500 hover:underline">{{ item.title }}</a>
-                                <div class="flex gap-2">
-                                    <button @click="togglePin(item.id)"
-                                        class="opacity-60 hover:opacity-100 px-1.5 py-0.5"
-                                        :class="{ 'text-blue-500 opacity-100': item.pinned }">
-                                        📌
-                                    </button>
-                                    <button @click="removeRecent(item.id)"
-                                        class="opacity-60 hover:opacity-100 px-1.5 py-0.5">×</button>
-                                </div>
-                            </div>
-                            <div v-if="recentCalendars.length === 0" class="p-3 text-center text-gray-600">
-                                No recent calendars
-                            </div>
-                        </div>
-                    </div>
-
-                    <button v-on:click="showhelp = !showhelp"
-                        class="text-blue-500 hover:bg-blue-50 p-1 md:px-2 py-1 rounded" title="Show help">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="inline-block w-4 h-4" fill="currentColor"
-                            viewBox="0 0 16 16">
-                            <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z" />
-                            <path
-                                d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286zm1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94z" />
-                        </svg>
-                    </button>
-
-                    <button v-on:click="showsearch = !showsearch"
-                        class="text-blue-500 hover:bg-blue-50 p-1 md:px-2 py-1 rounded" title="Search events">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="inline-block w-4 h-4" fill="currentColor"
-                            viewBox="0 0 16 16">
-                            <path
-                                d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z" />
-                        </svg>
-                    </button>
-
-                    <quick-add class="hidden lg:block" @event-created="handleQuickAddEvent"></quick-add>
-                </div>
-            </section>
-            <section
-                class="flex-1 text-center flex-col md:flex-row flex items-center justify-center text-xs md:text-sm">
-                <span v-show="!editTitle" @click="editTitle = true" class="font-bold" title="Click to edit"
-                    v-text="calendar.title"></span>
-                <button v-show="!editTitle" v-on:click="shownotes = !shownotes"
-                    class="e-control e-btn e-lib e-small e-flat" title="Toggle notes" alt="Notes">
-                    <div class="flex items-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
-                            stroke="currentColor" class="w-5 h-5">
-                            <path stroke-linecap="round" stroke-linejoin="round"
-                                d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-                        </svg>
-                        <span class="ml-1">Notes</span>
-                    </div>
-                </button>
-                <input type="text" v-show="editTitle" v-model="calendar.title" @keyup.enter="setTitle($event)">
-            </section>
-            <section class="flex-1 text-right flex items-center justify-end text-xs md:text-sm">
-                <div v-show="isExisting">
-                    <a :href="calendar.id">pastecal.com/{{calendar.id}}</a>
-                    (<a href="javascript:void(0)" v-on:click="showshare = !showshare">share</a>)
-                    |
-                    <a :href="calendar.id + '.ics'">iCal</a>
-                </div>
-
-                <div v-show="!isExisting">
-                    <div class="flex flex-row md:inline-block">
-                        pastecal.com/<input id="slug"
-                            class="border border-gray-300 px-1 w-24 rounded-sm text-xs md:text-sm" type="text"
-                            :disabled="isExisting" v-model="calendar.id" @keyup.enter="create"></input>
-                    </div>
-                    <button @click="create" v-show="!isExisting"
-                        class="ml-1 e-control e-btn e-lib e-primary e-small e-flat">Save</button>
-                </div>
-            </section>
-        </topbar>
-        <div v-if="shownotes" class="w-1/2 min-w-[460px] h-[250px] mx-auto p-2.5">
-            <textarea
-                class="w-full h-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                placeholder="Notes..." v-model="calendar.options.notes"></textarea>
-        </div>
-        <div v-if="showsearch" class="mb-2.5">
-            <input type="text" v-model="searchQuery" @input="searchEvents"
-                class="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Search events...">
-
-            <div v-if="searchResults.length > 0" class="mt-2 max-h-[300px] overflow-auto">
-                <div v-for="event in searchResults" :key="event.id" @click="jumpToEvent(event)"
-                    class="cursor-pointer p-2 hover:bg-gray-50 rounded">
-                    {{ event.title }}: {{ formatDate(event.start) }} - {{ formatDate(event.end) }}
                 </div>
             </div>
-        </div>
-        <div v-if="showhelp" class="text-sm text-gray-700">
-            <div class="divide-y divide-gray-200">
-                <div class="py-4">
-                    <h3 class="font-bold mb-2">Create & Share</h3>
-                    <p class="mb-2">
-                        Choose a URL (<code class="bg-gray-100 px-1 rounded">pastecal.com/name</code>) and save.
-                        For privacy, make it hard to guess:
-                        <code class="bg-gray-100 px-1 rounded">name-secretword</code>
-                    </p>
-                    <p>Anyone with the link can view/edit without logging in.</p>
-                </div>
+            <div v-if="showhelp" class="text-sm text-gray-700">
+                <div class="divide-y divide-gray-200">
+                    <div class="py-4">
+                        <h3 class="font-bold mb-2">Create & Share</h3>
+                        <p class="mb-2">
+                            Choose a URL (<code class="bg-gray-100 px-1 rounded">pastecal.com/name</code>) and save.
+                            For privacy, make it hard to guess:
+                            <code class="bg-gray-100 px-1 rounded">name-secretword</code>
+                        </p>
+                        <p>Anyone with the link can view/edit without logging in.</p>
+                    </div>
 
-                <div class="py-4">
-                    <h3 class="font-bold mb-2">Custom Event Type Labels</h3>
-                    <p class="mb-2">In Notes, write:</p>
-                    <pre class="bg-gray-100 p-2 rounded mb-2">Type 1 = Work
+                    <div class="py-4">
+                        <h3 class="font-bold mb-2">Custom Event Type Labels</h3>
+                        <p class="mb-2">In Notes, write:</p>
+                        <pre class="bg-gray-100 p-2 rounded mb-2">Type 1 = Work
 Type 2 = Personal
 Type 3 = Other</pre>
-                    <p>These names will appear in the event type dropdown.</p>
-                </div>
+                        <p>These names will appear in the event type dropdown.</p>
+                    </div>
 
-                <div class="py-4">
-                    <h3 class="font-bold mb-2">Link to date/view</h3>
-                    <p class="mb-2">
-                        Link to specific views:
-                        <code class="bg-gray-100 px-1 rounded">pastecal.com/cal?date=2024-04-01&view=week</code>
-                    </p>
-                    <p class="mb-2">date formats: YYYY-MM-DD, YYMMDD, YYYY.MM.DD</p>
-                    <p>views: day, week, month, year, agenda</p>
-                </div>
+                    <div class="py-4">
+                        <h3 class="font-bold mb-2">Link to date/view</h3>
+                        <p class="mb-2">
+                            Link to specific views:
+                            <code class="bg-gray-100 px-1 rounded">pastecal.com/cal?date=2024-04-01&view=week</code>
+                        </p>
+                        <p class="mb-2">date formats: YYYY-MM-DD, YYMMDD, YYYY.MM.DD</p>
+                        <p>views: day, week, month, year, agenda</p>
+                    </div>
 
-                <div class="py-4">
-                    <h3 class="font-bold mb-2">Add to calendar app</h3>
-                    <p>Import the ICS link: <code class="bg-gray-100 px-1 rounded">pastecal.com/name.ics</code></p>
-                </div>
+                    <div class="py-4">
+                        <h3 class="font-bold mb-2">Add to calendar app</h3>
+                        <p>Import the ICS link: <code class="bg-gray-100 px-1 rounded">pastecal.com/name.ics</code></p>
+                    </div>
 
-                <div class="py-4 text-xs">
-                    Made by Kalid (<a href="https://instacalc.com" class="text-blue-500 hover:underline">Instacalc</a>,
-                    <a href="https://betterexplained.com" class="text-blue-500 hover:underline">Better Explained</a>) •
-                    <a href="https://github.com/kazad/pastecal/issues"
-                        class="text-blue-500 hover:underline">Feedback</a>
+                    <div class="py-4 text-xs">
+                        Made by Kalid (<a href="https://instacalc.com"
+                            class="text-blue-500 hover:underline">Instacalc</a>,
+                        <a href="https://betterexplained.com" class="text-blue-500 hover:underline">Better
+                            Explained</a>) •
+                        <a href="https://github.com/kazad/pastecal/issues"
+                            class="text-blue-500 hover:underline">Feedback</a>
+                    </div>
                 </div>
             </div>
-        </div>
-        <div v-if="showshare" class="mt-2.5 text-sm">
-            <p class="mb-2">Share the current view:</p>
-            <div class="flex gap-2 mb-4">
-                <input type="text" :value="currentViewLink" readonly @click="copyToClipboard"
-                    class="flex-1 p-2 border rounded bg-gray-50">
-                <button @click="copyToClipboard($event.target.previousElementSibling)"
-                    class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600">
-                    Copy
-                </button>
-            </div>
+            <div v-if="showshare" class="mt-2.5 text-sm w-full md:w-1/2">
+                <p class="mb-2">Current date selection and layout</p>
+                <div class="flex gap-2 mb-4">
+                    <input type="text" :value="currentViewLink" readonly @click="copyToClipboard"
+                        class="flex-1 p-2 border rounded bg-gray-50">
+                    <button @click="copyToClipboard($event.target.previousElementSibling)"
+                        class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600">
+                        Copy
+                    </button>
+                </div>
 
-            <p class="mb-2">Share the general calendar link:</p>
-            <div class="flex gap-2">
-                <input type="text" :value="getCalendarLink()" readonly @click="copyToClipboard"
-                    class="flex-1 p-2 border rounded bg-gray-50">
-                <button @click="copyToClipboard($event.target.previousElementSibling)"
-                    class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600">
-                    Copy
-                </button>
+                <p class="mb-2">Editable calendar link</p>
+                <div class="flex gap-2">
+                    <input type="text" :value="getCalendarLink()" readonly @click="copyToClipboard"
+                        class="flex-1 p-2 border rounded bg-gray-50">
+                    <button @click="copyToClipboard($event.target.previousElementSibling)"
+                        class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600">
+                        Copy
+                    </button>
+                </div>
             </div>
-        </div>
+        </panel>
 
         <div id="cal2_wrap" style="width: 100%; height: 100%;">
             <div id="Schedule"></div>
@@ -781,7 +692,7 @@ Type 3 = Other</pre>
             template: `
     <span class="inline-flex items-start">
         <button @click="showDialog" 
-                class="text-blue-500 hover:bg-blue-50 px-2 py-1 rounded flex items-center gap-1">
+                class="text-gray-500 hover:text-blue-500 p-1.5 rounded-full transition-colors">
             <span class="hidden sm:inline">Add</span> 
             Event 
             <kbd class="hidden sm:inline px-1.5 py-0.5 text-xs bg-gray-100 rounded">⌘E</kbd>
