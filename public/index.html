@@ -441,23 +441,23 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
     <div id="app">
         <topbar class="flex justify-between items-center pb-3 border-b border-gray-100 text-sm">
             <!-- Left section -->
-            <section class="flex-1 flex items-center space-x-2 sm:space-x-4">
+            <section class="flex-1 flex flex-col md:flex-row md:items-center space-x-2 sm:space-x-4">
                 <!-- Logo and app name -->
-                <div class="flex flex-col md:flex-row md:items-center text-sm">
-                    <div class="flex flex-col">
-                        <a href="/"
-                            class="text-blue-500 font-medium text-sm hover:text-blue-600 transition-colors flex items-center">
-                            <img class="h-4 w-4 md:h-6 md:w-6 mr-1 inline" src="img/calendar.craiyon.64.png" alt="Logo">
-                            <div>
-                                PasteCal
-                            </div>
-                        </a>
-                        <span class="text-gray-400 text-xs hidden lg:inline pt-1">Easy shared calendars</span>
-                    </div>
-                </div>
+                <logo class="flex items-center space-x-2 text-sm">
+                    <a href="/" class="flex items-center group">
+                        <img class="h-5 w-5 md:h-6 md:w-6 mr-1.5 transition-transform group-hover:scale-105"
+                            src="img/calendar.craiyon.64.png" alt="PasteCal Logo">
+                        <div class="flex flex-col">
+                            <span
+                                class="text-blue-500 font-medium text-sm hover:text-blue-600 transition-colors">pastecal</span>
+                            <span class="text-gray-400 text-xs hidden lg:block -mt-0.5"
+                                style="font-size: 10px;">no-login shared calendars</span>
+                        </div>
+                    </a>
+                </logo>
 
                 <!-- Action buttons -->
-                <div class="flex items-center space-x-1">
+                <buttonarea class="flex items-center space-x-1">
                     <!-- Recent calendars -->
                     <div class="relative" v-click-outside="closeRecents">
                         <button @click.stop="toggleRecents"
@@ -519,7 +519,7 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
 
                     <!-- Quick add component - desktop only -->
                     <quick-add class="hidden lg:block" @event-created="handleQuickAddEvent"></quick-add>
-                </div>
+                </buttonarea>
             </section>
 
             <!-- Middle section - Calendar title -->
@@ -560,7 +560,7 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
                             </svg>
                         </span>
                     </button>
-                    <span class="hidden sm:inline mx-1 text-gray-300">|</span>
+                    <span class="hidden sm:inline mx-1 text-gray-300">&middot;</span>
                     <a :href="calendar.id + '.ics'" class="text-gray-600 hover:text-blue-500 transition-colors">iCal</a>
                 </div>
 
