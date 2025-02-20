@@ -450,7 +450,8 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
                             <span
                                 class="text-blue-500 font-medium text-sm hover:text-blue-600 transition-colors">pastecal</span>
                             <span class="text-gray-400 text-xs hidden lg:block -mt-0.5"
-                                style="font-size: 10px;">no-login shared calendars</span>
+                                style="font-size: 10px;">no-login
+                                shared calendar</span>
                         </div>
                     </a>
                 </logo>
@@ -602,7 +603,7 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
                     class="w-full h-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                     placeholder="Notes..." v-model="calendar.options.notes"></textarea>
             </div>
-            <div v-if="showSearch" class="mb-2.5">
+            <div v-if="showSearch" class="mb-2.5 text-sm">
                 <input type="text" v-model="searchQuery" @input="searchEvents"
                     class="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Search events...">
