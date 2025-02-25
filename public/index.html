@@ -62,6 +62,15 @@ Copyright (c) 2022 Kalid Azad
     <script src="https://cdn.tailwindcss.com"></script>
 
     <style>
+        body a {
+            text-decoration: none;
+            color: rgb(3, 169, 244);
+        }
+
+        body a:hover {
+            text-decoration: underline;
+        }
+
         /* Keep only Syncfusion customizations */
         .e-toolbar-item.e-today {
             display: none !important;
@@ -85,6 +94,10 @@ Copyright (c) 2022 Kalid Azad
             display: inline-block;
             color: #36b1f6;
             cursor: pointer;
+        }
+
+        td.e-header-cells.e-disable-dates:hover {
+            background-color: #fafafa !important;
         }
 
         /* Keep color classes for event types */
@@ -127,8 +140,17 @@ Copyright (c) 2022 Kalid Azad
             right: 25px;
         }
 
+        .custom-field-row-color .e-caret {
+            color: #eee;
+        }
+
+        /* make room for color picker */
         .e-subject-container {
             margin-right: 50px;
+        }
+
+        .e-schedule-dialog .e-subject-container {
+            width: 100%;
         }
 
         .e-location-container {
@@ -146,10 +168,6 @@ Copyright (c) 2022 Kalid Azad
         /* some fonts get cut off */
         .e-schedule.e-device .e-vertical-view .e-time-cells-wrap {
             overflow: visible;
-        }
-
-        a {
-            color: rgb(59 130 246) !important;
         }
     </style>
 
