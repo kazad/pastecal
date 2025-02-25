@@ -1009,9 +1009,13 @@ vacation dec 11 - dec 15
                             if (!window.btnObj) {
                                 return;
                             }
-                            console.log("setcolor", id, window.btnObj);
+
                             window.btnObj.element.style.background = COLORS[id - 1];
                             window.inputEle.setAttribute('value', id);
+
+                            // Explicitly set the Type on the event data object
+                            args.data.Type = parseInt(id);
+                            // console.log("Color set to:", id, "for event:", args.data);
                         }
 
                         // Initial setup
@@ -1053,7 +1057,16 @@ vacation dec 11 - dec 15
                             window.inputEle.setAttribute('value', args.data.Type);
                         }
 
-                        setColor(args.data.Type);
+                        // Initialize with existing type or default to Type 1
+                        const initialType = args.data.Type || 1;
+                        setColor(initialType);
+
+                        // Make sure the event has a Type property even if not selected
+                        if (!args.data.Type) {
+                            args.data.Type = 1; // Default to first type if not set
+                        }
+
+                        //setColor(args.data.Type);
                     }
                 }
 
