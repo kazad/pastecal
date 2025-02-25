@@ -444,11 +444,11 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
 
 <body class="p-1 m-1">
     <div id="app">
-        <topbar class="flex justify-between items-start md:items-center pb-1 md:pb-3 border-b border-gray-100 text-sm">
+        <topbar class="flex justify-between items-center pb-1 md:pb-3 border-b border-gray-100 text-sm">
             <!-- Left section -->
-            <section class="flex-1 flex flex-col md:flex-row md:items-center md:space-x-2 min-w-0">
+            <section class="flex-1 flex flex-col md:flex-row items-start md:space-x-2 min-w-0">
                 <!-- Logo and app name -->
-                <logo class="flex items-center space-x-2 text-sm">
+                <logo class="flex items-center space-x-2 text-sm h-8">
                     <a href="/" class="flex items-center group">
                         <img class="h-6 w-6 mr-1.5 flex-shrink-0" src="img/calendar.craiyon.64.png" alt="PasteCal Logo">
                         <div class="flex flex-col">
@@ -462,11 +462,11 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
                 </logo>
 
                 <!-- Action buttons -->
-                <buttonarea class="flex items-center space-x-1 mt-1 md:mt-0">
+                <buttonarea class="flex items-center space-x-1 mt-0">
                     <!-- Recent calendars -->
                     <div class="relative" v-click-outside="closeRecents">
                         <button @click.stop="toggleRecents"
-                            class="text-gray-500 hover:text-blue-500 p-1.5 rounded-full transition-colors"
+                            class="text-gray-500 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8"
                             title="View recent calendars">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="currentColor"
                                 viewBox="0 0 16 16">
@@ -503,7 +503,7 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
 
                     <!-- Help button -->
                     <button v-on:click="toggleHelp"
-                        class="text-gray-500 hover:text-blue-500 p-1.5 rounded-full transition-colors"
+                        class="text-gray-500 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8"
                         title="Show help">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="currentColor" viewBox="0 0 16 16">
                             <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z" />
@@ -528,32 +528,32 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
             </section>
 
             <!-- Middle section - Calendar title -->
-            <section class="flex-1 flex flex-col md:flex-row items-center justify-center mx-1 md:mx-2 min-w-0">
+            <section class="flex-1 flex flex-col md:flex-row items-center justify-center mx-1 md:mx-2 min-w-0 h-8">
                 <span v-show="!editTitle" @click="editTitle = true"
-                    class="font-bold cursor-pointer truncate max-w-[150px] md:max-w-xs text-center"
+                    class="font-bold cursor-pointer max-w-[150px] md:max-w-xs text-center flex items-center h-8"
                     title="Click to edit" v-text="calendar.title"></span>
                 <button v-show="!editTitle" v-on:click="toggleNotes"
-                    class="text-gray-500 hover:text-blue-500 p-1.5 rounded-full transition-colors" title="Toggle notes"
-                    alt="Notes">
+                    class="text-gray-500 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8"
+                    title="Toggle notes" alt="Notes">
                     <div class="flex items-center">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                             stroke="currentColor" class="w-5 h-5">
                             <path stroke-linecap="round" stroke-linejoin="round"
                                 d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
                         </svg>
-                        <span class="ml-1 text:xs md:text-sm hidden lg:inline">Notes</span>
+                        <span class="ml-0.5 text-xs hidden lg:inline">Notes</span>
                     </div>
                 </button>
-                <input type="text" class="border p-1 max-w-[150px] md:max-w-xs" v-show="editTitle"
+                <input type="text" class="border p-1 max-w-[150px] md:max-w-xs h-8" v-show="editTitle"
                     v-model="calendar.title" @keyup.enter="setTitle($event)">
             </section>
 
             <!-- Right section -->
-            <section class="flex-1 flex items-end md:items-center justify-end text-xs min-w-0">
+            <section class="flex-1 flex items-center justify-end text-xs min-w-0 h-8">
                 <!-- Existing calendar info -->
                 <div v-show="isExisting"
-                    class="text-gray-500 flex flex-col md:flex-row flex-nowrap items-end md:items-center space-y-2 md:space-y-0">
-                    <a :href="calendar.id" class="text-gray-600 hover:text-blue-500 transition-colors">
+                    class="text-gray-500 flex flex-col md:flex-row flex-nowrap items-center space-y-2 md:space-y-0">
+                    <a :href="calendar.id" class="text-gray-600 hover:text-blue-500 transition-colors text-xs">
                         pastecal.com/{{calendar.id}}
                     </a>
                     <button v-on:click="toggleShare"
@@ -576,8 +576,8 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
 
                 <!-- New calendar creation -->
                 <div v-show="!isExisting"
-                    class="flex items-center md:items-center flex-col md:flex-row space-y-1 md:space-y-0 relative">
-                    <div class="absolute -top-2.5 right-1 text-gray-400 md:hidden" style="font-size: 10px">
+                    class="flex items-center flex-col md:flex-row space-y-1 md:space-y-0 relative">
+                    <div class="absolute -top-2.5 right-1 text-gray-400 md:hidden text-xs" style="font-size: 10px">
                         pastecal.com/
                     </div>
                     <div class="text-xs md:text-sm scale-80 md:scale-none">
