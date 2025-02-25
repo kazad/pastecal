@@ -695,6 +695,14 @@ Type 3 = Other</pre>
                         class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600">
                         Copy
                     </button>
+                    <button v-if="canShare()" @click="shareUrl(currentViewLink, 'Calendar View')"
+                        class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
+                        </svg>
+                    </button>
                 </div>
 
                 <p class="mb-2">General (editable) calendar link</p>
@@ -705,6 +713,14 @@ Type 3 = Other</pre>
                         class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600">
                         Copy
                     </button>
+                    <button v-if="canShare()" @click="shareUrl(getCalendarLink(), 'Calendar')"
+                        class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
+                        </svg>
+                    </button>
                 </div>
 
                 <p class="mb-2">ICS link for other apps</p>
@@ -714,6 +730,14 @@ Type 3 = Other</pre>
                     <button @click="copyToClipboard($event.target.previousElementSibling)"
                         class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600">
                         Copy
+                    </button>
+                    <button v-if="canShare()" @click="shareUrl(getICSLink(), 'Calendar ICS')"
+                        class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24"
+                            stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
+                        </svg>
                     </button>
                 </div>
             </div>
@@ -1326,6 +1350,22 @@ vacation dec 11 - dec 15
                     });
                     this.calendar.events.push(newEvent);
                     this.calendar.setEvents(this.calendar.events);
+                },
+
+                shareUrl(url, title) {
+                    if (navigator.share) {
+                        navigator.share({
+                            title: 'PasteCal Calendar',
+                            text: title,
+                            url: url
+                        }).catch(err => {
+                            console.log('Error sharing:', err);
+                        });
+                    }
+                },
+
+                canShare() {
+                    return !!navigator.share;
                 }
             }
         };
