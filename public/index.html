@@ -548,7 +548,7 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
             <!-- Middle section - Calendar title -->
             <section class="flex-1 flex flex-col md:flex-row items-center justify-center mx-1 md:mx-2 min-w-0 h-8">
                 <span v-show="!editTitle" @click="editTitle = true"
-                    class="font-bold cursor-pointer max-w-[150px] md:max-w-xs text-center flex items-center h-8"
+                    class="font-bold cursor-pointer max-w-[150px] md:max-w-xs text-center flex items-center h-8 hover:text-blue-500 transition-colors"
                     title="Click to edit" v-text="calendar.title"></span>
                 <button v-show="!editTitle" v-on:click="toggleNotes"
                     class="text-gray-500 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8"
