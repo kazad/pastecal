@@ -477,7 +477,7 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
                         </button>
 
                         <!-- Dropdown content -->
-                        <div v-if="showrecents"
+                        <div v-if="showRecents"
                             class="absolute top-full left-0 mt-1 bg-white min-w-[250px] shadow-md rounded-md overflow-hidden z-50">
                             <div class="py-2 px-3 font-medium text-xs bg-gray-50 border-b text-gray-600">Recently Viewed
                             </div>
@@ -878,7 +878,7 @@ vacation dec 11 - dec 15
                     urlslug: urlslug,
                     debug: false,
 
-                    showrecents: false,
+                    showRecents: false,
                     showHelp: false,
                     showNotes: false,
                     showShare: false,
@@ -1208,11 +1208,11 @@ vacation dec 11 - dec 15
                 },
 
                 toggleRecents() {
-                    this.showrecents = !this.showrecents;
+                    this.showRecents = !this.showRecents;
                 },
 
                 closeRecents() {
-                    this.showrecents = false;
+                    this.showRecents = false;
                 },
 
                 isPanelOpen() {
