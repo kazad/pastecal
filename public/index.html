@@ -256,6 +256,12 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
             };
         }
 
+        function sanitizeUrl(url) {
+            // example: http://pastecal.com/SOMEID?date=2025-02-10&amp;amp;view=month 
+            let sanitized = url.replaceAll("amp;", "&").replace(/&+/g, '&')
+            return sanitized;
+        }
+
         let randomID = (size = 21) => {
             let alphabet = '123456789ABCDEFGHJKLMNPQRSTUVWXYZ'; // no lookalikes
             let id = '';
@@ -952,7 +958,8 @@ vacation dec 11 - dec 15
                 scheduleObj.views = ['Day', 'Week', 'Month', 'Year', 'Agenda'];
 
                 // set params from URL
-                var url = new URL(window.location.href.toLowerCase());
+                var sanitizedUrl = sanitizeUrl(window.location.href.toLowerCase());
+                var url = new URL(sanitizedUrl);
                 var date_param = url.searchParams.get("d") || url.searchParams.get("date");
                 var view_param = url.searchParams.get("v") || url.searchParams.get("view");
 
