@@ -546,8 +546,19 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
                         </svg>
                     </button>
 
+                    <!-- Settings button -->
+                    <button v-on:click="toggleSettings"
+                        class="text-gray-500 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8"
+                        title="Settings">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="currentColor" viewBox="0 0 16 16">
+                            <path
+                                d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z" />
+                        </svg>
+                    </button>
+
                     <!-- Quick add component - desktop only -->
                     <quick-add class="hidden lg:block" @event-created="handleQuickAddEvent"></quick-add>
+
                 </buttonarea>
             </section>
 
@@ -658,11 +669,18 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
 
                     <div class="py-4">
                         <h3 class="font-bold mb-2">Custom event types/colors</h3>
-                        <p class="mb-2">In the "Notes" area, write</p>
-                        <pre class="bg-gray-100 p-2 rounded mb-2">Type 1 = Work
-Type 2 = Personal
-Type 3 = Other</pre>
-                        <p>The names will show up in the event color dropdown menu.</p>
+                        <p class="mb-2">Customize event colors and labels in the Settings panel:</p>
+                        <ol class="list-decimal pl-6 mb-2 space-y-1">
+                            <li>Click the Settings icon <span class="inline-block align-middle"><svg
+                                        xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="currentColor"
+                                        viewBox="0 0 16 16">
+                                        <path
+                                            d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z" />
+                                    </svg></span> in the top menu</li>
+                            <li>Go to the "Calendar Settings" section</li>
+                            <li>Edit the labels next to each color in the "Event Types" area</li>
+                        </ol>
+                        <p>Changes are applied immediately and will appear in the event color dropdown menu.</p>
                     </div>
 
                     <div class="py-4">
@@ -745,6 +763,95 @@ Type 3 = Other</pre>
                                 d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
                         </svg>
                     </button>
+                </div>
+            </div>
+            <div v-if="showSettings" class="w-full p-2.5 text-sm text-gray-700">
+                <h2 class="text-lg font-bold mb-4">Settings</h2>
+
+                <div class="grid md:grid-cols-2 gap-6">
+                    <!-- Global Settings -->
+                    <div class="bg-white p-4 rounded-lg shadow-sm border">
+                        <h3 class="font-bold text-gray-800 mb-3">Personal Settings</h3>
+                        <p class="text-xs text-gray-500 mb-4">Settings that apply to your device only, when viewing any
+                            calendar.
+                        </p>
+
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block mb-1 font-medium">First day of week</label>
+                                <select v-model="globalSettings.firstDayOfWeek" @change="saveGlobalSettings"
+                                    class="w-full p-2 border rounded">
+                                    <option value="0">Sunday</option>
+                                    <option value="1">Monday</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block mb-1 font-medium">Time format</label>
+                                <select v-model="globalSettings.timeFormat" @change="saveGlobalSettings"
+                                    class="w-full p-2 border rounded">
+                                    <option value="12">12-hour (1:00 PM)</option>
+                                    <option value="24">24-hour (13:00)</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block mb-1 font-medium">Default view</label>
+                                <select v-model="globalSettings.defaultView" @change="saveGlobalSettings"
+                                    class="w-full p-2 border rounded">
+                                    <option value="Day">Day</option>
+                                    <option value="Week">Week</option>
+                                    <option value="Month">Month</option>
+                                    <option value="Year">Year</option>
+                                    <option value="Agenda">Agenda</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label class="block mb-1 font-medium">Start hour</label>
+                                <select v-model="globalSettings.startHour" @change="saveGlobalSettings"
+                                    class="w-full p-2 border rounded">
+                                    <option value="00:00">12:00 AM</option>
+                                    <option value="05:00">5:00 AM</option>
+                                    <option value="06:00">6:00 AM</option>
+                                    <option value="07:00">7:00 AM</option>
+                                    <option value="08:00">8:00 AM</option>
+                                    <option value="09:00">9:00 AM</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Calendar-specific Settings -->
+                    <div class="bg-white p-4 rounded-lg shadow-sm border">
+                        <h3 class="font-bold text-gray-800 mb-3">Calendar Settings</h3>
+                        <p class="text-xs text-gray-500 mb-4">Settings that apply to anyone viewing this calendar
+                            ({{calendar.title}}).
+                        </p>
+
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block mb-1 font-medium">Event Type Labels</label>
+
+                                <div v-for="(label, index) in localSettings.typeLabels" :key="index"
+                                    class="flex items-center mb-2">
+                                    <div class="w-5 h-5 rounded-full mr-2"
+                                        :style="{backgroundColor: getTypeColor(index+1)}"></div>
+                                    <input :value="label" @input="updateTypeLabel(index+1, $event.target.value)"
+                                        class="flex-1 p-2 border rounded text-sm" :placeholder="`Type ${index+1}`">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block mb-1 font-medium">Display options</label>
+                                <div class="flex items-center mt-2">
+                                    <input type="checkbox" id="extendedHours" v-model="calendar.options.extended"
+                                        class="mr-2">
+                                    <label for="extendedHours">Show extended hours (12-4 AM)</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </panel>
@@ -917,6 +1024,12 @@ vacation dec 11 - dec 15
                 var id = urlslug ?? randomID(8);
                 var cal = new Calendar(id, "New Calendar", []);
 
+                // Define COLORS for consistent reference
+                const COLORS = [
+                    "#3f51b5", "#e3165b", "#ff6652", "#4caf50",
+                    "#ff9800", "#03a9f4", "#9e9e9e", "#27282f"
+                ];
+
                 return {
                     isExisting: false, // set by callback
                     editTitle: false,
@@ -931,12 +1044,30 @@ vacation dec 11 - dec 15
                     showNotes: false,
                     showShare: false,
                     showSearch: false,
+                    showSettings: false,
 
                     currentViewLink: '',
                     updateLinkTimer: null, // re-render share link
 
                     searchQuery: '',
                     searchResults: [],
+
+                    // Settings
+                    globalSettings: {
+                        firstDayOfWeek: '0',
+                        timeFormat: '12',
+                        defaultView: 'Week',
+                        startHour: '05:00'
+                    },
+                    localSettings: {
+                        typeLabels: Array(COLORS.length).fill().map((_, i) => `Type ${i + 1}`)
+                    },
+
+                    // Store COLORS as a component property for consistent reference
+                    COLORS: COLORS,
+
+                    // Store browser locale for display
+                    browserLocale: navigator.language || navigator.userLanguage || 'en-US'
                 }
             },
 
@@ -944,6 +1075,10 @@ vacation dec 11 - dec 15
                 // Initialize recents
                 this.recentManager = new RecentCalendars();
                 this.recentCalendars = this.recentManager.getAll();
+
+                // Initialize local settings
+                this.initializeLocalSettings();
+                // We'll load and apply global settings after scheduleObj is initialized
 
                 CalendarDataService.subscribe(this.calendar.id, (c) => {
                     this.isExisting = true;
@@ -957,6 +1092,7 @@ vacation dec 11 - dec 15
                 scheduleObj.startHour = "05:00";
                 scheduleObj.views = ['Day', 'Week', 'Month', 'Year', 'Agenda'];
 
+                // Set up scheduler first, then apply settings after initialization
                 // set params from URL
                 var sanitizedUrl = sanitizeUrl(window.location.href.toLowerCase());
                 var url = new URL(sanitizedUrl);
@@ -1009,20 +1145,9 @@ vacation dec 11 - dec 15
                 };
 
                 // color events based on type
-                var COLORS = [
-                    "#3f51b5",
-                    "#e3165b",
-                    "#ff6652",
-                    "#4caf50",
-                    "#ff9800",
-                    "#03a9f4",
-                    "#9e9e9e",
-                    "#27282f"
-                ];
-
                 scheduleObj.eventRendered = (args) => {
                     // change color as needed
-                    categoryColor = COLORS[args.data.Type - 1] || COLORS[0];
+                    categoryColor = app.COLORS[args.data.Type - 1] || app.COLORS[0];
                     if (scheduleObj.currentView === 'Agenda') {
                         args.element.firstChild.style.borderLeftColor = categoryColor;
                     } else {
@@ -1041,7 +1166,7 @@ vacation dec 11 - dec 15
                                 return;
                             }
 
-                            window.btnObj.element.style.background = COLORS[id - 1];
+                            window.btnObj.element.style.background = app.COLORS[id - 1];
                             window.inputEle.setAttribute('value', id);
 
                             // Explicitly set the Type on the event data object
@@ -1103,10 +1228,15 @@ vacation dec 11 - dec 15
 
                 scheduleObj.appendTo('#Schedule');
 
+                // Load and apply global settings after scheduleObj is fully initialized
+                this.loadGlobalSettings();
+                this.applyGlobalSettings();
+
                 // extended hours button
                 document.addEventListener('click', (e) => {
                     if (e.target.className == "e-header-cells e-disable-dates") {
-                        this.calendar.options.extended = !this.calendar.options.extended;
+                        if (!this.calendar.options) this.calendar.options = {};
+                        this.calendar.options.extended = !this.calendar?.options?.extended;
                     }
                 });
 
@@ -1144,9 +1274,12 @@ vacation dec 11 - dec 15
                     deep: true
                 },
                 'calendar.options.extended'(val) {
-                    CalendarDataService.sync(this.calendar);
-                    // console.log("calendar.options.extended changed", val);
-                    scheduleObj.startHour = val ? "00:00" : "05:00";
+                    // No need to call CalendarDataService.sync here as the calendar watcher will handle that
+                    console.log("calendar.options.extended changed", val);
+                    // Apply extended hour setting immediately
+                    if (window.scheduleObj) {
+                        scheduleObj.startHour = val ? "00:00" : this.globalSettings.startHour;
+                    }
                 },
             },
 
@@ -1190,28 +1323,20 @@ vacation dec 11 - dec 15
                 },
 
                 getTypes() {
-                    // attempt to parse type options
-                    let notes = this.calendar.options.notes;
-
-                    let typeTitles = [];
-                    if (notes) {
-                        // Type 1 = Some title
-                        var matches = [...notes.matchAll(/\b(Type)\s*(\d)\s*[=](.*)\b/ig)];
-                        matches.forEach(m => {
-                            typeTitles[m[2]] = m[3].trim().substring(0, 70);
+                    // First check if we have custom labels in calendar.options.typeLabels
+                    if (this.calendar?.options?.typeLabels?.length > 0) {
+                        return Array(this.COLORS.length).fill().map((_, i) => {
+                            let id = i + 1;
+                            let title = this.calendar.options.typeLabels[i] || `Type ${id}`;
+                            return { text: title, value: id, iconCss: `e-color-${id}` };
                         });
-
-                        console.log(typeTitles);
                     }
 
-                    var types = Array(8).fill().map((_, i) => {
+                    // Fallback to default labels if no custom labels are found
+                    return Array(this.COLORS.length).fill().map((_, i) => {
                         let id = i + 1;
-                        let title = typeTitles[id] || `Type ${id}`;
-
-                        return { text: title, value: id, iconCss: `e-color-${id}` }
+                        return { text: `Type ${id}`, value: id, iconCss: `e-color-${id}` };
                     });
-
-                    return types;
                 },
 
                 updateCurrentViewLink() {
@@ -1263,6 +1388,7 @@ vacation dec 11 - dec 15
                         this.searchResults = [];
                     }
                 },
+
                 jumpToEvent(event) {
                     let startDate = new Date(event.start);
                     scheduleObj.selectedDate = startDate;
@@ -1278,7 +1404,7 @@ vacation dec 11 - dec 15
                 },
 
                 isPanelOpen() {
-                    return this.showNotes || this.showSearch || this.showHelp || this.showShare;
+                    return this.showNotes || this.showSearch || this.showHelp || this.showShare || this.showSettings;
                 },
 
                 toggleHelp() {
@@ -1325,6 +1451,7 @@ vacation dec 11 - dec 15
                     this.showNotes = false;
                     this.showSearch = false;
                     this.showShare = false;
+                    this.showSettings = false;
                 },
 
                 togglePin(id) {
@@ -1373,7 +1500,322 @@ vacation dec 11 - dec 15
 
                 canShare() {
                     return !!navigator.share;
-                }
+                },
+
+                toggleSettings() {
+                    if (this.showSettings) {
+                        this.showSettings = false;
+                    } else {
+                        this.closeAllPanels();
+                        this.showSettings = true;
+
+                        // One-time import of type labels from notes when settings panel is opened
+                        this.importTypeLabelsFromNotes();
+                    }
+                },
+
+                // Global Settings methods (device-specific, stored in localStorage)
+                loadGlobalSettings() {
+                    const settings = JSON.parse(localStorage.getItem('pastecal_global_settings'));
+                    if (settings) {
+                        this.globalSettings = { ...this.globalSettings, ...settings };
+                    } else {
+                        // Auto-import locale settings if no saved settings exist
+                        this.autoImportLocaleSettings();
+                    }
+                },
+
+                // Auto-import settings from browser locale
+                autoImportLocaleSettings() {
+                    try {
+                        // Get browser locale 
+                        const locale = navigator.language || navigator.userLanguage;
+                        console.log("Detected locale:", locale);
+
+                        // Detect 12/24 hour format preference from locale
+                        const formatter = new Intl.DateTimeFormat(locale, {
+                            hour: 'numeric',
+                            hour12: undefined // Let the system decide
+                        });
+                        const timeFormatSample = formatter.format(new Date(2023, 0, 1, 13, 0, 0));
+                        // Check if the formatted time contains "AM" or "PM" or their locale equivalents
+                        const is12Hour = timeFormatSample.match(/am|pm|a\.m\.|p\.m\.|AM|PM|A\.M\.|P\.M\./i) !== null;
+                        this.globalSettings.timeFormat = is12Hour ? '12' : '24';
+                        console.log("Detected time format:", is12Hour ? "12-hour" : "24-hour");
+
+                        // Detect first day of week - cross-browser compatible approach
+                        let firstDay = 0; // Default to Sunday (0)
+
+                        try {
+                            // Try the newer Intl.Locale API first
+                            if (typeof Intl !== 'undefined' &&
+                                typeof Intl.Locale !== 'undefined' &&
+                                typeof Intl.Locale.prototype.getWeekInfo === 'function') {
+                                const weekInfo = new Intl.Locale(locale).getWeekInfo();
+                                firstDay = weekInfo.firstDay === 7 ? 0 : weekInfo.firstDay; // Convert Sunday (7) to 0
+                                console.log("First day detected using Intl.Locale.getWeekInfo");
+                            }
+                            // Fallback to region-based detection
+                            else {
+                                // Countries/regions that typically use Monday as first day of week
+                                const mondayFirstRegions = ['AD', 'AL', 'AM', 'AT', 'AZ', 'BA', 'BE', 'BG', 'BY', 'CH',
+                                    'CZ', 'DE', 'DK', 'EE', 'ES', 'FI', 'FR', 'GB', 'GE', 'GR',
+                                    'HR', 'HU', 'IS', 'IT', 'KG', 'KZ', 'LT', 'LU', 'LV', 'MC',
+                                    'MD', 'ME', 'MK', 'MT', 'NL', 'NO', 'PL', 'PT', 'RO', 'RS',
+                                    'RU', 'SE', 'SI', 'SK', 'SM', 'TJ', 'TM', 'TR', 'UA', 'UZ',
+                                    'VA', 'CN', 'HK', 'JP', 'KP', 'KR', 'MO', 'TW'];
+
+                                // Languages that typically use Monday as first day of week
+                                const mondayFirstLanguages = ['ar', 'bg', 'ca', 'cs', 'da', 'de', 'el', 'et', 'eu', 'fa',
+                                    'fi', 'fr', 'hr', 'hu', 'is', 'it', 'lt', 'lv', 'mk', 'nl',
+                                    'pl', 'pt', 'ro', 'ru', 'sk', 'sl', 'sr', 'sv', 'tr', 'uk', 'zh'];
+
+                                // Extract region code and language code
+                                let regionCode = '';
+                                let languageCode = '';
+
+                                if (locale.includes('-')) {
+                                    const parts = locale.split('-');
+                                    languageCode = parts[0].toLowerCase();
+                                    regionCode = parts[1].toUpperCase();
+                                } else {
+                                    languageCode = locale.toLowerCase();
+                                }
+
+                                // Check region first, then fall back to language
+                                if (mondayFirstRegions.includes(regionCode)) {
+                                    firstDay = 1; // Monday
+                                    console.log("First day detected as Monday based on region:", regionCode);
+                                } else if (mondayFirstLanguages.includes(languageCode)) {
+                                    firstDay = 1; // Monday
+                                    console.log("First day detected as Monday based on language:", languageCode);
+                                } else {
+                                    console.log("First day defaulting to Sunday (not in Monday lists)");
+                                }
+                            }
+                        } catch (e) {
+                            console.warn("Error in first day detection:", e);
+                            // Keep the default (Sunday) if there's an error
+                        }
+
+                        this.globalSettings.firstDayOfWeek = firstDay.toString();
+                        console.log("Detected first day of week:", firstDay === 0 ? "Sunday" : "Monday");
+
+                        // Add locale detection flag for UI messaging
+                        this.globalSettings.autoDetectedFromLocale = true;
+
+                        // Save the imported settings
+                        this.saveGlobalSettings();
+                    } catch (error) {
+                        console.error("Error auto-importing locale settings:", error);
+                        // Fallback to defaults if import fails
+                    }
+                },
+
+                saveGlobalSettings() {
+                    try {
+                        localStorage.setItem('pastecal_global_settings', JSON.stringify(this.globalSettings));
+                        console.log('Global settings saved to localStorage');
+                    } catch (error) {
+                        console.warn('Failed to save settings to localStorage:', error);
+                        // Notify user if in private mode
+                        if (error.name === 'QuotaExceededError' ||
+                            error.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+                            error.code === 22) {
+                            console.warn('Browser may be in private browsing mode');
+                        } else {
+                            console.warn('Unable to save settings', error);
+                        }
+                    }
+                    this.applyGlobalSettings();
+                },
+
+                applyGlobalSettings() {
+                    if (typeof window.scheduleObj === 'undefined' || !window.scheduleObj) {
+                        console.log('Scheduler not initialized yet, skipping settings application');
+                        return;
+                    }
+
+                    try {
+                        // Apply first day of week
+                        scheduleObj.firstDayOfWeek = parseInt(this.globalSettings.firstDayOfWeek);
+
+                        // Apply time format
+                        const timeFormat = this.globalSettings.timeFormat === '24' ? 'HH:mm' : 'hh:mm a';
+                        scheduleObj.timeFormat = timeFormat;
+
+                        // Apply default view if not already set via URL
+                        if (!window.location.search.includes('view=') && !window.location.search.includes('v=')) {
+                            scheduleObj.currentView = this.globalSettings.defaultView;
+                        }
+
+                        // Apply start hour if not overridden by extended setting
+                        if (!this.calendar?.options?.extended) {
+                            scheduleObj.startHour = this.globalSettings.startHour;
+                        }
+
+                        console.log('Global settings applied successfully:', {
+                            firstDayOfWeek: scheduleObj.firstDayOfWeek,
+                            timeFormat: scheduleObj.timeFormat,
+                            currentView: scheduleObj.currentView,
+                            startHour: scheduleObj.startHour
+                        });
+                    } catch (error) {
+                        console.error('Error applying global settings:', error);
+                        // Try to recover by applying settings individually
+                        try {
+                            scheduleObj.firstDayOfWeek = parseInt(this.globalSettings.firstDayOfWeek);
+                            console.log('Applied first day of week setting');
+                        } catch (e) { console.warn('Failed to apply first day of week setting:', e); }
+
+                        try {
+                            scheduleObj.timeFormat = this.globalSettings.timeFormat === '24' ? 'HH:mm' : 'hh:mm a';
+                            console.log('Applied time format setting');
+                        } catch (e) { console.warn('Failed to apply time format setting:', e); }
+
+                        try {
+                            if (!window.location.search.includes('view=') && !window.location.search.includes('v=')) {
+                                scheduleObj.currentView = this.globalSettings.defaultView;
+                                console.log('Applied default view setting');
+                            }
+                        } catch (e) { console.warn('Failed to apply default view setting:', e); }
+
+                        try {
+                            if (!this.calendar?.options?.extended) {
+                                scheduleObj.startHour = this.globalSettings.startHour;
+                                console.log('Applied start hour setting');
+                            }
+                        } catch (e) { console.warn('Failed to apply start hour setting:', e); }
+                    }
+                },
+
+                // Calendar-specific Settings methods (stored in calendar.options)
+                initializeLocalSettings() {
+                    // Ensure we have default type labels
+                    const defaultLabels = Array(this.COLORS.length).fill().map((_, i) => `Type ${i + 1}`);
+
+                    if (!this.localSettings.typeLabels || !Array.isArray(this.localSettings.typeLabels)) {
+                        this.localSettings.typeLabels = [...defaultLabels];
+                    }
+
+                    // If the calendar has typeLabels, use them
+                    if (this.calendar?.options?.typeLabels?.length > 0) {
+                        this.localSettings.typeLabels = [...this.calendar.options.typeLabels];
+                    } else {
+                        // Try to import from notes
+                        const imported = this.importTypeLabelsFromNotes();
+                        if (!imported) {
+                            // If import failed or had no labels, use defaults
+                            this.localSettings.typeLabels = [...defaultLabels];
+                            // Store defaults in calendar.options
+                            if (!this.calendar.options) this.calendar.options = {};
+                            this.calendar.options.typeLabels = [...defaultLabels];
+                        }
+                    }
+                },
+
+                updateTypeLabel(typeId, value) {
+                    const index = typeId - 1;
+                    if (index >= 0 && index < this.COLORS.length) {
+                        // Sanitize input: trim whitespace, limit length to 70 chars, ensure non-empty
+                        let sanitizedValue = value.trim().substring(0, 70);
+                        if (sanitizedValue === '') {
+                            sanitizedValue = `Type ${typeId}`; // Fallback to default if empty
+                        }
+
+                        this.localSettings.typeLabels[index] = sanitizedValue;
+                        // Store directly in calendar.options and sync
+                        this.storeTypeLabelsInCalendarOptions();
+
+                        // Show confirmation for the user
+                        this.showSettingsConfirmation(`Label "${sanitizedValue}" saved successfully`, true);
+                    }
+                },
+
+                getTypeColor(typeId) {
+                    // Use the component's COLORS property instead of redefining
+                    return this.COLORS[typeId - 1] || this.COLORS[0];
+                },
+
+                storeTypeLabelsInCalendarOptions() {
+                    // Ensure calendar.options exists
+                    if (!this.calendar.options) {
+                        this.calendar.options = {};
+                    }
+
+                    // Store type labels directly in calendar.options
+                    this.calendar.options.typeLabels = [...this.localSettings.typeLabels];
+
+                    // The calendar watcher will handle syncing to Firebase or localStorage
+                    // Refresh the schedule to update the UI
+                    if (window.scheduleObj) {
+                        scheduleObj.refresh();
+                    }
+                },
+
+                // One-time migration from notes format to calendar.options format
+                importTypeLabelsFromNotes() {
+                    try {
+                        if (!this.calendar.options) {
+                            this.calendar.options = {};
+                        }
+
+                        // Skip if we already have typeLabels in calendar.options
+                        if (this.calendar?.options?.typeLabels?.length > 0) {
+                            this.localSettings.typeLabels = [...this.calendar.options.typeLabels];
+                            return true; // Success - already had labels
+                        }
+
+                        const notes = this.calendar?.options?.notes || '';
+                        const typeRegex = /\b(Type)\s*(\d)\s*[=](.*)\b/ig;
+                        const matches = [...notes.matchAll(typeRegex)];
+
+                        if (matches.length > 0) {
+                            // Found type definitions in notes to migrate
+                            const labels = Array(this.COLORS.length).fill().map((_, i) => `Type ${i + 1}`);
+
+                            matches.forEach(m => {
+                                const index = parseInt(m[2]) - 1;
+                                if (index >= 0 && index < this.COLORS.length) {
+                                    labels[index] = m[3].trim().substring(0, 70);
+                                }
+                            });
+
+                            // Update localSettings and store in calendar.options
+                            this.localSettings.typeLabels = labels;
+                            this.calendar.options.typeLabels = [...labels];
+
+                            // Clean up the notes by removing type definitions
+                            this.cleanTypeDefinitionsFromNotes(notes, matches);
+
+                            return true; // Success - found and migrated labels
+                        }
+
+                        return false; // No labels found to migrate
+                    } catch (error) {
+                        console.error('Error importing type labels from notes:', error);
+                        return false; // Error occurred
+                    }
+                },
+
+                cleanTypeDefinitionsFromNotes(notes, matches) {
+                    // Get all the strings to remove
+                    const stringsToRemove = matches.map(match => match[0]);
+
+                    let newNotes = notes;
+                    // Remove each string and any line breaks around it
+                    stringsToRemove.forEach(str => {
+                        // Remove the string with surrounding line breaks
+                        newNotes = newNotes.replace(new RegExp(str + '\\n?\\n?', 'g'), '');
+                        newNotes = newNotes.replace(new RegExp('\\n?\\n?' + str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), '');
+                    });
+
+                    // Clean up excessive line breaks
+                    newNotes = newNotes.replace(/\n{3,}/g, '\n\n').trim();
+
+                    // Update notes
+                    this.calendar.options.notes = newNotes;
+                },
             }
         };
 
