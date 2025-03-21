@@ -15,7 +15,7 @@
     "rewrites": [
       {
         "source": "/**/*.ics",
-        "function": "generateICS"
+        "function": "generateICSV2"
       },
       {
         "source": "**",
