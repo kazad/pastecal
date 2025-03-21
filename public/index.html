@@ -216,6 +216,10 @@ Copyright (c) 2022 Kalid Azad
                 display: none;
             }
         }
+
+        [v-cloak] {
+            display: none;
+        }
     </style>
 
     <!-- Essential JS 2 all script -->
@@ -502,7 +506,8 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
 
                         <!-- Dropdown content -->
                         <div v-if="showRecents"
-                            class="absolute top-full left-0 mt-1 bg-white min-w-[250px] shadow-md rounded-md overflow-hidden z-50">
+                            class="absolute top-full left-0 mt-1 bg-white min-w-[250px] shadow-md rounded-md overflow-hidden z-50"
+                            v-cloak>
                             <div class="py-2 px-3 font-medium text-xs bg-gray-50 border-b text-gray-600">Recently Viewed
                             </div>
                             <div v-for="item in recentCalendars" :key="item.id"
@@ -629,7 +634,7 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
             </section>
         </topbar>
 
-        <panel class="flex bg-gray-50 p-1 md:p-3 rounded-sm border mb-4 relative w-full" v-if="isPanelOpen()">
+        <panel class="flex bg-gray-50 p-1 md:p-3 rounded-sm border mb-4 relative w-full" v-if="isPanelOpen()" v-cloak>
             <button class="absolute top-0 right-0 m-2 md:m-4 text-gray-500 hover:text-red-500 transition-colors"
                 @click="closeAllPanels">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
@@ -638,12 +643,12 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
                 </svg>
             </button>
 
-            <div v-if="showNotes" class="w-1/2 min-w-[460px] h-[250px] mx-auto p-2.5">
+            <div v-if="showNotes" class="w-1/2 min-w-[460px] h-[250px] mx-auto p-2.5" v-cloak>
                 <textarea
                     class="w-full h-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                     placeholder="Notes..." v-model="calendar.options.notes"></textarea>
             </div>
-            <div v-if="showSearch" class="mb-2.5 text-sm">
+            <div v-if="showSearch" class="mb-2.5 text-sm" v-cloak>
                 <input type="text" v-model="searchQuery" @input="searchEvents"
                     class="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Search events...">
@@ -655,7 +660,7 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
                     </div>
                 </div>
             </div>
-            <div v-if="showHelp" class="text-sm text-gray-700 p-4">
+            <div v-if="showHelp" class="text-sm text-gray-700 p-4" v-cloak>
                 <div class="w-full overflow-hidden rounded-lg shadow-md">
                     <table class="min-w-full divide-y divide-gray-200">
                         <thead>
@@ -768,7 +773,7 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
                     </table>
                 </div>
             </div>
-            <div v-if="showShare" class="mt-2.5 text-sm w-full md:w-1/2">
+            <div v-if="showShare" class="mt-2.5 text-sm w-full md:w-1/2" v-cloak>
                 <p class="mb-2">Current date selection and layout</p>
                 <div class="flex gap-2 mb-4">
                     <input type="text" :value="currentViewLink" readonly @click="copyToClipboard"
@@ -823,7 +828,7 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
                     </button>
                 </div>
             </div>
-            <div v-if="showSettings" class="w-full p-2.5 text-sm text-gray-700">
+            <div v-if="showSettings" class="w-full p-2.5 text-sm text-gray-700" v-cloak>
                 <h2 class="text-lg font-bold mb-4">Settings</h2>
 
                 <div class="grid md:grid-cols-2 gap-6">
