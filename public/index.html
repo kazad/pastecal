@@ -863,62 +863,64 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
         <pre v-text="calendar" v-if="debug"></pre>
     </div>
 
-    <script>
-        const QuickAdd = {
-            template: `
-    <span class="inline-flex items-start">
-        <button @click="showDialog" 
-                class="text-gray-500 hover:text-blue-500 p-1.5 rounded-full transition-colors">
-            <span class="text-nowrap px-3 py-1 text-white bg-gray-500 rounded-full text-xs hover:bg-blue-600 transition-colors flex-shrink-0">+Event <!-- (⌘E) -->
-            </span>
-            <kbd class="hidden px-1.5 py-0.5 text-xs bg-gray-100 rounded">⌘E</kbd>
-        </button>
-
-        <div v-if="dialogVisible" 
-             class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div class="bg-white rounded-lg p-6 w-[80%] max-w-[500px]">
-                <h3 class="text-lg font-semibold mb-4">Quick Add Event</h3>
-                <form @submit.prevent="createEvent">
-                    <textarea v-model="description" 
-                             placeholder="Enter details ('Meet John tomorrow at 2pm')" 
-                             rows="3" 
-                             @keydown.enter.prevent="handleEnter"
-                             class="w-full p-2 border rounded mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    </textarea>
-
-                    <div class="bg-gray-50 rounded p-4 mb-4">
-                        <p><strong>Subject:</strong> {{ parsedEvent?.subject }}</p>
-                        <p><strong>Start:</strong> {{ formatDate(parsedEvent?.startDateTime) }}</p>
-                        <p><strong>End:</strong> {{ formatDate(parsedEvent?.endDateTime) }}</p>
-                    </div>
-
-                    <pre class="bg-gray-50 p-4 rounded text-sm mb-4">
+    <script type="text/x-template" id="quick-add-template">
+        <span class="inline-flex items-start">
+            <button @click="showDialog" 
+                    class="text-gray-500 hover:text-blue-500 p-1.5 rounded-full transition-colors">
+                <span class="text-nowrap px-3 py-1 text-white bg-gray-500 rounded-full text-xs hover:bg-blue-600 transition-colors flex-shrink-0">+Event <!-- (⌘E) -->
+                </span>
+                <kbd class="hidden px-1.5 py-0.5 text-xs bg-gray-100 rounded">⌘E</kbd>
+            </button>
+    
+            <div v-if="dialogVisible" 
+                 class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div class="bg-white rounded-lg p-6 w-[80%] max-w-[500px]">
+                    <h3 class="text-lg font-semibold mb-4">Quick Add Event</h3>
+                    <form @submit.prevent="createEvent">
+                        <textarea v-model="description" 
+                                 placeholder="Enter details ('Meet John tomorrow at 2pm')" 
+                                 rows="3" 
+                                 @keydown.enter.prevent="handleEnter"
+                                 class="w-full p-2 border rounded mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        </textarea>
+    
+                        <div class="bg-gray-50 rounded p-4 mb-4">
+                            <p><strong>Subject:</strong> {{ parsedEvent?.subject }}</p>
+                            <p><strong>Start:</strong> {{ formatDate(parsedEvent?.startDateTime) }}</p>
+                            <p><strong>End:</strong> {{ formatDate(parsedEvent?.endDateTime) }}</p>
+                        </div>
+    
+                        <pre class="bg-gray-50 p-4 rounded mb-4 text-sm whitespace-pre">
 Examples: 
-
+    
 lunch tomorrow 2pm for 1 hour
 appointment 9/15 at 2:30pm
 birthday party Sat 7pm to 11pm
 workout 3pm May 20 for 90 minutes
 vacation dec 11 - dec 15
-                    </pre>
-
-                    <div class="flex justify-end gap-2">
-                        <button type="button" 
-                                @click="hideDialog"
-                                class="px-4 py-2 border rounded hover:bg-gray-50">
-                            Cancel
-                        </button>
-                        <button type="submit" 
-                                :disabled="!isValidEvent"
-                                class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50">
-                            Create
-                        </button>
-                    </div>
-                </form>
+</pre>
+    
+                        <div class="flex justify-end gap-2">
+                            <button type="button" 
+                                    @click="hideDialog"
+                                    class="px-4 py-2 border rounded hover:bg-gray-50">
+                                Cancel
+                            </button>
+                            <button type="submit" 
+                                    :disabled="!isValidEvent"
+                                    class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50">
+                                Create
+                            </button>
+                        </div>
+                    </form>
+                </div>
             </div>
-        </div>
-    </span>
-  `,
+        </span>
+    </script>
+
+    <script>
+        const QuickAdd = {
+            template: "#quick-add-template",
             data() {
                 return {
                     dialogVisible: false,
