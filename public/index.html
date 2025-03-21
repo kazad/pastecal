@@ -655,59 +655,117 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
                     </div>
                 </div>
             </div>
-            <div v-if="showHelp" class="text-sm text-gray-700">
-                <div class="divide-y divide-gray-200">
-                    <div class="py-4">
-                        <h3 class="font-bold mb-2">Share a calendar</h3>
-                        <p class="mb-2">
-                            Choose a URL (<code class="bg-gray-100 px-1 rounded">pastecal.com/name</code>) and save.
-                            For privacy, make it hard to guess:
-                            <code class="bg-gray-100 px-1 rounded">name-secretword</code>
-                        </p>
-                        <p>Anyone with the link can view/edit without logging in.</p>
-                    </div>
+            <div v-if="showHelp" class="text-sm text-gray-700 p-4">
+                <div class="w-full overflow-hidden rounded-lg shadow-md">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead>
+                            <tr class="bg-blue-500 text-white">
+                                <th class="px-6 py-3 text-left text-sm font-medium uppercase tracking-wider w-1/3">
+                                    Feature</th>
+                                <th class="px-6 py-3 text-left text-sm font-medium uppercase tracking-wider w-2/3">
+                                    How to</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            <!-- Share a calendar -->
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-6 py-4 font-medium">Share a calendar</td>
+                                <td class="px-6 py-4">
+                                    <p class="mb-2">
+                                        Choose a URL (<code class="bg-gray-100 px-1 rounded">pastecal.com/name</code>)
+                                        and save. <br />
+                                        For privacy, make it hard to guess:
+                                        <code class="bg-gray-100 px-1 rounded">name-secretword</code>
+                                    </p>
+                                    <p>Anyone with the link can view/edit without logging in.</p>
+                                </td>
+                            </tr>
 
-                    <div class="py-4">
-                        <h3 class="font-bold mb-2">Custom event types/colors</h3>
-                        <p class="mb-2">Customize event colors and labels in the Settings panel:</p>
-                        <ol class="list-decimal pl-6 mb-2 space-y-1">
-                            <li>Click the Settings icon <span class="inline-block align-middle"><svg
-                                        xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="currentColor"
-                                        viewBox="0 0 16 16">
-                                        <path
-                                            d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z" />
-                                    </svg></span> in the top menu</li>
-                            <li>Go to the "Calendar Settings" section</li>
-                            <li>Edit the labels next to each color in the "Event Types" area</li>
-                        </ol>
-                        <p>Changes are applied immediately and will appear in the event color dropdown menu.</p>
-                    </div>
 
-                    <div class="py-4">
-                        <h3 class="font-bold mb-2">Link to specific calendar date/view</h3>
-                        <p class="mb-2">
-                            Link to specific views:
-                            <code class="bg-gray-100 px-1 rounded">pastecal.com/cal?date=2024-04-01&view=week</code>
-                        </p>
-                        <p class="mb-2">date formats: YYYY-MM-DD, YYMMDD, YYYY.MM.DD</p>
-                        <p>views: day, week, month, year, agenda</p>
-                    </div>
+                            <!-- Link to specific date -->
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-6 py-4 font-medium">Link to specific date/view</td>
+                                <td class="px-6 py-4">
+                                    <p class="mb-2">
+                                        Use URL parameters:
+                                        <code
+                                            class="bg-gray-100 px-1 rounded">pastecal.com/cal?date=2024-04-01&view=week</code>
+                                    </p>
+                                    <p class="mb-2">
+                                        <span class="font-medium">Date formats:</span> YYYY-MM-DD, YYMMDD, YYYY.MM.DD
+                                    </p>
+                                    <p>
+                                        <span class="font-medium">Views:</span> day, week, month, year, agenda
+                                    </p>
+                                </td>
+                            </tr>
 
-                    <div class="py-4">
-                        <h3 class="font-bold mb-2">View calendar in another app</h3>
-                        <p class="mb-2">Import the ICS link: <code
-                                class="bg-gray-100 px-1 rounded">pastecal.com/name.ics</code></p>
-                        <p>You can set reminders, etc. in that app.</p>
-                    </div>
+                            <!-- View in another app -->
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-6 py-4 font-medium">Jump between calendars
+                                </td>
+                                <td class="px-6 py-4">
+                                    <p class="mb-2">Click the history icon
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 inline relative -top-0.5"
+                                            fill="currentColor" viewBox="0 0 16 16">
+                                            <path
+                                                d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71V3.5z">
+                                            </path>
+                                            <path
+                                                d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0z">
+                                            </path>
+                                        </svg>
+                                        to jump between recently viewed calendars
+                                </td>
+                            </tr>
 
-                    <div class="py-4 text-xs">
-                        Made by Kalid (<a href="https://instacalc.com"
-                            class="text-blue-500 hover:underline">Instacalc</a>,
-                        <a href="https://betterexplained.com" class="text-blue-500 hover:underline">Better
-                            Explained</a>) •
-                        <a href="https://github.com/kazad/pastecal/issues"
-                            class="text-blue-500 hover:underline">Feedback</a>
-                    </div>
+                            <!-- Custom event types -->
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-6 py-4 font-medium">Custom event type labels</td>
+                                <td class="px-6 py-4">
+                                    <ol class="list-decimal pl-6 mb-2 space-y-1">
+                                        <li>Open Settings <span class="inline-block align-middle">
+                                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4"
+                                                    fill="currentColor" viewBox="0 0 16 16">
+                                                    <path
+                                                        d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z" />
+                                                </svg>
+                                            </span> in the top menu</li>
+                                        <li>Go to the "Calendar Settings" section</li>
+                                        <li>Edit the labels next to each color in the "Event Types" area</li>
+                                    </ol>
+                                </td>
+                            </tr>
+
+
+                            <!-- History -->
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-6 py-4 font-medium">Use calendar in another app (phone, computer, etc.)
+                                </td>
+                                <td class="px-6 py-4">
+                                    <p class="mb-2">Import the ICS link in your calendar app, phone:
+                                        <code class="bg-gray-100 px-1 rounded">pastecal.com/name.ics</code>
+                                    </p>
+                                    <p>You can set alerts, reminders, etc. in that app.</p>
+                                </td>
+                            </tr>
+                            <!--  Feedback -->
+                            <tr class="hover:bg-gray-50">
+                                <td class="px-6 py-4 font-medium">Feedback / bug reports</td>
+                                <td class="px-6 py-4">
+                                    <p class="mb-2"><a href="https://github.com/kazad/pastecal/issues"
+                                            class="text-blue-500 hover:underline">Share feedback on Github</a>.
+                                    </p>
+                                    Made by Kalid (<a href="https://instacalc.com"
+                                        class="text-blue-500 hover:underline">Instacalc</a>,
+                                    <a href="https://betterexplained.com" class="text-blue-500 hover:underline">Better
+                                        Explained</a>)
+                                    </p>
+
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
             <div v-if="showShare" class="mt-2.5 text-sm w-full md:w-1/2">
