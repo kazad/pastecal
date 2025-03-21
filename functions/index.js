@@ -1,4 +1,5 @@
 const functions = require('firebase-functions');
+const { onRequest } = require('firebase-functions/v2/https');
 const admin = require('firebase-admin');
 const { v4: uuidv4 } = require('uuid'); // Import uuid for generating GUIDs
 
@@ -44,14 +45,14 @@ function jsonToIcs(json, id) {
     return icsFile;
 }
 
-exports.generateICS = functions.https.onRequest((req, res) => {
-    let id = req.path.split('/')[1]; // Extract the ID from the URL path
+exports.generateICSV2 = onRequest({ cors: true }, async (req, res) => {
+    let id = req.path.split('/')[1];
     id = id.replace(/[.]ICS.*/i, '');
 
     console.log('Generating ICS for calendar ID', req.path, id);
 
-    // Fetch the calendar data for this ID from your database
-    admin.database().ref('/calendars').child(id).once('value', snapshot => {
+    try {
+        const snapshot = await admin.database().ref('/calendars').child(id).once('value');
         const calendarData = snapshot.val();
 
         if (!calendarData) {
@@ -59,11 +60,13 @@ exports.generateICS = functions.https.onRequest((req, res) => {
             return;
         }
 
-        const icsData = jsonToIcs(calendarData, id); // Call your jsonToIcs function
-
+        const icsData = jsonToIcs(calendarData, id);
         res.set('Content-Type', 'text/calendar');
         res.send(icsData);
-    });
+    } catch (err) {
+        console.error('Error generating ICS:', err);
+        res.status(500).send('Server error generating ICS');
+    }
 });
 
 /*
