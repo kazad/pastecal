@@ -161,8 +161,34 @@ Copyright (c) 2022 Kalid Azad
         html,
         div#Schedule,
         .e-control,
-        .e-css {
+        .e-css,
+        .e-toolbar,
+        .e-tbar-btn,
+        .e-tbar-btn-text,
+        .e-control-wrapper,
+        .e-label,
+        textarea {
             font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji" !important;
+            font-weight: normal;
+        }
+
+        /* to find all roboto fonts: 
+        [...document.querySelectorAll('*')].filter(el => {
+                const font = getComputedStyle(el).fontFamily.toLowerCase();
+                return font.includes('roboto');
+        });
+        */
+
+        div#Schedule,
+        .e-appointment,
+        .e-draggable {
+            border-radius: 6px !important;
+        }
+
+        .e-dialog,
+        .e-popup {
+            border-radius: 6px;
+            overflow: hidden;
         }
 
         /* some fonts get cut off */
@@ -173,7 +199,6 @@ Copyright (c) 2022 Kalid Azad
         /* better save icon */
         .e-schedule-dialog.e-device .e-save-icon::before {
             content: 'SAVE';
-            font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji" !important;
             color: #e3165b;
             font-size: 16px;
         }
