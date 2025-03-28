@@ -14,4 +14,6 @@ Use cases:
 
 Screenshots:
 
-<img width="981" alt="pastecal" src="https://user-images.githubusercontent.com/115572/168394942-0ffd541b-d091-4d26-ad21-1ee7cbaf72af.png">
+<img width="981" alt="pastecal" src="https://raw.githubusercontent.com/kazad/pastecal/refs/heads/master/public/img/screenshot.png">
+
+
