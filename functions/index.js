@@ -1,5 +1,6 @@
 const functions = require('firebase-functions');
-const { onRequest } = require('firebase-functions/v2/https');
+const { onRequest, onCall } = require('firebase-functions/v2/https');
+const { onValueUpdated } = require("firebase-functions/v2/database");
 const admin = require('firebase-admin');
 const { v4: uuidv4 } = require('uuid'); // Import uuid for generating GUIDs
 
@@ -68,6 +69,77 @@ exports.generateICSV2 = onRequest({ cors: true }, async (req, res) => {
         res.status(500).send('Server error generating ICS');
     }
 });
+
+let nanoid = (t = 21) => {
+    let e = "",
+        r = crypto.getRandomValues(new Uint8Array(t));
+    for (; t--;) {
+        let n = 63 & r[t];
+        e +=
+            n < 36
+                ? n.toString(36)
+                : n < 62
+                    ? (n - 26).toString(36).toUpperCase()
+                    : n < 63
+                        ? nanoid(1) // replace with another random character
+                        : nanoid(1);
+    }
+    return e;
+};
+
+var Utils = {};
+Utils.nanoid = nanoid;
+
+exports.createPublicLink = onCall(async (data, context) => {
+    const { sourceCalendarId } = data;
+
+    // Generate a unique public ID
+    const publicViewId = Utils.nanoid(10);
+
+    // Get the source calendar data
+    const sourceCalRef = admin.database().ref(`/calendars/${sourceCalendarId}`);
+    const snapshot = await sourceCalRef.once('value');
+    const calendarData = snapshot.val();
+
+    if (!calendarData) {
+        throw new functions.https.HttpsError('not-found', 'Calendar not found');
+    }
+
+    // Create a deep copy to avoid reference issues
+    const publicCalData = JSON.parse(JSON.stringify(calendarData));
+
+    // Store the publicViewId in the original calendar
+    await sourceCalRef.child('options/publicViewId').set(publicViewId);
+
+    // Create the public view calendar
+    await admin.database().ref(`/calendars_readonly/${publicViewId}`).set(publicCalData);
+
+    return { publicViewId };
+});
+
+// This function triggers when a calendar with a publicViewId is updated
+exports.syncPublicView = onValueUpdated('/calendars/{calendarId}', (event) => {
+    // Get the updated data
+    const afterData = event.data.after.val();
+
+    // Check if this calendar has a public view
+    const publicViewId = afterData.options?.publicViewId;
+
+    if (publicViewId) {
+        // Get the updated calendar data and create a copy
+        const updatedData = JSON.parse(JSON.stringify(afterData));
+
+        // Log the sync operation
+        logger.log("Syncing calendar", event.params.calendarId, "to readonly view", publicViewId);
+
+        // Update the public view in the readonly collection
+        // Must return the Promise for proper function execution
+        return rtdb.ref(`/calendars_readonly/${publicViewId}`).update(updatedData);
+    }
+
+    return null;
+}
+);
 
 /*
 // local cleanup task: Update eventIDs to be GUIDs 

@@ -648,6 +648,16 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
                             </svg>
                         </span>
                     </button>
+                    <!-- Security/Share button in the top right section -->
+                    <button v-on:click="toggleSecurity"
+                        class="text-gray-500 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8"
+                        title="Security & Sharing Settings">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                            stroke="currentColor" class="w-4 h-4">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                        </svg>
+                    </button>
                     <div class="hidden flex-shrink-0">
                         <span class="mx-1 text-gray-300">&middot;</span>
                         <a :href="calendar.id + '.ics'"
@@ -814,6 +824,7 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
                     </table>
                 </div>
             </div>
+
             <div v-if="showShare" class="mt-2.5 text-sm w-full md:w-1/2" v-cloak>
                 <p class="mb-2">Current date selection and layout</p>
                 <div class="flex gap-2 mb-4">
@@ -869,6 +880,89 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
                     </button>
                 </div>
             </div>
+
+            <div v-if="showSecurity" class="mt-2.5 text-sm w-full md:w-1/2" v-cloak>
+                <div class="bg-white p-4 rounded-lg shadow-sm border">
+                    <h3 class="font-bold text-gray-800 mb-3 flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                            stroke="currentColor" class="w-5 h-5 mr-2">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                        </svg>
+                        Security & Sharing
+                    </h3>
+
+                    <div class="space-y-6">
+                        <!-- Regular editable link section -->
+                        <div>
+                            <h4 class="font-medium mb-2">Editable Calendar Link</h4>
+                            <p class="text-xs text-gray-500 mb-2">Anyone with this link can view and edit this calendar.
+                            </p>
+                            <div class="flex gap-2">
+                                <input type="text" :value="getCalendarLink()" readonly @click="copyToClipboard"
+                                    class="flex-1 p-2 border rounded bg-gray-50">
+                                <button @click="copyToClipboard($event.target.previousElementSibling)"
+                                    class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                    </svg>
+                                    Copy
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- View-only link section -->
+                        <div>
+                            <h4 class="font-medium mb-2">View-Only Calendar Link</h4>
+                            <p class="text-xs text-gray-500 mb-2">
+                                Share a read-only version of this calendar. Updates to the original calendar will sync
+                                to the view-only version.
+                            </p>
+
+                            <!-- If no view-only link exists yet -->
+                            <div v-if="!getReadOnlyLink()" class="flex gap-2">
+                                <button @click="createReadOnlyLink"
+                                    class="px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                    </svg>
+                                    Create View-Only Link
+                                </button>
+                            </div>
+
+                            <!-- If view-only link already exists -->
+                            <div v-else class="space-y-2">
+                                <div class="flex gap-2">
+                                    <input type="text" :value="getReadOnlyLink()" readonly @click="copyToClipboard"
+                                        class="flex-1 p-2 border rounded bg-gray-50">
+                                    <button @click="copyToClipboard($event.target.previousElementSibling)"
+                                        class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
+                                            viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                        </svg>
+                                        Copy
+                                    </button>
+                                    <button v-if="canShare()" @click="shareUrl(getReadOnlyLink(), 'View-Only Calendar')"
+                                        class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                                            viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div v-if="showSettings" class="w-full p-2.5 text-sm text-gray-700" v-cloak>
                 <h2 class="text-lg font-bold mb-4">Settings</h2>
 
@@ -1151,6 +1245,7 @@ vacation dec 11 - dec 15
                     showShare: false,
                     showSearch: false,
                     showSettings: false,
+                    showSecurity: false,
 
                     currentViewLink: '',
                     updateLinkTimer: null, // re-render share link
@@ -1459,6 +1554,30 @@ vacation dec 11 - dec 15
                     return `${window.location.origin}/${this.calendar.id}.ics`;
                 },
 
+                createReadOnlyLink() {
+                    // Call the Firebase function
+                    const createPublicLink = firebase.functions().httpsCallable('createPublicLink');
+                    createPublicLink({ sourceCalendarId: this.calendar.id })
+                        .then((result) => {
+                            /*
+                            const { publicId } = result.data;
+                            this.readOnlyLink = `${window.location.origin}/public/${publicId}`;
+                            this.showReadOnlyModal = true;
+                            */
+                        })
+                        .catch((error) => {
+                            console.error('Error creating public link:', error);
+                            alert('Failed to create public link. Please try again.');
+                        });
+                },
+
+                getReadOnlyLink() {
+                    if (this.calendar.options && this.calendar.options.publicViewId) {
+                        return `${window.location.origin}/view/${this.calendar.options.publicViewId}`;
+                    }
+                    return null;
+                },
+
                 startUpdateLinkTimer() {
                     this.updateLinkTimer = setInterval(() => {
                         this.updateCurrentViewLink();
@@ -1510,7 +1629,7 @@ vacation dec 11 - dec 15
                 },
 
                 isPanelOpen() {
-                    return this.showNotes || this.showSearch || this.showHelp || this.showShare || this.showSettings;
+                    return this.showNotes || this.showSearch || this.showHelp || this.showShare || this.showSettings || this.showSecurity;
                 },
 
                 toggleHelp() {
@@ -1552,12 +1671,22 @@ vacation dec 11 - dec 15
                     }
                 },
 
+                toggleSecurity() {
+                    if (this.showSecurity) {
+                        this.showSecurity = false;
+                    } else {
+                        this.closeAllPanels();
+                        this.showSecurity = true;
+                    }
+                },
+
                 closeAllPanels() {
                     this.showHelp = false;
                     this.showNotes = false;
                     this.showSearch = false;
                     this.showShare = false;
                     this.showSettings = false;
+                    this.showSecurity = false;
                 },
 
                 togglePin(id) {
