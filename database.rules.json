@@ -7,6 +7,12 @@
         ".read": true,
         ".write": true
       }
+    },
+    "calendars_readonly": {
+      "$id": {
+        ".read": true,
+        ".write": false
+      }
     }
   }
 }
