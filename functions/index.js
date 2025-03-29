@@ -64,7 +64,7 @@ const ICSService = {
     },
 
     generateICS(calendarData, id) {
-        const events = calendarData.events.map(event => this.createEventBlock(event));
+        const events = (calendarData?.events ?? []).map(event => this.createEventBlock(event));
 
         return [
             "BEGIN:VCALENDAR",
