@@ -47,13 +47,16 @@ function jsonToIcs(json, id) {
 }
 
 exports.generateICSV2 = onRequest({ cors: true }, async (req, res) => {
-    let id = req.path.split('/')[1];
+    // pastecalc.com/ID.ics or pastecalc.com/view/ID.ics
+    const parts = req.path.split('/');
+    let id = parts[0] == "view" ? parts[2] : parts[1];
     id = id.replace(/[.]ICS.*/i, '');
 
     console.log('Generating ICS for calendar ID', req.path, id);
 
     try {
-        const snapshot = await admin.database().ref('/calendars').child(id).once('value');
+        let rootnode = parts[0] == "view" ? "calendars_readonly" : "calendars";
+        const snapshot = await admin.database().ref(rootnode).child(id).once('value');
         const calendarData = snapshot.val();
 
         if (!calendarData) {
