@@ -848,7 +848,7 @@ Copyright (c) 2022 Kalid Azad
             </div>
 
             <div v-if="showShare" class="p-2.5 text-sm w-full" v-cloak>
-                <h2 class="text-lg font-bold mb-4">Sharing</h2>
+                <h2 class="text-lg font-bold mb-4">Sharing & Security</h2>
 
                 <div class="grid md:grid-cols-2 gap-6">
                     <div class="bg-white p-4 rounded-lg shadow-sm border">
@@ -1280,7 +1280,6 @@ vacation dec 11 - dec 15
                     showShare: false,
                     showSearch: false,
                     showSettings: false,
-                    showSecurity: false,
 
                     currentViewLink: '',
                     updateLinkTimer: null, // re-render share link
@@ -1712,7 +1711,7 @@ vacation dec 11 - dec 15
                 },
 
                 isPanelOpen() {
-                    return this.showNotes || this.showSearch || this.showHelp || this.showShare || this.showSettings || this.showSecurity;
+                    return this.showNotes || this.showSearch || this.showHelp || this.showShare || this.showSettings;
                 },
 
                 toggleHelp() {
@@ -1754,22 +1753,12 @@ vacation dec 11 - dec 15
                     }
                 },
 
-                toggleSecurity() {
-                    if (this.showSecurity) {
-                        this.showSecurity = false;
-                    } else {
-                        this.closeAllPanels();
-                        this.showSecurity = true;
-                    }
-                },
-
                 closeAllPanels() {
                     this.showHelp = false;
                     this.showNotes = false;
                     this.showSearch = false;
                     this.showShare = false;
                     this.showSettings = false;
-                    this.showSecurity = false;
                 },
 
                 togglePin(id) {
