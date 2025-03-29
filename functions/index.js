@@ -106,8 +106,8 @@ exports.createPublicLink = onCall(async (request) => {
     let attempts = 0;
     let uniqueFound = false;
 
-    while (attempts < 3 && !uniqueFound) {
-        publicViewId = Utils.nanoid(6);
+    while (attempts < 5 && !uniqueFound) {
+        publicViewId = Utils.nanoid(5);
         const existsSnap = await admin.database().ref(`/calendars_readonly/${publicViewId}`).once('value');
         if (!existsSnap.exists()) {
             uniqueFound = true;
@@ -117,7 +117,7 @@ exports.createPublicLink = onCall(async (request) => {
     }
 
     if (!uniqueFound) {
-        throw new functions.https.HttpsError('internal', 'Failed to generate a unique public view ID after 3 attempts');
+        throw new functions.https.HttpsError('internal', 'Failed to generate a unique public view ID');
     }
 
     // Create a deep copy to avoid reference issues
