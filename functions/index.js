@@ -93,7 +93,7 @@ Utils.nanoid = nanoid;
 exports.createPublicLink = onCall(async (request) => {
     const { sourceCalendarId } = request.data;
 
-    console.log(JSON.stringify(request.data));
+    // console.log(JSON.stringify(request.data));
 
     // Generate a unique public ID
     const publicViewId = Utils.nanoid(6);
@@ -103,7 +103,7 @@ exports.createPublicLink = onCall(async (request) => {
     const snapshot = await sourceCalRef.once('value');
     const calendarData = snapshot.val();
 
-    console.log("caldata", calendarData);
+    // console.log("caldata", calendarData);
 
     if (!calendarData) {
         throw new functions.https.HttpsError('not-found', 'Calendar not found');

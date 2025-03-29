@@ -292,10 +292,8 @@ Copyright (c) 2022 Kalid Azad
         }
     </script>
 
-    <script src="
-https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
-"></script>
-    <script src="index.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js"></script>
+    <script src="/index.js"></script>
 
     <script>
         function debounce(func, timeout = 300) {
@@ -455,6 +453,7 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
         class CalendarDataService {
             static connected = false;
             static db = firebase.database().ref('/calendars');
+            static db_readonly = firebase.database().ref('/calendars_readonly');
 
             // subscribe to live updates
             static subscribe(slug, callback) {
@@ -464,6 +463,19 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
                         // console.log(`DataService: loaded ${slug}`, calendar);
                         if (calendar && calendar.id) {
                             this.connected = slug;
+                            callback(calendar);
+                        }
+                    })
+                }
+            }
+
+            // subscribe to live updates for read-only calendars
+            static subscribe_readonly(slug, callback) {
+                if (slug) {
+                    this.db_readonly.child(slug).on('value', data => {
+                        var calendar = data.val();
+                        if (calendar && calendar.id) {
+                            // don't set connected
                             callback(calendar);
                         }
                     })
@@ -524,7 +536,7 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
                 <!-- Logo and app name -->
                 <logo class="flex items-center space-x-2 text-sm h-8">
                     <a href="/" class="flex items-center group">
-                        <img class="h-8 w-8 mr-1.5 flex-shrink-0" src="img/pastecal.logo.svg" alt="PasteCal Logo">
+                        <img class="h-8 w-8 mr-1.5 flex-shrink-0" src="/img/pastecal.logo.svg" alt="PasteCal Logo">
                         <div class="flex flex-col">
                             <span
                                 class="text-blue-500 font-medium text-sm hover:text-blue-600 transition-colors">pastecal</span>
@@ -598,7 +610,7 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
                     </button>
 
                     <!-- Settings button -->
-                    <button v-on:click="toggleSettings"
+                    <button v-if="!isReadOnly" v-on:click="toggleSettings"
                         class="text-gray-500 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8"
                         title="Settings">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="currentColor" viewBox="0 0 16 16">
@@ -608,7 +620,8 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
                     </button>
 
                     <!-- Quick add component - desktop only -->
-                    <quick-add class="hidden lg:block" @event-created="handleQuickAddEvent"></quick-add>
+                    <quick-add v-if="!isReadOnly" class="hidden lg:block"
+                        @event-created="handleQuickAddEvent"></quick-add>
 
                 </buttonarea>
             </section>
@@ -636,56 +649,65 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
 
             <!-- Right section -->
             <section class="flex-1 flex items-center justify-end text-xs min-w-0 h-8">
-                <!-- Existing calendar info -->
-                <div v-show="isExisting"
-                    class="text-gray-500 flex flex-col md:flex-row flex-nowrap items-center space-y-2 md:space-y-0">
-                    <a :href="calendar.id" class="text-gray-600 hover:text-blue-500 transition-colors text-xs">
-                        pastecal.com/<span class="inline-block md:inline">{{calendar.id}}</span>
-                    </a>
-                    <button v-on:click="toggleShare"
-                        class="ml-1 text-gray-500 hover:text-blue-500 transition-colors flex-shrink-0">
-                        <span class="hidden">share</span>
-                        <span class="inline-block">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 inline" fill="none"
-                                viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                            </svg>
-                        </span>
-                    </button>
-                    <!-- Security/Share button in the top right section -->
-                    <button v-on:click="toggleSecurity"
-                        class="text-gray-500 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8"
-                        title="Security & Sharing Settings">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
-                            stroke="currentColor" class="w-4 h-4">
-                            <path stroke-linecap="round" stroke-linejoin="round"
-                                d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-                        </svg>
-                    </button>
-                    <div class="hidden flex-shrink-0">
-                        <span class="mx-1 text-gray-300">&middot;</span>
-                        <a :href="calendar.id + '.ics'"
-                            class="text-gray-600 hover:text-blue-500 transition-colors">iCal</a>
+
+                <div v-if="isReadOnly">
+                    <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4" role="alert">
+                        <p>Read-only mode</p>
                     </div>
                 </div>
 
-                <!-- New calendar creation -->
-                <div v-show="!isExisting"
-                    class="flex items-center flex-col md:flex-row space-y-1 md:space-y-0 relative">
-                    <div class="absolute -top-2.5 right-1 text-gray-400 md:hidden text-xs" style="font-size: 10px">
-                        pastecal.com/
+                <div v-if="!isReadOnly">
+                    <!-- Existing calendar info -->
+                    <div v-show="isExisting"
+                        class="text-gray-500 flex flex-col md:flex-row flex-nowrap items-center space-y-2 md:space-y-0">
+                        <a :href="calendar.id" class="text-gray-600 hover:text-blue-500 transition-colors text-xs">
+                            pastecal.com/<span class="inline-block md:inline">{{calendar.id}}</span>
+                        </a>
+                        <button v-on:click="toggleShare"
+                            class="ml-1 text-gray-500 hover:text-blue-500 transition-colors flex-shrink-0">
+                            <span class="hidden">share</span>
+                            <span class="inline-block">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 inline" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                                </svg>
+                            </span>
+                        </button>
+                        <!-- Security/Share button in the top right section -->
+                        <button v-on:click="toggleSecurity"
+                            class="text-gray-500 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8"
+                            title="Security & Sharing Settings">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                stroke="currentColor" class="w-4 h-4">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+                            </svg>
+                        </button>
+                        <div class="hidden flex-shrink-0">
+                            <span class="mx-1 text-gray-300">&middot;</span>
+                            <a :href="calendar.id + '.ics'"
+                                class="text-gray-600 hover:text-blue-500 transition-colors">iCal</a>
+                        </div>
                     </div>
-                    <div class="text-xs md:text-sm scale-80 md:scale-none">
-                        <span class="text-gray-500 hidden md:inline">pastecal.com/</span>
-                        <input id="slug"
-                            class="border border-gray-200 focus:border-blue-400 px-1 w-20 text-xs focus:outline-none transition-colors"
-                            type="text" :disabled="isExisting" v-model="calendar.id" @keyup.enter="create">
+
+                    <!-- New calendar creation -->
+                    <div v-show="!isExisting"
+                        class="flex items-center flex-col md:flex-row space-y-1 md:space-y-0 relative">
+                        <div class="absolute -top-2.5 right-1 text-gray-400 md:hidden text-xs" style="font-size: 10px">
+                            pastecal.com/
+                        </div>
+                        <div class="text-xs md:text-sm scale-80 md:scale-none">
+                            <span class="text-gray-500 hidden md:inline">pastecal.com/</span>
+                            <input id="slug"
+                                class="border border-gray-200 focus:border-blue-400 px-1 w-20 text-xs focus:outline-none transition-colors"
+                                type="text" :disabled="isExisting" v-model="calendar.id" @keyup.enter="create">
+                        </div>
+                        <button @click="create" v-show="!isExisting"
+                            class="ml-2 px-3 py-1 text-white bg-blue-500 rounded-full text-xs hover:bg-blue-600 transition-colors flex-shrink-0">
+                            Save
+                        </button>
                     </div>
-                    <button @click="create" v-show="!isExisting"
-                        class="ml-2 px-3 py-1 text-white bg-blue-500 rounded-full text-xs hover:bg-blue-600 transition-colors flex-shrink-0">
-                        Save
-                    </button>
                 </div>
             </section>
         </topbar>
@@ -898,25 +920,6 @@ https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js
                     </h3>
 
                     <div class="space-y-6">
-                        <!-- Regular editable link section -->
-                        <div>
-                            <h4 class="font-medium mb-2">Editable Calendar Link</h4>
-                            <p class="text-xs text-gray-500 mb-2">Anyone with this link can view and edit this calendar.
-                            </p>
-                            <div class="flex gap-2">
-                                <input type="text" :value="getCalendarLink()" readonly @click="copyToClipboard"
-                                    class="flex-1 p-2 border rounded bg-gray-50">
-                                <button @click="copyToClipboard($event.target.previousElementSibling)"
-                                    class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
-                                        viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                    </svg>
-                                    Copy
-                                </button>
-                            </div>
-                        </div>
 
                         <!-- View-only link section -->
                         <div>
@@ -1236,6 +1239,7 @@ vacation dec 11 - dec 15
                 ];
 
                 return {
+                    isReadOnly: false,
                     isExisting: false, // set by callback
                     editTitle: false,
                     calendar: cal,
@@ -1286,17 +1290,39 @@ vacation dec 11 - dec 15
                 this.initializeLocalSettings();
                 // We'll load and apply global settings after scheduleObj is initialized
 
-                CalendarDataService.subscribe(this.calendar.id, (c) => {
-                    this.isExisting = true;
-                    this.calendar.import(c);
-                    // Add to recents when calendar loads
-                    this.recentManager.add(this.calendar.id, this.calendar.title);
-                    this.recentCalendars = this.recentManager.getAll();
-                });
+                // readonly: pastecal.com/view/ID
+                let path = location.pathname;
+                if (path?.startsWith('/view/')) {
+                    // Read-only view mode
+                    const viewId = path.split('/')[2];
+                    this.isReadOnly = true;
+
+                    // Subscribe to the read-only calendar
+                    CalendarDataService.subscribe_readonly(viewId, (c) => {
+                        this.calendar.import(c);
+                        // Add to recents when calendar loads, but mark as read-only
+                        if (c.title) {
+                            this.recentManager.add(viewId, `${c.title} (View Only)`, true);
+                            this.recentCalendars = this.recentManager.getAll();
+                        }
+                    });
+                } else {
+                    // default: pastecal.com/ID
+                    CalendarDataService.subscribe(this.calendar.id, (c) => {
+                        this.isExisting = true;
+                        this.calendar.import(c);
+                        // Add to recents when calendar loads
+                        this.recentManager.add(this.calendar.id, this.calendar.title);
+                        this.recentCalendars = this.recentManager.getAll();
+                    });
+                }
 
                 window.scheduleObj = new ej.schedule.Schedule();
                 scheduleObj.startHour = "05:00";
                 scheduleObj.views = ['Day', 'Week', 'Month', 'Year', 'Agenda'];
+
+                scheduleObj.readonly = this.isReadOnly;
+
 
                 // Set up scheduler first, then apply settings after initialization
                 // set params from URL
