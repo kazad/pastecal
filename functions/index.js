@@ -2,159 +2,153 @@ const functions = require('firebase-functions');
 const { onRequest, onCall } = require('firebase-functions/v2/https');
 const { onValueUpdated } = require("firebase-functions/v2/database");
 const admin = require('firebase-admin');
-const { v4: uuidv4 } = require('uuid'); // Import uuid for generating GUIDs
 
 admin.initializeApp();
 
-function escapeIcsText(text) {
-    return text.replace(/\\/g, '\\\\') // Escape backslashes
-        .replace(/;/g, '\\;')   // Escape semicolons
-        .replace(/,/g, '\\,')   // Escape commas
-        .replace(/\n/g, '\\n'); // Escape newlines
-}
+// Calendar Data Service
+const CalendarService = {
+    parseCalendarPath(path) {
+        const parts = path.split('/');
+        return {
+            isReadOnly: parts[0] === "view",
+            id: parts[0] === "view" ? parts[2] : parts[1]
+        };
+    },
 
-function jsonToIcs(json, id) {
-    let icsEvents = [];
-
-    json.events.forEach(event => {
-        let icsEvent = [
-            "BEGIN:VEVENT",
-            `UID:${event.id}`,
-            `DTSTART:${event.start.replace(/[-:]/g, '').replace('.000Z', 'Z')}`,
-            `DTEND:${event.end.replace(/[-:]/g, '').replace('.000Z', 'Z')}`,
-            `SUMMARY:${escapeIcsText(event.title)}`,
-            `DESCRIPTION:${escapeIcsText(event.description)}`,
-        ];
-
-        if (event.recurrencerule) {
-            icsEvent.push(`RRULE:${event.recurrencerule}`);
-        }
-
-        icsEvent.push("END:VEVENT");
-
-        icsEvents.push(icsEvent.join("\n"));
-    });
-
-    let icsFile = [
-        "BEGIN:VCALENDAR",
-        "VERSION:2.0",
-        "PRODID:-//PasteCal//" + id + "//EN",
-        ...icsEvents,
-        "END:VCALENDAR"
-    ].join("\n");
-
-    return icsFile;
-}
-
-exports.generateICSV2 = onRequest({ cors: true }, async (req, res) => {
-    // pastecalc.com/ID.ics or pastecalc.com/view/ID.ics
-    const parts = req.path.split('/');
-    let id = parts[0] == "view" ? parts[2] : parts[1];
-    id = id.replace(/[.]ICS.*/i, '');
-
-    console.log('Generating ICS for calendar ID', req.path, id);
-
-    try {
-        let rootnode = parts[0] == "view" ? "calendars_readonly" : "calendars";
-        const snapshot = await admin.database().ref(rootnode).child(id).once('value');
+    async getCalendarData(id, isReadOnly = false) {
+        const rootNode = isReadOnly ? 'calendars_readonly' : 'calendars';
+        const calendarRef = admin.database().ref(rootNode).child(id);
+        const snapshot = await calendarRef.once('value');
         const calendarData = snapshot.val();
 
         if (!calendarData) {
-            res.status(404).send('Calendar not found');
-            return;
+            throw new functions.https.HttpsError('not-found', 'Calendar not found');
         }
 
-        const icsData = jsonToIcs(calendarData, id);
-        res.set('Content-Type', 'text/calendar');
-        res.send(icsData);
+        return { data: calendarData, ref: calendarRef };
+    }
+};
+
+// ICS Generation Service
+const ICSService = {
+    escapeText(text) {
+        return text.replace(/\\/g, '\\\\')
+            .replace(/;/g, '\\;')
+            .replace(/,/g, '\\,')
+            .replace(/\n/g, '\\n');
+    },
+
+    formatDateTime(dateTime) {
+        return dateTime.replace(/[-:]/g, '').replace('.000Z', 'Z');
+    },
+
+    createEventBlock(event) {
+        const eventLines = [
+            "BEGIN:VEVENT",
+            `UID:${event.id}`,
+            `DTSTART:${this.formatDateTime(event.start)}`,
+            `DTEND:${this.formatDateTime(event.end)}`,
+            `SUMMARY:${this.escapeText(event.title)}`,
+            `DESCRIPTION:${this.escapeText(event.description)}`
+        ];
+
+        if (event.recurrencerule) {
+            eventLines.push(`RRULE:${event.recurrencerule}`);
+        }
+
+        eventLines.push("END:VEVENT");
+        return eventLines.join("\n");
+    },
+
+    generateICS(calendarData, id) {
+        const events = calendarData.events.map(event => this.createEventBlock(event));
+
+        return [
+            "BEGIN:VCALENDAR",
+            "VERSION:2.0",
+            `PRODID:-//PasteCal//${id}//EN`,
+            ...events,
+            "END:VCALENDAR"
+        ].join("\n");
+    }
+};
+
+// ID Generation Service
+const IDService = {
+    generateNanoId(length = 21) {
+        const generateChar = (n) => {
+            if (n < 36) return n.toString(36);
+            if (n < 62) return (n - 26).toString(36).toUpperCase();
+            return this.generateNanoId(1);
+        };
+
+        const randomValues = crypto.getRandomValues(new Uint8Array(length));
+        return Array.from(randomValues)
+            .map(val => generateChar(val & 63))
+            .join('');
+    },
+
+    async generateUniquePublicId(attempts = 5) {
+        for (let i = 0; i < attempts; i++) {
+            const publicViewId = this.generateNanoId(5);
+            try {
+                await CalendarService.getCalendarData(publicViewId, true);
+            } catch (error) {
+                if (error.code === 'not-found') return publicViewId;
+                throw error;
+            }
+        }
+        throw new functions.https.HttpsError('internal', 'Failed to generate a unique public view ID');
+    }
+};
+
+// Cloud Functions
+exports.generateICSV2 = onRequest({ cors: true }, async (req, res) => {
+    try {
+        const { id, isReadOnly } = CalendarService.parseCalendarPath(req.path);
+        const cleanId = id.replace(/[.]ICS.*/i, '');
+
+        console.log('Generating ICS for calendar ID', req.path, cleanId);
+
+        const { data: calendarData } = await CalendarService.getCalendarData(cleanId, isReadOnly);
+        const icsData = ICSService.generateICS(calendarData, cleanId);
+
+        res.set('Content-Type', 'text/calendar').send(icsData);
     } catch (err) {
         console.error('Error generating ICS:', err);
         res.status(500).send('Server error generating ICS');
     }
 });
 
-let nanoid = (t = 21) => {
-    let e = "",
-        r = crypto.getRandomValues(new Uint8Array(t));
-    for (; t--;) {
-        let n = 63 & r[t];
-        e +=
-            n < 36
-                ? n.toString(36)
-                : n < 62
-                    ? (n - 26).toString(36).toUpperCase()
-                    : n < 63
-                        ? nanoid(1) // replace with another random character
-                        : nanoid(1);
-    }
-    return e;
-};
-
-var Utils = {};
-Utils.nanoid = nanoid;
-
 exports.createPublicLink = onCall(async (request) => {
     const { sourceCalendarId } = request.data;
 
-    // Get the source calendar data
-    const sourceCalRef = admin.database().ref(`/calendars/${sourceCalendarId}`);
-    const snapshot = await sourceCalRef.once('value');
-    const calendarData = snapshot.val();
+    try {
+        const { data: calendarData, ref: sourceCalRef } = await CalendarService.getCalendarData(sourceCalendarId);
+        const publicViewId = await IDService.generateUniquePublicId();
 
-    if (!calendarData) {
-        throw new functions.https.HttpsError('not-found', 'Calendar not found');
+        const publicCalData = JSON.parse(JSON.stringify(calendarData));
+
+        await Promise.all([
+            sourceCalRef.child('options/publicViewId').set(publicViewId),
+            admin.database().ref(`calendars_readonly/${publicViewId}`).set(publicCalData)
+        ]);
+
+        return { publicViewId };
+    } catch (error) {
+        throw error;
     }
-
-    let publicViewId;
-    let attempts = 0;
-    let uniqueFound = false;
-
-    while (attempts < 5 && !uniqueFound) {
-        publicViewId = Utils.nanoid(5);
-        const existsSnap = await admin.database().ref(`/calendars_readonly/${publicViewId}`).once('value');
-        if (!existsSnap.exists()) {
-            uniqueFound = true;
-            break;
-        }
-        attempts++;
-    }
-
-    if (!uniqueFound) {
-        throw new functions.https.HttpsError('internal', 'Failed to generate a unique public view ID');
-    }
-
-    // Create a deep copy to avoid reference issues
-    const publicCalData = JSON.parse(JSON.stringify(calendarData));
-
-    // Store the publicViewId in the original calendar
-    await sourceCalRef.child('options/publicViewId').set(publicViewId);
-
-    // Create the public view calendar
-    await admin.database().ref(`/calendars_readonly/${publicViewId}`).set(publicCalData);
-
-    return { publicViewId };
 });
 
-// This function triggers when a calendar with a publicViewId is updated
 exports.syncPublicView = onValueUpdated('/calendars/{calendarId}', (event) => {
-    // Get the updated data
     const afterData = event.data.after.val();
-
-    // Check if this calendar has a public view
     const publicViewId = afterData.options?.publicViewId;
 
-    if (publicViewId) {
-        // Get the updated calendar data and create a copy
-        const updatedData = JSON.parse(JSON.stringify(afterData));
+    if (!publicViewId) return null;
 
-        // Update the public view in the readonly collection
-        // Must return the Promise for proper function execution
-        return admin.database().ref(`/calendars_readonly/${publicViewId}`).update(updatedData);
-    }
-
-    return null;
-}
-);
+    const updatedData = JSON.parse(JSON.stringify(afterData));
+    return admin.database().ref(`/calendars_readonly/${publicViewId}`).update(updatedData);
+});
 
 /*
 // local cleanup task: Update eventIDs to be GUIDs 
