@@ -5,6 +5,9 @@ const admin = require('firebase-admin');
 
 admin.initializeApp();
 
+const DEFAULT_ROOT = "calendars";
+const READONLY_ROOT = "calendars_readonly";
+
 // Calendar Data Service
 const CalendarService = {
     parseCalendarPath(path) {
@@ -16,7 +19,7 @@ const CalendarService = {
     },
 
     async getCalendarData(id, isReadOnly = false) {
-        const rootNode = isReadOnly ? 'calendars_readonly' : 'calendars';
+        const rootNode = isReadOnly ? READONLY_ROOT : DEFAULT_ROOT;
         const calendarRef = admin.database().ref(rootNode).child(id);
         const snapshot = await calendarRef.once('value');
         const calendarData = snapshot.val();
@@ -131,7 +134,7 @@ exports.createPublicLink = onCall(async (request) => {
 
         await Promise.all([
             sourceCalRef.child('options/publicViewId').set(publicViewId),
-            admin.database().ref(`calendars_readonly/${publicViewId}`).set(publicCalData)
+            admin.database().ref(`${READONLY_ROOT}/${publicViewId}`).set(publicCalData)
         ]);
 
         return { publicViewId };
@@ -140,14 +143,14 @@ exports.createPublicLink = onCall(async (request) => {
     }
 });
 
-exports.syncPublicView = onValueUpdated('/calendars/{calendarId}', (event) => {
+exports.syncPublicView = onValueUpdated(`/${DEFAULT_ROOT}/{calendarId}`, (event) => {
     const afterData = event.data.after.val();
     const publicViewId = afterData.options?.publicViewId;
 
     if (!publicViewId) return null;
 
     const updatedData = JSON.parse(JSON.stringify(afterData));
-    return admin.database().ref(`/calendars_readonly/${publicViewId}`).update(updatedData);
+    return admin.database().ref(`/${READONLY_ROOT}/${publicViewId}`).update(updatedData);
 });
 
 /*
