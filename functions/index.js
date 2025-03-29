@@ -96,7 +96,7 @@ exports.createPublicLink = onCall(async (request) => {
     console.log(JSON.stringify(request.data));
 
     // Generate a unique public ID
-    const publicViewId = Utils.nanoid(10);
+    const publicViewId = Utils.nanoid(6);
 
     // Get the source calendar data
     const sourceCalRef = admin.database().ref(`/calendars/${sourceCalendarId}`);
@@ -135,7 +135,7 @@ exports.syncPublicView = onValueUpdated('/calendars/{calendarId}', (event) => {
 
         // Update the public view in the readonly collection
         // Must return the Promise for proper function execution
-        return rtdb.ref(`/calendars_readonly/${publicViewId}`).update(updatedData);
+        return admin.database().ref(`/calendars_readonly/${publicViewId}`).update(updatedData);
     }
 
     return null;

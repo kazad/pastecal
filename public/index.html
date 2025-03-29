@@ -1564,15 +1564,16 @@ vacation dec 11 - dec 15
                     const createPublicLink = firebase.functions().httpsCallable('createPublicLink');
                     createPublicLink({ sourceCalendarId: this.calendar.id })
                         .then((result) => {
-                            /*
-                            const { publicId } = result.data;
-                            this.readOnlyLink = `${window.location.origin}/public/${publicId}`;
-                            this.showReadOnlyModal = true;
-                            */
+                            const { publicViewId } = result.data;
+                            if (this.calendar.options) {
+                                this.calendar.options.publicViewId = publicViewId;
+                            } else {
+                                this.calendar.options = { publicViewId };
+                            }
                         })
                         .catch((error) => {
                             console.error('Error creating public link:', error);
-                            alert('Failed to create public link. Please try again.');
+                            // alert('Failed to create public link. Please try again.');
                         });
                 },
 
