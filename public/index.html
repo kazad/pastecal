@@ -285,6 +285,11 @@ Copyright (c) 2022 Kalid Azad
             measurementId: "G-4J99GY9KE6"
         };
         firebase.initializeApp(firebaseConfig);
+
+        // 
+        if (location.href.includes("localhost") && location.href.includes("?local")) {
+            firebase.functions().useEmulator("localhost", 5001);
+        }
     </script>
 
     <script src="

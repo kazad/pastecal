@@ -90,8 +90,10 @@ let nanoid = (t = 21) => {
 var Utils = {};
 Utils.nanoid = nanoid;
 
-exports.createPublicLink = onCall(async (data, context) => {
-    const { sourceCalendarId } = data;
+exports.createPublicLink = onCall(async (request) => {
+    const { sourceCalendarId } = request.data;
+
+    console.log(JSON.stringify(request.data));
 
     // Generate a unique public ID
     const publicViewId = Utils.nanoid(10);
@@ -100,6 +102,8 @@ exports.createPublicLink = onCall(async (data, context) => {
     const sourceCalRef = admin.database().ref(`/calendars/${sourceCalendarId}`);
     const snapshot = await sourceCalRef.once('value');
     const calendarData = snapshot.val();
+
+    console.log("caldata", calendarData);
 
     if (!calendarData) {
         throw new functions.https.HttpsError('not-found', 'Calendar not found');
@@ -128,9 +132,6 @@ exports.syncPublicView = onValueUpdated('/calendars/{calendarId}', (event) => {
     if (publicViewId) {
         // Get the updated calendar data and create a copy
         const updatedData = JSON.parse(JSON.stringify(afterData));
-
-        // Log the sync operation
-        logger.log("Syncing calendar", event.params.calendarId, "to readonly view", publicViewId);
 
         // Update the public view in the readonly collection
         // Must return the Promise for proper function execution
