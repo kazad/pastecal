@@ -629,7 +629,7 @@ Copyright (c) 2022 Kalid Azad
             <!-- Middle section - Calendar title -->
             <section class="flex-1 flex flex-col md:flex-row items-center justify-center mx-1 md:mx-2 min-w-0 h-8">
                 <span v-show="!editTitle" @click="editTitle = true"
-                    class="font-bold cursor-pointer max-w-[150px] md:max-w-xs text-center items-center min-h-8 inline-block overflow-hidden hover:text-blue-500 transition-colors"
+                    class="font-bold cursor-pointer max-w-[150px] md:max-w-xs text-center items-center min-h-8 md:min-h-4 inline-block overflow-hidden hover:text-blue-500 transition-colors"
                     title="Click to edit" v-text="calendar.title"></span>
                 <button v-show="!editTitle" v-on:click="toggleNotes"
                     class="text-gray-500 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8"
