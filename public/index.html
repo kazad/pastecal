@@ -721,17 +721,44 @@ Copyright (c) 2022 Kalid Azad
                     v-html="getReadOnlyNotes()">
                 </div>
             </div>
-            <div v-if="showSearch" class="mb-2.5 text-sm" v-cloak>
-                <input type="text" v-model="searchQuery" @input="searchEvents"
-                    class="w-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Search events...">
+            <div v-if="showSearch" class="m-2 md:m-0 flex flex-col-reverse w-full md:w-1/2" v-cloak>
 
-                <div v-if="searchResults.length > 0" class="mt-2 max-h-[300px] overflow-auto">
-                    <div v-for="event in searchResults" :key="event.id" @click="jumpToEvent(event)"
-                        class="cursor-pointer p-2 hover:bg-gray-50 rounded">
-                        {{ event.title }}: {{ formatDate(event.start) }} - {{ formatDate(event.end) }}
+                <section class="flex-1 bg-white p-4 rounded-lg shadow-sm border flex flex-col space-y-4">
+                    <!-- Search Input -->
+                    <div class="flex flex-col gap-2">
+                        <input type="search" v-model="searchQuery" @input="searchEvents"
+                            class="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                            placeholder="Search events...">
                     </div>
-                </div>
+
+                    <!-- Search Results -->
+                    <div v-if="searchResults.length > 0" class="max-h-64 overflow-auto">
+                        <div v-for="event in searchResults" :key="event.id" @click="jumpToEvent(event)"
+                            :style="{ borderLeft: '3px solid ' + getTypeColor(event.type) }"
+                            class="cursor-pointer p-1 pl-4 hover:bg-blue-50 rounded transition-colors mb-1">
+                            <div class="font-semibold text-gray-800">{{ event.title }}</div>
+                            <div class="text-xs text-gray-500">{{ formatDate(event.start) }} - {{
+                                formatDate(event.end)}}</div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="flex-1 flex flex-col space-y-4 mb-2">
+
+                    <!-- Filter Options -->
+                    <div class="flex items-center space-x-2">
+                        <span class="text-xs text-gray-500">Show</span>
+                        <div class="flex space-x-2">
+                            <template v-for="(color, idx) in COLORS">
+                                <span @click="toggleColorFilter(idx)"
+                                    class="w-6 h-6 rounded-full cursor-pointer border-2 transition-all"
+                                    :class="{'opacity-100 border-gray-100': colorFilters[idx], 'opacity-50 border-transparent': !colorFilters[idx]}"
+                                    :style="{ backgroundColor: color }">
+                                </span>
+                            </template>
+                        </div>
+                    </div>
+                </section>
             </div>
             <div v-if="showHelp" class="text-sm text-gray-700 p-4" v-cloak>
                 <div class="w-full overflow-hidden rounded-lg shadow-md">
@@ -1299,6 +1326,7 @@ vacation dec 11 - dec 15
 
                     // Store COLORS as a component property for consistent reference
                     COLORS: COLORS,
+                    colorFilters: COLORS.map(() => true), // allow all color types by default
 
                     // Store browser locale for display
                     browserLocale: navigator.language || navigator.userLanguage || 'en-US'
@@ -1537,6 +1565,11 @@ vacation dec 11 - dec 15
                         scheduleObj.startHour = val ? "00:00" : this.globalSettings.startHour;
                     }
                 },
+
+                colorFilters: {
+                    handler() { this.updateCalendarView(); },
+                    deep: true
+                }
             },
 
             methods: {
@@ -1557,7 +1590,10 @@ vacation dec 11 - dec 15
 
                 updateCalendarView() {
                     this.syncFusionEvents = this.calendar.getSyncFusionEvents();
-                    scheduleObj.eventSettings.dataSource = this.syncFusionEvents;
+
+                    // color filter, if valid
+                    const filteredEvents = this.getFilteredEvents();
+                    scheduleObj.eventSettings.dataSource = filteredEvents;
                 },
 
                 create() {
@@ -1695,6 +1731,22 @@ vacation dec 11 - dec 15
                     }
                 },
 
+                toggleColorFilter(index) {
+                    this.colorFilters[index] = !this.colorFilters[index];
+                },
+
+                resetColorFilters() {
+                    this.colorFilters = this.colorFilters.map(() => true);
+                },
+
+                getFilteredEvents() {
+                    if (!this.showSearch) {
+                        return this.syncFusionEvents;
+                    }
+
+                    return this.syncFusionEvents.filter((event) => this.colorFilters[event.Type - 1]);
+                },
+
                 jumpToEvent(event) {
                     let startDate = new Date(event.start);
                     scheduleObj.selectedDate = startDate;
@@ -1737,6 +1789,7 @@ vacation dec 11 - dec 15
                 toggleSearch() {
                     if (this.showSearch) {
                         this.showSearch = false;
+                        this.resetColorFilters();
                     } else {
                         this.closeAllPanels();
                         this.showSearch = true;
@@ -2039,7 +2092,7 @@ vacation dec 11 - dec 15
                 },
 
                 getTypeColor(typeId) {
-                    // Use the component's COLORS property instead of redefining
+                    typeId = parseInt(typeId);
                     return this.COLORS[typeId - 1] || this.COLORS[0];
                 },
 
