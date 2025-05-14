@@ -377,7 +377,7 @@ Copyright (c) 2022 Kalid Azad
                 this.recurrencerule = options.RecurrenceRule || options.recurrencerule || "";
                 this.start = options.start || null;
                 this.end = options.end || null;
-                this.type = options.Type || options.type || 1;
+                this.type = parseInt(options.Type || options.type || 1);
 
                 this.recurrenceID = options.RecurrenceID || options.recurrenceID || null;
                 this.recurrenceException = options.RecurrenceException || options.recurrenceException || null;
@@ -414,7 +414,7 @@ Copyright (c) 2022 Kalid Azad
                         EndTime: e.end,
                         Description: e.description,
                         RecurrenceRule: e.recurrencerule,
-                        Type: e.type || 1,
+                        Type: parseInt(e.type || 1),
 
                         //                        IsAllDay: e.allday,
                         Recurrence: e.repeat,
@@ -442,7 +442,7 @@ Copyright (c) 2022 Kalid Azad
             }
 
             setEvents(events) {
-                // console.log("setEvents()", events);
+                console.log(`[app] setEvents ${events.length}`, events);
                 this.events = events.map(e => {
                     return new Event(e);
                 });
@@ -1422,7 +1422,9 @@ vacation dec 11 - dec 15
                         case 'eventChanged':
                         case 'eventCreated':
                         case 'eventRemoved':
-                            console.log("actionComplete()", ev, this.syncFusionEvents, scheduleObj.eventsData);
+                            console.log("[app] actionComplete()", "event", ev);
+                            console.log(` - syncFusionEvents ${this.syncFusionEvents.length}`, this.syncFusionEvents);
+                            console.log(` - eventsData ${scheduleObj.eventsData.length}`, scheduleObj.eventsData);
                             this.calendar.setEvents(this.syncFusionEvents);
                             break;
                     }
@@ -1590,11 +1592,29 @@ vacation dec 11 - dec 15
                 },
 
                 updateCalendarView() {
+                    // Step 1: Ensure this.syncFusionEvents is up-to-date from the master store (this.calendar.events).
+                    // This creates a new array instance for this.syncFusionEvents if this.calendar.events has changed.
                     this.syncFusionEvents = this.calendar.getSyncFusionEvents();
 
-                    // color filter, if valid
-                    const filteredEvents = this.getFilteredEvents();
-                    scheduleObj.eventSettings.dataSource = filteredEvents;
+                    // Step 2: Create a DataManager with the current, complete set of events.
+                    const eventDataManager = new ej.data.DataManager(this.syncFusionEvents);
+
+                    // Step 3: Prepare the query based on current filters.
+                    let query = this.getFilteredEventsQuery();
+
+                    // Step 4: Update the Scheduler's eventSettings with the new DataManager and Query.
+                    // This tells the Scheduler to use the 'eventDataManager' as its source and apply the 'query'.
+                    scheduleObj.setProperties({
+                        eventSettings: {
+                            dataSource: eventDataManager,
+                            query: query
+                        }
+                    });
+
+                    // Step 5: Re-bind the data to ensure the Scheduler reflects the changes.
+                    // While setProperties might sometimes trigger a refresh, explicitly calling dataBind is safer
+                    // when dataSource or query changes significantly.
+                    scheduleObj.dataBind();
                 },
 
                 create() {
@@ -1732,12 +1752,57 @@ vacation dec 11 - dec 15
                     this.colorFilters = this.colorFilters.map(() => true);
                 },
 
+                getFilteredEventsQuery() {
+                    let query = new ej.data.Query();
+
+                    if (this.showSearch) {
+                        // Apply color filters from this.colorFilters
+                        const activeColorTypes = [];
+                        for (let i = 0; i < this.colorFilters.length; i++) {
+                            if (this.colorFilters[i]) {
+                                activeColorTypes.push(i + 1); // Event types are 1-based
+                            }
+                        }
+
+                        if (activeColorTypes.length > 0 && activeColorTypes.length < this.COLORS.length) {
+                            // If some, but not all, colors are selected, build a predicate.
+                            let colorPredicate = null;
+                            for (const typeId of activeColorTypes) {
+                                if (colorPredicate === null) {
+                                    colorPredicate = new ej.data.Predicate('Type', 'equal', typeId);
+                                } else {
+                                    colorPredicate = colorPredicate.or('Type', 'equal', typeId);
+                                }
+                            }
+                            query = query.where(colorPredicate);
+                        } else if (activeColorTypes.length === 0 && this.COLORS.length > 0) {
+                            // If no colors are selected (and there are colors to select from), filter out all events.
+                            // Use a predicate that will never be true. Assuming 'Type' is always positive.
+                            query = query.where('Type', 'equal', -1);
+                        }
+                        // If all colors are selected (activeColorTypes.length === this.COLORS.length),
+                        // no 'Type' predicate is added, effectively showing all events (respecting other query parts).
+                    }
+
+                    return query;
+                },
+
                 getFilteredEvents() {
                     if (!this.showSearch) {
                         return this.syncFusionEvents;
                     }
 
-                    return this.syncFusionEvents.filter((event) => this.colorFilters[event.Type - 1]);
+                    return this.syncFusionEvents;
+
+                    return this.syncFusionEvents.filter(event => {
+                        return true;
+
+                        const eventType = parseInt(event.Type || event.type);
+                        // If eventType is not a valid number, just keep the event.
+                        if (isNaN(eventType)) return true;
+                        // If the color filter for the event type is explicitly false, remove it.
+                        return this.colorFilters[eventType - 1] === true;
+                    });
                 },
 
                 jumpToEvent(event) {
