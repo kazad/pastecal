@@ -703,7 +703,8 @@ Copyright (c) 2022 Kalid Azad
         </topbar>
 
         <panel class="flex bg-gray-50 p-1 md:p-3 rounded-sm border mb-4 relative w-full" v-if="isPanelOpen()" v-cloak>
-            <button class="absolute top-0 right-0 m-2 md:m-4 text-gray-500 hover:text-red-500 transition-colors"
+            <button id="closeAllPanels"
+                class="absolute top-0 right-0 m-2 md:m-4 text-gray-500 hover:text-red-500 transition-colors"
                 @click="closeAllPanels">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                     stroke="currentColor" class="w-6 h-6">
@@ -723,7 +724,7 @@ Copyright (c) 2022 Kalid Azad
             </div>
             <div v-if="showSearch" class="m-2 md:m-0 flex flex-col-reverse w-full md:w-1/2" v-cloak>
 
-                <section class="flex-1 bg-white p-4 rounded-lg shadow-sm border flex flex-col space-y-4">
+                <section class="flex-1 flex flex-col space-y-4">
                     <!-- Search Input -->
                     <div class="flex flex-col gap-2">
                         <input type="search" v-model="searchQuery" @input="searchEvents"
@@ -752,7 +753,7 @@ Copyright (c) 2022 Kalid Azad
                             <template v-for="(color, idx) in COLORS">
                                 <span @click="toggleColorFilter(idx)"
                                     class="w-6 h-6 rounded-full cursor-pointer border-2 transition-all"
-                                    :class="{'opacity-100 border-gray-100': colorFilters[idx], 'opacity-50 border-transparent': !colorFilters[idx]}"
+                                    :class="{'opacity-100 border-gray-100': colorFilters[idx], 'opacity-25': !colorFilters[idx]}"
                                     :style="{ backgroundColor: color }">
                                 </span>
                             </template>
@@ -1710,14 +1711,6 @@ vacation dec 11 - dec 15
                     document.execCommand('copy');
                 },
 
-                toggleSearchOld() {
-                    this.showSearch = !this.showSearch;
-                    if (!this.showSearch) {
-                        this.searchQuery = '';
-                        this.searchResults = [];
-                    }
-                },
-
                 searchEvents() {
                     if (this.searchQuery.trim() !== '') {
                         this.searchResults = this.calendar.events.filter(event =>
@@ -1806,11 +1799,25 @@ vacation dec 11 - dec 15
                 },
 
                 closeAllPanels() {
-                    this.showHelp = false;
-                    this.showNotes = false;
-                    this.showSearch = false;
-                    this.showShare = false;
-                    this.showSettings = false;
+                    if (this.showHelp) {
+                        this.toggleHelp();
+                    }
+
+                    if (this.showNotes) {
+                        this.toggleNotes();
+                    }
+
+                    if (this.showSearch) {
+                        this.toggleSearch();
+                    }
+
+                    if (this.showShare) {
+                        this.toggleShare();
+                    }
+
+                    if (this.showSettings) {
+                        this.toggleSettings();
+                    }
                 },
 
                 togglePin(id) {
