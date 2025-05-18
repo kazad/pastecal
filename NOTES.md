@@ -2,6 +2,7 @@ IN PROGRESS:
 
 FUTURE:
 
+- Import other ICS calendars to current pastecal (have a list)
 - Style top bar similar to instacalc
 - Remember recents in localstorage
 - Readonly flag
