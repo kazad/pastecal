@@ -3,7 +3,21 @@ const { onRequest, onCall } = require('firebase-functions/v2/https');
 const { onValueUpdated } = require("firebase-functions/v2/database");
 const admin = require('firebase-admin');
 
-admin.initializeApp();
+const isLocal = process.env.FUNCTIONS_EMULATOR === 'true';
+//console.log('Environment:', process.env);
+console.log('Running in', isLocal ? 'local' : 'production', 'environment');
+
+if (isLocal) {
+    var serviceAccount = require("../internal/keys/pastecal-web-firebase-adminsdk-scf60-24fc54f2df.json");
+
+    admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+        databaseURL: "https://pastecal-web-default-rtdb.firebaseio.com"
+    });
+} else {
+    admin.initializeApp();
+}
+
 
 const DEFAULT_ROOT = "calendars";
 const READONLY_ROOT = "calendars_readonly";
@@ -11,11 +25,14 @@ const READONLY_ROOT = "calendars_readonly";
 // Calendar Data Service
 const CalendarService = {
     parseCalendarPath(path) {
-        const parts = path.split('/');
-        return {
+        //console.log('Parsing calendar path:', path);
+        const parts = path.split('/').filter(x => x); // "/view/123" and "view/123"
+        let ret = {
             isReadOnly: parts[0] === "view",
-            id: parts[0] === "view" ? parts[2] : parts[1]
+            id: parts[0] === "view" ? parts[1] : parts[0]
         };
+        //console.log('Parsed calendar path:', ret);
+        return ret;
     },
 
     async getCalendarData(id, isReadOnly = false) {
@@ -108,10 +125,12 @@ const IDService = {
 // Cloud Functions
 exports.generateICSV2 = onRequest({ cors: true }, async (req, res) => {
     try {
-        const { id, isReadOnly } = CalendarService.parseCalendarPath(req.path);
-        const cleanId = id.replace(/[.]ICS.*/i, '');
+        const pathWithoutICS = req.path.replace(/[.]ICS.*/i, '');
+        //console.log('Path without ICS:', pathWithoutICS);
+        const { id, isReadOnly } = CalendarService.parseCalendarPath(pathWithoutICS);
+        const cleanId = id; //id.replace(/[.]ICS.*/i, '');
 
-        console.log('Generating ICS for calendar ID', req.path, cleanId);
+        console.log('Generating ICS for calendar ID: path, id, readonly', req.path, cleanId, isReadOnly);
 
         const { data: calendarData } = await CalendarService.getCalendarData(cleanId, isReadOnly);
         const icsData = ICSService.generateICS(calendarData, cleanId);
