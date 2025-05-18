@@ -52,16 +52,81 @@ Copyright (c) 2022 Kalid Azad
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
 
     <!-- Syncfusion styles: https://ej2.syncfusion.com/documentation/appearance/theme/ -->
-    <link href="https://cdn.syncfusion.com/ej2/ej2-base/styles/material.css" rel="stylesheet" type="text/css" />
-    <link href="https://cdn.syncfusion.com/ej2/material.css" rel="stylesheet" type="text/css" />
-
-    <!-- Essential JS 2 Scheduler's material theme -->
-    <link href="https://cdn.syncfusion.com/ej2/ej2-schedule/styles/material.css" rel="stylesheet" type="text/css" />
+    <link id="syncfusion-base-theme" href="https://cdn.syncfusion.com/ej2/ej2-base/styles/material.css" rel="stylesheet"
+        type="text/css" />
+    <link id="syncfusion-theme" href="https://cdn.syncfusion.com/ej2/material.css" rel="stylesheet" type="text/css" />
+    <link id="syncfusion-schedule-theme" href="https://cdn.syncfusion.com/ej2/ej2-schedule/styles/material.css"
+        rel="stylesheet" type="text/css" />
 
     <!-- Add Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
 
+    <!-- CSS variables for light/dark theme -->
     <style>
+        :root {
+            --bg: #ffffff;
+            --bg-disabled: #eaeaea;
+
+            --fg: #333333;
+            --link: rgb(3, 169, 244);
+            --link-hover: rgb(3, 140, 214);
+            --panel-bg: #f9fafb;
+            --border-color: #efefef;
+
+            /* text-grey-500, 700 */
+            --text-color-1: #6b7280;
+            --text-color-2: #374151;
+            ;
+        }
+
+        [data-theme="dark"] {
+            --bg: #1e1e1e;
+            --bg-disabled: #333;
+
+            --fg: #cccccc;
+            --link: #4aaaff;
+            --link-hover: #6ec2ff;
+            --panel-bg: #2a2a2a;
+            --border-color: #373737;
+
+            --text-color-1: #999;
+            --text-color-2: #AEAEAE;
+        }
+    </style>
+
+    <style>
+        body {
+            background: var(--bg);
+            color: var(--fg);
+        }
+
+        .border-color-default {
+            border-color: var(--border-color) !important;
+        }
+
+        .text-color-1 {
+            color: var(--text-color-1);
+        }
+
+        .text-color-2 {
+            color: var(--text-color-2);
+        }
+
+        .bg-1 {
+            background: var(--bg);
+        }
+
+        .bg-disabled {
+            background: var(--bg-disabled);
+        }
+
+        select,
+        option,
+        input,
+        textarea {
+            background: var(--bg);
+        }
+
         body a {
             text-decoration: none;
             color: rgb(3, 169, 244);
@@ -196,7 +261,7 @@ Copyright (c) 2022 Kalid Azad
         /* better colors */
         .e-schedule .e-vertical-view .e-work-cells,
         .e-schedule .e-vertical-view .e-date-header-wrap table tbody td {
-            border-color: #efefef;
+            border-color: var(--border-color);
         }
 
         /* some fonts get cut off */
@@ -530,18 +595,18 @@ Copyright (c) 2022 Kalid Azad
 
 <body class="p-1 m-1">
     <div id="app">
-        <topbar class="flex justify-between items-center pb-1 md:pb-3 border-b border-gray-100 text-sm">
+        <topbar class="flex justify-between items-center pb-1 md:pb-3 text-sm">
             <!-- Left section -->
             <section class="flex-1 flex flex-col md:flex-row items-start md:space-x-2 min-w-0">
                 <!-- Logo and app name -->
                 <logo class="flex items-center space-x-2 text-sm h-8">
                     <a href="/" class="flex items-center group">
-                        <img class="h-8 w-8 mr-1.5 flex-shrink-0" src="/img/pastecal.logo.svg" alt="PasteCal Logo">
+                        <img class="h-8 w-8 mr-1.5 flex-shrink-0 dark:brightness-150" src="/img/pastecal.logo.svg"
+                            alt="PasteCal Logo">
                         <div class="flex flex-col">
                             <span
                                 class="text-blue-500 font-medium text-sm hover:text-blue-600 transition-colors">pastecal</span>
-                            <span class="text-gray-400 text-xs hidden lg:block -mt-0.5"
-                                style="font-size: 10px;">no-login
+                            <span class="text-color-1 text-xs hidden lg:block -mt-0.5" style="font-size: 10px;">no-login
                                 shared calendar</span>
                         </div>
                     </a>
@@ -552,7 +617,7 @@ Copyright (c) 2022 Kalid Azad
                     <!-- Recent calendars -->
                     <div class="relative" v-click-outside="closeRecents">
                         <button @click.stop="toggleRecents"
-                            class="text-gray-500 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8"
+                            class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8"
                             title="View recent calendars">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="currentColor"
                                 viewBox="0 0 16 16">
@@ -564,13 +629,13 @@ Copyright (c) 2022 Kalid Azad
 
                         <!-- Dropdown content -->
                         <div v-if="showRecents"
-                            class="absolute top-full left-0 mt-1 bg-white min-w-[250px] shadow-md rounded-md overflow-hidden z-50"
+                            class="absolute top-full left-0 mt-1 bg-1 min-w-[250px] shadow-md rounded-md overflow-hidden z-50"
                             v-cloak>
-                            <div class="py-2 px-3 font-medium text-xs bg-gray-50 border-b text-gray-600">Recently Viewed
+                            <div class="py-2 px-3 font-medium text-xs bg-1 border-b text-color-1">Recently Viewed
                             </div>
                             <div v-for="item in recentCalendars" :key="item.id"
-                                class="flex justify-between items-center py-2 px-3 hover:bg-gray-50 border-b border-gray-100">
-                                <a :href="'/' + item.id" class="text-gray-700 hover:text-blue-500 transition-colors">{{
+                                class="flex justify-between items-center py-2 px-3 hover:bg-1 border-b border-color-default">
+                                <a :href="'/' + item.id" class="text-color-2  hover:text-blue-500 transition-colors">{{
                                     item.title }}</a>
                                 <div class="flex gap-1">
                                     <button @click="togglePin(item.id)"
@@ -582,7 +647,7 @@ Copyright (c) 2022 Kalid Azad
                                         class="p-1 opacity-60 hover:opacity-100 transition-opacity">×</button>
                                 </div>
                             </div>
-                            <div v-if="recentCalendars.length === 0" class="py-4 text-center text-gray-500 text-sm">
+                            <div v-if="recentCalendars.length === 0" class="py-4 text-center text-color-1 text-sm">
                                 No recent calendars
                             </div>
                         </div>
@@ -590,7 +655,7 @@ Copyright (c) 2022 Kalid Azad
 
                     <!-- Help button -->
                     <button v-on:click="toggleHelp"
-                        class="text-gray-500 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8"
+                        class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8"
                         title="Show help">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="currentColor" viewBox="0 0 16 16">
                             <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z" />
@@ -601,7 +666,7 @@ Copyright (c) 2022 Kalid Azad
 
                     <!-- Search button -->
                     <button v-on:click="toggleSearch"
-                        class="text-gray-500 hover:text-blue-500 p-1.5 rounded-full transition-colors"
+                        class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors"
                         title="Search events">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="currentColor" viewBox="0 0 16 16">
                             <path
@@ -611,7 +676,7 @@ Copyright (c) 2022 Kalid Azad
 
                     <!-- Settings button -->
                     <button v-if="!isReadOnly" v-on:click="toggleSettings"
-                        class="text-gray-500 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8"
+                        class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8"
                         title="Settings">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="currentColor" viewBox="0 0 16 16">
                             <path
@@ -632,7 +697,7 @@ Copyright (c) 2022 Kalid Azad
                     class="font-bold cursor-pointer max-w-[150px] md:max-w-xs text-center items-center min-h-8 md:min-h-4 inline-block overflow-hidden hover:text-blue-500 transition-colors"
                     title="Click to edit" v-text="calendar.title"></span>
                 <button v-show="!editTitle" v-on:click="toggleNotes"
-                    class="text-gray-500 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8"
+                    class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8"
                     title="Toggle notes" alt="Notes">
                     <div class="flex items-center">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
@@ -643,8 +708,8 @@ Copyright (c) 2022 Kalid Azad
                         <span class="ml-0.5 text-xs hidden lg:inline">Notes</span>
                     </div>
                 </button>
-                <input type="text" class="border p-1 max-w-[150px] md:max-w-xs h-8" v-show="editTitle"
-                    v-model="calendar.title" @keyup.enter="setTitle($event)">
+                <input type="text" class="border border-color-default p-1 max-w-[150px] md:max-w-xs h-8"
+                    v-show="editTitle" v-model="calendar.title" @keyup.enter="setTitle($event)">
             </section>
 
             <!-- Right section -->
@@ -659,12 +724,12 @@ Copyright (c) 2022 Kalid Azad
                 <div v-if="!isReadOnly">
                     <!-- Existing calendar info -->
                     <div v-show="isExisting"
-                        class="text-gray-500 flex flex-col md:flex-row flex-nowrap items-center space-y-2 md:space-y-0">
-                        <a :href="calendar.id" class="text-gray-600 hover:text-blue-500 transition-colors text-xs">
+                        class="text-color-1 flex flex-col md:flex-row flex-nowrap items-center space-y-2 md:space-y-0">
+                        <a :href="calendar.id" class="text-color-1 hover:text-blue-500 transition-colors text-xs">
                             pastecal.com/<span class="inline-block md:inline">{{calendar.id}}</span>
                         </a>
                         <button v-on:click="toggleShare"
-                            class="ml-1 text-gray-500 hover:text-blue-500 transition-colors flex-shrink-0">
+                            class="ml-1 text-color-1 hover:text-blue-500 transition-colors flex-shrink-0">
                             <span class="hidden">share</span>
                             <span class="inline-block">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 inline" fill="none"
@@ -674,23 +739,18 @@ Copyright (c) 2022 Kalid Azad
                                 </svg>
                             </span>
                         </button>
-                        <div class="hidden flex-shrink-0">
-                            <span class="mx-1 text-gray-300">&middot;</span>
-                            <a :href="calendar.id + '.ics'"
-                                class="text-gray-600 hover:text-blue-500 transition-colors">iCal</a>
-                        </div>
                     </div>
 
                     <!-- New calendar creation -->
                     <div v-show="!isExisting"
                         class="flex items-center flex-col md:flex-row space-y-1 md:space-y-0 relative">
-                        <div class="absolute -top-2.5 right-1 text-gray-400 md:hidden text-xs" style="font-size: 10px">
+                        <div class="absolute -top-2.5 right-1 text-color-1 md:hidden text-xs" style="font-size: 10px">
                             pastecal.com/
                         </div>
                         <div class="text-xs md:text-sm scale-80 md:scale-none">
-                            <span class="text-gray-500 hidden md:inline">pastecal.com/</span>
+                            <span class="text-color-1 hidden md:inline">pastecal.com/</span>
                             <input id="slug"
-                                class="border border-gray-200 focus:border-blue-400 px-1 w-20 text-xs focus:outline-none transition-colors"
+                                class="border border-color-default focus:border-blue-400 px-1 w-20 text-xs focus:outline-none transition-colors"
                                 type="text" :disabled="isExisting" v-model="calendar.id" @keyup.enter="create">
                         </div>
                         <button @click="create" v-show="!isExisting"
@@ -702,9 +762,10 @@ Copyright (c) 2022 Kalid Azad
             </section>
         </topbar>
 
-        <panel class="flex bg-gray-50 p-1 md:p-3 rounded-sm border mb-4 relative w-full" v-if="isPanelOpen()" v-cloak>
+        <panel class="flex bg-1 p-1 md:p-3 rounded-sm border border-color-default mb-4 relative w-full"
+            v-if="isPanelOpen()" v-cloak>
             <button id="closeAllPanels"
-                class="absolute top-0 right-0 m-2 md:m-4 text-gray-500 hover:text-red-500 transition-colors"
+                class="absolute top-0 right-0 m-2 md:m-4 text-color-1 hover:text-red-500 transition-colors"
                 @click="closeAllPanels">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                     stroke="currentColor" class="w-6 h-6">
@@ -714,11 +775,11 @@ Copyright (c) 2022 Kalid Azad
 
             <div v-if="showNotes" class="w-1/2 min-w-[460px] h-[250px] mx-auto p-2.5" v-cloak>
                 <textarea v-if="!isReadOnly"
-                    class="w-full h-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    class="w-full h-full p-2 border border-color-default rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                     placeholder="Notes..." v-model="calendar.options.notes"></textarea>
 
                 <div v-if="isReadOnly"
-                    class="w-full h-full p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    class="w-full h-full p-2 border border-color-default rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                     v-html="getReadOnlyNotes()">
                 </div>
             </div>
@@ -728,7 +789,7 @@ Copyright (c) 2022 Kalid Azad
                     <!-- Search Input -->
                     <div class="flex flex-col gap-2">
                         <input type="search" v-model="searchQuery" @input="searchEvents"
-                            class="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                            class="w-full p-2 border border-color-default rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                             placeholder="Search events...">
                     </div>
 
@@ -736,9 +797,9 @@ Copyright (c) 2022 Kalid Azad
                     <div v-if="searchResults.length > 0" class="max-h-64 overflow-auto">
                         <div v-for="event in searchResults" :key="event.id" @click="jumpToEvent(event)"
                             :style="{ borderLeft: '3px solid ' + getTypeColor(event.type) }"
-                            class="cursor-pointer p-1 pl-4 hover:bg-blue-50 rounded transition-colors mb-1">
-                            <div class="font-semibold text-gray-800">{{ event.title }}</div>
-                            <div class="text-xs text-gray-500">{{ formatDate(event.start) }} - {{
+                            class="cursor-pointer p-1 pl-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors mb-1">
+                            <div class="font-semibold text-color-2">{{ event.title }}</div>
+                            <div class="text-xs text-color-1">{{ formatDate(event.start) }} - {{
                                 formatDate(event.end)}}</div>
                         </div>
                     </div>
@@ -748,12 +809,12 @@ Copyright (c) 2022 Kalid Azad
 
                     <!-- Filter Options -->
                     <div class="flex items-center space-x-2">
-                        <span class="text-xs text-gray-500">Show</span>
+                        <span class="text-xs text-color-1">Show</span>
                         <div class="flex space-x-2">
                             <template v-for="(color, idx) in COLORS">
                                 <span @click="toggleColorFilter(idx)"
                                     class="w-6 h-6 rounded-full cursor-pointer border-2 transition-all"
-                                    :class="{'opacity-100 border-gray-100': colorFilters[idx], 'opacity-25': !colorFilters[idx]}"
+                                    :class="{'opacity-100 border-color-default': colorFilters[idx], 'opacity-25': !colorFilters[idx]}"
                                     :style="{ backgroundColor: color }">
                                 </span>
                             </template>
@@ -761,9 +822,9 @@ Copyright (c) 2022 Kalid Azad
                     </div>
                 </section>
             </div>
-            <div v-if="showHelp" class="text-sm text-gray-700 p-4" v-cloak>
+            <div v-if="showHelp" class="text-sm text-color-2  p-4" v-cloak>
                 <div class="w-full overflow-hidden rounded-lg shadow-md">
-                    <table class="min-w-full divide-y divide-gray-200">
+                    <table class="min-w-full">
                         <thead>
                             <tr class="bg-blue-500 text-white">
                                 <th class="px-6 py-3 text-left text-sm font-medium uppercase tracking-wider w-1/3">
@@ -772,16 +833,16 @@ Copyright (c) 2022 Kalid Azad
                                     How to</th>
                             </tr>
                         </thead>
-                        <tbody class="bg-white divide-y divide-gray-200">
+                        <tbody class="bg-1">
                             <!-- Share a calendar -->
-                            <tr class="hover:bg-gray-50">
+                            <tr class="">
                                 <td class="px-6 py-4 font-medium">Share a calendar</td>
                                 <td class="px-6 py-4">
                                     <p class="mb-2">
-                                        Choose a URL (<code class="bg-gray-100 px-1 rounded">pastecal.com/name</code>)
+                                        Choose a URL (<code class="bg-disabled px-1 rounded">pastecal.com/name</code>)
                                         and save. <br />
                                         For privacy, make it hard to guess:
-                                        <code class="bg-gray-100 px-1 rounded">name-secretword</code>
+                                        <code class="bg-disabled px-1 rounded">name-secretword</code>
                                     </p>
                                     <p>Anyone with the link can view/edit without logging in.</p>
                                 </td>
@@ -789,13 +850,13 @@ Copyright (c) 2022 Kalid Azad
 
 
                             <!-- Link to specific date -->
-                            <tr class="hover:bg-gray-50">
+                            <tr class="">
                                 <td class="px-6 py-4 font-medium">Link to specific date/view</td>
                                 <td class="px-6 py-4">
                                     <p class="mb-2">
                                         Use URL parameters:
                                         <code
-                                            class="bg-gray-100 px-1 rounded">pastecal.com/cal?date=2024-04-01&view=week</code>
+                                            class="bg-disabled px-1 rounded">pastecal.com/cal?date=2024-04-01&view=week</code>
                                     </p>
                                     <p class="mb-2">
                                         <span class="font-medium">Date formats:</span> YYYY-MM-DD, YYMMDD, YYYY.MM.DD
@@ -807,7 +868,7 @@ Copyright (c) 2022 Kalid Azad
                             </tr>
 
                             <!-- View in another app -->
-                            <tr class="hover:bg-gray-50">
+                            <tr class="">
                                 <td class="px-6 py-4 font-medium">Jump between calendars
                                 </td>
                                 <td class="px-6 py-4">
@@ -826,7 +887,7 @@ Copyright (c) 2022 Kalid Azad
                             </tr>
 
                             <!-- Custom event types -->
-                            <tr class="hover:bg-gray-50">
+                            <tr class="">
                                 <td class="px-6 py-4 font-medium">Custom event type labels</td>
                                 <td class="px-6 py-4">
                                     <ol class="list-decimal pl-6 mb-2 space-y-1">
@@ -845,18 +906,18 @@ Copyright (c) 2022 Kalid Azad
 
 
                             <!-- History -->
-                            <tr class="hover:bg-gray-50">
+                            <tr class="">
                                 <td class="px-6 py-4 font-medium">Use calendar in another app (phone, computer, etc.)
                                 </td>
                                 <td class="px-6 py-4">
                                     <p class="mb-2">Import the ICS link in your calendar app, phone:
-                                        <code class="bg-gray-100 px-1 rounded">pastecal.com/name.ics</code>
+                                        <code class="bg-disabled px-1 rounded">pastecal.com/name.ics</code>
                                     </p>
                                     <p>You can set alerts, reminders, etc. in that app.</p>
                                 </td>
                             </tr>
                             <!--  Feedback -->
-                            <tr class="hover:bg-gray-50">
+                            <tr class="">
                                 <td class="px-6 py-4 font-medium">Feedback / bug reports</td>
                                 <td class="px-6 py-4">
                                     <p class="mb-2"><a href="https://github.com/kazad/pastecal/issues"
@@ -879,15 +940,15 @@ Copyright (c) 2022 Kalid Azad
                 <h2 class="text-lg font-bold mb-4">Sharing & Security</h2>
 
                 <div class="grid md:grid-cols-2 gap-6">
-                    <div class="bg-white p-4 rounded-lg shadow-sm border">
+                    <div class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
                         <editlink>
                             <h4 class="font-medium mb-2 capitalize">Full access (editable) calendar link</h4>
-                            <p class="text-xs text-gray-500 mb-2">
+                            <p class="text-xs text-color-1 mb-2">
                                 Anyone with this link can view and change events. No login required.
                             </p>
                             <div class="flex gap-2 mb-8">
                                 <input type="text" :value="getCalendarLink()" readonly @click="copyToClipboard"
-                                    class="flex-1 p-2 border rounded bg-gray-50">
+                                    class="flex-1 p-2 border border-color-default rounded bg-disabled">
                                 <button @click="copyToClipboard($event.target.previousElementSibling)"
                                     class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
@@ -901,7 +962,7 @@ Copyright (c) 2022 Kalid Azad
                                     class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
                                         viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                             d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
                                     </svg>
                                 </button>
@@ -910,13 +971,13 @@ Copyright (c) 2022 Kalid Azad
 
                         <specificview>
                             <h4 class="font-medium mb-2 capitalize">Current date selection and layout</h4>
-                            <p class="text-xs text-gray-500 mb-2">
+                            <p class="text-xs text-color-1 mb-2">
                                 Direct link to a specific day and layout (day, week, month, year, agenda). Useful for
                                 upcoming events.
                             </p>
                             <div class="flex gap-2 mb-8">
                                 <input type="text" :value="currentViewLink" readonly @click="copyToClipboard"
-                                    class="flex-1 p-2 border rounded bg-gray-50">
+                                    class="flex-1 p-2 border border-color-default rounded bg-disabled">
                                 <button @click="copyToClipboard($event.target.previousElementSibling)"
                                     class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
@@ -930,7 +991,7 @@ Copyright (c) 2022 Kalid Azad
                                     class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
                                         viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                             d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
                                     </svg>
                                 </button>
@@ -939,12 +1000,12 @@ Copyright (c) 2022 Kalid Azad
 
                         <icslink>
                             <h4 class="font-medium mb-2 capitalize">ICS link for other apps</h4>
-                            <p class="text-xs text-gray-500 mb-2">
+                            <p class="text-xs text-color-1 mb-2">
                                 Add to your phone, Google calendar, etc. and set alerts in that app.
                             </p>
                             <div class="flex gap-2">
                                 <input type="text" :value="getICSLink()" readonly @click="copyToClipboard"
-                                    class="flex-1 p-2 border rounded bg-gray-50">
+                                    class="flex-1 p-2 border border-color-default rounded bg-disabled">
                                 <button @click="copyToClipboard($event.target.previousElementSibling)"
                                     class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
@@ -958,7 +1019,7 @@ Copyright (c) 2022 Kalid Azad
                                     class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
                                         viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round"
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                             d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
                                     </svg>
                                 </button>
@@ -966,7 +1027,7 @@ Copyright (c) 2022 Kalid Azad
                         </icslink>
                     </div>
 
-                    <div class="bg-white p-4 rounded-lg shadow-sm border">
+                    <div class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
                         <viewonly>
                             <h4 class="font-medium mb-2 inline-flex items-center gap-x-2">
                                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
@@ -977,7 +1038,7 @@ Copyright (c) 2022 Kalid Azad
 
                                 View-Only Calendar Link
                             </h4>
-                            <p class="text-xs text-gray-500 mb-2">
+                            <p class="text-xs text-color-1 mb-2">
                                 A read-only version of this calendar. Users can view events but cannot edit them.
                             </p>
 
@@ -998,7 +1059,7 @@ Copyright (c) 2022 Kalid Azad
                             <div v-else class="space-y-2">
                                 <div class="flex gap-2">
                                     <input type="text" :value="getReadOnlyLink()" readonly @click="copyToClipboard"
-                                        class="flex-1 p-2 border rounded bg-gray-50">
+                                        class="flex-1 p-2 border border-color-default rounded bg-disabled">
                                     <button @click="copyToClipboard($event.target.previousElementSibling)"
                                         class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
@@ -1021,12 +1082,12 @@ Copyright (c) 2022 Kalid Azad
                             </div>
                             <icslink v-if="getReadOnlyLink()" class="block mt-8">
                                 <h4 class="font-medium mb-2 capitalize">View-Only ICS link</h4>
-                                <p class="text-xs text-gray-500 mb-2">
+                                <p class="text-xs text-color-1 mb-2">
                                     ICS link for apps (hides original URL)
                                 </p>
                                 <div class="flex gap-2">
                                     <input type="text" :value="getICSLinkReadOnly()" readonly @click="copyToClipboard"
-                                        class="flex-1 p-2 border rounded bg-gray-50">
+                                        class="flex-1 p-2 border border-color-default rounded bg-disabled">
                                     <button @click="copyToClipboard($event.target.previousElementSibling)"
                                         class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
@@ -1040,7 +1101,7 @@ Copyright (c) 2022 Kalid Azad
                                         class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
                                             viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round"
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                 d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
                                         </svg>
                                     </button>
@@ -1052,14 +1113,14 @@ Copyright (c) 2022 Kalid Azad
                 </div>
             </div>
 
-            <div v-if="showSettings" class="w-full p-2.5 text-sm text-gray-700" v-cloak>
+            <div v-if="showSettings" class="w-full p-2.5 text-sm text-color-2" v-cloak>
                 <h2 class="text-lg font-bold mb-4">Settings</h2>
 
                 <div class="grid md:grid-cols-2 gap-6">
                     <!-- Global Settings -->
-                    <div class="bg-white p-4 rounded-lg shadow-sm border">
-                        <h3 class="font-bold text-gray-800 mb-3">Personal Settings</h3>
-                        <p class="text-xs text-gray-500 mb-4">Settings that apply to your device only, when viewing any
+                    <div class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
+                        <h3 class="font-bold text-color-2 mb-3">Personal Settings</h3>
+                        <p class="text-xs text-color-1 mb-4">Settings that apply to your device only, when viewing any
                             calendar.
                         </p>
 
@@ -1067,7 +1128,7 @@ Copyright (c) 2022 Kalid Azad
                             <div>
                                 <label class="block mb-1 font-medium">First day of week</label>
                                 <select v-model="globalSettings.firstDayOfWeek" @change="saveGlobalSettings"
-                                    class="w-full p-2 border rounded">
+                                    class="w-full p-2 border border-color-default rounded ">
                                     <option value="0">Sunday</option>
                                     <option value="1">Monday</option>
                                 </select>
@@ -1076,7 +1137,7 @@ Copyright (c) 2022 Kalid Azad
                             <div>
                                 <label class="block mb-1 font-medium">Time format</label>
                                 <select v-model="globalSettings.timeFormat" @change="saveGlobalSettings"
-                                    class="w-full p-2 border rounded">
+                                    class="w-full p-2 border border-color-default rounded ">
                                     <option value="12">12-hour (1:00 PM)</option>
                                     <option value="24">24-hour (13:00)</option>
                                 </select>
@@ -1085,7 +1146,7 @@ Copyright (c) 2022 Kalid Azad
                             <div>
                                 <label class="block mb-1 font-medium">Personal default view</label>
                                 <select v-model="globalSettings.defaultView" @change="saveGlobalSettings"
-                                    class="w-full p-2 border rounded">
+                                    class="w-full p-2 border border-color-default rounded ">
                                     <option value="Day">Day</option>
                                     <option value="Week">Week</option>
                                     <option value="Month">Month</option>
@@ -1097,7 +1158,7 @@ Copyright (c) 2022 Kalid Azad
                             <div>
                                 <label class="block mb-1 font-medium">Start hour</label>
                                 <select v-model="globalSettings.startHour" @change="saveGlobalSettings"
-                                    class="w-full p-2 border rounded">
+                                    class="w-full p-2 border border-color-default rounded ">
                                     <option value="00:00">12:00 AM</option>
                                     <option value="05:00">5:00 AM</option>
                                     <option value="06:00">6:00 AM</option>
@@ -1106,13 +1167,21 @@ Copyright (c) 2022 Kalid Azad
                                     <option value="09:00">9:00 AM</option>
                                 </select>
                             </div>
+
+                            <div>
+                                <div class="flex items-center space-x-2">
+                                    <input type="checkbox" v-model="globalSettings.darkMode"
+                                        @change="saveGlobalSettings" id="darkModeCheckbox" />
+                                    <label for="darkModeCheckbox" class="font-medium">Dark mode (this device)</label>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
                     <!-- Calendar-specific Settings -->
-                    <div class="bg-white p-4 rounded-lg shadow-sm border">
-                        <h3 class="font-bold text-gray-800 mb-3">Calendar Settings</h3>
-                        <p class="text-xs text-gray-500 mb-4">Settings that apply to anyone viewing this calendar
+                    <div class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
+                        <h3 class="font-bold text-color-2 mb-3">Calendar Settings</h3>
+                        <p class="text-xs text-color-1 mb-4">Settings that apply to anyone viewing this calendar
                             ({{calendar.title}}).
                         </p>
 
@@ -1125,7 +1194,8 @@ Copyright (c) 2022 Kalid Azad
                                     <div class="w-5 h-5 rounded-full mr-2"
                                         :style="{backgroundColor: getTypeColor(index+1)}"></div>
                                     <input :value="label" @input="updateTypeLabel(index+1, $event.target.value)"
-                                        class="flex-1 p-2 border rounded text-sm" :placeholder="`Type ${index+1}`">
+                                        class="flex-1 p-2 border border-color-default rounded text-sm"
+                                        :placeholder="`Type ${index+1}`">
                                 </div>
                             </div>
 
@@ -1133,7 +1203,7 @@ Copyright (c) 2022 Kalid Azad
                             <div>
                                 <label class="block mb-1 font-medium">Default view for '{{calendar.title}}'</label>
                                 <select v-model="calendar.options.defaultView"
-                                    class=" w-1/3 p-2 border rounded text-sm">
+                                    class=" w-1/3 p-2 border border-color-default rounded text-sm">
                                     <option value="Day">Day</option>
                                     <option value="Week">Week</option>
                                     <option value="Month">Month</option>
@@ -1166,31 +1236,31 @@ Copyright (c) 2022 Kalid Azad
     <script type="text/x-template" id="quick-add-template">
         <span class="inline-flex items-start">
             <button @click="showDialog" 
-                    class="text-gray-500 hover:text-blue-500 p-1.5 rounded-full transition-colors">
+                    class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors">
                 <span class="text-nowrap px-3 py-1 text-white bg-gray-500 rounded-full text-xs hover:bg-blue-600 transition-colors flex-shrink-0">+Event <!-- (⌘E) -->
                 </span>
-                <kbd class="hidden px-1.5 py-0.5 text-xs bg-gray-100 rounded">⌘E</kbd>
+                <kbd class="hidden px-1.5 py-0.5 text-xs bg-disabled rounded">⌘E</kbd>
             </button>
     
             <div v-if="dialogVisible" 
                  class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div class="bg-white rounded-lg p-6 w-[80%] max-w-[500px]">
+                <div class="bg-1 rounded-lg p-6 w-[80%] max-w-[500px]">
                     <h3 class="text-lg font-semibold mb-4">Quick Add Event</h3>
                     <form @submit.prevent="createEvent">
                         <textarea v-model="description" 
                                  placeholder="Enter details ('Meet John tomorrow at 2pm')" 
                                  rows="3" 
                                  @keydown.enter.prevent="handleEnter"
-                                 class="w-full p-2 border rounded mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                 class="w-full p-2 border border-color-default rounded mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
                         </textarea>
     
-                        <div class="bg-gray-50 rounded p-4 mb-4">
+                        <div class="bg-1 rounded p-4 mb-4">
                             <p><strong>Subject:</strong> {{ parsedEvent?.subject }}</p>
                             <p><strong>Start:</strong> {{ formatDate(parsedEvent?.startDateTime) }}</p>
                             <p><strong>End:</strong> {{ formatDate(parsedEvent?.endDateTime) }}</p>
                         </div>
     
-                        <pre class="bg-gray-50 p-4 rounded mb-4 text-sm whitespace-pre">
+                        <pre class="bg-1 p-4 rounded mb-4 text-sm whitespace-pre">
 Examples: 
     
 lunch tomorrow 2pm for 1 hour
@@ -1203,7 +1273,7 @@ vacation dec 11 - dec 15
                         <div class="flex justify-end gap-2">
                             <button type="button" 
                                     @click="hideDialog"
-                                    class="px-4 py-2 border rounded hover:bg-gray-50">
+                                    class="px-4 py-2 border border-color-default rounded hover:bg-gray-50">
                                 Cancel
                             </button>
                             <button type="submit" 
@@ -1360,7 +1430,8 @@ vacation dec 11 - dec 15
                         firstDayOfWeek: '0',
                         timeFormat: '12',
                         defaultView: 'Week',
-                        startHour: '05:00'
+                        startHour: '05:00',
+                        darkMode: false
                     },
                     localSettings: {
                         typeLabels: Array(COLORS.length).fill().map((_, i) => `Type ${i + 1}`)
@@ -1571,6 +1642,7 @@ vacation dec 11 - dec 15
                 // Load and apply global settings after scheduleObj is fully initialized
                 this.loadGlobalSettings();
                 this.applyGlobalSettings();
+                this.applyTheme();
 
                 // extended hours button
                 document.addEventListener('click', (e) => {
@@ -1629,6 +1701,24 @@ vacation dec 11 - dec 15
             },
 
             methods: {
+                // toggle document theme and swap Syncfusion CSS
+                applyTheme() {
+                    const dark = this.globalSettings.darkMode;
+                    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+                    this.swapSyncfusionTheme(dark);
+                },
+                swapSyncfusionTheme(dark) {
+                    document.getElementById('syncfusion-base-theme').href = dark
+                        ? 'https://cdn.syncfusion.com/ej2/ej2-base/styles/material-dark.css'
+                        : 'https://cdn.syncfusion.com/ej2/ej2-base/styles/material.css';
+                    document.getElementById('syncfusion-theme').href = dark
+                        ? 'https://cdn.syncfusion.com/ej2/material-dark.css'
+                        : 'https://cdn.syncfusion.com/ej2/material.css';
+                    document.getElementById('syncfusion-schedule-theme').href = dark
+                        ? 'https://cdn.syncfusion.com/ej2/ej2-schedule/styles/material-dark.css'
+                        : 'https://cdn.syncfusion.com/ej2/ej2-schedule/styles/material.css';
+                },
+
                 clearLocalStorage() {
                     localStorage.removeItem("calendar");
                 },
@@ -2120,6 +2210,7 @@ vacation dec 11 - dec 15
                         }
                     }
                     this.applyGlobalSettings();
+                    this.applyTheme();
                 },
 
                 // settings which are stored in the remote calendar object
