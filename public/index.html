@@ -1176,10 +1176,21 @@ Copyright (c) 2022 Kalid Azad
                             </div>
 
                             <div>
-                                <div class="flex items-center space-x-2">
-                                    <input type="checkbox" v-model="globalSettings.darkMode"
-                                        @change="saveGlobalSettings" id="darkModeCheckbox" />
-                                    <label for="darkModeCheckbox" class="font-medium">Dark mode (this device)</label>
+                                <label class="block text-sm font-medium text-color-2 mb-2">
+                                    Theme
+                                </label>
+                                <div class="relative">
+                                    <select v-model="globalSettings.darkMode" @change="saveGlobalSettings"
+                                        class="appearance-none bg-1 border border-color-default text-color-2 rounded-lg px-4 py-2 pr-8 w-full focus:outline-none focus:ring-2 focus:ring-link focus:border-transparent">
+                                        <option value="auto">🌓 Auto (System)</option>
+                                        <option value="light">☀️ Light</option>
+                                        <option value="dark">🌙 Dark</option>
+                                    </select>
+                                    <div class="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                                        <svg class="w-4 h-4 text-color-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                                        </svg>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1439,7 +1450,7 @@ vacation dec 11 - dec 15
                         timeFormat: '12',
                         defaultView: 'Week',
                         startHour: '05:00',
-                        darkMode: false
+                        darkMode: 'auto'
                     },
                     localSettings: {
                         typeLabels: Array(COLORS.length).fill().map((_, i) => `Type ${i + 1}`)
@@ -1714,11 +1725,20 @@ vacation dec 11 - dec 15
             },
 
             methods: {
-                // toggle document theme and swap Syncfusion CSS
+                // Apply theme based on user preference and system settings
                 applyTheme() {
-                    const dark = this.globalSettings.darkMode;
-                    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-                    this.swapSyncfusionTheme(dark);
+                    let isDark = false;
+                    
+                    if (this.globalSettings.darkMode === 'auto') {
+                        // Use system preference
+                        isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+                    } else {
+                        // Use explicit user preference
+                        isDark = this.globalSettings.darkMode === 'dark';
+                    }
+                    
+                    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+                    this.swapSyncfusionTheme(isDark);
                 },
                 swapSyncfusionTheme(dark) {
                     document.getElementById('syncfusion-base-theme').href = dark
