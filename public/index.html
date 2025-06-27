@@ -330,7 +330,7 @@ Copyright (c) 2022 Kalid Azad
         }
 
         [v-cloak] {
-            display: none;
+            display: none !important;
         }
     </style>
 
@@ -698,7 +698,8 @@ Copyright (c) 2022 Kalid Azad
             </section>
 
             <!-- Middle section - Calendar title -->
-            <section class="flex-1 flex flex-col md:flex-row items-center justify-center mx-1 md:mx-2 min-w-0 h-8">
+            <section class="flex-1 flex flex-col md:flex-row items-center justify-center mx-1 md:mx-2 min-w-0 h-8"
+                v-cloak v-if="!isLoading">
                 <span v-show="!editTitle" @click="editTitle = true"
                     class="font-bold cursor-pointer max-w-[150px] md:max-w-xs text-center items-center min-h-8 md:min-h-4 inline-block overflow-hidden hover:text-blue-500 transition-colors"
                     title="Click to edit" v-text="calendar.title"></span>
@@ -719,7 +720,7 @@ Copyright (c) 2022 Kalid Azad
             </section>
 
             <!-- Right section -->
-            <section class="flex-1 flex items-center justify-end text-xs min-w-0 h-8">
+            <section class="flex-1 flex items-center justify-end text-xs min-w-0 h-8" v-cloak v-if="!isLoading">
 
                 <div v-if="isReadOnly">
                     <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4" role="alert">
@@ -732,7 +733,7 @@ Copyright (c) 2022 Kalid Azad
                     <div v-show="isExisting"
                         class="text-color-1 flex flex-col md:flex-row flex-nowrap items-center space-y-2 md:space-y-0">
                         <a :href="calendar.id" class="text-color-1 hover:text-blue-500 transition-colors text-xs">
-                            pastecal.com/<span class="inline-block md:inline">{{calendar.id}}</span>
+                            pastecal.com/<span class="inline-block md:inline" v-text="calendar.id"></span>
                         </a>
                         <button v-on:click="toggleShare"
                             class="ml-1 text-color-1 hover:text-blue-500 transition-colors flex-shrink-0">
@@ -1410,6 +1411,7 @@ vacation dec 11 - dec 15
 
                 return {
                     isReadOnly: false,
+                    isLoading: true, // set to false when calendar status is determined
                     isExisting: false, // set by callback
                     editTitle: false,
                     calendar: cal,
@@ -1483,8 +1485,9 @@ vacation dec 11 - dec 15
                             this.applyGlobalSettingsAfterRemote();
                             this.remoteSettingsApplied = true;
                         }
+                        this.isLoading = false;
                     });
-                } else {
+                } else if (this.urlslug) {
                     // default: pastecal.com/ID
                     CalendarDataService.subscribe(this.calendar.id, (c) => {
                         this.isExisting = true;
@@ -1497,7 +1500,11 @@ vacation dec 11 - dec 15
                             this.applyGlobalSettingsAfterRemote();
                             this.remoteSettingsApplied = true;
                         }
+                        this.isLoading = false;
                     });
+                } else {
+                    // homepage - no remote calendar to load
+                    this.isLoading = false;
                 }
 
                 window.scheduleObj = new ej.schedule.Schedule();
