@@ -1537,31 +1537,21 @@ vacation dec 11 - dec 15
                         this.isLoading = false;
                     });
                 } else if (this.urlslug) {
-                    // Check if this is a custom slug (exists in readonly calendars)
-                    // If so, redirect to /view/slug, otherwise treat as regular edit calendar
-                    CalendarDataService.subscribe_readonly(this.urlslug, (c) => {
-                        // Custom slug found - redirect to /view/slug
-                        if (c && c.title) {
-                            window.location.href = `/view/${this.urlslug}`;
-                            return;
-                        }
-                    }, (error) => {
-                        // Not a custom slug - treat as regular edit calendar
-                        CalendarDataService.subscribe(this.calendar.id, (c) => {
-                            this.isExisting = true;
-                            this.calendar.import(c);
-                            // Re-initialize local settings to load custom colors and labels
-                            this.initializeLocalSettings();
-                            // Add to recents when calendar loads
-                            this.recentManager.add(this.calendar.id, this.calendar.title);
-                            this.recentCalendars = this.recentManager.getAll();
+                    // default: pastecal.com/ID
+                    CalendarDataService.subscribe(this.calendar.id, (c) => {
+                        this.isExisting = true;
+                        this.calendar.import(c);
+                        // Re-initialize local settings to load custom colors and labels
+                        this.initializeLocalSettings();
+                        // Add to recents when calendar loads
+                        this.recentManager.add(this.calendar.id, this.calendar.title);
+                        this.recentCalendars = this.recentManager.getAll();
 
-                            if (!this.remoteSettingsApplied) {
-                                this.applyGlobalSettingsAfterRemote();
-                                this.remoteSettingsApplied = true;
-                            }
-                            this.isLoading = false;
-                        });
+                        if (!this.remoteSettingsApplied) {
+                            this.applyGlobalSettingsAfterRemote();
+                            this.remoteSettingsApplied = true;
+                        }
+                        this.isLoading = false;
                     });
                 } else {
                     // homepage - no remote calendar to load
