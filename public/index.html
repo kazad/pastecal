@@ -539,6 +539,9 @@ Copyright (c) 2022 Kalid Azad
                             SlugManager.autoCreateReadOnlyLink(calendar);
 
                             callback(calendar);
+                        } else {
+                            // Calendar doesn't exist yet - still call callback with null
+                            callback(null);
                         }
                     })
                 }
@@ -1643,18 +1646,25 @@ vacation dec 11 - dec 15
                 } else if (this.urlslug) {
                     // default: pastecal.com/ID
                     CalendarDataService.subscribe(this.calendar.id, (c) => {
-                        this.isExisting = true;
-                        this.calendar.import(c);
-                        // Re-initialize local settings to load custom colors and labels
-                        this.initializeLocalSettings();
-                        // Add to recents when calendar loads
-                        this.recentManager.add(this.calendar.id, this.calendar.title);
-                        this.recentCalendars = this.recentManager.getAll();
+                        if (c) {
+                            // Existing calendar
+                            this.isExisting = true;
+                            this.calendar.import(c);
+                            // Re-initialize local settings to load custom colors and labels
+                            this.initializeLocalSettings();
+                            // Add to recents when calendar loads
+                            this.recentManager.add(this.calendar.id, this.calendar.title);
+                            this.recentCalendars = this.recentManager.getAll();
 
-                        if (!this.remoteSettingsApplied) {
-                            this.applyGlobalSettingsAfterRemote();
-                            this.remoteSettingsApplied = true;
+                            if (!this.remoteSettingsApplied) {
+                                this.applyGlobalSettingsAfterRemote();
+                                this.remoteSettingsApplied = true;
+                            }
+                        } else {
+                            // New calendar - doesn't exist yet
+                            this.isExisting = false;
                         }
+                        // Always clear loading state
                         this.isLoading = false;
                     });
                 } else {
