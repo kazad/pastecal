@@ -1118,55 +1118,7 @@ Copyright (c) 2022 Kalid Azad
                         </div>
                     </div>
 
-                    <!-- 📱 Phone/Apps (Bottom Left) -->
-                    <div class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
-                        <h4 class="font-medium mb-2 inline-flex items-center gap-x-2">
-                            📱 Phone/Apps
-                        </h4>
-                        <p class="text-xs text-color-1 mb-3">
-                            ICS links for calendar apps (phone, Google Calendar, etc.)
-                        </p>
-                        
-                        <!-- Edit ICS -->
-                        <div class="space-y-3">
-                            <div>
-                                <div class="text-xs font-medium text-color-2 mb-1">Full Access:</div>
-                                <div class="flex gap-2">
-                                    <input type="text" :value="getICSLink()" readonly @click="copyToClipboard"
-                                        class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
-                                    <button @click="copyToClipboard($event.target.previousElementSibling)"
-                                        class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
-                                            viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                        </svg>
-                                        Copy
-                                    </button>
-                                </div>
-                            </div>
-                            
-                            <!-- View-Only ICS -->
-                            <div v-if="getReadOnlyLink()">
-                                <div class="text-xs font-medium text-color-2 mb-1">View Only:</div>
-                                <div class="flex gap-2">
-                                    <input type="text" :value="getICSLinkReadOnly()" readonly @click="copyToClipboard"
-                                        class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
-                                    <button @click="copyToClipboard($event.target.previousElementSibling)"
-                                        class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
-                                            viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                        </svg>
-                                        Copy
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- 🔗 Current View (Bottom Right) -->
+                    <!-- 🔗 Current View (Bottom Left) -->
                     <div class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
                         <h4 class="font-medium mb-2 inline-flex items-center gap-x-2">
                             🔗 Current View
@@ -1194,6 +1146,54 @@ Copyright (c) 2022 Kalid Azad
                                         d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
                                 </svg>
                             </button>
+                        </div>
+                    </div>
+
+                    <!-- 📱 Phone/Apps (Bottom Right) -->
+                    <div class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
+                        <h4 class="font-medium mb-2 inline-flex items-center gap-x-2">
+                            📱 Phone/Apps
+                        </h4>
+                        <p class="text-xs text-color-1 mb-3">
+                            ICS links for calendar apps (phone, Google Calendar, etc.)
+                        </p>
+                        
+                        <!-- Edit ICS -->
+                        <div class="space-y-3">
+                            <div>
+                                <div class="text-xs font-medium text-color-2 mb-1">Full Access:</div>
+                                <div class="flex gap-2">
+                                    <input type="text" :value="getICSLink()" readonly @click="copyToClipboard"
+                                        class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
+                                    <button @click="copyToClipboard($event.target.previousElementSibling)"
+                                        class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
+                                            viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                        </svg>
+                                        Copy
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <!-- View-Only ICS -->
+                            <div v-if="getReadOnlyLink()">
+                                <div class="text-xs font-medium text-color-2 mb-1">View Only:</div>
+                                <div class="flex gap-2">
+                                    <input type="text" :value="getICSLinkReadOnly()" readonly @click="copyToClipboard"
+                                        class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
+                                    <button @click="copyToClipboard($event.target.previousElementSibling)"
+                                        class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
+                                            viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                        </svg>
+                                        Copy
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
 
