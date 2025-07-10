@@ -1489,6 +1489,11 @@ vacation dec 11 - dec 15
             }
         };
 
+        // Slug normalization for consistent lookup
+        function normalizeSlug(slug) {
+            return slug?.toLowerCase();
+        }
+
         const CalendarVueApp = {
             directives: {
                 'click-outside': clickOutside
@@ -1497,7 +1502,8 @@ vacation dec 11 - dec 15
                 var urlslug = window.location.pathname.split("/")[1];
 
                 if (urlslug.match(/^[a-zA-Z0-9_\-]+$/) && urlslug.length < 40) {
-                    // slug is ok
+                    // slug is ok, normalize for consistent lookup
+                    urlslug = normalizeSlug(urlslug);
                 } else {
                     // should redirect back to homepage if we have a bad url;
                     urlslug = null;
@@ -1583,7 +1589,7 @@ vacation dec 11 - dec 15
                 let path = location.pathname;
                 if (path?.startsWith('/view/')) {
                     // Read-only view mode
-                    const viewId = path.split('/')[2];
+                    const viewId = normalizeSlug(path.split('/')[2]);
                     this.isReadOnly = true;
 
                     // Subscribe to the read-only calendar
