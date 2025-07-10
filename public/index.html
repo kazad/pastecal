@@ -977,159 +977,163 @@ Copyright (c) 2022 Kalid Azad
             <div v-if="showShare" class="p-2.5 text-sm w-full" v-cloak>
                 <h2 class="text-lg font-bold mb-4">Sharing & Security</h2>
 
-                <div class="grid md:grid-cols-2 gap-6">
+                <!-- 2x2 Grid Layout -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    
+                    <!-- 📝 Edit Access (Top Left) -->
                     <div class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
-                        <editlink>
-                            <h4 class="font-medium mb-2 capitalize">Full access (editable) calendar link</h4>
-                            <p class="text-xs text-color-1 mb-2">
-                                Anyone with this link can view and change events. No login required.
-                            </p>
-                            <div class="flex gap-2 mb-8">
-                                <input type="text" :value="getCalendarLink()" readonly @click="copyToClipboard"
-                                    class="flex-1 p-2 border border-color-default rounded bg-disabled">
-                                <button @click="copyToClipboard($event.target.previousElementSibling)"
-                                    class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
-                                        viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                    </svg>
-                                    Copy
-                                </button>
-                                <button v-if="canShare()" @click="shareUrl(getCalendarLink(), 'Calendar')"
-                                    class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
-                                        viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
-                                    </svg>
-                                </button>
-                            </div>
-                        </editlink>
-
-                        <specificview>
-                            <h4 class="font-medium mb-2 capitalize">Current date selection and layout</h4>
-                            <p class="text-xs text-color-1 mb-2">
-                                Direct link to a specific day and layout (day, week, month, year, agenda). Useful for
-                                upcoming events.
-                            </p>
-                            <div class="flex gap-2 mb-8">
-                                <input type="text" :value="currentViewLink" readonly @click="copyToClipboard"
-                                    class="flex-1 p-2 border border-color-default rounded bg-disabled">
-                                <button @click="copyToClipboard($event.target.previousElementSibling)"
-                                    class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
-                                        viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                    </svg>
-                                    Copy
-                                </button>
-                                <button v-if="canShare()" @click="shareUrl(currentViewLink, 'Calendar View')"
-                                    class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
-                                        viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
-                                    </svg>
-                                </button>
-                            </div>
-                        </specificview>
-
-                        <icslink>
-                            <h4 class="font-medium mb-2 capitalize">ICS link for other apps</h4>
-                            <p class="text-xs text-color-1 mb-2">
-                                Add to your phone, Google calendar, etc. and set alerts in that app.
-                            </p>
-                            <div class="flex gap-2">
-                                <input type="text" :value="getICSLink()" readonly @click="copyToClipboard"
-                                    class="flex-1 p-2 border border-color-default rounded bg-disabled">
-                                <button @click="copyToClipboard($event.target.previousElementSibling)"
-                                    class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
-                                        viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                    </svg>
-                                    Copy
-                                </button>
-                                <button v-if="canShare()" @click="shareUrl(getICSLink(), 'Calendar ICS')"
-                                    class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
-                                        viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
-                                    </svg>
-                                </button>
-                            </div>
-                        </icslink>
+                        <h4 class="font-medium mb-2 inline-flex items-center gap-x-2">
+                            📝 Edit Access
+                        </h4>
+                        <p class="text-xs text-color-1 mb-3">
+                            Full editing access - anyone can view and change events
+                        </p>
+                        <div class="flex gap-2">
+                            <input type="text" :value="getCalendarLink()" readonly @click="copyToClipboard"
+                                class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
+                            <button @click="copyToClipboard($event.target.previousElementSibling)"
+                                class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                                Copy
+                            </button>
+                            <button v-if="canShare()" @click="shareUrl(getCalendarLink(), 'Calendar')"
+                                class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
+                                </svg>
+                            </button>
+                        </div>
                     </div>
 
+                    <!-- 👁️ View Only (Top Right) -->
                     <div class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
-                        <viewonly>
-                            <h4 class="font-medium mb-2 inline-flex items-center gap-x-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                    stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
-                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                        d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-                                </svg>
+                        <h4 class="font-medium mb-2 inline-flex items-center gap-x-2">
+                            👁️ View Only
+                        </h4>
+                        <p class="text-xs text-color-1 mb-3">
+                            Read-only access - users can view but not edit events
+                        </p>
 
-                                View-Only Calendar Link
-                            </h4>
-                            <p class="text-xs text-color-1 mb-2">
-                                A read-only version of this calendar. Users can view events but cannot edit them.
-                            </p>
-
-                            <!-- If no view-only link exists yet -->
-                            <div v-if="!getReadOnlyLink()" class="space-y-2">
+                        <!-- If no view-only link exists yet -->
+                        <div v-if="!getReadOnlyLink()" class="space-y-2">
+                            <div class="flex gap-2">
+                                <button @click="createReadOnlyLink"
+                                    class="px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center text-sm">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                    </svg>
+                                    Create Link
+                                </button>
+                            </div>
+                            
+                            <!-- Custom slug option -->
+                            <div v-if="showCustomSlugInput" class="border-t pt-2">
                                 <div class="flex gap-2">
-                                    <button @click="createReadOnlyLink"
-                                        class="px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
-                                            viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                                        </svg>
-                                        Create View-Only Link
+                                    <input 
+                                        type="text" 
+                                        v-model="customSlugInput" 
+                                        placeholder="Enter custom name"
+                                        class="flex-1 p-2 border border-color-default rounded bg-bg text-sm"
+                                    >
+                                    <button @click="createCustomReadOnlyLink"
+                                        :disabled="!customSlugInput.trim()"
+                                        class="px-3 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-400 text-xs">
+                                        Custom
                                     </button>
                                 </div>
+                                <div class="text-xs text-color-1 mt-1">
+                                    URL: pastecal.com/view/{{ customSlugInput || 'custom-name' }}
+                                </div>
+                            </div>
+                            
+                            <button @click="showCustomSlugInput = !showCustomSlugInput"
+                                class="text-xs text-blue-500 hover:text-blue-600">
+                                {{ showCustomSlugInput ? 'Use auto-generated instead' : 'Want custom URL?' }}
+                            </button>
+                        </div>
+
+                        <!-- If view-only link already exists -->
+                        <div v-else class="space-y-2">
+                            <div class="flex gap-2">
+                                <input type="text" :value="getReadOnlyLink()" readonly @click="copyToClipboard"
+                                    class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
+                                <button @click="copyToClipboard($event.target.previousElementSibling)"
+                                    class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                    </svg>
+                                    Copy
+                                </button>
+                                <button v-if="canShare()" @click="shareUrl(getReadOnlyLink(), 'Calendar')"
+                                    class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
+                                    </svg>
+                                </button>
+                            </div>
+                            
+                            <!-- Short URL alias -->
+                            <div class="text-xs text-color-1">
+                                Short: pastecal.com/{{ getCurrentSlug() }}
+                            </div>
+                            
+                            <!-- Customize existing link -->
+                            <div class="border-t pt-2">
+                                <button @click="showCustomizeSlug = !showCustomizeSlug"
+                                    class="text-xs text-blue-500 hover:text-blue-600">
+                                    {{ showCustomizeSlug ? 'Cancel' : 'Customize URL' }}
+                                </button>
                                 
-                                <!-- Custom slug option -->
-                                <div v-if="showCustomSlugInput" class="border-t pt-2">
+                                <div v-if="showCustomizeSlug" class="mt-2">
                                     <div class="flex gap-2">
                                         <input 
                                             type="text" 
-                                            v-model="customSlugInput" 
+                                            v-model="customizeSlugInput" 
                                             placeholder="Enter custom name"
                                             class="flex-1 p-2 border border-color-default rounded bg-bg text-sm"
                                         >
-                                        <button @click="createCustomReadOnlyLink"
-                                            :disabled="!customSlugInput.trim()"
-                                            class="px-3 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-400 flex items-center">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
-                                                viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                    d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                                            </svg>
-                                            Create Custom Link
+                                        <button @click="customizeExistingLink"
+                                            :disabled="!customizeSlugInput.trim()"
+                                            class="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-400 text-xs">
+                                            Update
                                         </button>
                                     </div>
                                     <div class="text-xs text-color-1 mt-1">
-                                        URL will be: pastecal.com/view/{{ customSlugInput || 'custom-name' }}
+                                        New: pastecal.com/view/{{ customizeSlugInput || 'custom-name' }}
                                     </div>
                                 </div>
-                                
-                                <button @click="showCustomSlugInput = !showCustomSlugInput"
-                                    class="text-xs text-blue-500 hover:text-blue-600">
-                                    {{ showCustomSlugInput ? 'Use auto-generated link instead' : 'Want a custom URL?' }}
-                                </button>
                             </div>
+                        </div>
+                    </div>
 
-                            <!-- If view-only link already exists -->
-                            <div v-else class="space-y-2">
+                    <!-- 📱 Phone/Apps (Bottom Left) -->
+                    <div class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
+                        <h4 class="font-medium mb-2 inline-flex items-center gap-x-2">
+                            📱 Phone/Apps
+                        </h4>
+                        <p class="text-xs text-color-1 mb-3">
+                            ICS links for calendar apps (phone, Google Calendar, etc.)
+                        </p>
+                        
+                        <!-- Edit ICS -->
+                        <div class="space-y-3">
+                            <div>
+                                <div class="text-xs font-medium text-color-2 mb-1">Full Access:</div>
                                 <div class="flex gap-2">
-                                    <input type="text" :value="getReadOnlyLink()" readonly @click="copyToClipboard"
-                                        class="flex-1 p-2 border border-color-default rounded bg-disabled">
+                                    <input type="text" :value="getICSLink()" readonly @click="copyToClipboard"
+                                        class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
                                     <button @click="copyToClipboard($event.target.previousElementSibling)"
                                         class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
@@ -1139,57 +1143,15 @@ Copyright (c) 2022 Kalid Azad
                                         </svg>
                                         Copy
                                     </button>
-
-                                    <button v-if="canShare()" @click="shareUrl(getReadOnlyLink(), 'Calendar')"
-                                        class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
-                                            viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round"
-                                                d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
-                                        </svg>
-                                    </button>
-                                </div>
-                                
-                                <!-- Short URL alias -->
-                                <div class="text-xs text-color-1">
-                                    Also available at: pastecal.com/{{ getCurrentSlug() }}
-                                </div>
-                                
-                                <!-- Customize existing link -->
-                                <div class="border-t pt-2">
-                                    <button @click="showCustomizeSlug = !showCustomizeSlug"
-                                        class="text-xs text-blue-500 hover:text-blue-600">
-                                        {{ showCustomizeSlug ? 'Cancel' : 'Customize this URL' }}
-                                    </button>
-                                    
-                                    <div v-if="showCustomizeSlug" class="mt-2">
-                                        <div class="flex gap-2">
-                                            <input 
-                                                type="text" 
-                                                v-model="customizeSlugInput" 
-                                                placeholder="Enter custom name"
-                                                class="flex-1 p-2 border border-color-default rounded bg-bg text-sm"
-                                            >
-                                            <button @click="customizeExistingLink"
-                                                :disabled="!customizeSlugInput.trim()"
-                                                class="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-400 text-xs">
-                                                Update
-                                            </button>
-                                        </div>
-                                        <div class="text-xs text-color-1 mt-1">
-                                            New URL: pastecal.com/view/{{ customizeSlugInput || 'custom-name' }}
-                                        </div>
-                                    </div>
                                 </div>
                             </div>
-                            <icslink v-if="getReadOnlyLink()" class="block mt-8">
-                                <h4 class="font-medium mb-2 capitalize">View-Only ICS link</h4>
-                                <p class="text-xs text-color-1 mb-2">
-                                    ICS link for apps (hides original URL)
-                                </p>
+                            
+                            <!-- View-Only ICS -->
+                            <div v-if="getReadOnlyLink()">
+                                <div class="text-xs font-medium text-color-2 mb-1">View Only:</div>
                                 <div class="flex gap-2">
                                     <input type="text" :value="getICSLinkReadOnly()" readonly @click="copyToClipboard"
-                                        class="flex-1 p-2 border border-color-default rounded bg-disabled">
+                                        class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
                                     <button @click="copyToClipboard($event.target.previousElementSibling)"
                                         class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
@@ -1199,19 +1161,42 @@ Copyright (c) 2022 Kalid Azad
                                         </svg>
                                         Copy
                                     </button>
-                                    <button v-if="canShare()" @click="shareUrl(getICSLinkReadOnly(), 'Calendar ICS')"
-                                        class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
-                                            viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
-                                        </svg>
-                                    </button>
                                 </div>
-                            </icslink>
-
-                        </viewonly>
+                            </div>
+                        </div>
                     </div>
+
+                    <!-- 🔗 Current View (Bottom Right) -->
+                    <div class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
+                        <h4 class="font-medium mb-2 inline-flex items-center gap-x-2">
+                            🔗 Current View
+                        </h4>
+                        <p class="text-xs text-color-1 mb-3">
+                            Link to specific date and layout (day, week, month, etc.)
+                        </p>
+                        <div class="flex gap-2">
+                            <input type="text" :value="currentViewLink" readonly @click="copyToClipboard"
+                                class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
+                            <button @click="copyToClipboard($event.target.previousElementSibling)"
+                                class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                </svg>
+                                Copy
+                            </button>
+                            <button v-if="canShare()" @click="shareUrl(currentViewLink, 'Calendar View')"
+                                class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
                 </div>
             </div>
 
