@@ -534,10 +534,10 @@ Copyright (c) 2022 Kalid Azad
                         // console.log(`DataService: loaded ${slug}`, calendar);
                         if (calendar && calendar.id) {
                             this.connected = slug;
-                            
+
                             // Auto-create read-only link if it doesn't exist
                             SlugManager.autoCreateReadOnlyLink(calendar);
-                            
+
                             callback(calendar);
                         }
                     })
@@ -565,7 +565,7 @@ Copyright (c) 2022 Kalid Azad
                     console.log('CalendarDataService.sync()');
                 }
             }
-            
+
 
             static debounce_sync = debounce((cal) => (CalendarDataService.sync(cal)), 500);
 
@@ -953,11 +953,18 @@ Copyright (c) 2022 Kalid Azad
 
                 <!-- 2x2 Grid Layout -->
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    
-                    <!-- 📝 Edit Access (Top Left) -->
+
+                    <!-- Edit Access (Top Left) -->
                     <div class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
                         <h4 class="font-medium mb-2 inline-flex items-center gap-x-2">
-                            📝 Edit Access
+
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                stroke="currentColor" class="size-5">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
+                            </svg>
+
+                            Edit Access
                         </h4>
                         <p class="text-xs text-color-1 mb-3">
                             Full editing access - anyone can view and change events
@@ -976,8 +983,8 @@ Copyright (c) 2022 Kalid Azad
                             </button>
                             <button v-if="canShare()" @click="shareUrl(getEditableURL(), 'Calendar')"
                                 class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
                                 </svg>
@@ -985,10 +992,18 @@ Copyright (c) 2022 Kalid Azad
                         </div>
                     </div>
 
-                    <!-- 👁️ View Only (Top Right) -->
+                    <!--  View Only (Top Right) -->
                     <div class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
                         <h4 class="font-medium mb-2 inline-flex items-center gap-x-2">
-                            👁️ View Only
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                stroke="currentColor" class="size-5">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                            </svg>
+
+                            View Only
                         </h4>
                         <p class="text-xs text-color-1 mb-3">
                             Read-only access - users can view but not edit events
@@ -1017,29 +1032,24 @@ Copyright (c) 2022 Kalid Azad
                                     </svg>
                                 </button>
                             </div>
-                            
+
                             <!-- Short URL alias -->
                             <div class="text-xs text-color-1">
                                 Short: pastecal.com/{{ getReadOnlySlug() }}
                             </div>
-                            
+
                             <!-- Customize existing link -->
-                            <div class="border-t pt-2">
+                            <div class="">
                                 <button @click="showReadOnlySlug = !showReadOnlySlug"
                                     class="text-xs text-blue-500 hover:text-blue-600">
                                     {{ showReadOnlySlug ? 'Cancel' : 'Customize URL' }}
                                 </button>
-                                
+
                                 <div v-if="showReadOnlySlug" class="mt-2">
                                     <div class="flex gap-2">
-                                        <input 
-                                            type="text" 
-                                            v-model="readOnlySlugInput" 
-                                            placeholder="Enter custom name"
-                                            class="flex-1 p-2 border border-color-default rounded bg-bg text-sm"
-                                        >
-                                        <button @click="customizeExistingLink"
-                                            :disabled="!readOnlySlugInput.trim()"
+                                        <input type="text" v-model="readOnlySlugInput" placeholder="Enter custom name"
+                                            class="flex-1 p-2 border border-color-default rounded bg-bg text-sm">
+                                        <button @click="customizeExistingLink" :disabled="!readOnlySlugInput.trim()"
                                             class="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-400 text-xs">
                                             Update
                                         </button>
@@ -1052,10 +1062,16 @@ Copyright (c) 2022 Kalid Azad
                         </div>
                     </div>
 
-                    <!-- 🔗 Current View (Bottom Left) -->
+                    <!-- Current View (Bottom Left) -->
                     <div class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
                         <h4 class="font-medium mb-2 inline-flex items-center gap-x-2">
-                            🔗 Current View
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                stroke="currentColor" class="size-5">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+                            </svg>
+
+                            Current View
                         </h4>
                         <p class="text-xs text-color-1 mb-3">
                             Link to specific date and layout (day, week, month, etc.)
@@ -1074,8 +1090,8 @@ Copyright (c) 2022 Kalid Azad
                             </button>
                             <button v-if="canShare()" @click="shareUrl(currentViewURL, 'Calendar View')"
                                 class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
                                 </svg>
@@ -1083,15 +1099,22 @@ Copyright (c) 2022 Kalid Azad
                         </div>
                     </div>
 
-                    <!-- 📱 Phone/Apps (Bottom Right) -->
+                    <!-- Phone/Apps (Bottom Right) -->
                     <div class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
                         <h4 class="font-medium mb-2 inline-flex items-center gap-x-2">
-                            📱 Phone/Apps
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                stroke="currentColor" class="size-5">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
+                            </svg>
+
+
+                            Phone/Apps
                         </h4>
                         <p class="text-xs text-color-1 mb-3">
-                            ICS links for calendar apps (phone, Google Calendar, etc.)
+                            ICS link for other apps (phone calendar, Outlook, Google Calendar, etc.)
                         </p>
-                        
+
                         <!-- Edit ICS -->
                         <div class="space-y-3">
                             <div>
@@ -1110,7 +1133,7 @@ Copyright (c) 2022 Kalid Azad
                                     </button>
                                 </div>
                             </div>
-                            
+
                             <!-- View-Only ICS -->
                             <div v-if="getReadOnlyURL()">
                                 <div class="text-xs font-medium text-color-2 mb-1">View Only:</div>
@@ -1435,30 +1458,30 @@ vacation dec 11 - dec 15
             static async createReadOnlyLink(calendar, options = {}) {
                 const { customSlug = null, autoCreate = false } = options;
                 const createPublicLink = firebase.functions().httpsCallable('createPublicLink');
-                
+
                 try {
                     const params = { sourceCalendarId: calendar.id };
                     if (customSlug) {
                         params.customSlug = customSlug.trim();
                     }
-                    
+
                     const result = await createPublicLink(params);
                     const { publicViewId } = result.data;
-                    
+
                     // Update calendar options
                     if (!calendar.options) {
                         calendar.options = {};
                     }
                     calendar.options.publicViewId = publicViewId;
-                    
+
                     // Auto-save for auto-creation
                     if (autoCreate) {
                         CalendarDataService.db.child(calendar.id).set(calendar);
                     }
-                    
+
                     console.log(`${autoCreate ? 'Auto-created' : 'Created'} read-only link:`, publicViewId);
                     return publicViewId;
-                    
+
                 } catch (error) {
                     console.error('Error creating read-only link:', error);
                     if (!autoCreate) {
@@ -1576,7 +1599,7 @@ vacation dec 11 - dec 15
                     browserLocale: navigator.language || navigator.userLanguage || 'en-US',
 
                     remoteSettingsApplied: false,
-                    
+
                     // Read-only slug properties
                     showReadOnlySlug: false,
                     readOnlySlugInput: '',
@@ -1986,7 +2009,7 @@ vacation dec 11 - dec 15
 
                 customizeExistingLink() {
                     if (!this.readOnlySlugInput.trim()) return;
-                    
+
                     // Use SlugManager for centralized read-only link operations
                     SlugManager.customizeReadOnlyLink(this.calendar, this.readOnlySlugInput.trim())
                         .then(() => {
