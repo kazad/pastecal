@@ -29,7 +29,7 @@ const CalendarService = {
         const parts = path.split('/').filter(x => x); // "/view/123" and "view/123"
         let ret = {
             isReadOnly: parts[0] === "view",
-            id: parts[0] === "view" ? parts[1] : parts[0]
+            id: parts[0] === "view" ? SlugService.normalizeSlug(parts[1]) : SlugService.normalizeSlug(parts[0])
         };
         //console.log('Parsed calendar path:', ret);
         return ret;
