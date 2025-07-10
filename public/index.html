@@ -567,30 +567,8 @@ Copyright (c) 2022 Kalid Azad
             }
             
             static autoCreateReadOnlyLink(calendar) {
-                // Only auto-create if no existing read-only link
-                if (!calendar.options || !calendar.options.publicViewId) {
-                    
-                    console.log('Auto-creating read-only link for calendar:', calendar.id);
-                    
-                    const createPublicLink = firebase.functions().httpsCallable('createPublicLink');
-                    createPublicLink({ sourceCalendarId: calendar.id })
-                        .then((result) => {
-                            const { publicViewId } = result.data;
-                            
-                            // Update the calendar options
-                            if (!calendar.options) {
-                                calendar.options = {};
-                            }
-                            calendar.options.publicViewId = publicViewId;
-                            
-                            // Save the updated calendar
-                            this.db.child(calendar.id).set(calendar);
-                            console.log('Auto-created read-only link:', publicViewId);
-                        })
-                        .catch((error) => {
-                            console.error('Error auto-creating read-only link:', error);
-                        });
-                }
+                // Use SlugManager for centralized read-only link operations
+                return SlugManager.autoCreateReadOnlyLink(calendar);
             }
 
             static debounce_sync = debounce((cal) => (CalendarDataService.sync(cal)), 500);
@@ -1021,7 +999,7 @@ Copyright (c) 2022 Kalid Azad
                         </p>
 
                         <!-- If no view-only link exists yet -->
-                        <div v-if="!getReadOnlyLink()" class="space-y-2">
+                        <div v-if="!getReadOnlyURL()" class="space-y-2">
                             <div class="flex gap-2">
                                 <button @click="createReadOnlyLink"
                                     class="px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center text-sm">
@@ -1063,7 +1041,7 @@ Copyright (c) 2022 Kalid Azad
                         <!-- If view-only link already exists -->
                         <div v-else class="space-y-2">
                             <div class="flex gap-2">
-                                <input type="text" :value="getReadOnlyLink()" readonly @click="copyToClipboard"
+                                <input type="text" :value="getReadOnlyURL()" readonly @click="copyToClipboard"
                                     class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
                                 <button @click="copyToClipboard($event.target.previousElementSibling)"
                                     class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
@@ -1074,7 +1052,7 @@ Copyright (c) 2022 Kalid Azad
                                     </svg>
                                     Copy
                                 </button>
-                                <button v-if="canShare()" @click="shareUrl(getReadOnlyLink(), 'Calendar')"
+                                <button v-if="canShare()" @click="shareUrl(getReadOnlyURL(), 'Calendar')"
                                     class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
                                         viewBox="0 0 24 24" stroke="currentColor">
@@ -1178,10 +1156,10 @@ Copyright (c) 2022 Kalid Azad
                             </div>
                             
                             <!-- View-Only ICS -->
-                            <div v-if="getReadOnlyLink()">
+                            <div v-if="getReadOnlyURL()">
                                 <div class="text-xs font-medium text-color-2 mb-1">View Only:</div>
                                 <div class="flex gap-2">
-                                    <input type="text" :value="getICSLinkReadOnly()" readonly @click="copyToClipboard"
+                                    <input type="text" :value="getReadOnlyICSURL()" readonly @click="copyToClipboard"
                                         class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
                                     <button @click="copyToClipboard($event.target.previousElementSibling)"
                                         class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
@@ -1489,9 +1467,88 @@ vacation dec 11 - dec 15
             }
         };
 
-        // Slug normalization for consistent lookup
+        // Slug normalization for consistent lookup (matches SlugManager.normalizeSlug)
         function normalizeSlug(slug) {
             return slug?.toLowerCase();
+        }
+
+        // SlugManager static class for centralized read-only link operations
+        class SlugManager {
+            // Normalize slug for consistent lookup (matches backend)
+            static normalizeSlug(slug) {
+                return slug?.toLowerCase();
+            }
+
+            // Core method - handles all read-only link creation scenarios
+            static async createReadOnlyLink(calendar, options = {}) {
+                const { customSlug = null, autoCreate = false } = options;
+                const createPublicLink = firebase.functions().httpsCallable('createPublicLink');
+                
+                try {
+                    const params = { sourceCalendarId: calendar.id };
+                    if (customSlug) {
+                        params.customSlug = customSlug.trim();
+                    }
+                    
+                    const result = await createPublicLink(params);
+                    const { publicViewId } = result.data;
+                    
+                    // Update calendar options
+                    if (!calendar.options) {
+                        calendar.options = {};
+                    }
+                    calendar.options.publicViewId = publicViewId;
+                    
+                    // Auto-save for auto-creation
+                    if (autoCreate) {
+                        CalendarDataService.db.child(calendar.id).set(calendar);
+                    }
+                    
+                    console.log(`${autoCreate ? 'Auto-created' : 'Created'} read-only link:`, publicViewId);
+                    return publicViewId;
+                    
+                } catch (error) {
+                    console.error('Error creating read-only link:', error);
+                    if (!autoCreate) {
+                        alert('Failed to create read-only link: ' + (error.message || 'Please try again.'));
+                    }
+                    throw error;
+                }
+            }
+
+            // Specific read-only link operations with clear naming
+            static autoCreateReadOnlyLink(calendar) {
+                if (!calendar.options?.publicViewId) {
+                    return this.createReadOnlyLink(calendar, { autoCreate: true });
+                }
+            }
+
+            static createReadOnlyLinkWithCustomSlug(calendar, customSlug) {
+                return this.createReadOnlyLink(calendar, { customSlug });
+            }
+
+            static customizeReadOnlyLink(calendar, customSlug) {
+                return this.createReadOnlyLink(calendar, { customSlug });
+            }
+
+            // Helper methods - distinguish between slug and full URL
+            static getReadOnlySlug(calendar) {
+                return calendar.options?.publicViewId;
+            }
+
+            static hasReadOnlyLink(calendar) {
+                return !!(calendar.options?.publicViewId);
+            }
+
+            static getReadOnlyURL(calendar) {
+                const slug = this.getReadOnlySlug(calendar);
+                return slug ? `${window.location.origin}/view/${slug}` : null;
+            }
+
+            static getReadOnlyICSURL(calendar) {
+                const slug = this.getReadOnlySlug(calendar);
+                return slug ? `${window.location.origin}/view/${slug}.ics` : null;
+            }
         }
 
         const CalendarVueApp = {
@@ -1580,6 +1637,7 @@ vacation dec 11 - dec 15
                 // Initialize recents
                 this.recentManager = new RecentCalendars();
                 this.recentCalendars = this.recentManager.getAll();
+
 
                 // Initialize local settings
                 this.initializeLocalSettings();
@@ -1966,81 +2024,37 @@ vacation dec 11 - dec 15
                     return `${window.location.origin}/${this.calendar.id}.ics`;
                 },
 
-                getICSLinkReadOnly() {
-                    let baseUrl = this.getReadOnlyLink();
-                    if (!baseUrl) {
-                        return null;
-                    }
-                    return baseUrl + '.ics';
+                getReadOnlyICSURL() {
+                    // Use SlugManager for centralized read-only link operations
+                    return SlugManager.getReadOnlyICSURL(this.calendar);
                 },
 
                 createReadOnlyLink() {
-                    // Call the Firebase function (auto-generated link)
-                    const createPublicLink = firebase.functions().httpsCallable('createPublicLink');
-                    
-                    createPublicLink({ sourceCalendarId: this.calendar.id })
-                        .then((result) => {
-                            const { publicViewId } = result.data;
-                            if (this.calendar.options) {
-                                this.calendar.options.publicViewId = publicViewId;
-                            } else {
-                                this.calendar.options = { publicViewId };
-                            }
-                        })
-                        .catch((error) => {
-                            console.error('Error creating public link:', error);
-                            alert('Failed to create public link: ' + (error.message || 'Please try again.'));
-                        });
+                    // Use SlugManager for centralized read-only link operations
+                    return SlugManager.createReadOnlyLink(this.calendar);
                 },
 
                 createCustomReadOnlyLink() {
                     if (!this.customSlugInput.trim()) return;
                     
-                    // Call the Firebase function with custom slug
-                    const createPublicLink = firebase.functions().httpsCallable('createPublicLink');
-                    
-                    createPublicLink({ 
-                        sourceCalendarId: this.calendar.id, 
-                        customSlug: this.customSlugInput.trim() 
-                    })
-                        .then((result) => {
-                            const { publicViewId } = result.data;
-                            if (this.calendar.options) {
-                                this.calendar.options.publicViewId = publicViewId;
-                            } else {
-                                this.calendar.options = { publicViewId };
-                            }
+                    // Use SlugManager for centralized read-only link operations
+                    SlugManager.createReadOnlyLinkWithCustomSlug(this.calendar, this.customSlugInput.trim())
+                        .then(() => {
                             // Clear the input and hide the form
                             this.customSlugInput = '';
                             this.showCustomSlugInput = false;
-                        })
-                        .catch((error) => {
-                            console.error('Error creating custom public link:', error);
-                            alert('Failed to create custom link: ' + (error.message || 'Please try again.'));
                         });
                 },
 
                 customizeExistingLink() {
                     if (!this.customizeSlugInput.trim()) return;
                     
-                    // Create new custom link to replace the existing one
-                    const createPublicLink = firebase.functions().httpsCallable('createPublicLink');
-                    
-                    createPublicLink({ 
-                        sourceCalendarId: this.calendar.id, 
-                        customSlug: this.customizeSlugInput.trim() 
-                    })
-                        .then((result) => {
-                            const { publicViewId } = result.data;
-                            this.calendar.options.publicViewId = publicViewId;
-                            
+                    // Use SlugManager for centralized read-only link operations
+                    SlugManager.customizeReadOnlyLink(this.calendar, this.customizeSlugInput.trim())
+                        .then(() => {
                             // Clear the input and hide the form
                             this.customizeSlugInput = '';
                             this.showCustomizeSlug = false;
-                        })
-                        .catch((error) => {
-                            console.error('Error customizing link:', error);
-                            alert('Failed to customize link: ' + (error.message || 'Please try again.'));
                         });
                 },
 
@@ -2051,11 +2065,9 @@ vacation dec 11 - dec 15
                     return '';
                 },
 
-                getReadOnlyLink() {
-                    if (this.calendar.options && this.calendar.options.publicViewId) {
-                        return `${window.location.origin}/view/${this.calendar.options.publicViewId}`;
-                    }
-                    return null;
+                getReadOnlyURL() {
+                    // Use SlugManager for centralized read-only link operations
+                    return SlugManager.getReadOnlyURL(this.calendar);
                 },
 
                 getReadOnlyNotes() {
