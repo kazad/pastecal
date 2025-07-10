@@ -105,9 +105,15 @@ const SlugService = {
         return slugRegex.test(slug) && !reservedWords.includes(slug.toLowerCase());
     },
 
+    normalizeSlug(slug) {
+        // Convert to lowercase for consistent storage and lookup
+        return slug.toLowerCase();
+    },
+
     async isSlugAvailable(slug) {
-        // Check if slug exists in readonly calendars
-        const slugRef = admin.database().ref(READONLY_ROOT).child(slug);
+        // Check if normalized slug exists in readonly calendars
+        const normalizedSlug = this.normalizeSlug(slug);
+        const slugRef = admin.database().ref(READONLY_ROOT).child(normalizedSlug);
         const snapshot = await slugRef.once('value');
         return !snapshot.exists();
     }
@@ -180,7 +186,7 @@ exports.createPublicLink = onCall(async (request) => {
                 throw new functions.https.HttpsError('already-exists', 'Slug is already taken. Please choose a different one.');
             }
             
-            publicViewId = customSlug;
+            publicViewId = SlugService.normalizeSlug(customSlug);
         } else {
             publicViewId = await IDService.generateUniquePublicId();
         }
