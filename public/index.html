@@ -994,48 +994,8 @@ Copyright (c) 2022 Kalid Azad
                             Read-only access - users can view but not edit events
                         </p>
 
-                        <!-- If no view-only link exists yet -->
-                        <div v-if="!getReadOnlyURL()" class="space-y-2">
-                            <div class="flex gap-2">
-                                <button @click="createReadOnlyLink"
-                                    class="px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center text-sm">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
-                                        viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-                                    </svg>
-                                    Create Link
-                                </button>
-                            </div>
-                            
-                            <!-- Custom slug option -->
-                            <div v-if="showCustomSlugInput" class="border-t pt-2">
-                                <div class="flex gap-2">
-                                    <input 
-                                        type="text" 
-                                        v-model="customSlugInput" 
-                                        placeholder="Enter custom name"
-                                        class="flex-1 p-2 border border-color-default rounded bg-bg text-sm"
-                                    >
-                                    <button @click="createCustomReadOnlyLink"
-                                        :disabled="!customSlugInput.trim()"
-                                        class="px-3 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-400 text-xs">
-                                        Custom
-                                    </button>
-                                </div>
-                                <div class="text-xs text-color-1 mt-1">
-                                    URL: pastecal.com/view/{{ customSlugInput || 'custom-name' }}
-                                </div>
-                            </div>
-                            
-                            <button @click="showCustomSlugInput = !showCustomSlugInput"
-                                class="text-xs text-blue-500 hover:text-blue-600">
-                                {{ showCustomSlugInput ? 'Use auto-generated instead' : 'Want custom URL?' }}
-                            </button>
-                        </div>
-
-                        <!-- If view-only link already exists -->
-                        <div v-else class="space-y-2">
+                        <!-- View-only link (auto-created) -->
+                        <div class="space-y-2">
                             <div class="flex gap-2">
                                 <input type="text" :value="getReadOnlyURL()" readonly @click="copyToClipboard"
                                     class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
@@ -1065,27 +1025,27 @@ Copyright (c) 2022 Kalid Azad
                             
                             <!-- Customize existing link -->
                             <div class="border-t pt-2">
-                                <button @click="showCustomizeSlug = !showCustomizeSlug"
+                                <button @click="showReadOnlySlug = !showReadOnlySlug"
                                     class="text-xs text-blue-500 hover:text-blue-600">
-                                    {{ showCustomizeSlug ? 'Cancel' : 'Customize URL' }}
+                                    {{ showReadOnlySlug ? 'Cancel' : 'Customize URL' }}
                                 </button>
                                 
-                                <div v-if="showCustomizeSlug" class="mt-2">
+                                <div v-if="showReadOnlySlug" class="mt-2">
                                     <div class="flex gap-2">
                                         <input 
                                             type="text" 
-                                            v-model="customizeSlugInput" 
+                                            v-model="readOnlySlugInput" 
                                             placeholder="Enter custom name"
                                             class="flex-1 p-2 border border-color-default rounded bg-bg text-sm"
                                         >
                                         <button @click="customizeExistingLink"
-                                            :disabled="!customizeSlugInput.trim()"
+                                            :disabled="!readOnlySlugInput.trim()"
                                             class="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-400 text-xs">
                                             Update
                                         </button>
                                     </div>
                                     <div class="text-xs text-color-1 mt-1">
-                                        New: pastecal.com/view/{{ customizeSlugInput || 'custom-name' }}
+                                        New: pastecal.com/view/{{ readOnlySlugInput || 'custom-name' }}
                                     </div>
                                 </div>
                             </div>
@@ -1617,11 +1577,9 @@ vacation dec 11 - dec 15
 
                     remoteSettingsApplied: false,
                     
-                    // Custom slug properties
-                    customSlugInput: '',
-                    showCustomSlugInput: false,
-                    showCustomizeSlug: false,
-                    customizeSlugInput: '',
+                    // Read-only slug properties
+                    showReadOnlySlug: false,
+                    readOnlySlugInput: '',
                 }
             },
 
@@ -2026,27 +1984,15 @@ vacation dec 11 - dec 15
                     return SlugManager.createReadOnlyLink(this.calendar);
                 },
 
-                createCustomReadOnlyLink() {
-                    if (!this.customSlugInput.trim()) return;
-                    
-                    // Use SlugManager for centralized read-only link operations
-                    SlugManager.createReadOnlyLinkWithCustomSlug(this.calendar, this.customSlugInput.trim())
-                        .then(() => {
-                            // Clear the input and hide the form
-                            this.customSlugInput = '';
-                            this.showCustomSlugInput = false;
-                        });
-                },
-
                 customizeExistingLink() {
-                    if (!this.customizeSlugInput.trim()) return;
+                    if (!this.readOnlySlugInput.trim()) return;
                     
                     // Use SlugManager for centralized read-only link operations
-                    SlugManager.customizeReadOnlyLink(this.calendar, this.customizeSlugInput.trim())
+                    SlugManager.customizeReadOnlyLink(this.calendar, this.readOnlySlugInput.trim())
                         .then(() => {
                             // Clear the input and hide the form
-                            this.customizeSlugInput = '';
-                            this.showCustomizeSlug = false;
+                            this.readOnlySlugInput = '';
+                            this.showReadOnlySlug = false;
                         });
                 },
 
