@@ -963,7 +963,7 @@ Copyright (c) 2022 Kalid Azad
                             Full editing access - anyone can view and change events
                         </p>
                         <div class="flex gap-2">
-                            <input type="text" :value="getCalendarLink()" readonly @click="copyToClipboard"
+                            <input type="text" :value="getEditableURL()" readonly @click="copyToClipboard"
                                 class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
                             <button @click="copyToClipboard($event.target.previousElementSibling)"
                                 class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
@@ -974,7 +974,7 @@ Copyright (c) 2022 Kalid Azad
                                 </svg>
                                 Copy
                             </button>
-                            <button v-if="canShare()" @click="shareUrl(getCalendarLink(), 'Calendar')"
+                            <button v-if="canShare()" @click="shareUrl(getEditableURL(), 'Calendar')"
                                 class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
                                     viewBox="0 0 24 24" stroke="currentColor">
@@ -1101,7 +1101,7 @@ Copyright (c) 2022 Kalid Azad
                             Link to specific date and layout (day, week, month, etc.)
                         </p>
                         <div class="flex gap-2">
-                            <input type="text" :value="currentViewLink" readonly @click="copyToClipboard"
+                            <input type="text" :value="currentViewURL" readonly @click="copyToClipboard"
                                 class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
                             <button @click="copyToClipboard($event.target.previousElementSibling)"
                                 class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
@@ -1112,7 +1112,7 @@ Copyright (c) 2022 Kalid Azad
                                 </svg>
                                 Copy
                             </button>
-                            <button v-if="canShare()" @click="shareUrl(currentViewLink, 'Calendar View')"
+                            <button v-if="canShare()" @click="shareUrl(currentViewURL, 'Calendar View')"
                                 class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
                                     viewBox="0 0 24 24" stroke="currentColor">
@@ -1137,7 +1137,7 @@ Copyright (c) 2022 Kalid Azad
                             <div>
                                 <div class="text-xs font-medium text-color-2 mb-1">Full Access:</div>
                                 <div class="flex gap-2">
-                                    <input type="text" :value="getICSLink()" readonly @click="copyToClipboard"
+                                    <input type="text" :value="getEditableICSURL()" readonly @click="copyToClipboard"
                                         class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
                                     <button @click="copyToClipboard($event.target.previousElementSibling)"
                                         class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
@@ -1588,7 +1588,7 @@ vacation dec 11 - dec 15
                     showSearch: false,
                     showSettings: false,
 
-                    currentViewLink: '',
+                    currentViewURL: '',
                     updateLinkTimer: null, // re-render share link
 
                     searchQuery: '',
@@ -1854,7 +1854,7 @@ vacation dec 11 - dec 15
             watch: {
                 showShare(newValue) {
                     if (newValue) {
-                        this.updateCurrentViewLink();
+                        this.updateCurrentViewURL();
                         this.startUpdateLinkTimer();
                     } else {
                         this.stopUpdateLinkTimer();
@@ -2002,17 +2002,17 @@ vacation dec 11 - dec 15
                     });
                 },
 
-                updateCurrentViewLink() {
+                updateCurrentViewURL() {
                     const currentView = scheduleObj.currentView.toLowerCase();
                     const currentDate = scheduleObj.selectedDate.toISOString().slice(0, 10);
-                    this.currentViewLink = `${window.location.origin}/${this.calendar.id}?date=${currentDate}&view=${currentView}`;
+                    this.currentViewURL = `${window.location.origin}/${this.calendar.id}?date=${currentDate}&view=${currentView}`;
                 },
 
-                getCalendarLink() {
+                getEditableURL() {
                     return `${window.location.origin}/${this.calendar.id}`;
                 },
 
-                getICSLink() {
+                getEditableICSURL() {
                     return `${window.location.origin}/${this.calendar.id}.ics`;
                 },
 
@@ -2087,7 +2087,7 @@ vacation dec 11 - dec 15
 
                 startUpdateLinkTimer() {
                     this.updateLinkTimer = setInterval(() => {
-                        this.updateCurrentViewLink();
+                        this.updateCurrentViewURL();
                     }, 100);
                 },
 
