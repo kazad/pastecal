@@ -1060,7 +1060,7 @@ Copyright (c) 2022 Kalid Azad
                             
                             <!-- Short URL alias -->
                             <div class="text-xs text-color-1">
-                                Short: pastecal.com/{{ getCurrentSlug() }}
+                                Short: pastecal.com/{{ getReadOnlySlug() }}
                             </div>
                             
                             <!-- Customize existing link -->
@@ -2050,11 +2050,9 @@ vacation dec 11 - dec 15
                         });
                 },
 
-                getCurrentSlug() {
-                    if (this.calendar.options && this.calendar.options.publicViewId) {
-                        return this.calendar.options.publicViewId;
-                    }
-                    return '';
+                getReadOnlySlug() {
+                    // Use SlugManager for centralized read-only link operations
+                    return SlugManager.getReadOnlySlug(this.calendar) || '';
                 },
 
                 getReadOnlyURL() {
