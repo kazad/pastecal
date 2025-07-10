@@ -528,19 +528,49 @@ Copyright (c) 2022 Kalid Azad
 
             // subscribe to live updates
             static subscribe(slug, callback) {
+                if (!slug) return;
+                
+                // First try exact case match
+                this.db.child(slug).on('value', async data => {
+                    var calendar = data.val();
+                    if (calendar && calendar.id) {
+                        this.connected = slug;
+                        // Auto-create read-only link if it doesn't exist
+                        SlugManager.autoCreateReadOnlyLink(calendar);
+                        callback(calendar);
+                    } else {
+                        // Calendar not found with exact case - try case-insensitive lookup
+                        try {
+                            const lookupCalendar = firebase.functions().httpsCallable('lookupCalendar');
+                            const result = await lookupCalendar({ slug: slug });
+                            
+                            if (result.data.found) {
+                                // Found with different case - subscribe with correct case
+                                this._subscribeExact(result.data.actualSlug, callback);
+                            } else {
+                                // Calendar doesn't exist in any case
+                                callback(null);
+                            }
+                        } catch (error) {
+                            console.error('Case-insensitive lookup failed:', error);
+                            // Fall back to treating as new calendar
+                            callback(null);
+                        }
+                    }
+                });
+            }
+
+            // internal method for exact subscription without fallback
+            static _subscribeExact(slug, callback) {
                 if (slug) {
                     this.db.child(slug).on('value', data => {
                         var calendar = data.val();
-                        // console.log(`DataService: loaded ${slug}`, calendar);
                         if (calendar && calendar.id) {
                             this.connected = slug;
-
                             // Auto-create read-only link if it doesn't exist
                             SlugManager.autoCreateReadOnlyLink(calendar);
-
                             callback(calendar);
                         } else {
-                            // Calendar doesn't exist yet - still call callback with null
                             callback(null);
                         }
                     })
@@ -559,6 +589,7 @@ Copyright (c) 2022 Kalid Azad
                     })
                 }
             }
+
 
             // only sync if we have existed
             static sync(calendar) {
@@ -1647,7 +1678,7 @@ vacation dec 11 - dec 15
                     // default: pastecal.com/ID
                     CalendarDataService.subscribe(this.calendar.id, (c) => {
                         if (c) {
-                            // Existing calendar
+                            // Calendar found
                             this.isExisting = true;
                             this.calendar.import(c);
                             // Re-initialize local settings to load custom colors and labels
@@ -1661,10 +1692,9 @@ vacation dec 11 - dec 15
                                 this.remoteSettingsApplied = true;
                             }
                         } else {
-                            // New calendar - doesn't exist yet
+                            // Calendar doesn't exist
                             this.isExisting = false;
                         }
-                        // Always clear loading state
                         this.isLoading = false;
                     });
                 } else {

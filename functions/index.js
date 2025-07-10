@@ -116,6 +116,35 @@ const SlugService = {
         const slugRef = admin.database().ref(READONLY_ROOT).child(normalizedSlug);
         const snapshot = await slugRef.once('value');
         return !snapshot.exists();
+    },
+
+    async lookupCalendar(requestedSlug) {
+        const normalizedSlug = this.normalizeSlug(requestedSlug);
+        
+        // Check cache first
+        const cacheRef = admin.database().ref(`/slug_mappings/${normalizedSlug}`);
+        const cached = await cacheRef.once('value');
+        
+        if (cached.val()) {
+            // Found in cache
+            return { found: true, actualSlug: cached.val() };
+        }
+        
+        // Cache miss - scan all calendar keys
+        const calendarsRef = admin.database().ref(`/${DEFAULT_ROOT}`);
+        const snapshot = await calendarsRef.once('value');
+        const allCalendars = snapshot.val() || {};
+        
+        // Find case-insensitive match
+        for (const key of Object.keys(allCalendars)) {
+            if (this.normalizeSlug(key) === normalizedSlug) {
+                // Cache the mapping for future lookups
+                await cacheRef.set(key);
+                return { found: true, actualSlug: key };
+            }
+        }
+        
+        return { found: false };
     }
 };
 
@@ -213,6 +242,22 @@ exports.syncPublicView = onValueUpdated(`/${DEFAULT_ROOT}/{calendarId}`, (event)
 
     const updatedData = JSON.parse(JSON.stringify(afterData));
     return admin.database().ref(`/${READONLY_ROOT}/${publicViewId}`).update(updatedData);
+});
+
+// Case-insensitive calendar lookup function
+exports.lookupCalendar = onCall(async (data, context) => {
+    const requestedSlug = data.slug;
+    
+    if (!requestedSlug) {
+        throw new Error('Slug is required');
+    }
+    
+    try {
+        return await SlugService.lookupCalendar(requestedSlug);
+    } catch (error) {
+        console.error('Calendar lookup error:', error);
+        throw new Error('Failed to lookup calendar');
+    }
 });
 
 /*
