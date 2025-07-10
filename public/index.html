@@ -535,8 +535,7 @@ Copyright (c) 2022 Kalid Azad
                     var calendar = data.val();
                     if (calendar && calendar.id) {
                         this.connected = slug;
-                        // Auto-create read-only link if it doesn't exist
-                        SlugManager.autoCreateReadOnlyLink(calendar);
+                        this.validateCalendarData(calendar);
                         callback(calendar);
                     } else {
                         // Calendar not found with exact case - try case-insensitive lookup
@@ -567,14 +566,27 @@ Copyright (c) 2022 Kalid Azad
                         var calendar = data.val();
                         if (calendar && calendar.id) {
                             this.connected = slug;
-                            // Auto-create read-only link if it doesn't exist
-                            SlugManager.autoCreateReadOnlyLink(calendar);
+                            this.validateCalendarData(calendar);
                             callback(calendar);
                         } else {
                             callback(null);
                         }
                     })
                 }
+            }
+
+            // validate and fix calendar data
+            static validateCalendarData(calendar) {
+                if (!calendar || !calendar.id) return;
+                
+                // Auto-create read-only link if it doesn't exist
+                SlugManager.autoCreateReadOnlyLink(calendar);
+                
+                // Future validation steps can be added here:
+                // - Ensure required fields exist
+                // - Fix malformed data
+                // - Apply data migrations
+                // - Validate event formats
             }
 
             // subscribe to live updates for read-only calendars
