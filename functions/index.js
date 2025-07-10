@@ -198,21 +198,6 @@ exports.createPublicLink = onCall(async (request) => {
     }
 });
 
-exports.checkSlugAvailability = onCall(async (request) => {
-    const { slug } = request.data;
-
-    try {
-        if (!SlugService.validateSlug(slug)) {
-            return { available: false, reason: 'Invalid slug format. Use 3-50 alphanumeric characters, hyphens, or underscores.' };
-        }
-
-        const isAvailable = await SlugService.isSlugAvailable(slug);
-        return { available: isAvailable, reason: isAvailable ? null : 'Slug is already taken.' };
-    } catch (error) {
-        console.error('Error checking slug availability:', error);
-        return { available: false, reason: 'Error checking availability. Please try again.' };
-    }
-});
 
 exports.syncPublicView = onValueUpdated(`/${DEFAULT_ROOT}/{calendarId}`, (event) => {
     const afterData = event.data.after.val();
