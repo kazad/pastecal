@@ -1052,12 +1052,6 @@ Copyright (c) 2022 Kalid Azad
                             <!-- If no view-only link exists yet -->
                             <div v-if="!getReadOnlyLink()" class="space-y-2">
                                 <div class="flex gap-2">
-                                    <input 
-                                        type="text" 
-                                        v-model="customSlugInput" 
-                                        placeholder="Optional custom name"
-                                        class="flex-1 p-2 border border-color-default rounded bg-bg text-sm"
-                                    >
                                     <button @click="createReadOnlyLink"
                                         class="px-3 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
@@ -1065,12 +1059,39 @@ Copyright (c) 2022 Kalid Azad
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                 d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                                         </svg>
-                                        Create Link
+                                        Create View-Only Link
                                     </button>
                                 </div>
-                                <div class="text-xs text-color-1">
-                                    URL will be: pastecal.com/view/{{ customSlugInput || 'random-id' }}
+                                
+                                <!-- Custom slug option -->
+                                <div v-if="showCustomSlugInput" class="border-t pt-2">
+                                    <div class="flex gap-2">
+                                        <input 
+                                            type="text" 
+                                            v-model="customSlugInput" 
+                                            placeholder="Enter custom name"
+                                            class="flex-1 p-2 border border-color-default rounded bg-bg text-sm"
+                                        >
+                                        <button @click="createCustomReadOnlyLink"
+                                            :disabled="!customSlugInput.trim()"
+                                            class="px-3 py-2 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-400 flex items-center">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
+                                                viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                                            </svg>
+                                            Create Custom Link
+                                        </button>
+                                    </div>
+                                    <div class="text-xs text-color-1 mt-1">
+                                        URL will be: pastecal.com/view/{{ customSlugInput || 'custom-name' }}
+                                    </div>
                                 </div>
+                                
+                                <button @click="showCustomSlugInput = !showCustomSlugInput"
+                                    class="text-xs text-blue-500 hover:text-blue-600">
+                                    {{ showCustomSlugInput ? 'Use auto-generated link instead' : 'Want a custom URL?' }}
+                                </button>
                             </div>
 
                             <!-- If view-only link already exists -->
@@ -1098,9 +1119,36 @@ Copyright (c) 2022 Kalid Azad
                                     </button>
                                 </div>
                                 
-                                <!-- Short URL alias for custom slugs -->
-                                <div v-if="isCustomSlug()" class="text-xs text-color-1">
+                                <!-- Short URL alias -->
+                                <div class="text-xs text-color-1">
                                     Also available at: pastecal.com/{{ getCurrentSlug() }}
+                                </div>
+                                
+                                <!-- Customize existing link -->
+                                <div class="border-t pt-2">
+                                    <button @click="showCustomizeSlug = !showCustomizeSlug"
+                                        class="text-xs text-blue-500 hover:text-blue-600">
+                                        {{ showCustomizeSlug ? 'Cancel' : 'Customize this URL' }}
+                                    </button>
+                                    
+                                    <div v-if="showCustomizeSlug" class="mt-2">
+                                        <div class="flex gap-2">
+                                            <input 
+                                                type="text" 
+                                                v-model="customizeSlugInput" 
+                                                placeholder="Enter custom name"
+                                                class="flex-1 p-2 border border-color-default rounded bg-bg text-sm"
+                                            >
+                                            <button @click="customizeExistingLink"
+                                                :disabled="!customizeSlugInput.trim()"
+                                                class="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-400 text-xs">
+                                                Update
+                                            </button>
+                                        </div>
+                                        <div class="text-xs text-color-1 mt-1">
+                                            New URL: pastecal.com/view/{{ customizeSlugInput || 'custom-name' }}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                             <icslink v-if="getReadOnlyLink()" class="block mt-8">
@@ -1500,6 +1548,9 @@ vacation dec 11 - dec 15
                     
                     // Custom slug properties
                     customSlugInput: '',
+                    showCustomSlugInput: false,
+                    showCustomizeSlug: false,
+                    customizeSlugInput: '',
                 }
             },
 
@@ -1902,11 +1953,10 @@ vacation dec 11 - dec 15
                 },
 
                 createReadOnlyLink() {
-                    // Call the Firebase function
+                    // Call the Firebase function (auto-generated link)
                     const createPublicLink = firebase.functions().httpsCallable('createPublicLink');
-                    const customSlug = this.customSlugInput.trim() || null;
                     
-                    createPublicLink({ sourceCalendarId: this.calendar.id, customSlug })
+                    createPublicLink({ sourceCalendarId: this.calendar.id })
                         .then((result) => {
                             const { publicViewId } = result.data;
                             if (this.calendar.options) {
@@ -1914,12 +1964,61 @@ vacation dec 11 - dec 15
                             } else {
                                 this.calendar.options = { publicViewId };
                             }
-                            // Clear the input
-                            this.customSlugInput = '';
                         })
                         .catch((error) => {
                             console.error('Error creating public link:', error);
                             alert('Failed to create public link: ' + (error.message || 'Please try again.'));
+                        });
+                },
+
+                createCustomReadOnlyLink() {
+                    if (!this.customSlugInput.trim()) return;
+                    
+                    // Call the Firebase function with custom slug
+                    const createPublicLink = firebase.functions().httpsCallable('createPublicLink');
+                    
+                    createPublicLink({ 
+                        sourceCalendarId: this.calendar.id, 
+                        customSlug: this.customSlugInput.trim() 
+                    })
+                        .then((result) => {
+                            const { publicViewId } = result.data;
+                            if (this.calendar.options) {
+                                this.calendar.options.publicViewId = publicViewId;
+                            } else {
+                                this.calendar.options = { publicViewId };
+                            }
+                            // Clear the input and hide the form
+                            this.customSlugInput = '';
+                            this.showCustomSlugInput = false;
+                        })
+                        .catch((error) => {
+                            console.error('Error creating custom public link:', error);
+                            alert('Failed to create custom link: ' + (error.message || 'Please try again.'));
+                        });
+                },
+
+                customizeExistingLink() {
+                    if (!this.customizeSlugInput.trim()) return;
+                    
+                    // Create new custom link to replace the existing one
+                    const createPublicLink = firebase.functions().httpsCallable('createPublicLink');
+                    
+                    createPublicLink({ 
+                        sourceCalendarId: this.calendar.id, 
+                        customSlug: this.customizeSlugInput.trim() 
+                    })
+                        .then((result) => {
+                            const { publicViewId } = result.data;
+                            this.calendar.options.publicViewId = publicViewId;
+                            
+                            // Clear the input and hide the form
+                            this.customizeSlugInput = '';
+                            this.showCustomizeSlug = false;
+                        })
+                        .catch((error) => {
+                            console.error('Error customizing link:', error);
+                            alert('Failed to customize link: ' + (error.message || 'Please try again.'));
                         });
                 },
 
@@ -1935,17 +2034,6 @@ vacation dec 11 - dec 15
                         return `${window.location.origin}/view/${this.calendar.options.publicViewId}`;
                     }
                     return null;
-                },
-
-                isCustomSlug() {
-                    if (!this.calendar.options || !this.calendar.options.publicViewId) {
-                        return false;
-                    }
-                    
-                    // Check if it's a custom slug (not a 5-character random ID)
-                    const id = this.calendar.options.publicViewId;
-                    const isRandomId = /^[A-Z0-9]{5}$/.test(id);
-                    return !isRandomId;
                 },
 
                 getReadOnlyNotes() {
