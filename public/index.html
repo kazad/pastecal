@@ -534,6 +534,10 @@ Copyright (c) 2022 Kalid Azad
                         // console.log(`DataService: loaded ${slug}`, calendar);
                         if (calendar && calendar.id) {
                             this.connected = slug;
+                            
+                            // Auto-create read-only link if it doesn't exist
+                            this.autoCreateReadOnlyLink(calendar);
+                            
                             callback(calendar);
                         }
                     })
@@ -559,6 +563,33 @@ Copyright (c) 2022 Kalid Azad
                     // console.log("CalendarDataService.sync()", calendar);
                     this.db.child(calendar.id).set(calendar);
                     console.log('CalendarDataService.sync()');
+                }
+            }
+            
+            static autoCreateReadOnlyLink(calendar) {
+                // Only auto-create if no existing read-only link
+                if (!calendar.options || !calendar.options.publicViewId) {
+                    
+                    console.log('Auto-creating read-only link for calendar:', calendar.id);
+                    
+                    const createPublicLink = firebase.functions().httpsCallable('createPublicLink');
+                    createPublicLink({ sourceCalendarId: calendar.id })
+                        .then((result) => {
+                            const { publicViewId } = result.data;
+                            
+                            // Update the calendar options
+                            if (!calendar.options) {
+                                calendar.options = {};
+                            }
+                            calendar.options.publicViewId = publicViewId;
+                            
+                            // Save the updated calendar
+                            this.db.child(calendar.id).set(calendar);
+                            console.log('Auto-created read-only link:', publicViewId);
+                        })
+                        .catch((error) => {
+                            console.error('Error auto-creating read-only link:', error);
+                        });
                 }
             }
 
