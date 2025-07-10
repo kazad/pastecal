@@ -93,6 +93,26 @@ const ICSService = {
     }
 };
 
+// Slug Validation Service
+const SlugService = {
+    validateSlug(slug) {
+        // Allow alphanumeric characters, hyphens, and underscores
+        // Must be 3-50 characters long
+        // Cannot be 'view' or other reserved words
+        const slugRegex = /^[a-zA-Z0-9-_]{3,50}$/;
+        const reservedWords = ['view', 'api', 'admin', 'www', 'app', 'calendar', 'cal'];
+        
+        return slugRegex.test(slug) && !reservedWords.includes(slug.toLowerCase());
+    },
+
+    async isSlugAvailable(slug) {
+        // Check if slug exists in readonly calendars
+        const slugRef = admin.database().ref(READONLY_ROOT).child(slug);
+        const snapshot = await slugRef.once('value');
+        return !snapshot.exists();
+    }
+};
+
 // ID Generation Service
 const IDService = {
     generateNanoId(length = 21) {
@@ -143,11 +163,27 @@ exports.generateICSV2 = onRequest({ cors: true }, async (req, res) => {
 });
 
 exports.createPublicLink = onCall(async (request) => {
-    const { sourceCalendarId } = request.data;
+    const { sourceCalendarId, customSlug } = request.data;
 
     try {
         const { data: calendarData, ref: sourceCalRef } = await CalendarService.getCalendarData(sourceCalendarId);
-        const publicViewId = await IDService.generateUniquePublicId();
+        let publicViewId;
+
+        // Use custom slug if provided, otherwise generate random ID
+        if (customSlug) {
+            if (!SlugService.validateSlug(customSlug)) {
+                throw new functions.https.HttpsError('invalid-argument', 'Invalid slug format. Use 3-50 alphanumeric characters, hyphens, or underscores.');
+            }
+            
+            const isAvailable = await SlugService.isSlugAvailable(customSlug);
+            if (!isAvailable) {
+                throw new functions.https.HttpsError('already-exists', 'Slug is already taken. Please choose a different one.');
+            }
+            
+            publicViewId = customSlug;
+        } else {
+            publicViewId = await IDService.generateUniquePublicId();
+        }
 
         const publicCalData = JSON.parse(JSON.stringify(calendarData));
 
@@ -159,6 +195,22 @@ exports.createPublicLink = onCall(async (request) => {
         return { publicViewId };
     } catch (error) {
         throw error;
+    }
+});
+
+exports.checkSlugAvailability = onCall(async (request) => {
+    const { slug } = request.data;
+
+    try {
+        if (!SlugService.validateSlug(slug)) {
+            return { available: false, reason: 'Invalid slug format. Use 3-50 alphanumeric characters, hyphens, or underscores.' };
+        }
+
+        const isAvailable = await SlugService.isSlugAvailable(slug);
+        return { available: isAvailable, reason: isAvailable ? null : 'Slug is already taken.' };
+    } catch (error) {
+        console.error('Error checking slug availability:', error);
+        return { available: false, reason: 'Error checking availability. Please try again.' };
     }
 });
 
