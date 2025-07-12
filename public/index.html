@@ -640,13 +640,18 @@ Copyright (c) 2022 Kalid Azad
             }
 
             // subscribe to live updates for read-only calendars
-            static subscribe_readonly(slug, callback) {
+            static subscribe_readonly(slug, callback, notFoundCallback) {
                 if (slug) {
+                    let foundCalendar = false;
                     this.db_readonly.child(slug).on('value', data => {
                         var calendar = data.val();
                         if (calendar && calendar.id) {
                             // don't set connected
+                            foundCalendar = true;
                             callback(calendar);
+                        } else if (!foundCalendar && notFoundCallback) {
+                            // Calendar not found at this path
+                            notFoundCallback();
                         }
                     })
                 }
@@ -1716,26 +1721,52 @@ vacation dec 11 - dec 15
                 let path = location.pathname;
                 if (path?.startsWith('/view/')) {
                     // Read-only view mode
-                    const viewId = SlugManager.normalizeSlug(path.split('/')[2]);
+                    const requestedSlug = path.split('/')[2];
                     this.isReadOnly = true;
 
-                    // Subscribe to the read-only calendar
-                    CalendarDataService.subscribe_readonly(viewId, (c) => {
-                        this.calendar.import(c);
-                        // Re-initialize local settings to load custom colors and labels
-                        this.initializeLocalSettings();
-                        // Add to recents when calendar loads, but mark as read-only
-                        if (c.title) {
-                            this.recentManager.add(viewId, `${c.title} (View Only)`, true);
-                            this.recentCalendars = this.recentManager.getAll();
-                        }
+                    // Always use lookupCalendar for consistent case-insensitive handling
+                    (async () => {
+                        try {
+                            console.log('Looking up calendar for /view/ route:', requestedSlug);
+                            const lookupCalendar = firebase.functions().httpsCallable('lookupCalendar');
+                            const result = await lookupCalendar({ slug: requestedSlug });
+                            
+                            if (result.data.found && result.data.isReadOnly) {
+                                // Found as read-only - subscribe with the actual slug
+                                const actualSlug = result.data.actualSlug;
+                                console.log('Found read-only calendar with slug:', actualSlug);
+                                
+                                CalendarDataService.subscribe_readonly(actualSlug, (c) => {
+                                    this.calendar.import(c);
+                                    // Re-initialize local settings to load custom colors and labels
+                                    this.initializeLocalSettings();
+                                    // Add to recents when calendar loads, but mark as read-only
+                                    if (c.title) {
+                                        this.recentManager.add(actualSlug, `${c.title} (View Only)`, true);
+                                        this.recentCalendars = this.recentManager.getAll();
+                                    }
 
-                        if (!this.remoteSettingsApplied) {
-                            this.applyGlobalSettingsAfterRemote();
-                            this.remoteSettingsApplied = true;
+                                    if (!this.remoteSettingsApplied) {
+                                        this.applyGlobalSettingsAfterRemote();
+                                        this.remoteSettingsApplied = true;
+                                    }
+                                    this.isLoading = false;
+                                });
+                            } else if (result.data.found && !result.data.isReadOnly) {
+                                // Found as editable calendar - show message
+                                this.isLoading = false;
+                                alert('This calendar exists but is not shared for viewing. Ask the owner to create a read-only link.');
+                            } else {
+                                // Calendar doesn't exist at all
+                                this.isLoading = false;
+                                alert('Calendar not found. Please check the URL and try again.');
+                            }
+                        } catch (error) {
+                            console.error('Calendar lookup failed:', error);
+                            this.isLoading = false;
+                            alert('Failed to load calendar. Please try again later.');
                         }
-                        this.isLoading = false;
-                    });
+                    })();
                 } else if (this.urlslug) {
                     // default: pastecal.com/ID
                     CalendarDataService.findAndSubscribe(this.urlslug, (c) => {
