@@ -1734,7 +1734,7 @@ vacation dec 11 - dec 15
                     });
                 } else if (this.urlslug) {
                     // default: pastecal.com/ID
-                    CalendarDataService.findAndSubscribe(this.calendar.id, (c) => {
+                    CalendarDataService.findAndSubscribe(this.urlslug, (c) => {
                         if (c) {
                             // Calendar found
                             this.isExisting = true;
