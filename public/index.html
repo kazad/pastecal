@@ -552,6 +552,12 @@ Copyright (c) 2022 Kalid Azad
                             }
                         } catch (error) {
                             console.error('Case-insensitive lookup failed:', error);
+                            console.error('Error details:', {
+                                message: error.message,
+                                code: error.code,
+                                details: error.details,
+                                stack: error.stack
+                            });
                             // Fall back to treating as new calendar
                             callback(null);
                         }
@@ -618,6 +624,12 @@ Copyright (c) 2022 Kalid Azad
                     }
                 } catch (error) {
                     console.error('Calendar lookup failed:', error);
+                    console.error('Error details:', {
+                        message: error.message,
+                        code: error.code,
+                        details: error.details,
+                        stack: error.stack
+                    });
                     // Fall back to direct subscription
                     this._subscribeExact(slug, callback);
                 }
