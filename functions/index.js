@@ -127,20 +127,43 @@ const SlugService = {
         
         if (cached.val()) {
             // Found in cache
-            return { found: true, actualSlug: cached.val() };
+            const cacheData = cached.val();
+            if (typeof cacheData === 'string') {
+                // Legacy cache format - assume editable
+                return { found: true, actualSlug: cacheData, isReadOnly: false };
+            } else {
+                // New cache format with type
+                return { found: true, actualSlug: cacheData.actualSlug, isReadOnly: cacheData.isReadOnly };
+            }
         }
         
-        // Cache miss - scan all calendar keys
-        const calendarsRef = admin.database().ref(`/${DEFAULT_ROOT}`);
-        const snapshot = await calendarsRef.once('value');
-        const allCalendars = snapshot.val() || {};
+        // Cache miss - scan both editable and read-only calendars
         
-        // Find case-insensitive match
-        for (const key of Object.keys(allCalendars)) {
+        // First check editable calendars
+        const calendarsRef = admin.database().ref(`/${DEFAULT_ROOT}`);
+        const editableSnapshot = await calendarsRef.once('value');
+        const editableCalendars = editableSnapshot.val() || {};
+        
+        // Find case-insensitive match in editable calendars
+        for (const key of Object.keys(editableCalendars)) {
             if (this.normalizeSlug(key) === normalizedSlug) {
                 // Cache the mapping for future lookups
-                await cacheRef.set(key);
-                return { found: true, actualSlug: key };
+                await cacheRef.set({ actualSlug: key, isReadOnly: false });
+                return { found: true, actualSlug: key, isReadOnly: false };
+            }
+        }
+        
+        // Then check read-only calendars
+        const readOnlyRef = admin.database().ref(`/${READONLY_ROOT}`);
+        const readOnlySnapshot = await readOnlyRef.once('value');
+        const readOnlyCalendars = readOnlySnapshot.val() || {};
+        
+        // Find case-insensitive match in read-only calendars
+        for (const key of Object.keys(readOnlyCalendars)) {
+            if (this.normalizeSlug(key) === normalizedSlug) {
+                // Cache the mapping for future lookups
+                await cacheRef.set({ actualSlug: key, isReadOnly: true });
+                return { found: true, actualSlug: key, isReadOnly: true };
             }
         }
         
