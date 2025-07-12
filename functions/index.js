@@ -269,9 +269,12 @@ exports.syncPublicView = onValueUpdated(`/${DEFAULT_ROOT}/{calendarId}`, (event)
 
 // Case-insensitive calendar lookup function
 exports.lookupCalendar = onCall(async (data, context) => {
+    console.log('lookupCalendar called with data:', JSON.stringify(data));
+    
     const requestedSlug = data.slug;
     
     if (!requestedSlug) {
+        console.error('No slug provided in request data:', data);
         throw new Error('Slug is required');
     }
     

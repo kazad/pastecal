@@ -592,12 +592,14 @@ Copyright (c) 2022 Kalid Azad
             // find calendar (with redirect logic) and subscribe
             static async findAndSubscribe(slug, callback) {
                 if (!slug) {
+                    console.warn('findAndSubscribe called with empty slug');
                     callback(null);
                     return;
                 }
                 
                 // First do a lookup to determine calendar type and location
                 try {
+                    console.log('Looking up calendar for slug:', slug);
                     const lookupCalendar = firebase.functions().httpsCallable('lookupCalendar');
                     const result = await lookupCalendar({ slug: slug });
                     
