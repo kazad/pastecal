@@ -540,6 +540,8 @@ Copyright (c) 2022 Kalid Azad
                     } else {
                         // Calendar not found with exact case - try case-insensitive lookup for editable calendars only
                         try {
+                            console.log('Fallback lookup for slug:', slug);
+                            console.log('Calling function with data:', { slug: slug });
                             const lookupCalendar = firebase.functions().httpsCallable('lookupCalendar');
                             const result = await lookupCalendar({ slug: slug });
                             
@@ -606,8 +608,10 @@ Copyright (c) 2022 Kalid Azad
                 // First do a lookup to determine calendar type and location
                 try {
                     console.log('Looking up calendar for slug:', slug);
+                    console.log('Calling function with data:', { slug: slug });
                     const lookupCalendar = firebase.functions().httpsCallable('lookupCalendar');
                     const result = await lookupCalendar({ slug: slug });
+                    console.log('Function result:', result);
                     
                     if (result.data.found) {
                         if (result.data.isReadOnly) {

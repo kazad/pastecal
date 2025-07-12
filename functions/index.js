@@ -268,15 +268,15 @@ exports.syncPublicView = onValueUpdated(`/${DEFAULT_ROOT}/{calendarId}`, (event)
 });
 
 // Case-insensitive calendar lookup function
-exports.lookupCalendar = onCall(async (data, context) => {
+exports.lookupCalendar = onCall(async (request) => {
     try {
-        console.log('lookupCalendar called with slug:', data?.slug);
-        console.log('Request context auth:', context.auth ? 'authenticated' : 'unauthenticated');
+        console.log('lookupCalendar called with request.data:', request.data);
+        console.log('Request context auth:', request.auth ? 'authenticated' : 'unauthenticated');
         
-        const requestedSlug = data?.slug;
+        const requestedSlug = request.data?.slug;
         
         if (!requestedSlug) {
-            const errorMsg = `Slug is required. Received slug: ${data?.slug}`;
+            const errorMsg = `Slug is required. Received slug: ${request.data?.slug}`;
             console.error(errorMsg);
             throw new functions.https.HttpsError('invalid-argument', errorMsg);
         }
@@ -299,7 +299,7 @@ exports.lookupCalendar = onCall(async (data, context) => {
             `Failed to lookup calendar: ${error.message}`, 
             { 
                 originalError: error.message || error.toString(), 
-                slug: data?.slug,
+                slug: request.data?.slug,
                 errorName: error.name
             }
         );
