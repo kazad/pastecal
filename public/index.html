@@ -544,8 +544,14 @@ Copyright (c) 2022 Kalid Azad
                             const result = await lookupCalendar({ slug: slug });
                             
                             if (result.data.found) {
-                                // Found with different case - subscribe with correct case
-                                this._subscribeExact(result.data.actualSlug, callback);
+                                if (result.data.isReadOnly) {
+                                    // Found as read-only calendar - redirect to view URL
+                                    window.location.href = `/view/${result.data.actualSlug}`;
+                                    return; // Don't call callback, we're redirecting
+                                } else {
+                                    // Found as editable calendar - subscribe with correct case
+                                    this._subscribeExact(result.data.actualSlug, callback);
+                                }
                             } else {
                                 // Calendar doesn't exist in any case
                                 callback(null);
