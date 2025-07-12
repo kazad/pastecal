@@ -640,18 +640,13 @@ Copyright (c) 2022 Kalid Azad
             }
 
             // subscribe to live updates for read-only calendars
-            static subscribe_readonly(slug, callback, notFoundCallback) {
+            static subscribe_readonly(slug, callback) {
                 if (slug) {
-                    let foundCalendar = false;
                     this.db_readonly.child(slug).on('value', data => {
                         var calendar = data.val();
                         if (calendar && calendar.id) {
                             // don't set connected
-                            foundCalendar = true;
                             callback(calendar);
-                        } else if (!foundCalendar && notFoundCallback) {
-                            // Calendar not found at this path
-                            notFoundCallback();
                         }
                     })
                 }
