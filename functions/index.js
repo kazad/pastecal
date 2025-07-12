@@ -269,20 +269,39 @@ exports.syncPublicView = onValueUpdated(`/${DEFAULT_ROOT}/{calendarId}`, (event)
 
 // Case-insensitive calendar lookup function
 exports.lookupCalendar = onCall(async (data, context) => {
-    console.log('lookupCalendar called with data:', JSON.stringify(data));
-    
-    const requestedSlug = data.slug;
-    
-    if (!requestedSlug) {
-        console.error('No slug provided in request data:', data);
-        throw new Error('Slug is required');
-    }
-    
     try {
-        return await SlugService.lookupCalendar(requestedSlug);
+        console.log('lookupCalendar called with data:', JSON.stringify(data));
+        console.log('Request context:', {
+            auth: context.auth ? 'authenticated' : 'unauthenticated',
+            rawRequest: context.rawRequest ? 'present' : 'missing'
+        });
+        
+        const requestedSlug = data?.slug;
+        
+        if (!requestedSlug) {
+            const errorMsg = `Slug is required. Received data: ${JSON.stringify(data)}`;
+            console.error(errorMsg);
+            throw new functions.https.HttpsError('invalid-argument', errorMsg);
+        }
+        
+        console.log('Looking up calendar for slug:', requestedSlug);
+        const result = await SlugService.lookupCalendar(requestedSlug);
+        console.log('Lookup result:', JSON.stringify(result));
+        
+        return result;
     } catch (error) {
         console.error('Calendar lookup error:', error);
-        throw new Error('Failed to lookup calendar');
+        
+        // If it's already an HttpsError, re-throw it
+        if (error instanceof functions.https.HttpsError) {
+            throw error;
+        }
+        
+        // Otherwise, wrap it in an HttpsError with details
+        throw new functions.https.HttpsError('internal', 
+            `Failed to lookup calendar: ${error.message}`, 
+            { originalError: error.toString(), slug: data?.slug }
+        );
     }
 });
 
