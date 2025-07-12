@@ -538,22 +538,16 @@ Copyright (c) 2022 Kalid Azad
                         this.validateCalendarData(calendar);
                         callback(calendar);
                     } else {
-                        // Calendar not found with exact case - try case-insensitive lookup
+                        // Calendar not found with exact case - try case-insensitive lookup for editable calendars only
                         try {
                             const lookupCalendar = firebase.functions().httpsCallable('lookupCalendar');
                             const result = await lookupCalendar({ slug: slug });
                             
-                            if (result.data.found) {
-                                if (result.data.isReadOnly) {
-                                    // Found as read-only calendar - redirect to view URL
-                                    window.location.href = `/view/${result.data.actualSlug}`;
-                                    return; // Don't call callback, we're redirecting
-                                } else {
-                                    // Found as editable calendar - subscribe with correct case
-                                    this._subscribeExact(result.data.actualSlug, callback);
-                                }
+                            if (result.data.found && !result.data.isReadOnly) {
+                                // Found as editable calendar - subscribe with correct case
+                                this._subscribeExact(result.data.actualSlug, callback);
                             } else {
-                                // Calendar doesn't exist in any case
+                                // Calendar doesn't exist as editable
                                 callback(null);
                             }
                         } catch (error) {
@@ -593,6 +587,38 @@ Copyright (c) 2022 Kalid Azad
                 // - Fix malformed data
                 // - Apply data migrations
                 // - Validate event formats
+            }
+
+            // find calendar (with redirect logic) and subscribe
+            static async findAndSubscribe(slug, callback) {
+                if (!slug) {
+                    callback(null);
+                    return;
+                }
+                
+                // First do a lookup to determine calendar type and location
+                try {
+                    const lookupCalendar = firebase.functions().httpsCallable('lookupCalendar');
+                    const result = await lookupCalendar({ slug: slug });
+                    
+                    if (result.data.found) {
+                        if (result.data.isReadOnly) {
+                            // Found as read-only calendar - redirect to view URL
+                            window.location.href = `/view/${result.data.actualSlug}`;
+                            return; // Don't call callback, we're redirecting
+                        } else {
+                            // Found as editable calendar - subscribe with correct case
+                            this._subscribeExact(result.data.actualSlug, callback);
+                        }
+                    } else {
+                        // Calendar doesn't exist in any case - try direct subscription (might be new)
+                        this._subscribeExact(slug, callback);
+                    }
+                } catch (error) {
+                    console.error('Calendar lookup failed:', error);
+                    // Fall back to direct subscription
+                    this._subscribeExact(slug, callback);
+                }
             }
 
             // subscribe to live updates for read-only calendars
@@ -1694,7 +1720,7 @@ vacation dec 11 - dec 15
                     });
                 } else if (this.urlslug) {
                     // default: pastecal.com/ID
-                    CalendarDataService.subscribe(this.calendar.id, (c) => {
+                    CalendarDataService.findAndSubscribe(this.calendar.id, (c) => {
                         if (c) {
                             // Calendar found
                             this.isExisting = true;
