@@ -57,3 +57,19 @@ shared : {
 - Once it's password protected, can't be un-protected [for simplicity]
 - One of the problems is anyone can make a test calendar, then decide to password protect it. Any user has admin access. ok.
 - We should have server-side functions which are doing the syncing here? Or keep it simple. Have the client write to the shared entry as needed.
+
+---
+Troubleshooting: to import calendar items
+
+const events = [... (event data)]
+
+// programatically import
+
+events.forEach(event => {
+    app.handleQuickAddEvent({
+      subject: event.title,
+      startDateTime: event.start,
+      endDateTime: event.end,
+      type: event.type
+    });
+  });
