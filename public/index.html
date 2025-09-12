@@ -529,7 +529,7 @@ Copyright (c) 2022 Kalid Azad
             // subscribe to live updates
             static subscribe(slug, callback) {
                 if (!slug) return;
-                
+
                 // First try exact case match
                 this.db.child(slug).on('value', async data => {
                     var calendar = data.val();
@@ -544,7 +544,7 @@ Copyright (c) 2022 Kalid Azad
                             console.log('Calling function with data:', { slug: slug });
                             const lookupCalendar = firebase.functions().httpsCallable('lookupCalendar');
                             const result = await lookupCalendar({ slug: slug });
-                            
+
                             if (result.data.found && !result.data.isReadOnly) {
                                 // Found as editable calendar - subscribe with correct case
                                 this._subscribeExact(result.data.actualSlug, callback);
@@ -586,10 +586,10 @@ Copyright (c) 2022 Kalid Azad
             // validate and fix calendar data
             static validateCalendarData(calendar) {
                 if (!calendar || !calendar.id) return;
-                
+
                 // Auto-create read-only link if it doesn't exist
                 SlugManager.autoCreateReadOnlyLink(calendar);
-                
+
                 // Future validation steps can be added here:
                 // - Ensure required fields exist
                 // - Fix malformed data
@@ -604,7 +604,7 @@ Copyright (c) 2022 Kalid Azad
                     callback(null);
                     return;
                 }
-                
+
                 // First do a lookup to determine calendar type and location
                 try {
                     console.log('Looking up calendar for slug:', slug);
@@ -612,7 +612,7 @@ Copyright (c) 2022 Kalid Azad
                     const lookupCalendar = firebase.functions().httpsCallable('lookupCalendar');
                     const result = await lookupCalendar({ slug: slug });
                     console.log('Function result:', result);
-                    
+
                     if (result.data.found) {
                         if (result.data.isReadOnly) {
                             // Found as read-only calendar - redirect to view URL
@@ -706,59 +706,43 @@ Copyright (c) 2022 Kalid Azad
             <!-- Left section -->
             <section class="flex-1 flex flex-col md:flex-row items-start md:space-x-2 min-w-0">
                 <!-- Logo and app name -->
-                <logo class="flex items-center space-x-2 text-sm h-8">
-                    <a href="/" class="flex items-center group">
-                        <img class="h-8 w-8 mr-1.5 flex-shrink-0 dark:brightness-150" src="/img/pastecal.logo.svg"
-                            alt="PasteCal Logo">
-                        <div class="flex flex-col">
-                            <span
-                                class="text-blue-500 font-medium text-sm hover:text-blue-600 transition-colors">pastecal</span>
-                            <span class="text-color-1 text-xs hidden lg:block -mt-0.5" style="font-size: 10px;">no-login
-                                shared calendar</span>
+                <logo class="flex items-center text-sm h-8 relative">
+                    <div class="relative" v-click-outside="closeRecents" @mouseenter="handleDropdownMouseEnter"
+                        @mouseleave="handleDropdownMouseLeave">
+                        <div class="flex items-center space-x-2">
+                            <a @click.prevent="toggleRecents" class="flex items-center group cursor-pointer">
+                                <img class="h-8 w-8 mr-1.5 flex-shrink-0 dark:brightness-150" src="/img/pastecal.logo.svg"
+                                    alt="PasteCal Logo">
+                                <div class="flex flex-col">
+                                    <span
+                                        class="text-blue-500 font-medium text-sm hover:text-blue-600 transition-colors">pastecal</span>
+                                    <span class="text-color-1 text-xs hidden lg:block -mt-0.5"
+                                        style="font-size: 10px;">no-login
+                                        shared calendar</span>
+                                </div>
+                            </a>
+                            
+                            <!-- Dropdown arrow indicator -->
+                            <button @click.stop="toggleRecents" class="text-color-1 hover:text-blue-500 p-1 transition-colors" title="Recent calendars">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="currentColor" viewBox="0 0 16 16">
+                                    <path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/>
+                                </svg>
+                            </button>
                         </div>
-                    </a>
+
+                        <!-- Navigation dropdown component -->
+                        <navigation-dropdown v-if="showRecents" 
+                                           :recent-calendars="recentCalendars"
+                                           @go-homepage="goToHomepage"
+                                           @toggle-pin="togglePin"
+                                           @remove-recent="removeRecent"
+                                           v-cloak>
+                        </navigation-dropdown>
+                    </div>
                 </logo>
 
                 <!-- Action buttons -->
                 <buttonarea class="flex items-center space-x-1 mt-0">
-                    <!-- Recent calendars -->
-                    <div class="relative" v-click-outside="closeRecents">
-                        <button @click.stop="toggleRecents"
-                            class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8"
-                            title="View recent calendars">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="currentColor"
-                                viewBox="0 0 16 16">
-                                <path
-                                    d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71V3.5z" />
-                                <path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0z" />
-                            </svg>
-                        </button>
-
-                        <!-- Dropdown content -->
-                        <div v-if="showRecents"
-                            class="absolute top-full left-0 mt-1 bg-1 min-w-[250px] shadow-md rounded-md overflow-hidden z-50"
-                            v-cloak>
-                            <div class="py-2 px-3 font-medium text-xs bg-1 border-b text-color-1">Recently Viewed
-                            </div>
-                            <div v-for="item in recentCalendars" :key="item.id"
-                                class="flex justify-between items-center py-2 px-3 hover:bg-1 border-b border-color-default">
-                                <a :href="'/' + item.id" class="text-color-2  hover:text-blue-500 transition-colors">{{
-                                    item.title }}</a>
-                                <div class="flex gap-1">
-                                    <button @click="togglePin(item.id)"
-                                        class="p-1 opacity-60 hover:opacity-100 transition-opacity"
-                                        :class="{ 'text-blue-500 opacity-100': item.pinned }">
-                                        📌
-                                    </button>
-                                    <button @click="removeRecent(item.id)"
-                                        class="p-1 opacity-60 hover:opacity-100 transition-opacity">×</button>
-                                </div>
-                            </div>
-                            <div v-if="recentCalendars.length === 0" class="py-4 text-center text-color-1 text-sm">
-                                No recent calendars
-                            </div>
-                        </div>
-                    </div>
 
                     <!-- Help button -->
                     <button v-on:click="toggleHelp"
@@ -833,6 +817,7 @@ Copyright (c) 2022 Kalid Azad
                     <!-- Existing calendar info -->
                     <div v-show="isExisting"
                         class="text-color-1 flex flex-col md:flex-row flex-nowrap items-center space-y-2 md:space-y-0">
+
                         <a :href="calendar.id" class="text-color-1 hover:text-blue-500 transition-colors text-xs">
                             pastecal.com/<span class="inline-block md:inline" v-text="calendar.id"></span>
                         </a>
@@ -1396,6 +1381,76 @@ Copyright (c) 2022 Kalid Azad
         <pre v-text="calendar" v-if="debug"></pre>
     </div>
 
+    <script type="text/x-template" id="navigation-dropdown-template">
+        <div class="absolute top-full left-0 mt-2 bg-1 min-w-[280px] shadow-lg rounded-lg border border-color-default overflow-hidden z-50">
+            <!-- Homepage option -->
+            <a @click.prevent="$emit('go-homepage')"
+                class="flex items-center px-4 py-3 text-color-2 hover:bg-1 transition-colors cursor-pointer group">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                    stroke-width="1.5" stroke="currentColor"
+                    class="w-5 h-5 mr-3 text-color-1 group-hover:text-blue-500 transition-colors">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                        d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+                </svg>
+                <span class="font-medium group-hover:text-blue-500 transition-colors">Homepage</span>
+            </a>
+
+            <!-- Recent calendars -->
+            <div v-if="recentCalendars.length > 0">
+                <div class="px-4 py-2 text-xs font-semibold text-color-1 uppercase tracking-wider bg-1 border-t border-color-default">
+                    Recent Calendars
+                </div>
+                <div v-for="item in recentCalendars" :key="item.id"
+                    class="flex justify-between items-center px-4 py-3 hover:bg-1 transition-colors group">
+                    <a :href="'/' + item.id" class="flex-1 min-w-0 mr-3">
+                        <div class="text-color-2 font-medium truncate group-hover:text-blue-500 transition-colors">
+                            {{ item.title }}
+                        </div>
+                        <div class="text-xs text-color-1 truncate">
+                            pastecal.com/{{ item.id }}
+                        </div>
+                    </a>
+                    <div class="flex items-center gap-1 transition-opacity"
+                         :class="{ 'opacity-100': item.pinned, 'opacity-0 group-hover:opacity-100': !item.pinned }">
+                        <button @click.stop="$emit('toggle-pin', item.id)"
+                            class="p-1.5 rounded-md hover:bg-1 transition-colors text-color-1"
+                            :class="{ 'text-color-2': item.pinned }"
+                            :title="item.pinned ? 'Unpin calendar' : 'Pin calendar'">
+                            <!-- Filled star when pinned -->
+                            <svg v-if="item.pinned" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4">
+                                <path fill-rule="evenodd" d="M10.788 3.21c.448-1.077 1.976-1.077 2.424 0l2.082 5.006 5.404.434c1.164.093 1.636 1.545.749 2.305l-4.117 3.527 1.257 5.273c.271 1.136-.964 2.033-1.96 1.425L12 18.354 7.373 21.18c-.996.608-2.231-.29-1.96-1.425l1.257-5.273-4.117-3.527c-.887-.76-.415-2.212.749-2.305l5.404-.434 2.082-5.005Z" clip-rule="evenodd" />
+                            </svg>
+                            <!-- Outline star when not pinned -->
+                            <svg v-else xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
+                            </svg>
+                        </button>
+                        <button @click.stop="$emit('remove-recent', item.id)"
+                            class="p-1.5 rounded-md text-color-1 hover:text-red-500 hover:bg-1 transition-colors"
+                            title="Remove from recent">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none"
+                                viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="recentCalendars.length === 0" class="px-4 py-6 text-center">
+                <svg xmlns="http://www.w3.org/2000/svg"
+                    class="w-8 h-8 mx-auto mb-2 text-color-1 opacity-50" fill="none" viewBox="0 0 24 24"
+                    stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <p class="text-sm text-color-1">No recent calendars yet</p>
+                <p class="text-xs text-color-1 opacity-60 mt-1">Your calendars will appear here</p>
+            </div>
+        </div>
+    </script>
+    
     <script type="text/x-template" id="quick-add-template">
         <span class="inline-flex items-start">
             <button @click="showDialog" 
@@ -1622,7 +1677,16 @@ vacation dec 11 - dec 15
             }
         }
 
+        const NavigationDropdown = {
+            template: '#navigation-dropdown-template',
+            props: ['recentCalendars'],
+            emits: ['go-homepage', 'toggle-pin', 'remove-recent']
+        };
+
         const CalendarVueApp = {
+            components: {
+                'navigation-dropdown': NavigationDropdown
+            },
             directives: {
                 'click-outside': clickOutside
             },
@@ -1661,11 +1725,13 @@ vacation dec 11 - dec 15
                     debug: false,
 
                     showRecents: false,
+                    hoverTimeout: null,
                     showHelp: false,
                     showNotes: false,
                     showShare: false,
                     showSearch: false,
                     showSettings: false,
+
 
                     currentViewURL: '',
                     updateLinkTimer: null, // re-render share link
@@ -1725,12 +1791,12 @@ vacation dec 11 - dec 15
                             console.log('Looking up calendar for /view/ route:', requestedSlug);
                             const lookupCalendar = firebase.functions().httpsCallable('lookupCalendar');
                             const result = await lookupCalendar({ slug: requestedSlug });
-                            
+
                             if (result.data.found && result.data.isReadOnly) {
                                 // Found as read-only - subscribe with the actual slug
                                 const actualSlug = result.data.actualSlug;
                                 console.log('Found read-only calendar with slug:', actualSlug);
-                                
+
                                 CalendarDataService.subscribe_readonly(actualSlug, (c) => {
                                     this.calendar.import(c);
                                     // Re-initialize local settings to load custom colors and labels
@@ -2283,6 +2349,28 @@ vacation dec 11 - dec 15
 
                 closeRecents() {
                     this.showRecents = false;
+                },
+
+                handleDropdownMouseEnter() {
+                    // Only handle hover on non-touch devices
+                    if (!('ontouchstart' in window)) {
+                        clearTimeout(this.hoverTimeout);
+                        this.showRecents = true;
+                    }
+                },
+
+                handleDropdownMouseLeave() {
+                    // Only handle hover on non-touch devices
+                    if (!('ontouchstart' in window)) {
+                        this.hoverTimeout = setTimeout(() => {
+                            this.showRecents = false;
+                        }, 300);
+                    }
+                },
+
+                goToHomepage() {
+                    this.closeRecents();
+                    window.location.href = '/';
                 },
 
                 isPanelOpen() {
