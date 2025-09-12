@@ -36,14 +36,18 @@ class RecentCalendars {
     }
 
     add(id, title) {
+        // Find existing item to preserve pinned state
+        const existingItem = this.items.find(item => item.id === id);
+        const wasPinned = existingItem ? existingItem.pinned : false;
+        
         // Remove if exists
         this.items = this.items.filter(item => item.id !== id);
         
-        // Add to front
+        // Add to front, preserving pinned state
         this.items.unshift({
             id: id,
             title: title || id,
-            pinned: false,
+            pinned: wasPinned, // Preserve existing pinned state
             lastVisited: new Date().toISOString()
         });
 
