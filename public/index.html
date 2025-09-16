@@ -711,8 +711,8 @@ Copyright (c) 2022 Kalid Azad
                         @mouseleave="handleDropdownMouseLeave">
                         <div class="flex items-center space-x-2">
                             <a @click.prevent="toggleRecents" class="flex items-center group cursor-pointer">
-                                <img class="h-8 w-8 mr-1.5 flex-shrink-0 dark:brightness-150" src="/img/pastecal.logo.svg"
-                                    alt="PasteCal Logo">
+                                <img class="h-8 w-8 mr-1.5 flex-shrink-0 dark:brightness-150"
+                                    src="/img/pastecal.logo.svg" alt="PasteCal Logo">
                                 <div class="flex flex-col">
                                     <span
                                         class="text-blue-500 font-medium text-sm hover:text-blue-600 transition-colors">pastecal</span>
@@ -721,22 +721,21 @@ Copyright (c) 2022 Kalid Azad
                                         shared calendar</span>
                                 </div>
                             </a>
-                            
+
                             <!-- Dropdown arrow indicator -->
-                            <button @click.stop="toggleRecents" class="text-color-1 hover:text-blue-500 p-1 transition-colors" title="Recent calendars">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="currentColor" viewBox="0 0 16 16">
-                                    <path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/>
+                            <button @click.stop="toggleRecents"
+                                class="text-color-1 hover:text-blue-500 p-1 transition-colors" title="Recent calendars">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="currentColor"
+                                    viewBox="0 0 16 16">
+                                    <path fill-rule="evenodd"
+                                        d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z" />
                                 </svg>
                             </button>
                         </div>
 
                         <!-- Navigation dropdown component -->
-                        <navigation-dropdown v-if="showRecents" 
-                                           :recent-calendars="recentCalendars"
-                                           @go-homepage="goToHomepage"
-                                           @toggle-pin="togglePin"
-                                           @remove-recent="removeRecent"
-                                           v-cloak>
+                        <navigation-dropdown v-if="showRecents" :recent-calendars="recentCalendars"
+                            @go-homepage="goToHomepage" @toggle-pin="togglePin" @remove-recent="removeRecent" v-cloak>
                         </navigation-dropdown>
                     </div>
                 </logo>
@@ -933,9 +932,12 @@ Copyright (c) 2022 Kalid Azad
                                 <td class="px-6 py-4">
                                     <p class="mb-2">
                                         Choose a URL (<code class="bg-disabled px-1 rounded">pastecal.com/name</code>)
-                                        and save. <br />
-                                        For privacy, make it hard to guess:
-                                        <code class="bg-disabled px-1 rounded">name-secretword</code>
+                                        and save.
+                                    </p>
+                                    <p class="mb-2">
+                                        For privacy, use a hard-to-guess name like:
+                                        <code class="bg-disabled px-1 rounded">myteam-retreat2024</code> or <code
+                                            class="bg-disabled px-1 rounded">smith-family-summer1993</code>
                                     </p>
                                     <p>Anyone with the link can view/edit without logging in.</p>
                                 </td>
@@ -947,7 +949,7 @@ Copyright (c) 2022 Kalid Azad
                                 <td class="px-6 py-4 font-medium">Link to specific date/view</td>
                                 <td class="px-6 py-4">
                                     <p class="mb-2">
-                                        Use URL parameters:
+                                        Use the share menu, or set URL parameters:
                                         <code
                                             class="bg-disabled px-1 rounded">pastecal.com/cal?date=2024-04-01&view=week</code>
                                     </p>
@@ -965,24 +967,16 @@ Copyright (c) 2022 Kalid Azad
                                 <td class="px-6 py-4 font-medium">Jump between calendars
                                 </td>
                                 <td class="px-6 py-4">
-                                    <p class="mb-2">Click the history icon
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 inline relative -top-0.5"
-                                            fill="currentColor" viewBox="0 0 16 16">
-                                            <path
-                                                d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71V3.5z">
-                                            </path>
-                                            <path
-                                                d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0z">
-                                            </path>
-                                        </svg>
-                                        to jump between recently viewed calendars
+                                    <p class="mb-2">Hover over the logo in the top left corner to see a dropdown of
+                                        recently viewed calendars.</p>
                                 </td>
                             </tr>
 
                             <!-- Custom event types -->
                             <tr class="">
-                                <td class="px-6 py-4 font-medium">Custom event type labels</td>
+                                <td class="px-6 py-4 font-medium">Customize event types</td>
                                 <td class="px-6 py-4">
+                                    <p class="mb-2">You can customize both labels and colors for event types:</p>
                                     <ol class="list-decimal pl-6 mb-2 space-y-1">
                                         <li>Open Settings <span class="inline-block align-middle">
                                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4"
@@ -992,7 +986,8 @@ Copyright (c) 2022 Kalid Azad
                                                 </svg>
                                             </span> in the top menu</li>
                                         <li>Go to the "Calendar Settings" section</li>
-                                        <li>Edit the labels next to each color in the "Event Types" area</li>
+                                        <li>Edit the labels next to each color square</li>
+                                        <li>Click on any color square to choose a custom color</li>
                                     </ol>
                                 </td>
                             </tr>
@@ -1450,7 +1445,7 @@ Copyright (c) 2022 Kalid Azad
             </div>
         </div>
     </script>
-    
+
     <script type="text/x-template" id="quick-add-template">
         <span class="inline-flex items-start">
             <button @click="showDialog" 
