@@ -784,9 +784,11 @@ Copyright (c) 2025 Kalid Azad
             <!-- Middle section - Calendar title -->
             <section class="flex-1 flex flex-col md:flex-row items-center justify-center mx-1 md:mx-2 min-w-0 min-h-8"
                 v-cloak v-if="!isLoading">
-                <span v-show="!editTitle" @click="editTitle = true"
-                    class="font-bold cursor-pointer max-w-[150px] md:max-w-xs text-center items-center inline-block hover:text-blue-500 transition-colors leading-tight py-1"
-                    title="Click to edit" v-text="calendar.title"></span>
+                <div v-show="!editTitle" class="relative inline-flex items-center group">
+                    <span @click="editTitle = true"
+                        class="font-bold cursor-pointer max-w-[150px] md:max-w-xs text-center inline-block hover:text-blue-500 transition-colors leading-tight py-1"
+                        title="Click to edit" v-text="calendar.title"></span>
+                </div>
                 <button v-show="!editTitle" v-on:click="toggleNotes"
                     class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8"
                     title="Toggle notes" alt="Notes">
@@ -2031,11 +2033,16 @@ vacation dec 11 - dec 15
                     }
                 });
 
-                // populate sample data if needed, or load from local storage
-                if (!this.isExisting && this.calendar.events.length == 0 && !this.urlslug) {
-                    var defaultEvent = this.calendar.defaultEvent("Sample event");
-                    this.calendar.setEvents([defaultEvent]);
-                    this.loadLocalStorage();    // attempt this
+                // populate sample data for new calendars on homepage
+                if (this.isHomepageCalendar && this.calendar.events.length == 0) {
+                    // Load homepage data from localStorage
+                    this.loadLocalStorage();
+
+                    // If still no events after loading, create default sample event
+                    if (this.calendar.events.length == 0) {
+                        var defaultEvent = this.calendar.defaultEvent("Sample event");
+                        this.calendar.setEvents([defaultEvent]);
+                    }
                     this.updateCalendarView();
                 }
             },
@@ -2082,6 +2089,10 @@ vacation dec 11 - dec 15
             computed: {
                 hasCustomColors() {
                     return this.localSettings.colors.some((color, index) => color !== this.DEFAULT_COLORS[index]);
+                },
+                isHomepageCalendar() {
+                    // Homepage calendar has no URL slug and is not an existing saved calendar
+                    return !this.urlslug && !this.isExisting;
                 }
             },
 
@@ -2127,7 +2138,11 @@ vacation dec 11 - dec 15
                 },
 
                 saveLocalStorage() {
-                    localStorage.setItem("calendar", JSON.stringify(this.calendar));
+                    // Only save to localStorage when on homepage
+                    // Named calendars should never overwrite homepage data
+                    if (this.isHomepageCalendar) {
+                        localStorage.setItem("calendar", JSON.stringify(this.calendar));
+                    }
                 },
 
                 updateCalendarView() {
