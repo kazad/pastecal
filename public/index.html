@@ -1934,6 +1934,20 @@ vacation dec 11 - dec 15
                     if (args.type === 'Editor') {
                         // console.log("Editor call");
 
+                        // Configure datetime pickers with strictMode to prevent invalid date/time entries
+                        const startElement = args.element.querySelector('[name="StartTime"]');
+                        const endElement = args.element.querySelector('[name="EndTime"]');
+
+                        if (startElement && startElement.ej2_instances && startElement.ej2_instances[0]) {
+                            const startPicker = startElement.ej2_instances[0];
+                            startPicker.strictMode = true;
+                        }
+
+                        if (endElement && endElement.ej2_instances && endElement.ej2_instances[0]) {
+                            const endPicker = endElement.ej2_instances[0];
+                            endPicker.strictMode = true;
+                        }
+
                         function setColor(id) {
                             if (!window.btnObj) {
                                 return;
