@@ -1387,7 +1387,210 @@ Copyright (c) 2025 Kalid Azad
             </div>
         </panel>
 
-        <div id="cal2_wrap" style="width: 100%; height: 100%;">
+        <!-- Landing Page - shown when no calendar is loaded -->
+        <landing-page v-if="!calendar.slug" class="max-w-6xl mx-auto px-4 py-8 md:py-16" v-cloak>
+            <!-- Hero Section -->
+            <section class="text-center mb-12 md:mb-20">
+                <h1 class="text-4xl md:text-6xl font-bold text-color-2 mb-4 md:mb-6 leading-tight">
+                    Share Calendars<br class="md:hidden"> in <span class="text-blue-500">Seconds</span>
+                </h1>
+                <p class="text-lg md:text-2xl text-color-1 mb-6 md:mb-8 max-w-3xl mx-auto leading-relaxed">
+                    No signups. No passwords. No complexity.<br>
+                    Just pick a URL and start collaborating instantly.
+                </p>
+
+                <!-- CTA Input -->
+                <div class="max-w-2xl mx-auto mb-8">
+                    <div class="flex flex-col sm:flex-row gap-3 items-center justify-center">
+                        <div class="flex-1 w-full sm:w-auto">
+                            <div class="relative">
+                                <span class="absolute left-4 top-1/2 -translate-y-1/2 text-color-1 text-sm md:text-base">pastecal.com/</span>
+                                <input
+                                    v-model="slugInput"
+                                    @keyup.enter="create"
+                                    type="text"
+                                    placeholder="your-calendar-name"
+                                    class="w-full pl-32 md:pl-36 pr-4 py-3 md:py-4 text-base md:text-lg border-2 border-color-default rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
+                                />
+                            </div>
+                        </div>
+                        <button
+                            @click="create"
+                            class="w-full sm:w-auto px-8 py-3 md:py-4 bg-blue-500 text-white text-base md:text-lg font-semibold rounded-lg hover:bg-blue-600 transition-all transform hover:scale-105 shadow-lg">
+                            Create Calendar →
+                        </button>
+                    </div>
+                    <p class="text-xs md:text-sm text-color-1 mt-3 opacity-75">
+                        Free forever • No account needed • Start sharing in 5 seconds
+                    </p>
+                </div>
+
+                <!-- Screenshot/Demo -->
+                <div class="relative max-w-4xl mx-auto">
+                    <div class="rounded-lg overflow-hidden shadow-2xl border border-color-default">
+                        <img src="/img/screenshot.png" alt="PasteCal Screenshot" class="w-full h-auto" />
+                    </div>
+                    <!-- Floating badges -->
+                    <div class="hidden md:block absolute -top-4 -left-4 bg-blue-500 text-white px-4 py-2 rounded-full text-sm font-semibold shadow-lg">
+                        ⚡ Instant Sync
+                    </div>
+                    <div class="hidden md:block absolute -bottom-4 -right-4 bg-green-500 text-white px-4 py-2 rounded-full text-sm font-semibold shadow-lg">
+                        ✓ 100% Free
+                    </div>
+                </div>
+            </section>
+
+            <!-- How It Works -->
+            <section class="mb-12 md:mb-20">
+                <h2 class="text-2xl md:text-4xl font-bold text-center text-color-2 mb-8 md:mb-12">How It Works</h2>
+                <div class="grid md:grid-cols-3 gap-6 md:gap-8">
+                    <div class="text-center">
+                        <div class="w-16 h-16 md:w-20 md:h-20 bg-blue-500 text-white rounded-full flex items-center justify-center mx-auto mb-4 md:mb-6 text-2xl md:text-3xl font-bold shadow-lg">
+                            1
+                        </div>
+                        <h3 class="text-lg md:text-xl font-semibold mb-2 md:mb-3 text-color-2">Pick Your URL</h3>
+                        <p class="text-sm md:text-base text-color-1">Choose any name like <code class="bg-disabled px-2 py-1 rounded text-sm">team-meeting</code> or <code class="bg-disabled px-2 py-1 rounded text-sm">family-reunion</code></p>
+                    </div>
+                    <div class="text-center">
+                        <div class="w-16 h-16 md:w-20 md:h-20 bg-blue-500 text-white rounded-full flex items-center justify-center mx-auto mb-4 md:mb-6 text-2xl md:text-3xl font-bold shadow-lg">
+                            2
+                        </div>
+                        <h3 class="text-lg md:text-xl font-semibold mb-2 md:mb-3 text-color-2">Add Your Events</h3>
+                        <p class="text-sm md:text-base text-color-1">Click anywhere on the calendar to create events. Drag to resize, click to edit. Simple as that.</p>
+                    </div>
+                    <div class="text-center">
+                        <div class="w-16 h-16 md:w-20 md:h-20 bg-blue-500 text-white rounded-full flex items-center justify-center mx-auto mb-4 md:mb-6 text-2xl md:text-3xl font-bold shadow-lg">
+                            3
+                        </div>
+                        <h3 class="text-lg md:text-xl font-semibold mb-2 md:mb-3 text-color-2">Share the Link</h3>
+                        <p class="text-sm md:text-base text-color-1">Everyone with the link sees updates in real-time. No logins required. Ever.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Features Grid -->
+            <section class="mb-12 md:mb-20">
+                <h2 class="text-2xl md:text-4xl font-bold text-center text-color-2 mb-8 md:mb-12">Why PasteCal?</h2>
+                <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- Feature 1 -->
+                    <div class="bg-1 p-6 rounded-lg border border-color-default hover:border-blue-400 transition-all hover:shadow-lg">
+                        <div class="text-blue-500 mb-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 md:w-12 md:h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                        </div>
+                        <h3 class="text-lg md:text-xl font-semibold mb-2 text-color-2">Instant Setup</h3>
+                        <p class="text-sm md:text-base text-color-1">No forms to fill out. No email verification. No waiting. Create and share in seconds.</p>
+                    </div>
+
+                    <!-- Feature 2 -->
+                    <div class="bg-1 p-6 rounded-lg border border-color-default hover:border-blue-400 transition-all hover:shadow-lg">
+                        <div class="text-blue-500 mb-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 md:w-12 md:h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                            </svg>
+                        </div>
+                        <h3 class="text-lg md:text-xl font-semibold mb-2 text-color-2">Real-Time Collaboration</h3>
+                        <p class="text-sm md:text-base text-color-1">Everyone sees changes instantly. Perfect for teams, families, and event planning.</p>
+                    </div>
+
+                    <!-- Feature 3 -->
+                    <div class="bg-1 p-6 rounded-lg border border-color-default hover:border-blue-400 transition-all hover:shadow-lg">
+                        <div class="text-blue-500 mb-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 md:w-12 md:h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                            </svg>
+                        </div>
+                        <h3 class="text-lg md:text-xl font-semibold mb-2 text-color-2">Privacy by Design</h3>
+                        <p class="text-sm md:text-base text-color-1">Use hard-to-guess URLs for privacy. No data mining. No tracking. Just calendars.</p>
+                    </div>
+
+                    <!-- Feature 4 -->
+                    <div class="bg-1 p-6 rounded-lg border border-color-default hover:border-blue-400 transition-all hover:shadow-lg">
+                        <div class="text-blue-500 mb-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 md:w-12 md:h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                        </div>
+                        <h3 class="text-lg md:text-xl font-semibold mb-2 text-color-2">Export Anywhere</h3>
+                        <p class="text-sm md:text-base text-color-1">Subscribe in Google Calendar, Outlook, Apple Calendar, or any app that supports ICS feeds.</p>
+                    </div>
+
+                    <!-- Feature 5 -->
+                    <div class="bg-1 p-6 rounded-lg border border-color-default hover:border-blue-400 transition-all hover:shadow-lg">
+                        <div class="text-blue-500 mb-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 md:w-12 md:h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                            </svg>
+                        </div>
+                        <h3 class="text-lg md:text-xl font-semibold mb-2 text-color-2">Fully Customizable</h3>
+                        <p class="text-sm md:text-base text-color-1">Custom colors, event types, labels, and views. Make it work exactly how you need it.</p>
+                    </div>
+
+                    <!-- Feature 6 -->
+                    <div class="bg-1 p-6 rounded-lg border border-color-default hover:border-blue-400 transition-all hover:shadow-lg">
+                        <div class="text-blue-500 mb-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-10 h-10 md:w-12 md:h-12" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                        </div>
+                        <h3 class="text-lg md:text-xl font-semibold mb-2 text-color-2">Always Free</h3>
+                        <p class="text-sm md:text-base text-color-1">No premium tiers. No hidden costs. No credit card required. Completely free, forever.</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Use Cases -->
+            <section class="mb-12 md:mb-20 bg-1 rounded-2xl p-8 md:p-12 border border-color-default">
+                <h2 class="text-2xl md:text-4xl font-bold text-center text-color-2 mb-8 md:mb-12">Perfect For</h2>
+                <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <div class="text-center">
+                        <div class="text-4xl md:text-5xl mb-3">👥</div>
+                        <h3 class="font-semibold text-color-2 mb-2">Team Schedules</h3>
+                        <p class="text-xs md:text-sm text-color-1">Coordinate meetings, shifts, and deadlines</p>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-4xl md:text-5xl mb-3">👨‍👩‍👧‍👦</div>
+                        <h3 class="font-semibold text-color-2 mb-2">Family Planning</h3>
+                        <p class="text-xs md:text-sm text-color-1">Keep everyone on the same page</p>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-4xl md:text-5xl mb-3">🎉</div>
+                        <h3 class="font-semibold text-color-2 mb-2">Event Coordination</h3>
+                        <p class="text-xs md:text-sm text-color-1">Plan conferences, weddings, and parties</p>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-4xl md:text-5xl mb-3">🏫</div>
+                        <h3 class="font-semibold text-color-2 mb-2">Class Schedules</h3>
+                        <p class="text-xs md:text-sm text-color-1">Share schedules with students and parents</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Final CTA -->
+            <section class="text-center">
+                <h2 class="text-2xl md:text-4xl font-bold text-color-2 mb-4 md:mb-6">Ready to Get Started?</h2>
+                <p class="text-base md:text-xl text-color-1 mb-6 md:mb-8">Create your first shared calendar in seconds</p>
+                <button
+                    @click="scrollToTop"
+                    class="px-8 md:px-12 py-3 md:py-4 bg-blue-500 text-white text-base md:text-xl font-semibold rounded-lg hover:bg-blue-600 transition-all transform hover:scale-105 shadow-xl">
+                    Create Your Calendar →
+                </button>
+            </section>
+
+            <!-- Footer -->
+            <footer class="mt-16 md:mt-24 pt-8 border-t border-color-default text-center">
+                <p class="text-sm text-color-1 mb-2">
+                    Built by Kalid • Creator of <a href="https://instacalc.com" class="text-blue-500 hover:underline">Instacalc</a> and <a href="https://betterexplained.com" class="text-blue-500 hover:underline">Better Explained</a>
+                </p>
+                <p class="text-xs text-color-1 opacity-60">
+                    <a href="https://github.com/kazad/pastecal" class="hover:text-blue-500">Open Source</a> •
+                    <a href="https://github.com/kazad/pastecal/issues" class="hover:text-blue-500 ml-2">Feedback</a>
+                </p>
+            </footer>
+        </landing-page>
+
+        <div id="cal2_wrap" style="width: 100%; height: 100%;" v-if="calendar.slug">
             <div id="Schedule"></div>
         </div>
         <pre v-text="syncFusionEvents" v-if="debug"></pre>
@@ -2414,6 +2617,10 @@ vacation dec 11 - dec 15
                 goToHomepage() {
                     this.closeRecents();
                     window.location.href = '/';
+                },
+
+                scrollToTop() {
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                 },
 
                 isPanelOpen() {
