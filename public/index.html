@@ -302,6 +302,7 @@ Copyright (c) 2025 Kalid Azad
 
         /* Force view buttons to always show on desktop, hide overflow menu */
         @media screen and (min-width: 768px) {
+
             .e-schedule .e-schedule-toolbar .e-toolbar-pop,
             .e-schedule .e-schedule-toolbar .e-hor-nav {
                 display: none !important;
@@ -1892,8 +1893,11 @@ vacation dec 11 - dec 15
                 scheduleObj.views = [
                     'Day',
                     'Week',
+                    /*
+                    { option: 'Week', displayName: '12 Weeks', interval: 12 },
+                     */
                     'Month',
-                    { option: 'Month', displayName: 'Quarter', interval: 3 },
+                    { option: 'Month', displayName: '3 Month', interval: 3 },
                     'Year',
                     'Agenda'
                 ];
@@ -1921,6 +1925,9 @@ vacation dec 11 - dec 15
                         case "w":
                         case "week":
                             scheduleObj.currentView = "Week"; break;
+                        case "12w":
+                        case "12weeks":
+                            scheduleObj.currentView = "12 Weeks"; break;
                         case "m":
                         case "month":
                             scheduleObj.currentView = "Month"; break;
@@ -2058,7 +2065,7 @@ vacation dec 11 - dec 15
                 scheduleObj.appendTo('#Schedule');
 
                 // Add event listener to mark month-start dates
-                scheduleObj.dataBound = function() {
+                scheduleObj.dataBound = function () {
                     // Find all date headers and mark ones with month names (contain space)
                     const dateHeaders = document.querySelectorAll('.e-schedule .e-month-view .e-date-header.e-navigate');
                     dateHeaders.forEach(header => {
