@@ -299,6 +299,24 @@ Copyright (c) 2025 Kalid Azad
         .e-quick-popup-wrapper .e-event-popup .e-popup-header .e-header-icon-wrapper .e-delete {
             display: initial;
         }
+
+        /* Force view buttons to always show on desktop, hide overflow menu */
+        @media screen and (min-width: 768px) {
+            .e-schedule .e-schedule-toolbar .e-toolbar-pop,
+            .e-schedule .e-schedule-toolbar .e-hor-nav {
+                display: none !important;
+            }
+
+            .e-schedule .e-schedule-toolbar .e-toolbar-items {
+                display: flex !important;
+                flex-wrap: nowrap !important;
+            }
+        }
+
+        /* Highlight first day of new months in Quarter view */
+        .e-date-header.e-navigate.month-start {
+            font-size: 18px;
+        }
     </style>
 
     <style>
@@ -1871,7 +1889,14 @@ vacation dec 11 - dec 15
 
                 window.scheduleObj = new ej.schedule.Schedule();
                 scheduleObj.startHour = "05:00";
-                scheduleObj.views = ['Day', 'Week', 'Month', 'Year', 'Agenda'];
+                scheduleObj.views = [
+                    'Day',
+                    'Week',
+                    'Month',
+                    { option: 'Month', displayName: 'Quarter', interval: 3 },
+                    'Year',
+                    'Agenda'
+                ];
                 scheduleObj.enableAdaptiveUI = false;
 
                 scheduleObj.readonly = this.isReadOnly;
@@ -1899,6 +1924,9 @@ vacation dec 11 - dec 15
                         case "m":
                         case "month":
                             scheduleObj.currentView = "Month"; break;
+                        case "q":
+                        case "quarter":
+                            scheduleObj.currentView = "Quarter"; break;
                         case "y":
                         case "year":
                             scheduleObj.currentView = "Year"; break;
@@ -2028,6 +2056,21 @@ vacation dec 11 - dec 15
                 }
 
                 scheduleObj.appendTo('#Schedule');
+
+                // Add event listener to mark month-start dates
+                scheduleObj.dataBound = function() {
+                    // Find all date headers and mark ones with month names (contain space)
+                    const dateHeaders = document.querySelectorAll('.e-schedule .e-month-view .e-date-header.e-navigate');
+                    dateHeaders.forEach(header => {
+                        const text = header.textContent.trim();
+                        // If the text contains a space, it's a month-start date like "Jul 1", "Aug 1"
+                        if (text.includes(' ')) {
+                            header.classList.add('month-start');
+                        } else {
+                            header.classList.remove('month-start');
+                        }
+                    });
+                };
 
                 // Load and apply global settings after scheduleObj is fully initialized
                 this.loadGlobalSettings();
