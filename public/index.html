@@ -1305,9 +1305,29 @@ Copyright (c) 2025 Kalid Azad
                                     <option value="Day">Day</option>
                                     <option value="Week">Week</option>
                                     <option value="Month">Month</option>
+                                    <option value="Custom">Custom ({{ personalCustomViewLabel }})</option>
                                     <option value="Year">Year</option>
                                     <option value="Agenda">Agenda</option>
                                 </select>
+
+                                <!-- Custom view configuration panel -->
+                                <div v-if="globalSettings.defaultView === 'Custom'" class="mt-3 p-3 bg-color-panel border border-color-default rounded">
+                                    <label class="block mb-2 text-sm font-medium">Custom view settings</label>
+                                    <div class="flex items-center gap-2">
+                                        <input type="number"
+                                               v-model.number="globalSettings.customViewDuration"
+                                               @change="saveGlobalSettings"
+                                               :min="1"
+                                               :max="globalSettings.customViewUnit === 'Weeks' ? 52 : 24"
+                                               class="w-20 p-2 border border-color-default rounded text-sm">
+                                        <select v-model="globalSettings.customViewUnit"
+                                                @change="saveGlobalSettings"
+                                                class="flex-1 p-2 border border-color-default rounded text-sm">
+                                            <option value="Weeks">Weeks</option>
+                                            <option value="Months">Months</option>
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
 
                             <div>
@@ -1379,15 +1399,37 @@ Copyright (c) 2025 Kalid Azad
 
                             <!-- Default View -->
                             <div>
-                                <label class="block mb-1 font-medium">Default view</label>
+                                <label class="block mb-1 font-medium">Default view when calendar is opened</label>
                                 <select v-model="calendar.options.defaultView"
                                     class=" w-1/3 p-2 border border-color-default rounded text-sm">
+                                    <option :value="null">Auto ({{ calendarAutoViewLabel }})</option>
                                     <option value="Day">Day</option>
                                     <option value="Week">Week</option>
                                     <option value="Month">Month</option>
+                                    <option value="Custom">Custom ({{ calendarCustomViewLabel }})</option>
                                     <option value="Year">Year</option>
                                     <option value="Agenda">Agenda</option>
                                 </select>
+                                <p class="mt-1 text-xs text-color-secondary">
+                                    Auto allows the user's preference to load. Setting a default forces everyone to start on the same view.
+                                </p>
+
+                                <!-- Custom view configuration panel for calendar -->
+                                <div v-if="calendar.options.defaultView === 'Custom'" class="mt-3 p-3 bg-color-panel border border-color-default rounded">
+                                    <label class="block mb-2 text-sm font-medium">Custom view settings</label>
+                                    <div class="flex items-center gap-2">
+                                        <input type="number"
+                                               v-model.number="calendar.options.customViewDuration"
+                                               :min="1"
+                                               :max="calendar.options.customViewUnit === 'Weeks' ? 52 : 24"
+                                               class="w-20 p-2 border border-color-default rounded text-sm">
+                                        <select v-model="calendar.options.customViewUnit"
+                                                class="flex-1 p-2 border border-color-default rounded text-sm">
+                                            <option value="Weeks">Weeks</option>
+                                            <option value="Months">Months</option>
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
 
                             <div>
@@ -1775,7 +1817,9 @@ vacation dec 11 - dec 15
                     globalSettings: {
                         firstDayOfWeek: '0',
                         timeFormat: '12',
-                        defaultView: 'Week',
+                        defaultView: 'Month',
+                        customViewDuration: 3,
+                        customViewUnit: 'Months',
                         startHour: '05:00',
                         darkMode: 'auto'
                     },
@@ -1805,6 +1849,8 @@ vacation dec 11 - dec 15
                 this.recentManager = new RecentCalendars();
                 this.recentCalendars = this.recentManager.getAll();
 
+                // Ensure calendar.options has proper defaults
+                this.ensureCalendarOptionsDefaults();
 
                 // Initialize local settings
                 this.initializeLocalSettings();
@@ -1831,6 +1877,7 @@ vacation dec 11 - dec 15
 
                                 CalendarDataService.subscribe_readonly(actualSlug, (c) => {
                                     this.calendar.import(c);
+                                    this.ensureCalendarOptionsDefaults();
                                     // Re-initialize local settings to load custom colors and labels
                                     this.initializeLocalSettings();
                                     // Add to recents when calendar loads, but mark as read-only
@@ -1867,6 +1914,7 @@ vacation dec 11 - dec 15
                             // Calendar found
                             this.isExisting = true;
                             this.calendar.import(c);
+                            this.ensureCalendarOptionsDefaults();
                             // Re-initialize local settings to load custom colors and labels
                             this.initializeLocalSettings();
                             // Add to recents when calendar loads
@@ -1890,14 +1938,17 @@ vacation dec 11 - dec 15
 
                 window.scheduleObj = new ej.schedule.Schedule();
                 scheduleObj.startHour = "05:00";
+
+                // Build custom view configuration dynamically
+                const customViewDuration = this.calendar?.options?.customViewDuration || this.globalSettings.customViewDuration;
+                const customViewUnit = this.calendar?.options?.customViewUnit || this.globalSettings.customViewUnit;
+                const customViewConfig = this.buildCustomViewConfig(customViewDuration, customViewUnit);
+
                 scheduleObj.views = [
                     'Day',
                     'Week',
-                    /*
-                    { option: 'Week', displayName: '12 Weeks', interval: 12 },
-                     */
                     'Month',
-                    { option: 'Month', displayName: '3 Month', interval: 3 },
+                    customViewConfig,
                     'Year',
                     'Agenda'
                 ];
@@ -1927,13 +1978,60 @@ vacation dec 11 - dec 15
                             scheduleObj.currentView = "Week"; break;
                         case "12w":
                         case "12weeks":
-                            scheduleObj.currentView = "12 Weeks"; break;
+                            // Map to custom 12 weeks view
+                            const twelveWeeksView = this.buildCustomViewConfig(12, 'Weeks');
+                            const twelveWeeksIndex = scheduleObj.views.findIndex(v =>
+                                typeof v === 'object' && (v === customViewConfig)
+                            );
+                            if (twelveWeeksIndex !== -1) {
+                                scheduleObj.views[twelveWeeksIndex] = twelveWeeksView;
+                            }
+                            scheduleObj.currentView = twelveWeeksView.displayName;
+                            break;
                         case "m":
                         case "month":
                             scheduleObj.currentView = "Month"; break;
+                        case "c":
+                        case "custom":
+                            // Check for URL parameter overrides for custom view
+                            const durParam = url.searchParams.get("dur") || url.searchParams.get("duration");
+                            const unitParam = url.searchParams.get("unit");
+
+                            let customViewToUse = customViewConfig;
+
+                            if (durParam && unitParam) {
+                                // Temporarily override custom view config from URL
+                                const duration = parseInt(durParam);
+                                const unit = unitParam.charAt(0).toUpperCase() + unitParam.slice(1).toLowerCase();
+
+                                if (this.validateCustomView(duration, unit)) {
+                                    // Rebuild the custom view with URL parameters
+                                    customViewToUse = this.buildCustomViewConfig(duration, unit);
+                                    // Replace the custom view in the views array
+                                    const customViewIndex = scheduleObj.views.findIndex(v =>
+                                        typeof v === 'object' && (v === customViewConfig)
+                                    );
+                                    if (customViewIndex !== -1) {
+                                        scheduleObj.views[customViewIndex] = customViewToUse;
+                                    }
+                                }
+                            }
+
+                            // Set currentView to the display name
+                            scheduleObj.currentView = customViewToUse.displayName;
+                            break;
                         case "q":
                         case "quarter":
-                            scheduleObj.currentView = "Quarter"; break;
+                            // Map to custom 3 months view
+                            const quarterView = this.buildCustomViewConfig(3, 'Months');
+                            const quarterIndex = scheduleObj.views.findIndex(v =>
+                                typeof v === 'object' && (v === customViewConfig)
+                            );
+                            if (quarterIndex !== -1) {
+                                scheduleObj.views[quarterIndex] = quarterView;
+                            }
+                            scheduleObj.currentView = quarterView.displayName;
+                            break;
                         case "y":
                         case "year":
                             scheduleObj.currentView = "Year"; break;
@@ -2123,6 +2221,7 @@ vacation dec 11 - dec 15
                     // sync changes to local storage or firebase
                     handler: function (newVal, oldVal) {
                         // console.log("Vue:watch:calendar", newVal, oldVal);
+
                         if (!this.isExisting) {
                             this.saveLocalStorage();
                         } else {
@@ -2142,9 +2241,49 @@ vacation dec 11 - dec 15
                     }
                 },
 
+                // Initialize custom view defaults when Custom is selected
+                'globalSettings.defaultView'(newVal) {
+                    if (newVal === 'Custom') {
+                        if (this.globalSettings.customViewDuration === undefined) {
+                            this.globalSettings.customViewDuration = 3;
+                        }
+                        if (this.globalSettings.customViewUnit === undefined) {
+                            this.globalSettings.customViewUnit = 'Months';
+                        }
+                    }
+                },
+
+                'calendar.options.defaultView'(newVal) {
+                    if (newVal === 'Custom') {
+                        if (!this.calendar.options) {
+                            this.calendar.options = {};
+                        }
+                        if (this.calendar.options.customViewDuration === undefined) {
+                            this.calendar.options.customViewDuration = 3;
+                        }
+                        if (this.calendar.options.customViewUnit === undefined) {
+                            this.calendar.options.customViewUnit = 'Months';
+                        }
+                    }
+                },
+
                 colorFilters: {
                     handler() { this.updateCalendarView(); },
                     deep: true
+                },
+
+                // Watch for changes to custom view settings and update schedule
+                'globalSettings.customViewDuration'() {
+                    this.updateCustomViewInSchedule();
+                },
+                'globalSettings.customViewUnit'() {
+                    this.updateCustomViewInSchedule();
+                },
+                'calendar.options.customViewDuration'() {
+                    this.updateCustomViewInSchedule();
+                },
+                'calendar.options.customViewUnit'() {
+                    this.updateCustomViewInSchedule();
                 }
             },
 
@@ -2155,10 +2294,47 @@ vacation dec 11 - dec 15
                 isHomepageCalendar() {
                     // Homepage calendar has no URL slug and is not an existing saved calendar
                     return !this.urlslug && !this.isExisting;
+                },
+                // Label for Auto option in calendar settings - viewer's default
+                calendarAutoViewLabel() {
+                    return "Viewer's Default";
+                },
+                // Label for Custom option in personal settings showing current config
+                personalCustomViewLabel() {
+                    const duration = this.globalSettings.customViewDuration || 3;
+                    const unit = this.globalSettings.customViewUnit || 'Months';
+                    const unitLabel = duration === 1 ? unit.slice(0, -1) : unit;
+                    return `${duration} ${unitLabel}`;
+                },
+                // Label for Custom option in calendar settings showing current config
+                calendarCustomViewLabel() {
+                    const duration = this.calendar?.options?.customViewDuration || this.globalSettings.customViewDuration || 3;
+                    const unit = this.calendar?.options?.customViewUnit || this.globalSettings.customViewUnit || 'Months';
+                    const unitLabel = duration === 1 ? unit.slice(0, -1) : unit;
+                    return `${duration} ${unitLabel}`;
                 }
             },
 
             methods: {
+                // Ensure calendar.options has proper default values
+                ensureCalendarOptionsDefaults() {
+                    if (!this.calendar.options) {
+                        this.calendar.options = {};
+                    }
+                    // Ensure defaultView is null (not undefined) for proper dropdown binding
+                    if (this.calendar.options.defaultView === undefined) {
+                        this.calendar.options.defaultView = null;
+                    }
+                },
+
+                // Apply default view to schedule (if no URL override)
+                applyDefaultView() {
+                    if (!window.location.search.includes('view=') && !window.location.search.includes('v=')) {
+                        const defaultView = this.calendar?.options?.defaultView || this.globalSettings.defaultView || 'Month';
+                        scheduleObj.currentView = this.getActualViewName(defaultView);
+                    }
+                },
+
                 // Apply theme based on user preference and system settings
                 applyTheme() {
                     let isDark = false;
@@ -2184,6 +2360,104 @@ vacation dec 11 - dec 15
                     document.getElementById('syncfusion-schedule-theme').href = dark
                         ? 'https://cdn.syncfusion.com/ej2/ej2-schedule/styles/material-dark.css'
                         : 'https://cdn.syncfusion.com/ej2/ej2-schedule/styles/material.css';
+                },
+
+                // Validate custom view configuration
+                validateCustomView(duration, unit) {
+                    const maxWeeks = 52;
+                    const maxMonths = 24;
+
+                    if (unit === 'Weeks') {
+                        return duration >= 1 && duration <= maxWeeks;
+                    } else if (unit === 'Months') {
+                        return duration >= 1 && duration <= maxMonths;
+                    }
+                    return false;
+                },
+
+                // Build custom view configuration for Syncfusion
+                buildCustomViewConfig(duration, unit) {
+                    // Validate inputs
+                    if (!this.validateCustomView(duration, unit)) {
+                        console.warn('Invalid custom view configuration, using defaults');
+                        duration = 3;
+                        unit = 'Months';
+                    }
+
+                    // Build dynamic display name
+                    const unitLabel = duration === 1 ? unit.slice(0, -1) : unit; // Singular/plural
+                    const displayName = `${duration} ${unitLabel}`;
+
+                    // Standard interval view
+                    const baseOption = unit === 'Weeks' ? 'Week' : 'Month';
+                    return {
+                        option: baseOption,
+                        displayName: displayName,
+                        interval: duration
+                    };
+                },
+
+                // Update the custom view in the schedule when duration/unit changes
+                updateCustomViewInSchedule() {
+                    if (!window.scheduleObj || !window.scheduleObj.views) {
+                        return;
+                    }
+
+                    // Get the current custom view configuration
+                    const customViewDuration = this.calendar?.options?.customViewDuration || this.globalSettings.customViewDuration;
+                    const customViewUnit = this.calendar?.options?.customViewUnit || this.globalSettings.customViewUnit;
+                    const newCustomViewConfig = this.buildCustomViewConfig(customViewDuration, customViewUnit);
+
+                    // Find the custom view index (it's the object with interval property)
+                    const customViewIndex = scheduleObj.views.findIndex(v =>
+                        typeof v === 'object' && v.interval !== undefined
+                    );
+
+                    if (customViewIndex !== -1) {
+                        const oldDisplayName = scheduleObj.views[customViewIndex].displayName;
+                        const currentView = scheduleObj.currentView;
+
+                        // Replace the custom view
+                        scheduleObj.views[customViewIndex] = newCustomViewConfig;
+
+                        // If we're currently viewing the custom view, update the currentView
+                        if (currentView === oldDisplayName) {
+                            scheduleObj.currentView = newCustomViewConfig.displayName;
+                        }
+
+                        // Refresh the schedule to update the header
+                        scheduleObj.refresh();
+                    }
+                },
+
+                // Get the actual Syncfusion view name for a given default view setting
+                // Converts "Custom" to the actual display name like "3 Months"
+                getActualViewName(viewSetting) {
+                    // Handle null/undefined viewSetting - default to Month
+                    if (!viewSetting) {
+                        return 'Month';
+                    }
+
+                    if (viewSetting !== 'Custom') {
+                        return viewSetting;
+                    }
+
+                    // For Custom view, we need to find the custom view in the scheduleObj.views array
+                    if (typeof window.scheduleObj !== 'undefined' && window.scheduleObj && window.scheduleObj.views) {
+                        // Find the custom view (it's the one with interval property and not a string)
+                        const customView = window.scheduleObj.views.find(v =>
+                            typeof v === 'object' && v.interval !== undefined && v.displayName
+                        );
+                        if (customView) {
+                            return customView.displayName;
+                        }
+                    }
+
+                    // Fallback: compute it from settings
+                    const duration = this.calendar?.options?.customViewDuration || this.globalSettings.customViewDuration || 3;
+                    const unit = this.calendar?.options?.customViewUnit || this.globalSettings.customViewUnit || 'Months';
+                    const unitLabel = duration === 1 ? unit.slice(0, -1) : unit;
+                    return `${duration} ${unitLabel}`;
                 },
 
                 clearLocalStorage() {
@@ -2269,9 +2543,25 @@ vacation dec 11 - dec 15
                 },
 
                 updateCurrentViewURL() {
-                    const currentView = scheduleObj.currentView.toLowerCase();
+                    const currentView = scheduleObj.currentView;
                     const currentDate = scheduleObj.selectedDate.toISOString().slice(0, 10);
-                    this.currentViewURL = `${window.location.origin}/${this.calendar.id}?date=${currentDate}&view=${currentView}`;
+
+                    // Map display name to URL parameter
+                    let viewParam;
+                    const viewLower = currentView.toLowerCase();
+
+                    // Check if it's a custom view (has a number and unit)
+                    const customViewMatch = currentView.match(/^(\d+)\s+(Week|Month)s?$/);
+                    if (customViewMatch) {
+                        const duration = customViewMatch[1];
+                        const unit = customViewMatch[2].toLowerCase() + 's';
+                        viewParam = `custom&dur=${duration}&unit=${unit}`;
+                    } else {
+                        // Standard view - just lowercase it
+                        viewParam = viewLower;
+                    }
+
+                    this.currentViewURL = `${window.location.origin}/${this.calendar.id}?date=${currentDate}&view=${viewParam}`;
                 },
 
                 getEditableURL() {
@@ -2595,6 +2885,14 @@ vacation dec 11 - dec 15
                     const settings = JSON.parse(localStorage.getItem('pastecal_global_settings'));
                     if (settings) {
                         this.globalSettings = { ...this.globalSettings, ...settings };
+
+                        // Ensure custom view properties exist for backwards compatibility
+                        if (this.globalSettings.customViewDuration === undefined) {
+                            this.globalSettings.customViewDuration = 3;
+                        }
+                        if (this.globalSettings.customViewUnit === undefined) {
+                            this.globalSettings.customViewUnit = 'Months';
+                        }
                     } else {
                         // Auto-import locale settings if no saved settings exist
                         this.autoImportLocaleSettings();
@@ -2714,9 +3012,7 @@ vacation dec 11 - dec 15
                         return;
                     }
 
-                    if (!window.location.search.includes('view=') && !window.location.search.includes('v=')) {
-                        scheduleObj.currentView = this.calendar?.options?.defaultView || this.globalSettings.defaultView;
-                    }
+                    this.applyDefaultView();
                 },
 
                 applyGlobalSettings() {
@@ -2736,9 +3032,7 @@ vacation dec 11 - dec 15
                         scheduleObj.timeFormat = timeFormat;
 
                         // Apply default view if not already set via URL
-                        if (!window.location.search.includes('view=') && !window.location.search.includes('v=')) {
-                            scheduleObj.currentView = this.calendar?.options?.defaultView || this.globalSettings.defaultView;
-                        }
+                        this.applyDefaultView();
 
                         // Apply start hour if not overridden by extended setting
                         if (!this.calendar?.options?.extended) {
@@ -2765,10 +3059,8 @@ vacation dec 11 - dec 15
                         } catch (e) { console.warn('Failed to apply time format setting:', e); }
 
                         try {
-                            if (!window.location.search.includes('view=') && !window.location.search.includes('v=')) {
-                                scheduleObj.currentView = this.globalSettings.defaultView;
-                                console.log('Applied default view setting');
-                            }
+                            this.applyDefaultView();
+                            console.log('Applied default view setting');
                         } catch (e) { console.warn('Failed to apply default view setting:', e); }
 
                         try {
