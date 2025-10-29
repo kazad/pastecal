@@ -2405,28 +2405,23 @@ vacation dec 11 - dec 15
                             return;
                         }
 
-                        const activateViewIfReady = (contextLabel) => {
+                        const activateViewIfReady = () => {
                             const viewButtons = document.querySelectorAll('.e-toolbar-item.e-views button');
-                            console.log(`[applyDefaultView] ${contextLabel} buttons:`, viewButtons.length, 'target index:', viewIndex, 'view:', actualViewName);
                             const targetButton = viewButtons[viewIndex];
-                            if (targetButton) {
-                                const buttonLabel = (targetButton.getAttribute('aria-label') || targetButton.textContent || '').trim();
-                                console.log(`[applyDefaultView] ${contextLabel} target label:`, buttonLabel);
-                                if (buttonLabel && buttonLabel.toLowerCase().includes(actualViewName.toLowerCase())) {
-                                    console.log('[applyDefaultView] clicking button with aria-label:', buttonLabel);
-                                    targetButton.click();
-                                    return true;
-                                }
-                                console.log('[applyDefaultView] target button present but label does not match expected view, waiting for update');
+                            if (!targetButton) {
+                                return false;
+                            }
+                            const buttonLabel = (targetButton.getAttribute('aria-label') || targetButton.textContent || '').trim();
+                            if (buttonLabel && buttonLabel.toLowerCase().includes(actualViewName.toLowerCase())) {
+                                targetButton.click();
+                                return true;
                             }
                             return false;
                         };
 
-                        if (activateViewIfReady('immediate check found')) {
+                        if (activateViewIfReady()) {
                             return;
                         }
-
-                        console.log('[applyDefaultView] toolbar not ready, waiting for dataBound');
 
                         if (this._pendingViewActivationHandler) {
                             scheduleObj.removeEventListener('dataBound', this._pendingViewActivationHandler);
@@ -2438,7 +2433,7 @@ vacation dec 11 - dec 15
                         }
 
                         const dataBoundHandler = () => {
-                            if (activateViewIfReady('dataBound event')) {
+                            if (activateViewIfReady()) {
                                 scheduleObj.removeEventListener('dataBound', dataBoundHandler);
                                 this._pendingViewActivationHandler = null;
                                 if (this._pendingViewActivationTimeout) {
@@ -2455,7 +2450,7 @@ vacation dec 11 - dec 15
                             scheduleObj.removeEventListener('dataBound', dataBoundHandler);
                             this._pendingViewActivationHandler = null;
                             this._pendingViewActivationTimeout = null;
-                            if (!activateViewIfReady('timeout fallback')) {
+                            if (!activateViewIfReady()) {
                                 console.error('[applyDefaultView] Unable to activate view after waiting for dataBound events:', actualViewName);
                             }
                         }, 10000);
