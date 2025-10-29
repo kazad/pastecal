@@ -1878,6 +1878,8 @@ vacation dec 11 - dec 15
                                 CalendarDataService.subscribe_readonly(actualSlug, (c) => {
                                     this.calendar.import(c);
                                     this.ensureCalendarOptionsDefaults();
+                                    // Update custom view in schedule with calendar's settings
+                                    this.updateCustomViewInSchedule();
                                     // Re-initialize local settings to load custom colors and labels
                                     this.initializeLocalSettings();
                                     // Add to recents when calendar loads, but mark as read-only
@@ -1912,9 +1914,13 @@ vacation dec 11 - dec 15
                     CalendarDataService.findAndSubscribe(this.urlslug, (c) => {
                         if (c) {
                             // Calendar found
+                            console.log('[CalendarDataService] Calendar loaded from Firebase');
                             this.isExisting = true;
                             this.calendar.import(c);
+                            console.log('[CalendarDataService] Calendar imported, defaultView:', this.calendar?.options?.defaultView);
                             this.ensureCalendarOptionsDefaults();
+                            // Update custom view in schedule with calendar's settings
+                            this.updateCustomViewInSchedule();
                             // Re-initialize local settings to load custom colors and labels
                             this.initializeLocalSettings();
                             // Add to recents when calendar loads
@@ -2160,7 +2166,12 @@ vacation dec 11 - dec 15
                     }
                 }
 
+                console.log('[BEFORE appendTo] currentView:', scheduleObj.currentView);
+                console.log('[BEFORE appendTo] views:', scheduleObj.views);
+
                 scheduleObj.appendTo('#Schedule');
+
+                console.log('[AFTER appendTo] currentView:', scheduleObj.currentView);
 
                 // Add event listener to mark month-start dates
                 scheduleObj.dataBound = function () {
@@ -2179,7 +2190,10 @@ vacation dec 11 - dec 15
 
                 // Load and apply global settings after scheduleObj is fully initialized
                 this.loadGlobalSettings();
-                this.applyGlobalSettings();
+                // Only apply settings immediately for homepage; remote calendars will apply after data loads
+                if (!this.urlslug) {
+                    this.applyGlobalSettings();
+                }
                 this.applyTheme();
 
                 // Apply custom colors CSS if any
@@ -2273,17 +2287,29 @@ vacation dec 11 - dec 15
                 },
 
                 // Watch for changes to custom view settings and update schedule
-                'globalSettings.customViewDuration'() {
-                    this.updateCustomViewInSchedule();
+                'globalSettings.customViewDuration'(newVal, oldVal) {
+                    console.log('[watcher] globalSettings.customViewDuration changed:', oldVal, '->', newVal);
+                    if (oldVal !== undefined && newVal !== oldVal) {
+                        this.updateCustomViewInSchedule(true);
+                    }
                 },
-                'globalSettings.customViewUnit'() {
-                    this.updateCustomViewInSchedule();
+                'globalSettings.customViewUnit'(newVal, oldVal) {
+                    console.log('[watcher] globalSettings.customViewUnit changed:', oldVal, '->', newVal);
+                    if (oldVal !== undefined && newVal !== oldVal) {
+                        this.updateCustomViewInSchedule(true);
+                    }
                 },
-                'calendar.options.customViewDuration'() {
-                    this.updateCustomViewInSchedule();
+                'calendar.options.customViewDuration'(newVal, oldVal) {
+                    console.log('[watcher] calendar.options.customViewDuration changed:', oldVal, '->', newVal);
+                    if (oldVal !== undefined && newVal !== oldVal) {
+                        this.updateCustomViewInSchedule(true);
+                    }
                 },
-                'calendar.options.customViewUnit'() {
-                    this.updateCustomViewInSchedule();
+                'calendar.options.customViewUnit'(newVal, oldVal) {
+                    console.log('[watcher] calendar.options.customViewUnit changed:', oldVal, '->', newVal);
+                    if (oldVal !== undefined && newVal !== oldVal) {
+                        this.updateCustomViewInSchedule(true);
+                    }
                 }
             },
 
@@ -2329,9 +2355,61 @@ vacation dec 11 - dec 15
 
                 // Apply default view to schedule (if no URL override)
                 applyDefaultView() {
+                    console.log('[applyDefaultView] Called. URL search:', window.location.search);
                     if (!window.location.search.includes('view=') && !window.location.search.includes('v=')) {
                         const defaultView = this.calendar?.options?.defaultView || this.globalSettings.defaultView || 'Month';
-                        scheduleObj.currentView = this.getActualViewName(defaultView);
+                        console.log('[applyDefaultView] defaultView setting:', defaultView);
+                        const actualViewName = this.getActualViewName(defaultView);
+                        console.log('[applyDefaultView] Resolved to:', actualViewName);
+
+                        // Find which view we want by index
+                        const viewIndex = scheduleObj.views.findIndex(v => {
+                            if (typeof v === 'string') {
+                                return v === actualViewName;
+                            } else if (typeof v === 'object' && v.displayName) {
+                                return v.displayName === actualViewName;
+                            }
+                            return false;
+                        });
+
+                        console.log('[applyDefaultView] Target view index:', viewIndex, 'for view:', actualViewName);
+
+                        // Wait for toolbar to render, then click the view button by index
+                        let retryCount = 0;
+                        const maxRetries = 20;
+
+                        const clickViewButton = () => {
+                            console.log('[applyDefaultView] Attempt', retryCount + 1);
+
+                            // Get all view buttons (they have class e-views)
+                            const viewButtons = document.querySelectorAll('.e-toolbar-item.e-views button');
+                            console.log('[applyDefaultView] Found', viewButtons.length, 'view buttons');
+
+                            if (viewButtons.length > 0 && viewButtons[viewIndex]) {
+                                const targetButton = viewButtons[viewIndex];
+                                const buttonLabel = targetButton.getAttribute('aria-label');
+                                console.log('[applyDefaultView] Found button at index', viewIndex, 'with label:', buttonLabel);
+
+                                targetButton.click();
+                                console.log('[applyDefaultView] Clicked button');
+
+                                setTimeout(() => {
+                                    console.log('[applyDefaultView][DELAYED] Final currentView:', scheduleObj.currentView);
+                                }, 200);
+                            } else {
+                                retryCount++;
+                                if (retryCount < maxRetries) {
+                                    console.warn('[applyDefaultView] Buttons not ready, retrying... (' + retryCount + '/' + maxRetries + ')');
+                                    setTimeout(clickViewButton, 200);
+                                } else {
+                                    console.error('[applyDefaultView] Failed after', maxRetries, 'attempts');
+                                }
+                            }
+                        };
+
+                        setTimeout(clickViewButton, 1000);
+                    } else {
+                        console.log('[applyDefaultView] Skipped - URL has view parameter');
                     }
                 },
 
@@ -2398,15 +2476,19 @@ vacation dec 11 - dec 15
                 },
 
                 // Update the custom view in the schedule when duration/unit changes
-                updateCustomViewInSchedule() {
+                updateCustomViewInSchedule(shouldRefresh = false) {
+                    console.log('[updateCustomViewInSchedule] Called, shouldRefresh:', shouldRefresh);
                     if (!window.scheduleObj || !window.scheduleObj.views) {
+                        console.log('[updateCustomViewInSchedule] scheduleObj not ready');
                         return;
                     }
 
                     // Get the current custom view configuration
                     const customViewDuration = this.calendar?.options?.customViewDuration || this.globalSettings.customViewDuration;
                     const customViewUnit = this.calendar?.options?.customViewUnit || this.globalSettings.customViewUnit;
+                    console.log('[updateCustomViewInSchedule] Building custom view:', customViewDuration, customViewUnit);
                     const newCustomViewConfig = this.buildCustomViewConfig(customViewDuration, customViewUnit);
+                    console.log('[updateCustomViewInSchedule] New config:', newCustomViewConfig);
 
                     // Find the custom view index (it's the object with interval property)
                     const customViewIndex = scheduleObj.views.findIndex(v =>
@@ -2416,29 +2498,40 @@ vacation dec 11 - dec 15
                     if (customViewIndex !== -1) {
                         const oldDisplayName = scheduleObj.views[customViewIndex].displayName;
                         const currentView = scheduleObj.currentView;
+                        console.log('[updateCustomViewInSchedule] Found at index', customViewIndex, 'old:', oldDisplayName, 'current view:', currentView);
 
                         // Replace the custom view
                         scheduleObj.views[customViewIndex] = newCustomViewConfig;
+                        console.log('[updateCustomViewInSchedule] Replaced custom view');
 
                         // If we're currently viewing the custom view, update the currentView
                         if (currentView === oldDisplayName) {
                             scheduleObj.currentView = newCustomViewConfig.displayName;
+                            console.log('[updateCustomViewInSchedule] Updated currentView to:', newCustomViewConfig.displayName);
                         }
 
-                        // Refresh the schedule to update the header
-                        scheduleObj.refresh();
+                        // Refresh the schedule to update the header (only if user actively changed settings)
+                        if (shouldRefresh) {
+                            console.log('[updateCustomViewInSchedule] Refreshing schedule');
+                            scheduleObj.refresh();
+                        }
+                    } else {
+                        console.log('[updateCustomViewInSchedule] Custom view not found in views array');
                     }
                 },
 
                 // Get the actual Syncfusion view name for a given default view setting
                 // Converts "Custom" to the actual display name like "3 Months"
                 getActualViewName(viewSetting) {
+                    console.log('[getActualViewName] Called with:', viewSetting);
                     // Handle null/undefined viewSetting - default to Month
                     if (!viewSetting) {
+                        console.log('[getActualViewName] Null/undefined, returning Month');
                         return 'Month';
                     }
 
                     if (viewSetting !== 'Custom') {
+                        console.log('[getActualViewName] Not Custom, returning:', viewSetting);
                         return viewSetting;
                     }
 
@@ -2449,6 +2542,7 @@ vacation dec 11 - dec 15
                             typeof v === 'object' && v.interval !== undefined && v.displayName
                         );
                         if (customView) {
+                            console.log('[getActualViewName] Found custom view in schedule:', customView.displayName);
                             return customView.displayName;
                         }
                     }
@@ -2457,6 +2551,7 @@ vacation dec 11 - dec 15
                     const duration = this.calendar?.options?.customViewDuration || this.globalSettings.customViewDuration || 3;
                     const unit = this.calendar?.options?.customViewUnit || this.globalSettings.customViewUnit || 'Months';
                     const unitLabel = duration === 1 ? unit.slice(0, -1) : unit;
+                    console.log('[getActualViewName] Computed fallback:', `${duration} ${unitLabel}`);
                     return `${duration} ${unitLabel}`;
                 },
 
@@ -3007,17 +3102,30 @@ vacation dec 11 - dec 15
 
                 // settings which are stored in the remote calendar object
                 applyGlobalSettingsAfterRemote() {
+                    console.log('[applyGlobalSettingsAfterRemote] Called');
                     if (typeof window.scheduleObj === 'undefined' || !window.scheduleObj) {
-                        console.log('Scheduler not initialized yet, skipping settings application');
+                        console.log('[applyGlobalSettingsAfterRemote] Scheduler not initialized yet, skipping settings application');
                         return;
                     }
 
                     this.applyDefaultView();
+                    console.log('[applyGlobalSettingsAfterRemote] Complete');
+
+                    // Final check after all operations settle
+                    setTimeout(() => {
+                        console.log('[FINAL CHECK] After 1 second:');
+                        console.log('  currentView:', scheduleObj.currentView);
+                        console.log('  calendar.options.defaultView:', this.calendar?.options?.defaultView);
+                        console.log('  calendar.options.customViewDuration:', this.calendar?.options?.customViewDuration);
+                        console.log('  calendar.options.customViewUnit:', this.calendar?.options?.customViewUnit);
+                        console.log('  custom view in array:', scheduleObj.views.find(v => typeof v === 'object' && v.interval));
+                    }, 1000);
                 },
 
                 applyGlobalSettings() {
+                    console.log('[applyGlobalSettings] Called');
                     if (typeof window.scheduleObj === 'undefined' || !window.scheduleObj) {
-                        console.log('Scheduler not initialized yet, skipping settings application');
+                        console.log('[applyGlobalSettings] Scheduler not initialized yet, skipping settings application');
                         return;
                     }
 
