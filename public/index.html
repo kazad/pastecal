@@ -2389,29 +2389,38 @@ vacation dec 11 - dec 15
                             return;
                         }
 
-                        // Wait for toolbar to render, then click the view button by index
+                        console.log('[applyDefaultView] preparing to poll for toolbar buttons');
                         let retryCount = 0;
-                        const maxRetries = 20;
+                        const maxRetries = 100;
+                        const pollDelayMs = 100;
 
-                        const clickViewButton = () => {
-                            const viewButtons = document.querySelectorAll('.e-toolbar-item.e-views button');
-                            console.log('[applyDefaultView] attempt', retryCount + 1, 'buttons:', viewButtons.length, 'target index:', viewIndex, 'view:', actualViewName);
+                        const startPolling = () => {
+                            console.log('[applyDefaultView] starting polling loop');
+                            const pollForButton = () => {
+                                const viewButtons = document.querySelectorAll('.e-toolbar-item.e-views button');
+                                console.log('[applyDefaultView] attempt', retryCount + 1, 'buttons:', viewButtons.length, 'target index:', viewIndex, 'view:', actualViewName);
 
-                            if (viewButtons.length > 0 && viewButtons[viewIndex]) {
-                                const targetButton = viewButtons[viewIndex];
-                                console.log('[applyDefaultView] clicking button with aria-label:', targetButton.getAttribute('aria-label'));
-                                targetButton.click();
-                            } else {
+                                if (viewButtons.length > 0 && viewButtons[viewIndex]) {
+                                    const targetButton = viewButtons[viewIndex];
+                                    console.log('[applyDefaultView] clicking button with aria-label:', targetButton.getAttribute('aria-label'));
+                                    clearInterval(intervalId);
+                                    targetButton.click();
+                                    return;
+                                }
+
                                 retryCount++;
-                                if (retryCount < maxRetries) {
-                                    setTimeout(clickViewButton, 200);
-                                } else {
+                                if (retryCount >= maxRetries) {
+                                    clearInterval(intervalId);
                                     console.error('[applyDefaultView] Failed after', maxRetries, 'attempts. Last button count:', viewButtons.length);
                                 }
-                            }
+                            };
+
+                            const intervalId = setInterval(pollForButton, pollDelayMs);
+                            pollForButton(); // immediate check once
                         };
 
-                        setTimeout(clickViewButton, 1000);
+                        // Give Syncfusion some time to render the toolbar before polling aggressively
+                        setTimeout(startPolling, 800);
                     }
                 },
 
