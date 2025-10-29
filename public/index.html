@@ -1810,6 +1810,8 @@ vacation dec 11 - dec 15
 
                     searchQuery: '',
                     searchResults: [],
+                    _pendingViewActivationHandler: null,
+                    _pendingViewActivationTimeout: null,
 
                     // Settings
                     globalSettings: {
@@ -1941,6 +1943,20 @@ vacation dec 11 - dec 15
                 }
 
                 window.scheduleObj = new ej.schedule.Schedule();
+                const scheduleInitTimestamp = performance.now();
+                console.log('[schedule-init] Schedule constructed at', scheduleInitTimestamp.toFixed(1), 'ms');
+                scheduleObj.on('actionComplete', (args) => {
+                    if (args?.requestType === 'toolBarRendered') {
+                        console.log('[schedule-init] toolBarRendered at', (performance.now() - scheduleInitTimestamp).toFixed(1), 'ms since init');
+                    }
+                });
+                scheduleObj.addEventListener('dataBound', () => {
+                    console.log('[schedule-init] dataBound at', (performance.now() - scheduleInitTimestamp).toFixed(1), 'ms since init');
+                });
+                scheduleObj.on('eventsLoaded', () => {
+                    console.log('[schedule-init] eventsLoaded at', (performance.now() - scheduleInitTimestamp).toFixed(1), 'ms since init');
+                });
+
                 scheduleObj.startHour = "05:00";
 
                 // Build custom view configuration dynamically
@@ -2389,38 +2405,60 @@ vacation dec 11 - dec 15
                             return;
                         }
 
-                        console.log('[applyDefaultView] preparing to poll for toolbar buttons');
-                        let retryCount = 0;
-                        const maxRetries = 100;
-                        const pollDelayMs = 100;
-
-                        const startPolling = () => {
-                            console.log('[applyDefaultView] starting polling loop');
-                            const pollForButton = () => {
-                                const viewButtons = document.querySelectorAll('.e-toolbar-item.e-views button');
-                                console.log('[applyDefaultView] attempt', retryCount + 1, 'buttons:', viewButtons.length, 'target index:', viewIndex, 'view:', actualViewName);
-
-                                if (viewButtons.length > 0 && viewButtons[viewIndex]) {
-                                    const targetButton = viewButtons[viewIndex];
-                                    console.log('[applyDefaultView] clicking button with aria-label:', targetButton.getAttribute('aria-label'));
-                                    clearInterval(intervalId);
+                        const activateViewIfReady = (contextLabel) => {
+                            const viewButtons = document.querySelectorAll('.e-toolbar-item.e-views button');
+                            console.log(`[applyDefaultView] ${contextLabel} buttons:`, viewButtons.length, 'target index:', viewIndex, 'view:', actualViewName);
+                            const targetButton = viewButtons[viewIndex];
+                            if (targetButton) {
+                                const buttonLabel = (targetButton.getAttribute('aria-label') || targetButton.textContent || '').trim();
+                                console.log(`[applyDefaultView] ${contextLabel} target label:`, buttonLabel);
+                                if (buttonLabel && buttonLabel.toLowerCase().includes(actualViewName.toLowerCase())) {
+                                    console.log('[applyDefaultView] clicking button with aria-label:', buttonLabel);
                                     targetButton.click();
-                                    return;
+                                    return true;
                                 }
-
-                                retryCount++;
-                                if (retryCount >= maxRetries) {
-                                    clearInterval(intervalId);
-                                    console.error('[applyDefaultView] Failed after', maxRetries, 'attempts. Last button count:', viewButtons.length);
-                                }
-                            };
-
-                            const intervalId = setInterval(pollForButton, pollDelayMs);
-                            pollForButton(); // immediate check once
+                                console.log('[applyDefaultView] target button present but label does not match expected view, waiting for update');
+                            }
+                            return false;
                         };
 
-                        // Give Syncfusion some time to render the toolbar before polling aggressively
-                        setTimeout(startPolling, 800);
+                        if (activateViewIfReady('immediate check found')) {
+                            return;
+                        }
+
+                        console.log('[applyDefaultView] toolbar not ready, waiting for dataBound');
+
+                        if (this._pendingViewActivationHandler) {
+                            scheduleObj.removeEventListener('dataBound', this._pendingViewActivationHandler);
+                            this._pendingViewActivationHandler = null;
+                        }
+                        if (this._pendingViewActivationTimeout) {
+                            clearTimeout(this._pendingViewActivationTimeout);
+                            this._pendingViewActivationTimeout = null;
+                        }
+
+                        const dataBoundHandler = () => {
+                            if (activateViewIfReady('dataBound event')) {
+                                scheduleObj.removeEventListener('dataBound', dataBoundHandler);
+                                this._pendingViewActivationHandler = null;
+                                if (this._pendingViewActivationTimeout) {
+                                    clearTimeout(this._pendingViewActivationTimeout);
+                                    this._pendingViewActivationTimeout = null;
+                                }
+                            }
+                        };
+
+                        this._pendingViewActivationHandler = dataBoundHandler;
+                        scheduleObj.addEventListener('dataBound', dataBoundHandler);
+
+                        this._pendingViewActivationTimeout = setTimeout(() => {
+                            scheduleObj.removeEventListener('dataBound', dataBoundHandler);
+                            this._pendingViewActivationHandler = null;
+                            this._pendingViewActivationTimeout = null;
+                            if (!activateViewIfReady('timeout fallback')) {
+                                console.error('[applyDefaultView] Unable to activate view after waiting for dataBound events:', actualViewName);
+                            }
+                        }, 10000);
                     }
                 },
 
