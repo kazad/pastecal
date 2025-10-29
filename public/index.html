@@ -2262,14 +2262,22 @@ vacation dec 11 - dec 15
 
                 'calendar.options.defaultView'(newVal) {
                     if (newVal === 'Custom') {
-                        if (!this.calendar.options) {
-                            this.calendar.options = {};
+                        const hasOptions = !!this.calendar.options;
+                        const existingOptions = hasOptions ? this.calendar.options : {};
+                        const normalizedOptions = { ...existingOptions };
+                        let shouldReplace = !hasOptions;
+
+                        if (!('customViewDuration' in normalizedOptions) || normalizedOptions.customViewDuration === undefined) {
+                            normalizedOptions.customViewDuration = this.globalSettings.customViewDuration ?? 3;
+                            shouldReplace = true;
                         }
-                        if (this.calendar.options.customViewDuration === undefined) {
-                            this.calendar.options.customViewDuration = 3;
+                        if (!('customViewUnit' in normalizedOptions) || normalizedOptions.customViewUnit === undefined) {
+                            normalizedOptions.customViewUnit = this.globalSettings.customViewUnit ?? 'Months';
+                            shouldReplace = true;
                         }
-                        if (this.calendar.options.customViewUnit === undefined) {
-                            this.calendar.options.customViewUnit = 'Months';
+
+                        if (shouldReplace) {
+                            this.calendar.options = normalizedOptions;
                         }
                     }
                 },
@@ -2333,12 +2341,31 @@ vacation dec 11 - dec 15
             methods: {
                 // Ensure calendar.options has proper default values
                 ensureCalendarOptionsDefaults() {
-                    if (!this.calendar.options) {
-                        this.calendar.options = {};
-                    }
+                    const hasOptions = !!this.calendar.options;
+                    const existingOptions = hasOptions ? this.calendar.options : {};
+                    const normalizedOptions = { ...existingOptions };
+                    let shouldReplace = !hasOptions;
+
                     // Ensure defaultView is null (not undefined) for proper dropdown binding
-                    if (this.calendar.options.defaultView === undefined) {
-                        this.calendar.options.defaultView = null;
+                    if (!Object.prototype.hasOwnProperty.call(normalizedOptions, 'defaultView')) {
+                        normalizedOptions.defaultView = null;
+                        shouldReplace = true;
+                    }
+                    if (!Object.prototype.hasOwnProperty.call(normalizedOptions, 'customViewDuration') ||
+                        normalizedOptions.customViewDuration === undefined) {
+                        const fallbackDuration = this.globalSettings.customViewDuration ?? 3;
+                        normalizedOptions.customViewDuration = fallbackDuration;
+                        shouldReplace = true;
+                    }
+                    if (!Object.prototype.hasOwnProperty.call(normalizedOptions, 'customViewUnit') ||
+                        normalizedOptions.customViewUnit === undefined) {
+                        const fallbackUnit = this.globalSettings.customViewUnit ?? 'Months';
+                        normalizedOptions.customViewUnit = fallbackUnit;
+                        shouldReplace = true;
+                    }
+
+                    if (shouldReplace) {
+                        this.calendar.options = normalizedOptions;
                     }
                 },
 
@@ -2348,7 +2375,6 @@ vacation dec 11 - dec 15
                         const defaultView = this.calendar?.options?.defaultView || this.globalSettings.defaultView || 'Month';
                         const actualViewName = this.getActualViewName(defaultView);
 
-                        // Find which view we want by index
                         const viewIndex = scheduleObj.views.findIndex(v => {
                             if (typeof v === 'string') {
                                 return v === actualViewName;
@@ -2358,33 +2384,34 @@ vacation dec 11 - dec 15
                             return false;
                         });
 
+                        if (viewIndex === -1) {
+                            console.warn('[applyDefaultView] View not found in schedule:', actualViewName);
+                            return;
+                        }
 
                         // Wait for toolbar to render, then click the view button by index
                         let retryCount = 0;
                         const maxRetries = 20;
 
                         const clickViewButton = () => {
-
-                            // Get all view buttons (they have class e-views)
                             const viewButtons = document.querySelectorAll('.e-toolbar-item.e-views button');
+                            console.log('[applyDefaultView] attempt', retryCount + 1, 'buttons:', viewButtons.length, 'target index:', viewIndex, 'view:', actualViewName);
 
                             if (viewButtons.length > 0 && viewButtons[viewIndex]) {
                                 const targetButton = viewButtons[viewIndex];
-                                const buttonLabel = targetButton.getAttribute('aria-label');
+                                console.log('[applyDefaultView] clicking button with aria-label:', targetButton.getAttribute('aria-label'));
                                 targetButton.click();
-
                             } else {
                                 retryCount++;
                                 if (retryCount < maxRetries) {
                                     setTimeout(clickViewButton, 200);
                                 } else {
-                                    console.error('[applyDefaultView] Failed after', maxRetries, 'attempts');
+                                    console.error('[applyDefaultView] Failed after', maxRetries, 'attempts. Last button count:', viewButtons.length);
                                 }
                             }
                         };
 
                         setTimeout(clickViewButton, 1000);
-                    } else {
                     }
                 },
 
