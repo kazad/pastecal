@@ -872,9 +872,27 @@ Copyright (c) 2025 Kalid Azad
             <section class="flex-1 flex items-center justify-end text-xs min-w-0 h-8" v-cloak v-if="!isLoading">
 
                 <div v-if="isReadOnly">
-                    <div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4" role="alert">
-                        <p>Read-only mode</p>
-                    </div>
+                    <custom-tooltip>
+                        <template #trigger>
+                            <div class="flex items-center bg-gray-50 border border-gray-200 rounded-full p-1 pl-3 pr-3 shadow-sm cursor-default select-none">
+                                <!-- Lock Icon -->
+                                <div class="text-gray-400 flex-shrink-0 mr-1.5">
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-3.5 h-3.5">
+                                        <path fill-rule="evenodd" d="M12 1.5a5.25 5.25 0 00-5.25 5.25v3a3 3 0 00-3 3v6.75a3 3 0 003 3h10.5a3 3 0 003-3v-6.75a3 3 0 00-3-3v-3c0-2.9-2.35-5.25-5.25-5.25zm3.75 8.25v-3a3.75 3.75 0 10-7.5 0v3h7.5z" clip-rule="evenodd" />
+                                    </svg>
+                                </div>
+                                <!-- Text -->
+                                <div class="text-gray-400 text-xs truncate max-w-[180px] md:max-w-xs">
+                                    <span class="font-bold text-gray-500">Read-only:</span> pastecal.com/view/<span class="font-medium text-gray-600" v-text="displayReadOnlySlug"></span>
+                                </div>
+                            </div>
+                        </template>
+                        <template #content>
+                            <p class="leading-relaxed">
+                                You are viewing a read-only version. Events cannot be added or edited.
+                            </p>
+                        </template>
+                    </custom-tooltip>
                 </div>
 
                 <div v-if="!isReadOnly">
@@ -2036,6 +2054,13 @@ vacation dec 11 - dec 15
                 isValidEvent() {
                     // Placeholder if needed for validation logic moved to computed
                     return true; 
+                },
+                displayReadOnlySlug() {
+                    if (this.calendar?.options?.publicViewId) return this.calendar.options.publicViewId;
+                    // fallback to URL parsing if calendar data isn't fully loaded or populated yet
+                    const parts = window.location.pathname.split('/');
+                    if (parts[1] === 'view' && parts[2]) return parts[2];
+                    return '...';
                 }
             },
 
