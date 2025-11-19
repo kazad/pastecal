@@ -859,11 +859,8 @@ Copyright (c) 2025 Kalid Azad
                         @mouseenter="isHoveringExistingLink = true"
                         @mouseleave="isHoveringExistingLink = false">
 
-                        <div class="text-color-1 text-xs mr-2 truncate max-w-[150px] md:max-w-xs">
-                            pastecal.com/<span class="font-bold text-color-2" v-text="calendar.id"></span>
-                        </div>
-
-                        <div class="text-color-1 group-hover:text-blue-500 transition-colors flex-shrink-0 p-1 rounded-full">
+                        <!-- Icon -->
+                        <div class="text-color-1 group-hover:text-blue-500 transition-colors flex-shrink-0 p-1 rounded-full mr-1">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none"
                                 viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -871,11 +868,16 @@ Copyright (c) 2025 Kalid Azad
                             </svg>
                         </div>
 
+                        <!-- URL Text -->
+                        <div class="text-color-1 text-xs truncate max-w-[150px] md:max-w-xs">
+                            pastecal.com/<span class="font-bold text-color-2" v-text="calendar.id"></span>
+                        </div>
+
                         <!-- Tooltip -->
                         <div v-show="isHoveringExistingLink" 
                              class="absolute top-full left-0 mt-2 w-64 p-3 bg-2 text-color-2 text-xs rounded-lg shadow-xl border border-color-default z-50 transition-opacity duration-200">
                             <p class="leading-relaxed">
-                                <span class="font-bold text-link">Share:</span> Click to get links for Web, Phone (ICS), or Read-only view.
+                                Get links to share with anyone or sync to your phone.
                             </p>
                             <!-- Arrow -->
                             <div class="absolute -top-1 left-6 w-2 h-2 bg-2 transform rotate-45 border-l border-t border-color-default"></div>
