@@ -2277,7 +2277,7 @@ vacation dec 11 - dec 15
                             });
 
                             var createElement = ej.base.createElement;
-                            let row = createElement('div', { className: 'custom-field-row-color' });
+                            let row = createElement('div', { className: 'custom-field-row-color group' });
                             let formElement = args.element.querySelector('.e-schedule-form');
                             formElement.firstChild.insertBefore(row, args.element.querySelector('.e-description-row'));
                             let container = createElement('div', { className: 'custom-field-container', attrs: { name: 'Type' } });
@@ -2292,6 +2292,26 @@ vacation dec 11 - dec 15
                             window.inputEle.setAttribute('name', 'Type');
                             window.inputEle.style.display = "none";
                             window.inputEle.setAttribute('value', args.data.Type);
+
+                            // Add tooltip for customizing labels (desktop only, shown if defaults)
+                            let tooltip = createElement('div', {
+                                id: 'type-label-hint',
+                                className: 'absolute right-0 top-full mt-1 w-40 p-2 bg-gray-800 text-white text-xs rounded shadow-lg hidden group-hover:block z-50 text-center pointer-events-none',
+                                innerHTML: 'Customize labels in Settings <span class="inline-block transform translate-y-0.5">⚙️</span>'
+                            });
+                            row.appendChild(tooltip);
+                        }
+
+                        // Dynamic visibility check for tooltip
+                        const tooltip = args.element.querySelector('#type-label-hint');
+                        if (tooltip) {
+                            const isDefaultLabels = app.localSettings.typeLabels.every((label, i) => label === `Type ${i+1}`);
+                            // Only show on desktop and if labels are default
+                            if (isDefaultLabels && window.innerWidth >= 768) {
+                                tooltip.style.display = ''; // Let CSS classes handle hover visibility
+                            } else {
+                                tooltip.style.display = 'none'; // Force hide
+                            }
                         }
 
                         // Initialize with existing type or default to Type 1
