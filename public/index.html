@@ -72,6 +72,7 @@ Copyright (c) 2025 Kalid Azad
             --link-hover: rgb(3, 140, 214);
             --panel-bg: #f9fafb;
             --border-color: #efefef;
+            --bg-interactive-hover: #f3f4f6; /* Tailwind gray-100 */
 
             /* text-grey-500, 700 */
             --text-color-1: #6b7280;
@@ -88,6 +89,7 @@ Copyright (c) 2025 Kalid Azad
             --link-hover: #6ec2ff;
             --panel-bg: #2a2a2a;
             --border-color: #373737;
+            --bg-interactive-hover: #333;
 
             --text-color-1: #999;
             --text-color-2: #AEAEAE;
@@ -854,7 +856,7 @@ Copyright (c) 2025 Kalid Azad
                 <div v-if="!isReadOnly">
                     <!-- Existing calendar info -->
                     <div v-show="isExisting"
-                        class="relative flex items-center bg-1 border border-color-default rounded-full p-1 pl-3 pr-3 shadow-sm hover:border-blue-500 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition-all group select-none"
+                        class="relative flex items-center bg-1 border border-color-default rounded-full p-1 pl-3 pr-3 shadow-sm hover:border-blue-500 hover:bg-[var(--bg-interactive-hover)] cursor-pointer transition-all group select-none"
                         @click="toggleShare"
                         @mouseenter="isHoveringExistingLink = true"
                         @mouseleave="isHoveringExistingLink = false">
