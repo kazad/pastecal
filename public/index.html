@@ -854,7 +854,9 @@ Copyright (c) 2025 Kalid Azad
                 <div v-if="!isReadOnly">
                     <!-- Existing calendar info -->
                     <div v-show="isExisting"
-                        class="text-color-1 flex flex-col md:flex-row flex-nowrap items-center space-y-2 md:space-y-0">
+                        class="relative text-color-1 flex flex-col md:flex-row flex-nowrap items-center space-y-2 md:space-y-0"
+                        @mouseenter="isHoveringExistingLink = true"
+                        @mouseleave="isHoveringExistingLink = false">
 
                         <a :href="calendar.id" class="text-color-1 hover:text-blue-500 transition-colors text-xs">
                             pastecal.com/<span class="inline-block md:inline" v-text="calendar.id"></span>
@@ -870,6 +872,16 @@ Copyright (c) 2025 Kalid Azad
                                 </svg>
                             </span>
                         </button>
+
+                        <!-- Tooltip -->
+                        <div v-show="isHoveringExistingLink" 
+                             class="absolute top-full left-0 mt-2 w-64 p-3 bg-2 text-color-2 text-xs rounded-lg shadow-xl border border-color-default z-50 transition-opacity duration-200">
+                            <p class="leading-relaxed">
+                                <span class="font-bold text-link">Share:</span> Click to get links for Web, Phone (ICS), or Read-only view.
+                            </p>
+                            <!-- Arrow -->
+                            <div class="absolute -top-1 left-6 w-2 h-2 bg-2 transform rotate-45 border-l border-t border-color-default"></div>
+                        </div>
                     </div>
 
                     <!-- New calendar creation -->
@@ -1927,6 +1939,7 @@ vacation dec 11 - dec 15
                     showClaimDialog: false,
                     userHasEditedSlug: false,
                     isHoveringPill: false,
+                    isHoveringExistingLink: false,
                 }
             },
 
