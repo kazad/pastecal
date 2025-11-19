@@ -1686,7 +1686,7 @@ Copyright (c) 2025 Kalid Azad
                     <h3 class="text-lg font-semibold mb-4">Quick Add Event</h3>
                     <form @submit.prevent="createEvent">
                         <textarea v-model="description" 
-                                 placeholder="Enter details ('Meet John tomorrow at 2pm')" 
+                                 placeholder="Describe event here (e.g., 'Meet John tomorrow 2pm'). Hit Enter to create." 
                                  rows="3" 
                                  @keydown.enter.prevent="handleEnter"
                                  class="w-full p-2 border border-color-default rounded mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -1711,7 +1711,7 @@ vacation dec 11 - dec 15
                         <div class="flex justify-end gap-2">
                             <button type="button" 
                                     @click="hideDialog"
-                                    class="px-4 py-2 border border-color-default rounded hover:bg-gray-50">
+                                    class="px-4 py-2 border border-color-default rounded hover:bg-[var(--bg-interactive-hover)]">
                                 Cancel
                             </button>
                             <button type="submit" 
