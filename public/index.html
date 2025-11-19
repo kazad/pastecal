@@ -869,9 +869,27 @@ Copyright (c) 2025 Kalid Azad
             </section>
 
             <!-- Right section -->
-            <section class="flex-1 flex items-center justify-end text-xs min-w-0 h-8" v-cloak v-if="!isLoading">
+            <section class="flex-1 flex items-center justify-end text-xs min-w-0 h-8" v-cloak>
 
-                <div v-if="isReadOnly">
+                <!-- Loading state -->
+                <div v-if="isLoading">
+                    <div class="flex items-center bg-1 border border-color-default rounded-full p-1 pl-3 pr-3 shadow-sm select-none">
+                        <!-- Share Icon -->
+                        <div class="text-color-1 flex-shrink-0 mr-1.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none"
+                                viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                            </svg>
+                        </div>
+                        <!-- Text -->
+                        <div class="text-color-1 text-xs">
+                            Loading...
+                        </div>
+                    </div>
+                </div>
+
+                <div v-if="!isLoading && isReadOnly">
                     <custom-tooltip align="right">
                         <template #trigger>
                             <div class="flex items-center bg-1 border border-color-default rounded-full p-1 pl-3 pr-3 shadow-sm cursor-pointer select-none hover:border-blue-500 hover:bg-[var(--bg-interactive-hover)] transition-all"
@@ -892,13 +910,13 @@ Copyright (c) 2025 Kalid Azad
                         </template>
                         <template #content>
                             <p class="leading-relaxed">
-                                Click to get sharing links for this calendar.
+                                You are in View Only mode. Events cannot be added or edited.
                             </p>
                         </template>
                     </custom-tooltip>
                 </div>
 
-                <div v-if="!isReadOnly">
+                <div v-if="!isLoading && !isReadOnly">
                     <!-- Existing calendar info -->
                     <div v-show="isExisting">
                         <custom-tooltip align="right">
@@ -1156,14 +1174,14 @@ Copyright (c) 2025 Kalid Azad
                         <div class="flex gap-2">
                             <input type="text" :value="getEditableURL()" readonly @click="copyToClipboard"
                                 class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
-                            <button @click="copyToClipboard($event.target.previousElementSibling)"
+                            <button @click="copyToClipboard(getEditableURL(), $event.currentTarget)"
                                 class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
                                     viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                                 </svg>
-                                Copy
+                                <span>Copy</span>
                             </button>
                             <button v-if="canShare()" @click="shareUrl(getEditableURL(), 'Calendar')"
                                 class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
@@ -1198,14 +1216,14 @@ Copyright (c) 2025 Kalid Azad
                             <div class="flex gap-2">
                                 <input type="text" :value="getReadOnlyURL()" readonly @click="copyToClipboard"
                                     class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
-                                <button @click="copyToClipboard($event.target.previousElementSibling)"
+                                <button @click="copyToClipboard(getReadOnlyURL(), $event.currentTarget)"
                                     class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
                                         viewBox="0 0 24 24" stroke="currentColor">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                             d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                                     </svg>
-                                    Copy
+                                    <span>Copy</span>
                                 </button>
                                 <button v-if="canShare()" @click="shareUrl(getReadOnlyURL(), 'Calendar')"
                                     class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
@@ -1264,14 +1282,14 @@ Copyright (c) 2025 Kalid Azad
                         <div class="flex gap-2">
                             <input type="text" :value="currentViewURL" readonly @click="copyToClipboard"
                                 class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
-                            <button @click="copyToClipboard($event.target.previousElementSibling)"
+                            <button @click="copyToClipboard(currentViewURL, $event.currentTarget)"
                                 class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
                                     viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                         d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                                 </svg>
-                                Copy
+                                <span>Copy</span>
                             </button>
                             <button v-if="canShare()" @click="shareUrl(currentViewURL, 'Calendar View')"
                                 class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
@@ -1325,14 +1343,14 @@ Copyright (c) 2025 Kalid Azad
                                 <div class="flex gap-2">
                                     <input type="text" :value="getReadOnlyICSURL()" readonly @click="copyToClipboard"
                                         class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
-                                    <button @click="copyToClipboard($event.target.previousElementSibling)"
+                                    <button @click="copyToClipboard(getReadOnlyICSURL(), $event.currentTarget)"
                                         class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
                                         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
                                             viewBox="0 0 24 24" stroke="currentColor">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                                 d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                                         </svg>
-                                        Copy
+                                        <span>Copy</span>
                                     </button>
                                 </div>
                             </div>
@@ -1584,6 +1602,8 @@ Copyright (c) 2025 Kalid Azad
 
         <pre v-text="syncFusionEvents" v-if="debug"></pre>
         <pre v-text="calendar" v-if="debug"></pre>
+        
+        <toast-notification ref="toast"></toast-notification>
     </div>
 
     <script type="text/x-template" id="tooltip-template">
@@ -1674,6 +1694,52 @@ Copyright (c) 2025 Kalid Azad
         </div>
     </script>
 
+    <script type="text/x-template" id="toast-notification-template">
+        <transition 
+            enter-active-class="transform ease-out duration-300 transition"
+            enter-from-class="translate-y-2 opacity-0 sm:translate-y-0 sm:translate-x-2"
+            enter-to-class="translate-y-0 opacity-100 sm:translate-x-0"
+            leave-active-class="transition ease-in duration-100"
+            leave-from-class="opacity-100"
+            leave-to-class="opacity-0">
+            <div v-if="show" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-[100] w-full max-w-sm px-4">
+                <div class="w-full bg-2 border border-color-default shadow-lg rounded-lg pointer-events-auto ring-1 ring-black ring-opacity-5 overflow-hidden">
+                    <div class="p-4">
+                        <div class="flex items-start">
+                            <div class="flex-shrink-0">
+                                <!-- Success Icon -->
+                                <svg v-if="type === 'success'" class="h-6 w-6 text-green-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <!-- Error Icon -->
+                                <svg v-if="type === 'error'" class="h-6 w-6 text-red-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <!-- Info Icon -->
+                                <svg v-if="type === 'info'" class="h-6 w-6 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                            </div>
+                            <div class="ml-3 w-0 flex-1 pt-0.5">
+                                <p class="text-sm font-medium text-color-2">
+                                    {{ message }}
+                                </p>
+                            </div>
+                            <div class="ml-4 flex-shrink-0 flex">
+                                <button @click="hide" class="bg-transparent rounded-md inline-flex text-color-1 hover:text-color-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                                    <span class="sr-only">Close</span>
+                                    <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </transition>
+    </script>
+
     <script type="text/x-template" id="quick-add-template">
         <span class="inline-flex items-start">
             <button @click="showDialog" 
@@ -1730,6 +1796,33 @@ vacation dec 11 - dec 15
     </script>
 
     <script>
+        const ToastNotification = {
+            template: '#toast-notification-template',
+            data() {
+                return {
+                    show: false,
+                    message: '',
+                    type: 'info',
+                    timer: null
+                }
+            },
+            methods: {
+                display(message, type = 'info') {
+                    this.message = message;
+                    this.type = type;
+                    this.show = true;
+                    
+                    if (this.timer) clearTimeout(this.timer);
+                    this.timer = setTimeout(() => {
+                        this.hide();
+                    }, 3000);
+                },
+                hide() {
+                    this.show = false;
+                }
+            }
+        };
+
         const QuickAdd = {
             template: "#quick-add-template",
             data() {
@@ -1941,7 +2034,8 @@ vacation dec 11 - dec 15
         const CalendarVueApp = {
             components: {
                 'navigation-dropdown': NavigationDropdown,
-                'custom-tooltip': Tooltip
+                'custom-tooltip': Tooltip,
+                'toast-notification': ToastNotification
             },
             directives: {
                 'click-outside': clickOutside
@@ -2894,27 +2988,35 @@ vacation dec 11 - dec 15
                 },
                 
                 confirmClaim() {
-                    // Sanitize ID
-                    this.calendar.id = this.calendar.id.trim();
-                    
-                    if (!this.calendar.id) {
-                        alert("Please enter a calendar name");
-                        return;
+                    if (this.calendar.id) {
+                        // Proceed with creation
+                        this.create();
+                        this.showClaimDialog = false;
                     }
-                    
-                    // Basic validation
-                    if (!this.calendar.id.match(/^[a-zA-Z0-9_\-]+$/)) {
-                        alert("Invalid name. Use letters, numbers, dashes, and underscores.");
-                        return;
+                },
+
+                create() {
+                    let slug = this.calendar.id;
+                    if (!slug) {
+                        slug = randomID(8);
+                        this.calendar.id = slug;
                     }
 
-                    CalendarDataService.checkExists(this.calendar.id, () => {
-                        alert("Calendar already exists, please choose another name.");
+                    // normalize
+                    slug = SlugManager.normalizeSlug(slug);
+                    this.calendar.id = slug;
+
+                    // check for existing
+                    CalendarDataService.checkExists(slug, () => {
+                        // Revert to alert for this validation as per user request
+                        alert("This URL is already taken. Please choose another.");
                     }, () => {
-                        this.showClaimDialog = false;
-                        CalendarDataService.createWithId(this.calendar.id, this.calendar, () => {
-                            this.clearLocalStorage();
-                            window.location = "/" + this.calendar.id;
+                        // does not exist, proceed
+                        this.isLoading = true;
+                        CalendarDataService.createWithId(slug, this.calendar, () => {
+                            // success
+                            this.showToast('Calendar created!', 'success');
+                            window.location.href = "/" + slug;
                         });
                     });
                 },
@@ -3560,9 +3662,6 @@ vacation dec 11 - dec 15
                         this.localSettings.typeLabels[index] = sanitizedValue;
                         // Store directly in calendar.options and sync
                         this.storeTypeLabelsInCalendarOptions();
-
-                        // Show confirmation for the user
-                        this.showSettingsConfirmation(`Label "${sanitizedValue}" saved successfully`, true);
                     }
                 },
 
@@ -3735,6 +3834,37 @@ vacation dec 11 - dec 15
 
                     // Update notes
                     this.calendar.options.notes = newNotes;
+                },
+
+                copyToClipboard(textToCopy, buttonElement) {
+                    if (!textToCopy) {
+                        this.showToast('Nothing to copy', 'error');
+                        return;
+                    }
+
+                    navigator.clipboard.writeText(textToCopy).then(() => {
+                        const originalContent = buttonElement.innerHTML;
+                        const checkIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1 text-green-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>`;
+                        buttonElement.innerHTML = `${checkIcon} Copied!`;
+                        buttonElement.classList.remove('bg-blue-500', 'hover:bg-blue-600');
+                        buttonElement.classList.add('bg-green-500');
+
+                        setTimeout(() => {
+                            buttonElement.innerHTML = originalContent;
+                            buttonElement.classList.remove('bg-green-500');
+                            buttonElement.classList.add('bg-blue-500', 'hover:bg-blue-600');
+                        }, 1500); // Revert after 1.5 seconds
+
+                    }).catch(err => {
+                        console.error('Failed to copy: ', err);
+                        this.showToast('Failed to copy link', 'error');
+                    });
+                },
+
+                showToast(message, type = 'info') {
+                    this.$refs.toast.display(message, type);
                 },
             }
         };
