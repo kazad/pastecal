@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 100" font-family="sans-serif">
+  <!-- Background -->
+  <rect width="600" height="100" fill="#f0f2f5" rx="10"/>
+  
+  <!-- Main Container Pill -->
+  <g transform="translate(50, 25)">
+    <!-- Shadow -->
+    <rect x="0" y="2" width="500" height="50" rx="25" fill="#000" opacity="0.1"/>
+    <!-- White Base -->
+    <rect width="500" height="50" rx="25" fill="#fff" stroke="#d1d5db" stroke-width="2"/>
+    
+    <!-- Domain Part -->
+    <text x="25" y="30" fill="#9ca3af" font-weight="500" font-size="16">pastecal.com/</text>
+    
+    <!-- Input Part (Mocked) -->
+    <text x="135" y="30" fill="#1f2937" font-weight="bold" font-size="16">trip-2025</text>
+    <line x1="135" y1="35" x2="210" y2="35" stroke="#3b82f6" stroke-width="2" />
+    
+    <!-- Cursor -->
+    <line x1="210" y1="18" x2="210" y2="32" stroke="#3b82f6" stroke-width="2">
+      <animate attributeName="opacity" values="1;0;1" dur="1s" repeatCount="indefinite" />
+    </line>
+
+    <!-- Shuffle Icon (Interactive) -->
+    <g transform="translate(350, 13)" opacity="0.5" cursor="pointer">
+       <circle cx="12" cy="12" r="16" fill="#f3f4f6"/>
+       <path d="M16 8L20 12L16 16 M8 16L4 12L8 8" stroke="#4b5563" stroke-width="2" fill="none"/>
+       <title>Shuffle</title>
+    </g>
+
+    <!-- Claim Button (Integrated) -->
+    <g transform="translate(390, 4)">
+      <rect width="106" height="42" rx="21" fill="#2563eb"/>
+      <text x="53" y="26" fill="#fff" text-anchor="middle" font-size="14" font-weight="bold">Claim URL</text>
+    </g>
+  </g>
+</svg>

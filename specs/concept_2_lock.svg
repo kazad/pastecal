@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 120" font-family="sans-serif">
+  <!-- Background -->
+  <rect width="600" height="120" fill="#fff" rx="10"/>
+  
+  <!-- Top Status Bar -->
+  <rect x="50" y="20" width="500" height="80" rx="8" fill="#fff7ed" stroke="#fbbf24" stroke-width="2" stroke-dasharray="5,5"/>
+  
+  <!-- Unlocked Icon -->
+  <g transform="translate(70, 45)">
+    <path d="M10 10 V5 A5 5 0 0 1 20 5 V10 M5 10 H25 V25 H5 Z" fill="none" stroke="#d97706" stroke-width="3"/>
+    <text x="35" y="15" fill="#d97706" font-size="12" font-weight="bold">UNLOCKED</text>
+  </g>
+  
+  <!-- URL Display -->
+  <text x="170" y="65" font-size="18" fill="#4b5563">pastecal.com/</text>
+  
+  <!-- Editable Field -->
+  <g transform="translate(290, 40)">
+    <rect width="120" height="35" rx="4" fill="#fff" stroke="#d97706" stroke-width="1"/>
+    <text x="10" y="23" fill="#1f2937" font-size="16">A1B2C3</text>
+    <text x="130" y="23" fill="#9ca3af" font-size="12" font-style="italic">(Edit me!)</text>
+  </g>
+  
+  <!-- Action -->
+  <g transform="translate(450, 40)">
+    <rect width="80" height="35" rx="4" fill="#d97706"/>
+    <text x="40" y="22" fill="#fff" text-anchor="middle" font-weight="bold" font-size="13">Secure</text>
+  </g>
+</svg>
