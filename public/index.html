@@ -100,6 +100,7 @@ Copyright (c) 2025 Kalid Azad
         body {
             background: var(--bg);
             color: var(--fg);
+            min-width: 320px;
         }
 
         .border-color-default {
@@ -421,7 +422,7 @@ Copyright (c) 2025 Kalid Azad
         }
 
         let randomID = (size = 21) => {
-            let alphabet = '123456789ABCDEFGHJKLMNPQRSTUVWXYZ'; // no lookalikes
+            let alphabet = '123456789abcdefghjklmnpqrstuvwxyz'; // no lookalikes, lowercase
             let id = '';
             let i = size;
             while (i--) {
@@ -842,9 +843,21 @@ Copyright (c) 2025 Kalid Azad
             <section class="flex-1 flex flex-col md:flex-row items-center justify-center mx-1 md:mx-2 min-w-0 min-h-8"
                 v-cloak v-if="!isLoading">
                 <div v-show="!editTitle" class="relative inline-flex items-center group">
-                    <span @click="editTitle = true"
-                        class="font-bold cursor-pointer max-w-[150px] md:max-w-xs text-center inline-block hover:text-blue-500 transition-colors leading-tight py-1"
-                        title="Click to edit" v-text="calendar.title"></span>
+                    <!-- Title with tooltip (edit mode) -->
+                    <custom-tooltip width="w-auto" align="center" v-if="!isReadOnly">
+                        <template #trigger>
+                            <span @click="editTitle = true"
+                                class="font-bold cursor-pointer max-w-[150px] md:max-w-xs text-center inline-block hover:text-blue-500 transition-colors leading-tight py-1"
+                                v-text="calendar.title"></span>
+                        </template>
+                        <template #content>
+                            <span class="whitespace-nowrap">Click to edit title</span>
+                        </template>
+                    </custom-tooltip>
+                    <!-- Title without tooltip (read-only mode) -->
+                    <span v-if="isReadOnly"
+                        class="font-bold max-w-[150px] md:max-w-xs text-center inline-block leading-tight py-1"
+                        v-text="calendar.title"></span>
                 </div>
                 <custom-tooltip width="w-auto" align="center" v-if="!editTitle">
                     <template #trigger>
@@ -954,12 +967,12 @@ Copyright (c) 2025 Kalid Azad
                         <custom-tooltip>
                             <template #trigger>
                                 <!-- Unified Pill Container -->
-                                <div class="flex items-center bg-1 border border-color-default rounded-full p-0.5 sm:p-1 pl-2 sm:pl-3 shadow-sm focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all max-w-full relative">
-                                    
+                                <div class="flex items-center bg-1 border border-color-default rounded-full p-0 sm:p-1 pl-1.5 sm:pl-3 pr-0 sm:pr-1 shadow-sm focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all max-w-full relative">
+
                                     <!-- Domain -->
                                     <span class="text-color-1 text-sm font-medium hidden md:inline flex-shrink-0 tracking-tight">pastecal.com/</span>
                                     <span class="text-color-1 text-sm font-medium md:hidden flex-shrink-0">/</span>
-                                    
+
                                     <!-- Input -->
                                     <input id="slug"
                                         class="bg-transparent border-none focus:ring-0 p-0 text-sm font-bold text-color-2 w-24 md:w-40 focus:outline-none placeholder-gray-400 min-w-0"
@@ -968,7 +981,7 @@ Copyright (c) 2025 Kalid Azad
 
                                     <!-- Claim Button (Integrated) -->
                                     <button @click="create"
-                                        class="ml-1 px-3 py-1.5 text-white bg-blue-600 font-bold rounded-full text-xs hover:bg-blue-700 transition-colors flex-shrink-0 shadow-sm">
+                                        class="ml-0.5 sm:ml-1 px-2 sm:px-3 py-1 sm:py-1.5 text-white bg-blue-600 font-bold rounded-full text-xs hover:bg-blue-700 transition-colors flex-shrink-0 shadow-sm">
                                         <span class="hidden sm:inline">Claim URL</span>
                                         <span class="inline sm:hidden">Claim</span>
                                     </button>
@@ -1172,15 +1185,11 @@ Copyright (c) 2025 Kalid Azad
                             Full editing access - anyone can view and change events
                         </p>
                         <div class="flex gap-2">
-                            <input type="text" :value="getEditableURL()" readonly @click="copyToClipboard"
+                            <input type="text" :value="getEditableURL()" readonly
                                 class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
                             <button @click="copyToClipboard(getEditableURL(), $event.currentTarget)"
                                 class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                </svg>
+                                <copy-icon />
                                 <span>Copy</span>
                             </button>
                             <button v-if="canShare()" @click="shareUrl(getEditableURL(), 'Calendar')"
@@ -1214,15 +1223,11 @@ Copyright (c) 2025 Kalid Azad
                         <!-- View-only link (auto-created) -->
                         <div class="space-y-2">
                             <div class="flex gap-2">
-                                <input type="text" :value="getReadOnlyURL()" readonly @click="copyToClipboard"
+                                <input type="text" :value="getReadOnlyURL()" readonly
                                     class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
                                 <button @click="copyToClipboard(getReadOnlyURL(), $event.currentTarget)"
                                     class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
-                                        viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                    </svg>
+                                    <copy-icon />
                                     <span>Copy</span>
                                 </button>
                                 <button v-if="canShare()" @click="shareUrl(getReadOnlyURL(), 'Calendar')"
@@ -1280,15 +1285,11 @@ Copyright (c) 2025 Kalid Azad
                                 class="bg-disabled px-1 py-0.5 rounded text-xs">?date=2024-04-01&view=week</code>
                         </p>
                         <div class="flex gap-2">
-                            <input type="text" :value="currentViewURL" readonly @click="copyToClipboard"
+                            <input type="text" :value="currentViewURL" readonly
                                 class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
                             <button @click="copyToClipboard(currentViewURL, $event.currentTarget)"
                                 class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                </svg>
+                                <copy-icon />
                                 <span>Copy</span>
                             </button>
                             <button v-if="canShare()" @click="shareUrl(currentViewURL, 'Calendar View')"
@@ -1323,16 +1324,12 @@ Copyright (c) 2025 Kalid Azad
                             <div v-if="!isReadOnly">
                                 <div class="text-xs font-medium text-color-2 mb-1">Full Access:</div>
                                 <div class="flex gap-2">
-                                    <input type="text" :value="getEditableICSURL()" readonly @click="copyToClipboard"
+                                    <input type="text" :value="getEditableICSURL()" readonly
                                         class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
-                                    <button @click="copyToClipboard($event.target.previousElementSibling)"
+                                    <button @click="copyToClipboard(getEditableICSURL(), $event.currentTarget)"
                                         class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
-                                            viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                        </svg>
-                                        Copy
+                                        <copy-icon />
+                                        <span>Copy</span>
                                     </button>
                                 </div>
                             </div>
@@ -1341,15 +1338,11 @@ Copyright (c) 2025 Kalid Azad
                             <div v-if="getReadOnlyURL()">
                                 <div class="text-xs font-medium text-color-2 mb-1">View Only:</div>
                                 <div class="flex gap-2">
-                                    <input type="text" :value="getReadOnlyICSURL()" readonly @click="copyToClipboard"
+                                    <input type="text" :value="getReadOnlyICSURL()" readonly
                                         class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
                                     <button @click="copyToClipboard(getReadOnlyICSURL(), $event.currentTarget)"
                                         class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
-                                            viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                        </svg>
+                                        <copy-icon />
                                         <span>Copy</span>
                                     </button>
                                 </div>
@@ -1624,7 +1617,7 @@ Copyright (c) 2025 Kalid Azad
 
     <script type="text/x-template" id="navigation-dropdown-template">
         <div class="absolute top-full left-0 mt-2 bg-1 min-w-[280px] shadow-lg rounded-lg border border-color-default overflow-hidden z-50">
-            <!-- Homepage option -->
+            <!-- Home / New Calendar option -->
             <a @click.prevent="$emit('go-homepage')"
                 class="flex items-center px-4 py-3 text-color-2 hover:bg-1 transition-colors cursor-pointer group">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
@@ -1633,7 +1626,7 @@ Copyright (c) 2025 Kalid Azad
                     <path stroke-linecap="round" stroke-linejoin="round"
                         d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
                 </svg>
-                <span class="font-medium group-hover:text-blue-500 transition-colors">Homepage</span>
+                <span class="font-medium group-hover:text-blue-500 transition-colors">Home [New Calendar]</span>
             </a>
 
             <!-- Recent calendars -->
@@ -1742,12 +1735,19 @@ Copyright (c) 2025 Kalid Azad
 
     <script type="text/x-template" id="quick-add-template">
         <span class="inline-flex items-start">
-            <button @click="showDialog" 
-                    class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors">
-                <span class="text-nowrap px-3 py-1 text-white bg-gray-500 rounded-full text-xs hover:bg-blue-600 transition-colors flex-shrink-0">+Event <!-- (⌘E) -->
-                </span>
-                <kbd class="hidden px-1.5 py-0.5 text-xs bg-disabled rounded">⌘E</kbd>
-            </button>
+            <custom-tooltip width="w-auto" align="center">
+                <template #trigger>
+                    <button @click="showDialog"
+                            class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors">
+                        <span class="text-nowrap px-3 py-1 text-white bg-gray-500 rounded-full text-xs hover:bg-blue-600 transition-colors flex-shrink-0">+Event <!-- (⌘E) -->
+                        </span>
+                        <kbd class="hidden px-1.5 py-0.5 text-xs bg-disabled rounded">⌘E</kbd>
+                    </button>
+                </template>
+                <template #content>
+                    <span class="whitespace-nowrap">Create event with text</span>
+                </template>
+            </custom-tooltip>
     
             <div v-if="dialogVisible" 
                  class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -2031,11 +2031,22 @@ vacation dec 11 - dec 15
             emits: ['go-homepage', 'toggle-pin', 'remove-recent']
         };
 
+        const CopyIcon = {
+            template: `
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
+                    viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+            `
+        };
+
         const CalendarVueApp = {
             components: {
                 'navigation-dropdown': NavigationDropdown,
                 'custom-tooltip': Tooltip,
-                'toast-notification': ToastNotification
+                'toast-notification': ToastNotification,
+                'copy-icon': CopyIcon
             },
             directives: {
                 'click-outside': clickOutside
@@ -2257,6 +2268,8 @@ vacation dec 11 - dec 15
                     });
                 } else {
                     // homepage - no remote calendar to load
+                    this.isExisting = false;
+                    this.calendar.id = randomID(8);
                     this.isLoading = false;
                 }
 
@@ -2931,6 +2944,8 @@ vacation dec 11 - dec 15
                     var c = JSON.parse(localStorage.getItem("calendar"));
                     if (c) {
                         this.calendar.import(c);
+                        // Reset to a fresh random ID on homepage (don't persist custom name)
+                        this.calendar.id = randomID(8);
                         // Re-initialize local settings to load custom colors and labels
                         this.initializeLocalSettings();
                     }
