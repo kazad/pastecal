@@ -874,20 +874,39 @@ Copyright (c) 2025 Kalid Azad
 
                     <!-- New calendar creation -->
                     <div v-show="!isExisting"
-                        class="flex items-center flex-col md:flex-row space-y-1 md:space-y-0 relative">
-                        <div class="absolute -top-2.5 right-1 text-color-1 md:hidden text-xs" style="font-size: 10px">
-                            pastecal.com/
-                        </div>
-                        <div class="text-xs md:text-sm scale-80 md:scale-none">
-                            <span class="text-color-1 hidden md:inline">pastecal.com/</span>
+                        class="flex flex-wrap md:flex-nowrap items-center gap-2 relative">
+                        
+                        <!-- Unified Pill Container -->
+                        <div class="flex items-center bg-1 border border-color-default rounded-full p-1 pl-3 shadow-sm focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all max-w-full relative"
+                             @mouseenter="isHoveringPill = true" 
+                             @mouseleave="isHoveringPill = false">
+                            
+                            <!-- Domain -->
+                            <span class="text-color-1 text-sm font-medium hidden md:inline flex-shrink-0 tracking-tight">pastecal.com/</span>
+                            <span class="text-color-1 text-sm font-medium md:hidden flex-shrink-0">/</span>
+                            
+                            <!-- Input -->
                             <input id="slug"
-                                class="border border-color-default focus:border-blue-400 px-1 w-20 text-xs focus:outline-none transition-colors"
-                                type="text" :disabled="isExisting" v-model="calendar.id" @keyup.enter="create">
+                                class="bg-transparent border-none focus:ring-0 p-0 text-sm font-bold text-color-2 w-24 md:w-40 focus:outline-none placeholder-gray-400 min-w-0"
+                                type="text" :disabled="isExisting" v-model="calendar.id" @keyup.enter="create" @input="handleSlugInput"
+                                placeholder="your-name">
+
+                            <!-- Claim Button (Integrated) -->
+                            <button @click="create"
+                                class="ml-1 px-3 py-1.5 text-white bg-blue-600 font-bold rounded-full text-xs hover:bg-blue-700 transition-colors flex-shrink-0 shadow-sm">
+                                Claim URL
+                            </button>
+
+                            <!-- Tooltip -->
+                            <div v-show="isHoveringPill" 
+                                 class="absolute top-full left-0 mt-3 w-64 p-3 bg-2 text-color-2 text-xs rounded-lg shadow-xl border border-color-default z-50 transition-opacity duration-200">
+                                <p class="leading-relaxed">
+                                    <span class="font-bold text-link">Tip:</span> Pick a custom URL (such as <em class="text-color-1">/trip-2025</em>) or use the automatic ID.
+                                </p>
+                                <!-- Arrow -->
+                                <div class="absolute -top-1 left-6 w-2 h-2 bg-2 transform rotate-45 border-l border-t border-color-default"></div>
+                            </div>
                         </div>
-                        <button @click="create" v-show="!isExisting"
-                            class="ml-2 px-3 py-1 text-white bg-blue-500 rounded-full text-xs hover:bg-blue-600 transition-colors flex-shrink-0">
-                            Save
-                        </button>
                     </div>
                 </div>
             </section>
@@ -1438,6 +1457,25 @@ Copyright (c) 2025 Kalid Azad
                                     <label for="extendedHours">Show extended hours (12-4 AM)</label>
                                 </div>
                             </div>
+
+                            <!-- Rename / Move -->
+                            <div class="pt-4 border-t border-color-default mt-4">
+                                <h4 class="font-bold text-red-600 mb-2 text-xs uppercase tracking-wider">Danger Zone</h4>
+                                
+                                <div class="mb-1">
+                                    <label class="block mb-1 font-medium text-xs text-color-2">Rename / Move Calendar</label>
+                                    <p class="text-xs text-color-1 mb-2">Copy this calendar's data to a new URL. The old URL will remain accessible.</p>
+                                    <div class="flex gap-2">
+                                        <input type="text" v-model="newCalendarId" placeholder="new-name" 
+                                               class="flex-1 p-2 border border-color-default rounded text-sm"
+                                               @keyup.enter="renameCalendar">
+                                        <button @click="renameCalendar" 
+                                                class="px-3 py-1 bg-red-50 text-red-600 border border-red-200 rounded text-xs hover:bg-red-100 transition-colors whitespace-nowrap">
+                                            Move
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1447,6 +1485,46 @@ Copyright (c) 2025 Kalid Azad
         <div id="cal2_wrap" style="width: 100%; height: 100%;">
             <div id="Schedule"></div>
         </div>
+        
+        <!-- Claim Intervention Modal -->
+        <div v-if="showClaimDialog" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1000]" v-cloak>
+            <div class="bg-1 rounded-lg shadow-xl p-6 w-full max-w-md mx-4 relative">
+                <button @click="showClaimDialog = false" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                    </svg>
+                </button>
+
+                <div class="text-center mb-6">
+                    <h3 class="text-lg font-bold text-gray-900 mb-2">Name your calendar</h3>
+                    <p class="text-sm text-gray-600">
+                        You're about to claim this permanent link.
+                        <br>
+                        Want to give it a custom name to make it easier to remember?
+                    </p>
+                </div>
+
+                                    <div class="mb-6">
+                                        <div class="flex items-center border-2 border-blue-500 rounded-md overflow-hidden bg-white">
+                                            <span class="pl-3 pr-1 text-gray-500 text-sm font-medium bg-gray-50 h-10 flex items-center border-r border-gray-200">pastecal.com/</span>
+                                            <input ref="claimInput" type="text" v-model="calendar.id" 
+                                                   class="flex-1 p-2 text-gray-900 font-medium focus:outline-none" 
+                                                   placeholder="my-calendar"
+                                                   @keyup.enter="confirmClaim">
+                                        </div>
+                                        <p class="text-xs text-gray-500 mt-2 text-center">
+                                            Examples: <span class="italic">marketing-schedule, trip-2025, soccer-team</span>
+                                        </p>
+                                    </div>
+                <button @click="confirmClaim" class="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-colors flex items-center justify-center gap-2">
+                    <span>Claim URL</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+
         <pre v-text="syncFusionEvents" v-if="debug"></pre>
         <pre v-text="calendar" v-if="debug"></pre>
     </div>
@@ -1841,6 +1919,14 @@ vacation dec 11 - dec 15
                     // Read-only slug properties
                     showReadOnlySlug: false,
                     readOnlySlugInput: '',
+                    
+                    // Rename
+                    newCalendarId: '',
+                    
+                    // Creation flow
+                    showClaimDialog: false,
+                    userHasEditedSlug: false,
+                    isHoveringPill: false,
                 }
             },
 
@@ -2633,13 +2719,92 @@ vacation dec 11 - dec 15
                 },
 
                 create() {
+                    // If user hasn't manually edited the slug, show intervention dialog
+                    if (!this.userHasEditedSlug) {
+                        this.showClaimDialog = true;
+                        // Focus input in dialog on next tick
+                        this.$nextTick(() => {
+                            if (this.$refs.claimInput) {
+                                this.$refs.claimInput.focus();
+                                this.$refs.claimInput.select();
+                            }
+                        });
+                        return;
+                    }
+                    
+                    this.confirmClaim();
+                },
+                
+                confirmClaim() {
+                    // Sanitize ID
+                    this.calendar.id = this.calendar.id.trim();
+                    
+                    if (!this.calendar.id) {
+                        alert("Please enter a calendar name");
+                        return;
+                    }
+                    
+                    // Basic validation
+                    if (!this.calendar.id.match(/^[a-zA-Z0-9_\-]+$/)) {
+                        alert("Invalid name. Use letters, numbers, dashes, and underscores.");
+                        return;
+                    }
+
                     CalendarDataService.checkExists(this.calendar.id, () => {
                         alert("Calendar already exists, please choose another name.");
                     }, () => {
+                        this.showClaimDialog = false;
                         CalendarDataService.createWithId(this.calendar.id, this.calendar, () => {
                             this.clearLocalStorage();
                             window.location = "/" + this.calendar.id;
                         });
+                    });
+                },
+
+                handleSlugInput() {
+                    this.userHasEditedSlug = true;
+                },
+
+                randomizeId() {
+                    this.calendar.id = randomID(8);
+                    // Reset edited state if they randomize (treat as "auto" again, or maybe not? 
+                    // Let's keep it as "not edited" so they get the review dialog if they just clicked shuffle
+                    // Actually, if they clicked shuffle, they interacted. 
+                    // But let's err on safe side: if they just shuffled but didn't TYPE, show dialog to confirm.
+                    this.userHasEditedSlug = false; 
+                },
+
+                renameCalendar() {
+                    if (!this.newCalendarId || !this.newCalendarId.trim()) return;
+                    
+                    let newId = this.newCalendarId.trim();
+                    // basic validation (alphanumeric, hyphens)
+                    if (!newId.match(/^[a-zA-Z0-9_\-]+$/)) {
+                        alert("Invalid name. Use letters, numbers, dashes, and underscores.");
+                        return;
+                    }
+                    
+                    // Check if current name is same as new name
+                    if (newId.toLowerCase() === this.calendar.id.toLowerCase()) {
+                         alert("New name must be different from current name.");
+                         return;
+                    }
+                    
+                    CalendarDataService.checkExists(newId, () => {
+                        alert("That name is already taken.");
+                    }, () => {
+                        // Does not exist, proceed
+                        if(confirm(`Move calendar to pastecal.com/${newId}?`)) {
+                            // Create copy with new ID
+                            let newCalendar = JSON.parse(JSON.stringify(this.calendar));
+                            newCalendar.id = newId;
+                            newCalendar.title = newCalendar.title || "New Calendar";
+                            
+                            CalendarDataService.createWithId(newId, newCalendar, () => {
+                                // We don't delete the old one (safer, acts as a copy)
+                                window.location = "/" + newId;
+                            });
+                        }
                     });
                 },
 
