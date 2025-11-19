@@ -783,35 +783,53 @@ Copyright (c) 2025 Kalid Azad
                 <buttonarea class="flex items-center space-x-1 mt-0">
 
                     <!-- Help button -->
-                    <button v-on:click="toggleHelp"
-                        class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8"
-                        title="Show help">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="currentColor" viewBox="0 0 16 16">
-                            <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z" />
-                            <path
-                                d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286zm1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94z" />
-                        </svg>
-                    </button>
+                    <custom-tooltip width="w-auto" align="center">
+                        <template #trigger>
+                            <button v-on:click="toggleHelp"
+                                class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="currentColor" viewBox="0 0 16 16">
+                                    <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z" />
+                                    <path
+                                        d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286zm1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94z" />
+                                </svg>
+                            </button>
+                        </template>
+                        <template #content>
+                            <span class="whitespace-nowrap">Show Help</span>
+                        </template>
+                    </custom-tooltip>
 
                     <!-- Search button -->
-                    <button v-on:click="toggleSearch"
-                        class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors"
-                        title="Search events">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="currentColor" viewBox="0 0 16 16">
-                            <path
-                                d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z" />
-                        </svg>
-                    </button>
+                    <custom-tooltip width="w-auto" align="center">
+                        <template #trigger>
+                            <button v-on:click="toggleSearch"
+                                class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="currentColor" viewBox="0 0 16 16">
+                                    <path
+                                        d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z" />
+                                </svg>
+                            </button>
+                        </template>
+                        <template #content>
+                            <span class="whitespace-nowrap">Search Events</span>
+                        </template>
+                    </custom-tooltip>
 
                     <!-- Settings button -->
-                    <button v-if="!isReadOnly" v-on:click="toggleSettings"
-                        class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8"
-                        title="Settings">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="currentColor" viewBox="0 0 16 16">
-                            <path
-                                d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z" />
-                        </svg>
-                    </button>
+                    <custom-tooltip width="w-auto" align="center" v-if="!isReadOnly">
+                        <template #trigger>
+                            <button v-on:click="toggleSettings"
+                                class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="currentColor" viewBox="0 0 16 16">
+                                    <path
+                                        d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z" />
+                                </svg>
+                            </button>
+                        </template>
+                        <template #content>
+                            <span class="whitespace-nowrap">Settings</span>
+                        </template>
+                    </custom-tooltip>
 
                     <!-- Quick add component - desktop only -->
                     <quick-add v-if="!isReadOnly" class="hidden lg:block"
@@ -828,18 +846,24 @@ Copyright (c) 2025 Kalid Azad
                         class="font-bold cursor-pointer max-w-[150px] md:max-w-xs text-center inline-block hover:text-blue-500 transition-colors leading-tight py-1"
                         title="Click to edit" v-text="calendar.title"></span>
                 </div>
-                <button v-show="!editTitle" v-on:click="toggleNotes"
-                    class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8"
-                    title="Toggle notes" alt="Notes">
-                    <div class="flex items-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
-                            stroke="currentColor" class="w-5 h-5">
-                            <path stroke-linecap="round" stroke-linejoin="round"
-                                d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-                        </svg>
-                        <span class="ml-0.5 text-xs hidden lg:inline">Notes</span>
-                    </div>
-                </button>
+                <custom-tooltip width="w-auto" align="center" v-if="!editTitle">
+                    <template #trigger>
+                        <button v-on:click="toggleNotes"
+                            class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8">
+                            <div class="flex items-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                    stroke="currentColor" class="w-5 h-5">
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                        d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                                </svg>
+                                <span class="ml-0.5 text-xs hidden lg:inline">Notes</span>
+                            </div>
+                        </button>
+                    </template>
+                    <template #content>
+                        <span class="whitespace-nowrap">Toggle Notes</span>
+                    </template>
+                </custom-tooltip>
                 <input type="text" class="border border-color-default p-1 max-w-[150px] md:max-w-xs h-8"
                     v-show="editTitle" v-model="calendar.title" @keyup.enter="setTitle($event)">
             </section>
@@ -855,72 +879,67 @@ Copyright (c) 2025 Kalid Azad
 
                 <div v-if="!isReadOnly">
                     <!-- Existing calendar info -->
-                    <div v-show="isExisting"
-                        class="relative flex items-center bg-1 border border-color-default rounded-full p-1 pl-3 pr-3 shadow-sm hover:border-blue-500 hover:bg-[var(--bg-interactive-hover)] cursor-pointer transition-all group select-none"
-                        @click="toggleShare"
-                        @mouseenter="isHoveringExistingLink = true"
-                        @mouseleave="isHoveringExistingLink = false">
+                    <div v-show="isExisting">
+                        <custom-tooltip align="right">
+                            <template #trigger>
+                                <div class="relative flex items-center bg-1 border border-color-default rounded-full p-1 pl-3 pr-3 shadow-sm hover:border-blue-500 hover:bg-[var(--bg-interactive-hover)] cursor-pointer transition-all group select-none"
+                                    @click="toggleShare">
 
-                        <!-- Icon -->
-                        <div class="text-color-1 group-hover:text-blue-500 transition-colors flex-shrink-0 p-1 rounded-full mr-1">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none"
-                                viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                            </svg>
-                        </div>
+                                    <!-- Icon -->
+                                    <div class="text-color-1 group-hover:text-blue-500 transition-colors flex-shrink-0 p-1 rounded-full mr-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none"
+                                            viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                                        </svg>
+                                    </div>
 
-                        <!-- URL Text -->
-                        <div class="text-color-1 text-xs truncate max-w-[150px] md:max-w-xs">
-                            pastecal.com/<span class="font-bold text-color-2" v-text="calendar.id"></span>
-                        </div>
-
-                        <!-- Tooltip -->
-                        <div v-show="isHoveringExistingLink" 
-                             class="absolute top-full right-0 mt-2 w-64 p-3 bg-2 text-color-2 text-xs rounded-lg shadow-xl border border-color-default z-50 transition-opacity duration-200">
-                            <p class="leading-relaxed">
-                                Get links to share with anyone or sync to your phone.
-                            </p>
-                            <!-- Arrow -->
-                            <div class="absolute -top-1 right-6 w-2 h-2 bg-2 transform rotate-45 border-l border-t border-color-default"></div>
-                        </div>
+                                    <!-- URL Text -->
+                                    <div class="text-color-1 text-xs truncate max-w-[150px] md:max-w-xs">
+                                        pastecal.com/<span class="font-bold text-color-2" v-text="calendar.id"></span>
+                                    </div>
+                                </div>
+                            </template>
+                            <template #content>
+                                <p class="leading-relaxed">
+                                    Get links to share with anyone or sync to your phone.
+                                </p>
+                            </template>
+                        </custom-tooltip>
                     </div>
 
                     <!-- New calendar creation -->
                     <div v-show="!isExisting"
                         class="flex flex-wrap md:flex-nowrap items-center gap-2 relative">
                         
-                        <!-- Unified Pill Container -->
-                        <div class="flex items-center bg-1 border border-color-default rounded-full p-1 pl-3 shadow-sm focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all max-w-full relative"
-                             @mouseenter="isHoveringPill = true" 
-                             @mouseleave="isHoveringPill = false">
-                            
-                            <!-- Domain -->
-                            <span class="text-color-1 text-sm font-medium hidden md:inline flex-shrink-0 tracking-tight">pastecal.com/</span>
-                            <span class="text-color-1 text-sm font-medium md:hidden flex-shrink-0">/</span>
-                            
-                            <!-- Input -->
-                            <input id="slug"
-                                class="bg-transparent border-none focus:ring-0 p-0 text-sm font-bold text-color-2 w-24 md:w-40 focus:outline-none placeholder-gray-400 min-w-0"
-                                type="text" :disabled="isExisting" v-model="calendar.id" @keyup.enter="create" @input="handleSlugInput"
-                                placeholder="your-name">
+                        <custom-tooltip>
+                            <template #trigger>
+                                <!-- Unified Pill Container -->
+                                <div class="flex items-center bg-1 border border-color-default rounded-full p-1 pl-3 shadow-sm focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all max-w-full relative">
+                                    
+                                    <!-- Domain -->
+                                    <span class="text-color-1 text-sm font-medium hidden md:inline flex-shrink-0 tracking-tight">pastecal.com/</span>
+                                    <span class="text-color-1 text-sm font-medium md:hidden flex-shrink-0">/</span>
+                                    
+                                    <!-- Input -->
+                                    <input id="slug"
+                                        class="bg-transparent border-none focus:ring-0 p-0 text-sm font-bold text-color-2 w-24 md:w-40 focus:outline-none placeholder-gray-400 min-w-0"
+                                        type="text" :disabled="isExisting" v-model="calendar.id" @keyup.enter="create" @input="handleSlugInput"
+                                        placeholder="your-name">
 
-                            <!-- Claim Button (Integrated) -->
-                            <button @click="create"
-                                class="ml-1 px-3 py-1.5 text-white bg-blue-600 font-bold rounded-full text-xs hover:bg-blue-700 transition-colors flex-shrink-0 shadow-sm">
-                                Claim URL
-                            </button>
-
-                            <!-- Tooltip -->
-                            <div v-show="isHoveringPill" 
-                                 class="absolute top-full left-0 mt-3 w-64 p-3 bg-2 text-color-2 text-xs rounded-lg shadow-xl border border-color-default z-50 transition-opacity duration-200">
+                                    <!-- Claim Button (Integrated) -->
+                                    <button @click="create"
+                                        class="ml-1 px-3 py-1.5 text-white bg-blue-600 font-bold rounded-full text-xs hover:bg-blue-700 transition-colors flex-shrink-0 shadow-sm">
+                                        Claim URL
+                                    </button>
+                                </div>
+                            </template>
+                            <template #content>
                                 <p class="leading-relaxed">
                                     <span class="font-bold text-link">Tip:</span> Pick a custom URL (such as <em class="text-color-1">/trip-2025</em>) or use the automatic ID.
                                 </p>
-                                <!-- Arrow -->
-                                <div class="absolute -top-1 left-6 w-2 h-2 bg-2 transform rotate-45 border-l border-t border-color-default"></div>
-                            </div>
-                        </div>
+                            </template>
+                        </custom-tooltip>
                     </div>
                 </div>
             </section>
@@ -1545,6 +1564,22 @@ Copyright (c) 2025 Kalid Azad
         <pre v-text="calendar" v-if="debug"></pre>
     </div>
 
+    <script type="text/x-template" id="tooltip-template">
+        <div class="relative" @mouseenter="show = true" @mouseleave="show = false">
+            <slot name="trigger"></slot>
+            <div v-show="show" 
+                class="absolute top-full mt-2 p-3 bg-2 text-color-2 text-xs rounded-lg shadow-xl border border-color-default z-50 transition-opacity duration-200"
+                :class="[widthClass, alignClass]">
+                
+                <slot name="content"></slot>
+                
+                <!-- Arrow -->
+                <div class="absolute -top-1 w-2 h-2 bg-2 transform rotate-45 border-l border-t border-color-default"
+                     :class="arrowAlignClass"></div>
+            </div>
+        </div>
+    </script>
+
     <script type="text/x-template" id="navigation-dropdown-template">
         <div class="absolute top-full left-0 mt-2 bg-1 min-w-[280px] shadow-lg rounded-lg border border-color-default overflow-hidden z-50">
             <!-- Homepage option -->
@@ -1843,6 +1878,38 @@ vacation dec 11 - dec 15
             }
         }
 
+        const Tooltip = {
+            template: '#tooltip-template',
+            props: {
+                width: {
+                    type: String,
+                    default: 'w-64'
+                },
+                align: {
+                    type: String,
+                    default: 'left' // 'left' or 'right'
+                }
+            },
+            data() {
+                return {
+                    show: false
+                }
+            },
+            computed: {
+                widthClass() {
+                    return this.width;
+                },
+                alignClass() {
+                    if (this.align === 'center') return 'left-1/2 transform -translate-x-1/2';
+                    return this.align === 'right' ? 'right-0' : 'left-0';
+                },
+                arrowAlignClass() {
+                    if (this.align === 'center') return 'left-1/2 transform -translate-x-1/2';
+                    return this.align === 'right' ? 'right-6' : 'left-6';
+                }
+            }
+        };
+
         const NavigationDropdown = {
             template: '#navigation-dropdown-template',
             props: ['recentCalendars'],
@@ -1851,7 +1918,8 @@ vacation dec 11 - dec 15
 
         const CalendarVueApp = {
             components: {
-                'navigation-dropdown': NavigationDropdown
+                'navigation-dropdown': NavigationDropdown,
+                'custom-tooltip': Tooltip
             },
             directives: {
                 'click-outside': clickOutside
@@ -1942,8 +2010,6 @@ vacation dec 11 - dec 15
                     // Creation flow
                     showClaimDialog: false,
                     userHasEditedSlug: false,
-                    isHoveringPill: false,
-                    isHoveringExistingLink: false,
                 }
             },
 
