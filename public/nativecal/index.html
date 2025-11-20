@@ -123,6 +123,10 @@
             </div>
             
             <div class="flex gap-2">
+                <button @click="timeFormat = timeFormat === '12' ? '24' : '12'"
+                    :class="['px-3 py-1 rounded text-sm transition-colors', 'bg-gray-100 hover:bg-gray-200']">
+                    {{ timeFormat === '12' ? 'AM/PM' : '24H' }}
+                </button>
                 <button v-for="view in views" 
                     :key="view"
                     @click="changeView(view)"
@@ -187,7 +191,7 @@
 
                 <!-- Scrollable Area -->
                 <div class="flex-1 overflow-y-auto relative" ref="timeScroll">
-                    <div class="time-grid relative min-h-[1200px]"
+                    <div class="time-grid relative"
                          :style="`grid-template-columns: 60px repeat(${visibleDates.length}, 1fr)`">
                         
                         <!-- Time Labels (Left Gutter) -->
@@ -381,6 +385,7 @@
                 const popupPosition = ref({ top: 0, left: 0 });
                 const isEditorOpen = ref(false);
                 const editorForm = ref({ id: null, title: '', start: 0, end: 0, type: 1 });
+                const timeFormat = ref('12'); // '12' for AM/PM, '24' for military
                 
                 // ----------------------------------------------------------------
                 // Data
@@ -628,7 +633,13 @@
                     return dayEvents;
                 };
 
-                const formatTime = (timestamp) => df.format(new Date(timestamp), 'h:mm a');
+                const formatTime = (timestamp) => {
+                    if (timeFormat.value === '12') {
+                        return df.format(new Date(timestamp), 'h:mm a');
+                    } else {
+                        return df.format(new Date(timestamp), 'HH:mm');
+                    }
+                };
                 const formatDuration = (event) => {
                     const diff = df.differenceInMinutes(event.end, event.start);
                     const h = Math.floor(diff / 60);
@@ -966,7 +977,7 @@
                     createMonthEvent, createTimeEvent, editEvent, selectEvent, selectedEventId,
                     closePreview, openEditor, closeEditor, saveEvent, deleteEvent, isEditorOpen, editorForm, popupStyle, getEventById,
                     startDrag, onDrag, stopDrag, dragState,
-                    currentTimeTop, notification, eventCursor,
+                    currentTimeTop, notification, eventCursor, timeFormat,
                     isSameDay: (d1, d2) => df.isSameDay(d1, d2)
                 }
             }
