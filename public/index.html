@@ -61,319 +61,316 @@ Copyright (c) 2025 Kalid Azad
     <!-- Add Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
 
-    <!-- CSS variables for light/dark theme -->
-    <style>
-        :root {
-            --bg: #ffffff;
-            --bg-disabled: #eaeaea;
+        <!-- CSS variables for light/dark theme & Global Styles -->
 
-            --fg: #333333;
-            --link: rgb(3, 169, 244);
-            --link-hover: rgb(3, 140, 214);
-            --panel-bg: #f9fafb;
-            --border-color: #efefef;
-            --bg-interactive-hover: #f3f4f6;
-            /* Tailwind gray-100 */
+        <style>
 
-            /* text-grey-500, 700 */
-            --text-color-1: #6b7280;
-            --text-color-2: #374151;
-            ;
-        }
+            /* --- Theme Variables --- */
 
-        [data-theme="dark"] {
-            --bg: #1e1e1e;
-            --bg-disabled: #333;
+            :root {
 
-            --fg: #cccccc;
-            --link: #4aaaff;
-            --link-hover: #6ec2ff;
-            --panel-bg: #2a2a2a;
-            --border-color: #373737;
-            --bg-interactive-hover: #333;
+                --bg: #ffffff;
 
-            --text-color-1: #999;
-            --text-color-2: #AEAEAE;
-        }
-    </style>
+                --bg-disabled: #eaeaea;
 
-    <style>
-        body {
-            background: var(--bg);
-            color: var(--fg);
-            min-width: 320px;
-        }
+                --fg: #333333;
 
-        .border-color-default {
-            border-color: var(--border-color) !important;
-        }
+                --link: rgb(3, 169, 244);
 
-        .text-color-1 {
-            color: var(--text-color-1);
-        }
+                --link-hover: rgb(3, 140, 214);
 
-        .text-color-2 {
-            color: var(--text-color-2);
-        }
+                --panel-bg: #f9fafb;
 
-        .bg-1 {
-            background: var(--bg);
-        }
+                --border-color: #efefef;
 
-        .bg-2 {
-            background: var(--panel-bg);
-        }
+                --bg-interactive-hover: #f3f4f6; /* Tailwind gray-100 */
 
-        .bg-disabled {
-            background: var(--bg-disabled);
-        }
+                --text-color-1: #6b7280;
 
-        select,
-        option,
-        input,
-        textarea {
-            background: var(--bg);
-        }
+                --text-color-2: #374151;
 
-        body a {
-            text-decoration: none;
-            color: rgb(3, 169, 244);
-        }
-
-        body a:hover {
-            text-decoration: underline;
-        }
-
-        /* Details/Summary for FAQ */
-        details summary {
-            cursor: pointer;
-            user-select: none;
-        }
-
-        details summary:hover {
-            opacity: 0.85;
-        }
-
-        details[open] summary {
-            margin-bottom: 0.5rem;
-        }
-
-        /* Keep only Syncfusion customizations */
-        .e-toolbar-item.e-today {
-            display: none !important;
-        }
-
-        .e-schedule .e-vertical-view .e-time-cells-wrap table td,
-        .e-schedule .e-vertical-view .e-work-cells {
-            height: 24px !important;
-        }
-
-        .e-schedule .e-month-view .e-work-cells {
-            height: 100px !important;
-        }
-
-        td.e-header-cells.e-disable-dates::before {
-            content: '12-4 AM';
-            width: 100%;
-            margin: 0px auto;
-            margin-top: 40%;
-            text-align: center;
-            display: inline-block;
-            color: #36b1f6;
-            cursor: pointer;
-        }
-
-        td.e-header-cells.e-disable-dates:hover {
-            background-color: #fafafa !important;
-        }
-
-        /* Keep color classes for event types */
-        span.e-menu-icon.e-color-1 {
-            background: #3f51b5;
-        }
-
-        span.e-menu-icon.e-color-2 {
-            background: #e3165b;
-        }
-
-        span.e-menu-icon.e-color-3 {
-            background: #ff6652;
-        }
-
-        span.e-menu-icon.e-color-4 {
-            background: #4caf50;
-        }
-
-        span.e-menu-icon.e-color-5 {
-            background: #ff9800;
-        }
-
-        span.e-menu-icon.e-color-6 {
-            background: #03a9f4;
-        }
-
-        span.e-menu-icon.e-color-7 {
-            background: #9e9e9e;
-        }
-
-        span.e-menu-icon.e-color-8 {
-            background: #27282f;
-        }
-
-        /* Keep essential Syncfusion form styles */
-        .custom-field-row-color {
-            position: absolute;
-            top: 1rem;
-            right: 25px;
-        }
-
-        .custom-field-row-color .e-caret {
-            color: #eee;
-        }
-
-        /* make room for color picker */
-        .e-subject-container {
-            margin-right: 50px;
-        }
-
-        .e-schedule-dialog .e-subject-container {
-            width: 100%;
-        }
-
-        .e-location-container {
-            display: none;
-        }
-
-        /* font overrides */
-        html,
-        div#Schedule,
-        .e-control,
-        .e-css,
-        .e-toolbar,
-        .e-tbar-btn,
-        .e-tbar-btn-text,
-        .e-control-wrapper,
-        .e-label,
-        textarea {
-            font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji" !important;
-            font-weight: normal;
-        }
-
-        /* to find all roboto fonts: 
-        [...document.querySelectorAll('*')].filter(el => {
-                const font = getComputedStyle(el).fontFamily.toLowerCase();
-                return font.includes('roboto');
-        });
-        */
-
-        div#Schedule,
-        .e-appointment,
-        .e-draggable,
-        .e-btn {
-            border-radius: 6px !important;
-        }
-
-        .e-dialog,
-        .e-popup,
-        .e-calendar {
-            border-radius: 6px;
-            overflow: hidden;
-        }
-
-        /* better colors */
-        .e-schedule .e-vertical-view .e-work-cells,
-        .e-schedule .e-vertical-view .e-date-header-wrap table tbody td {
-            border-color: var(--border-color);
-        }
-
-        /* some fonts get cut off */
-        .e-schedule.e-device .e-vertical-view .e-time-cells-wrap {
-            overflow: visible;
-        }
-
-        /* better save icon */
-        .e-schedule-dialog.e-device .e-save-icon::before {
-            content: 'SAVE';
-            color: #e3165b;
-            font-size: 16px;
-        }
-
-        /* dark mode hides buttons for some reason */
-        .e-quick-popup-wrapper .e-event-popup .e-popup-header .e-header-icon-wrapper .e-edit,
-        .e-quick-popup-wrapper .e-event-popup .e-popup-header .e-header-icon-wrapper .e-delete {
-            display: initial;
-        }
-
-        /* Force view buttons to always show on desktop, hide overflow menu */
-        @media screen and (min-width: 768px) {
-
-            .e-schedule .e-schedule-toolbar .e-toolbar-pop,
-            .e-schedule .e-schedule-toolbar .e-hor-nav {
-                display: none !important;
             }
 
-            .e-schedule .e-schedule-toolbar .e-toolbar-items {
-                display: flex !important;
-                flex-wrap: nowrap !important;
+    
+
+            [data-theme="dark"] {
+
+                --bg: #1e1e1e;
+
+                --bg-disabled: #333;
+
+                --fg: #cccccc;
+
+                --link: #4aaaff;
+
+                --link-hover: #6ec2ff;
+
+                --panel-bg: #2a2a2a;
+
+                --border-color: #373737;
+
+                --bg-interactive-hover: #333;
+
+                --text-color-1: #999;
+
+                --text-color-2: #AEAEAE;
+
             }
-        }
 
-        /* Highlight first day of new months in Quarter view */
-        .e-date-header.e-navigate.month-start {
-            font-size: 18px;
-        }
-    </style>
+    
 
-    <style>
-        .quick-add-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 1000;
-        }
+            /* --- General Styles --- */
 
-        .quick-add-dialog {
-            background-color: white;
-            padding: 20px;
-            border-radius: 8px;
-            width: 80%;
-            max-width: 500px;
-        }
+            body {
 
-        .quick-add-dialog textarea {
-            width: 100%;
-            margin-bottom: 10px;
-        }
+                background: var(--bg);
 
-        .parsed-event {
-            background-color: #f0f0f0;
-            padding: 10px;
-            margin-bottom: 10px;
-            border-radius: 4px;
-        }
+                color: var(--fg);
 
-        .dialog-buttons {
-            display: flex;
-            justify-content: flex-end;
-            gap: 10px;
-        }
+                min-width: 320px;
 
-        @media screen and (max-width: 600px) {
-            .mobile-hide {
-                display: none;
             }
-        }
 
-        [v-cloak] {
-            display: none !important;
-        }
-    </style>
+    
+
+            .border-color-default { border-color: var(--border-color) !important; }
+
+            .text-color-1 { color: var(--text-color-1); }
+
+            .text-color-2 { color: var(--text-color-2); }
+
+            .bg-1 { background: var(--bg); }
+
+            .bg-2 { background: var(--panel-bg); }
+
+            .bg-disabled { background: var(--bg-disabled); }
+
+    
+
+            select, option, input, textarea { background: var(--bg); }
+
+    
+
+            body a {
+
+                text-decoration: none;
+
+                color: rgb(3, 169, 244);
+
+            }
+
+            body a:hover { text-decoration: underline; }
+
+    
+
+            /* Details/Summary for FAQ */
+
+            details summary { cursor: pointer; user-select: none; }
+
+            details summary:hover { opacity: 0.85; }
+
+            details[open] summary { margin-bottom: 0.5rem; }
+
+    
+
+            /* --- Syncfusion Overrides --- */
+
+            .e-toolbar-item.e-today { display: none !important; }
+
+            
+
+            .e-schedule .e-vertical-view .e-time-cells-wrap table td,
+
+            .e-schedule .e-vertical-view .e-work-cells { height: 24px !important; }
+
+            
+
+            .e-schedule .e-month-view .e-work-cells { height: 100px !important; }
+
+    
+
+            td.e-header-cells.e-disable-dates::before {
+
+                content: '12-4 AM';
+
+                width: 100%;
+
+                margin: 0px auto;
+
+                margin-top: 40%;
+
+                text-align: center;
+
+                display: inline-block;
+
+                color: #36b1f6;
+
+                cursor: pointer;
+
+            }
+
+            td.e-header-cells.e-disable-dates:hover { background-color: #fafafa !important; }
+
+    
+
+            /* Event Colors */
+
+            span.e-menu-icon.e-color-1 { background: #3f51b5; }
+
+            span.e-menu-icon.e-color-2 { background: #e3165b; }
+
+            span.e-menu-icon.e-color-3 { background: #ff6652; }
+
+            span.e-menu-icon.e-color-4 { background: #4caf50; }
+
+            span.e-menu-icon.e-color-5 { background: #ff9800; }
+
+            span.e-menu-icon.e-color-6 { background: #03a9f4; }
+
+            span.e-menu-icon.e-color-7 { background: #9e9e9e; }
+
+            span.e-menu-icon.e-color-8 { background: #27282f; }
+
+    
+
+            /* Syncfusion Form Styles */
+
+            .custom-field-row-color { position: absolute; top: 1rem; right: 25px; }
+
+            .custom-field-row-color .e-caret { color: #eee; }
+
+            .e-subject-container { margin-right: 50px; }
+
+            .e-schedule-dialog .e-subject-container { width: 100%; }
+
+            .e-location-container { display: none; }
+
+    
+
+            /* Fonts & Borders */
+
+            html, div#Schedule, .e-control, .e-css, .e-toolbar, .e-tbar-btn, .e-tbar-btn-text, 
+
+            .e-control-wrapper, .e-label, textarea {
+
+                font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji" !important;
+
+                font-weight: normal;
+
+            }
+
+    
+
+            div#Schedule, .e-appointment, .e-draggable, .e-btn { border-radius: 6px !important; }
+
+            .e-dialog, .e-popup, .e-calendar { border-radius: 6px; overflow: hidden; }
+
+    
+
+            /* Better Colors */
+
+            .e-schedule .e-vertical-view .e-work-cells,
+
+            .e-schedule .e-vertical-view .e-date-header-wrap table tbody td { border-color: var(--border-color); }
+
+    
+
+            /* Fixes */
+
+            .e-schedule.e-device .e-vertical-view .e-time-cells-wrap { overflow: visible; }
+
+            
+
+            .e-schedule-dialog.e-device .e-save-icon::before {
+
+                content: 'SAVE';
+
+                color: #e3165b;
+
+                font-size: 16px;
+
+            }
+
+    
+
+            .e-quick-popup-wrapper .e-event-popup .e-popup-header .e-header-icon-wrapper .e-edit,
+
+            .e-quick-popup-wrapper .e-event-popup .e-popup-header .e-header-icon-wrapper .e-delete { display: initial; }
+
+    
+
+            /* Desktop View Tweaks */
+
+            @media screen and (min-width: 768px) {
+
+                .e-schedule .e-schedule-toolbar .e-toolbar-pop,
+
+                .e-schedule .e-schedule-toolbar .e-hor-nav { display: none !important; }
+
+                .e-schedule .e-schedule-toolbar .e-toolbar-items { display: flex !important; flex-wrap: nowrap !important; }
+
+            }
+
+            /* Mobile toolbar overflow menu positioning */
+            @media screen and (max-width: 767px) {
+                .e-schedule .e-schedule-toolbar .e-toolbar-items {
+                    display: flex !important;
+                    justify-content: space-between !important;
+                }
+
+                /* Push overflow menu to the right */
+                .e-schedule .e-schedule-toolbar .e-toolbar-pop {
+                    margin-left: auto !important;
+                }
+            }
+
+    
+
+            .e-date-header.e-navigate.month-start { font-size: 18px; }
+
+    
+
+            /* --- Quick Add Styles --- */
+
+            .quick-add-overlay {
+
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+
+                background-color: rgba(0, 0, 0, 0.5);
+
+                display: flex; justify-content: center; align-items: center; z-index: 1000;
+
+            }
+
+            .quick-add-dialog {
+
+                background-color: white; padding: 20px; border-radius: 8px; width: 80%; max-width: 500px;
+
+            }
+
+            .quick-add-dialog textarea { width: 100%; margin-bottom: 10px; }
+
+            .parsed-event {
+
+                background-color: #f0f0f0; padding: 10px; margin-bottom: 10px; border-radius: 4px;
+
+            }
+
+            .dialog-buttons { display: flex; justify-content: flex-end; gap: 10px; }
+
+    
+
+            @media screen and (max-width: 600px) {
+
+                .mobile-hide { display: none; }
+
+            }
+
+    
+
+            [v-cloak] { display: none !important; }
+
+        </style>
 
     <!-- Essential JS 2 all script -->
     <script src="https://cdn.syncfusion.com/ej2/23.2.6/dist/ej2.min.js" type="text/javascript"></script>
@@ -407,82 +404,78 @@ Copyright (c) 2025 Kalid Azad
     <script src="https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js"></script>
     <script src="/index.js"></script>
 
+    <!-- Self-test suite (only loads on localhost) -->
     <script>
-        function debounce(func, timeout = 300) {
-            let timer;
-            return (...args) => {
-                clearTimeout(timer);
-                timer = setTimeout(() => { func.apply(this, args); }, timeout);
-            };
+        if (window.location.hostname.match(/^(localhost|127\.0\.0\.1|::1)$/)) {
+            const script = document.createElement('script');
+            script.src = '/selftest.js';
+            document.head.appendChild(script);
         }
+    </script>
 
-        function sanitizeUrl(url) {
-            // example: http://pastecal.com/SOMEID?date=2025-02-10&amp;amp;view=month 
-            let sanitized = url.replaceAll("amp;", "&").replace(/&+/g, '&')
-            return sanitized;
-        }
-
-        let randomID = (size = 21) => {
-            let alphabet = '123456789abcdefghjklmnpqrstuvwxyz'; // no lookalikes, lowercase
-            let id = '';
-            let i = size;
-            while (i--) {
-                // `| 0` is more compact and faster than `Math.floor()`.
-                id += alphabet[(Math.random() * alphabet.length) | 0]
-            }
-            return id;
-        }
-
-        function uuidv4() {
-            return ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, c =>
-                (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
-            );
-        }
-
-        function parseDate(str) {
-            let date = null;
-
-            if (!str) {
-                return date;
-            }
-
-            // has non-digit separator
-            if (str.match(/\D/)) {
-                let parts = str.split(/\D/);
-                date = new Date((parts[0].length == 2 ? "20" : 0) + parts[0], parts[1] - 1, parts[2]);
-            }
-            else {
-                // YYMMDD
-                if (str.length === 6) {
-                    date = new Date("20" + str.substring(0, 2), str.substring(2, 4) - 1, str.substring(4, 6));
+    <script>
+        // --- Utilities ---
+        // Extend Utils object defined in index.js (already contains nanoid, init, sync, etc.)
+        Object.assign(Utils, {
+            debounce(func, timeout = 300) {
+                let timer;
+                return (...args) => {
+                    clearTimeout(timer);
+                    timer = setTimeout(() => { func.apply(this, args); }, timeout);
+                };
+            },
+            sanitizeUrl(url) {
+                let sanitized = url.replaceAll("amp;", "&").replace(/&+/g, '&')
+                return sanitized;
+            },
+            randomID(size = 21) {
+                let alphabet = '123456789abcdefghjklmnpqrstuvwxyz';
+                let id = '';
+                let i = size;
+                while (i--) {
+                    id += alphabet[(Math.random() * alphabet.length) | 0]
                 }
-                // YYYYMMDD
-                if (str.length === 8) {
-                    date = new Date(str.substring(0, 4), str.substring(4, 6) - 1, str.substring(6, 8));
+                return id;
+            },
+            uuidv4() {
+                return ([1e7] + -1e3 + -4e3 + -8e3 + -1e11).replace(/[018]/g, c =>
+                    (c ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> c / 4).toString(16)
+                );
+            },
+            parseDate(str) {
+                let date = null;
+                if (!str) return date;
+                if (str.match(/\D/)) {
+                    let parts = str.split(/\D/);
+                    date = new Date((parts[0].length == 2 ? "20" : 0) + parts[0], parts[1] - 1, parts[2]);
+                } else {
+                    if (str.length === 6) date = new Date("20" + str.substring(0, 2), str.substring(2, 4) - 1, str.substring(4, 6));
+                    if (str.length === 8) date = new Date(str.substring(0, 4), str.substring(4, 6) - 1, str.substring(6, 8));
                 }
+                return date.toString() == 'Invalid Date' ? null : date;
             }
+        });
 
-            // js silliness, no better check?
-            return date.toString() == 'Invalid Date' ? null : date;
-        }
+        // --- Icon Components ---
+        const HelpIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" /></svg>` };
+        const SearchIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" /></svg>` };
+        const ShareIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>` };
+        const NotesIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>` };
+        const ChevronDownIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z" /></svg>` };
+        const CloseIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>` };
+        
+        const CopyIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>` };
+        
+        const SettingsIcon = {
+            props: { size: { type: String, default: 'w-4 h-4' } },
+            template: `<svg xmlns="http://www.w3.org/2000/svg" :class="size" fill="currentColor" viewBox="0 0 16 16"><path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z" /></svg>`
+        };
 
-        // parse test
-        if (new Set([
-            (new Date(2022, 1 - 1, 2)).getTime(),
-            parseDate("20220102").getTime(),
-            parseDate("220102").getTime(),
-            parseDate("2022-01-02").getTime(),
-            parseDate("22-01-02").getTime(),
-            parseDate("2022.1.2").getTime(),
-            parseDate("22-1-2").getTime()
-        ]).size !== 1) {
-            console.error("parseDate failed");
-        }
 
         class Event {
             // may be created from JSON object or DHTMLX internal calendar event
             constructor(options) {
-                this.id = options.Id || options.id || uuidv4();
+                this.id = options.Id || options.id || Utils.uuidv4();
                 this.title = options.Subject || options.text || options.title || "";
                 this.description = options.Description || options.description || "";
                 this.repeat = options.Recurrence || options.repeat || "";
@@ -704,7 +697,7 @@ Copyright (c) 2025 Kalid Azad
             }
 
 
-            static debounce_sync = debounce((cal) => (CalendarDataService.sync(cal)), 500);
+            static debounce_sync = Utils.debounce((cal) => (CalendarDataService.sync(cal)), 500);
 
             static create(item) {
                 return this.db.push(item);
@@ -744,13 +737,16 @@ Copyright (c) 2025 Kalid Azad
 <body class="p-1 m-1">
     <div id="app">
         <!-- Mobile Header -->
-        <div class="md:hidden flex flex-col mb-2 pt-3 px-3 space-y-3">
-            <!-- Row 1: Logo, Title, Share, Menu -->
-            <div class="flex items-center gap-2">
+        <div class="md:hidden flex flex-col mb-2 pt-3 space-y-3">
+            <!-- Row 1: Logo, Title, Menu -->
+            <div class="relative flex items-center justify-between gap-2">
                 <!-- Logo & Recents -->
                 <div class="relative z-40 flex-shrink-0" v-click-outside="closeRecents">
-                    <div @click.stop="toggleRecents" class="cursor-pointer flex items-center gap-0.5">
-                        <img class="h-8 w-8 dark:brightness-150" src="/img/pastecal.logo.svg" alt="PasteCal Logo">
+                    <div @click.stop="toggleRecents" class="cursor-pointer flex items-center gap-1">
+                        <div class="flex items-center gap-1.5">
+                            <img class="h-8 w-8 dark:brightness-150" src="/img/pastecal.logo.svg" alt="PasteCal Logo">
+                            <span class="text-sm font-medium text-blue-500 hover:text-blue-600 transition-colors">pastecal</span>
+                        </div>
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-color-1" fill="currentColor" viewBox="0 0 16 16" aria-label="Recent calendars">
                             <path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z" />
                         </svg>
@@ -758,22 +754,29 @@ Copyright (c) 2025 Kalid Azad
                     <navigation-dropdown v-if="showRecents" :recent-calendars="recentCalendars" @go-homepage="goToHomepage" @toggle-pin="togglePin" @remove-recent="removeRecent" class="mt-2"></navigation-dropdown>
                 </div>
 
-                <!-- Center: Title -->
-                <div class="flex-1 min-w-0 text-center">
-                    <!-- New calendar: Show PasteCal branding -->
-                    <div v-if="!calendar.title && !editTitle" class="flex flex-col">
-                        <h1 class="text-base font-bold text-color-2 leading-tight">PasteCal</h1>
-                        <span class="text-color-1 text-xs -mt-0.5" style="font-size: 10px;">easy shared calendars</span>
-                    </div>
-                    <!-- Existing calendar: Show title (editable if not read-only) -->
-                    <h1 v-if="calendar.title && !editTitle" @click="!isReadOnly && (editTitle = true)"
-                        :class="['text-base font-bold text-color-2 leading-tight truncate', !isReadOnly ? 'cursor-pointer hover:text-blue-500 transition-colors px-2 py-1 rounded hover:bg-[var(--bg-interactive-hover)]' : '']">
-                        {{ calendar.title }}
-                    </h1>
-                    <!-- Edit mode input -->
-                    <input v-if="editTitle" type="text" class="w-full bg-1 border-2 border-blue-500 rounded text-base font-bold focus:outline-none focus:ring-2 focus:ring-blue-300 px-2 py-1 text-color-2 leading-tight text-center"
-                           v-model="calendar.title" @blur="editTitle = false" @keyup.enter="editTitle = false" ref="mobileTitleInput"
-                           aria-label="Calendar title">
+                <!-- Center: Title (absolutely centered) -->
+                <div class="absolute left-1/2 transform -translate-x-1/2 z-30 flex items-center gap-1">
+                    <calendar-title
+                        :title="calendar.title"
+                        :is-editing="editTitle"
+                        :is-read-only="isReadOnly"
+                        mode="mobile"
+                        input-ref="mobileTitleInput"
+                        class="overflow-hidden max-w-[120px]"
+                        @update:title="calendar.title = $event"
+                        @click="editTitle = true"
+                        @blur="editTitle = false"
+                        @enter="editTitle = false">
+                    </calendar-title>
+                    <button v-if="!editTitle" v-on:click="toggleNotes"
+                        aria-label="Toggle notes"
+                        class="text-color-1 hover:text-blue-500 p-1 transition-colors flex items-center justify-center flex-shrink-0">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                            stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                        </svg>
+                    </button>
                 </div>
 
                 <!-- Right Actions: Share + Menu -->
@@ -794,21 +797,13 @@ Copyright (c) 2025 Kalid Azad
                         <!-- Dropdown -->
                         <div v-if="showMobileMenu" v-click-outside="() => showMobileMenu = false" class="absolute right-0 top-full mt-2 w-48 bg-1 rounded-lg shadow-xl border border-color-default py-1 text-sm text-color-2 z-50">
                             <button @click="showMobileMenu = false; toggleSearch()" class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-                                </svg>
+                                <search-icon size="w-4 h-4"></search-icon>
                                 Search
                             </button>
-                            <button v-if="canEdit" @click="showMobileMenu = false; $refs.mobileQuickAdd.showDialog()" class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
+                            <button @click="showMobileMenu = false; $refs.mobileQuickAdd.showDialog()" class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
                                 <span class="text-lg leading-none font-bold text-blue-500">+</span> Quick Add Event
                             </button>
-                            <button @click="showMobileMenu = false; toggleNotes()" class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-                                </svg>
-                                Notes
-                            </button>
-                            <button v-if="canEdit" @click="showMobileMenu = false; toggleSettings()" class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
+                            <button @click="showMobileMenu = false; toggleSettings()" class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
                                 <settings-icon size="w-4 h-4"></settings-icon>
                                 Settings
                             </button>
@@ -855,8 +850,7 @@ Copyright (c) 2025 Kalid Azad
                                 <div class="flex flex-col">
                                     <span
                                         class="text-blue-500 font-medium text-sm hover:text-blue-600 transition-colors">pastecal</span>
-                                    <span class="text-color-1 text-xs hidden lg:block -mt-0.5"
-                                        style="font-size: 10px;">no-login
+                                    <span class="text-color-1 hidden lg:block -mt-0.5 text-[10px]">no-login
                                         shared calendar</span>
                                 </div>
                             </a>
@@ -926,7 +920,8 @@ Copyright (c) 2025 Kalid Azad
 
                     <!-- Quick add component - desktop only -->
                     <quick-add v-if="canEdit" class="hidden lg:block"
-                        @event-created="handleQuickAddEvent"></quick-add>
+                        @event-created="handleQuickAddEvent"
+                        aria-label="Quick add event"></quick-add>
 
                 </buttonarea>
             </section>
@@ -934,23 +929,45 @@ Copyright (c) 2025 Kalid Azad
             <!-- Middle section - Calendar title -->
             <section class="hidden md:flex flex-1 flex-col md:flex-row items-center justify-center mx-1 md:mx-2 min-w-0 min-h-8"
                 v-cloak v-if="!isLoading">
-                <div v-if="calendar.title && !editTitle" class="relative inline-flex items-center group">
-                    <!-- Title with tooltip (edit mode) -->
-                    <custom-tooltip width="w-auto" align="center" v-if="!isReadOnly">
-                        <template #trigger>
-                            <span @click="editTitle = true"
-                                class="font-bold cursor-pointer max-w-[150px] md:max-w-xs text-center inline-block hover:text-blue-500 transition-colors leading-tight py-1"
-                                v-text="calendar.title"></span>
-                        </template>
-                        <template #content>
-                            <span class="whitespace-nowrap">Click to edit title</span>
-                        </template>
-                    </custom-tooltip>
-                    <!-- Title without tooltip (read-only mode) -->
-                    <span v-if="isReadOnly"
-                        class="font-bold max-w-[150px] md:max-w-xs text-center inline-block leading-tight py-1"
-                        v-text="calendar.title"></span>
-                </div>
+                <custom-tooltip width="w-auto" align="center" v-if="!editTitle && !isReadOnly">
+                    <template #trigger>
+                        <calendar-title
+                            :title="calendar.title"
+                            :is-editing="editTitle"
+                            :is-read-only="isReadOnly"
+                            mode="desktop"
+                            input-ref="desktopTitleInput"
+                            @update:title="calendar.title = $event"
+                            @click="editTitle = true"
+                            @blur="editTitle = false"
+                            @enter="setTitle($event)">
+                        </calendar-title>
+                    </template>
+                    <template #content>
+                        <span class="whitespace-nowrap">Click to edit title</span>
+                    </template>
+                </custom-tooltip>
+                <calendar-title v-if="!editTitle && isReadOnly"
+                    :title="calendar.title"
+                    :is-editing="editTitle"
+                    :is-read-only="isReadOnly"
+                    mode="desktop"
+                    @update:title="calendar.title = $event"
+                    @click="editTitle = true"
+                    @blur="editTitle = false"
+                    @enter="setTitle($event)">
+                </calendar-title>
+                <calendar-title v-if="editTitle"
+                    :title="calendar.title"
+                    :is-editing="editTitle"
+                    :is-read-only="isReadOnly"
+                    mode="desktop"
+                    input-ref="desktopTitleInput"
+                    @update:title="calendar.title = $event"
+                    @click="editTitle = true"
+                    @blur="editTitle = false"
+                    @enter="setTitle($event)">
+                </calendar-title>
                 <custom-tooltip width="w-auto" align="center" v-if="!editTitle">
                     <template #trigger>
                         <button v-on:click="toggleNotes"
@@ -970,9 +987,6 @@ Copyright (c) 2025 Kalid Azad
                         <span class="whitespace-nowrap">Toggle Notes</span>
                     </template>
                 </custom-tooltip>
-                <input type="text" class="border border-color-default p-1 max-w-[150px] md:max-w-xs h-8"
-                    v-if="editTitle" v-model="calendar.title" @keyup.enter="setTitle($event)"
-                    aria-label="Calendar title">
             </section>
 
             <!-- Right section -->
@@ -1107,7 +1121,7 @@ Copyright (c) 2025 Kalid Azad
                 </svg>
             </button>
 
-            <div v-if="showNotes" class="w-full md:w-1/2 md:min-w-[460px] h-[250px] mx-auto p-2.5" v-cloak>
+            <div v-if="showNotes" class="flex-1 w-full md:w-1/2 md:min-w-[460px] h-[250px] mx-auto p-2.5" v-cloak>
                 <textarea v-if="canEdit"
                     aria-label="Calendar notes"
                     class="w-full h-full p-2 border border-color-default rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
@@ -1708,8 +1722,6 @@ Copyright (c) 2025 Kalid Azad
         <pre v-text="calendar" v-if="debug"></pre>
 
         <toast-notification ref="toast"></toast-notification>
-
-        <quick-add mode="fab" v-if="canEdit" class="md:hidden" @event-created="handleQuickAddEvent"></quick-add>
     </div>
 
     <script type="text/x-template" id="tooltip-template">
@@ -1725,6 +1737,27 @@ Copyright (c) 2025 Kalid Azad
                 <div class="absolute -top-1 w-2 h-2 bg-2 transform rotate-45 border-l border-t border-color-default"
                      :class="arrowAlignClass"></div>
             </div>
+        </div>
+    </script>
+
+    <script type="text/x-template" id="calendar-title-template">
+        <div class="w-full text-center">
+            <!-- Show title (including "New Calendar" for new calendars) -->
+            <h1 v-if="!isEditing"
+                @click="handleTitleClick"
+                :class="titleClasses">
+                {{ title || 'New Calendar' }}
+            </h1>
+            <!-- Edit mode input -->
+            <input v-if="isEditing"
+                type="text"
+                :value="title"
+                @input="$emit('update:title', $event.target.value)"
+                @blur="$emit('blur')"
+                @keyup.enter="$emit('enter')"
+                :ref="inputRef"
+                aria-label="Calendar title"
+                :class="inputClass">
         </div>
     </script>
 
@@ -2160,83 +2193,98 @@ vacation dec 11 - dec 15
             }
         };
 
+        const CalendarTitle = {
+            template: '#calendar-title-template',
+            props: {
+                title: String,
+                isEditing: Boolean,
+                isReadOnly: Boolean,
+                mode: {
+                    type: String,
+                    default: 'mobile', // 'mobile' or 'desktop'
+                    validator: (value) => ['mobile', 'desktop'].includes(value)
+                },
+                inputRef: {
+                    type: String,
+                    default: 'titleInput'
+                }
+            },
+            emits: ['update:title', 'blur', 'enter', 'click'],
+            computed: {
+                brandingClass() {
+                    return this.mode === 'mobile'
+                        ? 'text-base font-bold text-color-2 leading-tight'
+                        : 'text-lg font-bold text-color-2 leading-tight';
+                },
+                taglineClass() {
+                    return 'text-color-1 text-xs -mt-0.5 text-[10px]';
+                },
+                titleClasses() {
+                    const base = this.mode === 'mobile'
+                        ? 'text-sm font-semibold text-color-2 leading-tight truncate text-center block'
+                        : 'font-bold max-w-[150px] md:max-w-xs text-center inline-block leading-tight py-1';
+
+                    const interactive = !this.isReadOnly
+                        ? 'cursor-pointer hover:text-blue-500 transition-colors px-1 py-0.5 rounded hover:bg-[var(--bg-interactive-hover)]'
+                        : 'px-1';
+
+                    return [base, interactive].filter(Boolean).join(' ');
+                },
+                inputClass() {
+                    return this.mode === 'mobile'
+                        ? 'w-full bg-1 border-2 border-blue-500 rounded text-base font-bold focus:outline-none focus:ring-2 focus:ring-blue-300 px-2 py-1 text-color-2 leading-tight text-center'
+                        : 'border border-color-default p-1 max-w-[150px] md:max-w-xs h-8';
+                }
+            },
+            methods: {
+                handleTitleClick() {
+                    if (!this.isReadOnly) {
+                        this.$emit('click');
+                    }
+                }
+            }
+        };
+
         const NavigationDropdown = {
             template: '#navigation-dropdown-template',
             props: ['recentCalendars'],
             emits: ['go-homepage', 'toggle-pin', 'remove-recent']
         };
 
-        const CopyIcon = {
-            template: `
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none"
-                    viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-            `
-        };
+        // CopyIcon and SettingsIcon already defined above, no need to redeclare
 
-        // Icon components for header actions
-        const HelpIcon = {
-            props: {
-                size: {
-                    type: String,
-                    default: 'w-4 h-4'
-                }
-            },
-            template: `
-                <svg xmlns="http://www.w3.org/2000/svg" :class="size" fill="currentColor" viewBox="0 0 16 16">
-                    <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z" />
-                    <path d="M5.255 5.786a.237.237 0 0 0 .241.247h.825c.138 0 .248-.113.266-.25.09-.656.54-1.134 1.342-1.134.686 0 1.314.343 1.314 1.168 0 .635-.374.927-.965 1.371-.673.489-1.206 1.06-1.168 1.987l.003.217a.25.25 0 0 0 .25.246h.811a.25.25 0 0 0 .25-.25v-.105c0-.718.273-.927 1.01-1.486.609-.463 1.244-.977 1.244-2.056 0-1.511-1.276-2.241-2.673-2.241-1.267 0-2.655.59-2.75 2.286zm1.557 5.763c0 .533.425.927 1.01.927.609 0 1.028-.394 1.028-.927 0-.552-.42-.94-1.029-.94-.584 0-1.009.388-1.009.94z" />
-                </svg>
-            `
-        };
-
-        const SearchIcon = {
-            props: {
-                size: {
-                    type: String,
-                    default: 'w-4 h-4'
-                }
-            },
-            template: `
-                <svg xmlns="http://www.w3.org/2000/svg" :class="size" fill="currentColor" viewBox="0 0 16 16">
-                    <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z" />
-                </svg>
-            `
-        };
-
-        const SettingsIcon = {
-            props: {
-                size: {
-                    type: String,
-                    default: 'w-4 h-4'
-                }
-            },
-            template: `
-                <svg xmlns="http://www.w3.org/2000/svg" :class="size" fill="currentColor" viewBox="0 0 16 16">
-                    <path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z" />
-                </svg>
-            `
+        // ============================================================
+        // COMPONENT REGISTRY
+        // ============================================================
+        // IMPORTANT: All components used in templates must be registered here!
+        // If you add a new component, add it to this object.
+        // The key is the kebab-case name used in templates (e.g., <calendar-title>)
+        // The value is the component object defined above (e.g., CalendarTitle)
+        // ============================================================
+        const COMPONENT_REGISTRY = {
+            'calendar-title': CalendarTitle,           // Mobile & desktop title component
+            'navigation-dropdown': NavigationDropdown, // Recent calendars dropdown
+            'custom-tooltip': Tooltip,                 // Tooltip wrapper
+            'toast-notification': ToastNotification,   // Toast messages
+            'copy-icon': CopyIcon,                     // Copy icon SVG
+            'settings-icon': SettingsIcon,             // Settings icon SVG
+            'help-icon': HelpIcon,                     // Help icon SVG
+            'search-icon': SearchIcon,                 // Search icon SVG
+            'share-icon': ShareIcon,                   // Share icon SVG
+            'notes-icon': NotesIcon,                   // Notes icon SVG
+            'chevron-down-icon': ChevronDownIcon,      // Chevron down icon SVG
+            'close-icon': CloseIcon                    // Close icon SVG
         };
 
         const CalendarVueApp = {
-            components: {
-                'navigation-dropdown': NavigationDropdown,
-                'custom-tooltip': Tooltip,
-                'toast-notification': ToastNotification,
-                'copy-icon': CopyIcon,
-                'help-icon': HelpIcon,
-                'search-icon': SearchIcon,
-                'settings-icon': SettingsIcon
-            },
+            components: COMPONENT_REGISTRY,
             directives: {
                 'click-outside': clickOutside
             },
             data() {
-                var urlslug = window.location.pathname.split("/")[1];
+                let urlslug = window.location.pathname.split("/")[1];
 
-                if (urlslug.match(/^[a-zA-Z0-9_\-]+$/) && urlslug.length < 40) {
+                if (urlslug && urlslug.match(/^[a-zA-Z0-9_\-]+$/) && urlslug.length < 40) {
                     // slug is ok, normalize for consistent lookup
                     urlslug = SlugManager.normalizeSlug(urlslug);
                 } else {
@@ -2244,13 +2292,13 @@ vacation dec 11 - dec 15
                     urlslug = null;
                 }
 
-                var id = urlslug ?? randomID(8);
-                var cal = new Calendar(id, "New Calendar", []);
+                let id = urlslug ?? Utils.randomID(8);
+                let cal = new Calendar(id, "New Calendar", []);
 
                 // Define default colors
                 const DEFAULT_COLORS = [
                     "#3f51b5", "#e3165b", "#ff6652", "#4caf50",
-                    "#ff9800", "#03a9f4", "#9e9e9e", "#27282f"
+                    "#ff9800", "03a9f4", "#9e9e9e", "#27282f"
                 ];
 
                 // COLORS will be updated based on custom colors if available
@@ -2469,11 +2517,11 @@ vacation dec 11 - dec 15
                 } else {
                     // homepage - no remote calendar to load
                     this.isExisting = false;
-                    this.calendar.id = randomID(8);
+                    this.calendar.id = Utils.randomID(8);
                     this.isLoading = false;
                 }
 
-                window.scheduleObj = new ej.schedule.Schedule();
+                const scheduleObj = window.scheduleObj = new ej.schedule.Schedule();
                 const scheduleInitTimestamp = performance.now();
                 console.log('[schedule-init] Schedule constructed at', scheduleInitTimestamp.toFixed(1), 'ms');
                 scheduleObj.on('actionComplete', (args) => {
@@ -2510,12 +2558,13 @@ vacation dec 11 - dec 15
 
                 // Set up scheduler first, then apply settings after initialization
                 // set params from URL
-                var sanitizedUrl = sanitizeUrl(window.location.href.toLowerCase());
-                var url = new URL(sanitizedUrl);
-                var date_param = url.searchParams.get("d") || url.searchParams.get("date");
-                var view_param = url.searchParams.get("v") || url.searchParams.get("view");
+                let sanitizedUrl = Utils.sanitizeUrl(window.location.href.toLowerCase());
+                let url = new URL(sanitizedUrl);
+                let date_param = url.searchParams.get("d") || url.searchParams.get("date");
+                let view_param = url.searchParams.get("v") || url.searchParams.get("view");
 
-                if (d = parseDate(date_param)) {
+                let d;
+                if (d = Utils.parseDate(date_param)) {
                     scheduleObj.selectedDate = d;
                 }
 
@@ -2595,7 +2644,7 @@ vacation dec 11 - dec 15
                 }
 
                 // disable drag and drop / resizing for touch devices
-                var touchDevice = ('ontouchstart' in document.documentElement);
+                let touchDevice = ('ontouchstart' in document.documentElement);
                 scheduleObj.allowDragAndDrop = !touchDevice;
                 scheduleObj.allowResizing = !touchDevice;
 
@@ -2940,6 +2989,10 @@ vacation dec 11 - dec 15
             },
 
             methods: {
+                // ============================================================
+                // REGION: Calendar Initialization & Setup
+                // ============================================================
+
                 // Ensure calendar.options has proper default values
                 ensureCalendarOptionsDefaults() {
                     const hasOptions = !!this.calendar.options;
@@ -2969,6 +3022,10 @@ vacation dec 11 - dec 15
                         this.calendar.options = normalizedOptions;
                     }
                 },
+
+                // ============================================================
+                // REGION: View Management & Calendar Display
+                // ============================================================
 
                 // Apply default view to schedule (if no URL override)
                 applyDefaultView() {
@@ -3176,7 +3233,7 @@ vacation dec 11 - dec 15
 
                 resetToDefaults() {
                     // Reset to a completely fresh calendar state
-                    this.calendar.id = randomID(8);
+                    this.calendar.id = Utils.randomID(8);
                     this.calendar.title = "New Calendar";
                     this.calendar.events = [];
                     this.calendar.options = {
@@ -3237,6 +3294,10 @@ vacation dec 11 - dec 15
                     scheduleObj.dataBind();
                 },
 
+                // ============================================================
+                // REGION: Calendar CRUD Operations
+                // ============================================================
+
                 create() {
                     // If user hasn't manually edited the slug, show intervention dialog
                     if (!this.userHasEditedSlug) {
@@ -3265,7 +3326,7 @@ vacation dec 11 - dec 15
                 create() {
                     let slug = this.calendar.id;
                     if (!slug) {
-                        slug = randomID(8);
+                        slug = Utils.randomID(8);
                         this.calendar.id = slug;
                     }
 
@@ -3294,7 +3355,7 @@ vacation dec 11 - dec 15
                 },
 
                 randomizeId() {
-                    this.calendar.id = randomID(8);
+                    this.calendar.id = Utils.randomID(8);
                     // Reset edited state if they randomize (treat as "auto" again, or maybe not? 
                     // Let's keep it as "not edited" so they get the review dialog if they just clicked shuffle
                     // Actually, if they clicked shuffle, they interacted. 
@@ -3382,6 +3443,10 @@ vacation dec 11 - dec 15
                     this.currentViewURL = `${window.location.origin}/${this.calendar.id}?date=${currentDate}&view=${viewParam}`;
                 },
 
+                // ============================================================
+                // REGION: URL Generation & Sharing
+                // ============================================================
+
                 getEditableURL() {
                     return `${window.location.origin}/${this.calendar.id}`;
                 },
@@ -3461,6 +3526,10 @@ vacation dec 11 - dec 15
                     target.select();
                     document.execCommand('copy');
                 },
+
+                // ============================================================
+                // REGION: Events & Search Management
+                // ============================================================
 
                 searchEvents() {
                     if (this.searchQuery.trim() !== '') {
@@ -3571,6 +3640,10 @@ vacation dec 11 - dec 15
                     this.closeRecents();
                     window.location.href = '/';
                 },
+
+                // ============================================================
+                // REGION: UI State Management (Panels & Toggles)
+                // ============================================================
 
                 isPanelOpen() {
                     return this.showNotes || this.showSearch || this.showHelp || this.showShare || this.showSettings;
@@ -3697,6 +3770,10 @@ vacation dec 11 - dec 15
                         this.importTypeLabelsFromNotes();
                     }
                 },
+
+                // ============================================================
+                // REGION: Settings & Preferences Management
+                // ============================================================
 
                 // Global Settings methods (device-specific, stored in localStorage)
                 loadGlobalSettings() {
@@ -4138,6 +4215,44 @@ vacation dec 11 - dec 15
         };
 
         const app = Vue.createApp(CalendarVueApp).component('quick-add', QuickAdd).mount('#app');
+
+        // ============================================================
+        // COMPONENT REGISTRATION VALIDATOR
+        // ============================================================
+        // This function validates that all components used in templates are registered
+        // It will log warnings for any unregistered components found in the DOM
+        // ============================================================
+        function validateComponentRegistration() {
+            const registeredComponents = Object.keys(COMPONENT_REGISTRY).concat(['quick-add']);
+            const allElements = document.querySelectorAll('*');
+            const customElements = new Set();
+
+            allElements.forEach(el => {
+                const tagName = el.tagName.toLowerCase();
+                // Check if it's a custom element (contains hyphen and not a standard HTML tag)
+                if (tagName.includes('-') && !tagName.startsWith('x-')) {
+                    customElements.add(tagName);
+                }
+            });
+
+            const unregistered = Array.from(customElements).filter(
+                tag => !registeredComponents.includes(tag)
+            );
+
+            if (unregistered.length > 0) {
+                console.error('⚠️  UNREGISTERED COMPONENTS DETECTED:');
+                console.error('The following components are used in templates but not registered:');
+                unregistered.forEach(tag => {
+                    console.error(`  - <${tag}> (empty/not rendering)`);
+                });
+                console.error('\nTo fix: Add these components to COMPONENT_REGISTRY in index.html');
+            } else {
+                console.log('✅ All components properly registered');
+            }
+        }
+
+        // Run validation after a short delay to allow Vue to mount
+        setTimeout(validateComponentRegistration, 1000);
     </script>
 
     <script>
