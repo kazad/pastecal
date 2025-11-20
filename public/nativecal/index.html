@@ -162,7 +162,7 @@
                              :class="{'is-dragging': dragState.eventId === event.id}"
                              :style="getEventStyle(event)"
                              @mousedown.stop="startDrag(event, $event, 'month-move')"
-                             @click.stop="editEvent(event)">
+                             @click.stop="selectEvent(event, $event)">
                             {{ event.title }}
                         </div>
                     </div>
@@ -277,7 +277,7 @@
                             <div v-for="event in group.events" :key="event.id" 
                                  class="flex gap-4 p-3 bg-white rounded border-l-4 shadow-sm hover:shadow cursor-pointer"
                                  :style="{ borderLeftColor: getEventColor(event) }"
-                                 @click="editEvent(event)">
+                                 @click.stop="selectEvent(event, $event)">
                                 <div class="w-24 text-right text-sm text-gray-500 flex-shrink-0">
                                     <div>{{ formatTime(event.start) }}</div>
                                     <div class="text-xs opacity-75">{{ formatDuration(event) }}</div>
@@ -520,6 +520,7 @@
                 // ----------------------------------------------------------------
                 const changeView = (view) => {
                     currentView.value = view;
+                    selectedEventId.value = null; // Close preview
                 };
 
                 const prev = () => {
@@ -527,18 +528,24 @@
                     else if (currentView.value === 'Month') currentDate.value = df.subMonths(currentDate.value, 1);
                     else if (currentView.value === 'Week') currentDate.value = df.subWeeks(currentDate.value, 1);
                     else currentDate.value = df.subDays(currentDate.value, 1);
+                    selectedEventId.value = null; // Close preview
                 };
                 const next = () => {
                     if (currentView.value === 'Year') currentDate.value = df.addYears(currentDate.value, 1);
                     else if (currentView.value === 'Month') currentDate.value = df.addMonths(currentDate.value, 1);
                     else if (currentView.value === 'Week') currentDate.value = df.addWeeks(currentDate.value, 1);
                     else currentDate.value = df.addDays(currentDate.value, 1);
+                    selectedEventId.value = null; // Close preview
                 };
-                const today = () => currentDate.value = new Date();
+                const today = () => {
+                    currentDate.value = new Date();
+                    selectedEventId.value = null; // Close preview
+                };
                 const isToday = (date) => df.isSameDay(date, new Date());
                 const goToMonth = (date) => {
                     currentDate.value = date;
                     currentView.value = 'Month';
+                    selectedEventId.value = null; // Close preview
                 };
 
                 // ----------------------------------------------------------------
