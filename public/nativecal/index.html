@@ -55,6 +55,7 @@
         
         .event-card {
             transition: box-shadow 0.1s, transform 0.1s;
+            z-index: 10;
         }
         .event-card:hover {
             z-index: 50 !important;
@@ -64,6 +65,15 @@
             cursor: grabbing !important;
         }
         
+        /* Active Drag State (Cute) */
+        .event-card.dragging-active {
+            transform: rotate(3deg) scale(1.02);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            z-index: 100 !important;
+            cursor: grabbing;
+            opacity: 0.9;
+        }
+
         .resize-handle {
             cursor: ns-resize;
         }
@@ -76,9 +86,9 @@
             position: fixed;
             pointer-events: none;
             z-index: 9999;
-            opacity: 0.8;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-            transform: translate(-50%, -50%);
+            opacity: 0.9;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+            transform: translate(-50%, -50%) rotate(3deg) scale(1.05);
         }
 
         /* Utilities */
@@ -198,9 +208,10 @@
                             <!-- Absolute Events -->
                             <div v-for="event in getEventsForDate(date)" :key="event.id" 
                                  class="event-card absolute p-1 text-xs inset-x-1 rounded overflow-hidden border-l-4 cursor-pointer"
-                                 :class="{'is-dragging': dragState.eventId === event.id}"
+                                 :class="{'dragging-active': dragState.eventId === event.id && dragState.isDragging, 'ring-2 ring-offset-1 ring-black': selectedEventId === event.id}"
                                  :style="[getEventStyle(event, true), getWeekEventPosition(event)]"
-                                 @mousedown.stop="startDrag(event, $event, 'time-move')">
+                                 @mousedown.stop="startDrag(event, $event, 'time-move')"
+                                 @click.stop="selectEvent(event)">
                                 <div class="font-bold leading-tight pointer-events-none">{{ event.title }}</div>
                                 <div class="opacity-75 text-[10px] pointer-events-none">{{ formatTime(event.start) }} - {{ formatTime(event.end) }}</div>
                                 
@@ -291,6 +302,7 @@
                 const currentDate = ref(new Date());
                 const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                 const notification = ref('');
+                const selectedEventId = ref(null);
                 
                 // ----------------------------------------------------------------
                 // Data
@@ -457,7 +469,7 @@
                     const endMinutes = end.getHours() * 60 + end.getMinutes();
                     const top = (startMinutes / 60) * 50;
                     const height = Math.max(((endMinutes - startMinutes) / 60) * 50, 20);
-                    return { top: `${top}px`, height: `${height}px` };
+                    return { top: `${top}px`, height: `${height}px`, width: '90%' };
                 };
 
                 // ----------------------------------------------------------------
@@ -490,6 +502,15 @@
                          return;
                     }
 
+                    // Ensure click wasn't on an event (extra safety)
+                    if (event.target.closest('.event-card')) {
+                        console.log('[createTimeEvent] Blocked because target is event-card');
+                        return;
+                    }
+                    
+                    // Clear previous selection
+                    selectedEventId.value = null;
+
                     const rect = event.currentTarget.getBoundingClientRect();
                     const y = event.clientY - rect.top;
                     const hoursFloat = y / 50;
@@ -498,7 +519,9 @@
                     const roundedMinutes = Math.round(minutes / 30) * 30;
                     const start = df.set(date, { hours: hours, minutes: roundedMinutes });
                     const end = df.addMinutes(start, 60);
-                    events.value.push({ id: Date.now(), title: '(No Title)', start: start.getTime(), end: end.getTime(), type: Math.floor(Math.random() * 8) + 1 });
+                    const newEvent = { id: Date.now(), title: '(No Title)', start: start.getTime(), end: end.getTime(), type: Math.floor(Math.random() * 8) + 1 };
+                    events.value.push(newEvent);
+                    selectedEventId.value = newEvent.id; // Select newly created
                     showToast(`Created at ${df.format(start, 'h:mm a')}`);
                 };
 
@@ -507,6 +530,12 @@
                     if (dragState.value.isDragging || dragState.value.wasDragging) return;
                     const newTitle = prompt("Edit Event Title:", event.title);
                     if (newTitle !== null) event.title = newTitle;
+                };
+
+                const selectEvent = (event) => {
+                    console.log('[selectEvent] triggered for', event.id);
+                    if (dragState.value.isDragging || dragState.value.wasDragging) return;
+                    selectedEventId.value = event.id;
                 };
 
                 // ----------------------------------------------------------------
@@ -690,7 +719,7 @@
                     currentView, views, currentTitle, weekDays, monthCells, visibleDates, yearMonths, agendaEvents,
                     prev, next, today, isToday, changeView, goToMonth,
                     events, getEventsForDate, getEventStyle, getWeekEventPosition, formatTime, formatDuration, getEventColor,
-                    createMonthEvent, createTimeEvent, editEvent,
+                    createMonthEvent, createTimeEvent, editEvent, selectEvent, selectedEventId,
                     startDrag, onDrag, stopDrag, dragState,
                     currentTimeTop, notification
                 }
