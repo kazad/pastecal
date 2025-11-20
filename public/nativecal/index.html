@@ -54,15 +54,28 @@
         }
         
         .event-card {
-            transition: box-shadow 0.1s, transform 0.1s;
+            transition: box-shadow 0.1s, transform 0.1s, width 0.2s ease-out;
             z-index: 10;
+            width: 96%; /* Default width */
         }
+        
+        /* When hovering the day column, shrink events to make room for clicks */
+        .time-col:hover .event-card {
+            width: 82% !important;
+        }
+        
+        /* But if I hover the event itself, maybe keep it slightly wider or let it shrink? 
+           User said "make room for click target". 
+           If I hover the event, I probably want to select/drag IT, but I might also be trying to click next to it.
+           Let's stick to the column rule. */
+
         .event-card:hover {
             z-index: 50 !important;
         }
         .event-card.is-dragging {
             opacity: 0.5;
             cursor: grabbing !important;
+            width: 90% !important; /* Keep consistent width during drag */
         }
         
         /* Active Drag State (Cute) */
@@ -72,6 +85,7 @@
             z-index: 100 !important;
             cursor: grabbing;
             opacity: 0.9;
+            width: 90% !important;
         }
 
         .resize-handle {
@@ -475,7 +489,7 @@
                     const endMinutes = end.getHours() * 60 + end.getMinutes();
                     const top = (startMinutes / 60) * 50;
                     const height = Math.max(((endMinutes - startMinutes) / 60) * 50, 20);
-                    return { top: `${top}px`, height: `${height}px`, width: '90%' };
+                    return { top: `${top}px`, height: `${height}px` }; // Removed width
                 };
                 
                 const getGhostStyle = () => {
@@ -485,7 +499,7 @@
                     const endMinutes = end.getHours() * 60 + end.getMinutes();
                     const top = (startMinutes / 60) * 50;
                     const height = Math.max(((endMinutes - startMinutes) / 60) * 50, 20);
-                    return { top: `${top}px`, height: `${height}px`, width: '90%' };
+                    return { top: `${top}px`, height: `${height}px`, width: '82%' }; // Ghost matches shrunk width
                 };
 
                 // ----------------------------------------------------------------
@@ -519,6 +533,7 @@
                     }
 
                     // Ensure click wasn't on an event (extra safety)
+                    // Note: @click.stop on event-card should prevent this, but this is a fallback
                     if (event.target.closest('.event-card')) {
                         console.log('[createTimeEvent] Blocked because target is event-card');
                         return;
@@ -596,7 +611,7 @@
                         console.log(`[onDrag] Check threshold: dx=${deltaX}, dy=${deltaY}`);
                         
                         // Threshold check to prevent accidental micro-drags on click
-                        if (deltaY > 3 || deltaX > 3) {
+                        if (deltaY > 5 || deltaX > 5) {
                             console.log('[onDrag] Drag started (threshold passed)');
                             dragState.value.isDragging = true;
                         } else {
