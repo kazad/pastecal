@@ -88,7 +88,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            pointer-events: none; /* Click passes through to column */
+            /* pointer-events: none; REMOVED */ 
             z-index: 60; /* Above events */
         }
         
@@ -111,6 +111,12 @@
         .event-card.hover-shrink {
             transform-origin: left center;
             transform: scaleX(0.85);
+        }
+        
+        /* Prevent text from squashing when event card shrinks */
+        .event-card.hover-shrink .event-text-content {
+            transform-origin: left center;
+            transform: scaleX(1 / 0.85); /* Inverse scale */
         }
         
         /* Ensure dragging overrides hover shrink */
@@ -250,7 +256,8 @@
                             <!-- Add Indicator (+) -->
                             <div v-if="hoverTime && hoverTime.dateStr === date.toISOString() && !dragState.isDragging && hasEventOverlap(date, hoverTime.top)" 
                                  class="add-indicator"
-                                 :style="{ top: hoverTime.top + 'px' }">
+                                 :style="{ top: hoverTime.top + 'px' }"
+                                 @click.stop="createEventFromAddIndicator(date, hoverTime.top)">
                             </div>
                             
                             <!-- Current Time Indicator -->
@@ -277,9 +284,10 @@
                                  :style="[getEventStyle(event, true), getWeekEventPosition(event), { cursor: eventCursor }]"
                                  @mousedown.stop="startDrag(event, $event, 'time-move')"
                                  @click.stop="selectEvent(event)">
-                                <div class="font-bold leading-tight pointer-events-none">{{ event.title }}</div>
-                                <div class="opacity-75 text-[10px] pointer-events-none">{{ formatTime(event.start) }} - {{ formatTime(event.end) }}</div>
-                                
+                                <div class="event-text-content">
+                                    <div class="font-bold leading-tight pointer-events-none">{{ event.title }}</div>
+                                    <div class="opacity-75 text-[10px] pointer-events-none">{{ formatTime(event.start) }} - {{ formatTime(event.end) }}</div>
+                                </div>
                                 <!-- Resize Handle -->
                                 <div class="resize-handle absolute bottom-0 inset-x-0 h-2 z-20"
                                      @mousedown.stop="startDrag(event, $event, 'resize')"></div>
@@ -671,6 +679,23 @@
                     });
                 };
 
+                const createEventFromAddIndicator = (date, top) => {
+                    console.log('[createEventFromAddIndicator] triggered');
+                    
+                    // Clear previous selection
+                    selectedEventId.value = null;
+
+                    // 'top' is pixels from top of time-col, 50px per hour
+                    const hours = Math.floor(top / 50);
+                    const roundedMinutes = 0; // Snap to the hour start
+                    const start = df.set(date, { hours: hours, minutes: roundedMinutes });
+                    const end = df.addMinutes(start, 60);
+                    const newEvent = { id: Date.now(), title: '(No Title)', start: start.getTime(), end: end.getTime(), type: Math.floor(Math.random() * 8) + 1 };
+                    events.value.push(newEvent);
+                    selectedEventId.value = newEvent.id; // Select newly created
+                    showToast(`Created at ${df.format(start, 'h:mm a')}`);
+                };
+
                 // ----------------------------------------------------------------
                 // Interactions
                 // ----------------------------------------------------------------
@@ -918,7 +943,7 @@
                     currentView, views, currentTitle, weekDays, monthCells, visibleDates, yearMonths, agendaEvents,
                     prev, next, today, isToday, changeView, goToMonth,
                     events, getEventsForDate, getEventsWithLayout, getEventStyle, getWeekEventPosition, getGhostStyle, formatTime, formatDuration, getEventColor,
-                    createMonthEvent, createTimeEvent, editEvent, selectEvent, selectedEventId,
+                    createMonthEvent, createTimeEvent, createEventFromAddIndicator, editEvent, selectEvent, selectedEventId,
                     startDrag, onDrag, stopDrag, dragState,
                     currentTimeTop, notification, eventCursor,
                     hoverTime, onColumnMouseMove, onColumnMouseLeave, hasEventOverlap,
