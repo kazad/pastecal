@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NativeCal Interactive Prototype</title>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Date FNS -->
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@3.6.0/cdn.min.js"></script>
+    
+    <style>
+        /* Basic grid for month view */
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            border-top: 1px solid #e5e7eb;
+            border-left: 1px solid #e5e7eb;
+        }
+        .calendar-cell {
+            min-height: 100px;
+            border-right: 1px solid #e5e7eb;
+            border-bottom: 1px solid #e5e7eb;
+            padding: 0.25rem;
+        }
+        /* Time grid (Week/Day) */
+        .time-grid {
+            display: grid;
+            /* First col is labels (60px), rest are dates */
+            /* Template columns set dynamically via inline style */
+        }
+        .time-col {
+            border-right: 1px solid #e5e7eb;
+            min-width: 0; 
+            position: relative;
+        }
+        .hour-row {
+            height: 50px; /* 50px per hour */
+            border-bottom: 1px solid #f3f4f6;
+            box-sizing: border-box;
+        }
+        
+        /* Year View */
+        .year-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            padding: 1.5rem;
+        }
+        .mini-month-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 2px;
+        }
+        
+        .event-card {
+            transition: box-shadow 0.1s, transform 0.1s;
+        }
+        .event-card:hover {
+            z-index: 50 !important;
+        }
+        .event-card.is-dragging {
+            opacity: 0.5;
+            cursor: grabbing !important;
+        }
+        
+        .resize-handle {
+            cursor: ns-resize;
+        }
+        .resize-handle:hover {
+            background-color: rgba(0,0,0,0.1);
+        }
+
+        /* Drag Ghost */
+        .drag-ghost {
+            position: fixed;
+            pointer-events: none;
+            z-index: 9999;
+            opacity: 0.8;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            transform: translate(-50%, -50%);
+        }
+
+        /* Utilities */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* Prevent text selection during drag */
+        .select-none { user-select: none; }
+    </style>
+</head>
+<body class="bg-gray-50 p-4 text-gray-800 h-screen flex flex-col">
+    <div id="app" class="flex flex-col h-full max-w-6xl mx-auto bg-white shadow rounded-lg overflow-hidden select-none">
+        
+        <!-- Header / Toolbar -->
+        <div class="p-4 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
+            <div class="flex items-center gap-4">
+                <h1 class="text-xl font-bold tracking-tight text-blue-600">NativeCal</h1>
+                
+                <!-- Navigation -->
+                <div class="flex items-center bg-gray-100 rounded p-0.5">
+                    <button @click="prev" class="px-2 hover:bg-white rounded h-8 flex items-center">&lt;</button>
+                    <button @click="today" class="px-3 text-sm font-medium hover:bg-white rounded h-8">Today</button>
+                    <button @click="next" class="px-2 hover:bg-white rounded h-8 flex items-center">&gt;</button>
+                </div>
+                
+                <span class="text-lg font-medium w-48">{{ currentTitle }}</span>
+            </div>
+            
+            <div class="flex gap-2">
+                <button v-for="view in views" 
+                    :key="view"
+                    @click="changeView(view)"
+                    :class="['px-3 py-1 rounded text-sm transition-colors', currentView === view ? 'bg-blue-600 text-white' : 'bg-gray-100 hover:bg-gray-200']">
+                    {{ view }}
+                </button>
+            </div>
+        </div>
+
+        <!-- View Container -->
+        <div class="flex-1 overflow-hidden relative">
+            
+            <!-- Month View -->
+            <div v-if="currentView === 'Month'" class="h-full flex flex-col overflow-y-auto">
+                <!-- Headers -->
+                <div class="grid grid-cols-7 border-b border-gray-200 bg-gray-50">
+                    <div v-for="day in weekDays" :key="day" class="py-2 text-center text-sm font-semibold text-gray-500 uppercase tracking-wide">
+                        {{ day }}
+                    </div>
+                </div>
+                <!-- Grid -->
+                <div class="calendar-grid flex-1">
+                    <div v-for="(cell, idx) in monthCells" :key="idx" 
+                         class="calendar-cell relative group hover:bg-gray-50 flex flex-col gap-1 cursor-pointer"
+                         :class="{'bg-gray-50/50': !cell.isCurrentMonth, 'bg-blue-50': isToday(cell.date)}"
+                         :data-date="cell.date.toISOString()"
+                         @click.self="createMonthEvent(cell.date)">
+                        
+                        <span class="text-xs font-medium p-1 ml-auto rounded-full w-7 h-7 flex items-center justify-center"
+                              :class="isToday(cell.date) ? 'bg-blue-600 text-white' : 'text-gray-700'">
+                            {{ cell.dayNumber }}
+                        </span>
+
+                        <!-- Month Events -->
+                        <div v-for="event in getEventsForDate(cell.date)" :key="event.id"
+                             class="px-1.5 py-0.5 text-xs rounded truncate cursor-pointer shadow-sm border-l-2 hover:brightness-95 transition-all select-none"
+                             :class="{'is-dragging': dragState.eventId === event.id}"
+                             :style="getEventStyle(event)"
+                             @mousedown.stop="startDrag(event, $event, 'month-move')"
+                             @click.stop="editEvent(event)">
+                            {{ event.title }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Time Grid View (Week/Day) -->
+            <div v-if="currentView === 'Week' || currentView === 'Day'" class="h-full flex flex-col">
+                <!-- Header Row -->
+                <div class="border-b border-gray-200 bg-white flex-shrink-0 grid"
+                     :style="`grid-template-columns: 60px repeat(${visibleDates.length}, 1fr)`">
+                    <div class="border-r border-gray-200 p-2"></div> <!-- Gutter -->
+                    <div v-for="(date, idx) in visibleDates" :key="idx" 
+                         class="p-2 text-center border-r border-gray-100">
+                        <div class="text-xs font-semibold text-gray-500 uppercase">{{ weekDays[date.getDay()] }}</div>
+                        <div class="text-xl font-light w-8 h-8 mx-auto rounded-full flex items-center justify-center" 
+                             :class="{'bg-blue-600 text-white font-bold': isToday(date)}">
+                            {{ date.getDate() }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Scrollable Area -->
+                <div class="flex-1 overflow-y-auto relative" ref="timeScroll">
+                    <div class="time-grid relative min-h-[1200px]"
+                         :style="`grid-template-columns: 60px repeat(${visibleDates.length}, 1fr)`">
+                        
+                        <!-- Time Labels (Left Gutter) -->
+                        <div class="flex flex-col text-xs text-gray-400 text-right pr-2 pt-[-0.5rem] bg-white sticky left-0 z-10 border-r border-gray-200">
+                            <div v-for="h in 24" :key="h" class="h-[50px] -mt-2.5 bg-white select-none">{{ h-1 }}:00</div>
+                        </div>
+                        
+                        <!-- Day Columns -->
+                        <div v-for="(date, idx) in visibleDates" :key="idx" 
+                             class="time-col relative"
+                             :data-date="date.toISOString()"
+                             @click="createTimeEvent(date, $event)">
+                            
+                            <!-- Grid lines -->
+                            <div v-for="h in 24" :key="h" class="hour-row pointer-events-none"></div>
+                            
+                            <!-- Current Time Indicator -->
+                            <div v-if="isToday(date)" class="absolute w-full h-0.5 bg-red-500 z-30 pointer-events-none flex items-center"
+                                 :style="{ top: currentTimeTop + 'px' }">
+                                 <div class="w-2 h-2 bg-red-500 rounded-full -ml-1"></div>
+                            </div>
+
+                            <!-- Absolute Events -->
+                            <div v-for="event in getEventsForDate(date)" :key="event.id" 
+                                 class="event-card absolute p-1 text-xs inset-x-1 rounded overflow-hidden border-l-4 cursor-pointer"
+                                 :class="{'is-dragging': dragState.eventId === event.id}"
+                                 :style="[getEventStyle(event, true), getWeekEventPosition(event)]"
+                                 @mousedown.stop="startDrag(event, $event, 'time-move')">
+                                <div class="font-bold leading-tight pointer-events-none">{{ event.title }}</div>
+                                <div class="opacity-75 text-[10px] pointer-events-none">{{ formatTime(event.start) }} - {{ formatTime(event.end) }}</div>
+                                
+                                <!-- Resize Handle -->
+                                <div class="resize-handle absolute bottom-0 inset-x-0 h-2 z-20"
+                                     @mousedown.stop="startDrag(event, $event, 'resize')"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Year View -->
+            <div v-if="currentView === 'Year'" class="h-full overflow-y-auto p-4">
+                <div class="year-grid">
+                    <div v-for="(month, idx) in yearMonths" :key="idx" class="border rounded p-2 hover:shadow-md transition-shadow cursor-pointer"
+                         @click="goToMonth(month.date)">
+                        <h3 class="text-center font-bold text-gray-700 mb-2">{{ month.name }}</h3>
+                        <div class="mini-month-grid">
+                            <div v-for="day in ['S','M','T','W','T','F','S']" :key="day" class="text-[10px] text-center text-gray-400">{{ day }}</div>
+                            
+                            <!-- Empty start cells -->
+                            <div v-for="n in month.startPad" :key="'pad-'+n"></div>
+                            
+                            <!-- Days -->
+                            <div v-for="day in month.days" :key="day.date" 
+                                 class="text-center text-xs p-1 rounded-full"
+                                 :class="{'bg-blue-600 text-white': isToday(day.date), 'bg-blue-100': day.hasEvents && !isToday(day.date)}">
+                                {{ day.dayNumber }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Agenda View -->
+            <div v-if="currentView === 'Agenda'" class="h-full overflow-y-auto p-4">
+                <div class="max-w-3xl mx-auto space-y-6">
+                    <div v-if="agendaEvents.length === 0" class="text-center text-gray-500 py-10">No events found.</div>
+                    
+                    <div v-for="(group, dateStr) in agendaEvents" :key="dateStr">
+                        <div class="sticky top-0 bg-gray-50/95 backdrop-blur py-2 border-b border-gray-200 mb-2 z-10">
+                            <span class="font-bold text-lg">{{ group.formattedDate }}</span>
+                            <span v-if="group.isToday" class="ml-2 text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full">Today</span>
+                        </div>
+                        <div class="space-y-2">
+                            <div v-for="event in group.events" :key="event.id" 
+                                 class="flex gap-4 p-3 bg-white rounded border-l-4 shadow-sm hover:shadow cursor-pointer"
+                                 :style="{ borderLeftColor: getEventColor(event) }"
+                                 @click="editEvent(event)">
+                                <div class="w-24 text-right text-sm text-gray-500 flex-shrink-0">
+                                    <div>{{ formatTime(event.start) }}</div>
+                                    <div class="text-xs opacity-75">{{ formatDuration(event) }}</div>
+                                </div>
+                                <div>
+                                    <div class="font-bold text-gray-800">{{ event.title }}</div>
+                                    <div class="text-xs text-gray-500">Type {{ event.type }}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Drag Ghost (Month View) -->
+        <div v-if="dragState.isDragging && dragState.action === 'month-move' && dragState.ghostEvent" 
+             class="drag-ghost px-2 py-1 text-xs rounded text-white font-bold truncate w-32 pointer-events-none"
+             :style="[getEventStyle(dragState.ghostEvent), { left: dragState.mouseX + 'px', top: dragState.mouseY + 'px' }]">
+            {{ dragState.ghostEvent.title }}
+        </div>
+
+        <!-- Simple Toast/Hint -->
+        <div v-if="notification" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-full text-sm shadow-lg z-50 transition-opacity">
+            {{ notification }}
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted, onUnmounted } = Vue;
+        const df = window.dateFns;
+
+        createApp({
+            setup() {
+                const currentView = ref('Month'); // Default view
+                const views = ['Year', 'Month', 'Week', 'Day', 'Agenda'];
+                const currentDate = ref(new Date());
+                const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                const notification = ref('');
+                
+                // ----------------------------------------------------------------
+                // Data
+                // ----------------------------------------------------------------
+                const events = ref([
+                    { id: 1, title: 'Morning Standup', start: new Date().setHours(9, 0, 0, 0), end: new Date().setHours(9, 30, 0, 0), type: 1 },
+                    { id: 2, title: 'Deep Work', start: new Date().setHours(10, 0, 0, 0), end: new Date().setHours(12, 0, 0, 0), type: 2 },
+                    { id: 3, title: 'Lunch', start: new Date().setHours(12, 30, 0, 0), end: new Date().setHours(13, 30, 0, 0), type: 3 },
+                    { id: 4, title: 'Client Meeting', start: new Date().setHours(14, 0, 0, 0), end: new Date().setHours(15, 0, 0, 0), type: 4 },
+                ]);
+
+                const colors = ["#3f51b5", "#e3165b", "#ff6652", "#4caf50", "#ff9800", "#03a9f4", "#9e9e9e", "#27282f"];
+
+                // ----------------------------------------------------------------
+                // Computed Props
+                // ----------------------------------------------------------------
+                const currentTitle = computed(() => {
+                    if (currentView.value === 'Year') return df.format(currentDate.value, 'yyyy');
+                    if (currentView.value === 'Day') return df.format(currentDate.value, 'MMMM d, yyyy');
+                    return df.format(currentDate.value, 'MMMM yyyy');
+                });
+
+                // Month View Logic
+                const monthCells = computed(() => {
+                    const start = df.startOfMonth(currentDate.value);
+                    const end = df.endOfMonth(currentDate.value);
+                    const days = df.eachDayOfInterval({ start, end });
+                    const startDay = df.getDay(start);
+                    const prevMonthDays = [];
+                    for(let i = 0; i < startDay; i++) {
+                        prevMonthDays.unshift({
+                            date: df.subDays(start, i + 1),
+                            dayNumber: df.getDate(df.subDays(start, i + 1)),
+                            isCurrentMonth: false
+                        });
+                    }
+                    const currentMonthDays = days.map(d => ({ date: d, dayNumber: df.getDate(d), isCurrentMonth: true }));
+                    // Pad end
+                    const totalCells = 42; // 6 rows
+                    const remaining = totalCells - (prevMonthDays.length + currentMonthDays.length);
+                    const nextMonthDays = [];
+                    for(let i = 1; i <= remaining; i++) {
+                        nextMonthDays.push({
+                            date: df.addDays(end, i),
+                            dayNumber: df.getDate(df.addDays(end, i)),
+                            isCurrentMonth: false
+                        });
+                    }
+                    
+                    return [...prevMonthDays, ...currentMonthDays, ...nextMonthDays];
+                });
+
+                // Week/Day View Logic
+                const visibleDates = computed(() => {
+                    if (currentView.value === 'Day') {
+                        return [currentDate.value];
+                    }
+                    // Week view
+                    const start = df.startOfWeek(currentDate.value);
+                    return Array.from({ length: 7 }, (_, i) => df.addDays(start, i));
+                });
+
+                // Year View Logic
+                const yearMonths = computed(() => {
+                    const yearStart = df.startOfYear(currentDate.value);
+                    const months = df.eachMonthOfInterval({
+                        start: yearStart,
+                        end: df.endOfYear(currentDate.value)
+                    });
+
+                    return months.map(m => {
+                        const start = df.startOfMonth(m);
+                        const end = df.endOfMonth(m);
+                        const days = df.eachDayOfInterval({ start, end });
+                        return {
+                            name: df.format(m, 'MMMM'),
+                            date: m,
+                            startPad: df.getDay(start),
+                            days: days.map(d => ({
+                                date: d,
+                                dayNumber: df.getDate(d),
+                                hasEvents: events.value.some(e => df.isSameDay(new Date(e.start), d))
+                            }))
+                        };
+                    });
+                });
+
+                // Agenda View Logic
+                const agendaEvents = computed(() => {
+                    // Sort all events by start date
+                    const sorted = [...events.value].sort((a, b) => a.start - b.start);
+                    
+                    // Group by date
+                    const groups = {};
+                    sorted.forEach(event => {
+                        const dateKey = df.format(new Date(event.start), 'yyyy-MM-dd');
+                        if (!groups[dateKey]) {
+                            groups[dateKey] = {
+                                date: new Date(event.start),
+                                formattedDate: df.format(new Date(event.start), 'EEEE, MMMM d'),
+                                isToday: df.isSameDay(new Date(event.start), new Date()),
+                                events: []
+                            };
+                        }
+                        groups[dateKey].events.push(event);
+                    });
+                    return groups; // Object (not ordered), usually okay for v-for but better as array
+                });
+
+                // ----------------------------------------------------------------
+                // Methods: Navigation
+                // ----------------------------------------------------------------
+                const changeView = (view) => {
+                    currentView.value = view;
+                };
+
+                const prev = () => {
+                    if (currentView.value === 'Year') currentDate.value = df.subYears(currentDate.value, 1);
+                    else if (currentView.value === 'Month') currentDate.value = df.subMonths(currentDate.value, 1);
+                    else if (currentView.value === 'Week') currentDate.value = df.subWeeks(currentDate.value, 1);
+                    else currentDate.value = df.subDays(currentDate.value, 1);
+                };
+                const next = () => {
+                    if (currentView.value === 'Year') currentDate.value = df.addYears(currentDate.value, 1);
+                    else if (currentView.value === 'Month') currentDate.value = df.addMonths(currentDate.value, 1);
+                    else if (currentView.value === 'Week') currentDate.value = df.addWeeks(currentDate.value, 1);
+                    else currentDate.value = df.addDays(currentDate.value, 1);
+                };
+                const today = () => currentDate.value = new Date();
+                const isToday = (date) => df.isSameDay(date, new Date());
+                const goToMonth = (date) => {
+                    currentDate.value = date;
+                    currentView.value = 'Month';
+                };
+
+                // ----------------------------------------------------------------
+                // Methods: Event Logic
+                // ----------------------------------------------------------------
+                const getEventsForDate = (date) => {
+                    return events.value.filter(e => df.isSameDay(new Date(e.start), date));
+                };
+
+                const formatTime = (timestamp) => df.format(new Date(timestamp), 'h:mm a');
+                const formatDuration = (event) => {
+                    const diff = df.differenceInMinutes(event.end, event.start);
+                    const h = Math.floor(diff / 60);
+                    const m = diff % 60;
+                    return (h > 0 ? `${h}h ` : '') + (m > 0 ? `${m}m` : ''); 
+                };
+
+                const getEventStyle = (event, isWeekView = false) => {
+                    const color = colors[(event.type - 1) % colors.length];
+                    if (isWeekView) {
+                        return { borderLeftColor: color, backgroundColor: color + '20', color: color };
+                    }
+                    return { backgroundColor: color, color: 'white' };
+                };
+                const getEventColor = (event) => colors[(event.type - 1) % colors.length];
+
+                const getWeekEventPosition = (event) => {
+                    const start = new Date(event.start);
+                    const end = new Date(event.end);
+                    const startMinutes = start.getHours() * 60 + start.getMinutes();
+                    const endMinutes = end.getHours() * 60 + end.getMinutes();
+                    const top = (startMinutes / 60) * 50;
+                    const height = Math.max(((endMinutes - startMinutes) / 60) * 50, 20);
+                    return { top: `${top}px`, height: `${height}px` };
+                };
+
+                // ----------------------------------------------------------------
+                // Interactions
+                // ----------------------------------------------------------------
+                const showToast = (msg) => {
+                    notification.value = msg;
+                    setTimeout(() => notification.value = '', 2000);
+                }
+
+                const createMonthEvent = (date) => {
+                    console.log('[createMonthEvent] triggered for', date);
+                    const start = df.setHours(date, 9);
+                    const end = df.setHours(date, 10);
+                    events.value.push({ id: Date.now(), title: 'New Event', start: start.getTime(), end: end.getTime(), type: Math.floor(Math.random() * 8) + 1 });
+                    showToast(`Created event on ${df.format(date, 'MMM d')}`);
+                };
+
+                const createTimeEvent = (date, event) => {
+                    console.log('[createTimeEvent] triggered. Dragging:', dragState.value.isDragging);
+                    if (dragState.value.isDragging) {
+                        console.log('[createTimeEvent] Blocked because dragging is active');
+                        return;
+                    }
+                    
+                    // Check if we just finished a drag (click often fires after drag release)
+                    if (dragState.value.wasDragging) {
+                         console.log('[createTimeEvent] Blocked because we just finished dragging');
+                         dragState.value.wasDragging = false;
+                         return;
+                    }
+
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    const y = event.clientY - rect.top;
+                    const hoursFloat = y / 50;
+                    const hours = Math.floor(hoursFloat);
+                    const minutes = Math.floor((hoursFloat - hours) * 60);
+                    const roundedMinutes = Math.round(minutes / 30) * 30;
+                    const start = df.set(date, { hours: hours, minutes: roundedMinutes });
+                    const end = df.addMinutes(start, 60);
+                    events.value.push({ id: Date.now(), title: '(No Title)', start: start.getTime(), end: end.getTime(), type: Math.floor(Math.random() * 8) + 1 });
+                    showToast(`Created at ${df.format(start, 'h:mm a')}`);
+                };
+
+                const editEvent = (event) => {
+                    console.log('[editEvent] triggered');
+                    if (dragState.value.isDragging || dragState.value.wasDragging) return;
+                    const newTitle = prompt("Edit Event Title:", event.title);
+                    if (newTitle !== null) event.title = newTitle;
+                };
+
+                // ----------------------------------------------------------------
+                // Drag & Drop (Unified)
+                // ----------------------------------------------------------------
+                const dragState = ref({
+                    eventId: null,
+                    isDragging: false,
+                    wasDragging: false, // New flag to prevent click-after-drag
+                    startY: 0, // For Time Grid
+                    originalStart: 0,
+                    originalEnd: 0,
+                    action: 'move', // 'time-move', 'month-move', 'resize'
+                    ghostEvent: null, // For Month Move
+                    mouseX: 0,
+                    mouseY: 0
+                });
+
+                const startDrag = (event, e, action) => {
+                    console.log('[startDrag] action:', action, 'id:', event.id);
+                    if (e.button !== 0) return;
+                    dragState.value = {
+                        eventId: event.id,
+                        isDragging: false,
+                        wasDragging: false,
+                        startY: e.clientY,
+                        originalStart: event.start,
+                        originalEnd: event.end,
+                        action: action,
+                        ghostEvent: event,
+                        mouseX: e.clientX,
+                        mouseY: e.clientY
+                    };
+                };
+
+                const onDrag = (e) => {
+                    if (!dragState.value.eventId) return;
+                    
+                    if (!dragState.value.isDragging) {
+                        const deltaY = Math.abs(e.clientY - dragState.value.startY);
+                        const deltaX = Math.abs(e.clientX - dragState.value.mouseX);
+                        console.log(`[onDrag] Check threshold: dx=${deltaX}, dy=${deltaY}`);
+                        
+                        // Threshold check to prevent accidental micro-drags on click
+                        if (deltaY > 3 || deltaX > 3) {
+                            console.log('[onDrag] Drag started (threshold passed)');
+                            dragState.value.isDragging = true;
+                        } else {
+                            return;
+                        }
+                    }
+
+                    // Update Mouse Position for Month Ghost
+                    dragState.value.mouseX = e.clientX;
+                    dragState.value.mouseY = e.clientY;
+
+                    const event = events.value.find(ev => ev.id === dragState.value.eventId);
+                    if (!event) return;
+
+                    // Time Grid Logic (Move/Resize)
+                    if (dragState.value.action === 'time-move' || dragState.value.action === 'resize') {
+                        const deltaPixels = e.clientY - dragState.value.startY;
+                        const deltaMinutes = Math.round((deltaPixels / 50) * 60 / 15) * 15;
+
+                        if (dragState.value.action === 'time-move') {
+                            const duration = dragState.value.originalEnd - dragState.value.originalStart;
+                            
+                            // Calculate time based on original + delta (vertical move)
+                            const newStartTime = df.addMinutes(dragState.value.originalStart, deltaMinutes);
+                            const newHours = newStartTime.getHours();
+                            const newMinutes = newStartTime.getMinutes();
+                            
+                            // Find target column (horizontal move)
+                            const target = document.elementFromPoint(e.clientX, e.clientY);
+                            let targetDate = null;
+                            if (target) {
+                                const col = target.closest('.time-col');
+                                if (col && col.dataset.date) {
+                                    targetDate = new Date(col.dataset.date);
+                                }
+                            }
+                            
+                            // Use target date if found, else keep current event date
+                            const baseDate = targetDate ? targetDate : new Date(event.start);
+                            
+                            const newStart = df.set(baseDate, {
+                                hours: newHours,
+                                minutes: newMinutes
+                            });
+                            
+                            event.start = newStart.getTime();
+                            event.end = new Date(newStart.getTime() + duration).getTime();
+
+                        } else if (dragState.value.action === 'resize') {
+                            let newEnd = df.addMinutes(dragState.value.originalEnd, deltaMinutes);
+                            const start = new Date(dragState.value.originalStart);
+                            if (df.differenceInMinutes(newEnd, start) < 15) newEnd = df.addMinutes(start, 15);
+                            event.end = newEnd.getTime();
+                        }
+                    }
+                    // Month Move Logic handled in stopDrag (Drop)
+                };
+
+                const stopDrag = (e) => {
+                    console.log('[stopDrag] isDragging:', dragState.value.isDragging);
+                    if (!dragState.value.eventId) {
+                        return;
+                    }
+                    
+                    const wasDragging = dragState.value.isDragging;
+
+                    if (wasDragging) {
+                        // Handle Drop logic
+                        if (dragState.value.action === 'month-move') {
+                            // ... (Month drop logic) ...
+                            const target = document.elementFromPoint(e.clientX, e.clientY);
+                            const cell = target.closest('.calendar-cell');
+                            if (cell && cell.dataset.date) {
+                                const targetDate = new Date(cell.dataset.date);
+                                const event = events.value.find(ev => ev.id === dragState.value.eventId);
+                                if (event) {
+                                    const duration = event.end - event.start;
+                                    const newStart = df.set(targetDate, {
+                                        hours: new Date(event.start).getHours(),
+                                        minutes: new Date(event.start).getMinutes()
+                                    });
+                                    event.start = newStart.getTime();
+                                    event.end = newStart.getTime() + duration;
+                                    showToast(`Moved to ${df.format(targetDate, 'MMM d')}`);
+                                }
+                            }
+                        } else {
+                            const action = dragState.value.action === 'resize' ? 'resized' : 'moved';
+                            showToast(`Event ${action}`);
+                        }
+                    }
+
+                    // Reset state, but keep wasDragging true momentarily for click handlers
+                    dragState.value = { 
+                        eventId: null, 
+                        isDragging: false, 
+                        wasDragging: wasDragging, // Preserve this!
+                        action: 'move' 
+                    };
+                    
+                    // Clear wasDragging after a microtask to let click events fire and see the flag
+                    setTimeout(() => {
+                        dragState.value.wasDragging = false;
+                    }, 50);
+                };
+
+                // ----------------------------------------------------------------
+                // Time Indicator & Init
+                // ----------------------------------------------------------------
+                const currentTimeTop = ref(0);
+                const updateTimeIndicator = () => {
+                    const now = new Date();
+                    currentTimeTop.value = ((now.getHours() * 60 + now.getMinutes()) / 60) * 50;
+                };
+
+                let timer;
+                onMounted(() => {
+                    updateTimeIndicator();
+                    timer = setInterval(updateTimeIndicator, 60000);
+                    setTimeout(() => {
+                        const scroll = document.querySelector('.overflow-y-auto.relative');
+                        if(scroll) scroll.scrollTop = 350; 
+                    }, 100);
+                    
+                    // Global event listeners for drag
+                    window.addEventListener('mousemove', onDrag);
+                    window.addEventListener('mouseup', stopDrag);
+                });
+                onUnmounted(() => {
+                    clearInterval(timer);
+                    window.removeEventListener('mousemove', onDrag);
+                    window.removeEventListener('mouseup', stopDrag);
+                });
+
+                return {
+                    currentView, views, currentTitle, weekDays, monthCells, visibleDates, yearMonths, agendaEvents,
+                    prev, next, today, isToday, changeView, goToMonth,
+                    events, getEventsForDate, getEventStyle, getWeekEventPosition, formatTime, formatDuration, getEventColor,
+                    createMonthEvent, createTimeEvent, editEvent,
+                    startDrag, onDrag, stopDrag, dragState,
+                    currentTimeTop, notification
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
