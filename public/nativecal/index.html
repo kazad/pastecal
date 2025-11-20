@@ -54,28 +54,19 @@
         }
         
         .event-card {
-            transition: box-shadow 0.1s, transform 0.1s, width 0.2s ease-out;
+            transition: box-shadow 0.1s, transform 0.1s, width 0.2s ease-out, left 0.2s ease-out;
             z-index: 10;
-            width: 96%; /* Default width */
+            /* width and left are now set dynamically via style */
         }
         
-        /* When hovering the day column, shrink events to make room for clicks */
-        .time-col:hover .event-card {
-            width: 82% !important;
-        }
-        
-        /* But if I hover the event itself, maybe keep it slightly wider or let it shrink? 
-           User said "make room for click target". 
-           If I hover the event, I probably want to select/drag IT, but I might also be trying to click next to it.
-           Let's stick to the column rule. */
-
         .event-card:hover {
             z-index: 50 !important;
         }
+        
         .event-card.is-dragging {
             opacity: 0.5;
             cursor: grabbing !important;
-            width: 90% !important; /* Keep consistent width during drag */
+            z-index: 60 !important;
         }
         
         /* Active Drag State (Cute) */
@@ -85,8 +76,42 @@
             z-index: 100 !important;
             cursor: grabbing;
             opacity: 0.9;
-            width: 90% !important;
         }
+
+        /* Add Indicator (+) */
+        .add-indicator {
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 50px; /* 1 hour */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none; /* Click passes through to column */
+            opacity: 0;
+            transition: opacity 0.1s;
+            z-index: 5; /* Below events */
+        }
+        
+        .time-col:hover .add-indicator {
+            opacity: 1;
+        }
+
+        .add-indicator::after {
+            content: '+';
+            font-size: 24px;
+            color: #3b82f6; /* Blue-500 */
+            background: rgba(239, 246, 255, 0.8); /* Blue-50 */
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .resize-handle {
 
         .resize-handle {
             cursor: ns-resize;
@@ -208,10 +233,18 @@
                         <div v-for="(date, idx) in visibleDates" :key="idx" 
                              class="time-col relative"
                              :data-date="date.toISOString()"
-                             @click="createTimeEvent(date, $event)">
+                             @click="createTimeEvent(date, $event)"
+                             @mousemove="onColumnMouseMove($event, date)"
+                             @mouseleave="onColumnMouseLeave">
                             
                             <!-- Grid lines -->
                             <div v-for="h in 24" :key="h" class="hour-row pointer-events-none"></div>
+                            
+                            <!-- Add Indicator (+) -->
+                            <div v-if="hoverTime && hoverTime.dateStr === date.toISOString() && !dragState.isDragging" 
+                                 class="add-indicator"
+                                 :style="{ top: hoverTime.top + 'px' }">
+                            </div>
                             
                             <!-- Current Time Indicator -->
                             <div v-if="isToday(date)" class="absolute w-full h-0.5 bg-red-500 z-30 pointer-events-none flex items-center"
@@ -226,7 +259,7 @@
                             </div>
 
                             <!-- Absolute Events -->
-                            <div v-for="event in getEventsForDate(date)" :key="event.id" 
+                            <div v-for="event in getEventsWithLayout(date)" :key="event.id" 
                                  class="event-card absolute p-1 text-xs inset-x-1 rounded overflow-hidden border-l-4 cursor-pointer"
                                  :class="{'dragging-active': dragState.eventId === event.id && dragState.isDragging, 'ring-2 ring-offset-1 ring-black': selectedEventId === event.id}"
                                  :style="[getEventStyle(event, true), getWeekEventPosition(event)]"
@@ -465,6 +498,79 @@
                     return events.value.filter(e => df.isSameDay(new Date(e.start), date));
                 };
 
+                // Layout Algorithm for Week/Day View
+                const getEventsWithLayout = (date) => {
+                    const dayEvents = getEventsForDate(date).map(e => ({...e})); // Shallow copy to attach layout props
+                    if (dayEvents.length === 0) return [];
+
+                    // Sort by start time, then end time (descending duration)
+                    dayEvents.sort((a, b) => a.start - b.start || b.end - a.end);
+
+                    const columns = [];
+                    dayEvents.forEach(ev => {
+                        let placed = false;
+                        for (let i = 0; i < columns.length; i++) {
+                            const col = columns[i];
+                            // Check if this event overlaps with the LAST event in this column
+                            // (Simple packing) - actually need to check all in column to be safe,
+                            // but usually just checking the last one is enough if sorted? 
+                            // No, if we have A(9-11), B(9-10), C(10-11). A is col 0. B is col 1. C? 
+                            // C starts at 10. A ends at 11. C cannot be col 0.
+                            // C starts at 10. B ends at 10. C DOES NOT overlap B. C can be col 1.
+                            
+                            const hasOverlap = col.some(existing => {
+                                return Math.max(existing.start, ev.start) < Math.min(existing.end, ev.end);
+                            });
+                            
+                            if (!hasOverlap) {
+                                col.push(ev);
+                                ev.colIndex = i;
+                                placed = true;
+                                break;
+                            }
+                        }
+                        if (!placed) {
+                            columns.push([ev]);
+                            ev.colIndex = columns.length - 1;
+                        }
+                    });
+
+                    // Now calculate Width and Left
+                    // Simple Approach: Width = 100% / total columns in the "cluster"
+                    // For this prototype, we will use global columns for the day for simplicity,
+                    // or we can try to find max_col_index for the specific event's cluster.
+                    
+                    // Let's do a simplified "shared width" approach:
+                    // If I am in col 0, and there is a col 1 that overlaps me, we share space.
+                    
+                    // We will use a generic "Max Columns" for the day to avoid complex cluster logic for now.
+                    // This means if there is a 4-event overlap at 9am, ALL events in the day might be 1/4 width.
+                    // This is suboptimal but robust for a first pass. 
+                    // IMPROVEMENT: Calculate max overlap for each event's connected component.
+                    
+                    // Better: Calculate overlaps per event.
+                    dayEvents.forEach(ev => {
+                        // Find all overlapping events
+                        const overlapping = dayEvents.filter(other => 
+                            Math.max(ev.start, other.start) < Math.min(ev.end, other.end)
+                        );
+                        // The "width" is 1 / (max concurrent events in this group).
+                        // The "left" depends on the colIndex.
+                        
+                        // Actually, simpler visual:
+                        // width = 100 / columns.length (global max columns)
+                        // This ensures alignment.
+                        
+                        const widthPercent = 100 / columns.length;
+                        ev.style = {
+                            left: (ev.colIndex * widthPercent) + '%',
+                            width: widthPercent + '%'
+                        };
+                    });
+                    
+                    return dayEvents;
+                };
+
                 const formatTime = (timestamp) => df.format(new Date(timestamp), 'h:mm a');
                 const formatDuration = (event) => {
                     const diff = df.differenceInMinutes(event.end, event.start);
@@ -476,7 +582,12 @@
                 const getEventStyle = (event, isWeekView = false) => {
                     const color = colors[(event.type - 1) % colors.length];
                     if (isWeekView) {
-                        return { borderLeftColor: color, backgroundColor: color + '20', color: color };
+                        return { 
+                            borderLeftColor: color, 
+                            backgroundColor: color + '20', 
+                            color: color,
+                            ...event.style // Apply layout styles (left, width)
+                        };
                     }
                     return { backgroundColor: color, color: 'white' };
                 };
@@ -489,7 +600,7 @@
                     const endMinutes = end.getHours() * 60 + end.getMinutes();
                     const top = (startMinutes / 60) * 50;
                     const height = Math.max(((endMinutes - startMinutes) / 60) * 50, 20);
-                    return { top: `${top}px`, height: `${height}px` }; // Removed width
+                    return { top: `${top}px`, height: `${height}px` }; // Width/Left handled by layout style
                 };
                 
                 const getGhostStyle = () => {
@@ -499,7 +610,26 @@
                     const endMinutes = end.getHours() * 60 + end.getMinutes();
                     const top = (startMinutes / 60) * 50;
                     const height = Math.max(((endMinutes - startMinutes) / 60) * 50, 20);
-                    return { top: `${top}px`, height: `${height}px`, width: '82%' }; // Ghost matches shrunk width
+                    return { top: `${top}px`, height: `${height}px`, width: '90%', left: '5%' }; // Ghost is centered
+                };
+
+                // ----------------------------------------------------------------
+                // Hover Guide Logic
+                // ----------------------------------------------------------------
+                const hoverTime = ref(null); // { date: Date, top: number }
+                
+                const onColumnMouseMove = (e, date) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const y = e.clientY - rect.top;
+                    const hoursFloat = y / 50;
+                    const hours = Math.floor(hoursFloat);
+                    // Snap to hour (0 min)
+                    const top = hours * 50;
+                    hoverTime.value = { dateStr: date.toISOString(), top: top };
+                };
+                
+                const onColumnMouseLeave = () => {
+                    hoverTime.value = null;
                 };
 
                 // ----------------------------------------------------------------
@@ -546,8 +676,7 @@
                     const y = event.clientY - rect.top;
                     const hoursFloat = y / 50;
                     const hours = Math.floor(hoursFloat);
-                    const minutes = Math.floor((hoursFloat - hours) * 60);
-                    const roundedMinutes = Math.round(minutes / 30) * 30;
+                    const roundedMinutes = 0; // Snap to the hour start
                     const start = df.set(date, { hours: hours, minutes: roundedMinutes });
                     const end = df.addMinutes(start, 60);
                     const newEvent = { id: Date.now(), title: '(No Title)', start: start.getTime(), end: end.getTime(), type: Math.floor(Math.random() * 8) + 1 };
@@ -749,10 +878,11 @@
                 return {
                     currentView, views, currentTitle, weekDays, monthCells, visibleDates, yearMonths, agendaEvents,
                     prev, next, today, isToday, changeView, goToMonth,
-                    events, getEventsForDate, getEventStyle, getWeekEventPosition, getGhostStyle, formatTime, formatDuration, getEventColor,
+                    events, getEventsForDate, getEventsWithLayout, getEventStyle, getWeekEventPosition, getGhostStyle, formatTime, formatDuration, getEventColor,
                     createMonthEvent, createTimeEvent, editEvent, selectEvent, selectedEventId,
                     startDrag, onDrag, stopDrag, dragState,
                     currentTimeTop, notification,
+                    hoverTime, onColumnMouseMove, onColumnMouseLeave,
                     isSameDay: (d1, d2) => df.isSameDay(d1, d2)
                 }
             }
