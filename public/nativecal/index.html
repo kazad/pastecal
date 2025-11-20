@@ -279,7 +279,7 @@
                                      'dragging-active': dragState.eventId === event.id && dragState.isDragging, 
                                      'dragging-move-active': dragState.eventId === event.id && dragState.isDragging && dragState.action === 'time-move',
                                      'ring-2 ring-offset-1 ring-black': selectedEventId === event.id,
-                                     'hover-shrink': hoverTime && hoverTime.dateStr === date.toISOString() && !dragState.isDragging && hasEventOverlap(date, hoverTime.top)
+                                     'hover-shrink': hoverTime && hoverTime.dateStr === date.toISOString() && !dragState.isDragging && eventOverlapsHoverTime(event, hoverTime)
                                  }"
                                  :style="[getEventStyle(event, true), getWeekEventPosition(event), { cursor: eventCursor }]"
                                  @mousedown.stop="startDrag(event, $event, 'time-move')"
@@ -696,6 +696,21 @@
                     showToast(`Created at ${df.format(start, 'h:mm a')}`);
                 };
 
+                const eventOverlapsHoverTime = (event, hoverTime) => {
+                    if (!hoverTime || !event) return false;
+                    
+                    // Convert hoverTime.top (pixels) to minutes from start of day
+                    const hoverStartMinutes = (hoverTime.top / 50) * 60;
+                    const hoverEndMinutes = hoverStartMinutes + 60; // 1 hour slot
+                    
+                    const evStart = new Date(event.start);
+                    const evEnd = new Date(event.end);
+                    const evStartMin = evStart.getHours() * 60 + evStart.getMinutes();
+                    const evEndMin = evEnd.getHours() * 60 + evEnd.getMinutes();
+                    
+                    return Math.max(hoverStartMinutes, evStartMin) < Math.min(hoverEndMinutes, evEndMin);
+                };
+
                 // ----------------------------------------------------------------
                 // Interactions
                 // ----------------------------------------------------------------
@@ -941,12 +956,11 @@
 
                 return {
                     currentView, views, currentTitle, weekDays, monthCells, visibleDates, yearMonths, agendaEvents,
-                    prev, next, today, isToday, changeView, goToMonth,
                     events, getEventsForDate, getEventsWithLayout, getEventStyle, getWeekEventPosition, getGhostStyle, formatTime, formatDuration, getEventColor,
                     createMonthEvent, createTimeEvent, createEventFromAddIndicator, editEvent, selectEvent, selectedEventId,
                     startDrag, onDrag, stopDrag, dragState,
                     currentTimeTop, notification, eventCursor,
-                    hoverTime, onColumnMouseMove, onColumnMouseLeave, hasEventOverlap,
+                    hoverTime, onColumnMouseMove, onColumnMouseLeave, hasEventOverlap, eventOverlapsHoverTime,
                     isSameDay: (d1, d2) => df.isSameDay(d1, d2)
                 }
             }
