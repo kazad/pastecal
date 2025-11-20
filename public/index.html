@@ -639,13 +639,39 @@ Copyright (c) 2025 Kalid Azad
                     return;
                 }
 
-                // First do a lookup to determine calendar type and location
+                // OPTIMISTIC STRATEGY: Try direct subscription first.
+                // This covers the 99% case where the URL matches the DB key exactly.
+                // It avoids the Cloud Function overhead/latency/failure-points for valid URLs.
+                
+                console.log('Attempting direct subscription for:', slug);
+                
+                // We need a way to "try" subscribing and if it returns null quickly, then fallback.
+                // Since .on() is persistent, we'll use .once() for the check.
+                
                 try {
-                    console.log('Looking up calendar for slug:', slug);
-                    console.log('Calling function with data:', { slug: slug });
+                    const snapshot = await this.db.child(slug).once('value');
+                    const calendar = snapshot.val();
+
+                    if (calendar && calendar.id) {
+                        console.log('Direct subscription successful for:', slug);
+                        // Found directly! Subscribe and return.
+                        this._subscribeExact(slug, callback);
+                        return;
+                    }
+                } catch (e) {
+                    console.warn('Direct subscription check failed (network?):', e);
+                    // We'll continue to the fallback logic just in case it was a permission issue 
+                    // that the function might resolve (unlikely but safe).
+                }
+
+                // FALLBACK STRATEGY: Case-insensitive lookup via Cloud Function.
+                // Only reached if direct exact-match lookup failed.
+                console.log('Direct lookup failed. Falling back to cloud function lookup for:', slug);
+
+                try {
                     const lookupCalendar = firebase.functions().httpsCallable('lookupCalendar');
                     const result = await lookupCalendar({ slug: slug });
-                    console.log('Function result:', result);
+                    console.log('Lookup result:', result);
 
                     if (result.data.found) {
                         if (result.data.isReadOnly) {
@@ -654,21 +680,18 @@ Copyright (c) 2025 Kalid Azad
                             return; // Don't call callback, we're redirecting
                         } else {
                             // Found as editable calendar - subscribe with correct case
+                            console.log('Found case-insensitive match:', result.data.actualSlug);
                             this._subscribeExact(result.data.actualSlug, callback);
                         }
                     } else {
-                        // Calendar doesn't exist in any case - try direct subscription (might be new)
+                        // Calendar doesn't exist in any case - treating as new
+                        console.log('No calendar found. Treating as new.');
+                        // We subscribe to the ORIGINAL slug so if they create it, it uses the URL they typed.
                         this._subscribeExact(slug, callback);
                     }
                 } catch (error) {
                     console.error('Calendar lookup failed:', error);
-                    console.error('Error details:', {
-                        message: error.message,
-                        code: error.code,
-                        details: error.details,
-                        stack: error.stack
-                    });
-                    // Fall back to direct subscription
+                    // Fall back to direct subscription on original slug (it will likely be empty/new)
                     this._subscribeExact(slug, callback);
                 }
             }
@@ -739,7 +762,7 @@ Copyright (c) 2025 Kalid Azad
         <!-- Mobile Header -->
         <div class="md:hidden flex flex-col mb-2 pt-3 space-y-3">
             <!-- Row 1: Logo, Title, Menu -->
-            <div class="relative flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2 w-full">
                 <!-- Logo & Recents -->
                 <div class="relative z-40 flex-shrink-0" v-click-outside="closeRecents">
                     <div @click.stop="toggleRecents" class="cursor-pointer flex items-center gap-1">
@@ -754,33 +777,26 @@ Copyright (c) 2025 Kalid Azad
                     <navigation-dropdown v-if="showRecents" :recent-calendars="recentCalendars" @go-homepage="goToHomepage" @toggle-pin="togglePin" @remove-recent="removeRecent" class="mt-2"></navigation-dropdown>
                 </div>
 
-                <!-- Center: Title (absolutely centered) -->
-                <div class="absolute left-1/2 transform -translate-x-1/2 z-30 flex items-center gap-1">
+                <!-- Center: Title (Flex grow to fill space) -->
+                <div class="flex-1 min-w-0 flex justify-center z-30 px-1">
                     <calendar-title
                         :title="calendar.title"
                         :is-editing="editTitle"
                         :is-read-only="isReadOnly"
                         mode="mobile"
                         input-ref="mobileTitleInput"
-                        class="overflow-hidden max-w-[120px]"
+                        class="overflow-hidden w-full max-w-full truncate"
                         @update:title="calendar.title = $event"
                         @click="editTitle = true"
                         @blur="editTitle = false"
-                        @enter="editTitle = false">
+                        @enter="editTitle = false"
+                        :show-notes-button="true"
+                        :toggle-notes="toggleNotes">
                     </calendar-title>
-                    <button v-if="!editTitle" v-on:click="toggleNotes"
-                        aria-label="Toggle notes"
-                        class="text-color-1 hover:text-blue-500 p-1 transition-colors flex items-center justify-center flex-shrink-0">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                            stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
-                            <path stroke-linecap="round" stroke-linejoin="round"
-                                d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-                        </svg>
-                    </button>
                 </div>
 
                 <!-- Right Actions: Share + Menu -->
-                <div class="flex items-center gap-1 text-color-1 flex-shrink-0">
+                <div class="flex items-center gap-1 text-color-1 flex-shrink-0 z-40">
                     <!-- Share button -->
                     <button v-if="isExisting" @click="toggleShare()" aria-label="Share calendar" class="p-1 hover:text-blue-500">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -836,11 +852,11 @@ Copyright (c) 2025 Kalid Azad
         <!-- Hidden QuickAdd for Mobile Menu -->
         <quick-add ref="mobileQuickAdd" class="hidden" @event-created="handleQuickAddEvent"></quick-add>
 
-        <topbar class="hidden md:flex justify-between items-center pb-1 md:pb-3 text-sm">
+        <div class="hidden md:flex justify-between items-center pb-1 md:pb-3 text-sm">
             <!-- Left section -->
             <section class="flex-1 flex flex-col md:flex-row items-start md:space-x-2 min-w-0">
                 <!-- Logo and app name -->
-                <logo class="flex items-center text-sm h-8 relative">
+                <div class="flex items-center text-sm h-8 relative">
                     <div class="relative" v-click-outside="closeRecents" @mouseenter="handleDropdownMouseEnter"
                         @mouseleave="handleDropdownMouseLeave">
                         <div class="flex items-center space-x-2">
@@ -871,10 +887,10 @@ Copyright (c) 2025 Kalid Azad
                             @go-homepage="goToHomepage" @toggle-pin="togglePin" @remove-recent="removeRecent" v-cloak>
                         </navigation-dropdown>
                     </div>
-                </logo>
+                </div>
 
                 <!-- Action buttons -->
-                <buttonarea class="flex items-center space-x-1 mt-0">
+                <div class="flex items-center space-x-1 mt-0">
 
                     <!-- Help button -->
                     <custom-tooltip width="w-auto" align="center">
@@ -923,41 +939,13 @@ Copyright (c) 2025 Kalid Azad
                         @event-created="handleQuickAddEvent"
                         aria-label="Quick add event"></quick-add>
 
-                </buttonarea>
+                </div>
             </section>
 
             <!-- Middle section - Calendar title -->
             <section class="hidden md:flex flex-1 flex-col md:flex-row items-center justify-center mx-1 md:mx-2 min-w-0 min-h-8"
-                v-cloak v-if="!isLoading">
-                <custom-tooltip width="w-auto" align="center" v-if="!editTitle && !isReadOnly">
-                    <template #trigger>
-                        <calendar-title
-                            :title="calendar.title"
-                            :is-editing="editTitle"
-                            :is-read-only="isReadOnly"
-                            mode="desktop"
-                            input-ref="desktopTitleInput"
-                            @update:title="calendar.title = $event"
-                            @click="editTitle = true"
-                            @blur="editTitle = false"
-                            @enter="setTitle($event)">
-                        </calendar-title>
-                    </template>
-                    <template #content>
-                        <span class="whitespace-nowrap">Click to edit title</span>
-                    </template>
-                </custom-tooltip>
-                <calendar-title v-if="!editTitle && isReadOnly"
-                    :title="calendar.title"
-                    :is-editing="editTitle"
-                    :is-read-only="isReadOnly"
-                    mode="desktop"
-                    @update:title="calendar.title = $event"
-                    @click="editTitle = true"
-                    @blur="editTitle = false"
-                    @enter="setTitle($event)">
-                </calendar-title>
-                <calendar-title v-if="editTitle"
+                v-cloak>
+                <calendar-title
                     :title="calendar.title"
                     :is-editing="editTitle"
                     :is-read-only="isReadOnly"
@@ -966,151 +954,27 @@ Copyright (c) 2025 Kalid Azad
                     @update:title="calendar.title = $event"
                     @click="editTitle = true"
                     @blur="editTitle = false"
-                    @enter="setTitle($event)">
+                    @enter="setTitle($event)"
+                    :show-notes-button="true"
+                    :toggle-notes="toggleNotes">
                 </calendar-title>
-                <custom-tooltip width="w-auto" align="center" v-if="!editTitle">
-                    <template #trigger>
-                        <button v-on:click="toggleNotes"
-                            aria-label="Toggle notes"
-                            class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8">
-                            <div class="flex items-center">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                    stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
-                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                        d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-                                </svg>
-                                <span class="ml-0.5 text-xs hidden lg:inline">Notes</span>
-                            </div>
-                        </button>
-                    </template>
-                    <template #content>
-                        <span class="whitespace-nowrap">Toggle Notes</span>
-                    </template>
-                </custom-tooltip>
             </section>
 
             <!-- Right section -->
             <section class="flex-1 flex items-center justify-end text-xs min-w-0 h-8" v-cloak>
-
-                <!-- Loading state -->
-                <div v-if="isLoading">
-                    <div
-                        class="flex items-center bg-1 border border-color-default rounded-full p-1 pl-3 pr-3 shadow-sm select-none">
-                        <!-- Share Icon -->
-                        <div class="text-color-1 flex-shrink-0 mr-1.5">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24"
-                                stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                            </svg>
-                        </div>
-                        <!-- Text -->
-                        <div class="text-color-1 text-xs">
-                            Loading...
-                        </div>
-                    </div>
-                </div>
-
-                <div v-if="!isLoading && isReadOnly">
-                    <custom-tooltip align="right">
-                        <template #trigger>
-                            <div class="flex items-center bg-1 border border-color-default rounded-full p-1 pl-3 pr-3 shadow-sm cursor-pointer select-none hover:border-blue-500 hover:bg-[var(--bg-interactive-hover)] transition-all"
-                                @click="toggleShare">
-                                <!-- Share Icon -->
-                                <div class="text-color-1 flex-shrink-0 mr-1.5">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none"
-                                        viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                                    </svg>
-                                </div>
-                                <!-- Text -->
-                                <div class="text-color-2 text-xs font-bold">
-                                    View Only
-                                </div>
-                            </div>
-                        </template>
-                        <template #content>
-                            <p class="leading-relaxed">
-                                You are in View Only mode. Events cannot be added or edited.
-                            </p>
-                        </template>
-                    </custom-tooltip>
-                </div>
-
-                <div v-if="!isLoading && !isReadOnly">
-                    <!-- Existing calendar info -->
-                    <div v-show="isExisting">
-                        <custom-tooltip align="right">
-                            <template #trigger>
-                                <div class="relative flex items-center bg-1 border border-color-default rounded-full p-1 pl-3 pr-3 shadow-sm hover:border-blue-500 hover:bg-[var(--bg-interactive-hover)] cursor-pointer transition-all group select-none"
-                                    @click="toggleShare">
-
-                                    <!-- Icon -->
-                                    <div
-                                        class="text-color-1 group-hover:text-blue-500 transition-colors flex-shrink-0 p-1 rounded-full mr-1">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none"
-                                            viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                                        </svg>
-                                    </div>
-
-                                    <!-- URL Text -->
-                                    <div class="text-color-1 text-xs truncate max-w-[150px] md:max-w-xs">
-                                        pastecal.com/<span class="font-bold text-color-2" v-text="calendar.id"></span>
-                                    </div>
-                                </div>
-                            </template>
-                            <template #content>
-                                <p class="leading-relaxed">
-                                    Get links to share with anyone or sync to your phone.
-                                </p>
-                            </template>
-                        </custom-tooltip>
-                    </div>
-
-                    <!-- New calendar creation -->
-                    <div v-show="!isExisting" class="flex flex-wrap md:flex-nowrap items-center gap-2 relative">
-
-                        <custom-tooltip>
-                            <template #trigger>
-                                <!-- Unified Pill Container -->
-                                <div
-                                    class="flex items-center bg-1 border border-color-default rounded-full p-0 sm:p-1 pl-1.5 sm:pl-3 pr-0 sm:pr-1 shadow-sm focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all max-w-full relative">
-
-                                    <!-- Domain -->
-                                    <span
-                                        class="text-color-1 text-sm font-medium hidden md:inline flex-shrink-0 tracking-tight">pastecal.com/</span>
-                                    <span class="text-color-1 text-sm font-medium md:hidden flex-shrink-0">/</span>
-
-                                    <!-- Input -->
-                                    <input id="slug"
-                                        class="bg-transparent border-none focus:ring-0 p-0 text-sm font-bold text-color-2 w-24 md:w-40 focus:outline-none placeholder-gray-400 min-w-0"
-                                        type="text" :disabled="isExisting" v-model="calendar.id" @keyup.enter="create"
-                                        @input="handleSlugInput" placeholder="your-name">
-
-                                    <!-- Claim Button (Integrated) -->
-                                    <button @click="create"
-                                        class="ml-0.5 sm:ml-1 px-2 sm:px-3 py-1 sm:py-1.5 text-white bg-blue-600 font-bold rounded-full text-xs hover:bg-blue-700 transition-colors flex-shrink-0 shadow-sm">
-                                        <span class="hidden sm:inline">Claim URL</span>
-                                        <span class="inline sm:hidden">Claim</span>
-                                    </button>
-                                </div>
-                            </template>
-                            <template #content>
-                                <p class="leading-relaxed">
-                                    Claim any URL, like `/trip-2025`. Everyone with the URL can edit events. Use a
-                                    random ID for privacy.
-                                </p>
-                            </template>
-                        </custom-tooltip>
-                    </div>
-                </div>
+                <share-or-claim-ui
+                    :calendar="calendar"
+                    :is-read-only="isReadOnly"
+                    :is-existing="isExisting"
+                    :is-loading="isLoading"
+                    @toggle-share="toggleShare"
+                    @create="create"
+                    @update-slug="calendar.id = $event; handleSlugInput($event)">
+                </share-or-claim-ui>
             </section>
-        </topbar>
+        </div>
 
-        <panel class="flex bg-1 p-1 md:p-3 rounded-sm border border-color-default mb-4 relative w-full"
+        <div class="flex bg-1 p-1 md:p-3 rounded-sm border border-color-default mb-4 relative w-full"
             v-if="isPanelOpen()" v-cloak>
             <button id="closeAllPanels"
                 class="absolute top-0 right-0 m-2 md:m-4 text-color-1 hover:text-red-500 transition-colors"
@@ -1665,7 +1529,7 @@ Copyright (c) 2025 Kalid Azad
                     </div>
                 </div>
             </div>
-        </panel>
+        </div>
 
         <div id="cal2_wrap" style="width: 100%; height: 100%;">
             <div id="Schedule"></div>
@@ -1735,29 +1599,168 @@ Copyright (c) 2025 Kalid Azad
                 
                 <!-- Arrow -->
                 <div class="absolute -top-1 w-2 h-2 bg-2 transform rotate-45 border-l border-t border-color-default"
-                     :class="arrowAlignClass"></div>
             </div>
         </div>
     </script>
 
+    <script type="text/x-template" id="share-or-claim-template">
+        <div class="flex items-center justify-end text-xs min-w-0 h-8">
+            <!-- Loading state -->
+            <div v-if="isLoading" class="mr-2">
+                <div class="flex items-center bg-1 border border-color-default rounded-full p-1 pl-3 pr-3 shadow-sm select-none opacity-70">
+                    <div class="text-color-1 text-xs">Loading...</div>
+                </div>
+            </div>
+
+            <template v-if="!isLoading">
+                <!-- Read Only Mode -->
+                <div v-if="isReadOnly">
+                    <custom-tooltip align="right">
+                        <template #trigger>
+                            <div class="flex items-center bg-1 border border-color-default rounded-full p-1 pl-3 pr-3 shadow-sm cursor-pointer select-none hover:border-blue-500 hover:bg-[var(--bg-interactive-hover)] transition-all"
+                                @click="toggleShare">
+                                <!-- Share Icon -->
+                                <div class="text-color-1 flex-shrink-0 mr-1.5">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                                    </svg>
+                                </div>
+                                <!-- Text -->
+                                <div class="text-color-1 text-xs font-bold">
+                                    View Only
+                                </div>
+                            </div>
+                        </template>
+                        <template #content>
+                            <p class="leading-relaxed">
+                                You are in View Only mode. Events cannot be added or edited.
+                            </p>
+                        </template>
+                    </custom-tooltip>
+                </div>
+
+                <!-- Edit Mode (Existing or New) -->
+                <div v-else>
+                    <!-- Existing calendar info -->
+                    <div v-if="isExisting">
+                        <custom-tooltip align="right">
+                            <template #trigger>
+                                <div class="relative flex items-center bg-1 border border-color-default rounded-full p-1 pl-3 pr-3 shadow-sm hover:border-blue-500 hover:bg-[var(--bg-interactive-hover)] cursor-pointer transition-all group select-none"
+                                    @click="toggleShare">
+
+                                    <!-- Icon -->
+                                    <div class="text-color-1 group-hover:text-blue-500 transition-colors flex-shrink-0 p-1 rounded-full mr-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none"
+                                            viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                                        </svg>
+                                    </div>
+
+                                    <!-- URL Text -->
+                                    <div class="text-color-1 text-xs truncate max-w-[150px] md:max-w-xs">
+                                        pastecal.com/<span class="font-bold text-color-2" v-text="calendar.id"></span>
+                                    </div>
+                                </div>
+                            </template>
+                            <template #content>
+                                <p class="leading-relaxed">
+                                    Get links to share with anyone or sync to your phone.
+                                </p>
+                            </template>
+                        </custom-tooltip>
+                    </div>
+
+                    <!-- New calendar creation -->
+                    <div v-else class="flex flex-wrap md:flex-nowrap items-center gap-2 relative">
+                        <custom-tooltip>
+                            <template #trigger>
+                                <!-- Unified Pill Container -->
+                                <div class="flex items-center bg-1 border border-color-default rounded-full p-0 sm:p-1 pl-1.5 sm:pl-3 pr-0 sm:pr-1 shadow-sm focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all max-w-full relative">
+                                    <!-- Domain -->
+                                    <span class="text-color-1 text-sm font-medium hidden md:inline flex-shrink-0 tracking-tight">pastecal.com/</span>
+                                    <span class="text-color-1 text-sm font-medium md:hidden flex-shrink-0">/</span>
+
+                                    <!-- Input -->
+                                    <input id="slug"
+                                        class="bg-transparent border-none focus:ring-0 p-0 text-sm font-bold text-color-2 w-24 md:w-40 focus:outline-none placeholder-gray-400 min-w-0"
+                                        type="text" 
+                                        :value="calendar.id"
+                                        @input="handleSlugInput"
+                                        @keyup.enter="create"
+                                        placeholder="your-name">
+
+                                    <!-- Claim Button (Integrated) -->
+                                    <button @click="create"
+                                        class="ml-0.5 sm:ml-1 px-2 sm:px-3 py-1 sm:py-1.5 text-white bg-blue-600 font-bold rounded-full text-xs hover:bg-blue-700 transition-colors flex-shrink-0 shadow-sm">
+                                        <span class="hidden sm:inline">Claim URL</span>
+                                        <span class="inline sm:hidden">Claim</span>
+                                    </button>
+                                </div>
+                            </template>
+                            <template #content>
+                                <p class="leading-relaxed">
+                                    Claim any URL, like `/trip-2025`. Everyone with the URL can edit events. Use a random ID for privacy.
+                                </p>
+                            </template>
+                        </custom-tooltip>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </script>
+
     <script type="text/x-template" id="calendar-title-template">
-        <div class="w-full text-center">
-            <!-- Show title (including "New Calendar" for new calendars) -->
-            <h1 v-if="!isEditing"
-                @click="handleTitleClick"
-                :class="titleClasses">
-                {{ title || 'New Calendar' }}
-            </h1>
-            <!-- Edit mode input -->
+        <div class="calendar-title-component w-full text-center flex justify-center items-center gap-1">
+            <!-- Edit Mode -->
             <input v-if="isEditing"
                 type="text"
                 :value="title"
                 @input="$emit('update:title', $event.target.value)"
                 @blur="$emit('blur')"
-                @keyup.enter="$emit('enter')"
+                @keyup.enter="$emit('enter', $event)"
                 :ref="inputRef"
                 aria-label="Calendar title"
                 :class="inputClass">
+
+            <!-- View Mode -->
+            <template v-else>
+                <!-- Desktop + Editable: Show Title with Tooltip -->
+                <custom-tooltip width="w-auto" align="center" v-if="!isReadOnly && mode === 'desktop'">
+                    <template #trigger>
+                        <h1 @click="handleTitleClick" :class="titleClasses">
+                            {{ title || 'New Calendar' }}
+                        </h1>
+                    </template>
+                    <template #content>
+                        <span class="whitespace-nowrap">Click to edit title</span>
+                    </template>
+                </custom-tooltip>
+
+                <!-- Mobile OR ReadOnly: Just Title -->
+                <h1 v-else
+                    @click="handleTitleClick"
+                    :class="titleClasses">
+                    {{ title || 'New Calendar' }}
+                </h1>
+
+                <!-- Notes Button -->
+                <custom-tooltip width="w-auto" align="center" v-if="showNotesButton && !isEditing">
+                    <template #trigger>
+                        <button v-on:click="handleToggleNotes"
+                            aria-label="Toggle notes"
+                            class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8">
+                            <notes-icon></notes-icon>
+                            <span v-if="mode === 'desktop'" class="ml-0.5 text-xs hidden lg:inline">Notes</span>
+                        </button>
+                    </template>
+                    <template #content>
+                        <span class="whitespace-nowrap">Toggle Notes</span>
+                    </template>
+                </custom-tooltip>
+            </template>
         </div>
     </script>
 
@@ -2195,6 +2198,9 @@ vacation dec 11 - dec 15
 
         const CalendarTitle = {
             template: '#calendar-title-template',
+            components: {
+                'notes-icon': NotesIcon // Register NotesIcon here
+            },
             props: {
                 title: String,
                 isEditing: Boolean,
@@ -2207,7 +2213,9 @@ vacation dec 11 - dec 15
                 inputRef: {
                     type: String,
                     default: 'titleInput'
-                }
+                },
+                showNotesButton: Boolean, // New prop
+                toggleNotes: Function,   // New prop
             },
             emits: ['update:title', 'blur', 'enter', 'click'],
             computed: {
@@ -2241,6 +2249,12 @@ vacation dec 11 - dec 15
                     if (!this.isReadOnly) {
                         this.$emit('click');
                     }
+                },
+                // New method for notes button click
+                handleToggleNotes() {
+                    if (this.toggleNotes) {
+                        this.toggleNotes();
+                    }
                 }
             }
         };
@@ -2252,6 +2266,38 @@ vacation dec 11 - dec 15
         };
 
         // CopyIcon and SettingsIcon already defined above, no need to redeclare
+
+        const ShareOrClaimUI = {
+            template: '#share-or-claim-template',
+            components: {
+                'custom-tooltip': Tooltip,
+                'copy-icon': CopyIcon
+            },
+            props: {
+                calendar: Object,
+                isReadOnly: Boolean,
+                isExisting: Boolean,
+                isLoading: Boolean
+            },
+            emits: ['toggle-share', 'create', 'update-slug'],
+            methods: {
+                handleSlugInput(e) {
+                    this.$emit('update-slug', e.target.value);
+                },
+                create() {
+                    this.$emit('create');
+                },
+                toggleShare() {
+                    this.$emit('toggle-share');
+                },
+                copyToClipboard(text, target) {
+                    // Reuse the parent's logic or reimplement simply
+                    navigator.clipboard.writeText(text).then(() => {
+                        // simplified feedback or emit event
+                    });
+                }
+            }
+        };
 
         // ============================================================
         // COMPONENT REGISTRY
@@ -2273,7 +2319,9 @@ vacation dec 11 - dec 15
             'share-icon': ShareIcon,                   // Share icon SVG
             'notes-icon': NotesIcon,                   // Notes icon SVG
             'chevron-down-icon': ChevronDownIcon,      // Chevron down icon SVG
-            'close-icon': CloseIcon                    // Close icon SVG
+            'close-icon': CloseIcon,                   // Close icon SVG
+            'quick-add': QuickAdd,                     // Quick Add component
+            'share-or-claim-ui': ShareOrClaimUI        // Share or Claim UI
         };
 
         const CalendarVueApp = {
@@ -2416,7 +2464,9 @@ vacation dec 11 - dec 15
                     return this.isExisting || this.isReadOnly;
                 },
                 canEdit() {
-                    // User has edit permissions
+                    // SINGLE SOURCE OF TRUTH for editing permissions.
+                    // Derived from isReadOnly (URL-based).
+                    // Controls UI elements: settings, quick add, title editing, notes editing.
                     return !this.isReadOnly;
                 }
             },
@@ -3509,6 +3559,11 @@ vacation dec 11 - dec 15
                     // Convert line breaks to <br> tags
                     notes = notes.replace(/\n/g, "<br>");
 
+                    // If no notes, display a message
+                    if (notes.trim() === '') {
+                        return '<span class="text-color-1 italic">No notes yet.</span>';
+                    }
+
                     return notes;
                 },
 
@@ -4214,7 +4269,14 @@ vacation dec 11 - dec 15
             }
         };
 
-        const app = Vue.createApp(CalendarVueApp).component('quick-add', QuickAdd).mount('#app');
+        const app = Vue.createApp(CalendarVueApp);
+        
+        // Register all components globally so they can be used recursively
+        Object.entries(COMPONENT_REGISTRY).forEach(([name, component]) => {
+            app.component(name, component);
+        });
+        
+        app.component('quick-add', QuickAdd).mount('#app');
 
         // ============================================================
         // COMPONENT REGISTRATION VALIDATOR
