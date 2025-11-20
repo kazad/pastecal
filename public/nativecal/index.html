@@ -175,63 +175,29 @@
         <!-- Calendar Container (Edge to Edge) -->
         <div class="flex-1 flex flex-col overflow-hidden relative border border-gray-200 rounded-sm bg-white shadow-sm">
             
-            <!-- Calendar Toolbar (Date & Views) -->
-            <div class="flex justify-between items-center p-3 border-b border-gray-200 bg-white flex-shrink-0">
-                <div class="flex items-center gap-4">
-                    <!-- Date Nav -->
-                    <div class="flex items-center bg-gray-100 rounded-lg p-0.5">
-                        <button @click="prev" class="px-2 hover:bg-white rounded-md h-7 flex items-center text-gray-600 text-lg leading-none mb-0.5">&lsaquo;</button>
-                        <button @click="today" class="px-3 text-xs font-bold hover:bg-white rounded-md h-7 text-gray-700 uppercase tracking-wide">Today</button>
-                        <button @click="next" class="px-2 hover:bg-white rounded-md h-7 flex items-center text-gray-600 text-lg leading-none mb-0.5">&rsaquo;</button>
-                    </div>
-                    <!-- Date Range -->
-                    <div class="text-xl font-medium text-gray-800">{{ currentTitle }}</div>
-                </div>
-
-                <!-- View Switcher -->
-                <div class="flex bg-gray-100 rounded-lg p-0.5">
-                    <button v-for="view in views" 
-                        :key="view"
-                        @click="changeView(view)"
-                        :class="['px-3 py-1 rounded-md text-xs font-medium transition-all', currentView === view ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700']">
-                        {{ view }}
-                    </button>
-                </div>
-            </div>
+            <!-- Calendar Toolbar -->
+            <calendar-toolbar
+                :current-title="currentTitle"
+                :current-view="currentView"
+                :views="views"
+                @prev="prev"
+                @next="next"
+                @today="today"
+                @change-view="changeView">
+            </calendar-toolbar>
 
             <!-- Month View -->
-            <div v-if="currentView === 'Month'" class="h-full flex flex-col overflow-y-auto">
-                <!-- Headers -->
-                <div class="grid grid-cols-7 border-b border-gray-200 bg-gray-50">
-                    <div v-for="day in weekDays" :key="day" class="py-2 text-center text-sm font-semibold text-gray-500 uppercase tracking-wide">
-                        {{ day }}
-                    </div>
-                </div>
-                <!-- Grid -->
-                <div class="calendar-grid flex-1">
-                    <div v-for="(cell, idx) in monthCells" :key="idx" 
-                         class="calendar-cell relative group hover:bg-gray-50 flex flex-col gap-1 cursor-pointer"
-                         :class="{'bg-gray-50/50': !cell.isCurrentMonth, 'bg-blue-50': isToday(cell.date)}"
-                         :data-date="cell.date.toISOString()"
-                         @click.self="createMonthEvent(cell.date)">
-                        
-                        <span class="text-xs font-medium p-1 ml-auto rounded-full w-7 h-7 flex items-center justify-center"
-                              :class="isToday(cell.date) ? 'bg-blue-600 text-white' : 'text-gray-700'">
-                            {{ cell.dayNumber }}
-                        </span>
-
-                        <!-- Month Events -->
-                        <div v-for="event in getEventsForDate(cell.date)" :key="event.id"
-                             class="px-1.5 py-0.5 text-xs rounded truncate cursor-pointer shadow-sm border-l-2 hover:brightness-95 transition-all select-none"
-                             :class="{'is-dragging': dragState.eventId === event.id}"
-                             :style="getEventStyle(event)"
-                             @mousedown.stop="startDrag(event, $event, 'month-move')"
-                             @click.stop="selectEvent(event, $event)">
-                            {{ event.title }}
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <month-view v-if="currentView === 'Month'"
+                :cells="monthCells"
+                :week-days="weekDays"
+                :drag-state="dragState"
+                :get-events-for-date="getEventsForDate"
+                :get-event-style="getEventStyle"
+                :is-today="isToday"
+                @create-event="createMonthEvent"
+                @start-drag="startDrag"
+                @select-event="selectEvent">
+            </month-view>
 
             <!-- Time Grid View (Week/Day) -->
             <div v-if="currentView === 'Week' || currentView === 'Day'" class="h-full flex flex-col">
@@ -436,6 +402,113 @@
         </div>
     </div>
 
+    <!-- Month View Component Template -->
+    <script type="text/x-template" id="month-view-template">
+        <div class="h-full flex flex-col overflow-y-auto">
+            <!-- Headers -->
+            <div class="grid grid-cols-7 border-b border-gray-200 bg-gray-50">
+                <div v-for="day in weekDays" :key="day" class="py-2 text-center text-sm font-semibold text-gray-500 uppercase tracking-wide">
+                    {{ day }}
+                </div>
+            </div>
+            <!-- Grid -->
+            <div class="calendar-grid flex-1">
+                <div v-for="(cell, idx) in cells" :key="idx" 
+                     class="calendar-cell relative group hover:bg-gray-50 flex flex-col gap-1 cursor-pointer"
+                     :class="{'bg-gray-50/50': !cell.isCurrentMonth, 'bg-blue-50': isToday(cell.date)}"
+                     :data-date="cell.date.toISOString()"
+                     @click.self="$emit('create-event', cell.date)">
+                    
+                    <span class="text-xs font-medium p-1 ml-auto rounded-full w-7 h-7 flex items-center justify-center"
+                          :class="isToday(cell.date) ? 'bg-blue-600 text-white' : 'text-gray-700'">
+                        {{ cell.dayNumber }}
+                    </span>
+
+                    <!-- Month Events -->
+                    <div v-for="event in getEventsForDate(cell.date)" :key="event.id"
+                         class="px-1.5 py-0.5 text-xs rounded truncate cursor-pointer shadow-sm border-l-2 hover:brightness-95 transition-all select-none"
+                         :class="{'is-dragging': dragState.eventId === event.id}"
+                         :style="getEventStyle(event)"
+                         @mousedown.stop="$emit('start-drag', event, $event, 'month-move')"
+                         @click.stop="$emit('select-event', event, $event)">
+                        {{ event.title }}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </script>
+
+    <!-- Calendar Toolbar Component Template -->
+    <script type="text/x-template" id="calendar-toolbar-template">
+        <div class="flex justify-between items-center p-3 border-b border-gray-200 bg-white flex-shrink-0">
+            <div class="flex items-center gap-4">
+                <!-- Date Nav -->
+                <div class="flex items-center bg-gray-100 rounded-lg p-0.5">
+                    <button @click="$emit('prev')" class="px-2 hover:bg-white rounded-md h-7 flex items-center text-gray-600 text-lg leading-none mb-0.5">&lsaquo;</button>
+                    <button @click="$emit('today')" class="px-3 text-xs font-bold hover:bg-white rounded-md h-7 text-gray-700 uppercase tracking-wide">Today</button>
+                    <button @click="$emit('next')" class="px-2 hover:bg-white rounded-md h-7 flex items-center text-gray-600 text-lg leading-none mb-0.5">&rsaquo;</button>
+                </div>
+                <!-- Date Range -->
+                <div class="text-xl font-medium text-gray-800">{{ currentTitle }}</div>
+            </div>
+
+            <!-- View Switcher -->
+            <div class="flex bg-gray-100 rounded-lg p-0.5">
+                <button v-for="view in views" 
+                    :key="view"
+                    @click="$emit('change-view', view)"
+                    :class="['px-3 py-1 rounded-md text-xs font-medium transition-all', currentView === view ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700']">
+                    {{ view }}
+                </button>
+            </div>
+        </div>
+    </script>
+
+    <!-- App Topbar Component Template -->
+    <script type="text/x-template" id="app-topbar-template">
+        <div class="hidden md:flex justify-between items-center pb-1 md:pb-3 text-sm flex-shrink-0">
+            <!-- Left: Logo & App Actions -->
+            <section class="flex-1 flex items-center min-w-0">
+                <div class="flex items-center h-8 mr-4">
+                    <img class="h-8 w-8 mr-1.5 flex-shrink-0" src="https://pastecal.com/img/pastecal.logo.svg" alt="Logo">
+                    <div class="flex flex-col leading-none">
+                        <span class="text-blue-500 font-bold text-sm tracking-tight">pastecal</span>
+                        <span class="text-gray-400 text-[10px] -mt-0.5">no-login calendar</span>
+                    </div>
+                </div>
+                
+                <!-- App Icons -->
+                <div class="flex items-center space-x-1">
+                    <button class="text-gray-400 hover:text-blue-500 p-1.5 rounded-full transition-colors" title="Help">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    </button>
+                    <button class="text-gray-400 hover:text-blue-500 p-1.5 rounded-full transition-colors" title="Search">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                    </button>
+                    <button @click="$emit('toggle-settings')" class="text-gray-400 hover:text-blue-500 p-1.5 rounded-full transition-colors" title="Settings">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="currentColor" viewBox="0 0 16 16"><path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z" /></svg>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Center: Calendar Title -->
+            <section class="flex-1 flex justify-center">
+                <div class="text-lg font-bold text-gray-800 cursor-pointer hover:text-blue-600 transition-colors px-2 py-1 rounded hover:bg-gray-50"
+                     @click="$emit('edit-title')">
+                    {{ title }}
+                </div>
+            </section>
+
+            <!-- Right: Share Actions -->
+            <section class="flex-1 flex justify-end items-center">
+                <div class="flex items-center bg-white border border-gray-200 rounded-full px-3 py-1 shadow-sm hover:border-blue-400 cursor-pointer transition-colors group">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-gray-400 group-hover:text-blue-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
+                    <div class="text-xs text-gray-500">pastecal.com/<span class="font-bold text-gray-700">native-proto</span></div>
+                </div>
+            </section>
+        </div>
+    </script>
+
     <!-- Settings Modal Component Template -->
     <script type="text/x-template" id="settings-modal-template">
         <div class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50" @click.self="$emit('close')">
@@ -494,6 +567,27 @@
         const { createApp, ref, computed, onMounted, onUnmounted } = Vue;
         const df = window.dateFns;
 
+        // Component: App Topbar
+        const AppTopbar = {
+            template: '#app-topbar-template',
+            props: ['title'],
+            emits: ['toggle-settings', 'edit-title']
+        };
+
+        // Component: Calendar Toolbar
+        const CalendarToolbar = {
+            template: '#calendar-toolbar-template',
+            props: ['currentTitle', 'currentView', 'views'],
+            emits: ['prev', 'next', 'today', 'change-view']
+        };
+
+        // Component: Month View
+        const MonthView = {
+            template: '#month-view-template',
+            props: ['cells', 'weekDays', 'dragState', 'getEventsForDate', 'getEventStyle', 'isToday'],
+            emits: ['create-event', 'start-drag', 'select-event']
+        };
+
         // Component: Settings Modal
         const SettingsModal = {
             template: '#settings-modal-template',
@@ -503,7 +597,10 @@
 
         createApp({
             components: {
-                'settings-modal': SettingsModal
+                'settings-modal': SettingsModal,
+                'app-topbar': AppTopbar,
+                'calendar-toolbar': CalendarToolbar,
+                'month-view': MonthView
             },
             setup() {
                 const currentView = ref('Month'); // Default view
