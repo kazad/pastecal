@@ -226,7 +226,7 @@
                                  }"
                                  :style="[getEventStyle(event, true), getWeekEventPosition(event), { cursor: eventCursor }]"
                                  @mousedown.stop="startDrag(event, $event, 'time-move')"
-                                 @click.stop="selectEvent(event)">
+                                 @click.stop="selectEvent(event, $event)">
                                 <div class="event-text-content">
                                     <div class="font-bold leading-tight pointer-events-none">{{ event.title }}</div>
                                     <div class="opacity-75 text-[10px] pointer-events-none">{{ formatTime(event.start) }} - {{ formatTime(event.end) }}</div>
@@ -294,6 +294,65 @@
 
         </div>
 
+        <!-- Quick Info Popup -->
+        <div v-if="selectedEventId" 
+             class="fixed z-50 bg-white rounded-lg shadow-xl border border-gray-200 p-4 w-72"
+             :style="popupStyle">
+             <div class="flex justify-between items-start mb-2">
+                <h3 class="font-bold text-lg truncate">{{ getEventById(selectedEventId)?.title }}</h3>
+                <button @click="closePreview" class="text-gray-400 hover:text-gray-600">✕</button>
+             </div>
+             <div class="text-sm text-gray-600 mb-4" v-if="getEventById(selectedEventId)">
+                {{ formatTime(getEventById(selectedEventId).start) }} - {{ formatTime(getEventById(selectedEventId).end) }}
+             </div>
+             <div class="flex justify-end gap-2">
+                <button @click="deleteEvent(selectedEventId)" class="text-red-500 hover:bg-red-50 px-3 py-1 rounded text-sm font-medium">Delete</button>
+                <button @click="openEditor(selectedEventId)" class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 text-sm font-medium">Edit</button>
+             </div>
+        </div>
+
+        <!-- Edit Modal -->
+        <div v-if="isEditorOpen" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50" @click.self="closeEditor">
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6 m-4">
+                <h2 class="text-xl font-bold mb-4">Edit Event</h2>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Title</label>
+                        <input v-model="editorForm.title" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 focus:border-blue-500 focus:ring-blue-500">
+                    </div>
+                    
+                    <!-- Simple time inputs for prototype -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700">Start</label>
+                            <div class="text-gray-900 mt-1">{{ formatTime(editorForm.start) }}</div>
+                        </div>
+                         <div>
+                            <label class="block text-sm font-medium text-gray-700">End</label>
+                            <div class="text-gray-900 mt-1">{{ formatTime(editorForm.end) }}</div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Color</label>
+                        <div class="flex gap-2 mt-1">
+                            <div v-for="(c, i) in colors" :key="i" 
+                                 class="w-6 h-6 rounded-full cursor-pointer ring-offset-2"
+                                 :class="{'ring-2 ring-blue-500': editorForm.type === i + 1}"
+                                 :style="{backgroundColor: c}"
+                                 @click="editorForm.type = i + 1"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-6 flex justify-end gap-3">
+                    <button @click="closeEditor" class="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-md">Cancel</button>
+                    <button @click="saveEvent" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Save</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Drag Ghost (Month View) -->
         <div v-if="dragState.isDragging && dragState.action === 'month-move' && dragState.ghostEvent" 
              class="drag-ghost px-2 py-1 text-xs rounded text-white font-bold truncate w-32 pointer-events-none"
@@ -319,6 +378,9 @@
                 const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                 const notification = ref('');
                 const selectedEventId = ref(null);
+                const popupPosition = ref({ top: 0, left: 0 });
+                const isEditorOpen = ref(false);
+                const editorForm = ref({ id: null, title: '', start: 0, end: 0, type: 1 });
                 
                 // ----------------------------------------------------------------
                 // Data
@@ -347,6 +409,24 @@
                     if (currentView.value === 'Day') return df.format(currentDate.value, 'MMMM d, yyyy');
                     return df.format(currentDate.value, 'MMMM yyyy');
                 });
+
+                const popupStyle = computed(() => {
+                    // Keep popup within bounds roughly
+                    let left = popupPosition.value.left;
+                    let top = popupPosition.value.top;
+                    
+                    // Adjust if too close to right edge (simplistic)
+                    if (window.innerWidth - left < 300) left -= 300;
+                    // Adjust if too close to bottom
+                    if (window.innerHeight - top < 200) top -= 200;
+                    
+                    return {
+                        top: `${top}px`,
+                        left: `${left}px`
+                    };
+                });
+
+                const getEventById = (id) => events.value.find(e => e.id === id);
 
                 // Month View Logic
                 const monthCells = computed(() => {
@@ -641,16 +721,58 @@
                 };
 
                 const editEvent = (event) => {
-                    console.log('[editEvent] triggered');
-                    if (dragState.value.isDragging || dragState.value.wasDragging) return;
-                    const newTitle = prompt("Edit Event Title:", event.title);
-                    if (newTitle !== null) event.title = newTitle;
+                    // Legacy double click handler if needed, now redirected to openEditor
+                    openEditor(event.id);
                 };
 
-                const selectEvent = (event) => {
+                const selectEvent = (event, e) => {
                     console.log('[selectEvent] triggered for', event.id);
                     if (dragState.value.isDragging || dragState.value.wasDragging) return;
                     selectedEventId.value = event.id;
+                    
+                    // Calculate popup position
+                    if (e) {
+                        // Position relative to viewport
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        // Place to the right or bottom of the element
+                        popupPosition.value = {
+                            top: rect.bottom + 10,
+                            left: rect.left + (rect.width / 2)
+                        };
+                    }
+                };
+
+                const closePreview = () => {
+                    selectedEventId.value = null;
+                };
+
+                const deleteEvent = (id) => {
+                    if(confirm("Delete this event?")) {
+                        events.value = events.value.filter(e => e.id !== id);
+                        selectedEventId.value = null;
+                    }
+                };
+
+                const openEditor = (id) => {
+                    const event = getEventById(id);
+                    if (event) {
+                        editorForm.value = { ...event };
+                        isEditorOpen.value = true;
+                        selectedEventId.value = null; // Close preview
+                    }
+                };
+
+                const closeEditor = () => {
+                    isEditorOpen.value = false;
+                };
+
+                const saveEvent = () => {
+                    const index = events.value.findIndex(e => e.id === editorForm.value.id);
+                    if (index !== -1) {
+                        events.value[index] = { ...editorForm.value };
+                        showToast('Event saved');
+                    }
+                    closeEditor();
                 };
 
                 // ----------------------------------------------------------------
@@ -835,6 +957,7 @@
                     prev, next, today, isToday, changeView, goToMonth,
                     events, getEventsForDate, getEventsWithLayout, getEventStyle, getWeekEventPosition, getGhostStyle, formatTime, formatDuration, getEventColor,
                     createMonthEvent, createTimeEvent, editEvent, selectEvent, selectedEventId,
+                    closePreview, openEditor, closeEditor, saveEvent, deleteEvent, isEditorOpen, editorForm, popupStyle, getEventById,
                     startDrag, onDrag, stopDrag, dragState,
                     currentTimeTop, notification, eventCursor,
                     isSameDay: (d1, d2) => df.isSameDay(d1, d2)
