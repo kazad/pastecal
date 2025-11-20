@@ -10,6 +10,20 @@
     <script src="https://cdn.jsdelivr.net/npm/date-fns@3.6.0/cdn.min.js"></script>
     
     <style>
+        /* Global Styles */
+        :root {
+            --bg: #ffffff;
+            --bg-disabled: #eaeaea;
+            --fg: #333333;
+            --link: rgb(3, 169, 244);
+            --link-hover: rgb(3, 140, 214);
+            --panel-bg: #f9fafb;
+            --border-color: #efefef;
+            --bg-interactive-hover: #f3f4f6; /* Tailwind gray-100 */
+            --text-color-1: #6b7280;
+            --text-color-2: #374151;
+        }
+
         /* Basic grid for month view */
         .calendar-grid {
             display: grid;
@@ -107,6 +121,14 @@
 <body class="bg-gray-50 p-4 text-gray-800 h-screen flex flex-col">
     <div id="app" class="flex flex-col h-full max-w-6xl mx-auto bg-white shadow rounded-lg overflow-hidden select-none">
         
+        <!-- Settings Modal -->
+        <settings-modal 
+            v-if="showSettings" 
+            :time-format="timeFormat" 
+            @update:time-format="updateTimeFormat"
+            @close="toggleSettings">
+        </settings-modal>
+
         <!-- Header / Toolbar -->
         <div class="p-4 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
             <div class="flex items-center gap-4">
@@ -122,10 +144,9 @@
                 <span class="text-lg font-medium w-48">{{ currentTitle }}</span>
             </div>
             
-            <div class="flex gap-2">
-                <button @click="timeFormat = timeFormat === '12' ? '24' : '12'"
-                    :class="['px-3 py-1 rounded text-sm transition-colors', 'bg-gray-100 hover:bg-gray-200']">
-                    {{ timeFormat === '12' ? 'AM/PM' : '24H' }}
+            <div class="flex gap-2 items-center">
+                <button @click="toggleSettings" class="p-1.5 rounded-full text-gray-600 hover:bg-gray-100 transition-colors" title="Settings">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="currentColor" viewBox="0 0 16 16"><path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1 2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1 .872-2.105l.34-.1c1.4-.413 1.4-2.397 0-2.81l-.34-.1a1.464 1.464 0 0 1-.872-2.105l.17-.31c.698-1.283-.705-2.686-1.987-1.987l-.311.169a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z" /></svg>
                 </button>
                 <button v-for="view in views" 
                     :key="view"
@@ -376,11 +397,75 @@
         </div>
     </div>
 
+    <!-- Settings Modal Component Template -->
+    <script type="text/x-template" id="settings-modal-template">
+        <div class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50" @click.self="$emit('close')">
+            <div class="w-full max-w-2xl p-4 text-sm text-gray-800 bg-white rounded-lg shadow-xl border border-gray-200 m-4">
+                <div class="flex justify-between items-center mb-4 border-b pb-2">
+                    <h2 class="text-lg font-bold">Settings</h2>
+                    <button @click="$emit('close')" class="text-gray-500 hover:text-gray-700">✕</button>
+                </div>
+
+                <div class="grid md:grid-cols-2 gap-6">
+                    <!-- Global Settings -->
+                    <div class="bg-gray-50 p-4 rounded-lg shadow-sm border border-gray-200">
+                        <h3 class="font-bold text-gray-800 mb-3">Personal Settings</h3>
+                        <p class="text-xs text-gray-500 mb-4 italic">Default settings for your device.</p>
+
+                        <div class="space-y-4">
+                            <div>
+                                <label class="block mb-1 font-medium">Time format</label>
+                                <select :value="timeFormat" @change="$emit('update:timeFormat', $event.target.value)"
+                                    class="w-full p-2 border border-gray-200 rounded bg-white">
+                                    <option value="12">12-hour (1:00 PM)</option>
+                                    <option value="24">24-hour (13:00)</option>
+                                </select>
+                            </div>
+                            
+                            <!-- Placeholders for other settings matching main app -->
+                            <div>
+                                <label class="block mb-1 font-medium text-gray-400">First day of week</label>
+                                <select disabled class="w-full p-2 border border-gray-200 rounded bg-white text-gray-400">
+                                    <option>Sunday</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block mb-1 font-medium text-gray-400">Theme</label>
+                                <select disabled class="w-full p-2 border border-gray-200 rounded bg-white text-gray-400">
+                                    <option>Light</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Calendar Specific Placeholders -->
+                    <div class="bg-gray-50 p-4 rounded-lg shadow-sm border border-gray-200">
+                        <h3 class="font-bold text-gray-800 mb-3">Calendar Settings</h3>
+                        <p class="text-xs text-gray-500 mb-4 italic">Settings for everyone viewing this calendar.</p>
+                        <div class="text-center text-gray-400 py-8">
+                            (Calendar-specific settings coming soon)
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </script>
+
     <script>
         const { createApp, ref, computed, onMounted, onUnmounted } = Vue;
         const df = window.dateFns;
 
+        // Component: Settings Modal
+        const SettingsModal = {
+            template: '#settings-modal-template',
+            props: ['timeFormat'],
+            emits: ['update:timeFormat', 'close']
+        };
+
         createApp({
+            components: {
+                'settings-modal': SettingsModal
+            },
             setup() {
                 const currentView = ref('Month'); // Default view
                 const views = ['Day', 'Week', 'Month', 'Year', 'Agenda'];
@@ -392,6 +477,7 @@
                 const isEditorOpen = ref(false);
                 const editorForm = ref({ id: null, title: '', description: '', start: '', end: '', type: 1, recurrencerule: '' });
                 const timeFormat = ref('12'); // '12' for AM/PM, '24' for military
+                const showSettings = ref(false);
                 
                 // ----------------------------------------------------------------
                 // Data
@@ -563,6 +649,14 @@
                     currentDate.value = date;
                     currentView.value = 'Month';
                     selectedEventId.value = null; // Close preview
+                };
+
+                const toggleSettings = () => {
+                    showSettings.value = !showSettings.value;
+                };
+
+                const updateTimeFormat = (val) => {
+                    timeFormat.value = val;
                 };
 
                 // ----------------------------------------------------------------
@@ -1000,7 +1094,7 @@
                     createMonthEvent, createTimeEvent, editEvent, selectEvent, selectedEventId,
                     closePreview, openEditor, closeEditor, saveEvent, deleteEvent, isEditorOpen, editorForm, popupStyle, getEventById, toDateTimeLocalString,
                     startDrag, onDrag, stopDrag, dragState,
-                    currentTimeTop, notification, eventCursor, timeFormat,
+                    currentTimeTop, notification, eventCursor, timeFormat, showSettings, toggleSettings, updateTimeFormat,
                     isSameDay: (d1, d2) => df.isSameDay(d1, d2)
                 }
             }
