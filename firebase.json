@@ -25,10 +25,14 @@
   },
   "emulators": {
     "functions": {
-      "port": 5001
+      "port": 5101
+    },
+    "hosting": {
+      "port": 5103
     },
     "ui": {
-      "enabled": true
+      "enabled": true,
+      "port": 5100
     }
   },
   "remoteconfig": {
