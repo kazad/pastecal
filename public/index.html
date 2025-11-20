@@ -2940,14 +2940,32 @@ vacation dec 11 - dec 15
                     localStorage.removeItem("calendar");
                 },
 
+                resetToDefaults() {
+                    // Reset to a completely fresh calendar state
+                    this.calendar.id = randomID(8);
+                    this.calendar.title = "New Calendar";
+                    this.calendar.events = [];
+                    this.calendar.options = {
+                        notes: '',
+                        defaultView: 'week'
+                    };
+                    // Add one sample event
+                    var defaultEvent = this.calendar.defaultEvent("Sample event");
+                    this.calendar.setEvents([defaultEvent]);
+                    // Reset local settings to defaults
+                    this.initializeLocalSettings();
+                },
+
                 loadLocalStorage() {
                     var c = JSON.parse(localStorage.getItem("calendar"));
                     if (c) {
+                        // Load ALL draft data from localStorage (ID, title, events, settings, colors, notes, etc.)
                         this.calendar.import(c);
-                        // Reset to a fresh random ID on homepage (don't persist custom name)
-                        this.calendar.id = randomID(8);
                         // Re-initialize local settings to load custom colors and labels
                         this.initializeLocalSettings();
+                    } else {
+                        // No localStorage data (fresh start after save, or first visit)
+                        this.resetToDefaults();
                     }
                 },
 
@@ -3029,7 +3047,8 @@ vacation dec 11 - dec 15
                         // does not exist, proceed
                         this.isLoading = true;
                         CalendarDataService.createWithId(slug, this.calendar, () => {
-                            // success
+                            // success - clear localStorage so homepage starts fresh next time
+                            this.clearLocalStorage();
                             this.showToast('Calendar created!', 'success');
                             window.location.href = "/" + slug;
                         });
