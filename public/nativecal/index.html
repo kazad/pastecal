@@ -205,6 +205,12 @@
                                  <div class="w-2 h-2 bg-red-500 rounded-full -ml-1"></div>
                             </div>
 
+                            <!-- Original Position Ghost (When Dragging) -->
+                            <div v-if="dragState.isDragging && isSameDay(date, new Date(dragState.originalStart)) && dragState.action === 'time-move'"
+                                 class="absolute inset-x-1 rounded border-2 border-gray-400 border-dashed bg-gray-100 opacity-60 pointer-events-none z-0"
+                                 :style="getGhostStyle()">
+                            </div>
+
                             <!-- Absolute Events -->
                             <div v-for="event in getEventsForDate(date)" :key="event.id" 
                                  class="event-card absolute p-1 text-xs inset-x-1 rounded overflow-hidden border-l-4 cursor-pointer"
@@ -298,7 +304,7 @@
         createApp({
             setup() {
                 const currentView = ref('Month'); // Default view
-                const views = ['Year', 'Month', 'Week', 'Day', 'Agenda'];
+                const views = ['Day', 'Week', 'Month', 'Year', 'Agenda'];
                 const currentDate = ref(new Date());
                 const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
                 const notification = ref('');
@@ -471,6 +477,16 @@
                     const height = Math.max(((endMinutes - startMinutes) / 60) * 50, 20);
                     return { top: `${top}px`, height: `${height}px`, width: '90%' };
                 };
+                
+                const getGhostStyle = () => {
+                    const start = new Date(dragState.value.originalStart);
+                    const end = new Date(dragState.value.originalEnd);
+                    const startMinutes = start.getHours() * 60 + start.getMinutes();
+                    const endMinutes = end.getHours() * 60 + end.getMinutes();
+                    const top = (startMinutes / 60) * 50;
+                    const height = Math.max(((endMinutes - startMinutes) / 60) * 50, 20);
+                    return { top: `${top}px`, height: `${height}px`, width: '90%' };
+                };
 
                 // ----------------------------------------------------------------
                 // Interactions
@@ -598,7 +614,7 @@
                     // Time Grid Logic (Move/Resize)
                     if (dragState.value.action === 'time-move' || dragState.value.action === 'resize') {
                         const deltaPixels = e.clientY - dragState.value.startY;
-                        const deltaMinutes = Math.round((deltaPixels / 50) * 60 / 15) * 15;
+                        const deltaMinutes = Math.round((deltaPixels / 50) * 60 / 30) * 30;
 
                         if (dragState.value.action === 'time-move') {
                             const duration = dragState.value.originalEnd - dragState.value.originalStart;
@@ -718,10 +734,11 @@
                 return {
                     currentView, views, currentTitle, weekDays, monthCells, visibleDates, yearMonths, agendaEvents,
                     prev, next, today, isToday, changeView, goToMonth,
-                    events, getEventsForDate, getEventStyle, getWeekEventPosition, formatTime, formatDuration, getEventColor,
+                    events, getEventsForDate, getEventStyle, getWeekEventPosition, getGhostStyle, formatTime, formatDuration, getEventColor,
                     createMonthEvent, createTimeEvent, editEvent, selectEvent, selectedEventId,
                     startDrag, onDrag, stopDrag, dragState,
-                    currentTimeTop, notification
+                    currentTimeTop, notification,
+                    isSameDay: (d1, d2) => df.isSameDay(d1, d2)
                 }
             }
         }).mount('#app');
