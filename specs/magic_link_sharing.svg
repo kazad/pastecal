@@ -1,0 +1,8 @@
+<svg width="600" height="300" viewBox="0 0 600 300" xmlns="http://www.w3.org/2000/svg">
+  <rect width="600" height="300" fill="#f0f0f0"/>
+  <rect x="150" y="100" width="300" height="100" rx="10" fill="white" stroke="#ccc" stroke-width="2"/>
+  <text x="300" y="130" font-family="Arial, sans-serif" font-size="18" fill="#333" text-anchor="middle">Your calendar is ready!</text>
+  <text x="300" y="155" font-family="Arial, sans-serif" font-size="14" fill="#666" text-anchor="middle">Share this link to invite others.</text>
+  <rect x="175" y="170" width="250" height="25" rx="5" fill="#e9ecef"/>
+  <text x="300" y="187" font-family="monospace" font-size="14" fill="#007bff" text-anchor="middle">pastecal.com/your-unique-id</text>
+</svg>
