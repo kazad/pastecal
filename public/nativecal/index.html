@@ -79,34 +79,40 @@
         /* Add Indicator (+) */
         .add-indicator {
             position: absolute;
-            left: 0;
             right: 0;
+            width: 40px; /* Fixed clickable area on the right */
             height: 50px; /* 1 hour */
             display: flex;
             align-items: center;
             justify-content: center;
             pointer-events: none; /* Click passes through to column */
-            opacity: 0;
-            transition: opacity 0.1s;
-            z-index: 5; /* Below events */
+            z-index: 60; /* Above events */
         }
         
-        .time-col:hover .add-indicator {
-            opacity: 1;
-        }
-
         .add-indicator::after {
             content: '+';
             font-size: 24px;
             color: #3b82f6; /* Blue-500 */
-            background: rgba(239, 246, 255, 0.8); /* Blue-50 */
+            background: rgba(239, 246, 255, 0.95); /* Blue-50 */
             width: 32px;
             height: 32px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+            border: 1px solid #bfdbfe;
+        }
+
+        /* Shrink events when hovering to make room for Add button */
+        .event-card.hover-shrink {
+            transform-origin: left center;
+            transform: scaleX(0.85);
+        }
+        
+        /* Ensure dragging overrides hover shrink */
+        .event-card.dragging-active.hover-shrink {
+            transform: rotate(3deg) scale(1.02);
         }
 
         .resize-handle {
@@ -239,7 +245,7 @@
                             <div v-for="h in 24" :key="h" class="hour-row pointer-events-none"></div>
                             
                             <!-- Add Indicator (+) -->
-                            <div v-if="hoverTime && hoverTime.dateStr === date.toISOString() && !dragState.isDragging" 
+                            <div v-if="hoverTime && hoverTime.dateStr === date.toISOString() && !dragState.isDragging && hasEventOverlap(date, hoverTime.top)" 
                                  class="add-indicator"
                                  :style="{ top: hoverTime.top + 'px' }">
                             </div>
@@ -259,7 +265,11 @@
                             <!-- Absolute Events -->
                             <div v-for="event in getEventsWithLayout(date)" :key="event.id" 
                                  class="event-card absolute p-1 text-xs inset-x-1 rounded overflow-hidden border-l-4"
-                                 :class="{'dragging-active': dragState.eventId === event.id && dragState.isDragging, 'ring-2 ring-offset-1 ring-black': selectedEventId === event.id}"
+                                 :class="{
+                                     'dragging-active': dragState.eventId === event.id && dragState.isDragging, 
+                                     'ring-2 ring-offset-1 ring-black': selectedEventId === event.id,
+                                     'hover-shrink': hoverTime && hoverTime.dateStr === date.toISOString() && !dragState.isDragging && hasEventOverlap(date, hoverTime.top)
+                                 }"
                                  :style="[getEventStyle(event, true), getWeekEventPosition(event), { cursor: eventCursor }]"
                                  @mousedown.stop="startDrag(event, $event, 'time-move')"
                                  @click.stop="selectEvent(event)">
@@ -637,6 +647,26 @@
                     hoverTime.value = null;
                 };
 
+                const hasEventOverlap = (date, top) => {
+                    if (!date || top === null || top === undefined) return false;
+                    // Convert top (pixels) to minutes from start of day
+                    const startMinutes = (top / 50) * 60;
+                    const endMinutes = startMinutes + 60; // Assumes 1 hour slot
+
+                    // Check against events on this date
+                    const dayEvents = events.value.filter(e => df.isSameDay(new Date(e.start), date));
+                    
+                    return dayEvents.some(ev => {
+                        const evStart = new Date(ev.start);
+                        const evEnd = new Date(ev.end);
+                        const evStartMin = evStart.getHours() * 60 + evStart.getMinutes();
+                        const evEndMin = evEnd.getHours() * 60 + evEnd.getMinutes();
+                        
+                        // Simple overlap check
+                        return Math.max(startMinutes, evStartMin) < Math.min(endMinutes, evEndMin);
+                    });
+                };
+
                 // ----------------------------------------------------------------
                 // Interactions
                 // ----------------------------------------------------------------
@@ -887,7 +917,7 @@
                     createMonthEvent, createTimeEvent, editEvent, selectEvent, selectedEventId,
                     startDrag, onDrag, stopDrag, dragState,
                     currentTimeTop, notification, eventCursor,
-                    hoverTime, onColumnMouseMove, onColumnMouseLeave,
+                    hoverTime, onColumnMouseMove, onColumnMouseLeave, hasEventOverlap,
                     isSameDay: (d1, d2) => df.isSameDay(d1, d2)
                 }
             }
