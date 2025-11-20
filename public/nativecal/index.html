@@ -70,10 +70,13 @@
         
         /* Active Drag State (Cute) */
         .event-card.dragging-active {
-            transform: rotate(3deg) scale(1.02);
             box-shadow: 0 10px 25px rgba(0,0,0,0.2);
             z-index: 100 !important;
             opacity: 0.9;
+        }
+        
+        .event-card.dragging-move-active {
+            transform: rotate(3deg) scale(1.02);
         }
 
         /* Add Indicator (+) */
@@ -267,6 +270,7 @@
                                  class="event-card absolute p-1 text-xs inset-x-1 rounded overflow-hidden border-l-4"
                                  :class="{
                                      'dragging-active': dragState.eventId === event.id && dragState.isDragging, 
+                                     'dragging-move-active': dragState.eventId === event.id && dragState.isDragging && dragState.action === 'time-move',
                                      'ring-2 ring-offset-1 ring-black': selectedEventId === event.id,
                                      'hover-shrink': hoverTime && hoverTime.dateStr === date.toISOString() && !dragState.isDragging && hasEventOverlap(date, hoverTime.top)
                                  }"
