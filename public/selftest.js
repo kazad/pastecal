@@ -8,8 +8,11 @@
 (function() {
     'use strict';
 
-    // Only run on localhost
-    if (!window.location.hostname.match(/^(localhost|127\.0\.0\.1|::1)$/)) {
+    // Only run on localhost or if ?test parameter is present
+    const isLocalhost = window.location.hostname.match(/^(localhost|127\.0\.0\.1|::1)$/);
+    const hasTestParam = window.location.search.includes('?test');
+
+    if (!isLocalhost && !hasTestParam) {
         return;
     }
 
