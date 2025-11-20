@@ -79,53 +79,6 @@
             transform: rotate(3deg) scale(1.02);
         }
 
-        /* Add Indicator (+) */
-        .add-indicator {
-            position: absolute;
-            right: 0;
-            width: 40px; /* Fixed clickable area on the right */
-            height: 50px; /* 1 hour */
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            /* pointer-events: none; REMOVED */ 
-            z-index: 60; /* Above events */
-        }
-        
-        .add-indicator::after {
-            content: '+';
-            font-size: 24px;
-            color: #3b82f6; /* Blue-500 */
-            background: rgba(239, 246, 255, 0.95); /* Blue-50 */
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.15);
-            border: 1px solid #bfdbfe;
-        }
-
-        /* Shrink events when hovering to make room for Add button */
-        .event-card.hover-shrink {
-            transform-origin: left center;
-            transform: scaleX(0.85);
-        }
-        
-        /* Prevent text from squashing when event card shrinks */
-        .event-card.hover-shrink .event-text-content {
-            transform-origin: left center;
-            transform: scaleX(1 / 0.85); /* Inverse scale */
-        }
-        
-        /* Ensure dragging overrides hover shrink */
-        .event-card.dragging-active.hover-shrink {
-            transform: rotate(3deg) scale(1.02);
-        }
-
-        .resize-handle {
-
         .resize-handle {
             cursor: ns-resize;
         }
@@ -246,19 +199,10 @@
                         <div v-for="(date, idx) in visibleDates" :key="idx" 
                              class="time-col relative"
                              :data-date="date.toISOString()"
-                             @click="createTimeEvent(date, $event)"
-                             @mousemove="onColumnMouseMove($event, date)"
-                             @mouseleave="onColumnMouseLeave">
+                             @click="createTimeEvent(date, $event)">
                             
                             <!-- Grid lines -->
                             <div v-for="h in 24" :key="h" class="hour-row pointer-events-none"></div>
-                            
-                            <!-- Add Indicator (+) -->
-                            <div v-if="hoverTime && hoverTime.dateStr === date.toISOString() && !dragState.isDragging && hasEventOverlap(date, hoverTime.top)" 
-                                 class="add-indicator"
-                                 :style="{ top: hoverTime.top + 'px' }"
-                                 @click.stop="createEventFromAddIndicator(date, hoverTime.top)">
-                            </div>
                             
                             <!-- Current Time Indicator -->
                             <div v-if="isToday(date)" class="absolute w-full h-0.5 bg-red-500 z-30 pointer-events-none flex items-center"
@@ -278,8 +222,7 @@
                                  :class="{
                                      'dragging-active': dragState.eventId === event.id && dragState.isDragging, 
                                      'dragging-move-active': dragState.eventId === event.id && dragState.isDragging && dragState.action === 'time-move',
-                                     'ring-2 ring-offset-1 ring-black': selectedEventId === event.id,
-                                     'hover-shrink': hoverTime && hoverTime.dateStr === date.toISOString() && !dragState.isDragging && eventOverlapsHoverTime(event, hoverTime)
+                                     'ring-2 ring-offset-1 ring-black': selectedEventId === event.id
                                  }"
                                  :style="[getEventStyle(event, true), getWeekEventPosition(event), { cursor: eventCursor }]"
                                  @mousedown.stop="startDrag(event, $event, 'time-move')"
@@ -591,7 +534,7 @@
                         const widthPercent = 100 / columns.length;
                         ev.style = {
                             left: (ev.colIndex * widthPercent) + '%',
-                            width: widthPercent + '%'
+                            width: (widthPercent * 0.8) + '%' // Events take 80% of their column space
                         };
                     });
                     
@@ -637,79 +580,12 @@
                     const endMinutes = end.getHours() * 60 + end.getMinutes();
                     const top = (startMinutes / 60) * 50;
                     const height = Math.max(((endMinutes - startMinutes) / 60) * 50, 20);
-                    return { top: `${top}px`, height: `${height}px`, width: '90%', left: '5%' }; // Ghost is centered
+                    return { top: `${top}px`, height: `${height}px`, width: '80%', left: '0%' }; // Ghost is left aligned 80% width
                 };
 
                 // ----------------------------------------------------------------
-                // Hover Guide Logic
+                // Hover Guide Logic (Removed - no longer needed)
                 // ----------------------------------------------------------------
-                const hoverTime = ref(null); // { date: Date, top: number }
-                
-                const onColumnMouseMove = (e, date) => {
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    const y = e.clientY - rect.top;
-                    const hoursFloat = y / 50;
-                    const hours = Math.floor(hoursFloat);
-                    // Snap to hour (0 min)
-                    const top = hours * 50;
-                    hoverTime.value = { dateStr: date.toISOString(), top: top };
-                };
-                
-                const onColumnMouseLeave = () => {
-                    hoverTime.value = null;
-                };
-
-                const hasEventOverlap = (date, top) => {
-                    if (!date || top === null || top === undefined) return false;
-                    // Convert top (pixels) to minutes from start of day
-                    const startMinutes = (top / 50) * 60;
-                    const endMinutes = startMinutes + 60; // Assumes 1 hour slot
-
-                    // Check against events on this date
-                    const dayEvents = events.value.filter(e => df.isSameDay(new Date(e.start), date));
-                    
-                    return dayEvents.some(ev => {
-                        const evStart = new Date(ev.start);
-                        const evEnd = new Date(ev.end);
-                        const evStartMin = evStart.getHours() * 60 + evStart.getMinutes();
-                        const evEndMin = evEnd.getHours() * 60 + evEnd.getMinutes();
-                        
-                        // Simple overlap check
-                        return Math.max(startMinutes, evStartMin) < Math.min(endMinutes, evEndMin);
-                    });
-                };
-
-                const createEventFromAddIndicator = (date, top) => {
-                    console.log('[createEventFromAddIndicator] triggered');
-                    
-                    // Clear previous selection
-                    selectedEventId.value = null;
-
-                    // 'top' is pixels from top of time-col, 50px per hour
-                    const hours = Math.floor(top / 50);
-                    const roundedMinutes = 0; // Snap to the hour start
-                    const start = df.set(date, { hours: hours, minutes: roundedMinutes });
-                    const end = df.addMinutes(start, 60);
-                    const newEvent = { id: Date.now(), title: '(No Title)', start: start.getTime(), end: end.getTime(), type: Math.floor(Math.random() * 8) + 1 };
-                    events.value.push(newEvent);
-                    selectedEventId.value = newEvent.id; // Select newly created
-                    showToast(`Created at ${df.format(start, 'h:mm a')}`);
-                };
-
-                const eventOverlapsHoverTime = (event, hoverTime) => {
-                    if (!hoverTime || !event) return false;
-                    
-                    // Convert hoverTime.top (pixels) to minutes from start of day
-                    const hoverStartMinutes = (hoverTime.top / 50) * 60;
-                    const hoverEndMinutes = hoverStartMinutes + 60; // 1 hour slot
-                    
-                    const evStart = new Date(event.start);
-                    const evEnd = new Date(event.end);
-                    const evStartMin = evStart.getHours() * 60 + evStart.getMinutes();
-                    const evEndMin = evEnd.getHours() * 60 + evEnd.getMinutes();
-                    
-                    return Math.max(hoverStartMinutes, evStartMin) < Math.min(hoverEndMinutes, evEndMin);
-                };
 
                 // ----------------------------------------------------------------
                 // Interactions
@@ -957,10 +833,9 @@
                 return {
                     currentView, views, currentTitle, weekDays, monthCells, visibleDates, yearMonths, agendaEvents,
                     events, getEventsForDate, getEventsWithLayout, getEventStyle, getWeekEventPosition, getGhostStyle, formatTime, formatDuration, getEventColor,
-                    createMonthEvent, createTimeEvent, createEventFromAddIndicator, editEvent, selectEvent, selectedEventId,
+                    createMonthEvent, createTimeEvent, editEvent, selectEvent, selectedEventId,
                     startDrag, onDrag, stopDrag, dragState,
                     currentTimeTop, notification, eventCursor,
-                    hoverTime, onColumnMouseMove, onColumnMouseLeave, hasEventOverlap, eventOverlapsHoverTime,
                     isSameDay: (d1, d2) => df.isSameDay(d1, d2)
                 }
             }
