@@ -326,15 +326,15 @@
                         <input v-model="editorForm.title" type="text" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 focus:border-blue-500 focus:ring-blue-500">
                     </div>
                     
-                    <!-- Simple time inputs for prototype -->
+                    <!-- Editable Date/Time Inputs -->
                     <div class="grid grid-cols-2 gap-4">
                         <div>
                             <label class="block text-sm font-medium text-gray-700">Start</label>
-                            <div class="text-gray-900 mt-1">{{ formatTime(editorForm.start) }}</div>
+                            <input v-model="editorForm.start" type="datetime-local" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 focus:border-blue-500 focus:ring-blue-500 text-sm">
                         </div>
                          <div>
                             <label class="block text-sm font-medium text-gray-700">End</label>
-                            <div class="text-gray-900 mt-1">{{ formatTime(editorForm.end) }}</div>
+                            <input v-model="editorForm.end" type="datetime-local" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 focus:border-blue-500 focus:ring-blue-500 text-sm">
                         </div>
                     </div>
 
@@ -347,6 +347,12 @@
                                  :style="{backgroundColor: c}"
                                  @click="editorForm.type = i + 1"></div>
                         </div>
+                    </div>
+
+                    <!-- Description -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700">Description</label>
+                        <textarea v-model="editorForm.description" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 focus:border-blue-500 focus:ring-blue-500 text-sm" placeholder="Add details..."></textarea>
                     </div>
                 </div>
 
@@ -384,7 +390,7 @@
                 const selectedEventId = ref(null);
                 const popupPosition = ref({ top: 0, left: 0 });
                 const isEditorOpen = ref(false);
-                const editorForm = ref({ id: null, title: '', start: 0, end: 0, type: 1 });
+                const editorForm = ref({ id: null, title: '', description: '', start: '', end: '', type: 1, recurrencerule: '' });
                 const timeFormat = ref('12'); // '12' for AM/PM, '24' for military
                 
                 // ----------------------------------------------------------------
@@ -432,6 +438,12 @@
                 });
 
                 const getEventById = (id) => events.value.find(e => e.id === id);
+
+                const toDateTimeLocalString = (timestamp) => {
+                    const date = new Date(timestamp);
+                    const pad = (num) => String(num).padStart(2, '0');
+                    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+                };
 
                 // Month View Logic
                 const monthCells = computed(() => {
@@ -774,7 +786,12 @@
                 const openEditor = (id) => {
                     const event = getEventById(id);
                     if (event) {
-                        editorForm.value = { ...event };
+                        // Clone event and format dates for inputs
+                        editorForm.value = { 
+                            ...event,
+                            start: toDateTimeLocalString(event.start),
+                            end: toDateTimeLocalString(event.end)
+                        };
                         isEditorOpen.value = true;
                         selectedEventId.value = null; // Close preview
                     }
@@ -787,7 +804,13 @@
                 const saveEvent = () => {
                     const index = events.value.findIndex(e => e.id === editorForm.value.id);
                     if (index !== -1) {
-                        events.value[index] = { ...editorForm.value };
+                        // Convert back to timestamps
+                        const updatedEvent = { 
+                            ...editorForm.value,
+                            start: new Date(editorForm.value.start).getTime(),
+                            end: new Date(editorForm.value.end).getTime()
+                        };
+                        events.value[index] = updatedEvent;
                         showToast('Event saved');
                     }
                     closeEditor();
@@ -975,7 +998,7 @@
                     prev, next, today, isToday, changeView, goToMonth,
                     events, getEventsForDate, getEventsWithLayout, getEventStyle, getWeekEventPosition, getGhostStyle, formatTime, formatDuration, getEventColor,
                     createMonthEvent, createTimeEvent, editEvent, selectEvent, selectedEventId,
-                    closePreview, openEditor, closeEditor, saveEvent, deleteEvent, isEditorOpen, editorForm, popupStyle, getEventById,
+                    closePreview, openEditor, closeEditor, saveEvent, deleteEvent, isEditorOpen, editorForm, popupStyle, getEventById, toDateTimeLocalString,
                     startDrag, onDrag, stopDrag, dragState,
                     currentTimeTop, notification, eventCursor, timeFormat,
                     isSameDay: (d1, d2) => df.isSameDay(d1, d2)
