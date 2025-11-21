@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PasteCal Help - Version 1: Minimal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --bg: #ffffff;
+            --bg-disabled: #eaeaea;
+            --fg: #333333;
+            --link: rgb(3, 169, 244);
+            --panel-bg: #f9fafb;
+            --border-color: #efefef;
+            --text-color-1: #6b7280;
+        }
+
+        [data-theme="dark"] {
+            --bg: #1e1e1e;
+            --bg-disabled: #333;
+            --fg: #cccccc;
+            --link: #4aaaff;
+            --panel-bg: #2a2a2a;
+            --border-color: #373737;
+            --text-color-1: #999;
+        }
+
+        body { background: var(--bg); color: var(--fg); }
+        .bg-1 { background: var(--bg); }
+        .bg-2 { background: var(--panel-bg); }
+        .bg-disabled { background: var(--bg-disabled); }
+        .text-color-1 { color: var(--text-color-1); }
+    </style>
+</head>
+<body class="p-8">
+    <div class="max-w-3xl mx-auto">
+        <div class="mb-4 text-sm text-color-1">
+            <button onclick="document.documentElement.toggleAttribute('data-theme', 'dark')"
+                    class="px-3 py-1 bg-disabled rounded">
+                Toggle Dark Mode
+            </button>
+        </div>
+
+        <!-- Version 1: Ultra Minimal & Direct -->
+        <div class="w-full overflow-hidden rounded-lg">
+            <div class="mb-6 p-6 bg-2 rounded-lg border-l-4" style="border-color: var(--link);">
+                <h3 class="text-2xl font-bold mb-3" style="color: var(--link);">Calendar links that just work</h3>
+                <p class="text-lg mb-2">
+                    No downloads. No logins. No friction.
+                </p>
+                <p class="text-sm text-color-1">
+                    Pick a link → Share it → Start planning together.
+                </p>
+            </div>
+
+            <!-- Three Key Features -->
+            <div class="space-y-4">
+                <!-- Feature 1 -->
+                <div class="p-4 bg-2 rounded-lg hover:bg-disabled transition-colors">
+                    <div class="flex items-start gap-4">
+                        <div class="text-3xl" style="color: var(--link);">✨</div>
+                        <div class="flex-1">
+                            <h4 class="font-semibold mb-1">Share instantly</h4>
+                            <p class="text-sm text-color-1">
+                                Pick a URL like <code class="bg-disabled px-2 py-1 rounded">pastecal.com/summer-trip</code> and send the link. Everyone can view and edit—no account needed.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Feature 2 -->
+                <div class="p-4 bg-2 rounded-lg hover:bg-disabled transition-colors">
+                    <div class="flex items-start gap-4">
+                        <div class="text-3xl" style="color: var(--link);">🔒</div>
+                        <div class="flex-1">
+                            <h4 class="font-semibold mb-1">Keep it private</h4>
+                            <p class="text-sm text-color-1">
+                                Use hard-to-guess names like <code class="bg-disabled px-1.5 py-0.5 rounded text-xs">myteam-retreat2024</code>. Share read-only links from the share menu.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Feature 3 -->
+                <div class="p-4 bg-2 rounded-lg hover:bg-disabled transition-colors">
+                    <div class="flex items-start gap-4">
+                        <div class="text-3xl" style="color: var(--link);">📱</div>
+                        <div class="flex-1">
+                            <h4 class="font-semibold mb-1">Works everywhere</h4>
+                            <p class="text-sm text-color-1">
+                                Use in browser or add <code class="bg-disabled px-1.5 py-0.5 rounded text-xs">.ics</code> to your phone's calendar app for alerts and reminders.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Simple CTA -->
+            <div class="mt-6 p-4 bg-2 rounded-lg text-center">
+                <p class="text-sm text-color-1">
+                    Ready? <strong>Pick a name above ↑ and start planning in seconds</strong>
+                </p>
+            </div>
+
+            <!-- Footer -->
+            <div class="mt-6 text-xs text-color-1 text-center">
+                <a href="https://github.com/kazad/pastecal/issues" class="hover:underline" style="color: var(--link);">
+                    Feedback or bugs?
+                </a>
+                · Made by Kalid
+            </div>
+        </div>
+    </div>
+</body>
+</html>
