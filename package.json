@@ -1,0 +1,8 @@
+{
+  "name": "pastecal",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "test": "bash test/smoke-llm.sh"
+  }
+}
