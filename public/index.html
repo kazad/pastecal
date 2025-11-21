@@ -620,7 +620,7 @@ Copyright (c) 2025 Kalid Azad
                     <div>edit: {{ canEdit == !isReadOnly ? 'correct' : 'not correct' }} </div>
 
                     <!-- Quick add component - desktop only -->
-                    <quick-add v-if="canEdit" class="hidden lg:block" @event-created="handleQuickAddEvent"
+                    <quick-add v-if="canEdit" class="block" @event-created="handleQuickAddEvent"
                         aria-label="Quick add event"></quick-add>
 
                 </buttonarea>
