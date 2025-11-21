@@ -368,39 +368,13 @@ Copyright (c) 2025 Kalid Azad
                     return;
                 }
 
-                // OPTIMISTIC STRATEGY: Try direct subscription first.
-                // This covers the 99% case where the URL matches the DB key exactly.
-                // It avoids the Cloud Function overhead/latency/failure-points for valid URLs.
-
-                console.log('Attempting direct subscription for:', slug);
-
-                // We need a way to "try" subscribing and if it returns null quickly, then fallback.
-                // Since .on() is persistent, we'll use .once() for the check.
-
+                // First do a lookup to determine calendar type and location
                 try {
-                    const snapshot = await this.db.child(slug).once('value');
-                    const calendar = snapshot.val();
-
-                    if (calendar && calendar.id) {
-                        console.log('Direct subscription successful for:', slug);
-                        // Found directly! Subscribe and return.
-                        this._subscribeExact(slug, callback);
-                        return;
-                    }
-                } catch (e) {
-                    console.warn('Direct subscription check failed (network?):', e);
-                    // We'll continue to the fallback logic just in case it was a permission issue 
-                    // that the function might resolve (unlikely but safe).
-                }
-
-                // FALLBACK STRATEGY: Case-insensitive lookup via Cloud Function.
-                // Only reached if direct exact-match lookup failed.
-                console.log('Direct lookup failed. Falling back to cloud function lookup for:', slug);
-
-                try {
+                    console.log('Looking up calendar for slug:', slug);
+                    console.log('Calling function with data:', { slug: slug });
                     const lookupCalendar = firebase.functions().httpsCallable('lookupCalendar');
                     const result = await lookupCalendar({ slug: slug });
-                    console.log('Lookup result:', result);
+                    console.log('Function result:', result);
 
                     if (result.data.found) {
                         if (result.data.isReadOnly) {
@@ -409,18 +383,21 @@ Copyright (c) 2025 Kalid Azad
                             return; // Don't call callback, we're redirecting
                         } else {
                             // Found as editable calendar - subscribe with correct case
-                            console.log('Found case-insensitive match:', result.data.actualSlug);
                             this._subscribeExact(result.data.actualSlug, callback);
                         }
                     } else {
-                        // Calendar doesn't exist in any case - treating as new
-                        console.log('No calendar found. Treating as new.');
-                        // We subscribe to the ORIGINAL slug so if they create it, it uses the URL they typed.
+                        // Calendar doesn't exist in any case - try direct subscription (might be new)
                         this._subscribeExact(slug, callback);
                     }
                 } catch (error) {
                     console.error('Calendar lookup failed:', error);
-                    // Fall back to direct subscription on original slug (it will likely be empty/new)
+                    console.error('Error details:', {
+                        message: error.message,
+                        code: error.code,
+                        details: error.details,
+                        stack: error.stack
+                    });
+                    // Fall back to direct subscription
                     this._subscribeExact(slug, callback);
                 }
             }
@@ -650,11 +627,11 @@ Copyright (c) 2025 Kalid Azad
                     <!-- Quick add button - desktop only -->
                     <custom-tooltip width="w-auto" align="center" v-if="!isReadOnly">
                         <template #trigger>
-                            <button @click="$refs.quickAddDialog.showDialog()"
-                                    aria-label="Quick add event"
-                                    data-testid="desktop-add-event-button"
-                                    class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8">
-                                <span class="text-nowrap px-3 py-1 text-white bg-gray-500 rounded-full text-xs hover:bg-blue-600 transition-colors flex-shrink-0 font-bold">+Event</span>
+                            <button @click="$refs.quickAddDialog.showDialog()" aria-label="Quick add event"
+                                data-testid="desktop-add-event-button"
+                                class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8">
+                                <span
+                                    class="text-nowrap px-3 py-1 text-white bg-gray-500 rounded-full text-xs hover:bg-blue-600 transition-colors flex-shrink-0 font-bold">+Event</span>
                             </button>
                         </template>
                         <template #content>
@@ -1730,8 +1707,9 @@ vacation dec 11 - dec 15
                     console.error('Error creating read-only link:', error);
                     if (!autoCreate) {
                         alert('Failed to create read-only link: ' + (error.message || 'Please try again.'));
+                        throw error;
                     }
-                    throw error;
+                    // For auto-create, just log and suppress error so we don't block loading
                 }
             }
 
@@ -1981,7 +1959,7 @@ vacation dec 11 - dec 15
                 // Define default colors
                 const DEFAULT_COLORS = [
                     "#3f51b5", "#e3165b", "#ff6652", "#4caf50",
-                    "#ff9800", "03a9f4", "#9e9e9e", "#27282f"
+                    "#ff9800", "#03a9f4", "#9e9e9e", "#27282f"
                 ];
 
                 // COLORS will be updated based on custom colors if available
@@ -2176,11 +2154,14 @@ vacation dec 11 - dec 15
                 } else if (this.urlslug) {
                     // default: pastecal.com/ID
                     CalendarDataService.findAndSubscribe(this.urlslug, (c) => {
+                        console.log('[DEBUG] findAndSubscribe callback triggered', c);
                         if (c) {
                             // Calendar found
-                            console.log('[CalendarDataService] Calendar loaded from Firebase');
+                            console.log('[CalendarDataService] Calendar loaded from Firebase', c);
                             this.isExisting = true;
                             this.calendar.import(c);
+                            console.log('[DEBUG] Calendar after import:', this.calendar);
+
                             console.log('[CalendarDataService] Calendar imported, defaultView:', this.calendar?.options?.defaultView);
                             this.ensureCalendarOptionsDefaults();
                             // Update custom view in schedule with calendar's settings
@@ -2195,6 +2176,9 @@ vacation dec 11 - dec 15
                                 this.applyGlobalSettingsAfterRemote();
                                 this.remoteSettingsApplied = true;
                             }
+
+                            // Force update in case watcher doesn't trigger
+                            this.updateCalendarView();
                         } else {
                             // Calendar doesn't exist
                             this.isExisting = false;
@@ -2345,7 +2329,8 @@ vacation dec 11 - dec 15
                             console.log("[app] actionComplete()", "event", ev);
                             console.log(` - syncFusionEvents ${this.syncFusionEvents.length}`, this.syncFusionEvents);
                             console.log(` - eventsData ${scheduleObj.eventsData.length}`, scheduleObj.eventsData);
-                            this.calendar.setEvents(this.syncFusionEvents);
+                            // Use eventsData as the source of truth since DataManager might not update syncFusionEvents in place
+                            this.calendar.setEvents(scheduleObj.eventsData);
                             break;
                     }
                     // console.log(ev);
