@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PasteCal Help - Final Version</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --bg: #ffffff;
+            --bg-disabled: #eaeaea;
+            --fg: #333333;
+            --link: rgb(3, 169, 244);
+            --panel-bg: #f9fafb;
+            --border-color: #efefef;
+            --text-color-1: #6b7280;
+        }
+
+        [data-theme="dark"] {
+            --bg: #1e1e1e;
+            --bg-disabled: #333;
+            --fg: #cccccc;
+            --link: #4aaaff;
+            --panel-bg: #2a2a2a;
+            --border-color: #373737;
+            --text-color-1: #999;
+        }
+
+        body { background: var(--bg); color: var(--fg); }
+        .bg-1 { background: var(--bg); }
+        .bg-2 { background: var(--panel-bg); }
+        .bg-disabled { background: var(--bg-disabled); }
+        .text-color-1 { color: var(--text-color-1); }
+
+        details summary { cursor: pointer; user-select: none; }
+        details summary:hover { opacity: 0.85; }
+        details[open] summary { margin-bottom: 0.5rem; }
+    </style>
+</head>
+<body class="p-8">
+    <div class="max-w-3xl mx-auto">
+        <div class="mb-4 text-sm text-color-1">
+            <button onclick="document.documentElement.toggleAttribute('data-theme', 'dark')"
+                    class="px-3 py-1 bg-disabled rounded">
+                Toggle Dark Mode
+            </button>
+        </div>
+
+        <!-- Final Version: Mix of 1 & 3 -->
+        <div class="w-full overflow-hidden rounded-lg">
+            <!-- Punchy Hero from V1 -->
+            <div class="mb-6 p-6 bg-2 rounded-lg border-l-4" style="border-color: var(--link);">
+                <h3 class="text-2xl font-bold mb-3" style="color: var(--link);">Calendar links that just work</h3>
+                <p class="text-lg mb-2">
+                    No downloads. No logins. No friction.
+                </p>
+                <p class="text-sm text-color-1">
+                    Pick a link → Share it → Start planning together.
+                </p>
+            </div>
+
+            <!-- Expandable FAQ from V3 -->
+            <div class="space-y-3 mb-6">
+                <!-- Q1 -->
+                <details class="bg-2 rounded-lg p-4 hover:bg-disabled transition-colors" open>
+                    <summary class="font-semibold flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="color: var(--link);">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                        </svg>
+                        How do I share a calendar?
+                    </summary>
+                    <div class="pl-7 text-sm text-color-1 space-y-2">
+                        <p>Pick a URL like <code class="bg-disabled px-2 py-1 rounded">pastecal.com/summer-trip</code> and save. That's your calendar.</p>
+                        <p>Share the link—everyone can view and edit instantly. No account needed.</p>
+                        <p class="text-xs"><strong>Privacy tip:</strong> Use hard-to-guess names. Get read-only links from the share menu.</p>
+                    </div>
+                </details>
+
+                <!-- Q2 -->
+                <details class="bg-2 rounded-lg p-4 hover:bg-disabled transition-colors">
+                    <summary class="font-semibold flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="color: var(--link);">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                        Is this private?
+                    </summary>
+                    <div class="pl-7 text-sm text-color-1 space-y-2">
+                        <p>Calendars aren't listed anywhere—only people with the exact URL can access them.</p>
+                        <p>Use hard-to-guess names like <code class="bg-disabled px-1.5 py-0.5 rounded text-xs">acme-team-q1-2024</code> to keep random people out.</p>
+                        <p>Need view-only access? Share the read-only link from the share menu.</p>
+                    </div>
+                </details>
+
+                <!-- Q3 -->
+                <details class="bg-2 rounded-lg p-4 hover:bg-disabled transition-colors">
+                    <summary class="font-semibold flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="color: var(--link);">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        </svg>
+                        Can I use this on my phone?
+                    </summary>
+                    <div class="pl-7 text-sm text-color-1 space-y-2">
+                        <p>Works in any browser. Or add the <code class="bg-disabled px-1.5 py-0.5 rounded text-xs">.ics</code> link to your phone's calendar app:</p>
+                        <p><code class="bg-disabled px-2 py-1 rounded text-xs">pastecal.com/your-calendar.ics</code></p>
+                        <p>You'll get notifications, reminders, and it syncs with your other calendars.</p>
+                    </div>
+                </details>
+
+                <!-- Q4 -->
+                <details class="bg-2 rounded-lg p-4 hover:bg-disabled transition-colors">
+                    <summary class="font-semibold flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="color: var(--link);">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                        </svg>
+                        How do I switch between calendars?
+                    </summary>
+                    <div class="pl-7 text-sm text-color-1 space-y-2">
+                        <p>Hover over the <strong>PasteCal logo</strong> in the top-left to see your recently viewed calendars.</p>
+                    </div>
+                </details>
+            </div>
+
+            <!-- Simple CTA -->
+            <div class="p-4 bg-2 rounded-lg text-center">
+                <p class="text-sm text-color-1">
+                    <strong>Ready? Pick a name above ↑ and start planning in seconds</strong>
+                </p>
+            </div>
+
+            <!-- Footer -->
+            <div class="mt-6 text-xs text-color-1 text-center">
+                <a href="https://github.com/kazad/pastecal/issues" class="hover:underline" style="color: var(--link);">
+                    Feedback or bugs?
+                </a>
+                · Made by Kalid
+            </div>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PasteCal Help - Version 2: Visual</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --bg: #ffffff;
+            --bg-disabled: #eaeaea;
+            --fg: #333333;
+            --link: rgb(3, 169, 244);
+            --panel-bg: #f9fafb;
+            --border-color: #efefef;
+            --text-color-1: #6b7280;
+        }
+
+        [data-theme="dark"] {
+            --bg: #1e1e1e;
+            --bg-disabled: #333;
+            --fg: #cccccc;
+            --link: #4aaaff;
+            --panel-bg: #2a2a2a;
+            --border-color: #373737;
+            --text-color-1: #999;
+        }
+
+        body { background: var(--bg); color: var(--fg); }
+        .bg-1 { background: var(--bg); }
+        .bg-2 { background: var(--panel-bg); }
+        .bg-disabled { background: var(--bg-disabled); }
+        .text-color-1 { color: var(--text-color-1); }
+    </style>
+</head>
+<body class="p-8">
+    <div class="max-w-4xl mx-auto">
+        <div class="mb-4 text-sm text-color-1">
+            <button onclick="document.documentElement.toggleAttribute('data-theme', 'dark')"
+                    class="px-3 py-1 bg-disabled rounded">
+                Toggle Dark Mode
+            </button>
+        </div>
+
+        <!-- Version 2: Visual with Use Cases -->
+        <div class="w-full overflow-hidden rounded-lg">
+            <!-- Hero -->
+            <div class="mb-8 p-8 bg-2 rounded-lg text-center border-l-4" style="border-color: var(--link);">
+                <h3 class="text-3xl font-bold mb-3" style="color: var(--link);">The calendar link that just works</h3>
+                <p class="text-xl mb-2">
+                    Share a calendar in <strong>10 seconds</strong>. No app downloads. No sign-ups.
+                </p>
+                <p class="text-sm text-color-1">
+                    Perfect for teams, events, and planning anything together.
+                </p>
+            </div>
+
+            <!-- Popular Use Cases Grid -->
+            <div class="mb-8">
+                <h4 class="text-sm font-semibold text-color-1 uppercase tracking-wide mb-4">Popular uses</h4>
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <div class="p-3 bg-2 rounded-lg text-center text-sm">
+                        <div class="text-2xl mb-1">📅</div>
+                        Team shifts
+                    </div>
+                    <div class="p-3 bg-2 rounded-lg text-center text-sm">
+                        <div class="text-2xl mb-1">✈️</div>
+                        Vacation planning
+                    </div>
+                    <div class="p-3 bg-2 rounded-lg text-center text-sm">
+                        <div class="text-2xl mb-1">🎉</div>
+                        Group events
+                    </div>
+                    <div class="p-3 bg-2 rounded-lg text-center text-sm">
+                        <div class="text-2xl mb-1">📚</div>
+                        Class schedules
+                    </div>
+                    <div class="p-3 bg-2 rounded-lg text-center text-sm">
+                        <div class="text-2xl mb-1">🏗️</div>
+                        Project timelines
+                    </div>
+                    <div class="p-3 bg-2 rounded-lg text-center text-sm">
+                        <div class="text-2xl mb-1">👨‍👩‍👧</div>
+                        Family calendars
+                    </div>
+                </div>
+            </div>
+
+            <!-- How It Works - Step by Step -->
+            <div class="mb-8">
+                <h4 class="text-sm font-semibold text-color-1 uppercase tracking-wide mb-4">How it works</h4>
+                <div class="space-y-3">
+                    <div class="flex items-start gap-4 p-4 bg-2 rounded-lg">
+                        <div class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm"
+                             style="background-color: var(--link); color: white;">1</div>
+                        <div>
+                            <strong class="block mb-1">Pick a URL</strong>
+                            <p class="text-sm text-color-1">
+                                Choose something memorable: <code class="bg-disabled px-2 py-1 rounded">pastecal.com/summer-trip</code>
+                            </p>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-4 p-4 bg-2 rounded-lg">
+                        <div class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm"
+                             style="background-color: var(--link); color: white;">2</div>
+                        <div>
+                            <strong class="block mb-1">Share the link</strong>
+                            <p class="text-sm text-color-1">
+                                Paste it in Slack, email, text—wherever. Everyone can view and edit.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-4 p-4 bg-2 rounded-lg">
+                        <div class="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm"
+                             style="background-color: var(--link); color: white;">3</div>
+                        <div>
+                            <strong class="block mb-1">Start planning</strong>
+                            <p class="text-sm text-color-1">
+                                Add events, see updates in real-time. No app downloads required.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Tips -->
+            <div class="mb-6">
+                <h4 class="text-sm font-semibold text-color-1 uppercase tracking-wide mb-4">Quick tips</h4>
+                <div class="grid md:grid-cols-2 gap-3">
+                    <div class="p-3 bg-2 rounded-lg">
+                        <div class="flex items-center gap-2 mb-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="color: var(--link);">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                            </svg>
+                            <strong class="text-sm">Privacy</strong>
+                        </div>
+                        <p class="text-xs text-color-1">Use hard-to-guess URLs. Get read-only links from share menu.</p>
+                    </div>
+                    <div class="p-3 bg-2 rounded-lg">
+                        <div class="flex items-center gap-2 mb-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="color: var(--link);">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                            </svg>
+                            <strong class="text-sm">Mobile sync</strong>
+                        </div>
+                        <p class="text-xs text-color-1">Add <code class="bg-disabled px-1 py-0.5 rounded">.ics</code> to your phone's calendar app.</p>
+                    </div>
+                    <div class="p-3 bg-2 rounded-lg">
+                        <div class="flex items-center gap-2 mb-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="color: var(--link);">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                            </svg>
+                            <strong class="text-sm">Switch calendars</strong>
+                        </div>
+                        <p class="text-xs text-color-1">Hover over PasteCal logo to see recent calendars.</p>
+                    </div>
+                    <div class="p-3 bg-2 rounded-lg">
+                        <div class="flex items-center gap-2 mb-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="color: var(--link);">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                            </svg>
+                            <strong class="text-sm">Customize</strong>
+                        </div>
+                        <p class="text-xs text-color-1">Edit event colors and labels in settings.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="mt-6 text-xs text-color-1 text-center">
+                <a href="https://github.com/kazad/pastecal/issues" class="hover:underline" style="color: var(--link);">
+                    Share feedback or report bugs
+                </a>
+                · Made by Kalid
+            </div>
+        </div>
+    </div>
+</body>
+</html>
