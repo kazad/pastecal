@@ -1974,6 +1974,14 @@ const app = Vue.createApp(CalendarVueApp)
     .component('quick-add-dialog', QuickAddDialog)
     .mount('#app');
 
+// Signal to tests that the app has mounted
+try {
+    document.dispatchEvent(new CustomEvent('app:mounted'));
+    window.__appMounted = true;
+} catch (e) {
+    console.warn('[app] unable to dispatch app:mounted', e);
+}
+
 // Sanity guard: verify canEdit exists and matches the inverse of isReadOnly after mount
 setTimeout(() => {
     try {

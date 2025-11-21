@@ -37,15 +37,28 @@ Copyright (c) 2025 Kalid Azad
     <meta name="msapplication-TileColor" content="#da532c">
     <meta name="theme-color" content="#ffffff">
 
+    <!-- Preconnects for faster third-party fetches -->
+    <link rel="preconnect" href="https://cdn.syncfusion.com">
+    <link rel="preconnect" href="https://www.gstatic.com">
+    <link rel="preconnect" href="https://unpkg.com">
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+
     <!-- Google Tag Manager -->
-    <script>(function (w, d, s, l, i) {
+    <script>
+        (function (w, d, s, l, i) {
+            const enableAnalytics = !(w.__TEST__ || w.location.search.includes('no-analytics'));
+            if (!enableAnalytics) {
+                console.log('[analytics] disabled by test mode');
+                return;
+            }
             w[l] = w[l] || []; w[l].push({
                 'gtm.start':
                     new Date().getTime(), event: 'gtm.js'
             }); var f = d.getElementsByTagName(s)[0],
                 j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : ''; j.async = true; j.src =
                     'https://www.googletagmanager.com/gtm.js?id=' + i + dl; f.parentNode.insertBefore(j, f);
-        })(window, document, 'script', 'dataLayer', 'GTM-WTP9VTM');</script>
+        })(window, document, 'script', 'dataLayer', 'GTM-WTP9VTM');
+    </script>
     <!-- End Google Tag Manager -->
 
     <!-- CDN Development (always latest) -->
@@ -93,19 +106,42 @@ Copyright (c) 2025 Kalid Azad
         }
     </script>
 
+    <!-- Core script load order (sync): Utils → index.js → Event → SlugManager → CalendarDataService → Calendar → directives → components → app -->
     <script src="https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js"></script>
-    <script src="/utils/utils.js"></script>
-    <script src="/index.js"></script>
-    <script src="/models/Event.js"></script>
-    <script src="/services/SlugManager.js"></script>
-    <script src="/services/CalendarDataService.js"></script>
-    <script src="/models/Calendar.js"></script>
+    <script src="/utils/utils.js"></script> <!-- shared Utils; must load before services -->
+    <script src="/index.js"></script> <!-- legacy utils/extensions; depends on Utils -->
+    <script src="/models/Event.js"></script> <!-- depends on Utils -->
+    <script src="/services/SlugManager.js"></script> <!-- depends on Utils -->
+    <script src="/services/CalendarDataService.js"></script> <!-- depends on Utils, SlugManager, Calendar -->
+    <script src="/models/Calendar.js"></script> <!-- depends on Utils, Event, CalendarDataService -->
     <script src="/directives/clickOutside.js"></script>
     <script src="/components/icons.js"></script>
     <script src="/components/ToastNotification.js"></script>
     <script src="/components/QuickAddButton.js"></script>
     <script src="/components/Tooltip.js"></script>
     <script src="/components/QuickAddDialog.js"></script>
+
+    <script>
+        // Load-order guard for critical globals
+        (function () {
+            const required = [
+                ['Utils', () => typeof Utils !== 'undefined'],
+                ['Event', () => typeof Event !== 'undefined'],
+                ['Calendar', () => typeof Calendar !== 'undefined'],
+                ['SlugManager', () => typeof SlugManager !== 'undefined'],
+                ['CalendarDataService', () => typeof CalendarDataService !== 'undefined'],
+                ['QuickAddButton', () => typeof QuickAddButton !== 'undefined'],
+                ['QuickAddDialog', () => typeof QuickAddDialog !== 'undefined'],
+                ['ToastNotification', () => typeof ToastNotification !== 'undefined'],
+                ['Tooltip', () => typeof Tooltip !== 'undefined'],
+            ];
+
+            const missing = required.filter(([, check]) => !check()).map(([name]) => name);
+            if (missing.length) {
+                console.error('[load-order] Missing globals:', missing.join(', '));
+            }
+        })();
+    </script>
 
     <!-- Self-test suite (only loads on localhost) -->
     <script>
@@ -119,9 +155,9 @@ Copyright (c) 2025 Kalid Azad
 </head>
 
 <body class="p-1 m-1">
-    <div id="app">
+    <div id="app" data-testid="app-root">
         <!-- Mobile Header -->
-        <div class="md:hidden flex flex-col mb-2 pt-3 space-y-3">
+        <div class="md:hidden flex flex-col mb-2 pt-3 space-y-3" data-testid="mobile-header">
             <!-- Row 1: Logo, Title, Menu -->
             <div class="relative flex items-center justify-between gap-2">
                 <!-- Logo & Recents -->
@@ -164,6 +200,7 @@ Copyright (c) 2025 Kalid Azad
                 <div class="flex items-center gap-1 text-color-1 flex-shrink-0">
                     <!-- Share button -->
                     <button v-if="isExisting" @click="toggleShare()" aria-label="Share calendar"
+                        data-testid="share-button-mobile"
                         class="p-1 hover:text-blue-500">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24"
                             stroke="currentColor" stroke-width="2">
@@ -184,7 +221,8 @@ Copyright (c) 2025 Kalid Azad
                         <!-- Dropdown -->
                         <div v-if="showMobileMenu" v-click-outside="() => showMobileMenu = false"
                             class="absolute right-0 top-full mt-2 w-48 bg-1 rounded-lg shadow-xl border border-color-default py-1 text-sm text-color-2 z-50">
-                            <button @click="showMobileMenu = false; toggleSearch()"
+                        <button @click="showMobileMenu = false; toggleSearch()"
+                                data-testid="search-button-mobile"
                                 class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
                                 <search-icon class="w-5 h-5"></search-icon>
                                 Search
@@ -195,6 +233,7 @@ Copyright (c) 2025 Kalid Azad
                                 <span class="text-lg leading-none font-bold text-blue-500">+</span> Quick Add Event
                             </button>
                             <button @click="showMobileMenu = false; toggleSettings()"
+                                data-testid="settings-button-mobile"
                                 class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
                                 <settings-icon class="w-5 h-5"></settings-icon>
                                 Settings
@@ -290,6 +329,7 @@ Copyright (c) 2025 Kalid Azad
                     <custom-tooltip width="w-auto" align="center">
                         <template #trigger>
                             <button v-on:click="toggleSearch" aria-label="Search events"
+                                data-testid="search-button-desktop"
                                 class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors">
                                 <search-icon></search-icon>
                             </button>
@@ -303,6 +343,7 @@ Copyright (c) 2025 Kalid Azad
                     <custom-tooltip width="w-auto" align="center">
                         <template #trigger>
                             <button v-on:click="toggleSettings" aria-label="Settings"
+                                data-testid="settings-button-desktop"
                                 class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8">
                                 <settings-icon></settings-icon>
                             </button>
@@ -323,6 +364,7 @@ Copyright (c) 2025 Kalid Azad
             <!-- Middle section - Calendar title -->
             <section
                 class="hidden md:flex flex-1 flex-col md:flex-row items-center justify-center mx-1 md:mx-2 min-w-0 min-h-8"
+                data-testid="desktop-title-area"
                 v-cloak v-if="!isLoading">
                 <custom-tooltip width="w-auto" align="center" v-if="!editTitle && !isReadOnly">
                     <template #trigger>
@@ -390,7 +432,8 @@ Copyright (c) 2025 Kalid Azad
                     <custom-tooltip align="right">
                         <template #trigger>
                             <div class="flex items-center bg-1 border border-color-default rounded-full p-1 pl-3 pr-3 shadow-sm cursor-pointer select-none hover:border-blue-500 hover:bg-[var(--bg-interactive-hover)] transition-all"
-                                @click="toggleShare">
+                                @click="toggleShare"
+                                data-testid="share-pill-readonly">
                                 <!-- Share Icon -->
                                 <div class="text-color-1 flex-shrink-0 mr-1.5">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none"
@@ -419,7 +462,8 @@ Copyright (c) 2025 Kalid Azad
                         <custom-tooltip align="right">
                             <template #trigger>
                                 <div class="relative flex items-center bg-1 border border-color-default rounded-full p-1 pl-3 pr-3 shadow-sm hover:border-blue-500 hover:bg-[var(--bg-interactive-hover)] cursor-pointer transition-all group select-none"
-                                    @click="toggleShare">
+                                    @click="toggleShare"
+                                    data-testid="share-pill-existing">
 
                                     <!-- Icon -->
                                     <div
@@ -1041,7 +1085,7 @@ Copyright (c) 2025 Kalid Azad
         </panel>
 
         <div id="cal2_wrap" style="width: 100%; height: 100%;">
-            <div id="Schedule"></div>
+            <div id="Schedule" data-testid="schedule-container"></div>
         </div>
 
         <!-- Claim Intervention Modal -->
@@ -1096,7 +1140,7 @@ Copyright (c) 2025 Kalid Azad
         <toast-notification ref="toast"></toast-notification>
     </div>
 
-    <script type="text/x-template" id="tooltip-template">
+    <script type="text/x-template" id="tooltip-template" data-testid="tpl-tooltip">
         <div class="relative" @mouseenter="show = true" @mouseleave="show = false">
             <slot name="trigger"></slot>
             <div v-show="show && !isMobile" 
@@ -1112,7 +1156,7 @@ Copyright (c) 2025 Kalid Azad
         </div>
     </script>
 
-    <script type="text/x-template" id="calendar-title-template">
+    <script type="text/x-template" id="calendar-title-template" data-testid="tpl-calendar-title">
         <div class="w-full text-center">
             <!-- Show title (including "New Calendar" for new calendars) -->
             <h1 v-if="!isEditing"
@@ -1133,7 +1177,7 @@ Copyright (c) 2025 Kalid Azad
         </div>
     </script>
 
-    <script type="text/x-template" id="navigation-dropdown-template">
+    <script type="text/x-template" id="navigation-dropdown-template" data-testid="tpl-navigation-dropdown">
         <div class="absolute top-full left-0 md:left-0 mt-2 bg-1 min-w-[280px] md:min-w-[280px] w-[90vw] md:w-auto max-w-[280px] shadow-lg rounded-lg border border-color-default overflow-hidden z-50">
             <!-- Home / New Calendar option -->
             <a @click.prevent="$emit('go-homepage')"
@@ -1205,7 +1249,7 @@ Copyright (c) 2025 Kalid Azad
         </div>
     </script>
 
-    <script type="text/x-template" id="toast-notification-template">
+    <script type="text/x-template" id="toast-notification-template" data-testid="tpl-toast-notification">
         <transition 
             enter-active-class="transform ease-out duration-300 transition"
             enter-from-class="translate-y-2 opacity-0 sm:translate-y-0 sm:translate-x-2"
@@ -1251,7 +1295,7 @@ Copyright (c) 2025 Kalid Azad
         </transition>
     </script>
 
-    <script type="text/x-template" id="quick-add-button-template">
+    <script type="text/x-template" id="quick-add-button-template" data-testid="tpl-quick-add-button">
         <span class="inline-flex items-start">
                 <button slot="trigger" @click="$emit('open')"
                     data-testid="desktop-add-event-button"
@@ -1262,7 +1306,7 @@ Copyright (c) 2025 Kalid Azad
         </span>
     </script>
 
-    <script type="text/x-template" id="quick-add-dialog-template">
+    <script type="text/x-template" id="quick-add-dialog-template" data-testid="tpl-quick-add-dialog">
         <div v-if="dialogVisible" 
                  class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                 <div class="bg-1 rounded-lg p-6 w-[80%] max-w-[500px]">

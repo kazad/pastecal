@@ -10,10 +10,14 @@
 
     // Only run on localhost or if ?test parameter is present 
         const hasTestParam = window.location.search.includes('?test');
-    
+
         if (!hasTestParam) {
             return;
         }
+
+        // Marker so automated checks can detect self-test activation
+        window.__SELFTEST_READY = true;
+        document.documentElement.setAttribute('data-selftest-ready', 'true');
     const TEST_RESULTS = { 
         passed: [], 
         failed: [], 
