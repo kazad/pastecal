@@ -2102,6 +2102,13 @@ vacation dec 11 - dec 15
             },
 
             mounted() {
+                // Global keydown listener for shortcuts
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape') {
+                        this.closeAllPanels();
+                    }
+                });
+
                 // Initialize recents
                 this.recentManager = new RecentCalendars();
                 this.recentCalendars = this.recentManager.getAll();
