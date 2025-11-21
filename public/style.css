@@ -1,0 +1,423 @@
+/* --- Theme Variables --- */
+
+:root {
+
+    --bg: #ffffff;
+
+    --bg-disabled: #eaeaea;
+
+    --fg: #333333;
+
+    --link: rgb(3, 169, 244);
+
+    --link-hover: rgb(3, 140, 214);
+
+    --panel-bg: #f9fafb;
+
+    --border-color: #efefef;
+
+    --bg-interactive-hover: #f3f4f6;
+    /* Tailwind gray-100 */
+
+    --text-color-1: #6b7280;
+
+    --text-color-2: #374151;
+
+}
+
+
+
+[data-theme="dark"] {
+
+    --bg: #1e1e1e;
+
+    --bg-disabled: #333;
+
+    --fg: #cccccc;
+
+    --link: #4aaaff;
+
+    --link-hover: #6ec2ff;
+
+    --panel-bg: #2a2a2a;
+
+    --border-color: #373737;
+
+    --bg-interactive-hover: #333;
+
+    --text-color-1: #999;
+
+    --text-color-2: #AEAEAE;
+
+}
+
+
+
+/* --- General Styles --- */
+
+body {
+
+    background: var(--bg);
+
+    color: var(--fg);
+
+    min-width: 320px;
+
+}
+
+
+
+.border-color-default {
+    border-color: var(--border-color) !important;
+}
+
+.text-color-1 {
+    color: var(--text-color-1);
+}
+
+.text-color-2 {
+    color: var(--text-color-2);
+}
+
+.bg-1 {
+    background: var(--bg);
+}
+
+.bg-2 {
+    background: var(--panel-bg);
+}
+
+.bg-disabled {
+    background: var(--bg-disabled);
+}
+
+
+
+select,
+option,
+input,
+textarea {
+    background: var(--bg);
+}
+
+
+
+body a {
+
+    text-decoration: none;
+
+    color: rgb(3, 169, 244);
+
+}
+
+body a:hover {
+    text-decoration: underline;
+}
+
+
+
+/* Details/Summary for FAQ */
+
+details summary {
+    cursor: pointer;
+    user-select: none;
+}
+
+details summary:hover {
+    opacity: 0.85;
+}
+
+details[open] summary {
+    margin-bottom: 0.5rem;
+}
+
+
+
+/* --- Syncfusion Overrides --- */
+
+.e-toolbar-item.e-today {
+    display: none !important;
+}
+
+
+
+.e-schedule .e-vertical-view .e-time-cells-wrap table td,
+
+.e-schedule .e-vertical-view .e-work-cells {
+    height: 24px !important;
+}
+
+
+
+.e-schedule .e-month-view .e-work-cells {
+    height: 100px !important;
+}
+
+
+
+td.e-header-cells.e-disable-dates::before {
+
+    content: '12-4 AM';
+
+    width: 100%;
+
+    margin: 0px auto;
+
+    margin-top: 40%;
+
+    text-align: center;
+
+    display: inline-block;
+
+    color: #36b1f6;
+
+    cursor: pointer;
+
+}
+
+td.e-header-cells.e-disable-dates:hover {
+    background-color: #fafafa !important;
+}
+
+
+
+/* Event Colors */
+
+span.e-menu-icon.e-color-1 {
+    background: #3f51b5;
+}
+
+span.e-menu-icon.e-color-2 {
+    background: #e3165b;
+}
+
+span.e-menu-icon.e-color-3 {
+    background: #ff6652;
+}
+
+span.e-menu-icon.e-color-4 {
+    background: #4caf50;
+}
+
+span.e-menu-icon.e-color-5 {
+    background: #ff9800;
+}
+
+span.e-menu-icon.e-color-6 {
+    background: #03a9f4;
+}
+
+span.e-menu-icon.e-color-7 {
+    background: #9e9e9e;
+}
+
+span.e-menu-icon.e-color-8 {
+    background: #27282f;
+}
+
+
+
+/* Syncfusion Form Styles */
+
+.custom-field-row-color {
+    position: absolute;
+    top: 1rem;
+    right: 25px;
+}
+
+.custom-field-row-color .e-caret {
+    color: #eee;
+}
+
+.e-subject-container {
+    margin-right: 50px;
+}
+
+.e-schedule-dialog .e-subject-container {
+    width: 100%;
+}
+
+.e-location-container {
+    display: none;
+}
+
+
+
+/* Fonts & Borders */
+
+html,
+div#Schedule,
+.e-control,
+.e-css,
+.e-toolbar,
+.e-tbar-btn,
+.e-tbar-btn-text,
+
+.e-control-wrapper,
+.e-label,
+textarea {
+
+    font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji" !important;
+
+    font-weight: normal;
+
+}
+
+
+
+div#Schedule,
+.e-appointment,
+.e-draggable,
+.e-btn {
+    border-radius: 6px !important;
+}
+
+.e-dialog,
+.e-popup,
+.e-calendar {
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+
+
+/* Better Colors */
+
+.e-schedule .e-vertical-view .e-work-cells,
+
+.e-schedule .e-vertical-view .e-date-header-wrap table tbody td {
+    border-color: var(--border-color);
+}
+
+
+
+/* Fixes */
+
+.e-schedule.e-device .e-vertical-view .e-time-cells-wrap {
+    overflow: visible;
+}
+
+
+
+.e-schedule-dialog.e-device .e-save-icon::before {
+
+    content: 'SAVE';
+
+    color: #e3165b;
+
+    font-size: 16px;
+
+}
+
+
+
+.e-quick-popup-wrapper .e-event-popup .e-popup-header .e-header-icon-wrapper .e-edit,
+
+.e-quick-popup-wrapper .e-event-popup .e-popup-header .e-header-icon-wrapper .e-delete {
+    display: initial;
+}
+
+
+
+/* Desktop View Tweaks */
+
+@media screen and (min-width: 768px) {
+
+    .e-schedule .e-schedule-toolbar .e-toolbar-pop,
+
+    .e-schedule .e-schedule-toolbar .e-hor-nav {
+        display: none !important;
+    }
+
+    .e-schedule .e-schedule-toolbar .e-toolbar-items {
+        display: flex !important;
+        flex-wrap: nowrap !important;
+    }
+
+}
+
+/* Mobile toolbar overflow menu positioning */
+@media screen and (max-width: 767px) {
+    .e-schedule .e-schedule-toolbar .e-toolbar-items {
+        display: flex !important;
+        justify-content: space-between !important;
+    }
+
+    /* Push overflow menu to the right */
+    .e-schedule .e-schedule-toolbar .e-toolbar-pop {
+        margin-left: auto !important;
+    }
+}
+
+
+
+.e-date-header.e-navigate.month-start {
+    font-size: 18px;
+}
+
+
+
+/* --- Quick Add Styles --- */
+
+.quick-add-overlay {
+
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+
+    background-color: rgba(0, 0, 0, 0.5);
+
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+
+}
+
+.quick-add-dialog {
+
+    background-color: white;
+    padding: 20px;
+    border-radius: 8px;
+    width: 80%;
+    max-width: 500px;
+
+}
+
+.quick-add-dialog textarea {
+    width: 100%;
+    margin-bottom: 10px;
+}
+
+.parsed-event {
+
+    background-color: #f0f0f0;
+    padding: 10px;
+    margin-bottom: 10px;
+    border-radius: 4px;
+
+}
+
+.dialog-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+
+
+@media screen and (max-width: 600px) {
+
+    .mobile-hide {
+        display: none;
+    }
+
+}
+
+
+
+[v-cloak] {
+    display: none !important;
+}
