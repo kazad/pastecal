@@ -116,6 +116,17 @@ Copyright (c) 2025 Kalid Azad
                     timer = setTimeout(() => { func.apply(this, args); }, timeout);
                 };
             },
+
+            beforeUnmount() {
+                try {
+                    if (this._quickAddShortcutHandler) {
+                        window.removeEventListener('keydown', this._quickAddShortcutHandler);
+                        this._quickAddShortcutHandler = null;
+                    }
+                } catch (e) {
+                    console.warn('Error removing quick-add keyboard handler', e);
+                }
+            },
             sanitizeUrl(url) {
                 let sanitized = url.replaceAll("amp;", "&").replace(/&+/g, '&')
                 return sanitized;
@@ -497,7 +508,8 @@ Copyright (c) 2025 Kalid Azad
                                 <search-icon size="w-4 h-4"></search-icon>
                                 Search
                             </button>
-                            <button @click="showMobileMenu = false; $refs.mobileQuickAdd.showDialog()"
+                            <button
+                                @click="showMobileMenu = false; $refs.quickAddDialog && $refs.quickAddDialog.showDialog()"
                                 class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
                                 <span class="text-lg leading-none font-bold text-blue-500">+</span> Quick Add Event
                             </button>
@@ -535,8 +547,10 @@ Copyright (c) 2025 Kalid Azad
             </div>
         </div> <!-- Closing div for md:hidden -->
 
-        <!-- Hidden QuickAdd for Mobile Menu -->
-        <quick-add ref="mobileQuickAdd" class="hidden" @event-created="handleQuickAddEvent"></quick-add>
+        <!-- Mobile FAB removed - mobile menu will open the central quick-add dialog directly -->
+
+        <!-- Single dialog instance used by button triggers -->
+        <quick-add-dialog ref="quickAddDialog" @event-created="handleQuickAddEvent"></quick-add-dialog>
 
         <topbar class="hidden md:flex justify-between items-center pb-1 md:pb-3 text-sm">
             <!-- Left section -->
@@ -617,11 +631,10 @@ Copyright (c) 2025 Kalid Azad
                         </template>
                     </custom-tooltip>
 
-                    <div>edit: {{ canEdit == !isReadOnly ? 'correct' : 'not correct' }} </div>
-
-                    <!-- Quick add component - desktop only -->
-                    <quick-add v-if="canEdit" class="block" @event-created="handleQuickAddEvent"
-                        aria-label="Quick add event"></quick-add>
+                    <!-- Quick add button - desktop only -->
+                    <quick-add-button v-if="canEdit" class="block"
+                        @open="$refs.quickAddDialog && $refs.quickAddDialog.showDialog()"
+                        aria-label="Quick add event"></quick-add-button>
 
                 </buttonarea>
             </section>
@@ -1557,25 +1570,19 @@ Copyright (c) 2025 Kalid Azad
         </transition>
     </script>
 
-    <script type="text/x-template" id="quick-add-template">
+    <script type="text/x-template" id="quick-add-button-template">
         <span class="inline-flex items-start">
-            <custom-tooltip width="w-auto" align="center" v-if="mode !== 'fab'">
-                <template #trigger>
-                    <button @click="showDialog"
-                            class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors">
-                        <span class="text-nowrap px-3 py-1 text-white bg-gray-500 rounded-full text-xs hover:bg-blue-600 transition-colors flex-shrink-0">+Event <!-- (⌘E) -->
-                        </span>
-                        <kbd class="hidden px-1.5 py-0.5 text-xs bg-disabled rounded">⌘E</kbd>
-                    </button>
-                </template>
-                <template #content>
-                    <span class="whitespace-nowrap">Create event with text</span>
-                </template>
-            </custom-tooltip>
+                <button slot="trigger" @click="$emit('open')"
+                    data-testid="desktop-add-event-button"
+                    class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors">
+                    <span class="text-nowrap px-3 py-1 text-white bg-gray-500 rounded-full text-xs hover:bg-blue-600 transition-colors flex-shrink-0">+Event</span>
+                    <kbd class="hidden px-1.5 py-0.5 text-xs bg-disabled rounded">⌘E</kbd>
+                </button>
+        </span>
+    </script>
 
-
-    
-            <div v-if="dialogVisible" 
+    <script type="text/x-template" id="quick-add-dialog-template">
+        <div v-if="dialogVisible" 
                  class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                 <div class="bg-1 rounded-lg p-6 w-[80%] max-w-[500px]">
                     <h3 class="text-lg font-semibold mb-4">Add Event by Typing</h3>
@@ -1650,12 +1657,20 @@ vacation dec 11 - dec 15
             }
         };
 
-        const QuickAdd = {
-            template: "#quick-add-template",
+        // QuickAddButton: presentational trigger (keeps markup in index.html)
+        const QuickAddButton = {
+            template: '#quick-add-button-template',
+            // No props - dialog is a single shared instance
+            emits: ['open', 'clicked']
+        };
+
+        // QuickAddDialog: single source of truth for parsing/creating events
+        const QuickAddDialog = {
+            template: '#quick-add-dialog-template',
             props: {
                 mode: {
                     type: String,
-                    default: 'desktop' // 'desktop' or 'fab'
+                    default: 'desktop'
                 }
             },
             data() {
@@ -1673,23 +1688,17 @@ vacation dec 11 - dec 15
                         !isNaN(new Date(this.parsedEvent.startDateTime).getTime());
                 }
             },
-
             watch: {
                 description() {
                     this.parseDescription();
                 }
             },
-            mounted() {
-                window.addEventListener('keydown', this.handleKeydown);
-            },
-            beforeDestroy() {
-                window.removeEventListener('keydown', this.handleKeydown);
-            },
             methods: {
                 showDialog() {
                     this.dialogVisible = true;
                     this.$nextTick(() => {
-                        this.$el.querySelector('textarea').focus();
+                        const ta = this.$el.querySelector('textarea');
+                        if (ta) ta.focus();
                     });
                 },
                 hideDialog() {
@@ -1710,17 +1719,6 @@ vacation dec 11 - dec 15
                     if (!dateString) return '';
                     const options = { weekday: 'short', month: 'short', year: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', hour12: true };
                     return new Date(dateString).toLocaleString(undefined, options);
-                },
-                handleKeydown(event) {
-                    // Check for Cmd+A (Mac) or Ctrl+A (Windows/Linux)
-                    if ((event.metaKey || event.ctrlKey) && event.key === 'e') {
-                        event.preventDefault();
-                        this.showDialog();
-                    }
-                    // Check for Escape key when dialog is visible
-                    if (event.key === 'Escape' && this.dialogVisible) {
-                        this.hideDialog();
-                    }
                 },
                 handleEnter(event) {
                     // If Shift key is not pressed, submit the form
@@ -1944,6 +1942,8 @@ vacation dec 11 - dec 15
             'navigation-dropdown': NavigationDropdown, // Recent calendars dropdown
             'custom-tooltip': Tooltip,                 // Tooltip wrapper
             'toast-notification': ToastNotification,   // Toast messages
+            'quick-add-button': QuickAddButton,        // Quick Add trigger component (button/FAB)
+            'quick-add-dialog': QuickAddDialog,        // Quick Add dialog (parsing & create)
             'copy-icon': CopyIcon,                     // Copy icon SVG
             'settings-icon': SettingsIcon,             // Settings icon SVG
             'help-icon': HelpIcon,                     // Help icon SVG
@@ -2534,6 +2534,17 @@ vacation dec 11 - dec 15
                     }
                     this.updateCalendarView();
                 }
+
+                // Global keyboard shortcut for quick-add (Cmd/Ctrl+E)
+                this._quickAddShortcutHandler = (e) => {
+                    if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
+                        e.preventDefault();
+                        if (this.$refs && this.$refs.quickAddDialog && typeof this.$refs.quickAddDialog.showDialog === 'function') {
+                            this.$refs.quickAddDialog.showDialog();
+                        }
+                    }
+                };
+                window.addEventListener('keydown', this._quickAddShortcutHandler);
             },
 
             watch: {
@@ -3887,7 +3898,10 @@ vacation dec 11 - dec 15
             }
         };
 
-        const app = Vue.createApp(CalendarVueApp).component('quick-add', QuickAdd).mount('#app');
+        const app = Vue.createApp(CalendarVueApp)
+            .component('quick-add-button', QuickAddButton)
+            .component('quick-add-dialog', QuickAddDialog)
+            .mount('#app');
 
         // Sanity guard: verify canEdit exists and matches the inverse of isReadOnly after mount
         setTimeout(() => {
@@ -3909,7 +3923,7 @@ vacation dec 11 - dec 15
         // It will log warnings for any unregistered components found in the DOM
         // ============================================================
         function validateComponentRegistration() {
-            const registeredComponents = Object.keys(COMPONENT_REGISTRY).concat(['quick-add']);
+            const registeredComponents = Object.keys(COMPONENT_REGISTRY); // registry now includes quick-add-button & quick-add-dialog
             const allElements = document.querySelectorAll('*');
             const customElements = new Set();
 

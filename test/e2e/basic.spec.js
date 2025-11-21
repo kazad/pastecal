@@ -16,7 +16,7 @@ test.describe('Calendar Creation Flow', () => {
     // 4. Create Calendar (Click Claim without typing slug -> Random ID)
     // Note: The current implementation might show a dialog if input is empty, 
     // or auto-generate. Adjusting test based on current behavior.
-    
+
     // For this test, let's type a specific test slug to ensure clean state
     const testSlug = `test-cal-${Date.now()}`;
     const slugInput = page.locator('input[placeholder="your-name"]');
@@ -90,15 +90,15 @@ test.describe('Add Event Icon Visibility', () => {
     const addEventButton = page.locator('[data-testid="desktop-add-event-button"]');
     await expect(addEventButton).toBeHidden();
 
-    // Verify kebab menu button is visible on mobile
-    const menuButton = page.locator('[data-testid="mobile-menu-button"]');
+    // Verify kebab menu button is visible on mobile (using ARIA label)
+    const menuButton = page.locator('button[aria-label="Open menu"]');
     await expect(menuButton).toBeVisible();
 
     // Open mobile menu
     await menuButton.click();
 
     // Verify "Quick Add Event" is visible in mobile menu
-    const mobileQuickAdd = page.locator('[data-testid="mobile-quick-add-button"]');
+    const mobileQuickAdd = page.getByText('Quick Add Event');
     await expect(mobileQuickAdd).toBeVisible();
   });
 });
