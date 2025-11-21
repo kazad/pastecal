@@ -9,13 +9,11 @@
     'use strict'; 
 
     // Only run on localhost or if ?test parameter is present 
-    const isLocalhost = window.location.hostname.match(/^(localhost|127\.0\.0\.1|::1)$/); 
-    const hasTestParam = window.location.search.includes('?test'); 
-
-    if (!isLocalhost && !hasTestParam) { 
-        return; 
-    } 
-
+        const hasTestParam = window.location.search.includes('?test');
+    
+        if (!hasTestParam) {
+            return;
+        }
     const TEST_RESULTS = { 
         passed: [], 
         failed: [], 
