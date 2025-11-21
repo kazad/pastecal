@@ -466,6 +466,37 @@
     }
 
     // ============================================================
+    // TEST: DESKTOP ADD EVENT BUTTON
+    // ============================================================
+
+    async function testDesktopAddEventButton() {
+        groupStart('Desktop UI Tests');
+
+        const isMobile = window.innerWidth < 768;
+        if (!isMobile) {
+            // Look for the Quick Add button (it has aria-label="Quick add event")
+            // Wait for it to be potentially rendered/visible
+            await waitFor(() => document.querySelector('button[aria-label="Quick add event"]'));
+            
+            const quickAddBtn = document.querySelector('button[aria-label="Quick add event"]');
+            
+            if (quickAddBtn) {
+                // Check visibility
+                const rect = quickAddBtn.getBoundingClientRect();
+                const isVisible = rect.width > 0 && rect.height > 0 && window.getComputedStyle(quickAddBtn).display !== 'none';
+                
+                assert(isVisible, 'Quick Add button is visible', 'Button found and rendered on desktop');
+            } else {
+                assert(false, 'Quick Add button exists', 'Button with aria-label="Quick add event" not found');
+            }
+        } else {
+            assert(true, 'Skipping desktop test on mobile', 'Viewport < 768px');
+        }
+
+        groupEnd();
+    }
+
+    // ============================================================
     // TEST: EVENT HANDLING
     // ============================================================
 
@@ -604,6 +635,7 @@
         await testLocalStorage();
         await testResponsiveBehavior();
         await testTitleComponent();
+        await testDesktopAddEventButton();
         await testNotesEditing();
         await testEventHandling();
         await testExternalDependencies();
