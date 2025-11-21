@@ -348,7 +348,7 @@
         // 2. Share/Actions Section (Desktop)
         const isMobile = window.innerWidth < 768;
         if (!isMobile) {
-            const topbar = document.querySelector('topbar');
+            const topbar = document.querySelector('.hidden.md\\:flex');
             if (topbar) {
                 // Look for the share/claim section container (it's the last section in topbar)
                 const rightSection = topbar.querySelector('section:last-child');
@@ -366,6 +366,7 @@
                     const foundContent = await waitFor(() => {
                         const children = Array.from(rightSection.children);
                         const visibleChildren = children.filter(child => {
+                            // For the ShareOrClaimUI component root or its children
                             return child.nodeType === 1 && // Element node
                                    child.style.display !== 'none' && 
                                    child.getBoundingClientRect().width > 0;
@@ -378,6 +379,87 @@
                     assert(false, 'Share/Actions section exists', 'Right section not found in topbar');
                 }
             }
+        }
+
+        groupEnd();
+    }
+
+    // ============================================================
+    // TEST: NOTES EDITING
+    // ============================================================
+
+    async function testNotesEditing() {
+        groupStart('Notes Functionality Tests');
+
+        // Locate the Notes toggle button (it might be inside the title component or topbar)
+        // We'll look for the button with the aria-label "Toggle notes"
+        const notesButton = document.querySelector('button[aria-label="Toggle notes"]');
+        
+        if (!notesButton) {
+            warn('Notes toggle button not found', 'Skipping notes test');
+            groupEnd();
+            return;
+        }
+
+        // Ensure notes are closed initially (or just toggle it open)
+        // We can check if the notes panel is visible. 
+        // The panel usually has a textarea inside or we can look for the panel container logic.
+        // But simpler: click the button and wait for textarea.
+        
+        // Click to open
+        notesButton.click();
+
+        // Wait for panel to open and render either textarea OR view mode with edit button
+        const panelReady = await waitFor(() => {
+            const ta = document.querySelector('textarea[aria-label="Calendar notes"]');
+            const editBtn = document.querySelector('button.text-blue-500'); // The "Edit/Done" button class
+            const readOnlyDiv = document.querySelector('div[v-html="getReadOnlyNotes()"]'); // Approximate selector or check for content div
+            
+            // Valid states: Textarea visible OR (View mode visible AND Edit button visible)
+            const isEditMode = ta && ta.offsetParent !== null;
+            const isViewMode = !isEditMode && editBtn && editBtn.offsetParent !== null;
+            
+            return isEditMode || isViewMode;
+        });
+
+        if (panelReady) {
+            assert(true, 'Notes panel opened', 'Panel content visible');
+            
+            let textarea = document.querySelector('textarea[aria-label="Calendar notes"]');
+            
+            // If we are in view mode (textarea not found), click Edit
+            if (!textarea) {
+                // Look for the Edit button by text content since class might change
+                const buttons = Array.from(document.querySelectorAll('button'));
+                const editButton = buttons.find(b => b.textContent.trim().toUpperCase() === 'EDIT');
+                
+                if (editButton) {
+                    editButton.click();
+                    // Wait for textarea to appear after click
+                    await waitFor(() => document.querySelector('textarea[aria-label="Calendar notes"]'));
+                    textarea = document.querySelector('textarea[aria-label="Calendar notes"]');
+                    assert(textarea !== null, 'Switched to edit mode', 'Textarea appeared after clicking Edit');
+                } else {
+                    // Check if read-only (no edit button)
+                     const isReadOnlyView = window.location.pathname.startsWith('/view/');
+                     if (isReadOnlyView) {
+                         assert(true, 'Notes are read-only (expected)', 'No Edit button in read-only view');
+                         notesButton.click();
+                         return;
+                     } else {
+                         assert(false, 'Edit button missing', 'Not in read-only view but cannot edit');
+                     }
+                }
+            }
+
+            if (textarea && !textarea.disabled && !textarea.readOnly) {
+                assert(true, 'Notes are editable', 'Textarea is interactive');
+            }
+            
+            // Close notes to clean up UI state
+            notesButton.click(); 
+        } else {
+            assert(false, 'Notes panel failed to open', 'Neither textarea nor view panel found');
         }
 
         groupEnd();
@@ -522,6 +604,7 @@
         await testLocalStorage();
         await testResponsiveBehavior();
         await testTitleComponent();
+        await testNotesEditing();
         await testEventHandling();
         await testExternalDependencies();
         await testConsoleErrors();
