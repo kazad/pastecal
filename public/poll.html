@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pastecal Poll Prototype</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      --bg: #f9fafb;
+      --fg: #111827;
+      --muted: #6b7280;
+      --muted-strong: #374151;
+      --panel-bg: #ffffff;
+      --panel-muted: #f3f4f6;
+      --border-color: #e5e7eb;
+      --shadow-soft: 0 18px 45px rgba(15, 23, 42, 0.08);
+      --accent: #03a9f4;
+      --accent-strong: #0284c7;
+      --accent-soft: rgba(3, 169, 244, 0.14);
+      --yes: var(--accent);
+      --yes-soft: var(--accent-soft);
+      --maybe: #f59e0b;
+      --maybe-soft: rgba(245, 158, 11, 0.15);
+      --no: #ef4444;
+      --no-soft: rgba(239, 68, 68, 0.15);
+      --type-1: var(--accent);
+      --type-2: #6366f1;
+    }
+
+    [data-theme='dark'] {
+      --bg: #1f2937;
+      --fg: #e5e7eb;
+      --muted: #9ca3af;
+      --muted-strong: #d1d5db;
+      --panel-bg: #111827;
+      --panel-muted: #182132;
+      --border-color: #253046;
+      --shadow-soft: 0 20px 50px rgba(0, 0, 0, 0.4);
+      --accent: #4aaaff;
+      --accent-strong: #6ec2ff;
+      --accent-soft: rgba(74, 170, 255, 0.18);
+      --yes: var(--accent);
+      --yes-soft: var(--accent-soft);
+      --maybe: #fbbf24;
+      --maybe-soft: rgba(251, 191, 36, 0.18);
+      --no: #f87171;
+      --no-soft: rgba(248, 113, 113, 0.18);
+      --type-1: var(--accent);
+      --type-2: #a855f7;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      line-height: 1.5;
+    }
+
+    .card {
+      background: var(--panel-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 1.25rem;
+      box-shadow: var(--shadow-soft);
+    }
+
+    .surface-muted {
+      background: var(--panel-muted);
+      border-radius: 1rem;
+    }
+
+    .tag-pill {
+      background: var(--accent-soft);
+      color: var(--accent-strong);
+      border-radius: 9999px;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      border-radius: 9999px;
+      padding: 0.25rem 0.6rem;
+      background: var(--panel-muted);
+      color: var(--muted-strong);
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .chip[data-state='yes'] {
+      background: var(--yes-soft);
+      color: var(--yes);
+    }
+
+    .chip[data-state='maybe'] {
+      background: var(--maybe-soft);
+      color: var(--maybe);
+    }
+
+    .chip[data-state='no'] {
+      background: var(--no-soft);
+      color: var(--no);
+    }
+
+    .response-button {
+      border-radius: 0.55rem;
+      border: 1px solid transparent;
+      padding: 0.4rem 0.95rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      transition: all 0.18s ease-in-out;
+      background: var(--panel-muted);
+      color: var(--muted-strong);
+    }
+
+    .response-button[data-state='yes'] {
+      background: var(--yes-soft);
+      color: var(--yes);
+    }
+
+    .response-button[data-state='maybe'] {
+      background: var(--maybe-soft);
+      color: var(--maybe);
+    }
+
+    .response-button[data-state='no'] {
+      background: var(--no-soft);
+      color: var(--no);
+    }
+
+    .response-button[data-state='yes'].is-active {
+      background: var(--yes);
+      color: #ffffff;
+      border-color: transparent;
+      box-shadow: 0 7px 18px rgba(2, 132, 199, 0.22);
+    }
+
+    .response-button[data-state='maybe'].is-active {
+      background: var(--maybe);
+      color: #1f2937;
+      border-color: transparent;
+      box-shadow: 0 7px 18px rgba(245, 158, 11, 0.3);
+    }
+
+    .response-button[data-state='no'].is-active {
+      background: var(--no);
+      color: #fef2f2;
+      border-color: transparent;
+      box-shadow: 0 7px 18px rgba(239, 68, 68, 0.32);
+    }
+
+    .response-button:not(.is-active):hover {
+      transform: translateY(-1px);
+    }
+
+    .totals-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.3rem;
+      border-radius: 9999px;
+      padding: 0.25rem 0.65rem;
+      font-size: 0.7rem;
+      font-weight: 600;
+    }
+
+    .totals-chip[data-state='yes'] {
+      background: var(--yes-soft);
+      color: var(--yes);
+    }
+
+    .totals-chip[data-state='maybe'] {
+      background: var(--maybe-soft);
+      color: var(--maybe);
+    }
+
+    .totals-chip[data-state='no'] {
+      background: var(--no-soft);
+      color: var(--no);
+    }
+
+    .table-shell {
+      border: 1px solid var(--border-color);
+      border-radius: 1.5rem;
+      overflow: hidden;
+      background: var(--panel-bg);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .table-shell thead {
+      background: var(--panel-muted);
+      color: var(--muted-strong);
+    }
+
+    .table-shell tbody tr:nth-child(odd) {
+      background: var(--panel-bg);
+    }
+
+    .table-shell tbody tr:nth-child(even) {
+      background: var(--panel-muted);
+    }
+
+    .table-shell th,
+    .table-shell td {
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .table-shell tfoot {
+      background: var(--panel-muted);
+    }
+
+    .type-dot {
+      display: inline-flex;
+      width: 0.5rem;
+      height: 0.5rem;
+      border-radius: 9999px;
+    }
+
+    .type-dot[data-type='1'] {
+      background: var(--type-1);
+    }
+
+    .type-dot[data-type='2'] {
+      background: var(--type-2);
+    }
+
+    textarea,
+    input {
+      background: var(--panel-bg);
+      color: var(--fg);
+    }
+
+    .response-button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+  <div id="app" class="min-h-screen flex flex-col">
+    <header class="border-b border-[var(--border-color)] bg-[var(--panel-bg)]/95 backdrop-blur">
+      <div class="mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 py-12 lg:flex-row lg:items-start lg:justify-between">
+        <div class="flex-1 space-y-6">
+          <div class="inline-flex items-center gap-2 tag-pill px-3 py-1 text-xs font-semibold uppercase tracking-wider">
+            <span>Poll Preview</span>
+          </div>
+          <div class="space-y-3">
+            <h1 class="text-3xl font-semibold text-[var(--muted-strong)] sm:text-4xl">{{ poll.title }}</h1>
+            <p class="max-w-2xl text-sm text-[var(--muted)]">{{ poll.description }}</p>
+          </div>
+          <dl class="grid gap-4 text-sm text-[var(--muted)] sm:grid-cols-2">
+            <div class="surface-muted p-4">
+              <dt class="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Calendar</dt>
+              <dd class="mt-1 text-base font-medium text-[var(--muted-strong)]">/{{ poll.calendarId }}</dd>
+            </div>
+            <div class="surface-muted p-4">
+              <dt class="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Date range</dt>
+              <dd class="mt-1 text-base font-medium text-[var(--muted-strong)]">{{ poll.dateRange.start }} -> {{ poll.dateRange.end }}</dd>
+            </div>
+            <div class="surface-muted p-4">
+              <dt class="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Timezone</dt>
+              <dd class="mt-1 text-base font-medium text-[var(--muted-strong)]">{{ poll.timezone }}</dd>
+            </div>
+            <div class="surface-muted p-4">
+              <dt class="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Filters</dt>
+              <dd class="mt-2 flex flex-wrap gap-2">
+                <span
+                  v-for="type in filterState.selectedTypes"
+                  :key="type"
+                  class="inline-flex items-center gap-2 rounded-full border border-[var(--border-color)] bg-[var(--panel-bg)] px-3 py-1 text-xs font-semibold text-[var(--muted-strong)]">
+                  <span class="type-dot" :data-type="type"></span>
+                  {{ typeLabel(type) }}
+                </span>
+              </dd>
+            </div>
+          </dl>
+        </div>
+        <aside class="card w-full max-w-sm space-y-5 p-6">
+          <h2 class="text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">Preview settings</h2>
+          <div class="space-y-5 text-sm text-[var(--muted)]">
+            <div>
+              <h3 class="font-semibold text-[var(--muted-strong)]">Filter by type</h3>
+              <div class="mt-3 flex flex-wrap gap-2">
+                <label
+                  v-for="type in typeOptions"
+                  :key="type.id"
+                  class="inline-flex items-center gap-2 rounded-lg border border-[var(--border-color)] bg-[var(--panel-bg)] px-3 py-2 text-xs font-medium text-[var(--muted-strong)]">
+                  <input
+                    type="checkbox"
+                    class="h-4 w-4 rounded border-[var(--border-color)] text-[var(--accent)] focus:ring-[var(--accent)]"
+                    v-model="filterState.selectedTypes"
+                    :value="type.id"
+                  />
+                  <span>{{ type.label }}</span>
+                </label>
+              </div>
+            </div>
+            <div>
+              <h3 class="font-semibold text-[var(--muted-strong)]">Shareable link</h3>
+              <div class="mt-2 flex items-center justify-between rounded-lg border border-[var(--border-color)] bg-[var(--panel-muted)] px-3 py-2 text-xs">
+                <span class="truncate text-[var(--muted)]">{{ shareUrl }}</span>
+                <button type="button" class="rounded-md bg-[var(--accent)] px-3 py-1 font-semibold text-white shadow-sm transition hover:bg-[var(--accent-strong)]">Copy</button>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </header>
+
+    <main class="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-12 px-6 py-12">
+      <section class="card p-6 sm:p-8">
+        <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div class="space-y-2">
+            <h2 class="text-xl font-semibold text-[var(--muted-strong)]">Add yourself to this poll</h2>
+            <p class="text-sm text-[var(--muted)]">Enter your name to create a row. Responses are editable and travel with your link.</p>
+          </div>
+          <form class="flex w-full flex-col gap-3 sm:max-w-xl sm:flex-row" @submit.prevent="startResponding">
+            <input
+              type="text"
+              v-model.trim="newParticipant.name"
+              placeholder="Your name"
+              class="w-full rounded-lg border border-[var(--border-color)] px-4 py-2 text-sm focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-soft)]"
+            />
+            <textarea
+              v-model.trim="newParticipant.comment"
+              placeholder="Optional note"
+              rows="1"
+              class="w-full rounded-lg border border-[var(--border-color)] px-4 py-2 text-sm focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-soft)]"
+            ></textarea>
+            <button
+              type="submit"
+              class="rounded-lg bg-[var(--accent)] px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--accent-strong)] disabled:cursor-not-allowed disabled:bg-[var(--muted)]"
+              :disabled="!newParticipant.name"
+            >
+              Add me
+            </button>
+          </form>
+        </div>
+      </section>
+
+      <section class="flex flex-col gap-6">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 class="text-lg font-semibold text-[var(--muted-strong)]">Availability grid</h2>
+            <p class="text-sm text-[var(--muted)]">The columns are live from your calendar using the selected filters.</p>
+          </div>
+          <div class="flex items-center gap-3 text-xs text-[var(--muted)]">
+            <div class="chip" data-state="yes">Yes</div>
+            <div class="chip" data-state="maybe">Maybe</div>
+            <div class="chip" data-state="no">No</div>
+          </div>
+        </div>
+
+        <div v-if="filteredEvents.length === 0" class="card border-dashed border-[var(--border-color)] bg-[var(--panel-muted)] p-10 text-center text-sm text-[var(--muted)] shadow-none">
+          No events match the current filters. Adjust the type filters or date range to populate the poll grid.
+        </div>
+
+        <div v-else class="table-shell overflow-x-auto">
+          <table class="min-w-full text-sm">
+            <thead class="text-xs uppercase tracking-wide">
+              <tr>
+                <th scope="col" class="sticky left-0 z-20 bg-[var(--panel-muted)] px-4 py-3 text-left font-semibold text-[var(--muted-strong)]">Participant</th>
+                <th
+                  v-for="event in filteredEvents"
+                  :key="event.id"
+                  scope="col"
+                  class="px-4 py-3 text-left"
+                >
+                  <div class="flex flex-col gap-0.5">
+                    <span class="font-semibold text-[var(--muted-strong)]">{{ event.title }}</span>
+                    <span class="text-xs text-[var(--muted)]">{{ formatEventWindow(event) }}</span>
+                    <span class="text-[0.7rem] text-[var(--muted)]">{{ typeLabel(event.type) }}</span>
+                  </div>
+                </th>
+                <th scope="col" class="px-4 py-3 text-left font-semibold text-[var(--muted-strong)]">Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="participant in participants"
+                :key="participant.id"
+                :class="editingParticipantId === participant.id ? 'bg-[var(--panel-muted)]' : 'bg-[var(--panel-bg)]'"
+              >
+                <th
+                  scope="row"
+                  class="sticky left-0 z-10 border-r border-[var(--border-color)] bg-inherit px-4 py-4 text-left text-sm font-semibold text-[var(--muted-strong)]"
+                >
+                  <div class="flex flex-col gap-2">
+                    <div class="flex items-center justify-between gap-3">
+                      <span>{{ participant.name }}</span>
+                      <button
+                        type="button"
+                        class="text-xs font-semibold text-[var(--accent)] transition hover:text-[var(--accent-strong)]"
+                        @click="toggleEditing(participant.id)"
+                      >
+                        {{ editingParticipantId === participant.id ? 'Done' : 'Edit' }}
+                      </button>
+                    </div>
+                    <span class="text-xs font-normal text-[var(--muted)]">Updated {{ timeAgo(participant.updatedAt) }}</span>
+                  </div>
+                </th>
+                <td
+                  v-for="event in filteredEvents"
+                  :key="event.id"
+                  class="px-4 py-4"
+                >
+                  <div class="flex items-center gap-2 text-xs font-semibold">
+                    <button
+                      type="button"
+                      :data-state="'yes'"
+                      :class="responseButtonClasses(participant, event.id, 'yes')"
+                      :disabled="!canEditParticipant(participant)"
+                      @click="setResponse(participant, event.id, 'yes')"
+                    >
+                      Yes
+                    </button>
+                    <button
+                      type="button"
+                      :data-state="'maybe'"
+                      :class="responseButtonClasses(participant, event.id, 'maybe')"
+                      :disabled="!canEditParticipant(participant)"
+                      @click="setResponse(participant, event.id, 'maybe')"
+                    >
+                      Maybe
+                    </button>
+                    <button
+                      type="button"
+                      :data-state="'no'"
+                      :class="responseButtonClasses(participant, event.id, 'no')"
+                      :disabled="!canEditParticipant(participant)"
+                      @click="setResponse(participant, event.id, 'no')"
+                    >
+                      No
+                    </button>
+                  </div>
+                </td>
+                <td class="px-4 py-4">
+                  <textarea
+                    v-model="participant.comment"
+                    rows="2"
+                    class="w-full rounded-lg border border-[var(--border-color)] px-3 py-2 text-xs focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent-soft)]"
+                    :disabled="!canEditParticipant(participant)"
+                    placeholder="Add context"
+                  ></textarea>
+                </td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr>
+                <th
+                  scope="row"
+                  class="sticky left-0 z-10 border-r border-[var(--border-color)] bg-[var(--panel-muted)] px-4 py-3 text-left text-sm font-semibold text-[var(--muted-strong)]"
+                >
+                  Totals
+                </th>
+                <td
+                  v-for="event in filteredEvents"
+                  :key="'summary-' + event.id"
+                  class="px-4 py-3"
+                >
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="totals-chip" data-state="yes">{{ statsByEvent[event.id]?.yes || 0 }} yes</span>
+                    <span class="totals-chip" data-state="maybe">{{ statsByEvent[event.id]?.maybe || 0 }} maybe</span>
+                    <span class="totals-chip" data-state="no">{{ statsByEvent[event.id]?.no || 0 }} no</span>
+                  </div>
+                </td>
+                <td class="px-4 py-3 text-xs text-[var(--muted)]">Comments stay with each respondent.</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </section>
+
+      <section class="grid gap-6 lg:grid-cols-2">
+        <article class="card p-6">
+          <h3 class="text-lg font-semibold text-[var(--muted-strong)]">How the share link works</h3>
+          <p class="mt-3 text-sm text-[var(--muted)]">
+            Share <code class="rounded bg-[var(--panel-muted)] px-1 py-0.5 text-xs text-[var(--muted-strong)]">/{{ poll.calendarId }}/poll</code> with teammates.
+            They see a unified availability grid sourced from your calendar events that match the filters.
+          </p>
+          <ul class="mt-4 space-y-2 text-sm text-[var(--muted)]">
+            <li class="flex gap-3"><span class="mt-1 h-1.5 w-1.5 rounded-full bg-[var(--accent)]"></span> Names persist per device and can be updated later.</li>
+            <li class="flex gap-3"><span class="mt-1 h-1.5 w-1.5 rounded-full bg-[var(--accent)]"></span> Adjusting filters updates columns without losing responses.</li>
+            <li class="flex gap-3"><span class="mt-1 h-1.5 w-1.5 rounded-full bg-[var(--accent)]"></span> Aggregate totals spotlight the most popular options instantly.</li>
+          </ul>
+        </article>
+        <article class="card p-6">
+          <h3 class="text-lg font-semibold text-[var(--muted-strong)]">Next steps to production</h3>
+          <ol class="mt-3 list-inside list-decimal space-y-2 text-sm text-[var(--muted)]">
+            <li>Expose poll configuration inside the calendar toolbar.</li>
+            <li>Persist votes to <code class="rounded bg-[var(--panel-muted)] px-1 py-0.5 text-xs text-[var(--muted-strong)]">/calendars/{calendarId}/polls</code> with realtime listeners.</li>
+            <li>Promote winning events by updating their type/status on the calendar.</li>
+          </ol>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script>
+    const { createApp } = Vue;
+
+    createApp({
+      data() {
+        return {
+          poll: {
+            title: 'Quarterly Planning Poll',
+            description: 'Mark when you can join the workshop. Options are pulled directly from the calendar (Type 1 = tentative, Type 2 = optional).',
+            calendarId: 'team-product',
+            timezone: 'America/Los_Angeles',
+            dateRange: { start: '2024-07-08', end: '2024-07-19' }
+          },
+          typeOptions: [
+            { id: '1', label: 'Type 1 - Tentative hold' },
+            { id: '2', label: 'Type 2 - Optional idea' }
+          ],
+          filterState: { selectedTypes: ['1', '2'] },
+          events: [
+            { id: 'evt-a', title: 'Mon, Jul 8 - 9:00-11:00', start: '2024-07-08T16:00:00Z', end: '2024-07-08T18:00:00Z', type: '1' },
+            { id: 'evt-b', title: 'Tue, Jul 9 - 13:00-15:00', start: '2024-07-09T20:00:00Z', end: '2024-07-09T22:00:00Z', type: '1' },
+            { id: 'evt-c', title: 'Thu, Jul 11 - 10:00-12:00', start: '2024-07-11T17:00:00Z', end: '2024-07-11T19:00:00Z', type: '2' },
+            { id: 'evt-d', title: 'Fri, Jul 12 - 15:00-17:00', start: '2024-07-12T22:00:00Z', end: '2024-07-13T00:00:00Z', type: '1' }
+          ],
+          participants: [
+            { id: 'p-amy', name: 'Amy', comment: 'Prefer mornings; travelling 7/12.', updatedAt: Date.now() - 1000 * 60 * 60 * 2, responses: { 'evt-a': 'yes', 'evt-b': 'maybe', 'evt-c': 'no' } },
+            { id: 'p-blaine', name: 'Blaine', comment: 'OK with remote dial-in.', updatedAt: Date.now() - 1000 * 60 * 45, responses: { 'evt-a': 'yes', 'evt-b': 'no', 'evt-c': 'maybe', 'evt-d': 'yes' } },
+            { id: 'p-casey', name: 'Casey', comment: '', updatedAt: Date.now() - 1000 * 60 * 5, responses: { 'evt-b': 'yes', 'evt-d': 'maybe' } }
+          ],
+          newParticipant: { name: '', comment: '' },
+          editingParticipantId: null
+        };
+      },
+      computed: {
+        filteredEvents() {
+          return this.events.filter(event => this.filterState.selectedTypes.includes(event.type));
+        },
+        shareUrl() {
+          return `pastecal.com/${this.poll.calendarId}/poll`;
+        },
+        statsByEvent() {
+          const totals = {};
+          this.events.forEach(event => {
+            totals[event.id] = { yes: 0, maybe: 0, no: 0 };
+          });
+          this.participants.forEach(participant => {
+            Object.entries(participant.responses).forEach(([eventId, response]) => {
+              if (!totals[eventId]) return;
+              if (response && totals[eventId][response] !== undefined) {
+                totals[eventId][response] += 1;
+              }
+            });
+          });
+          return totals;
+        }
+      },
+      methods: {
+        startResponding() {
+          const name = this.newParticipant.name.trim();
+          if (!name) return;
+          const id = `p-${Math.random().toString(36).slice(2, 8)}`;
+          const participant = {
+            id,
+            name,
+            comment: this.newParticipant.comment.trim(),
+            updatedAt: Date.now(),
+            responses: {}
+          };
+          this.participants.push(participant);
+          this.editingParticipantId = id;
+          this.newParticipant.name = '';
+          this.newParticipant.comment = '';
+        },
+        toggleEditing(participantId) {
+          this.editingParticipantId = this.editingParticipantId === participantId ? null : participantId;
+        },
+        canEditParticipant(participant) {
+          return this.editingParticipantId === participant.id;
+        },
+        setResponse(participant, eventId, status) {
+          if (!this.canEditParticipant(participant)) return;
+          const current = participant.responses[eventId];
+          if (current === status) {
+            delete participant.responses[eventId];
+          } else {
+            participant.responses[eventId] = status;
+          }
+          participant.updatedAt = Date.now();
+        },
+        responseButtonClasses(participant, eventId, status) {
+          const classes = ['response-button'];
+          if (participant.responses[eventId] === status) {
+            classes.push('is-active');
+          }
+          if (!this.canEditParticipant(participant)) {
+            classes.push('opacity-60');
+          }
+          return classes.join(' ');
+        },
+        formatEventWindow(event) {
+          const start = new Date(event.start);
+          const end = new Date(event.end);
+          return `${start.toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' })} - ${end.toLocaleString('en-US', { hour: 'numeric', minute: '2-digit' })}`;
+        },
+        typeLabel(typeId) {
+          const match = this.typeOptions.find(type => type.id === typeId);
+          return match ? match.label : `Type ${typeId}`;
+        },
+        timeAgo(timestamp) {
+          if (!timestamp) return 'just now';
+          const delta = Date.now() - timestamp;
+          const minutes = Math.round(delta / (1000 * 60));
+          if (minutes < 1) return 'just now';
+          if (minutes < 60) return `${minutes}m ago`;
+          const hours = Math.round(minutes / 60);
+          if (hours < 24) return `${hours}h ago`;
+          const days = Math.round(hours / 24);
+          return `${days}d ago`;
+        }
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>
