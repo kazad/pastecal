@@ -1,27 +1,3 @@
-// nanoid library
-let nanoid = (t = 21) => {
-  let e = "",
-    r = crypto.getRandomValues(new Uint8Array(t));
-  for (; t--;) {
-    let n = 63 & r[t];
-    e +=
-      n < 36
-        ? n.toString(36)
-        : n < 62
-          ? (n - 26).toString(36).toUpperCase()
-          : n < 63
-            ? nanoid(1) // replace with another random character
-            : nanoid(1);
-  }
-  return e;
-};
-
-var Utils = {};
-
-Utils.nanoid = nanoid;
-Utils.uuidv4 = nanoid;
-Utils.randomID = nanoid;
-
 // can we make this a mutator, where the get/set of a property on this automatically syncs to localstorage?
 // TODO: find localstorage sync?
 class RecentCalendars {
