@@ -102,3 +102,35 @@ test.describe('Add Event Icon Visibility', () => {
     await expect(mobileQuickAdd).toBeVisible();
   });
 });
+
+test.describe('Quick Add Dialog', () => {
+  test('Escape key dismisses Quick Add dialog', async ({ page }) => {
+    // Set desktop viewport
+    await page.setViewportSize({ width: 1280, height: 720 });
+
+    // Create a test calendar
+    const testSlug = `test-quickadd-${Date.now()}`;
+    await page.goto('http://localhost:8000/');
+    const slugInput = page.locator('input[placeholder="your-name"]');
+    await slugInput.fill(testSlug);
+    await slugInput.press('Enter');
+
+    // Wait for calendar to load
+    await expect(page).toHaveURL(new RegExp(`/${testSlug}`));
+    await expect(page.locator('.e-schedule')).toBeVisible({ timeout: 10000 });
+
+    // Open quick add dialog (desktop add event button)
+    const addEventBtn = page.locator('[data-testid="desktop-add-event-button"]');
+    await addEventBtn.click();
+
+    // Dialog should appear with textarea
+    const textarea = page.locator('textarea[aria-label="Event description"]');
+    await expect(textarea).toBeVisible();
+
+    // Press Escape to dismiss
+    await page.keyboard.press('Escape');
+
+    // Dialog should be gone
+    await expect(textarea).toBeHidden();
+  });
+});
