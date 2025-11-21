@@ -609,6 +609,54 @@
     } 
 
     // ============================================================ 
+    // TEST: CALENDAR LOADING (REGRESSION) 
+    // ============================================================ 
+
+    async function testCalendarLoading() {
+        groupStart('Calendar Loading Tests');
+
+        const slug = window.location.pathname.split('/')[1];
+        
+        if (slug && slug.length > 0 && slug !== 'view') {
+            console.log(`Testing loading for slug: "${slug}"`);
+            
+            // Wait for title to change from default "New Calendar"
+            // We give it some time to fetch from Firebase
+            const loaded = await waitFor(() => {
+                const titleEl = document.querySelector('.calendar-title-component h1, .calendar-title-component input');
+                if (!titleEl) return false;
+                
+                const title = titleEl.tagName === 'INPUT' ? titleEl.value : titleEl.textContent;
+                // It should NOT be "New Calendar" if it loaded data for a specific slug
+                // Unless the calendar is actually named "New Calendar", but that's an edge case.
+                // Better check: app.isExisting should be true
+                const app = document.getElementById('app').__vue_app__._instance.ctx;
+                return app.isExisting === true && app.isLoading === false;
+            }, 8000);
+
+            assert(
+                loaded,
+                'Calendar data loaded',
+                'isExisting is true and isLoading is false'
+            );
+
+            if (loaded) {
+                const app = document.getElementById('app').__vue_app__._instance.ctx;
+                assert(
+                    app.calendar.title !== 'New Calendar',
+                    'Calendar title updated',
+                    `Current title: "${app.calendar.title}"`
+                );
+            }
+        } else {
+            console.log('Skipping loading test (no slug present)');
+            assert(true, 'Skipped loading test', 'No slug in URL');
+        }
+
+        groupEnd();
+    }
+
+    // ============================================================ 
     // RUN ALL TESTS 
     // ============================================================ 
 
@@ -636,6 +684,7 @@
         await testNotesEditing(); 
         await testEventHandling(); 
         await testExternalDependencies(); 
+        await testCalendarLoading();
         await testConsoleErrors(); 
 
         // Print summary 

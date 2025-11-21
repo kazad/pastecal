@@ -1,71 +1,127 @@
 # PasteCal Pro / Premium Specification
 
 ## Philosophy
-PasteCal's core value is frictionlessness: "No login, just a link." A Pro tier must not break this paradigm. Instead of forcing users to create a username/password account to upgrade, we should offer a **"Pay-per-Calendar"** or **"Calendar License"** model.
+While PasteCal's core value remains "No login, just a link" for instant creation, the Pro tier introduces a management layer for power users. By authenticating via **Google Login**, a user becomes the **Manager** of their calendars, unlocking advanced control, security, and customization without complicating the experience for their end-users (viewers/editors).
 
-Users upgrade a *specific calendar* to unlock power features for that collaborative space.
+## Authentication & Account Model
+*   **Google Login:** Used solely for the "Manager" role.
+*   **Claiming:** Existing anonymous calendars can be "claimed" by a logged-in Manager.
+*   **Manager Privileges:**
+    *   Central dashboard to see all owned calendars.
+    *   Ability to reset edit links/permissions.
+    *   Access to billing and subscription settings.
 
-## Monetization Model: "Boost this Calendar"
-*   **Pricing:** One-time fee (e.g., $29/lifetime) or small annual subscription (e.g., $12/year) per calendar.
-*   **Mechanism:**
-    1.  User goes to `Settings > Upgrade to Pro`.
-    2.  Stripe Checkout (Customer Email required).
-    3.  Upon success, the Calendar ID is flagged as `isPro: true` in Firebase.
-    4.  An "Admin Key" is emailed to the user to manage the subscription.
+## Pricing Tiers & Model: "Pay for Space, Not Seats"
 
-## Feature Set
+We adopt the **Basecamp Model**: The Manager pays for the infrastructure and features, while their users (viewers, editors, family members) remain free and account-less. This aligns with our frictionless "viral" nature.
 
-### 1. Enhanced Security & Access Control
-*   **Edit Locking:** Convert the public URL `pastecal.com/my-team` to **Read-Only** for the public, while issuing a secret **Admin Link** (or password) for editors.
-    *   *Why:* Solves the "anyone can delete my events" risk for semi-public calendars.
-*   **Password Protection:** Require a password to even *view* the calendar.
+### 1. Free Tier (The Growth Engine)
+*   **Cost:** $0
+*   **Limits:** 1 Admin (Cookie-based), Unlimited Viewers.
+*   **Features:** Basic creation, public editing (unless secret link), PasteCal branding.
+*   **Goal:** Maximum virality. Every free calendar shared is a marketing impression.
 
-### 2. Branding & Whitelabeling
-*   **Remove "PasteCal" Branding:** Remove the logo and "Powered by" links from the header and embedded views.
-*   **Custom Logo:** Upload a team/company logo to replace the default.
-*   **Custom Colors:** Full control over the UI color palette (header background, buttons) to match brand identity.
+### 2. Pro Tier (The "Peace of Mind" Plan)
+*   **Cost:** **$9 / month** (or $89 / year)
+*   **Target:** Freelancers, Power Individuals, Consultants.
+*   **Capacity:** Up to **5 Managed Calendars**.
+*   **Key Value:**
+    *   **Locking:** Prevent public edits (Security).
+    *   **Restores:** Undo accidental deletions.
+    *   **Notifications:** Get emailed when clients book/change things.
 
-### 3. Data Safety & Recovery
-*   **Owner Email Association:** Link an email address to the calendar *without* creating a full account.
-    *   *Benefit:* Recover lost edit links.
-    *   *Benefit:* Receive critical alerts (e.g., "Someone deleted 50 events").
-*   **Change History / Audit Log:** View a log of who (IP/User Agent) changed what and when.
-*   **Undo/Restore:** Ability to revert changes from the Audit Log.
+### 3. Team Tier (The "Professional" Plan)
+*   **Cost:** **$29 / month** (or $290 / year)
+*   **Target:** Agencies, Small Businesses, Schools.
+*   **Capacity:** Up to **25 Managed Calendars**.
+*   **Key Value:**
+    *   **Whitelabeling:** Remove "PasteCal" branding, add Company Logo.
+    *   **API Access:** Integrate with internal tools.
+    *   **Priority Support.**
 
-### 4. Power Features
-*   **Email Notifications:** Subscribers can opt-in to get email digests (Daily Agenda) or alerts when events are added/changed.
-*   **File Attachments:** Allow uploading PDFs or images to event descriptions (requires Firebase Storage).
-*   **Recurring Events+:** Advanced recurrence rules (e.g., "Last Friday of every month").
-*   **Webhook / API Access:** trigger Zapier/Slack automations when events change.
+---
 
-## Implementation Strategy
+## Indy SaaS Business Plan & Projections
 
-### Phase 1: The "Lock" (MVP)
-The most requested feature for a public shared calendar is stopping random people from editing it.
-*   **Feature:** "Lock Public Access".
-*   **Flow:** User pays -> Gets an `adminToken`.
-*   **Logic:**
-    *   Request to `GET /calendar` works.
-    *   Request to `POST /calendar` (write) requires `Authorization: Bearer <adminToken>`.
+### The Context (Micro-SaaS)
+*   **Current Status:** ~500 MAU (Monthly Active Users).
+*   **Growth Rate:** ~10% MoM (Organic/Viral).
+*   **Differentiation:** "No Login" utility vs. complex suites.
 
-### Phase 2: Branding
-*   **Feature:** Upload Logo & Custom CSS.
-*   **Logic:** Store `options.branding` in the calendar object. Frontend applies styles if `isPro` is valid.
+### The Mathematics of Growth
+With a sticky utility tool, the conversion rate to Paid usually hovers between **2% to 4%**. The "Lock" feature is a high-leverage trigger that may push this towards the higher end.
 
-### Phase 3: Notifications
-*   **Feature:** "Notify me on changes."
-*   **Logic:** Use Cloud Functions to watch the Realtime Database and send emails via SendGrid/Postmark to subscribed addresses.
+#### Year 1 Projection (The Grind)
+*   **Growth:** 500 MAU $\rightarrow$ ~1,500 MAU (at 10% MoM).
+*   **Conversion:** Conservative 2.5% (Early product).
+*   **Paying Users:** ~38 subscribers.
+*   **Blended ARPU:** $12 (Mostly Pro, some Team).
+*   **Exit MRR:** **~$456/mo**.
+*   **Strategy:** Focus on product stability and SEO.
 
-## User Journey (Upgrade)
+#### Year 2 Projection (The Scale)
+*   **Growth:** 1,500 MAU $\rightarrow$ ~4,700 MAU.
+*   **Conversion:** Optimistic 4.0% (Mature features: Whitelabeling + API).
+*   **Paying Users:** ~188 subscribers.
+*   **Blended ARPU:** $15 (More business teams adopting).
+*   **Exit MRR:** **~$2,820/mo** (~$34k ARR).
+*   **Strategy:** Focus on B2B/Team features.
 
-1.  User creates `pastecal.com/marketing-q4`.
-2.  User clicks "Settings" icon.
-3.  Sees "Upgrade to Pro" banner.
-4.  kliks "Upgrade".
-5.  Enters Email (for admin recovery) and Credit Card.
-6.  Payment Success.
-7.  **Instant Result:**
-    *   Calendar gets a "Pro" badge.
-    *   "Lock Editing" toggle becomes enabled.
-    *   "Upload Logo" input appears.
-    *   User receives an email with their "Admin/Owner Link" to manage the calendar in the future.
+### Cash Flow Accelerator: The "Lifetime Deal" (LTD)
+To fund early development and server costs without VC money:
+*   **Offer:** "Founder's Club" - **$149 One-Time** for Lifetime Pro access.
+*   **Limit:** First 50 spots only.
+*   **Potential Influx:** $7,450 immediate cash.
+*   **Benefit:** Creates 50 die-hard evangelists who will report bugs and share the tool.
+
+## Feature Matrix
+
+| Feature Category | Free (Anonymous) | Pro / Team / Enterprise (Manager) |
+| :--- | :--- | :--- |
+| **Creation** | Instant, Anonymous | Instant, Linked to Account |
+| **Access Control** | Open (Anyone with link edits) | **Granular Modes:**<br>1. Public View / Private Edit<br>2. Password Protected<br>3. Team Only (Invite via email) |
+| **Branding** | PasteCal Logo & Footer | **Whitelabel:**<br>1. Remove "Powered by PasteCal"<br>2. Custom Header Logo<br>3. Custom Brand Colors |
+| **Data Safety** | None | **Recovery:**<br>1. Unlimited History/Audit Log<br>2. Snapshot Restores (Undo)<br>3. Daily Backups |
+| **Notifications** | None | **Alerts:**<br>1. Email digests of changes<br>2. Slack notifications (via Webhook) |
+| **Analytics** | None | **Insights:**<br>1. View counts<br>2. "Add to Calendar" click stats |
+| **Integration** | Basic iCal Subscription | **Advanced:**<br>1. Webhooks (Zapier support)<br>2. API Access (Read/Write) |
+| **Support** | Community / Docs | Priority Email Support |
+
+## Detailed Feature Specs
+
+### 1. The "Manager" Role
+*   **Dashboard:** A unified view (`/dashboard`) listing all owned calendars with quick status indicators (Public/Private, Last Edited).
+*   **Claiming Flow:** If a user is logged in and creates a calendar, it is auto-claimed. If they have an old anonymous calendar, they can visit the settings on that calendar and click "Claim to Account" (requires verifying they have the current edit URL).
+
+### 2. Enhanced Security (The "Lock")
+*   **Read-Only Public Links:** The most requested feature. The URL `pastecal.com/my-event` becomes read-only for the world.
+*   **Manager Edit Access:** The Manager can always edit when logged in.
+*   **Guest Edit Links:** Manager can generate specific "Editor Links" to share with trusted collaborators, which can be revoked later.
+
+### 3. Whitelabeling & Branding
+*   **Custom Domain (Enterprise?):** Potentially allow `cal.mycompany.com` mapping (Future).
+*   **Visual Customization:**
+    *   **Header:** Replace PasteCal title with Company Name.
+    *   **Logo:** Upload square or rectangular logo.
+    *   **Theme:** Pick primary accent color (buttons, links, current day highlight).
+
+### 4. Analytics
+*   Simple, privacy-friendly metrics to justify the cost.
+*   "How many people viewed my schedule this week?"
+*   "How many people exported to Google Calendar?"
+
+## Implementation Roadmap
+
+### Phase 1: Identity & Claiming
+*   Implement Google Auth (Firebase Auth).
+*   Create `/dashboard` route.
+*   Implement "Claim Calendar" logic (link anonymous ID to User UID).
+
+### Phase 2: The Paywall & Limits
+*   Integrate Stripe Customer Portal.
+*   Enforce calendar limits based on subscription status.
+
+### Phase 3: Pro Features Rollout
+1.  **Security:** Implement "Read-Only" mode (Server-side rule: only owner/editor token can WRITE).
+2.  **Branding:** Allow saving branding config object to DB; Frontend applies it.
+3.  **Backups:** Cloud Function to snapshot data daily for Pro calendars.
