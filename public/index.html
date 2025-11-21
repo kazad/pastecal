@@ -75,7 +75,7 @@ Copyright (c) 2025 Kalid Azad
     <script src="https://cdn.tailwindcss.com"></script>
 
     <!-- CSS variables for light/dark theme & Global Styles -->
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=1763769217">
 
     <!-- Essential JS 2 all script -->
     <script src="https://cdn.syncfusion.com/ej2/23.2.6/dist/ej2.min.js" type="text/javascript"></script>
@@ -108,18 +108,18 @@ Copyright (c) 2025 Kalid Azad
 
     <!-- Core script load order (sync): Utils → index.js → Event → SlugManager → CalendarDataService → Calendar → directives → components → app -->
     <script src="https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js"></script>
-    <script src="/utils/utils.js"></script> <!-- shared Utils; must load before services -->
-    <script src="/index.js"></script> <!-- legacy utils/extensions; depends on Utils -->
-    <script src="/models/Event.js"></script> <!-- depends on Utils -->
-    <script src="/services/SlugManager.js"></script> <!-- depends on Utils -->
-    <script src="/services/CalendarDataService.js"></script> <!-- depends on Utils, SlugManager, Calendar -->
-    <script src="/models/Calendar.js"></script> <!-- depends on Utils, Event, CalendarDataService -->
-    <script src="/directives/clickOutside.js"></script>
-    <script src="/components/icons.js"></script>
-    <script src="/components/ToastNotification.js"></script>
-    <script src="/components/QuickAddButton.js"></script>
-    <script src="/components/Tooltip.js"></script>
-    <script src="/components/QuickAddDialog.js"></script>
+    <script src="/utils/utils.js?v=1763769217"></script> <!-- shared Utils; must load before services -->
+    <script src="/index.js?v=1763769217"></script> <!-- legacy utils/extensions; depends on Utils -->
+    <script src="/models/Event.js?v=1763769217"></script> <!-- depends on Utils -->
+    <script src="/services/SlugManager.js?v=1763769217"></script> <!-- depends on Utils -->
+    <script src="/services/CalendarDataService.js?v=1763769217"></script> <!-- depends on Utils, SlugManager, Calendar -->
+    <script src="/models/Calendar.js?v=1763769217"></script> <!-- depends on Utils, Event, CalendarDataService -->
+    <script src="/directives/clickOutside.js?v=1763769217"></script>
+    <script src="/components/icons.js?v=1763769217"></script>
+    <script src="/components/ToastNotification.js?v=1763769217"></script>
+    <script src="/components/QuickAddButton.js?v=1763769217"></script>
+    <script src="/components/Tooltip.js?v=1763769217"></script>
+    <script src="/components/QuickAddDialog.js?v=1763769217"></script>
 
     <script>
         // Load-order guard for critical globals
@@ -147,7 +147,7 @@ Copyright (c) 2025 Kalid Azad
     <script>
         if (window.location.hostname.match(/^(localhost|127\.0\.0\.1|::1)$/)) {
             const script = document.createElement('script');
-            script.src = '/selftest.js';
+            script.src = '/selftest.js?v=1763769217';
             document.head.appendChild(script);
         }
     </script>
@@ -1354,12 +1354,12 @@ vacation dec 11 - dec 15
         </span>
     </script>
 
-    <script src="/components/CalendarTitle.js"></script>
-    <script src="/components/NavigationDropdown.js"></script>
-    <script src="/app.js"></script>
+    <script src="/components/CalendarTitle.js?v=1763769217"></script>
+    <script src="/components/NavigationDropdown.js?v=1763769217"></script>
+    <script src="/app.js?v=1763769217"></script>
 
     <!-- linkify utility: Moved to /utils/linkify.js -->
-    <script src="/utils/linkify.js"></script>
+    <script src="/utils/linkify.js?v=1763769217"></script>
 </body>
 
 </html>
