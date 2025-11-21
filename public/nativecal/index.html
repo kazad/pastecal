@@ -179,6 +179,7 @@
                 :get-ghost-style="getGhostStyle"
                 :format-time="formatTime"
                 :is-same-day="isSameDay"
+                :time-format="timeFormat"
                 @create-time-event="createTimeEvent"
                 @start-drag="startDrag"
                 @select-event="selectEvent">
@@ -664,7 +665,7 @@
             props: [
                 'currentView', 'visibleDates', 'weekDays', 'isToday', 
                 'currentTimeTop', 'dragState', 'selectedEventId', 'eventCursor',
-                'getEventsWithLayout', 'getEventStyle', 'getWeekEventPosition', 'getGhostStyle', 'formatTime', 'isSameDay'
+                'getEventsWithLayout', 'getEventStyle', 'getWeekEventPosition', 'getGhostStyle', 'formatTime', 'isSameDay', 'timeFormat'
             ],
             emits: ['create-time-event', 'start-drag', 'select-event'],
             methods: {
