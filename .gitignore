@@ -8,6 +8,13 @@ firebase-debug.log*
 firebase-debug.*.log*
 
 internal/
+snapshots/
+tmp/
+
+.claude/
+.gemini-clipboard/
+.playwright-mcp/
+
 
 # Firebase cache
 .firebase/
