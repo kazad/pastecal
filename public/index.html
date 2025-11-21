@@ -61,316 +61,433 @@ Copyright (c) 2025 Kalid Azad
     <!-- Add Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
 
-        <!-- CSS variables for light/dark theme & Global Styles -->
+    <!-- CSS variables for light/dark theme & Global Styles -->
 
-        <style>
+    <style>
+        /* --- Theme Variables --- */
 
-            /* --- Theme Variables --- */
+        :root {
 
-            :root {
+            --bg: #ffffff;
 
-                --bg: #ffffff;
+            --bg-disabled: #eaeaea;
 
-                --bg-disabled: #eaeaea;
+            --fg: #333333;
 
-                --fg: #333333;
+            --link: rgb(3, 169, 244);
 
-                --link: rgb(3, 169, 244);
+            --link-hover: rgb(3, 140, 214);
 
-                --link-hover: rgb(3, 140, 214);
+            --panel-bg: #f9fafb;
 
-                --panel-bg: #f9fafb;
+            --border-color: #efefef;
 
-                --border-color: #efefef;
+            --bg-interactive-hover: #f3f4f6;
+            /* Tailwind gray-100 */
 
-                --bg-interactive-hover: #f3f4f6; /* Tailwind gray-100 */
+            --text-color-1: #6b7280;
 
-                --text-color-1: #6b7280;
+            --text-color-2: #374151;
 
-                --text-color-2: #374151;
+        }
 
+
+
+        [data-theme="dark"] {
+
+            --bg: #1e1e1e;
+
+            --bg-disabled: #333;
+
+            --fg: #cccccc;
+
+            --link: #4aaaff;
+
+            --link-hover: #6ec2ff;
+
+            --panel-bg: #2a2a2a;
+
+            --border-color: #373737;
+
+            --bg-interactive-hover: #333;
+
+            --text-color-1: #999;
+
+            --text-color-2: #AEAEAE;
+
+        }
+
+
+
+        /* --- General Styles --- */
+
+        body {
+
+            background: var(--bg);
+
+            color: var(--fg);
+
+            min-width: 320px;
+
+        }
+
+
+
+        .border-color-default {
+            border-color: var(--border-color) !important;
+        }
+
+        .text-color-1 {
+            color: var(--text-color-1);
+        }
+
+        .text-color-2 {
+            color: var(--text-color-2);
+        }
+
+        .bg-1 {
+            background: var(--bg);
+        }
+
+        .bg-2 {
+            background: var(--panel-bg);
+        }
+
+        .bg-disabled {
+            background: var(--bg-disabled);
+        }
+
+
+
+        select,
+        option,
+        input,
+        textarea {
+            background: var(--bg);
+        }
+
+
+
+        body a {
+
+            text-decoration: none;
+
+            color: rgb(3, 169, 244);
+
+        }
+
+        body a:hover {
+            text-decoration: underline;
+        }
+
+
+
+        /* Details/Summary for FAQ */
+
+        details summary {
+            cursor: pointer;
+            user-select: none;
+        }
+
+        details summary:hover {
+            opacity: 0.85;
+        }
+
+        details[open] summary {
+            margin-bottom: 0.5rem;
+        }
+
+
+
+        /* --- Syncfusion Overrides --- */
+
+        .e-toolbar-item.e-today {
+            display: none !important;
+        }
+
+
+
+        .e-schedule .e-vertical-view .e-time-cells-wrap table td,
+
+        .e-schedule .e-vertical-view .e-work-cells {
+            height: 24px !important;
+        }
+
+
+
+        .e-schedule .e-month-view .e-work-cells {
+            height: 100px !important;
+        }
+
+
+
+        td.e-header-cells.e-disable-dates::before {
+
+            content: '12-4 AM';
+
+            width: 100%;
+
+            margin: 0px auto;
+
+            margin-top: 40%;
+
+            text-align: center;
+
+            display: inline-block;
+
+            color: #36b1f6;
+
+            cursor: pointer;
+
+        }
+
+        td.e-header-cells.e-disable-dates:hover {
+            background-color: #fafafa !important;
+        }
+
+
+
+        /* Event Colors */
+
+        span.e-menu-icon.e-color-1 {
+            background: #3f51b5;
+        }
+
+        span.e-menu-icon.e-color-2 {
+            background: #e3165b;
+        }
+
+        span.e-menu-icon.e-color-3 {
+            background: #ff6652;
+        }
+
+        span.e-menu-icon.e-color-4 {
+            background: #4caf50;
+        }
+
+        span.e-menu-icon.e-color-5 {
+            background: #ff9800;
+        }
+
+        span.e-menu-icon.e-color-6 {
+            background: #03a9f4;
+        }
+
+        span.e-menu-icon.e-color-7 {
+            background: #9e9e9e;
+        }
+
+        span.e-menu-icon.e-color-8 {
+            background: #27282f;
+        }
+
+
+
+        /* Syncfusion Form Styles */
+
+        .custom-field-row-color {
+            position: absolute;
+            top: 1rem;
+            right: 25px;
+        }
+
+        .custom-field-row-color .e-caret {
+            color: #eee;
+        }
+
+        .e-subject-container {
+            margin-right: 50px;
+        }
+
+        .e-schedule-dialog .e-subject-container {
+            width: 100%;
+        }
+
+        .e-location-container {
+            display: none;
+        }
+
+
+
+        /* Fonts & Borders */
+
+        html,
+        div#Schedule,
+        .e-control,
+        .e-css,
+        .e-toolbar,
+        .e-tbar-btn,
+        .e-tbar-btn-text,
+
+        .e-control-wrapper,
+        .e-label,
+        textarea {
+
+            font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji" !important;
+
+            font-weight: normal;
+
+        }
+
+
+
+        div#Schedule,
+        .e-appointment,
+        .e-draggable,
+        .e-btn {
+            border-radius: 6px !important;
+        }
+
+        .e-dialog,
+        .e-popup,
+        .e-calendar {
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+
+
+        /* Better Colors */
+
+        .e-schedule .e-vertical-view .e-work-cells,
+
+        .e-schedule .e-vertical-view .e-date-header-wrap table tbody td {
+            border-color: var(--border-color);
+        }
+
+
+
+        /* Fixes */
+
+        .e-schedule.e-device .e-vertical-view .e-time-cells-wrap {
+            overflow: visible;
+        }
+
+
+
+        .e-schedule-dialog.e-device .e-save-icon::before {
+
+            content: 'SAVE';
+
+            color: #e3165b;
+
+            font-size: 16px;
+
+        }
+
+
+
+        .e-quick-popup-wrapper .e-event-popup .e-popup-header .e-header-icon-wrapper .e-edit,
+
+        .e-quick-popup-wrapper .e-event-popup .e-popup-header .e-header-icon-wrapper .e-delete {
+            display: initial;
+        }
+
+
+
+        /* Desktop View Tweaks */
+
+        @media screen and (min-width: 768px) {
+
+            .e-schedule .e-schedule-toolbar .e-toolbar-pop,
+
+            .e-schedule .e-schedule-toolbar .e-hor-nav {
+                display: none !important;
             }
 
-    
-
-            [data-theme="dark"] {
-
-                --bg: #1e1e1e;
-
-                --bg-disabled: #333;
-
-                --fg: #cccccc;
-
-                --link: #4aaaff;
-
-                --link-hover: #6ec2ff;
-
-                --panel-bg: #2a2a2a;
-
-                --border-color: #373737;
-
-                --bg-interactive-hover: #333;
-
-                --text-color-1: #999;
-
-                --text-color-2: #AEAEAE;
-
+            .e-schedule .e-schedule-toolbar .e-toolbar-items {
+                display: flex !important;
+                flex-wrap: nowrap !important;
             }
 
-    
+        }
 
-            /* --- General Styles --- */
-
-            body {
-
-                background: var(--bg);
-
-                color: var(--fg);
-
-                min-width: 320px;
-
+        /* Mobile toolbar overflow menu positioning */
+        @media screen and (max-width: 767px) {
+            .e-schedule .e-schedule-toolbar .e-toolbar-items {
+                display: flex !important;
+                justify-content: space-between !important;
             }
 
-    
+            /* Push overflow menu to the right */
+            .e-schedule .e-schedule-toolbar .e-toolbar-pop {
+                margin-left: auto !important;
+            }
+        }
 
-            .border-color-default { border-color: var(--border-color) !important; }
 
-            .text-color-1 { color: var(--text-color-1); }
 
-            .text-color-2 { color: var(--text-color-2); }
+        .e-date-header.e-navigate.month-start {
+            font-size: 18px;
+        }
 
-            .bg-1 { background: var(--bg); }
 
-            .bg-2 { background: var(--panel-bg); }
 
-            .bg-disabled { background: var(--bg-disabled); }
+        /* --- Quick Add Styles --- */
 
-    
+        .quick-add-overlay {
 
-            select, option, input, textarea { background: var(--bg); }
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
 
-    
+            background-color: rgba(0, 0, 0, 0.5);
 
-            body a {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
 
-                text-decoration: none;
+        }
 
-                color: rgb(3, 169, 244);
+        .quick-add-dialog {
 
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            width: 80%;
+            max-width: 500px;
+
+        }
+
+        .quick-add-dialog textarea {
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        .parsed-event {
+
+            background-color: #f0f0f0;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+
+        }
+
+        .dialog-buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+
+
+        @media screen and (max-width: 600px) {
+
+            .mobile-hide {
+                display: none;
             }
 
-            body a:hover { text-decoration: underline; }
+        }
 
-    
 
-            /* Details/Summary for FAQ */
 
-            details summary { cursor: pointer; user-select: none; }
-
-            details summary:hover { opacity: 0.85; }
-
-            details[open] summary { margin-bottom: 0.5rem; }
-
-    
-
-            /* --- Syncfusion Overrides --- */
-
-            .e-toolbar-item.e-today { display: none !important; }
-
-            
-
-            .e-schedule .e-vertical-view .e-time-cells-wrap table td,
-
-            .e-schedule .e-vertical-view .e-work-cells { height: 24px !important; }
-
-            
-
-            .e-schedule .e-month-view .e-work-cells { height: 100px !important; }
-
-    
-
-            td.e-header-cells.e-disable-dates::before {
-
-                content: '12-4 AM';
-
-                width: 100%;
-
-                margin: 0px auto;
-
-                margin-top: 40%;
-
-                text-align: center;
-
-                display: inline-block;
-
-                color: #36b1f6;
-
-                cursor: pointer;
-
-            }
-
-            td.e-header-cells.e-disable-dates:hover { background-color: #fafafa !important; }
-
-    
-
-            /* Event Colors */
-
-            span.e-menu-icon.e-color-1 { background: #3f51b5; }
-
-            span.e-menu-icon.e-color-2 { background: #e3165b; }
-
-            span.e-menu-icon.e-color-3 { background: #ff6652; }
-
-            span.e-menu-icon.e-color-4 { background: #4caf50; }
-
-            span.e-menu-icon.e-color-5 { background: #ff9800; }
-
-            span.e-menu-icon.e-color-6 { background: #03a9f4; }
-
-            span.e-menu-icon.e-color-7 { background: #9e9e9e; }
-
-            span.e-menu-icon.e-color-8 { background: #27282f; }
-
-    
-
-            /* Syncfusion Form Styles */
-
-            .custom-field-row-color { position: absolute; top: 1rem; right: 25px; }
-
-            .custom-field-row-color .e-caret { color: #eee; }
-
-            .e-subject-container { margin-right: 50px; }
-
-            .e-schedule-dialog .e-subject-container { width: 100%; }
-
-            .e-location-container { display: none; }
-
-    
-
-            /* Fonts & Borders */
-
-            html, div#Schedule, .e-control, .e-css, .e-toolbar, .e-tbar-btn, .e-tbar-btn-text, 
-
-            .e-control-wrapper, .e-label, textarea {
-
-                font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji" !important;
-
-                font-weight: normal;
-
-            }
-
-    
-
-            div#Schedule, .e-appointment, .e-draggable, .e-btn { border-radius: 6px !important; }
-
-            .e-dialog, .e-popup, .e-calendar { border-radius: 6px; overflow: hidden; }
-
-    
-
-            /* Better Colors */
-
-            .e-schedule .e-vertical-view .e-work-cells,
-
-            .e-schedule .e-vertical-view .e-date-header-wrap table tbody td { border-color: var(--border-color); }
-
-    
-
-            /* Fixes */
-
-            .e-schedule.e-device .e-vertical-view .e-time-cells-wrap { overflow: visible; }
-
-            
-
-            .e-schedule-dialog.e-device .e-save-icon::before {
-
-                content: 'SAVE';
-
-                color: #e3165b;
-
-                font-size: 16px;
-
-            }
-
-    
-
-            .e-quick-popup-wrapper .e-event-popup .e-popup-header .e-header-icon-wrapper .e-edit,
-
-            .e-quick-popup-wrapper .e-event-popup .e-popup-header .e-header-icon-wrapper .e-delete { display: initial; }
-
-    
-
-            /* Desktop View Tweaks */
-
-            @media screen and (min-width: 768px) {
-
-                .e-schedule .e-schedule-toolbar .e-toolbar-pop,
-
-                .e-schedule .e-schedule-toolbar .e-hor-nav { display: none !important; }
-
-                .e-schedule .e-schedule-toolbar .e-toolbar-items { display: flex !important; flex-wrap: nowrap !important; }
-
-            }
-
-            /* Mobile toolbar overflow menu positioning */
-            @media screen and (max-width: 767px) {
-                .e-schedule .e-schedule-toolbar .e-toolbar-items {
-                    display: flex !important;
-                    justify-content: space-between !important;
-                }
-
-                /* Push overflow menu to the right */
-                .e-schedule .e-schedule-toolbar .e-toolbar-pop {
-                    margin-left: auto !important;
-                }
-            }
-
-    
-
-            .e-date-header.e-navigate.month-start { font-size: 18px; }
-
-    
-
-            /* --- Quick Add Styles --- */
-
-            .quick-add-overlay {
-
-                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-
-                background-color: rgba(0, 0, 0, 0.5);
-
-                display: flex; justify-content: center; align-items: center; z-index: 1000;
-
-            }
-
-            .quick-add-dialog {
-
-                background-color: white; padding: 20px; border-radius: 8px; width: 80%; max-width: 500px;
-
-            }
-
-            .quick-add-dialog textarea { width: 100%; margin-bottom: 10px; }
-
-            .parsed-event {
-
-                background-color: #f0f0f0; padding: 10px; margin-bottom: 10px; border-radius: 4px;
-
-            }
-
-            .dialog-buttons { display: flex; justify-content: flex-end; gap: 10px; }
-
-    
-
-            @media screen and (max-width: 600px) {
-
-                .mobile-hide { display: none; }
-
-            }
-
-    
-
-            [v-cloak] { display: none !important; }
-
-        </style>
+        [v-cloak] {
+            display: none !important;
+        }
+    </style>
 
     <!-- Essential JS 2 all script -->
     <script src="https://cdn.syncfusion.com/ej2/23.2.6/dist/ej2.min.js" type="text/javascript"></script>
@@ -464,10 +581,10 @@ Copyright (c) 2025 Kalid Azad
         const NotesIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>` };
         const ChevronDownIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z" /></svg>` };
         const CloseIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>` };
-        
+
         const CopyIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>` };
-        
-        const StarIcon = { 
+
+        const StarIcon = {
             props: { filled: Boolean },
             template: `
                 <svg v-if="filled" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4">
@@ -478,16 +595,29 @@ Copyright (c) 2025 Kalid Azad
                 </svg>`
         };
 
-        const TrashIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>` };
-        const DropdownIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z" /></svg>` };
-        
-        const CheckIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>` };
-        const XIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>` };
-        const InfoIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>` };
-        
-        const EditIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>` };
-        const DoneIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>` };
-        const KebabIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 12.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 18.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5Z" /></svg>` };
+        const TrashIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>` };
+        const DropdownIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z" /></svg>` };
+
+        const CheckIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>` };
+        const XIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>` };
+        const InfoIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>` };
+
+        const EditIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>` };
+        const DoneIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>` };
+        const KebabIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 12.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 18.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5Z" /></svg>` };
+
+        const LockIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>` };
+        const MobileIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>` };
+        const SwitchIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>` };
+        const EyeIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" /></svg>` };
+        const LinkIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" /></svg>` };
+        const DeviceIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" /></svg>` };
+        const ExportIcon = { template: `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" /></svg>` };
+        // Also re-defining EditIcon2 for the pencil used in Share UI if distinct from EditIcon? 
+        // The SVG at line 1187 was: d="m16.862 4.487 1.687-1.688..."
+        // The existing EditIcon is d="M15.232 5.232..."
+        // They are similar pencils. I will reuse EditIcon for consistency and simplicity unless they look wildly different.
+        // Actually, looking at paths, they are both pencils. I will standardize on EditIcon.
 
         const SettingsIcon = {
             props: { size: { type: String, default: 'w-4 h-4' } },
@@ -665,12 +795,12 @@ Copyright (c) 2025 Kalid Azad
                 // OPTIMISTIC STRATEGY: Try direct subscription first.
                 // This covers the 99% case where the URL matches the DB key exactly.
                 // It avoids the Cloud Function overhead/latency/failure-points for valid URLs.
-                
+
                 console.log('Attempting direct subscription for:', slug);
-                
+
                 // We need a way to "try" subscribing and if it returns null quickly, then fallback.
                 // Since .on() is persistent, we'll use .once() for the check.
-                
+
                 try {
                     const snapshot = await this.db.child(slug).once('value');
                     const calendar = snapshot.val();
@@ -783,7 +913,7 @@ Copyright (c) 2025 Kalid Azad
 <body class="p-1 m-1">
     <div id="app">
         <!-- Mobile Header -->
-        <div class="md:hidden flex flex-col mb-2 pt-3 space-y-3">
+        <header class="md:hidden flex flex-col mb-2 pt-3 space-y-3" role="banner">
             <!-- Row 1: Logo, Title, Menu -->
             <div class="flex items-center gap-2 w-full">
                 <!-- Logo & Recents -->
@@ -791,61 +921,59 @@ Copyright (c) 2025 Kalid Azad
                     <div @click.stop="toggleRecents" class="cursor-pointer flex items-center gap-1">
                         <div class="flex items-center gap-1.5">
                             <img class="h-8 w-8 dark:brightness-150" src="/img/pastecal.logo.svg" alt="PasteCal Logo">
-                            <span class="text-sm font-medium text-blue-500 hover:text-blue-600 transition-colors">pastecal</span>
+                            <span
+                                class="text-sm font-medium text-blue-500 hover:text-blue-600 transition-colors">pastecal</span>
                         </div>
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-color-1" fill="currentColor" viewBox="0 0 16 16" aria-label="Recent calendars">
-                            <path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z" />
-                        </svg>
+                        <chevron-down-icon class="w-3 h-3 text-color-1"></chevron-down-icon>
                     </div>
-                    <navigation-dropdown v-if="showRecents" :recent-calendars="recentCalendars" @go-homepage="goToHomepage" @toggle-pin="togglePin" @remove-recent="removeRecent" class="mt-2"></navigation-dropdown>
+                    <navigation-dropdown v-if="showRecents" :recent-calendars="recentCalendars"
+                        @go-homepage="goToHomepage" @toggle-pin="togglePin" @remove-recent="removeRecent"
+                        class="mt-2"></navigation-dropdown>
                 </div>
 
                 <!-- Center: Title (Flex grow to fill space) -->
                 <div class="flex-1 min-w-0 flex justify-center z-30 px-1">
-                    <calendar-title
-                        :title="calendar.title"
-                        :is-editing="editTitle"
-                        :is-read-only="isReadOnly"
-                        mode="mobile"
-                        input-ref="mobileTitleInput"
-                        class="overflow-hidden w-full max-w-full truncate"
-                        @update:title="calendar.title = $event"
-                        @click="editTitle = true"
-                        @blur="editTitle = false"
-                        @enter="editTitle = false"
-                        :show-notes-button="true"
-                        :toggle-notes="toggleNotes">
+                    <calendar-title :title="calendar.title" :is-editing="editTitle" :is-read-only="isReadOnly"
+                        mode="mobile" input-ref="mobileTitleInput" class="overflow-hidden w-full max-w-full truncate"
+                        @update:title="calendar.title = $event" @click="editTitle = true" @blur="editTitle = false"
+                        @enter="editTitle = false" :show-notes-button="true" :toggle-notes="toggleNotes">
                     </calendar-title>
                 </div>
 
                 <!-- Right Actions: Share + Menu -->
                 <div class="flex items-center gap-1 text-color-1 flex-shrink-0 z-40">
                     <!-- Share button -->
-                    <button v-if="isExisting" @click="toggleShare()" aria-label="Share calendar" class="p-1 hover:text-blue-500">
+                    <button v-if="isExisting" @click="toggleShare()" aria-label="Share calendar"
+                        class="p-1 hover:text-blue-500">
                         <share-icon class="w-5 h-5"></share-icon>
                     </button>
                     <!-- Kebab Menu (...) -->
                     <div class="relative z-40">
-                         <button @click.stop="showMobileMenu = !showMobileMenu" aria-label="Open menu" class="p-1 hover:text-blue-500">
-                             <kebab-icon></kebab-icon>
+                        <button @click.stop="showMobileMenu = !showMobileMenu" aria-label="Open menu"
+                            data-testid="mobile-menu-button" class="p-1 hover:text-blue-500">
+                            <kebab-icon class="w-5 h-5"></kebab-icon>
                         </button>
                         <!-- Dropdown -->
-                        <div v-if="showMobileMenu" v-click-outside="() => showMobileMenu = false" class="absolute right-0 top-full mt-2 w-48 bg-1 rounded-lg shadow-xl border border-color-default py-1 text-sm text-color-2 z-50">
-                            <button @click="showMobileMenu = false; toggleSearch()" class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
-                                <search-icon size="w-4 h-4"></search-icon>
+                        <div v-if="showMobileMenu" v-click-outside="() => showMobileMenu = false"
+                            class="absolute right-0 top-full mt-2 w-48 bg-1 rounded-lg shadow-xl border border-color-default py-1 text-sm text-color-2 z-50">
+                            <button @click="showMobileMenu = false; toggleSearch()"
+                                class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
+                                <search-icon class="w-4 h-4"></search-icon>
                                 Search
                             </button>
-                            <button @click="showMobileMenu = false; $refs.mobileQuickAdd.showDialog()" class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
+                            <button @click="showMobileMenu = false; $refs.quickAddDialog.showDialog()"
+                                data-testid="mobile-quick-add-button"
+                                class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
                                 <span class="text-base font-bold text-blue-500">+</span> Quick Add Event
                             </button>
-                            <button @click="showMobileMenu = false; toggleSettings()" class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
+                            <button @click="showMobileMenu = false; toggleSettings()"
+                                class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
                                 <settings-icon size="w-4 h-4"></settings-icon>
                                 Settings
                             </button>
-                            <button @click="showMobileMenu = false; toggleHelp()" class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
-                                </svg>
+                            <button @click="showMobileMenu = false; toggleHelp()"
+                                class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
+                                <help-icon class="w-4 h-4"></help-icon>
                                 Help
                             </button>
                         </div>
@@ -854,26 +982,23 @@ Copyright (c) 2025 Kalid Azad
             </div>
 
             <!-- Row 2: Claim URL (only for new calendars) -->
-            <div v-show="!isExisting" class="flex items-center bg-1 border border-color-default rounded-lg p-2 shadow-sm">
+            <div v-show="!isExisting"
+                class="flex items-center bg-1 border border-color-default rounded-lg p-2 shadow-sm">
                 <span class="text-color-1 text-sm pl-1 pr-1 font-medium" id="url-prefix-mobile">pastecal.com/</span>
                 <input type="text" v-model="calendar.id" @input="handleSlugInput" @keyup.enter="create"
-                       class="flex-1 bg-transparent border-none focus:ring-0 p-1 text-sm font-bold text-color-2 min-w-0"
-                       placeholder="your-link"
-                       aria-label="Custom URL slug"
-                       aria-describedby="url-prefix-mobile">
-                <button @click="create" class="bg-blue-600 text-white text-sm font-bold px-4 py-1.5 rounded-md shadow-sm whitespace-nowrap"
-                        aria-label="Claim calendar URL">
+                    class="flex-1 bg-transparent border-none focus:ring-0 p-1 text-sm font-bold text-color-2 min-w-0"
+                    placeholder="your-link" aria-label="Custom URL slug" aria-describedby="url-prefix-mobile">
+                <button @click="create"
+                    class="bg-blue-600 text-white text-sm font-bold px-4 py-1.5 rounded-md shadow-sm whitespace-nowrap"
+                    aria-label="Claim calendar URL">
                     Claim URL
                 </button>
             </div>
-        </div> <!-- Closing div for md:hidden -->
+        </header> <!-- Closing header for md:hidden -->
 
-        <!-- Hidden QuickAdd for Mobile Menu -->
-        <quick-add ref="mobileQuickAdd" class="hidden" @event-created="handleQuickAddEvent"></quick-add>
-
-        <div class="hidden md:flex justify-between items-center pb-1 md:pb-3 text-sm">
+        <header class="hidden md:flex justify-between items-center pb-1 md:pb-3 text-sm" role="banner">
             <!-- Left section -->
-            <section class="flex-1 flex flex-col md:flex-row items-start md:space-x-2 min-w-0">
+            <section class="flex-1 flex items-center gap-3 min-w-0">
                 <!-- Logo and app name -->
                 <div class="flex items-center text-sm h-8 relative">
                     <div class="relative" v-click-outside="closeRecents" @mouseenter="handleDropdownMouseEnter"
@@ -893,11 +1018,7 @@ Copyright (c) 2025 Kalid Azad
                             <!-- Dropdown arrow indicator -->
                             <button @click.stop="toggleRecents"
                                 class="text-color-1 hover:text-blue-500 p-1 transition-colors" title="Recent calendars">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="currentColor"
-                                    viewBox="0 0 16 16">
-                                    <path fill-rule="evenodd"
-                                        d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z" />
-                                </svg>
+                                <chevron-down-icon class="w-3 h-3"></chevron-down-icon>
                             </button>
                         </div>
 
@@ -909,13 +1030,12 @@ Copyright (c) 2025 Kalid Azad
                 </div>
 
                 <!-- Action buttons -->
-                <div class="flex items-center space-x-1 mt-0">
+                <nav class="flex items-center gap-1 mt-0" aria-label="Primary navigation">
 
                     <!-- Help button -->
                     <custom-tooltip width="w-auto" align="center">
                         <template #trigger>
-                            <button v-on:click="toggleHelp"
-                                aria-label="Show help"
+                            <button v-on:click="toggleHelp" aria-label="Show help"
                                 class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8">
                                 <help-icon class="w-5 h-5"></help-icon>
                             </button>
@@ -928,8 +1048,7 @@ Copyright (c) 2025 Kalid Azad
                     <!-- Search button -->
                     <custom-tooltip width="w-auto" align="center">
                         <template #trigger>
-                            <button v-on:click="toggleSearch"
-                                aria-label="Search events"
+                            <button v-on:click="toggleSearch" aria-label="Search events"
                                 class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors">
                                 <search-icon class="w-5 h-5"></search-icon>
                             </button>
@@ -940,10 +1059,9 @@ Copyright (c) 2025 Kalid Azad
                     </custom-tooltip>
 
                     <!-- Settings button -->
-                    <custom-tooltip width="w-auto" align="center" v-if="canEdit">
+                    <custom-tooltip width="w-auto" align="center" v-if="!isReadOnly">
                         <template #trigger>
-                            <button v-on:click="toggleSettings"
-                                aria-label="Settings"
+                            <button v-on:click="toggleSettings" aria-label="Settings"
                                 class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8">
                                 <settings-icon size="w-5 h-5"></settings-icon>
                             </button>
@@ -953,79 +1071,76 @@ Copyright (c) 2025 Kalid Azad
                         </template>
                     </custom-tooltip>
 
-                    <!-- Quick add component - desktop only -->
-                    <quick-add v-if="canEdit" class="hidden md:block"
-                        @event-created="handleQuickAddEvent"
-                        aria-label="Quick add event"></quick-add>
+                    <!-- Quick add button - desktop only -->
+                    <custom-tooltip width="w-auto" align="center" v-if="!isReadOnly">
+                        <template #trigger>
+                            <button @click="$refs.quickAddDialog.showDialog()"
+                                    aria-label="Quick add event"
+                                    data-testid="desktop-add-event-button"
+                                    class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8">
+                                <span class="text-nowrap px-3 py-1 text-white bg-gray-500 rounded-full text-xs hover:bg-blue-600 transition-colors flex-shrink-0 font-bold">+Event</span>
+                            </button>
+                        </template>
+                        <template #content>
+                            <span class="whitespace-nowrap">Create event with text (⌘E)</span>
+                        </template>
+                    </custom-tooltip>
 
-                </div>
+                </nav>
             </section>
 
             <!-- Middle section - Calendar title -->
-            <section class="hidden md:flex flex-1 flex-col md:flex-row items-center justify-center mx-1 md:mx-2 min-w-0 min-h-8"
+            <section
+                class="hidden md:flex flex-1 flex-col md:flex-row items-center justify-center mx-1 md:mx-2 min-w-0 min-h-8"
                 v-cloak>
-                <calendar-title
-                    :title="calendar.title"
-                    :is-editing="editTitle"
-                    :is-read-only="isReadOnly"
-                    mode="desktop"
-                    input-ref="desktopTitleInput"
-                    @update:title="calendar.title = $event"
-                    @click="editTitle = true"
-                    @blur="editTitle = false"
-                    @enter="setTitle($event)"
-                    :show-notes-button="true"
-                    :toggle-notes="toggleNotes">
+                <calendar-title :title="calendar.title" :is-editing="editTitle" :is-read-only="isReadOnly"
+                    mode="desktop" input-ref="desktopTitleInput" @update:title="calendar.title = $event"
+                    @click="editTitle = true" @blur="editTitle = false" @enter="setTitle($event)"
+                    :show-notes-button="true" :toggle-notes="toggleNotes">
                 </calendar-title>
             </section>
 
             <!-- Right section -->
             <section class="flex-1 flex items-center justify-end text-xs min-w-0 h-8" v-cloak>
-                <share-or-claim-ui
-                    :calendar="calendar"
-                    :is-read-only="isReadOnly"
-                    :is-existing="isExisting"
-                    :is-loading="isLoading"
-                    @toggle-share="toggleShare"
-                    @create="create"
+                <share-or-claim-ui :calendar="calendar" :is-read-only="isReadOnly" :is-existing="isExisting"
+                    :is-loading="isLoading" @toggle-share="toggleShare" @create="create"
                     @update-slug="calendar.id = $event; handleSlugInput($event)">
                 </share-or-claim-ui>
             </section>
-        </div>
+        </header>
 
         <div class="flex bg-1 p-1 md:p-3 rounded-sm border border-color-default mb-4 relative w-full"
             v-if="isPanelOpen()" v-cloak>
             <button id="closeAllPanels"
                 class="absolute top-0 right-0 m-2 md:m-4 text-color-1 hover:text-red-500 transition-colors"
                 @click="closeAllPanels">
-                <close-icon></close-icon>
+                <close-icon class="w-6 h-6"></close-icon>
             </button>
 
-            <div v-if="showNotes" class="flex-1 w-full md:w-1/2 md:min-w-[460px] h-[250px] mx-auto p-2.5 flex flex-col" v-cloak>
+            <div v-if="showNotes" class="flex-1 w-full md:w-1/2 md:min-w-[460px] h-[250px] mx-auto p-2.5 flex flex-col"
+                v-cloak>
                 <!-- Header with Edit/Done toggle -->
                 <div class="flex justify-between items-center mb-2">
-                     <button v-if="!isReadOnly && (calendar.options.notes || isEditingNotes)"
-                             @click="isEditingNotes = !isEditingNotes"
-                             class="text-xs font-bold px-3 py-1.5 rounded-full border border-color-default hover:bg-[var(--bg-interactive-hover)] transition-colors flex items-center gap-1 bg-1"
-                             style="color: var(--link); border-color: var(--border-color);">
-                         <edit-icon v-if="!isEditingNotes"></edit-icon>
-                         <done-icon v-else></done-icon>
-                         {{ isEditingNotes ? 'Done' : 'Edit Notes' }}
-                     </button>
-                     <span v-else class="text-xs font-bold text-color-1 uppercase tracking-wider">Notes</span>
+                    <button v-if="!isReadOnly && (calendar.options.notes || isEditingNotes)"
+                        @click="isEditingNotes = !isEditingNotes"
+                        class="text-xs font-bold px-3 py-1.5 rounded-full border border-color-default hover:bg-[var(--bg-interactive-hover)] transition-colors flex items-center gap-1 bg-1"
+                        style="color: var(--link); border-color: var(--border-color);">
+                        <edit-icon v-if="!isEditingNotes" class="w-4 h-4"></edit-icon>
+                        <done-icon v-else class="w-4 h-4"></done-icon>
+                        {{ isEditingNotes ? 'Done' : 'Edit Notes' }}
+                    </button>
+                    <span v-else class="text-xs font-bold text-color-1 uppercase tracking-wider">Notes</span>
                 </div>
 
                 <!-- Edit Mode -->
-                <textarea v-if="!isReadOnly && isEditingNotes"
-                    aria-label="Calendar notes"
+                <textarea v-if="!isReadOnly && isEditingNotes" aria-label="Calendar notes"
                     class="w-full flex-1 p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none"
                     style="background-color: var(--bg); color: var(--fg); border-color: var(--border-color);"
                     placeholder="Notes..." v-model="calendar.options.notes"></textarea>
 
                 <!-- View Mode -->
-                <div v-else
-                    class="w-full flex-1 p-2 border rounded-lg overflow-y-auto text-sm"
-                    style="background-color: var(--bg); color: var(--fg); border-color: var(--border-color);"
+                <div v-else class="w-full flex-1 p-2 border rounded-lg overflow-y-auto text-sm"
+                    style="background-color: var(--bg-disabled); color: var(--fg); border-color: var(--border-color);"
                     v-html="getReadOnlyNotes()">
                 </div>
             </div>
@@ -1034,8 +1149,7 @@ Copyright (c) 2025 Kalid Azad
                 <section class="flex-1 flex flex-col space-y-4">
                     <!-- Search Input -->
                     <div class="flex flex-col gap-2">
-                        <input type="search" v-model="searchQuery" @input="searchEvents"
-                            aria-label="Search events"
+                        <input type="search" v-model="searchQuery" @input="searchEvents" aria-label="Search events"
                             class="w-full p-2 border border-color-default rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                             placeholder="Search events...">
                     </div>
@@ -1089,11 +1203,7 @@ Copyright (c) 2025 Kalid Azad
                         <!-- Q1: How do I share -->
                         <div class="bg-2 rounded-lg p-4">
                             <div class="font-semibold flex items-center gap-2 mb-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 flex-shrink-0" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor" style="color: var(--link);">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                                </svg>
+                                <share-icon class="w-5 h-5 flex-shrink-0" style="color: var(--link);"></share-icon>
                                 How do I share a calendar?
                             </div>
                             <div class="text-sm text-color-1">
@@ -1106,11 +1216,7 @@ Copyright (c) 2025 Kalid Azad
                         <!-- Q2: Privacy -->
                         <div class="bg-2 rounded-lg p-4">
                             <div class="font-semibold flex items-center gap-2 mb-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 flex-shrink-0" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor" style="color: var(--link);">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                                </svg>
+                                <lock-icon class="w-5 h-5 flex-shrink-0" style="color: var(--link);"></lock-icon>
                                 Is this private?
                             </div>
                             <div class="text-sm text-color-1">
@@ -1123,11 +1229,7 @@ Copyright (c) 2025 Kalid Azad
                         <!-- Q3: Mobile -->
                         <div class="bg-2 rounded-lg p-4">
                             <div class="font-semibold flex items-center gap-2 mb-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 flex-shrink-0" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor" style="color: var(--link);">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                                </svg>
+                                <mobile-icon class="w-5 h-5 flex-shrink-0" style="color: var(--link);"></mobile-icon>
                                 Can I use this on my phone?
                             </div>
                             <div class="text-sm text-color-1">
@@ -1140,11 +1242,7 @@ Copyright (c) 2025 Kalid Azad
                         <!-- Q4: Switch calendars -->
                         <div class="bg-2 rounded-lg p-4">
                             <div class="font-semibold flex items-center gap-2 mb-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 flex-shrink-0" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor" style="color: var(--link);">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                                </svg>
+                                <switch-icon class="w-5 h-5 flex-shrink-0" style="color: var(--link);"></switch-icon>
                                 How do I manage multiple calendars?
                             </div>
                             <p class="text-sm text-color-1">Hover over the <strong>PasteCal logo</strong>
@@ -1181,15 +1279,9 @@ Copyright (c) 2025 Kalid Azad
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 
                     <!-- Edit Access (Top Left) -->
-                    <div v-if="canEdit" class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
+                    <div v-if="!isReadOnly" class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
                         <h4 class="font-medium mb-2 inline-flex items-center gap-x-2">
-
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
-                                stroke="currentColor" class="size-5">
-                                <path stroke-linecap="round" stroke-linejoin="round"
-                                    d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
-                            </svg>
-
+                            <edit-icon class="size-5"></edit-icon>
                             Edit Access
                         </h4>
                         <p class="text-xs text-color-1 mb-3 italic">
@@ -1200,16 +1292,12 @@ Copyright (c) 2025 Kalid Azad
                                 class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
                             <button @click="copyToClipboard(getEditableURL(), $event.currentTarget)"
                                 class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                <copy-icon />
+                                <copy-icon class="w-4 h-4"></copy-icon>
                                 <span>Copy</span>
                             </button>
                             <button v-if="canShare()" @click="shareUrl(getEditableURL(), 'Calendar')"
                                 class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-                                    stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
-                                </svg>
+                                <export-icon class="h-4 w-4"></export-icon>
                             </button>
                         </div>
                     </div>
@@ -1217,14 +1305,7 @@ Copyright (c) 2025 Kalid Azad
                     <!--  View Only (Top Right) -->
                     <div class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
                         <h4 class="font-medium mb-2 inline-flex items-center gap-x-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
-                                stroke="currentColor" class="size-5">
-                                <path stroke-linecap="round" stroke-linejoin="round"
-                                    d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
-                                <path stroke-linecap="round" stroke-linejoin="round"
-                                    d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                            </svg>
-
+                            <eye-icon class="size-5"></eye-icon>
                             View Only
                         </h4>
                         <p class="text-xs text-color-1 mb-3 italic">
@@ -1238,16 +1319,12 @@ Copyright (c) 2025 Kalid Azad
                                     class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
                                 <button @click="copyToClipboard(getReadOnlyURL(), $event.currentTarget)"
                                     class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                    <copy-icon />
+                                    <copy-icon class="w-4 h-4"></copy-icon>
                                     <span>Copy</span>
                                 </button>
                                 <button v-if="canShare()" @click="shareUrl(getReadOnlyURL(), 'Calendar')"
                                     class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
-                                        viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
-                                    </svg>
+                                    <export-icon class="h-4 w-4"></export-icon>
                                 </button>
                             </div>
 
@@ -1283,12 +1360,7 @@ Copyright (c) 2025 Kalid Azad
                     <!-- Current View (Bottom Left) -->
                     <div class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
                         <h4 class="font-medium mb-2 inline-flex items-center gap-x-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
-                                stroke="currentColor" class="size-5">
-                                <path stroke-linecap="round" stroke-linejoin="round"
-                                    d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
-                            </svg>
-
+                            <link-icon class="size-5"></link-icon>
                             Current View
                         </h4>
                         <p class="text-xs text-color-1 mb-3 italic">
@@ -1300,16 +1372,12 @@ Copyright (c) 2025 Kalid Azad
                                 class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
                             <button @click="copyToClipboard(currentViewURL, $event.currentTarget)"
                                 class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                <copy-icon />
+                                <copy-icon class="w-4 h-4"></copy-icon>
                                 <span>Copy</span>
                             </button>
                             <button v-if="canShare()" @click="shareUrl(currentViewURL, 'Calendar View')"
                                 class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-                                    stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
-                                </svg>
+                                <export-icon class="h-4 w-4"></export-icon>
                             </button>
                         </div>
                     </div>
@@ -1317,13 +1385,7 @@ Copyright (c) 2025 Kalid Azad
                     <!-- Phone/Apps (Bottom Right) -->
                     <div class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
                         <h4 class="font-medium mb-2 inline-flex items-center gap-x-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
-                                stroke="currentColor" class="size-5">
-                                <path stroke-linecap="round" stroke-linejoin="round"
-                                    d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
-                            </svg>
-
-
+                            <device-icon class="size-5"></device-icon>
                             Phone/Apps
                         </h4>
                         <p class="text-xs text-color-1 mb-3 italic">
@@ -1332,14 +1394,14 @@ Copyright (c) 2025 Kalid Azad
 
                         <!-- Edit ICS -->
                         <div class="space-y-3">
-                            <div v-if="canEdit">
+                            <div v-if="!isReadOnly">
                                 <div class="text-xs font-medium text-color-2 mb-1">Full Access:</div>
                                 <div class="flex gap-2">
                                     <input type="text" :value="getEditableICSURL()" readonly
                                         class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
                                     <button @click="copyToClipboard(getEditableICSURL(), $event.currentTarget)"
                                         class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                        <copy-icon />
+                                        <copy-icon class="w-4 h-4" />
                                         <span>Copy</span>
                                     </button>
                                 </div>
@@ -1353,7 +1415,7 @@ Copyright (c) 2025 Kalid Azad
                                         class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
                                     <button @click="copyToClipboard(getReadOnlyICSURL(), $event.currentTarget)"
                                         class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                        <copy-icon />
+                                        <copy-icon class="w-4 h-4" />
                                         <span>Copy</span>
                                     </button>
                                 </div>
@@ -1365,6 +1427,7 @@ Copyright (c) 2025 Kalid Azad
             </div>
 
             <div v-if="showSettings" class="w-full p-2.5 text-sm text-color-2" v-cloak>
+
                 <h2 class="text-lg font-bold mb-4">Settings</h2>
 
                 <div class="grid md:grid-cols-2 gap-6">
@@ -1594,8 +1657,7 @@ Copyright (c) 2025 Kalid Azad
                     <div class="flex items-center border-2 border-blue-500 rounded-md overflow-hidden bg-white">
                         <span
                             class="pl-3 pr-1 text-gray-500 text-sm font-medium bg-gray-50 h-10 flex items-center border-r border-gray-200">pastecal.com/</span>
-                        <input ref="claimInput" type="text" v-model="calendar.id"
-                            aria-label="Claim custom URL"
+                        <input ref="claimInput" type="text" v-model="calendar.id" aria-label="Claim custom URL"
                             class="flex-1 p-2 text-gray-900 font-medium focus:outline-none" placeholder="my-calendar"
                             @keyup.enter="confirmClaim">
                     </div>
@@ -1618,6 +1680,7 @@ Copyright (c) 2025 Kalid Azad
         <pre v-text="syncFusionEvents" v-if="debug"></pre>
         <pre v-text="calendar" v-if="debug"></pre>
 
+        <quick-add-dialog ref="quickAddDialog" @event-created="handleQuickAddEvent"></quick-add-dialog>
         <toast-notification ref="toast"></toast-notification>
     </div>
 
@@ -1824,12 +1887,12 @@ Copyright (c) 2025 Kalid Azad
                                 class="p-1.5 rounded-md hover:bg-1 transition-colors text-color-1"
                                 :class="{ 'text-color-2': item.pinned }"
                                 :title="item.pinned ? 'Unpin calendar' : 'Pin calendar'">
-                                <star-icon :filled="item.pinned"></star-icon>
+                                <star-icon :filled="item.pinned" class="w-4 h-4"></star-icon>
                             </button>
                             <button @click.stop="$emit('remove-recent', item.id)"
                                 class="p-1.5 rounded-md text-color-1 hover:text-red-500 hover:bg-1 transition-colors"
                                 title="Remove from recent">
-                                <trash-icon></trash-icon>
+                                <trash-icon class="w-4 h-4"></trash-icon>
                             </button>
                         </div>
                     </div>
@@ -1886,44 +1949,27 @@ Copyright (c) 2025 Kalid Azad
         </transition>
     </script>
 
-    <script type="text/x-template" id="quick-add-template">
-        <span class="inline-flex items-start">
-            <custom-tooltip width="w-auto" align="center" v-if="mode !== 'fab'">
-                <template #trigger>
-                    <button @click="showDialog"
-                            class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors">
-                        <span class="text-nowrap px-3 py-1 text-white bg-gray-500 rounded-full text-xs hover:bg-blue-600 transition-colors flex-shrink-0">+Event <!-- (⌘E) -->
-                        </span>
-                        <kbd class="hidden px-1.5 py-0.5 text-xs bg-disabled rounded">⌘E</kbd>
-                    </button>
-                </template>
-                <template #content>
-                    <span class="whitespace-nowrap">Create event with text</span>
-                </template>
-            </custom-tooltip>
+    <script type="text/x-template" id="quick-add-dialog-template">
+        <div v-if="dialogVisible" 
+                class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1001]">
+            <div class="bg-1 rounded-lg p-6 w-[80%] max-w-[500px] shadow-2xl">
+                <h3 class="text-lg font-semibold mb-4">Add Event by Typing</h3>
+                <form @submit.prevent="createEvent">
+                    <textarea v-model="description"
+                                aria-label="Event description"
+                                placeholder="Describe event here (e.g., 'Meet John tomorrow 2pm'). Hit Enter to create."
+                                rows="3"
+                                @keydown.enter.prevent="handleEnter"
+                                class="w-full p-2 border border-color-default rounded mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </textarea>
 
+                    <div class="bg-1 rounded p-4 mb-4">
+                        <p><strong>Subject:</strong> {{ parsedEvent?.subject }}</p>
+                        <p><strong>Start:</strong> {{ formatDate(parsedEvent?.startDateTime) }}</p>
+                        <p><strong>End:</strong> {{ formatDate(parsedEvent?.endDateTime) }}</p>
+                    </div>
 
-    
-            <div v-if="dialogVisible" 
-                 class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div class="bg-1 rounded-lg p-6 w-[80%] max-w-[500px]">
-                    <h3 class="text-lg font-semibold mb-4">Add Event by Typing</h3>
-                    <form @submit.prevent="createEvent">
-                        <textarea v-model="description"
-                                 aria-label="Event description"
-                                 placeholder="Describe event here (e.g., 'Meet John tomorrow 2pm'). Hit Enter to create."
-                                 rows="3"
-                                 @keydown.enter.prevent="handleEnter"
-                                 class="w-full p-2 border border-color-default rounded mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        </textarea>
-    
-                        <div class="bg-1 rounded p-4 mb-4">
-                            <p><strong>Subject:</strong> {{ parsedEvent?.subject }}</p>
-                            <p><strong>Start:</strong> {{ formatDate(parsedEvent?.startDateTime) }}</p>
-                            <p><strong>End:</strong> {{ formatDate(parsedEvent?.endDateTime) }}</p>
-                        </div>
-    
-                        <pre class="bg-1 p-4 rounded mb-4 text-sm whitespace-pre">
+                    <pre class="bg-1 p-4 rounded mb-4 text-sm whitespace-pre overflow-x-auto">
 Examples: 
     
 lunch tomorrow 2pm for 1 hour
@@ -1932,23 +1978,22 @@ birthday party Sat 7pm to 11pm
 workout 3pm May 20 for 90 minutes
 vacation dec 11 - dec 15
 </pre>
-    
-                        <div class="flex justify-end gap-2">
-                            <button type="button" 
-                                    @click="hideDialog"
-                                    class="px-4 py-2 border border-color-default rounded hover:bg-[var(--bg-interactive-hover)]">
-                                Cancel
-                            </button>
-                            <button type="submit" 
-                                    :disabled="!isValidEvent"
-                                    class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50">
-                                Create
-                            </button>
-                        </div>
-                    </form>
-                </div>
+
+                    <div class="flex justify-end gap-2">
+                        <button type="button" 
+                                @click="hideDialog"
+                                class="px-4 py-2 border border-color-default rounded hover:bg-[var(--bg-interactive-hover)]">
+                            Cancel
+                        </button>
+                        <button type="submit" 
+                                :disabled="!isValidEvent"
+                                class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50">
+                            Create
+                        </button>
+                    </div>
+                </form>
             </div>
-        </span>
+        </div>
     </script>
 
     <script>
@@ -1979,14 +2024,8 @@ vacation dec 11 - dec 15
             }
         };
 
-        const QuickAdd = {
-            template: "#quick-add-template",
-            props: {
-                mode: {
-                    type: String,
-                    default: 'desktop' // 'desktop' or 'fab'
-                }
-            },
+        const QuickAddDialog = {
+            template: "#quick-add-dialog-template",
             data() {
                 return {
                     dialogVisible: false,
@@ -2324,7 +2363,7 @@ vacation dec 11 - dec 15
             'notes-icon': NotesIcon,                   // Notes icon SVG
             'chevron-down-icon': ChevronDownIcon,      // Chevron down icon SVG
             'close-icon': CloseIcon,                   // Close icon SVG
-            'quick-add': QuickAdd,                     // Quick Add component
+            'quick-add-dialog': QuickAddDialog,        // Quick Add Dialog component
             'share-or-claim-ui': ShareOrClaimUI,       // Share or Claim UI
             'star-icon': StarIcon,
             'trash-icon': TrashIcon,
@@ -2334,7 +2373,14 @@ vacation dec 11 - dec 15
             'info-icon': InfoIcon,
             'edit-icon': EditIcon,
             'done-icon': DoneIcon,
-            'kebab-icon': KebabIcon
+            'kebab-icon': KebabIcon,
+            'lock-icon': LockIcon,
+            'mobile-icon': MobileIcon,
+            'switch-icon': SwitchIcon,
+            'eye-icon': EyeIcon,
+            'link-icon': LinkIcon,
+            'device-icon': DeviceIcon,
+            'export-icon': ExportIcon
         };
 
         const CalendarVueApp = {
@@ -2476,12 +2522,6 @@ vacation dec 11 - dec 15
                 hasCalendar() {
                     // User is viewing any calendar (owned or read-only)
                     return this.isExisting || this.isReadOnly;
-                },
-                canEdit() {
-                    // SINGLE SOURCE OF TRUTH for editing permissions.
-                    // Derived from isReadOnly (URL-based).
-                    // Controls UI elements: settings, quick add, title editing, notes editing.
-                    return !this.isReadOnly;
                 }
             },
 
@@ -3736,9 +3776,9 @@ vacation dec 11 - dec 15
                     } else {
                         this.closeAllPanels();
                         this.showNotes = true;
-                        
+
                         // If editable and no notes exist, default to edit mode
-                        if (this.canEdit) {
+                        if (!this.isReadOnly) {
                             const hasNotes = this.calendar.options.notes && this.calendar.options.notes.trim().length > 0;
                             this.isEditingNotes = !hasNotes;
                         } else {
@@ -4292,13 +4332,13 @@ vacation dec 11 - dec 15
         };
 
         const app = Vue.createApp(CalendarVueApp);
-        
+
         // Register all components globally so they can be used recursively
         Object.entries(COMPONENT_REGISTRY).forEach(([name, component]) => {
             app.component(name, component);
         });
-        
-        app.component('quick-add', QuickAdd).mount('#app');
+
+        app.mount('#app');
 
         // ============================================================
         // COMPONENT REGISTRATION VALIDATOR
@@ -4307,7 +4347,7 @@ vacation dec 11 - dec 15
         // It will log warnings for any unregistered components found in the DOM
         // ============================================================
         function validateComponentRegistration() {
-            const registeredComponents = Object.keys(COMPONENT_REGISTRY).concat(['quick-add']);
+            const registeredComponents = Object.keys(COMPONENT_REGISTRY);
             const allElements = document.querySelectorAll('*');
             const customElements = new Set();
 

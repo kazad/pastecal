@@ -49,3 +49,56 @@ test.describe('NativeCal Prototype', () => {
     await expect(page.locator('.time-grid')).toBeVisible();
   });
 });
+
+test.describe('Add Event Icon Visibility', () => {
+  test('should show add event button on desktop', async ({ page }) => {
+    // Set desktop viewport
+    await page.setViewportSize({ width: 1280, height: 720 });
+
+    // Create a test calendar
+    const testSlug = `test-cal-${Date.now()}`;
+    await page.goto('http://localhost:8000/');
+    const slugInput = page.locator('input[placeholder="your-name"]');
+    await slugInput.fill(testSlug);
+    await slugInput.press('Enter');
+
+    // Wait for calendar to load
+    await expect(page).toHaveURL(new RegExp(`/${testSlug}`));
+    await expect(page.locator('.e-schedule')).toBeVisible({ timeout: 10000 });
+
+    // Verify the add event button is visible on desktop
+    const addEventButton = page.locator('[data-testid="desktop-add-event-button"]');
+    await expect(addEventButton).toBeVisible();
+  });
+
+  test('should hide add event button on mobile but show in menu', async ({ page }) => {
+    // Set mobile viewport
+    await page.setViewportSize({ width: 375, height: 667 });
+
+    // Create a test calendar
+    const testSlug = `test-cal-${Date.now()}`;
+    await page.goto('http://localhost:8000/');
+    const slugInput = page.locator('input[placeholder="your-name"]');
+    await slugInput.fill(testSlug);
+    await slugInput.press('Enter');
+
+    // Wait for calendar to load
+    await expect(page).toHaveURL(new RegExp(`/${testSlug}`));
+    await expect(page.locator('.e-schedule')).toBeVisible({ timeout: 10000 });
+
+    // Verify the add event button is NOT visible on mobile (direct button)
+    const addEventButton = page.locator('[data-testid="desktop-add-event-button"]');
+    await expect(addEventButton).toBeHidden();
+
+    // Verify kebab menu button is visible on mobile
+    const menuButton = page.locator('[data-testid="mobile-menu-button"]');
+    await expect(menuButton).toBeVisible();
+
+    // Open mobile menu
+    await menuButton.click();
+
+    // Verify "Quick Add Event" is visible in mobile menu
+    const mobileQuickAdd = page.locator('[data-testid="mobile-quick-add-button"]');
+    await expect(mobileQuickAdd).toBeVisible();
+  });
+});
