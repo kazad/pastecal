@@ -191,11 +191,7 @@ Copyright (c) 2025 Kalid Azad
                     <button v-if="isExisting" @click="toggleShare()" aria-label="Share calendar"
                         data-testid="share-button-mobile"
                         class="p-1 hover:text-blue-500">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24"
-                            stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" stroke-linejoin="round"
-                                d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                        </svg>
+                        <icon name="share" class="w-5 h-5"></icon>
                     </button>
                     <!-- Kebab Menu (...) -->
                     <div class="relative z-40">
@@ -213,21 +209,19 @@ Copyright (c) 2025 Kalid Azad
                         <button @click="showMobileMenu = false; toggleSearch()"
                                 data-testid="search-button-mobile"
                                 class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
-                                <search-icon class="w-5 h-5"></search-icon>
-                                Search
+                                                                        <icon name="search" class="w-5 h-5"></icon>                                Search
                             </button>
                             <button
                                 @click="showMobileMenu = false; $refs.quickAddDialog && $refs.quickAddDialog.showDialog()"
                                 class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
                                 <span class="text-lg leading-none font-bold text-blue-500">+</span> Quick Add Event
                             </button>
-                            <button @click="showMobileMenu = false; toggleSettings()"
-                                data-testid="settings-button-mobile"
-                                class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
-                                <settings-icon class="w-5 h-5"></settings-icon>
-                                Settings
-                            </button>
-                            <button @click="showMobileMenu = false; toggleHelp()"
+                                                            <button @click="showMobileMenu = false; toggleSettings()"
+                                                                    data-testid="settings-button-mobile"
+                                                                    class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
+                                                                    <icon name="settings" class="w-5 h-5"></icon>
+                                                                    Settings
+                                                                </button>                            <button @click="showMobileMenu = false; toggleHelp()"
                                 class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24"
                                     stroke="currentColor">
@@ -306,7 +300,7 @@ Copyright (c) 2025 Kalid Azad
                         <template #trigger>
                             <button v-on:click="toggleHelp" aria-label="Show help"
                                 class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8">
-                                <help-icon></help-icon>
+                                <icon name="help" class="w-5 h-5"></icon>
                             </button>
                         </template>
                         <template #content>
@@ -320,7 +314,7 @@ Copyright (c) 2025 Kalid Azad
                             <button v-on:click="toggleSearch" aria-label="Search events"
                                 data-testid="search-button-desktop"
                                 class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors">
-                                <search-icon></search-icon>
+                                <icon name="search" class="w-5 h-5"></icon>
                             </button>
                         </template>
                         <template #content>
@@ -334,7 +328,7 @@ Copyright (c) 2025 Kalid Azad
                             <button v-on:click="toggleSettings" aria-label="Settings"
                                 data-testid="settings-button-desktop"
                                 class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8">
-                                <settings-icon></settings-icon>
+                                <icon name="settings" class="w-5 h-5"></icon>
                             </button>
                         </template>
                         <template #content>
@@ -404,11 +398,7 @@ Copyright (c) 2025 Kalid Azad
                         class="flex items-center bg-1 border border-color-default rounded-full p-1 pl-3 pr-3 shadow-sm select-none">
                         <!-- Share Icon -->
                         <div class="text-color-1 flex-shrink-0 mr-1.5">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24"
-                                stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                    d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                            </svg>
+                            <icon name="share" class="w-5 h-5"></icon>
                         </div>
                         <!-- Text -->
                         <div class="text-color-1 text-xs">
@@ -425,11 +415,7 @@ Copyright (c) 2025 Kalid Azad
                                 data-testid="share-pill-readonly">
                                 <!-- Share Icon -->
                                 <div class="text-color-1 flex-shrink-0 mr-1.5">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none"
-                                        viewBox="0 0 24 24" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                                    </svg>
+                                    <icon name="share" class="w-5 h-5"></icon>
                                 </div>
                                 <!-- Text -->
                                 <div class="text-color-2 text-xs font-bold">
@@ -457,11 +443,7 @@ Copyright (c) 2025 Kalid Azad
                                     <!-- Icon -->
                                     <div
                                         class="text-color-1 group-hover:text-blue-500 transition-colors flex-shrink-0 p-1 rounded-full mr-1">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none"
-                                            viewBox="0 0 24 24" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                                        </svg>
+                                        <icon name="share" class="w-5 h-5"></icon>
                                     </div>
 
                                     <!-- URL Text -->
@@ -598,11 +580,7 @@ Copyright (c) 2025 Kalid Azad
                         <!-- Q1: How do I share -->
                         <div class="bg-2 rounded-lg p-4">
                             <div class="font-semibold flex items-center gap-2 mb-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 flex-shrink-0" fill="none"
-                                    viewBox="0 0 24 24" stroke="currentColor" style="color: var(--link);">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                                </svg>
+                                <icon name="share" class="w-5 h-5" style="color: var(--link);"></icon>
                                 How do I share a calendar?
                             </div>
                             <div class="text-sm text-color-1">
@@ -709,7 +687,7 @@ Copyright (c) 2025 Kalid Azad
                                 class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
                             <button @click="copyToClipboard(getEditableURL(), $event.currentTarget)"
                                 class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                <copy-icon />
+                                <icon name="copy" class="h-4 w-4 mr-1"></icon>
                                 <span>Copy</span>
                             </button>
                             <button v-if="canShare()" @click="shareUrl(getEditableURL(), 'Calendar')"
@@ -747,7 +725,7 @@ Copyright (c) 2025 Kalid Azad
                                     class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
                                 <button @click="copyToClipboard(getReadOnlyURL(), $event.currentTarget)"
                                     class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                    <copy-icon />
+                                    <icon name="copy" class="h-4 w-4 mr-1"></icon>
                                     <span>Copy</span>
                                 </button>
                                 <button v-if="canShare()" @click="shareUrl(getReadOnlyURL(), 'Calendar')"
@@ -809,7 +787,7 @@ Copyright (c) 2025 Kalid Azad
                                 class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
                             <button @click="copyToClipboard(currentViewURL, $event.currentTarget)"
                                 class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                <copy-icon />
+                                <icon name="copy" class="h-4 w-4 mr-1"></icon>
                                 <span>Copy</span>
                             </button>
                             <button v-if="canShare()" @click="shareUrl(currentViewURL, 'Calendar View')"
@@ -848,7 +826,7 @@ Copyright (c) 2025 Kalid Azad
                                         class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
                                     <button @click="copyToClipboard(getEditableICSURL(), $event.currentTarget)"
                                         class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                        <copy-icon />
+                                        <icon name="copy" class="h-4 w-4 mr-1"></icon>
                                         <span>Copy</span>
                                     </button>
                                 </div>
@@ -862,7 +840,7 @@ Copyright (c) 2025 Kalid Azad
                                         class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
                                     <button @click="copyToClipboard(getReadOnlyICSURL(), $event.currentTarget)"
                                         class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                        <copy-icon />
+                                        <icon name="copy" class="h-4 w-4 mr-1"></icon>
                                         <span>Copy</span>
                                     </button>
                                 </div>

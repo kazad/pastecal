@@ -15,6 +15,7 @@ const COMPONENT_REGISTRY = {
     'toast-notification': ToastNotification,   // Toast messages
     'quick-add-button': QuickAddButton,        // Quick Add trigger component (button/FAB)
     'quick-add-dialog': QuickAddDialog,        // Quick Add dialog (parsing & create)
+    'icon': Icon,                              // Generic Icon component
     'copy-icon': CopyIcon,                     // Copy icon SVG
     'settings-icon': SettingsIcon,             // Settings icon SVG
     'help-icon': HelpIcon,                     // Help icon SVG
