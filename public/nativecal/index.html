@@ -12,12 +12,30 @@
 
     <!-- Shared deps for data/services -->
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-compat.js"></script>
+    <script>
+        window.CAL_BASE = '/nativecal';
+        const firebaseConfig = {
+            apiKey: "AIzaSyCZ9U1FflAFcdDLgxJscs2BwV_PrXqmzKw",
+            authDomain: "pastecal-web.firebaseapp.com",
+            databaseURL: "https://pastecal-web-default-rtdb.firebaseio.com",
+            projectId: "pastecal-web",
+            storageBucket: "pastecal-web.appspot.com",
+            messagingSenderId: "912998627577",
+            appId: "1:912998627577:web:aa652846c2618a986d8a28",
+            measurementId: "G-4J99GY9KE6"
+        };
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+            if (location.href.includes("localhost") && location.href.includes("?local")) {
+                firebase.functions().useEmulator("localhost", 5001);
+            }
+        }
+    </script>
     <script src="/utils/utils.js"></script>
     <script src="/models/Event.js"></script>
     <script src="/services/SlugManager.js"></script>
     <script src="/services/CalendarDataService.js"></script>
     <script src="/models/Calendar.js"></script>
-    <link rel="stylesheet" href="/style.css">
     
     <style>
         /* Global Styles */
@@ -286,88 +304,32 @@
              </div>
         </div>
 
-        <!-- Edit Modal -->
-        <div v-if="isEditorOpen" class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50" @click.self="closeEditor">
-            <div class="bg-white rounded-lg shadow-xl w-full max-w-md m-4 overflow-hidden">
-                <!-- Header -->
-                <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-                    <h2 class="text-xl font-bold text-gray-800">Edit Event</h2>
+        <!-- Inline Editor (popup) -->
+        <div v-if="isEditorOpen" class="fixed inset-0 z-[100] pointer-events-none">
+            <div class="pointer-events-auto absolute bg-white border border-gray-200 rounded-lg shadow-xl w-80 max-w-[90vw] p-4"
+                 :style="{ top: `${editorPosition.top}px`, left: `${editorPosition.left}px` }">
+                <div class="flex justify-between items-start gap-3 mb-3">
+                    <input v-model="editorForm.title"
+                        type="text"
+                        class="w-full border-b border-gray-300 focus:border-blue-500 focus:outline-none text-base font-semibold"
+                        placeholder="Event title">
                     <button @click="closeEditor" class="text-gray-400 hover:text-gray-600">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
                 </div>
-                
-                <div class="p-6 space-y-5">
-                    <!-- Title -->
-                    <div>
-                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Title</label>
-                        <input v-model="editorForm.title" type="text" class="block w-full border-b-2 border-gray-300 focus:border-blue-500 focus:outline-none py-2 text-lg font-medium transition-colors" placeholder="Add title">
-                    </div>
-                    
-                    <!-- Date/Time Grid -->
-                    <div class="grid grid-cols-2 gap-6">
-                        <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Start</label>
-                            <input v-model="editorForm.start" type="datetime-local" class="block w-full rounded border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
-                        </div>
-                         <div>
-                            <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">End</label>
-                            <input v-model="editorForm.end" type="datetime-local" class="block w-full rounded border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm">
-                        </div>
-                    </div>
-
-                    <!-- Options (All day / Timezone) -->
-                    <div class="flex items-center gap-6">
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-                            <span class="text-sm text-gray-700">All day</span>
-                        </label>
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500">
-                            <span class="text-sm text-gray-700">Timezone</span>
-                        </label>
-                    </div>
-
-                    <!-- Repeat -->
-                    <div>
-                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Repeat</label>
-                        <select class="block w-full rounded border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2">
-                            <option>Never</option>
-                            <option>Daily</option>
-                            <option>Weekly</option>
-                            <option>Monthly</option>
-                            <option>Yearly</option>
-                        </select>
-                    </div>
-
-                    <!-- Description -->
-                    <div>
-                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Description</label>
-                        <textarea v-model="editorForm.description" rows="3" class="block w-full rounded border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm" placeholder="Add description..."></textarea>
-                    </div>
-
-                    <!-- Color -->
-                    <div>
-                        <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Color</label>
-                        <div class="flex gap-3 flex-wrap">
-                            <div v-for="(c, i) in colors" :key="i" 
-                                 class="w-6 h-6 rounded-full cursor-pointer transition-transform hover:scale-110"
-                                 :class="{'ring-2 ring-offset-2 ring-blue-500': editorForm.type === i + 1}"
-                                 :style="{backgroundColor: c}"
-                                 @click="editorForm.type = i + 1"></div>
-                        </div>
-                    </div>
+                <div class="flex items-center gap-2 text-sm text-gray-600 mb-3">
+                    <span>{{ formatTime(editorForm.startTs) }}</span>
+                    <span>–</span>
+                    <span>{{ formatTime(editorForm.endTs) }}</span>
+                    <span class="text-gray-400 text-xs">(1h)</span>
                 </div>
-
-                <!-- Footer -->
-                <div class="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-between items-center">
-                    <button v-if="editorForm.id" @click="deleteEvent(editorForm.id); closeEditor()" class="text-red-600 hover:text-red-800 text-sm font-medium uppercase tracking-wide hover:bg-red-50 px-3 py-1.5 rounded transition-colors">Delete</button>
-                    <div v-else></div> <!-- Spacer -->
-                    
-                    <div class="flex gap-3">
-                        <button @click="closeEditor" class="px-4 py-2 text-gray-700 hover:bg-gray-200 rounded font-medium text-sm uppercase tracking-wide transition-colors">Cancel</button>
-                        <button @click="saveEvent" class="px-4 py-2 bg-blue-600 text-white rounded font-medium text-sm uppercase tracking-wide hover:bg-blue-700 shadow-sm transition-colors">Save</button>
-                    </div>
+                <div class="flex justify-end gap-2">
+                    <button @click="closeEditor" class="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded">Cancel</button>
+                    <button @click="saveEvent" class="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded">Save</button>
+                </div>
+            </div>
+        </div>
+</div>
                 </div>
             </div>
         </div>
@@ -380,9 +342,6 @@
         </div>
 
         <!-- Simple Toast/Hint -->
-        <div v-if="notification" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white px-4 py-2 rounded-full text-sm shadow-lg z-50 transition-opacity">
-            {{ notification }}
-        </div>
     </div>
 
     <!-- Time Grid View Component Template -->
@@ -475,7 +434,7 @@
                      class="calendar-cell relative group hover:bg-gray-50 flex flex-col gap-1 cursor-pointer"
                      :class="{'bg-gray-50/50': !cell.isCurrentMonth, 'bg-blue-50': isToday(cell.date)}"
                      :data-date="cell.date.toISOString()"
-                     @click.self="$emit('create-event', cell.date)">
+                     @click.self="$emit('create-event', cell.date, $event)">
                     
                     <span class="text-xs font-medium p-1 ml-auto rounded-full w-7 h-7 flex items-center justify-center"
                           :class="isToday(cell.date) ? 'bg-blue-600 text-white' : 'text-gray-700'">
@@ -714,20 +673,19 @@
                 const selectedEventId = ref(null);
                 const popupPosition = ref({ top: 0, left: 0 });
                 const isEditorOpen = ref(false);
-                const editorForm = ref({ id: null, title: '', description: '', start: '', end: '', type: 1, recurrencerule: '' });
+                const editorForm = ref({ id: null, title: '', description: '', startTs: null, endTs: null, type: 1 });
+                const editorPosition = ref({ top: 120, left: 120 });
                 const timeFormat = ref('12'); // '12' for AM/PM, '24' for military
                 const showSettings = ref(false);
                 const calendarTitle = ref('My Schedule');
+                const calendar = ref(null);
+                const isExisting = ref(false);
+                const isLoading = ref(true);
                 
                 // ----------------------------------------------------------------
                 // Data
                 // ----------------------------------------------------------------
-                const events = ref([
-                    { id: 1, title: 'Morning Standup', start: new Date().setHours(9, 0, 0, 0), end: new Date().setHours(9, 30, 0, 0), type: 1 },
-                    { id: 2, title: 'Deep Work', start: new Date().setHours(10, 0, 0, 0), end: new Date().setHours(12, 0, 0, 0), type: 2 },
-                    { id: 3, title: 'Lunch', start: new Date().setHours(12, 30, 0, 0), end: new Date().setHours(13, 30, 0, 0), type: 3 },
-                    { id: 4, title: 'Client Meeting', start: new Date().setHours(14, 0, 0, 0), end: new Date().setHours(15, 0, 0, 0), type: 4 },
-                ]);
+                const events = ref([]);
 
                 const colors = ["#3f51b5", "#e3165b", "#ff6652", "#4caf50", "#ff9800", "#03a9f4", "#9e9e9e", "#27282f"];
 
@@ -747,21 +705,10 @@
                     return df.format(currentDate.value, 'MMMM yyyy');
                 });
 
-                const popupStyle = computed(() => {
-                    // Keep popup within bounds roughly
-                    let left = popupPosition.value.left;
-                    let top = popupPosition.value.top;
-                    
-                    // Adjust if too close to right edge (simplistic)
-                    if (window.innerWidth - left < 300) left -= 300;
-                    // Adjust if too close to bottom
-                    if (window.innerHeight - top < 200) top -= 200;
-                    
-                    return {
-                        top: `${top}px`,
-                        left: `${left}px`
-                    };
-                });
+                const popupStyle = computed(() => ({
+                    top: `${popupPosition.value.top}px`,
+                    left: `${popupPosition.value.left}px`
+                }));
 
                 const getEventById = (id) => events.value.find(e => e.id === id);
 
@@ -1037,6 +984,59 @@
                 // ----------------------------------------------------------------
 
                 // ----------------------------------------------------------------
+                // Data loading
+                const mapCalendarEvents = (calEvents = []) => calEvents.map(e => ({
+                    id: e.id,
+                    title: e.title,
+                    start: new Date(e.start).getTime(),
+                    end: new Date(e.end).getTime(),
+                    type: e.type || 1,
+                    description: e.description || ''
+                }));
+
+                const loadCalendarFromSlug = () => {
+                    const base = (window.CAL_BASE || '').replace(/\/$/, '');
+                    const path = base && window.location.pathname.startsWith(base)
+                        ? window.location.pathname.slice(base.length) || '/'
+                        : window.location.pathname;
+                    const parts = path.split('/').filter(Boolean);
+                    let slug = parts[0];
+
+                    if (slug && slug.match(/^[a-zA-Z0-9_\-]+$/) && slug.length < 40) {
+                        slug = SlugManager.normalizeSlug(slug);
+                    } else {
+                        slug = null;
+                    }
+
+                    const id = slug ?? Utils.randomID(8);
+                    calendar.value = new Calendar(id, "New Calendar", []);
+                    calendarTitle.value = calendar.value.title || 'New Calendar';
+
+                    const applyCalendar = (calData) => {
+                        calendar.value.import(calData);
+                        calendarTitle.value = calendar.value.title || 'New Calendar';
+                        events.value = mapCalendarEvents(calendar.value.events);
+                        isExisting.value = true;
+                        isLoading.value = false;
+                    };
+
+                    if (slug) {
+                        CalendarDataService.findAndSubscribe(slug, (c) => {
+                            if (c) {
+                                applyCalendar(c);
+                            } else {
+                                isExisting.value = false;
+                                isLoading.value = false;
+                            }
+                        });
+                    } else {
+                        const defaultEvent = calendar.value.defaultEvent("Sample event");
+                        events.value = mapCalendarEvents([defaultEvent]);
+                        isExisting.value = false;
+                        isLoading.value = false;
+                    }
+                };
+
                 // Interactions
                 // ----------------------------------------------------------------
                 const showToast = (msg) => {
@@ -1044,12 +1044,38 @@
                     setTimeout(() => notification.value = '', 2000);
                 }
 
-                const createMonthEvent = (date) => {
-                    console.log('[createMonthEvent] triggered for', date);
+                const clampPosition = (x, y, width = 320, height = 150, padding = 12) => {
+                    const maxX = window.innerWidth + window.scrollX - width - padding;
+                    const maxY = window.innerHeight + window.scrollY - height - padding;
+                    return {
+                        left: Math.max(padding, Math.min(x, maxX)),
+                        top: Math.max(padding, Math.min(y, maxY))
+                    };
+                };
+
+                const openEditorWithDefaults = (startTs, endTs, clickEvent = null) => {
+                    const id = Date.now();
+                    editorForm.value = {
+                        id,
+                        title: '',
+                        description: '',
+                        startTs,
+                        endTs,
+                        type: 1
+                    };
+                    isEditorOpen.value = true;
+                    selectedEventId.value = null;
+                    if (clickEvent) {
+                        editorPosition.value = clampPosition(clickEvent.clientX + window.scrollX, clickEvent.clientY + window.scrollY);
+                    } else {
+                        editorPosition.value = clampPosition(window.innerWidth / 2, window.innerHeight / 2);
+                    }
+                };
+
+                const createMonthEvent = (date, evt) => {
                     const start = df.setHours(date, 9);
                     const end = df.setHours(date, 10);
-                    events.value.push({ id: Date.now(), title: 'New Event', start: start.getTime(), end: end.getTime(), type: Math.floor(Math.random() * 8) + 1 });
-                    showToast(`Created event on ${df.format(date, 'MMM d')}`);
+                    openEditorWithDefaults(start.getTime(), end.getTime(), evt);
                 };
 
                 const createTimeEvent = (date, event) => {
@@ -1073,9 +1099,6 @@
                         return;
                     }
                     
-                    // Clear previous selection
-                    selectedEventId.value = null;
-
                     const rect = event.currentTarget.getBoundingClientRect();
                     const y = event.clientY - rect.top;
                     const hoursFloat = y / 50;
@@ -1083,10 +1106,7 @@
                     const roundedMinutes = 0; // Snap to the hour start
                     const start = df.set(date, { hours: hours, minutes: roundedMinutes });
                     const end = df.addMinutes(start, 60);
-                    const newEvent = { id: Date.now(), title: '(No Title)', start: start.getTime(), end: end.getTime(), type: Math.floor(Math.random() * 8) + 1 };
-                    events.value.push(newEvent);
-                    selectedEventId.value = newEvent.id; // Select newly created
-                    showToast(`Created at ${df.format(start, 'h:mm a')}`);
+                    openEditorWithDefaults(start.getTime(), end.getTime(), event);
                 };
 
                 const editEvent = (event) => {
@@ -1128,8 +1148,8 @@
                         // Clone event and format dates for inputs
                         editorForm.value = { 
                             ...event,
-                            start: toDateTimeLocalString(event.start),
-                            end: toDateTimeLocalString(event.end)
+                            startTs: event.start,
+                            endTs: event.end
                         };
                         isEditorOpen.value = true;
                         selectedEventId.value = null; // Close preview
@@ -1142,16 +1162,17 @@
 
                 const saveEvent = () => {
                     const index = events.value.findIndex(e => e.id === editorForm.value.id);
+                    const updatedEvent = { 
+                        ...editorForm.value,
+                        start: editorForm.value.startTs,
+                        end: editorForm.value.endTs
+                    };
                     if (index !== -1) {
-                        // Convert back to timestamps
-                        const updatedEvent = { 
-                            ...editorForm.value,
-                            start: new Date(editorForm.value.start).getTime(),
-                            end: new Date(editorForm.value.end).getTime()
-                        };
                         events.value[index] = updatedEvent;
-                        showToast('Event saved');
+                    } else {
+                        events.value.push(updatedEvent);
                     }
+                    showToast('Event saved');
                     closeEditor();
                 };
 
@@ -1315,6 +1336,7 @@
 
                 let timer;
                 onMounted(() => {
+                    loadCalendarFromSlug();
                     updateTimeIndicator();
                     timer = setInterval(updateTimeIndicator, 60000);
                     setTimeout(() => {
@@ -1337,7 +1359,7 @@
                     prev, next, today, isToday, changeView, goToMonth,
                     events, getEventsForDate, getEventsWithLayout, getEventStyle, getWeekEventPosition, getGhostStyle, formatTime, formatDuration, getEventColor,
                     createMonthEvent, createTimeEvent, editEvent, selectEvent, selectedEventId,
-                    closePreview, openEditor, closeEditor, saveEvent, deleteEvent, isEditorOpen, editorForm, popupStyle, getEventById, toDateTimeLocalString,
+                    closePreview, openEditor, closeEditor, saveEvent, deleteEvent, isEditorOpen, editorForm, editorPosition, getEventById, toDateTimeLocalString, popupStyle,
                     startDrag, onDrag, stopDrag, dragState,
                     currentTimeTop, notification, eventCursor, timeFormat, showSettings, toggleSettings, updateTimeFormat, calendarTitle, editCalendarTitle,
                     isSameDay: (d1, d2) => df.isSameDay(d1, d2)
