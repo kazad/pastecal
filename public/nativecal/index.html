@@ -1,19 +1,83 @@
+<!-- 
+Open sourced under the MIT License: https://opensource.org/licenses/MIT
+Copyright (c) 2025 Kalid Azad
+-->
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NativeCal Interactive Prototype</title>
-    <link rel="stylesheet" href="/style.css">
+
+    <!-- HTML Meta Tags -->
+    <title>PasteCal: Shareable, no-login calendar</title>
+    <meta name="description" content="Create a public shared calendar link, no signups needed.">
+
+    <!-- Facebook Meta Tags -->
+    <meta property="og:url" content="https://pastecal.com/">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="PasteCal: Shareable, no-login calendar">
+    <meta property="og:description" content="Create a public shared calendar link, no signups needed.">
+    <meta property="og:image" content="https://pastecal.com/img/screenshot.png">
+
+    <!-- Twitter Meta Tags -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta property="twitter:domain" content="pastecal.com">
+    <meta property="twitter:url" content="https://pastecal.com/">
+    <meta name="twitter:title" content="PasteCal: Shareable, no-login calendar">
+    <meta name="twitter:description" content="Create a public shared calendar link, no signups needed.">
+    <meta name="twitter:image" content="https://pastecal.com/img/screenshot.png">
+
+    <!-- Favicons: https://realfavicongenerator.net/ -->
+    <link rel="icon" type="image/png" href="/img/icons/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="/img/icons/favicon.svg" />
+    <link rel="shortcut icon" href="/img/icons/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/img/icons/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="msapplication-TileColor" content="#da532c">
+    <meta name="theme-color" content="#ffffff">
+
+    <!-- Preconnects for faster third-party fetches -->
+    <link rel="preconnect" href="https://cdn.syncfusion.com">
+    <link rel="preconnect" href="https://www.gstatic.com">
+    <link rel="preconnect" href="https://unpkg.com">
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+
+    <!-- Google Tag Manager -->
+    <script>
+        (function (w, d, s, l, i) {
+            const enableAnalytics = !(w.__TEST__ || w.location.search.includes('no-analytics'));
+            if (!enableAnalytics) {
+                console.log('[analytics] disabled by test mode');
+                return;
+            }
+            w[l] = w[l] || []; w[l].push({
+                'gtm.start':
+                    new Date().getTime(), event: 'gtm.js'
+            }); var f = d.getElementsByTagName(s)[0],
+                j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : ''; j.async = true; j.src =
+                    'https://www.googletagmanager.com/gtm.js?id=' + i + dl; f.parentNode.insertBefore(j, f);
+        })(window, document, 'script', 'dataLayer', 'GTM-WTP9VTM');
+    </script>
+    <!-- End Google Tag Manager -->
+
+    <!-- Core styles -->
+    <link rel="stylesheet" href="/style.css?v=1763769217">
+    <link rel="stylesheet" href="/nativecal/native.css">
+
+    <!-- Third-party libraries -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Date FNS -->
     <script src="https://cdn.jsdelivr.net/npm/date-fns@3.6.0/cdn.min.js"></script>
-
-    <!-- Shared deps for data/services -->
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js"></script>
+    
     <script>
         window.CAL_BASE = '/nativecal';
+    </script>
+
+    <!-- Firebase config -->
+    <script>
         const firebaseConfig = {
             apiKey: "AIzaSyCZ9U1FflAFcdDLgxJscs2BwV_PrXqmzKw",
             authDomain: "pastecal-web.firebaseapp.com",
@@ -24,1347 +88,1034 @@
             appId: "1:912998627577:web:aa652846c2618a986d8a28",
             measurementId: "G-4J99GY9KE6"
         };
-        if (!firebase.apps.length) {
-            firebase.initializeApp(firebaseConfig);
-            if (location.href.includes("localhost") && location.href.includes("?local")) {
-                firebase.functions().useEmulator("localhost", 5001);
+        firebase.initializeApp(firebaseConfig);
+
+        if (location.href.includes("localhost") && location.href.includes("?local")) {
+            firebase.functions().useEmulator("localhost", 5001);
+        }
+    </script>
+
+    <!-- App scripts (order matters: Utils → models/services → directives → components) -->
+    <script src="/utils/utils.js?v=1763769217"></script>
+    <script src="/models/Event.js?v=1763769217"></script>
+    <script src="/services/SlugManager.js?v=1763769217"></script>
+    <script src="/services/CalendarDataService.js?v=1763769217"></script>
+    <script src="/models/Calendar.js?v=1763769217"></script>
+    <script src="/directives/clickOutside.js?v=1763769217"></script>
+    <!-- Components -->
+    <!-- NativeCalendar.js loaded by loader.js -->
+    <script src="/components/icons.js?v=1763769217"></script>
+    <script src="/components/ToastNotification.js?v=1763769217"></script>
+    <script src="/components/QuickAddButton.js?v=1763769217"></script>
+    <script src="/components/Tooltip.js?v=1763769217"></script>
+    <script src="/components/QuickAddDialog.js?v=1763769217"></script>
+    <script src="/components/CalendarTitle.js?v=1763769217"></script>
+    <script src="/components/NavigationDropdown.js?v=1763769217"></script>
+
+    <script>
+        // Load-order guard for critical globals
+        (function () {
+            const required = [
+                ['Utils', () => typeof Utils !== 'undefined'],
+                ['Event', () => typeof Event !== 'undefined'],
+                ['Calendar', () => typeof Calendar !== 'undefined'],
+                ['SlugManager', () => typeof SlugManager !== 'undefined'],
+                ['CalendarDataService', () => typeof CalendarDataService !== 'undefined'],
+                ['QuickAddButton', () => typeof QuickAddButton !== 'undefined'],
+                ['QuickAddDialog', () => typeof QuickAddDialog !== 'undefined'],
+                ['ToastNotification', () => typeof ToastNotification !== 'undefined'],
+                ['Tooltip', () => typeof Tooltip !== 'undefined'],
+            ];
+
+            const missing = required.filter(([, check]) => !check()).map(([name]) => name);
+            if (missing.length) {
+                console.error('[load-order] Missing globals:', missing.join(', '));
             }
+        })();
+    </script>
+
+    <!-- Self-test suite (only loads on localhost) -->
+    <script>
+        if (window.location.hostname.match(/^(localhost|127\.0\.0\.1|::1)$/)) {
+            const script = document.createElement('script');
+            script.src = '/selftest.js?v=1763769217';
+            document.head.appendChild(script);
         }
     </script>
-    <script src="/utils/utils.js"></script>
-    <script src="/models/Event.js"></script>
-    <script src="/services/SlugManager.js"></script>
-    <script src="/services/CalendarDataService.js"></script>
-    <script src="/models/Calendar.js"></script>
-    
-    <style>
-        /* Global Styles */
-        :root {
-            --bg: #ffffff;
-            --bg-disabled: #eaeaea;
-            --fg: #333333;
-            --link: rgb(3, 169, 244);
-            --link-hover: rgb(3, 140, 214);
-            --panel-bg: #f9fafb;
-            --border-color: #efefef;
-            --bg-interactive-hover: #f3f4f6; /* Tailwind gray-100 */
-            --text-color-1: #6b7280;
-            --text-color-2: #374151;
-        }
 
-        /* Basic grid for month view */
-        .calendar-grid {
-            display: grid;
-            grid-template-columns: repeat(7, 1fr);
-            border-top: 1px solid #e5e7eb;
-            border-left: 1px solid #e5e7eb;
-        }
-        .calendar-cell {
-            min-height: 100px;
-            border-right: 1px solid #e5e7eb;
-            border-bottom: 1px solid #e5e7eb;
-            padding: 0.25rem;
-        }
-        /* Time grid (Week/Day) */
-        .time-grid {
-            display: grid;
-            /* First col is labels (60px), rest are dates */
-            /* Template columns set dynamically via inline style */
-        }
-        .time-col {
-            border-right: 1px solid #e5e7eb;
-            min-width: 0; 
-            position: relative;
-        }
-        .hour-row {
-            height: 50px; /* 50px per hour */
-            border-bottom: 1px solid #f3f4f6;
-            box-sizing: border-box;
-        }
-        
-        /* Year View */
-        .year-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1.5rem;
-            padding: 1.5rem;
-        }
-        .mini-month-grid {
-            display: grid;
-            grid-template-columns: repeat(7, 1fr);
-            gap: 2px;
-        }
-        
-        .event-card {
-            transition: box-shadow 0.1s, transform 0.1s, width 0.2s ease-out, left 0.2s ease-out;
-            z-index: 10;
-            /* width and left are now set dynamically via style */
-        }
-        
-        .event-card:hover {
-            z-index: 50 !important;
-        }
-        
-        .event-card.is-dragging {
-            opacity: 0.5;
-            z-index: 60 !important;
-        }
-        
-        /* Active Drag State (Cute) */
-        .event-card.dragging-active {
-            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-            z-index: 100 !important;
-            opacity: 0.9;
-        }
-        
-        .event-card.dragging-move-active {
-            transform: rotate(3deg) scale(1.02);
-        }
-
-        .resize-handle {
-            cursor: ns-resize;
-        }
-        .resize-handle:hover {
-            background-color: rgba(0,0,0,0.1);
-        }
-
-        /* Drag Ghost */
-        .drag-ghost {
-            position: fixed;
-            pointer-events: none;
-            z-index: 9999;
-            opacity: 0.9;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-            transform: translate(-50%, -50%) rotate(3deg) scale(1.05);
-        }
-
-        /* Utilities */
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        
-        /* Prevent text selection during drag */
-        .select-none { user-select: none; }
-    </style>
 </head>
-<body class="bg-white text-gray-800 p-1 m-1 h-screen flex flex-col box-border overflow-hidden">
-    <div id="app" class="flex flex-col h-full w-full">
-        
-        <!-- Settings Modal -->
-        <settings-modal 
-            v-if="showSettings" 
-            :time-format="timeFormat" 
-            @update:time-format="updateTimeFormat"
-            @close="toggleSettings">
-        </settings-modal>
 
-        <!-- App Topbar (Global) -->
-        <app-topbar 
-            :title="calendarTitle"
-            @toggle-settings="toggleSettings"
-            @edit-title="editCalendarTitle">
-        </app-topbar>
+<body class="p-1 m-1">
+    <div id="app" data-testid="app-root">
+        <!-- Mobile Header -->
+        <div class="md:hidden flex flex-col mb-2 pt-3 space-y-3" data-testid="mobile-header">
+            <!-- Row 1: Logo, Title, Menu -->
+            <div class="relative flex items-center justify-between gap-2">
+                <!-- Logo & Recents -->
+                <div class="relative z-40 flex-shrink-0" v-click-outside="closeRecents">
+                    <div @click.stop="toggleRecents" class="cursor-pointer flex items-center gap-1">
+                        <div class="flex items-center gap-1.5">
+                            <img class="h-8 w-8 dark:brightness-150" src="/img/pastecal.logo.svg" alt="PasteCal Logo">
+                            <span
+                                class="text-sm font-medium text-blue-500 hover:text-blue-600 transition-colors">pastecal</span>
+                        </div>
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-color-1" fill="currentColor"
+                            viewBox="0 0 16 16" aria-label="Recent calendars">
+                            <path fill-rule="evenodd"
+                                d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z" />
+                        </svg>
+                    </div>
+                    <navigation-dropdown v-if="showRecents" :recent-calendars="recentCalendars"
+                        @go-homepage="goToHomepage" @toggle-pin="togglePin" @remove-recent="removeRecent"
+                        class="mt-2"></navigation-dropdown>
+                </div>
 
-        <!-- Calendar Container (Edge to Edge) -->
-        <div class="flex-1 flex flex-col overflow-hidden relative border border-gray-200 rounded-sm bg-white shadow-sm">
-            
-            <!-- Calendar Toolbar -->
-            <calendar-toolbar
-                :current-title="currentTitle"
-                :current-view="currentView"
-                :views="views"
-                @prev="prev"
-                @next="next"
-                @today="today"
-                @change-view="changeView">
-            </calendar-toolbar>
+                <!-- Center: Title (absolutely centered) -->
+                <div class="absolute left-1/2 transform -translate-x-1/2 z-30 flex items-center gap-1">
+                    <calendar-title :title="calendar.title" :is-editing="editTitle" :is-read-only="isReadOnly"
+                        mode="mobile" input-ref="mobileTitleInput" class="overflow-hidden max-w-[120px]"
+                        @update:title="calendar.title = $event" @click="editTitle = true" @blur="editTitle = false"
+                        @enter="editTitle = false">
+                    </calendar-title>
+                    <button v-if="!editTitle" v-on:click="toggleNotes" aria-label="Toggle notes"
+                        class="text-color-1 hover:text-blue-500 p-1 transition-colors flex items-center justify-center flex-shrink-0">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                            stroke="currentColor" class="w-5 h-5">
+                            <path stroke-linecap="round" stroke-linejoin="round"
+                                d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                        </svg>
+                    </button>
+                </div>
 
-            <!-- Month View -->
-            <month-view v-if="currentView === 'Month'"
-                :cells="monthCells"
-                :week-days="weekDays"
-                :drag-state="dragState"
-                :get-events-for-date="getEventsForDate"
-                :get-event-style="getEventStyle"
-                :is-today="isToday"
-                @create-event="createMonthEvent"
-                @start-drag="startDrag"
-                @select-event="selectEvent">
-            </month-view>
-
-            <!-- Time Grid View (Week/Day) -->
-            <time-grid-view v-if="currentView === 'Week' || currentView === 'Day'"
-                :current-view="currentView"
-                :visible-dates="visibleDates"
-                :week-days="weekDays"
-                :is-today="isToday"
-                :current-time-top="currentTimeTop"
-                :drag-state="dragState"
-                :selected-event-id="selectedEventId"
-                :event-cursor="eventCursor"
-                :get-events-with-layout="getEventsWithLayout"
-                :get-event-style="getEventStyle"
-                :get-week-event-position="getWeekEventPosition"
-                :get-ghost-style="getGhostStyle"
-                :format-time="formatTime"
-                :is-same-day="isSameDay"
-                :time-format="timeFormat"
-                @create-time-event="createTimeEvent"
-                @start-drag="startDrag"
-                @select-event="selectEvent">
-            </time-grid-view>
-
-            <!-- Year View -->
-            <div v-if="currentView === 'Year'" class="h-full overflow-y-auto p-4">
-                <div class="year-grid">
-                    <div v-for="(month, idx) in yearMonths" :key="idx" class="border rounded p-2 hover:shadow-md transition-shadow cursor-pointer"
-                         @click="goToMonth(month.date)">
-                        <h3 class="text-center font-bold text-gray-700 mb-2">{{ month.name }}</h3>
-                        <div class="mini-month-grid">
-                            <div v-for="day in ['S','M','T','W','T','F','S']" :key="day" class="text-[10px] text-center text-gray-400">{{ day }}</div>
-                            
-                            <!-- Empty start cells -->
-                            <div v-for="n in month.startPad" :key="'pad-'+n"></div>
-                            
-                            <!-- Days -->
-                            <div v-for="day in month.days" :key="day.date" 
-                                 class="text-center text-xs p-1 rounded-full"
-                                 :class="{'bg-blue-600 text-white': isToday(day.date), 'bg-blue-100': day.hasEvents && !isToday(day.date)}">
-                                {{ day.dayNumber }}
-                            </div>
+                <!-- Right Actions: Share + Menu -->
+                <div class="flex items-center gap-1 text-color-1 flex-shrink-0">
+                    <!-- Share button -->
+                    <button v-if="isExisting" @click="toggleShare()" aria-label="Share calendar"
+                        data-testid="share-button-mobile"
+                        class="p-1 hover:text-blue-500">
+                        <icon name="share" class="w-5 h-5"></icon>
+                    </button>
+                    <!-- Kebab Menu (...) -->
+                    <div class="relative z-40">
+                        <button @click.stop="showMobileMenu = !showMobileMenu" aria-label="Open menu"
+                            class="p-1 hover:text-blue-500">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24"
+                                stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M12 6.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 12.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5ZM12 18.75a.75.75 0 1 1 0-1.5.75.75 0 0 1 0 1.5Z" />
+                            </svg>
+                        </button>
+                        <!-- Dropdown -->
+                        <div v-if="showMobileMenu" v-click-outside="() => showMobileMenu = false"
+                            class="absolute right-0 top-full mt-2 w-48 bg-1 rounded-lg shadow-xl border border-color-default py-1 text-sm text-color-2 z-50">
+                        <button @click="showMobileMenu = false; toggleSearch()"
+                                data-testid="search-button-mobile"
+                                class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
+                                                                        <icon name="search" class="w-5 h-5"></icon>                                Search
+                            </button>
+                            <button
+                                @click="showMobileMenu = false; $refs.quickAddDialog && $refs.quickAddDialog.showDialog()"
+                                class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
+                                <span class="text-lg leading-none font-bold text-blue-500">+</span> Quick Add Event
+                            </button>
+                                                            <button @click="showMobileMenu = false; toggleSettings()"
+                                                                    data-testid="settings-button-mobile"
+                                                                    class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
+                                                                    <icon name="settings" class="w-5 h-5"></icon>
+                                                                    Settings
+                                                                </button>                            <button @click="showMobileMenu = false; toggleHelp()"
+                                class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                        d="M9.879 7.519c1.171-1.025 3.071-1.025 4.242 0 1.172 1.025 1.172 2.687 0 3.712-.203.179-.43.326-.67.442-.745.361-1.45.999-1.45 1.827v.75M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9 5.25h.008v.008H12v-.008z" />
+                                </svg>
+                                Help
+                            </button>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Agenda View -->
-            <div v-if="currentView === 'Agenda'" class="h-full overflow-y-auto p-4">
-                <div class="max-w-3xl mx-auto space-y-6">
-                    <div v-if="agendaEvents.length === 0" class="text-center text-gray-500 py-10">No events found.</div>
-                    
-                    <div v-for="(group, dateStr) in agendaEvents" :key="dateStr">
-                        <div class="sticky top-0 bg-gray-50/95 backdrop-blur py-2 border-b border-gray-200 mb-2 z-10">
-                            <span class="font-bold text-lg">{{ group.formattedDate }}</span>
-                            <span v-if="group.isToday" class="ml-2 text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full">Today</span>
+            <!-- Row 2: Claim URL (only for new calendars) -->
+            <div v-show="!isExisting"
+                class="flex items-center bg-1 border border-color-default rounded-lg p-2 shadow-sm">
+                <span class="text-color-1 text-sm pl-1 pr-1 font-medium" id="url-prefix-mobile">pastecal.com/</span>
+                <input type="text" v-model="calendar.id" @input="handleSlugInput" @keyup.enter="create"
+                    class="flex-1 bg-transparent border-none focus:ring-0 p-1 text-sm font-bold text-color-2 min-w-0"
+                    placeholder="your-link" aria-label="Custom URL slug" aria-describedby="url-prefix-mobile">
+                <button @click="create"
+                    class="bg-blue-600 text-white text-sm font-bold px-4 py-1.5 rounded-md shadow-sm whitespace-nowrap"
+                    aria-label="Claim calendar URL">
+                    Claim
+                </button>
+            </div>
+        </div> <!-- Closing div for md:hidden -->
+
+        <!-- Mobile FAB removed - mobile menu will open the central quick-add dialog directly -->
+
+        <!-- Single dialog instance used by button triggers -->
+        <quick-add-dialog ref="quickAddDialog" @event-created="handleQuickAddEvent"></quick-add-dialog>
+
+        <topbar class="hidden md:flex justify-between items-center pb-1 md:pb-3 text-sm">
+            <!-- Left section -->
+            <section class="flex-1 flex flex-col md:flex-row items-start md:space-x-2 min-w-0">
+                <!-- Logo and app name -->
+                <logo class="flex items-center text-sm h-8 relative">
+                    <div class="relative" v-click-outside="closeRecents" @mouseenter="handleDropdownMouseEnter"
+                        @mouseleave="handleDropdownMouseLeave">
+                        <div class="flex items-center space-x-2">
+                            <a @click.prevent="toggleRecents" class="flex items-center group cursor-pointer">
+                                <img class="h-8 w-8 mr-1.5 flex-shrink-0 dark:brightness-150"
+                                    src="/img/pastecal.logo.svg" alt="PasteCal Logo">
+                                <div class="flex flex-col">
+                                    <span
+                                        class="text-blue-500 font-medium text-sm hover:text-blue-600 transition-colors">pastecal</span>
+                                    <span class="text-color-1 hidden lg:block -mt-0.5 text-[10px]">no-login
+                                        shared calendar</span>
+                                </div>
+                            </a>
+
+                            <!-- Dropdown arrow indicator -->
+                            <button @click.stop="toggleRecents"
+                                class="text-color-1 hover:text-blue-500 p-1 transition-colors" title="Recent calendars">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="currentColor"
+                                    viewBox="0 0 16 16">
+                                    <path fill-rule="evenodd"
+                                        d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z" />
+                                </svg>
+                            </button>
                         </div>
+
+                        <!-- Navigation dropdown component -->
+                        <navigation-dropdown v-if="showRecents" :recent-calendars="recentCalendars"
+                            @go-homepage="goToHomepage" @toggle-pin="togglePin" @remove-recent="removeRecent" v-cloak>
+                        </navigation-dropdown>
+                    </div>
+                </logo>
+
+                <!-- Action buttons -->
+                <buttonarea class="flex items-center space-x-1 mt-0">
+
+                    <!-- Help button -->
+                    <custom-tooltip width="w-auto" align="center">
+                        <template #trigger>
+                            <button v-on:click="toggleHelp" aria-label="Show help"
+                                class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8">
+                                <icon name="help" class="w-5 h-5"></icon>
+                            </button>
+                        </template>
+                        <template #content>
+                            <span class="whitespace-nowrap">Show Help</span>
+                        </template>
+                    </custom-tooltip>
+
+                    <!-- Search button -->
+                    <custom-tooltip width="w-auto" align="center">
+                        <template #trigger>
+                            <button v-on:click="toggleSearch" aria-label="Search events"
+                                data-testid="search-button-desktop"
+                                class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors">
+                                <icon name="search" class="w-5 h-5"></icon>
+                            </button>
+                        </template>
+                        <template #content>
+                            <span class="whitespace-nowrap">Search Events</span>
+                        </template>
+                    </custom-tooltip>
+
+                    <!-- Settings button -->
+                    <custom-tooltip width="w-auto" align="center">
+                        <template #trigger>
+                            <button v-on:click="toggleSettings" aria-label="Settings"
+                                data-testid="settings-button-desktop"
+                                class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8">
+                                <icon name="settings" class="w-5 h-5"></icon>
+                            </button>
+                        </template>
+                        <template #content>
+                            <span class="whitespace-nowrap">Settings</span>
+                        </template>
+                    </custom-tooltip>
+
+                    <!-- Quick add button - desktop only -->
+                    <quick-add-button v-if="canEdit" class="block"
+                        @open="$refs.quickAddDialog && $refs.quickAddDialog.showDialog()"
+                        aria-label="Quick add event"></quick-add-button>
+
+                </buttonarea>
+            </section>
+
+            <!-- Middle section - Calendar title -->
+            <section
+                class="hidden md:flex flex-1 flex-col md:flex-row items-center justify-center mx-1 md:mx-2 min-w-0 min-h-8"
+                data-testid="desktop-title-area"
+                v-cloak v-if="!isLoading">
+                <custom-tooltip width="w-auto" align="center" v-if="!editTitle && !isReadOnly">
+                    <template #trigger>
+                        <calendar-title :title="calendar.title" :is-editing="editTitle" :is-read-only="isReadOnly"
+                            mode="desktop" input-ref="desktopTitleInput" @update:title="calendar.title = $event"
+                            @click="editTitle = true" @blur="editTitle = false" @enter="setTitle($event)">
+                        </calendar-title>
+                    </template>
+                    <template #content>
+                        <span class="whitespace-nowrap">Click to edit title</span>
+                    </template>
+                </custom-tooltip>
+                <calendar-title v-if="!editTitle && isReadOnly" :title="calendar.title" :is-editing="editTitle"
+                    :is-read-only="isReadOnly" mode="desktop" @update:title="calendar.title = $event"
+                    @click="editTitle = true" @blur="editTitle = false" @enter="setTitle($event)">
+                </calendar-title>
+                <calendar-title v-if="editTitle" :title="calendar.title" :is-editing="editTitle"
+                    :is-read-only="isReadOnly" mode="desktop" input-ref="desktopTitleInput"
+                    @update:title="calendar.title = $event" @click="editTitle = true" @blur="editTitle = false"
+                    @enter="setTitle($event)">
+                </calendar-title>
+                <custom-tooltip width="w-auto" align="center" v-if="!editTitle">
+                    <template #trigger>
+                        <button v-on:click="toggleNotes" aria-label="Toggle notes"
+                            class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8">
+                            <div class="flex items-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                                    stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                        d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                                </svg>
+                                <span class="ml-0.5 text-xs hidden lg:inline">Notes</span>
+                            </div>
+                        </button>
+                    </template>
+                    <template #content>
+                        <span class="whitespace-nowrap">Toggle Notes</span>
+                    </template>
+                </custom-tooltip>
+            </section>
+
+            <!-- Right section -->
+            <section class="flex-1 flex items-center justify-end text-xs min-w-0 h-8" v-cloak>
+
+                <!-- Loading state -->
+                <div v-if="isLoading">
+                    <div
+                        class="flex items-center bg-1 border border-color-default rounded-full p-1 pl-3 pr-3 shadow-sm select-none">
+                        <!-- Share Icon -->
+                        <div class="text-color-1 flex-shrink-0 mr-1.5">
+                            <icon name="share" class="w-5 h-5"></icon>
+                        </div>
+                        <!-- Text -->
+                        <div class="text-color-1 text-xs">
+                            Loading...
+                        </div>
+                    </div>
+                </div>
+
+                <div v-if="!isLoading && isReadOnly">
+                    <custom-tooltip align="right">
+                        <template #trigger>
+                            <div class="flex items-center bg-1 border border-color-default rounded-full p-1 pl-3 pr-3 shadow-sm cursor-pointer select-none hover:border-blue-500 hover:bg-[var(--bg-interactive-hover)] transition-all"
+                                @click="toggleShare"
+                                data-testid="share-pill-readonly">
+                                <!-- Share Icon -->
+                                <div class="text-color-1 flex-shrink-0 mr-1.5">
+                                    <icon name="share" class="w-5 h-5"></icon>
+                                </div>
+                                <!-- Text -->
+                                <div class="text-color-2 text-xs font-bold">
+                                    View Only
+                                </div>
+                            </div>
+                        </template>
+                        <template #content>
+                            <p class="leading-relaxed">
+                                You are in View Only mode. Events cannot be added or edited.
+                            </p>
+                        </template>
+                    </custom-tooltip>
+                </div>
+
+                <div v-if="!isLoading && !isReadOnly">
+                    <!-- Existing calendar info -->
+                    <div v-show="isExisting">
+                        <custom-tooltip align="right">
+                            <template #trigger>
+                                <div class="relative flex items-center bg-1 border border-color-default rounded-full p-1 pl-3 pr-3 shadow-sm hover:border-blue-500 hover:bg-[var(--bg-interactive-hover)] cursor-pointer transition-all group select-none"
+                                    @click="toggleShare"
+                                    data-testid="share-pill-existing">
+
+                                    <!-- Icon -->
+                                    <div
+                                        class="text-color-1 group-hover:text-blue-500 transition-colors flex-shrink-0 p-1 rounded-full mr-1">
+                                        <icon name="share" class="w-5 h-5"></icon>
+                                    </div>
+
+                                    <!-- URL Text -->
+                                    <div class="text-color-1 text-xs truncate max-w-[150px] md:max-w-xs">
+                                        pastecal.com/<span class="font-bold text-color-2" v-text="calendar.id"></span>
+                                    </div>
+                                </div>
+                            </template>
+                            <template #content>
+                                <p class="leading-relaxed">
+                                    Get links to share with anyone or sync to your phone.
+                                </p>
+                            </template>
+                        </custom-tooltip>
+                    </div>
+
+                    <!-- New calendar creation -->
+                    <div v-show="!isExisting" class="flex flex-wrap md:flex-nowrap items-center gap-2 relative">
+
+                        <custom-tooltip>
+                            <template #trigger>
+                                <!-- Unified Pill Container -->
+                                <div
+                                    class="flex items-center bg-1 border border-color-default rounded-full p-0 sm:p-1 pl-1.5 sm:pl-3 pr-0 sm:pr-1 shadow-sm focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all max-w-full relative">
+
+                                    <!-- Domain -->
+                                    <span
+                                        class="text-color-1 text-sm font-medium hidden md:inline flex-shrink-0 tracking-tight">pastecal.com/</span>
+                                    <span class="text-color-1 text-sm font-medium md:hidden flex-shrink-0">/</span>
+
+                                    <!-- Input -->
+                                    <input id="slug"
+                                        class="bg-transparent border-none focus:ring-0 p-0 text-sm font-bold text-color-2 w-24 md:w-40 focus:outline-none placeholder-gray-400 min-w-0"
+                                        type="text" :disabled="isExisting" v-model="calendar.id" @keyup.enter="create"
+                                        @input="handleSlugInput" placeholder="your-name">
+
+                                    <!-- Claim Button (Integrated) -->
+                                    <button @click="create"
+                                        class="ml-0.5 sm:ml-1 px-2 sm:px-3 py-1 sm:py-1.5 text-white bg-blue-600 font-bold rounded-full text-xs hover:bg-blue-700 transition-colors flex-shrink-0 shadow-sm">
+                                        <span class="hidden sm:inline">Claim URL</span>
+                                        <span class="inline sm:hidden">Claim</span>
+                                    </button>
+                                </div>
+                            </template>
+                            <template #content>
+                                <p class="leading-relaxed">
+                                    Claim any URL, like `/trip-2025`. Everyone with the URL can edit events. Use a
+                                    random ID for privacy.
+                                </p>
+                            </template>
+                        </custom-tooltip>
+                    </div>
+                </div>
+            </section>
+        </topbar>
+
+        <panel class="flex bg-1 p-1 md:p-3 rounded-sm border border-color-default mb-4 relative w-full"
+            v-if="isPanelOpen()" v-cloak>
+            <button id="closeAllPanels"
+                class="absolute top-0 right-0 m-2 md:m-4 text-color-1 hover:text-red-500 transition-colors"
+                @click="closeAllPanels">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                    stroke="currentColor" class="w-5 h-5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+
+            <div v-if="showNotes" class="flex-1 w-full md:w-1/2 md:min-w-[460px] h-[250px] mx-auto p-2.5" v-cloak>
+                <textarea v-if="canEdit" aria-label="Calendar notes"
+                    class="w-full h-full p-2 border border-color-default rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    placeholder="Notes..." v-model="calendar.options.notes"></textarea>
+
+                <div v-if="isReadOnly"
+                    class="w-full h-full p-2 border border-color-default rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    v-html="getReadOnlyNotes()">
+                </div>
+            </div>
+            <div v-if="showSearch" class="m-2 md:m-0 flex flex-col-reverse w-full md:w-1/2" v-cloak>
+
+                <section class="flex-1 flex flex-col space-y-4">
+                    <!-- Search Input -->
+                    <div class="flex flex-col gap-2">
+                        <input type="search" v-model="searchQuery" @input="searchEvents" aria-label="Search events"
+                            class="w-full p-2 border border-color-default rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                            placeholder="Search events...">
+                    </div>
+
+                    <!-- Search Results -->
+                    <div v-if="searchResults.length > 0" class="max-h-64 overflow-auto">
+                        <div v-for="event in searchResults" :key="event.id" @click="jumpToEvent(event)"
+                            :style="{ borderLeft: '3px solid ' + getTypeColor(event.type) }"
+                            class="cursor-pointer p-1 pl-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors mb-1">
+                            <div class="font-semibold text-color-2">{{ event.title }}</div>
+                            <div class="text-xs text-color-1">{{ formatDate(event.start) }} - {{
+                                formatDate(event.end)}}</div>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="flex-1 flex flex-col space-y-4 mb-2">
+
+                    <!-- Filter Options -->
+                    <div class="flex items-center space-x-2">
+                        <span class="text-xs text-color-1">Show</span>
+                        <div class="flex space-x-2">
+                            <template v-for="(color, idx) in COLORS">
+                                <span @click="toggleColorFilter(idx)"
+                                    class="w-5 h-5 rounded-full cursor-pointer border-2 transition-all"
+                                    :class="{'opacity-100 border-color-default': colorFilters[idx], 'opacity-25': !colorFilters[idx]}"
+                                    :style="{ backgroundColor: color }">
+                                </span>
+                            </template>
+                        </div>
+                    </div>
+                </section>
+            </div>
+            <div v-if="showHelp" class="text-sm text-color-2 p-4" v-cloak>
+                <div class="w-full overflow-hidden rounded-lg">
+                    <!-- Welcome Hero -->
+                    <div class="mb-6 p-6 bg-2 rounded-lg border-l-4" style="border-color: var(--link);">
+                        <h3 class="text-2xl font-bold mb-3" style="color: var(--link);">Shared calendars that just work.
+                        </h3>
+                        <p class="text-base mb-2">
+                            No logins. No installs. Pick a link and start planning together.
+                        </p>
+                        <p>
+                            Great for team schedules, clubs, vacation planning, and more. Everyone with the link
+                            can edit in real time.
+                        </p>
+                    </div>
+
+                    <!-- Feature Grid - 2x2 -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
+                        <!-- Q1: How do I share -->
+                        <div class="bg-2 rounded-lg p-4">
+                            <div class="font-semibold flex items-center gap-2 mb-2">
+                                <icon name="share" class="w-5 h-5" style="color: var(--link);"></icon>
+                                How do I share a calendar?
+                            </div>
+                            <div class="text-sm text-color-1">
+                                <p>Choose a URL like <code
+                                        class="bg-disabled px-1.5 py-0.5 rounded text-xs">pastecal.com/summer-trip</code>
+                                    -- that's it. Everyone with the link can view and edit. </p>
+                            </div>
+                        </div>
+
+                        <!-- Q2: Privacy -->
+                        <div class="bg-2 rounded-lg p-4">
+                            <div class="font-semibold flex items-center gap-2 mb-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 flex-shrink-0" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor" style="color: var(--link);">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                </svg>
+                                Is this private?
+                            </div>
+                            <div class="text-sm text-color-1">
+                                <p>Your calendar isn't listed anywhere, so only people with your calendar link can find
+                                    it. For privacy, use a hard-to-guess name. Calendars also get a read-only link for
+                                    public sharing.
+                            </div>
+                        </div>
+
+                        <!-- Q3: Mobile -->
+                        <div class="bg-2 rounded-lg p-4">
+                            <div class="font-semibold flex items-center gap-2 mb-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 flex-shrink-0" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor" style="color: var(--link);">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                                </svg>
+                                Can I use this on my phone?
+                            </div>
+                            <div class="text-sm text-color-1">
+                                <p>Yes, it works in any mobile browser. Want
+                                    notifications and reminders? Add the ICS link to your phone's calendar app.
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- Q4: Switch calendars -->
+                        <div class="bg-2 rounded-lg p-4">
+                            <div class="font-semibold flex items-center gap-2 mb-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 flex-shrink-0" fill="none"
+                                    viewBox="0 0 24 24" stroke="currentColor" style="color: var(--link);">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                                </svg>
+                                How do I manage multiple calendars?
+                            </div>
+                            <p class="text-sm text-color-1">Hover over the <strong>PasteCal logo</strong>
+                                to jump between your calendars. Make a few!</p>
+                        </div>
+                    </div>
+
+                    <!-- Simple CTA -->
+                    <div class="p-4 bg-2 rounded-lg text-center">
+                        <p class="text-sm text-color-1">
+                            <strong>Ready? Pick a name in the top right and save your new calendar.</strong>
+                        </p>
+                    </div>
+
+                    <!-- Footer -->
+                    <div class="mt-6 text-xs text-color-1 text-center space-y-1">
+                        <p>
+                            <a href="https://github.com/kazad/pastecal/issues" class="hover:underline"
+                                style="color: var(--link);">
+                                Share feedback/bugs on GitHub
+                            </a>
+                        </p>
+                        <p>Made by Kalid (<a href="https://instacalc.com" class="hover:underline"
+                                style="color: var(--link);">Instacalc</a>, <a href="https://betterexplained.com"
+                                class="hover:underline" style="color: var(--link);">Better Explained</a>)</p>
+                    </div>
+                </div>
+            </div>
+
+            <div v-if="showShare" class="p-2.5 text-sm w-full" v-cloak>
+                <h2 class="text-lg font-bold mb-4">Sharing & Security</h2>
+
+                <!-- 2x2 Grid Layout -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                    <!-- Edit Access (Top Left) -->
+                    <div v-if="canEdit" class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
+                        <h4 class="font-medium mb-2 inline-flex items-center gap-x-2">
+
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                stroke="currentColor" class="size-5">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
+                            </svg>
+
+                            Edit Access
+                        </h4>
+                        <p class="text-xs text-color-1 mb-3 italic">
+                            Full editing access - anyone can view and change events
+                        </p>
+                        <div class="flex gap-2">
+                            <input type="text" :value="getEditableURL()" readonly
+                                class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
+                            <button @click="copyToClipboard(getEditableURL(), $event.currentTarget)"
+                                class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
+                                <icon name="copy" class="h-4 w-4 mr-1"></icon>
+                                <span>Copy</span>
+                            </button>
+                            <button v-if="canShare()" @click="shareUrl(getEditableURL(), 'Calendar')"
+                                class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!--  View Only (Top Right) -->
+                    <div class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
+                        <h4 class="font-medium mb-2 inline-flex items-center gap-x-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                stroke="currentColor" class="size-5">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                            </svg>
+
+                            View Only
+                        </h4>
+                        <p class="text-xs text-color-1 mb-3 italic">
+                            Read-only access - users can view but not edit events
+                        </p>
+
+                        <!-- View-only link (auto-created) -->
                         <div class="space-y-2">
-                            <div v-for="event in group.events" :key="event.id" 
-                                 class="flex gap-4 p-3 bg-white rounded border-l-4 shadow-sm hover:shadow cursor-pointer"
-                                 :style="{ borderLeftColor: getEventColor(event) }"
-                                 @click.stop="selectEvent(event, $event)">
-                                <div class="w-24 text-right text-sm text-gray-500 flex-shrink-0">
-                                    <div>{{ formatTime(event.start) }}</div>
-                                    <div class="text-xs opacity-75">{{ formatDuration(event) }}</div>
-                                </div>
-                                <div>
-                                    <div class="font-bold text-gray-800">{{ event.title }}</div>
-                                    <div class="text-xs text-gray-500">Type {{ event.type }}</div>
+                            <div class="flex gap-2">
+                                <input type="text" :value="getReadOnlyURL()" readonly
+                                    class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
+                                <button @click="copyToClipboard(getReadOnlyURL(), $event.currentTarget)"
+                                    class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
+                                    <icon name="copy" class="h-4 w-4 mr-1"></icon>
+                                    <span>Copy</span>
+                                </button>
+                                <button v-if="canShare()" @click="shareUrl(getReadOnlyURL(), 'Calendar')"
+                                    class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
+                                    </svg>
+                                </button>
+                            </div>
+
+                            <!-- Short URL alias -->
+                            <div class="text-xs text-color-1">
+                                Short: pastecal.com/{{ getReadOnlySlug() }}
+                            </div>
+
+                            <!-- Customize existing link -->
+                            <div class="">
+                                <button @click="showReadOnlySlug = !showReadOnlySlug"
+                                    class="text-xs text-blue-500 hover:text-blue-600">
+                                    {{ showReadOnlySlug ? 'Cancel' : 'Customize URL' }}
+                                </button>
+
+                                <div v-if="showReadOnlySlug" class="mt-2">
+                                    <div class="flex gap-2">
+                                        <input type="text" v-model="readOnlySlugInput" placeholder="Enter custom name"
+                                            class="flex-1 p-2 border border-color-default rounded bg-bg text-sm">
+                                        <button @click="customizeExistingLink" :disabled="!readOnlySlugInput.trim()"
+                                            class="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-gray-400 text-xs">
+                                            Update
+                                        </button>
+                                    </div>
+                                    <div class="text-xs text-color-1 mt-1">
+                                        New: pastecal.com/view/{{ readOnlySlugInput || 'custom-name' }}
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            </div>
 
-        </div>
+                    <!-- Current View (Bottom Left) -->
+                    <div class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
+                        <h4 class="font-medium mb-2 inline-flex items-center gap-x-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                stroke="currentColor" class="size-5">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+                            </svg>
 
-        <!-- Quick Info Popup -->
-        <div v-if="selectedEventId" 
-             class="fixed z-50 bg-white rounded-lg shadow-xl border border-gray-200 w-80 overflow-hidden"
-             :style="popupStyle">
-             <!-- Header -->
-             <div class="bg-blue-600 px-4 py-3 flex justify-between items-start text-white">
-                <h3 class="font-bold text-lg truncate flex-1 mr-2">{{ getEventById(selectedEventId)?.title || '(No Title)' }}</h3>
-                <div class="flex items-center gap-1">
-                    <button @click="openEditor(selectedEventId)" class="p-1 hover:bg-blue-700 rounded transition-colors" title="Edit">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                    </button>
-                    <button @click="deleteEvent(selectedEventId)" class="p-1 hover:bg-blue-700 rounded transition-colors" title="Delete">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                    </button>
-                    <button @click="closePreview" class="p-1 hover:bg-blue-700 rounded transition-colors ml-1" title="Close">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
-                </div>
-             </div>
-             <!-- Body -->
-             <div class="p-4 bg-white">
-                 <div class="flex items-start gap-3 mb-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-gray-500 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                    <div class="text-sm text-gray-700" v-if="getEventById(selectedEventId)">
-                        <div class="font-medium">{{ df.format(getEventById(selectedEventId).start, 'MMMM d, yyyy') }}</div>
-                        <div class="text-gray-500">
-                            {{ formatTime(getEventById(selectedEventId).start) }} - {{ formatTime(getEventById(selectedEventId).end) }}
+                            Current View
+                        </h4>
+                        <p class="text-xs text-color-1 mb-3 italic">
+                            Share link to current date and view. Or add URL params: <code
+                                class="bg-disabled px-1 py-0.5 rounded text-xs">?date=2024-04-01&view=week</code>
+                        </p>
+                        <div class="flex gap-2">
+                            <input type="text" :value="currentViewURL" readonly
+                                class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
+                            <button @click="copyToClipboard(currentViewURL, $event.currentTarget)"
+                                class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
+                                <icon name="copy" class="h-4 w-4 mr-1"></icon>
+                                <span>Copy</span>
+                            </button>
+                            <button v-if="canShare()" @click="shareUrl(currentViewURL, 'Calendar View')"
+                                class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                                    stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
+                                </svg>
+                            </button>
                         </div>
                     </div>
-                 </div>
-                 <div v-if="getEventById(selectedEventId)?.description" class="flex items-start gap-3 mt-3 pt-3 border-t border-gray-100">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-gray-500 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7" /></svg>
-                    <div class="text-sm text-gray-600 whitespace-pre-wrap">{{ getEventById(selectedEventId).description }}</div>
-                 </div>
-             </div>
-        </div>
 
-        <!-- Inline Editor (popup) -->
-        <div v-if="isEditorOpen" class="fixed inset-0 z-[100] pointer-events-none">
-            <div class="pointer-events-auto absolute bg-white border border-gray-200 rounded-lg shadow-xl w-80 max-w-[90vw] p-4"
-                 :style="{ top: `${editorPosition.top}px`, left: `${editorPosition.left}px` }">
-                <div class="flex justify-end">
-                    <button @click="closeEditor" class="text-gray-400 hover:text-gray-600">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
-                </div>
-                <div class="mb-3">
-                    <input v-model="editorForm.title"
-                        type="text"
-                        class="w-full border-b border-gray-300 focus:border-blue-500 focus:outline-none text-sm font-semibold"
-                        placeholder="Add title">
-                </div>
-                <div class="flex items-center gap-2 text-xs text-gray-600 mb-3">
-                    <div class="w-4 h-4 bg-gray-200 rounded-full flex-shrink-0"></div>
-                    <div class="text-gray-700">{{ df.format(editorForm.startTs, 'MMMM d, yyyy') }} ({{ formatTime(editorForm.startTs) }} – {{ formatTime(editorForm.endTs) }})</div>
-                </div>
-                <div class="flex justify-end gap-2 text-xs">
-                    <button @click="closeEditor" class="px-3 py-1 text-gray-600 hover:bg-gray-100 rounded">More Details</button>
-                    <button @click="saveEvent" class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded">Save</button>
-                </div>
-            </div>
-        </div>
-                </div>
-            </div>
-        </div>
+                    <!-- Phone/Apps (Bottom Right) -->
+                    <div class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
+                        <h4 class="font-medium mb-2 inline-flex items-center gap-x-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
+                                stroke="currentColor" class="size-5">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
+                            </svg>
 
-        <!-- Drag Ghost (Month View) -->
-        <div v-if="dragState.isDragging && dragState.action === 'month-move' && dragState.ghostEvent" 
-             class="drag-ghost px-2 py-1 text-xs rounded text-white font-bold truncate w-32 pointer-events-none"
-             :style="[getEventStyle(dragState.ghostEvent), { left: dragState.mouseX + 'px', top: dragState.mouseY + 'px' }]">
-            {{ dragState.ghostEvent.title }}
-        </div>
 
-        <!-- Simple Toast/Hint -->
-    </div>
+                            Phone/Apps
+                        </h4>
+                        <p class="text-xs text-color-1 mb-3 italic">
+                            ICS link for other apps (phone calendar, Outlook, Google Calendar, etc.)
+                        </p>
 
-    <!-- Time Grid View Component Template -->
-    <script type="text/x-template" id="time-grid-view-template">
-        <div class="h-full flex flex-col">
-            <!-- Header Row -->
-            <div class="border-b border-gray-200 bg-white flex-shrink-0 grid"
-                 :style="`grid-template-columns: 60px repeat(${visibleDates.length}, 1fr)`">
-                <div class="border-r border-gray-200 p-2"></div> <!-- Gutter -->
-                <div v-for="(date, idx) in visibleDates" :key="idx" 
-                     class="p-2 text-center border-r border-gray-100">
-                    <div class="text-xs font-semibold text-gray-500 uppercase">{{ weekDays[date.getDay()] }}</div>
-                    <div class="text-xl font-light w-8 h-8 mx-auto rounded-full flex items-center justify-center" 
-                         :class="{'bg-blue-600 text-white font-bold': isToday(date)}">
-                        {{ date.getDate() }}
-                    </div>
-                </div>
-            </div>
-
-            <!-- Scrollable Area -->
-            <div class="flex-1 overflow-y-auto relative" ref="timeScroll">
-                <div class="time-grid relative"
-                     :style="`grid-template-columns: 60px repeat(${visibleDates.length}, 1fr)`">
-                    
-                    <!-- Time Labels (Left Gutter) -->
-                    <div class="flex flex-col text-xs text-gray-400 text-right pr-2 pt-[-0.5rem] bg-white sticky left-0 z-10 border-r border-gray-200">
-                        <div v-for="h in 24" :key="h" class="h-[50px] -mt-2.5 bg-white select-none">
-                            {{ formatTimeLabel(h-1) }}
-                        </div>
-                    </div>
-                    
-                    <!-- Day Columns -->
-                    <div v-for="(date, idx) in visibleDates" :key="idx" 
-                         class="time-col relative"
-                         :data-date="date.toISOString()"
-                         @click="$emit('create-time-event', date, $event)">
-                        
-                        <!-- Grid lines -->
-                        <div v-for="h in 24" :key="h" class="hour-row pointer-events-none"></div>
-                        
-                        <!-- Current Time Indicator -->
-                        <div v-if="isToday(date)" class="absolute w-full h-0.5 bg-red-500 z-30 pointer-events-none flex items-center"
-                             :style="{ top: currentTimeTop + 'px' }">
-                             <div class="w-2 h-2 bg-red-500 rounded-full -ml-1"></div>
-                        </div>
-
-                        <!-- Original Position Ghost (When Dragging) -->
-                        <div v-if="dragState.isDragging && isSameDay(date, new Date(dragState.originalStart)) && dragState.action === 'time-move'"
-                             class="absolute inset-x-1 rounded border-2 border-gray-400 border-dashed bg-gray-100 opacity-60 pointer-events-none z-0"
-                             :style="getGhostStyle()">
-                        </div>
-
-                        <!-- Absolute Events -->
-                        <div v-for="event in getEventsWithLayout(date)" :key="event.id" 
-                             class="event-card absolute p-1 text-xs inset-x-1 rounded overflow-hidden border-l-4"
-                             :class="{
-                                 'dragging-active': dragState.eventId === event.id && dragState.isDragging, 
-                                 'dragging-move-active': dragState.eventId === event.id && dragState.isDragging && dragState.action === 'time-move',
-                                 'ring-2 ring-offset-1 ring-black': selectedEventId === event.id
-                             }"
-                             :style="[getEventStyle(event, true), getWeekEventPosition(event), { cursor: eventCursor }]"
-                             @mousedown.stop="$emit('start-drag', event, $event, 'time-move')"
-                             @click.stop="$emit('select-event', event, $event)">
-                            <div class="event-text-content">
-                                <div class="font-bold leading-tight pointer-events-none">{{ event.title }}</div>
-                                <div class="opacity-75 text-[10px] pointer-events-none">{{ formatTime(event.start) }} - {{ formatTime(event.end) }}</div>
+                        <!-- Edit ICS -->
+                        <div class="space-y-3">
+                            <div v-if="canEdit">
+                                <div class="text-xs font-medium text-color-2 mb-1">Full Access:</div>
+                                <div class="flex gap-2">
+                                    <input type="text" :value="getEditableICSURL()" readonly
+                                        class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
+                                    <button @click="copyToClipboard(getEditableICSURL(), $event.currentTarget)"
+                                        class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
+                                        <icon name="copy" class="h-4 w-4 mr-1"></icon>
+                                        <span>Copy</span>
+                                    </button>
+                                </div>
                             </div>
-                            <!-- Resize Handle -->
-                            <div class="resize-handle absolute bottom-0 inset-x-0 h-2 z-20"
-                                 @mousedown.stop="$emit('start-drag', event, $event, 'resize')"></div>
+
+                            <!-- View-Only ICS -->
+                            <div v-if="getReadOnlyURL()">
+                                <div class="text-xs font-medium text-color-2 mb-1">View Only:</div>
+                                <div class="flex gap-2">
+                                    <input type="text" :value="getReadOnlyICSURL()" readonly
+                                        class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
+                                    <button @click="copyToClipboard(getReadOnlyICSURL(), $event.currentTarget)"
+                                        class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
+                                        <icon name="copy" class="h-4 w-4 mr-1"></icon>
+                                        <span>Copy</span>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
+
                 </div>
             </div>
-        </div>
-    </script>
 
-    <!-- Month View Component Template -->
-    <script type="text/x-template" id="month-view-template">
-        <div class="h-full flex flex-col overflow-y-auto">
-            <!-- Headers -->
-            <div class="grid grid-cols-7 border-b border-gray-200 bg-gray-50">
-                <div v-for="day in weekDays" :key="day" class="py-2 text-center text-sm font-semibold text-gray-500 uppercase tracking-wide">
-                    {{ day }}
-                </div>
-            </div>
-            <!-- Grid -->
-            <div class="calendar-grid flex-1">
-                <div v-for="(cell, idx) in cells" :key="idx" 
-                     class="calendar-cell relative group hover:bg-gray-50 flex flex-col gap-1 cursor-pointer"
-                     :class="{'bg-gray-50/50': !cell.isCurrentMonth, 'bg-blue-50': isToday(cell.date)}"
-                     :data-date="cell.date.toISOString()"
-                     @click.self="$emit('create-event', cell.date, $event)">
-                    
-                    <span class="text-xs font-medium p-1 ml-auto rounded-full w-7 h-7 flex items-center justify-center"
-                          :class="isToday(cell.date) ? 'bg-blue-600 text-white' : 'text-gray-700'">
-                        {{ cell.dayNumber }}
-                    </span>
-
-                    <!-- Month Events -->
-                    <div v-for="event in getEventsForDate(cell.date)" :key="event.id"
-                         class="px-1.5 py-0.5 text-xs rounded truncate cursor-pointer shadow-sm border-l-2 hover:brightness-95 transition-all select-none"
-                         :class="{'is-dragging': dragState.eventId === event.id}"
-                         :style="getEventStyle(event)"
-                         @mousedown.stop="$emit('start-drag', event, $event, 'month-move')"
-                         @click.stop="$emit('select-event', event, $event)">
-                        {{ event.title }}
-                    </div>
-                </div>
-            </div>
-        </div>
-    </script>
-
-    <!-- Calendar Toolbar Component Template -->
-    <script type="text/x-template" id="calendar-toolbar-template">
-        <div class="flex justify-between items-center p-3 border-b border-gray-200 bg-white flex-shrink-0">
-            <div class="flex items-center gap-4">
-                <!-- Date Nav -->
-                <div class="flex items-center bg-gray-100 rounded-lg p-0.5">
-                    <button @click="$emit('prev')" class="px-2 hover:bg-white rounded-md h-7 flex items-center text-gray-600 text-lg leading-none mb-0.5">&lsaquo;</button>
-                    <button @click="$emit('today')" class="px-3 text-xs font-bold hover:bg-white rounded-md h-7 text-gray-700 uppercase tracking-wide">Today</button>
-                    <button @click="$emit('next')" class="px-2 hover:bg-white rounded-md h-7 flex items-center text-gray-600 text-lg leading-none mb-0.5">&rsaquo;</button>
-                </div>
-                <!-- Date Range -->
-                <div class="text-xl font-medium text-gray-800">{{ currentTitle }}</div>
-            </div>
-
-            <!-- View Switcher -->
-            <div class="flex bg-gray-100 rounded-lg p-0.5">
-                <button v-for="view in views" 
-                    :key="view"
-                    @click="$emit('change-view', view)"
-                    :class="['px-3 py-1 rounded-md text-xs font-medium transition-all', currentView === view ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700']">
-                    {{ view }}
-                </button>
-            </div>
-        </div>
-    </script>
-
-    <!-- App Topbar Component Template -->
-    <script type="text/x-template" id="app-topbar-template">
-        <div class="flex-shrink-0 bg-white border-b border-gray-200 md:border-b-0">
-            <!-- Mobile Topbar -->
-            <div class="md:hidden flex items-center justify-between p-2">
-                <!-- Left: Logo -->
-                <div class="flex items-center">
-                    <img class="h-8 w-8 mr-1" src="https://pastecal.com/img/pastecal.logo.svg" alt="Logo">
-                    <span class="text-blue-500 font-bold text-sm">pastecal</span>
-                </div>
-
-                <!-- Center: Title -->
-                <div class="absolute left-1/2 transform -translate-x-1/2 font-bold text-gray-800 cursor-pointer"
-                     @click="$emit('edit-title')">
-                    {{ title }}
-                </div>
-
-                <!-- Right: Menu -->
-                <button @click="$emit('toggle-settings')" class="p-2 text-gray-500">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" /></svg>
-                </button>
-            </div>
-
-            <!-- Desktop Topbar -->
-            <div class="hidden md:flex justify-between items-center pb-1 md:pb-3 text-sm">
-                <!-- Left: Logo & App Actions -->
-                <section class="flex-1 flex items-center min-w-0">
-                    <div class="flex items-center h-8 mr-4">
-                        <img class="h-8 w-8 mr-1.5 flex-shrink-0" src="https://pastecal.com/img/pastecal.logo.svg" alt="Logo">
-                        <div class="flex flex-col leading-none">
-                            <span class="text-blue-500 font-bold text-sm tracking-tight">pastecal</span>
-                            <span class="text-gray-400 text-[10px] -mt-0.5">no-login calendar</span>
-                        </div>
-                    </div>
-                    
-                    <!-- App Icons -->
-                    <div class="flex items-center space-x-1">
-                        <button class="text-gray-400 hover:text-blue-500 p-1.5 rounded-full transition-colors" title="Help">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                        </button>
-                        <button class="text-gray-400 hover:text-blue-500 p-1.5 rounded-full transition-colors" title="Search">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-                        </button>
-                        <button @click="$emit('toggle-settings')" class="text-gray-400 hover:text-blue-500 p-1.5 rounded-full transition-colors" title="Settings">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="currentColor" viewBox="0 0 16 16"><path d="M9.405 1.05c-.413-1.4-2.397-1.4-2.81 0l-.1.34a1.464 1.464 0 0 1-2.105.872l-.31-.17c-1.283-.698-2.686.705-1.987 1.987l.169.311c.446.82.023 1.841-.872 2.105l-.34.1c-1.4.413-1.4 2.397 0 2.81l.34.1a1.464 1.464 0 0 1 .872 2.105l-.17.31c-.698 1.283.705 2.686 1.987 1.987l.311-.169a1.464 1.464 0 0 1 2.105.872l.1.34c.413 1.4 2.397 1.4 2.81 0l.1-.34a1.464 1.464 0 0 1-2.105-.872l.31.17c1.283.698 2.686-.705 1.987-1.987l-.169-.311a1.464 1.464 0 0 1-2.105-.872l-.1-.34zM8 10.93a2.929 2.929 0 1 1 0-5.86 2.929 2.929 0 0 1 0 5.858z" /></svg>
-                        </button>
-                    </div>
-                </section>
-
-                <!-- Center: Calendar Title -->
-                <section class="flex-1 flex justify-center">
-                    <div class="text-lg font-bold text-gray-800 cursor-pointer hover:text-blue-600 transition-colors px-2 py-1 rounded hover:bg-gray-50"
-                         @click="$emit('edit-title')">
-                        {{ title }}
-                    </div>
-                </section>
-
-                <!-- Right: Share Actions -->
-                <section class="flex-1 flex justify-end items-center">
-                    <div class="flex items-center bg-white border border-gray-200 rounded-full px-3 py-1 shadow-sm hover:border-blue-400 cursor-pointer transition-colors group">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-gray-400 group-hover:text-blue-500 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
-                        <div class="text-xs text-gray-500">pastecal.com/<span class="font-bold text-gray-700">native-proto</span></div>
-                    </div>
-                </section>
-            </div>
-        </div>
-    </script>
-
-    <!-- Settings Modal Component Template -->
-    <script type="text/x-template" id="settings-modal-template">
-        <div class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50" @click.self="$emit('close')">
-            <div class="w-full max-w-2xl p-4 text-sm text-gray-800 bg-white rounded-lg shadow-xl border border-gray-200 m-4">
-                <div class="flex justify-between items-center mb-4 border-b pb-2">
-                    <h2 class="text-lg font-bold">Settings</h2>
-                    <button @click="$emit('close')" class="text-gray-500 hover:text-gray-700">✕</button>
-                </div>
+            <div v-if="showSettings" class="w-full p-2.5 text-sm text-color-2" v-cloak>
+                <h2 class="text-lg font-bold mb-4">Settings</h2>
 
                 <div class="grid md:grid-cols-2 gap-6">
                     <!-- Global Settings -->
-                    <div class="bg-gray-50 p-4 rounded-lg shadow-sm border border-gray-200">
-                        <h3 class="font-bold text-gray-800 mb-3">Personal Settings</h3>
-                        <p class="text-xs text-gray-500 mb-4 italic">Default settings for your device.</p>
+                    <div class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
+                        <h3 class="font-bold text-color-2 mb-3">Personal Settings</h3>
+                        <p class="text-xs text-color-1 mb-4 italic">Default settings for your device, when viewing any
+                            calendar.
+                        </p>
 
                         <div class="space-y-4">
                             <div>
+                                <label class="block mb-1 font-medium">First day of week</label>
+                                <select v-model="globalSettings.firstDayOfWeek" @change="saveGlobalSettings"
+                                    class="w-full p-2 border border-color-default rounded ">
+                                    <option value="0">Sunday</option>
+                                    <option value="1">Monday</option>
+                                </select>
+                            </div>
+
+                            <div>
                                 <label class="block mb-1 font-medium">Time format</label>
-                                <select :value="timeFormat" @change="$emit('update:timeFormat', $event.target.value)"
-                                    class="w-full p-2 border border-gray-200 rounded bg-white">
+                                <select v-model="globalSettings.timeFormat" @change="saveGlobalSettings"
+                                    class="w-full p-2 border border-color-default rounded ">
                                     <option value="12">12-hour (1:00 PM)</option>
                                     <option value="24">24-hour (13:00)</option>
                                 </select>
                             </div>
-                            
-                            <!-- Placeholders for other settings matching main app -->
+
                             <div>
-                                <label class="block mb-1 font-medium text-gray-400">First day of week</label>
-                                <select disabled class="w-full p-2 border border-gray-200 rounded bg-white text-gray-400">
-                                    <option>Sunday</option>
+                                <label class="block mb-1 font-medium">Personal default view</label>
+                                <select v-model="globalSettings.defaultView" @change="saveGlobalSettings"
+                                    class="w-full p-2 border border-color-default rounded ">
+                                    <option value="Day">Day</option>
+                                    <option value="Week">Week</option>
+                                    <option value="Month">Month</option>
+                                    <option value="Custom">Custom ({{ personalCustomViewLabel }})</option>
+                                    <option value="Year">Year</option>
+                                    <option value="Agenda">Agenda</option>
+                                </select>
+
+                                <!-- Custom view configuration panel -->
+                                <div v-if="globalSettings.defaultView === 'Custom'"
+                                    class="mt-3 p-3 bg-color-panel border border-color-default rounded">
+                                    <label class="block mb-2 text-sm font-medium">Custom view settings</label>
+                                    <div class="flex items-center gap-2">
+                                        <input type="number" v-model.number="globalSettings.customViewDuration"
+                                            @change="saveGlobalSettings" :min="1"
+                                            :max="globalSettings.customViewUnit === 'Weeks' ? 52 : 24"
+                                            class="w-20 p-2 border border-color-default rounded text-sm">
+                                        <select v-model="globalSettings.customViewUnit" @change="saveGlobalSettings"
+                                            class="flex-1 p-2 border border-color-default rounded text-sm">
+                                            <option value="Weeks">Weeks</option>
+                                            <option value="Months">Months</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block mb-1 font-medium">Start hour</label>
+                                <select v-model="globalSettings.startHour" @change="saveGlobalSettings"
+                                    class="w-full p-2 border border-color-default rounded ">
+                                    <option value="00:00">12:00 AM</option>
+                                    <option value="05:00">5:00 AM</option>
+                                    <option value="06:00">6:00 AM</option>
+                                    <option value="07:00">7:00 AM</option>
+                                    <option value="08:00">8:00 AM</option>
+                                    <option value="09:00">9:00 AM</option>
                                 </select>
                             </div>
+
                             <div>
-                                <label class="block mb-1 font-medium text-gray-400">Theme</label>
-                                <select disabled class="w-full p-2 border border-gray-200 rounded bg-white text-gray-400">
-                                    <option>Light</option>
-                                </select>
+                                <label class="block text-sm font-medium text-color-2 mb-2">
+                                    Theme
+                                </label>
+                                <div class="relative">
+                                    <select v-model="globalSettings.darkMode" @change="saveGlobalSettings"
+                                        class="appearance-none bg-1 border border-color-default text-color-2 rounded-lg px-4 py-2 pr-8 w-full focus:outline-none focus:ring-2 focus:ring-link focus:border-transparent">
+                                        <option value="auto">🌓 Auto (System)</option>
+                                        <option value="light">☀️ Light</option>
+                                        <option value="dark">🌙 Dark</option>
+                                    </select>
+                                    <div class="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                                        <svg class="w-5 h-5 text-color-1" fill="none" stroke="currentColor"
+                                            viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M19 9l-7 7-7-7"></path>
+                                        </svg>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
-                    
-                    <!-- Calendar Specific Placeholders -->
-                    <div class="bg-gray-50 p-4 rounded-lg shadow-sm border border-gray-200">
-                        <h3 class="font-bold text-gray-800 mb-3">Calendar Settings</h3>
-                        <p class="text-xs text-gray-500 mb-4 italic">Settings for everyone viewing this calendar.</p>
-                        <div class="text-center text-gray-400 py-8">
-                            (Calendar-specific settings coming soon)
+
+                    <!-- Calendar-specific Settings -->
+                    <div class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
+                        <h3 class="font-bold text-color-2 mb-3">Settings for '{{calendar.title}}' </h3>
+                        <p class="text-xs text-color-1 mb-4 italic">Default settings for everyone viewing this calendar.
+                        </p>
+
+                        <div class="space-y-4">
+                            <div class="relative">
+                                <label class="block mb-1 font-medium">Event Colors &amp; Labels</label>
+                                <p class="text-xs text-color-1 mb-2 italic">Click color circle or text to customize</p>
+
+                                <button v-if="hasCustomColors" @click="resetAllColors"
+                                    class="absolute right-0 top-0 text-xs text-link hover:text-link-hover">
+                                    Reset colors
+                                </button>
+
+                                <div v-for="(label, index) in localSettings.typeLabels" :key="index"
+                                    class="flex items-center mb-2">
+                                    <div class="relative">
+                                        <input type="color" :id="'color-picker-' + index"
+                                            :value="localSettings.colors[index]"
+                                            @change="updateEventColor(index, $event.target.value)"
+                                            :aria-label="'Color picker for ' + (localSettings.typeLabels[index] || 'event type ' + (index + 1))"
+                                            class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+                                        <div class="w-5 h-5 rounded-full mr-2 cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-link transition-all"
+                                            :style="{backgroundColor: getTypeColor(index+1)}"></div>
+                                    </div>
+                                    <input :value="label" @input="updateTypeLabel(index+1, $event.target.value)"
+                                        :aria-label="'Label for type ' + (index + 1)"
+                                        class="flex-1 p-2 border border-color-default rounded text-sm"
+                                        :placeholder="`Type ${index+1}`">
+                                </div>
+                            </div>
+
+                            <!-- Default View -->
+                            <div>
+                                <label class="block mb-1 font-medium">Default view when calendar is opened</label>
+                                <select v-model="calendar.options.defaultView"
+                                    class=" w-1/3 p-2 border border-color-default rounded text-sm">
+                                    <option :value="null">Auto ({{ calendarAutoViewLabel }})</option>
+                                    <option value="Day">Day</option>
+                                    <option value="Week">Week</option>
+                                    <option value="Month">Month</option>
+                                    <option value="Custom">Custom ({{ calendarCustomViewLabel }})</option>
+                                    <option value="Year">Year</option>
+                                    <option value="Agenda">Agenda</option>
+                                </select>
+                                <p class="mt-1 text-xs text-color-secondary italic">
+                                    Auto allows the user's preference to load. Setting a default forces everyone to
+                                    start on the same view.
+                                </p>
+
+                                <!-- Custom view configuration panel for calendar -->
+                                <div v-if="calendar.options.defaultView === 'Custom'"
+                                    class="mt-3 p-3 bg-color-panel border border-color-default rounded">
+                                    <label class="block mb-2 text-sm font-medium">Custom view settings</label>
+                                    <div class="flex items-center gap-2">
+                                        <input type="number" v-model.number="calendar.options.customViewDuration"
+                                            :min="1" :max="calendar.options.customViewUnit === 'Weeks' ? 52 : 24"
+                                            class="w-20 p-2 border border-color-default rounded text-sm">
+                                        <select v-model="calendar.options.customViewUnit"
+                                            class="flex-1 p-2 border border-color-default rounded text-sm">
+                                            <option value="Weeks">Weeks</option>
+                                            <option value="Months">Months</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label class="block mb-1 font-medium">Display options</label>
+                                <div class="flex items-center mt-2">
+                                    <input type="checkbox" id="extendedHours" v-model="calendar.options.extended"
+                                        class="mr-2">
+                                    <label for="extendedHours">Show extended hours (12-4 AM)</label>
+                                </div>
+                            </div>
+
+                            <!-- 
+                                // Rename / Move (COMMENTED OUT FOR NOW)
+                            <div v-if="isAutogeneratedId" class="pt-4 border-t border-color-default mt-4">
+                                <h4 class="font-bold text-red-600 mb-2 text-xs uppercase tracking-wider">Danger Zone</h4>
+                                
+                                <div class="mb-1">
+                                    <label class="block mb-1 font-medium text-xs text-color-2">Rename / Move Calendar</label>
+                                    <p class="text-xs text-color-1 mb-2 italic">Copy this calendar's data to a new URL. The old URL will remain accessible.</p>
+                                    <div class="flex gap-2">
+                                        <input type="text" v-model="newCalendarId" placeholder="new-name" 
+                                               class="flex-1 p-2 border border-color-default rounded text-sm"
+                                               @keyup.enter="renameCalendar">
+                                        <button @click="renameCalendar" 
+                                                class="px-3 py-1 bg-red-50 text-red-600 border border-red-200 rounded text-xs hover:bg-red-100 transition-colors whitespace-nowrap">
+                                            Move
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            -->
                         </div>
                     </div>
                 </div>
             </div>
+        </panel>
+
+        <div id="cal2_wrap" style="width: 100%; height: 100%;" class="flex-1 overflow-hidden">
+            <native-calendar
+                :events="calendar.events"
+                :time-format="globalSettings.timeFormat"
+                @update:events="calendar.setEvents($event)"
+            ></native-calendar>
         </div>
-    </script>
 
-    <script>
-        const { createApp, ref, computed, onMounted, onUnmounted } = Vue;
-        const df = window.dateFns;
+        <!-- Claim Intervention Modal -->
+        <div v-if="showClaimDialog"
+            class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1000]" v-cloak>
+            <div class="bg-1 rounded-lg shadow-xl p-6 w-full max-w-md mx-4 relative">
+                <button @click="showClaimDialog = false"
+                    class="absolute top-4 right-4 text-gray-400 hover:text-gray-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd"
+                            d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                            clip-rule="evenodd" />
+                    </svg>
+                </button>
+
+                <div class="text-center mb-6">
+                    <h3 class="text-lg font-bold text-gray-900 mb-2">Name your calendar</h3>
+                    <p class="text-sm text-gray-600">
+                        You're about to claim this permanent link.
+                        <br>
+                        Want to give it a custom name to make it easier to remember?
+                    </p>
+                </div>
+
+                <div class="mb-6">
+                    <div class="flex items-center border-2 border-blue-500 rounded-md overflow-hidden bg-white">
+                        <span
+                            class="pl-3 pr-1 text-gray-500 text-sm font-medium bg-gray-50 h-10 flex items-center border-r border-gray-200">pastecal.com/</span>
+                        <input ref="claimInput" type="text" v-model="calendar.id" aria-label="Claim custom URL"
+                            class="flex-1 p-2 text-gray-900 font-medium focus:outline-none" placeholder="my-calendar"
+                            @keyup.enter="confirmClaim">
+                    </div>
+                    <p class="text-xs text-gray-500 mt-2 text-center">
+                        Examples: <span class="italic">marketing-schedule, trip-2025, soccer-team</span>
+                    </p>
+                </div>
+                <button @click="confirmClaim"
+                    class="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition-colors flex items-center justify-center gap-2">
+                    <span>Claim URL</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <pre v-text="syncFusionEvents" v-if="debug"></pre>
+        <pre v-text="calendar" v-if="debug"></pre>
+
+        <toast-notification ref="toast"></toast-notification>
+    </div>
+
+    
+    <script src="/nativecal/loader.js"></script>
 
-        // Component: App Topbar
-        const AppTopbar = {
-            template: '#app-topbar-template',
-            props: ['title'],
-            emits: ['toggle-settings', 'edit-title']
-        };
-
-        // Component: Calendar Toolbar
-        const CalendarToolbar = {
-            template: '#calendar-toolbar-template',
-            props: ['currentTitle', 'currentView', 'views'],
-            emits: ['prev', 'next', 'today', 'change-view']
-        };
-
-        // Component: Month View
-        const MonthView = {
-            template: '#month-view-template',
-            props: ['cells', 'weekDays', 'dragState', 'getEventsForDate', 'getEventStyle', 'isToday'],
-            emits: ['create-event', 'start-drag', 'select-event']
-        };
-
-        // Component: Time Grid View
-        const TimeGridView = {
-            template: '#time-grid-view-template',
-            props: [
-                'currentView', 'visibleDates', 'weekDays', 'isToday', 
-                'currentTimeTop', 'dragState', 'selectedEventId', 'eventCursor',
-                'getEventsWithLayout', 'getEventStyle', 'getWeekEventPosition', 'getGhostStyle', 'formatTime', 'isSameDay', 'timeFormat'
-            ],
-            emits: ['create-time-event', 'start-drag', 'select-event'],
-            methods: {
-                formatTimeLabel(hours) {
-                    const date = new Date();
-                    date.setHours(hours, 0, 0, 0);
-                    // Use parent's formatTime if possible, or re-implement logic based on timeFormat
-                    // To respect 12/24h, we need to know the format. 
-                    // Actually, formatTime is passed as a prop!
-                    return this.formatTime(date.getTime());
-                }
-            }
-        };
-
-        // Component: Settings Modal
-        const SettingsModal = {
-            template: '#settings-modal-template',
-            props: ['timeFormat'],
-            emits: ['update:timeFormat', 'close']
-        };
-
-        createApp({
-            components: {
-                'settings-modal': SettingsModal,
-                'app-topbar': AppTopbar,
-                'calendar-toolbar': CalendarToolbar,
-                'month-view': MonthView,
-                'time-grid-view': TimeGridView
-            },
-            setup() {
-                const currentView = ref('Month'); // Default view
-                const views = ['Day', 'Week', 'Month', 'Year', 'Agenda'];
-                const currentDate = ref(new Date());
-                const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-                const notification = ref('');
-                const selectedEventId = ref(null);
-                const popupPosition = ref({ top: 0, left: 0 });
-                const isEditorOpen = ref(false);
-                const editorForm = ref({ id: null, title: '', description: '', startTs: null, endTs: null, type: 1 });
-                const editorPosition = ref({ top: 120, left: 120 });
-                const timeFormat = ref('12'); // '12' for AM/PM, '24' for military
-                const showSettings = ref(false);
-                const calendarTitle = ref('My Schedule');
-                const calendar = ref(null);
-                const isExisting = ref(false);
-                const isLoading = ref(true);
-                
-                // ----------------------------------------------------------------
-                // Data
-                // ----------------------------------------------------------------
-                const events = ref([]);
-
-                const colors = ["#3f51b5", "#e3165b", "#ff6652", "#4caf50", "#ff9800", "#03a9f4", "#9e9e9e", "#27282f"];
-
-                // ----------------------------------------------------------------
-                // Computed Props
-                // ----------------------------------------------------------------
-                const eventCursor = computed(() => {
-                    if (dragState.value.isDragging && dragState.value.eventId) {
-                        return dragState.value.action === 'resize' ? 'ns-resize' : 'grabbing';
-                    }
-                    return 'pointer';
-                });
-
-                const currentTitle = computed(() => {
-                    if (currentView.value === 'Year') return df.format(currentDate.value, 'yyyy');
-                    if (currentView.value === 'Day') return df.format(currentDate.value, 'MMMM d, yyyy');
-                    return df.format(currentDate.value, 'MMMM yyyy');
-                });
-
-                const popupStyle = computed(() => ({
-                    top: `${popupPosition.value.top}px`,
-                    left: `${popupPosition.value.left}px`
-                }));
-
-                const getEventById = (id) => events.value.find(e => e.id === id);
-
-                const toDateTimeLocalString = (timestamp) => {
-                    const date = new Date(timestamp);
-                    const pad = (num) => String(num).padStart(2, '0');
-                    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-                };
-
-                // Month View Logic
-                const monthCells = computed(() => {
-                    const start = df.startOfMonth(currentDate.value);
-                    const end = df.endOfMonth(currentDate.value);
-                    const days = df.eachDayOfInterval({ start, end });
-                    const startDay = df.getDay(start);
-                    const prevMonthDays = [];
-                    for(let i = 0; i < startDay; i++) {
-                        prevMonthDays.unshift({
-                            date: df.subDays(start, i + 1),
-                            dayNumber: df.getDate(df.subDays(start, i + 1)),
-                            isCurrentMonth: false
-                        });
-                    }
-                    const currentMonthDays = days.map(d => ({ date: d, dayNumber: df.getDate(d), isCurrentMonth: true }));
-                    // Pad end
-                    const totalCells = 42; // 6 rows
-                    const remaining = totalCells - (prevMonthDays.length + currentMonthDays.length);
-                    const nextMonthDays = [];
-                    for(let i = 1; i <= remaining; i++) {
-                        nextMonthDays.push({
-                            date: df.addDays(end, i),
-                            dayNumber: df.getDate(df.addDays(end, i)),
-                            isCurrentMonth: false
-                        });
-                    }
-                    
-                    return [...prevMonthDays, ...currentMonthDays, ...nextMonthDays];
-                });
-
-                // Week/Day View Logic
-                const visibleDates = computed(() => {
-                    if (currentView.value === 'Day') {
-                        return [currentDate.value];
-                    }
-                    // Week view
-                    const start = df.startOfWeek(currentDate.value);
-                    return Array.from({ length: 7 }, (_, i) => df.addDays(start, i));
-                });
-
-                // Year View Logic
-                const yearMonths = computed(() => {
-                    const yearStart = df.startOfYear(currentDate.value);
-                    const months = df.eachMonthOfInterval({
-                        start: yearStart,
-                        end: df.endOfYear(currentDate.value)
-                    });
-
-                    return months.map(m => {
-                        const start = df.startOfMonth(m);
-                        const end = df.endOfMonth(m);
-                        const days = df.eachDayOfInterval({ start, end });
-                        return {
-                            name: df.format(m, 'MMMM'),
-                            date: m,
-                            startPad: df.getDay(start),
-                            days: days.map(d => ({
-                                date: d,
-                                dayNumber: df.getDate(d),
-                                hasEvents: events.value.some(e => df.isSameDay(new Date(e.start), d))
-                            }))
-                        };
-                    });
-                });
-
-                // Agenda View Logic
-                const agendaEvents = computed(() => {
-                    // Sort all events by start date
-                    const sorted = [...events.value].sort((a, b) => a.start - b.start);
-                    
-                    // Group by date
-                    const groups = {};
-                    sorted.forEach(event => {
-                        const dateKey = df.format(new Date(event.start), 'yyyy-MM-dd');
-                        if (!groups[dateKey]) {
-                            groups[dateKey] = {
-                                date: new Date(event.start),
-                                formattedDate: df.format(new Date(event.start), 'EEEE, MMMM d'),
-                                isToday: df.isSameDay(new Date(event.start), new Date()),
-                                events: []
-                            };
-                        }
-                        groups[dateKey].events.push(event);
-                    });
-                    return groups; // Object (not ordered), usually okay for v-for but better as array
-                });
-
-                // ----------------------------------------------------------------
-                // Methods: Navigation
-                // ----------------------------------------------------------------
-                const changeView = (view) => {
-                    currentView.value = view;
-                    selectedEventId.value = null; // Close preview
-                };
-
-                const prev = () => {
-                    if (currentView.value === 'Year') currentDate.value = df.subYears(currentDate.value, 1);
-                    else if (currentView.value === 'Month') currentDate.value = df.subMonths(currentDate.value, 1);
-                    else if (currentView.value === 'Week') currentDate.value = df.subWeeks(currentDate.value, 1);
-                    else currentDate.value = df.subDays(currentDate.value, 1);
-                    selectedEventId.value = null; // Close preview
-                };
-                const next = () => {
-                    if (currentView.value === 'Year') currentDate.value = df.addYears(currentDate.value, 1);
-                    else if (currentView.value === 'Month') currentDate.value = df.addMonths(currentDate.value, 1);
-                    else if (currentView.value === 'Week') currentDate.value = df.addWeeks(currentDate.value, 1);
-                    else currentDate.value = df.addDays(currentDate.value, 1);
-                    selectedEventId.value = null; // Close preview
-                };
-                const today = () => {
-                    currentDate.value = new Date();
-                    selectedEventId.value = null; // Close preview
-                };
-                const isToday = (date) => df.isSameDay(date, new Date());
-                const goToMonth = (date) => {
-                    currentDate.value = date;
-                    currentView.value = 'Month';
-                    selectedEventId.value = null; // Close preview
-                };
-
-                const toggleSettings = () => {
-                    showSettings.value = !showSettings.value;
-                };
-
-                const updateTimeFormat = (val) => {
-                    timeFormat.value = val;
-                };
-
-                const editCalendarTitle = () => {
-                    const newTitle = prompt("Enter calendar name:", calendarTitle.value);
-                    if (newTitle) calendarTitle.value = newTitle;
-                };
-
-                // ----------------------------------------------------------------
-                // Methods: Event Logic
-                // ----------------------------------------------------------------
-                const getEventsForDate = (date) => {
-                    return events.value.filter(e => df.isSameDay(new Date(e.start), date));
-                };
-
-                // Layout Algorithm for Week/Day View
-                const getEventsWithLayout = (date) => {
-                    const dayEvents = getEventsForDate(date).map(e => ({...e})); // Shallow copy to attach layout props
-                    if (dayEvents.length === 0) return [];
-
-                    // Sort by start time, then end time (descending duration)
-                    dayEvents.sort((a, b) => a.start - b.start || b.end - a.end);
-
-                    const columns = [];
-                    dayEvents.forEach(ev => {
-                        let placed = false;
-                        for (let i = 0; i < columns.length; i++) {
-                            const col = columns[i];
-                            // Check if this event overlaps with the LAST event in this column
-                            // (Simple packing) - actually need to check all in column to be safe,
-                            // but usually just checking the last one is enough if sorted? 
-                            // No, if we have A(9-11), B(9-10), C(10-11). A is col 0. B is col 1. C? 
-                            // C starts at 10. A ends at 11. C cannot be col 0.
-                            // C starts at 10. B ends at 10. C DOES NOT overlap B. C can be col 1.
-                            
-                            const hasOverlap = col.some(existing => {
-                                return Math.max(existing.start, ev.start) < Math.min(existing.end, ev.end);
-                            });
-                            
-                            if (!hasOverlap) {
-                                col.push(ev);
-                                ev.colIndex = i;
-                                placed = true;
-                                break;
-                            }
-                        }
-                        if (!placed) {
-                            columns.push([ev]);
-                            ev.colIndex = columns.length - 1;
-                        }
-                    });
-
-                    // Now calculate Width and Left
-                    // Simple Approach: Width = 100% / total columns in the "cluster"
-                    // For this prototype, we will use global columns for the day for simplicity,
-                    // or we can try to find max_col_index for the specific event's cluster.
-                    
-                    // Let's do a simplified "shared width" approach:
-                    // If I am in col 0, and there is a col 1 that overlaps me, we share space.
-                    
-                    // We will use a generic "Max Columns" for the day to avoid complex cluster logic for now.
-                    // This means if there is a 4-event overlap at 9am, ALL events in the day might be 1/4 width.
-                    // This is suboptimal but robust for a first pass. 
-                    // IMPROVEMENT: Calculate max overlap for each event's connected component.
-                    
-                    // Better: Calculate overlaps per event.
-                    dayEvents.forEach(ev => {
-                        // Find all overlapping events
-                        const overlapping = dayEvents.filter(other => 
-                            Math.max(ev.start, other.start) < Math.min(ev.end, other.end)
-                        );
-                        // The "width" is 1 / (max concurrent events in this group).
-                        // The "left" depends on the colIndex.
-                        
-                        // Actually, simpler visual:
-                        // width = 100 / columns.length (global max columns)
-                        // This ensures alignment.
-                        
-                        const widthPercent = 100 / columns.length;
-                        ev.style = {
-                            left: (ev.colIndex * widthPercent) + '%',
-                            width: (widthPercent * 0.8) + '%' // Events take 80% of their column space
-                        };
-                    });
-                    
-                    return dayEvents;
-                };
-
-                const formatTime = (timestamp) => {
-                    if (timeFormat.value === '12') {
-                        return df.format(new Date(timestamp), 'h:mm a');
-                    } else {
-                        return df.format(new Date(timestamp), 'HH:mm');
-                    }
-                };
-                const formatDuration = (event) => {
-                    const diff = df.differenceInMinutes(event.end, event.start);
-                    const h = Math.floor(diff / 60);
-                    const m = diff % 60;
-                    return (h > 0 ? `${h}h ` : '') + (m > 0 ? `${m}m` : ''); 
-                };
-
-                const getEventStyle = (event, isWeekView = false) => {
-                    const color = colors[(event.type - 1) % colors.length];
-                    if (isWeekView) {
-                        return { 
-                            borderLeftColor: color, 
-                            backgroundColor: color + '20', 
-                            color: color,
-                            ...event.style // Apply layout styles (left, width)
-                        };
-                    }
-                    return { backgroundColor: color, color: 'white' };
-                };
-                const getEventColor = (event) => colors[(event.type - 1) % colors.length];
-
-                const getWeekEventPosition = (event) => {
-                    const start = new Date(event.start);
-                    const end = new Date(event.end);
-                    const startMinutes = start.getHours() * 60 + start.getMinutes();
-                    const endMinutes = end.getHours() * 60 + end.getMinutes();
-                    const top = (startMinutes / 60) * 50;
-                    const height = Math.max(((endMinutes - startMinutes) / 60) * 50, 20);
-                    return { top: `${top}px`, height: `${height}px` }; // Width/Left handled by layout style
-                };
-                
-                const getGhostStyle = () => {
-                    const start = new Date(dragState.value.originalStart);
-                    const end = new Date(dragState.value.originalEnd);
-                    const startMinutes = start.getHours() * 60 + start.getMinutes();
-                    const endMinutes = end.getHours() * 60 + end.getMinutes();
-                    const top = (startMinutes / 60) * 50;
-                    const height = Math.max(((endMinutes - startMinutes) / 60) * 50, 20);
-                    return { top: `${top}px`, height: `${height}px`, width: '80%', left: '0%' }; // Ghost is left aligned 80% width
-                };
-
-                // ----------------------------------------------------------------
-                // Hover Guide Logic (Removed - no longer needed)
-                // ----------------------------------------------------------------
-
-                // ----------------------------------------------------------------
-                // Data loading
-                const mapCalendarEvents = (calEvents = []) => calEvents.map(e => ({
-                    id: e.id,
-                    title: e.title,
-                    start: new Date(e.start).getTime(),
-                    end: new Date(e.end).getTime(),
-                    type: e.type || 1,
-                    description: e.description || ''
-                }));
-
-                const loadCalendarFromSlug = () => {
-                    const base = (window.CAL_BASE || '').replace(/\/$/, '');
-                    const path = base && window.location.pathname.startsWith(base)
-                        ? window.location.pathname.slice(base.length) || '/'
-                        : window.location.pathname;
-                    const parts = path.split('/').filter(Boolean);
-                    let slug = parts[0];
-
-                    if (slug && slug.match(/^[a-zA-Z0-9_\-]+$/) && slug.length < 40) {
-                        slug = SlugManager.normalizeSlug(slug);
-                    } else {
-                        slug = null;
-                    }
-
-                    const id = slug ?? Utils.randomID(8);
-                    calendar.value = new Calendar(id, "New Calendar", []);
-                    calendarTitle.value = calendar.value.title || 'New Calendar';
-
-                    const applyCalendar = (calData) => {
-                        calendar.value.import(calData);
-                        calendarTitle.value = calendar.value.title || 'New Calendar';
-                        events.value = mapCalendarEvents(calendar.value.events);
-                        isExisting.value = true;
-                        isLoading.value = false;
-                    };
-
-                    if (slug) {
-                        CalendarDataService.findAndSubscribe(slug, (c) => {
-                            if (c) {
-                                applyCalendar(c);
-                            } else {
-                                isExisting.value = false;
-                                isLoading.value = false;
-                            }
-                        });
-                    } else {
-                        const defaultEvent = calendar.value.defaultEvent("Sample event");
-                        events.value = mapCalendarEvents([defaultEvent]);
-                        isExisting.value = false;
-                        isLoading.value = false;
-                    }
-                };
-
-                // Interactions
-                // ----------------------------------------------------------------
-                const showToast = (msg) => {
-                    notification.value = msg;
-                    setTimeout(() => notification.value = '', 2000);
-                }
-
-                const clampPosition = (x, y, width = 320, height = 150, padding = 12) => {
-                    const maxX = window.innerWidth + window.scrollX - width - padding;
-                    const maxY = window.innerHeight + window.scrollY - height - padding;
-                    return {
-                        left: Math.max(padding, Math.min(x, maxX)),
-                        top: Math.max(padding, Math.min(y, maxY))
-                    };
-                };
-
-                const openEditorWithDefaults = (startTs, endTs, clickEvent = null) => {
-                    const id = Date.now();
-                    editorForm.value = {
-                        id,
-                        title: '',
-                        description: '',
-                        startTs,
-                        endTs,
-                        type: 1
-                    };
-                    isEditorOpen.value = true;
-                    selectedEventId.value = null;
-                    if (clickEvent) {
-                        editorPosition.value = clampPosition(clickEvent.clientX + window.scrollX, clickEvent.clientY + window.scrollY);
-                    } else {
-                        editorPosition.value = clampPosition(window.innerWidth / 2, window.innerHeight / 2);
-                    }
-                };
-
-                const createMonthEvent = (date, evt) => {
-                    const start = df.setHours(date, 9);
-                    const end = df.setHours(date, 10);
-                    openEditorWithDefaults(start.getTime(), end.getTime(), evt);
-                };
-
-                const createTimeEvent = (date, event) => {
-                    console.log('[createTimeEvent] triggered. Dragging:', dragState.value.isDragging);
-                    if (dragState.value.isDragging) {
-                        console.log('[createTimeEvent] Blocked because dragging is active');
-                        return;
-                    }
-                    
-                    // Check if we just finished a drag (click often fires after drag release)
-                    if (dragState.value.wasDragging) {
-                         console.log('[createTimeEvent] Blocked because we just finished dragging');
-                         dragState.value.wasDragging = false;
-                         return;
-                    }
-
-                    // Ensure click wasn't on an event (extra safety)
-                    // Note: @click.stop on event-card should prevent this, but this is a fallback
-                    if (event.target.closest('.event-card')) {
-                        console.log('[createTimeEvent] Blocked because target is event-card');
-                        return;
-                    }
-                    
-                    const rect = event.currentTarget.getBoundingClientRect();
-                    const y = event.clientY - rect.top;
-                    const hoursFloat = y / 50;
-                    const hours = Math.floor(hoursFloat);
-                    const roundedMinutes = 0; // Snap to the hour start
-                    const start = df.set(date, { hours: hours, minutes: roundedMinutes });
-                    const end = df.addMinutes(start, 60);
-                    openEditorWithDefaults(start.getTime(), end.getTime(), event);
-                };
-
-                const editEvent = (event) => {
-                    // Legacy double click handler if needed, now redirected to openEditor
-                    openEditor(event.id);
-                };
-
-                const selectEvent = (event, e) => {
-                    console.log('[selectEvent] triggered for', event.id);
-                    if (dragState.value.isDragging || dragState.value.wasDragging) return;
-                    selectedEventId.value = event.id;
-                    
-                    // Calculate popup position
-                    if (e) {
-                        // Position relative to viewport
-                        const rect = e.currentTarget.getBoundingClientRect();
-                        // Place to the right or bottom of the element
-                        popupPosition.value = {
-                            top: rect.bottom + 10,
-                            left: rect.left + (rect.width / 2)
-                        };
-                    }
-                };
-
-                const closePreview = () => {
-                    selectedEventId.value = null;
-                };
-
-                const deleteEvent = (id) => {
-                    if(confirm("Delete this event?")) {
-                        events.value = events.value.filter(e => e.id !== id);
-                        selectedEventId.value = null;
-                    }
-                };
-
-                const openEditor = (id) => {
-                    const event = getEventById(id);
-                    if (event) {
-                        // Clone event and format dates for inputs
-                        editorForm.value = { 
-                            ...event,
-                            startTs: event.start,
-                            endTs: event.end
-                        };
-                        isEditorOpen.value = true;
-                        selectedEventId.value = null; // Close preview
-                    }
-                };
-
-                const closeEditor = () => {
-                    isEditorOpen.value = false;
-                };
-
-                const saveEvent = () => {
-                    const index = events.value.findIndex(e => e.id === editorForm.value.id);
-                    const updatedEvent = { 
-                        ...editorForm.value,
-                        start: editorForm.value.startTs,
-                        end: editorForm.value.endTs
-                    };
-                    if (index !== -1) {
-                        events.value[index] = updatedEvent;
-                    } else {
-                        events.value.push(updatedEvent);
-                    }
-                    showToast('Event saved');
-                    closeEditor();
-                };
-
-                // ----------------------------------------------------------------
-                // Drag & Drop (Unified)
-                // ----------------------------------------------------------------
-                const dragState = ref({
-                    eventId: null,
-                    isDragging: false,
-                    wasDragging: false, // New flag to prevent click-after-drag
-                    startY: 0, // For Time Grid
-                    originalStart: 0,
-                    originalEnd: 0,
-                    action: 'move', // 'time-move', 'month-move', 'resize'
-                    ghostEvent: null, // For Month Move
-                    mouseX: 0,
-                    mouseY: 0
-                });
-
-                const startDrag = (event, e, action) => {
-                    console.log('[startDrag] action:', action, 'id:', event.id);
-                    if (e.button !== 0) return;
-                    dragState.value = {
-                        eventId: event.id,
-                        isDragging: false,
-                        wasDragging: false,
-                        startY: e.clientY,
-                        originalStart: event.start,
-                        originalEnd: event.end,
-                        action: action,
-                        ghostEvent: event,
-                        mouseX: e.clientX,
-                        mouseY: e.clientY
-                    };
-                };
-
-                const onDrag = (e) => {
-                    if (!dragState.value.eventId) return;
-                    
-                    if (!dragState.value.isDragging) {
-                        const deltaY = Math.abs(e.clientY - dragState.value.startY);
-                        const deltaX = Math.abs(e.clientX - dragState.value.mouseX);
-                        console.log(`[onDrag] Check threshold: dx=${deltaX}, dy=${deltaY}`);
-                        
-                        // Threshold check to prevent accidental micro-drags on click
-                        if (deltaY > 5 || deltaX > 5) {
-                            console.log('[onDrag] Drag started (threshold passed)');
-                            dragState.value.isDragging = true;
-                        } else {
-                            return;
-                        }
-                    }
-
-                    // Update Mouse Position for Month Ghost
-                    dragState.value.mouseX = e.clientX;
-                    dragState.value.mouseY = e.clientY;
-
-                    const event = events.value.find(ev => ev.id === dragState.value.eventId);
-                    if (!event) return;
-
-                    // Time Grid Logic (Move/Resize)
-                    if (dragState.value.action === 'time-move' || dragState.value.action === 'resize') {
-                        const deltaPixels = e.clientY - dragState.value.startY;
-                        const deltaMinutes = Math.round((deltaPixels / 50) * 60 / 30) * 30;
-
-                        if (dragState.value.action === 'time-move') {
-                            const duration = dragState.value.originalEnd - dragState.value.originalStart;
-                            
-                            // Calculate time based on original + delta (vertical move)
-                            const newStartTime = df.addMinutes(dragState.value.originalStart, deltaMinutes);
-                            const newHours = newStartTime.getHours();
-                            const newMinutes = newStartTime.getMinutes();
-                            
-                            // Find target column (horizontal move)
-                            const target = document.elementFromPoint(e.clientX, e.clientY);
-                            let targetDate = null;
-                            if (target) {
-                                const col = target.closest('.time-col');
-                                if (col && col.dataset.date) {
-                                    targetDate = new Date(col.dataset.date);
-                                }
-                            }
-                            
-                            // Use target date if found, else keep current event date
-                            const baseDate = targetDate ? targetDate : new Date(event.start);
-                            
-                            const newStart = df.set(baseDate, {
-                                hours: newHours,
-                                minutes: newMinutes
-                            });
-                            
-                            event.start = newStart.getTime();
-                            event.end = new Date(newStart.getTime() + duration).getTime();
-
-                        } else if (dragState.value.action === 'resize') {
-                            let newEnd = df.addMinutes(dragState.value.originalEnd, deltaMinutes);
-                            const start = new Date(dragState.value.originalStart);
-                            if (df.differenceInMinutes(newEnd, start) < 15) newEnd = df.addMinutes(start, 15);
-                            event.end = newEnd.getTime();
-                        }
-                    }
-                    // Month Move Logic handled in stopDrag (Drop)
-                };
-
-                const stopDrag = (e) => {
-                    console.log('[stopDrag] isDragging:', dragState.value.isDragging);
-                    if (!dragState.value.eventId) {
-                        return;
-                    }
-                    
-                    const wasDragging = dragState.value.isDragging;
-
-                    if (wasDragging) {
-                        // Handle Drop logic
-                        if (dragState.value.action === 'month-move') {
-                            // ... (Month drop logic) ...
-                            const target = document.elementFromPoint(e.clientX, e.clientY);
-                            const cell = target.closest('.calendar-cell');
-                            if (cell && cell.dataset.date) {
-                                const targetDate = new Date(cell.dataset.date);
-                                const event = events.value.find(ev => ev.id === dragState.value.eventId);
-                                if (event) {
-                                    const duration = event.end - event.start;
-                                    const newStart = df.set(targetDate, {
-                                        hours: new Date(event.start).getHours(),
-                                        minutes: new Date(event.start).getMinutes()
-                                    });
-                                    event.start = newStart.getTime();
-                                    event.end = newStart.getTime() + duration;
-                                    showToast(`Moved to ${df.format(targetDate, 'MMM d')}`);
-                                }
-                            }
-                        } else {
-                            const action = dragState.value.action === 'resize' ? 'resized' : 'moved';
-                            showToast(`Event ${action}`);
-                        }
-                    }
-
-                    // Reset state, but keep wasDragging true momentarily for click handlers
-                    dragState.value = { 
-                        eventId: null, 
-                        isDragging: false, 
-                        wasDragging: wasDragging, // Preserve this!
-                        action: 'move' 
-                    };
-                    
-                    // Clear wasDragging after a microtask to let click events fire and see the flag
-                    setTimeout(() => {
-                        dragState.value.wasDragging = false;
-                    }, 50);
-                };
-
-                // ----------------------------------------------------------------
-                // Time Indicator & Init
-                // ----------------------------------------------------------------
-                const currentTimeTop = ref(0);
-                const updateTimeIndicator = () => {
-                    const now = new Date();
-                    currentTimeTop.value = ((now.getHours() * 60 + now.getMinutes()) / 60) * 50;
-                };
-
-                let timer;
-                onMounted(() => {
-                    loadCalendarFromSlug();
-                    updateTimeIndicator();
-                    timer = setInterval(updateTimeIndicator, 60000);
-                    setTimeout(() => {
-                        const scroll = document.querySelector('.overflow-y-auto.relative');
-                        if(scroll) scroll.scrollTop = 350; 
-                    }, 100);
-                    
-                    // Global event listeners for drag
-                    window.addEventListener('mousemove', onDrag);
-                    window.addEventListener('mouseup', stopDrag);
-                });
-                onUnmounted(() => {
-                    clearInterval(timer);
-                    window.removeEventListener('mousemove', onDrag);
-                    window.removeEventListener('mouseup', stopDrag);
-                });
-
-                return {
-                    currentView, views, currentTitle, weekDays, monthCells, visibleDates, yearMonths, agendaEvents,
-                    prev, next, today, isToday, changeView, goToMonth,
-                    events, getEventsForDate, getEventsWithLayout, getEventStyle, getWeekEventPosition, getGhostStyle, formatTime, formatDuration, getEventColor,
-                    createMonthEvent, createTimeEvent, editEvent, selectEvent, selectedEventId,
-                    closePreview, openEditor, closeEditor, saveEvent, deleteEvent, isEditorOpen, editorForm, editorPosition, getEventById, toDateTimeLocalString, popupStyle,
-                    startDrag, onDrag, stopDrag, dragState,
-                    currentTimeTop, notification, eventCursor, timeFormat, showSettings, toggleSettings, updateTimeFormat, calendarTitle, editCalendarTitle,
-                    isSameDay: (d1, d2) => df.isSameDay(d1, d2)
-                }
-            }
-        }).mount('#app');
-    </script>
 </body>
+
 </html>
