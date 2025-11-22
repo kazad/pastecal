@@ -1,7 +1,26 @@
 // CalendarTitle component
 // Handles editable/read-only calendar title display for mobile/desktop modes
 const CalendarTitle = {
-    template: '#calendar-title-template',
+    template: /* html */ `
+        <div class="w-full text-center">
+            <!-- Show title (including "New Calendar" for new calendars) -->
+            <h1 v-if="!isEditing"
+                @click="handleTitleClick"
+                :class="titleClasses">
+                {{ title || 'New Calendar' }}
+            </h1>
+            <!-- Edit mode input -->
+            <input v-if="isEditing"
+                type="text"
+                :value="title"
+                @input="$emit('update:title', $event.target.value)"
+                @blur="$emit('blur')"
+                @keyup.enter="$emit('enter')"
+                :ref="inputRef"
+                aria-label="Calendar title"
+                :class="inputClass">
+        </div>
+    `,
     props: {
         title: String,
         isEditing: Boolean,
