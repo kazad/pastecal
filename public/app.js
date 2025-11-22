@@ -25,13 +25,28 @@ const COMPONENT_REGISTRY = {
     'close-icon': CloseIcon                    // Close icon SVG
 };
 
+const CAL_BASE = (typeof window !== 'undefined' && window.CAL_BASE) ? window.CAL_BASE : '/';
+const stripBase = (path) => {
+    const base = CAL_BASE.endsWith('/') ? CAL_BASE.slice(0, -1) : CAL_BASE;
+    if (base && base !== '/' && path.startsWith(base)) {
+        const stripped = path.slice(base.length);
+        return stripped.startsWith('/') ? stripped : `/${stripped}`;
+    }
+    return path;
+};
+
 const CalendarVueApp = {
     components: COMPONENT_REGISTRY,
     directives: {
         'click-outside': clickOutside
     },
     data() {
-        let urlslug = window.location.pathname.split("/")[1];
+        const normalizedPathParts = (() => {
+            const path = stripBase(window.location.pathname);
+            return path.split('/').filter(Boolean);
+        })();
+
+        let urlslug = normalizedPathParts[0];
 
         if (urlslug && urlslug.match(/^[a-zA-Z0-9_\-]+$/) && urlslug.length < 40) {
             // slug is ok, normalize for consistent lookup
@@ -149,10 +164,10 @@ const CalendarVueApp = {
         displayReadOnlySlug() {
             if (this.calendar?.options?.publicViewId) return this.calendar.options.publicViewId;
             // fallback to URL parsing if calendar data isn't fully loaded or populated yet
-            const parts = window.location.pathname.split('/');
-            if (parts[1] === 'view' && parts[2]) return parts[2];
-            return '...';
-        },
+                const parts = stripBase(window.location.pathname).split('/').filter(Boolean);
+                if (parts[0] === 'view' && parts[1]) return parts[1];
+                return '...';
+            },
         // Readable intent-based computed properties
         isNewCalendar() {
             // User is on homepage creating a new calendar
@@ -187,11 +202,12 @@ const CalendarVueApp = {
         this.initializeLocalSettings();
         // We'll load and apply global settings after scheduleObj is initialized
 
-        // readonly: pastecal.com/view/ID
-        let path = location.pathname;
-        if (path?.startsWith('/view/')) {
-            // Read-only view mode
-            const requestedSlug = path.split('/')[2];
+                // readonly: pastecal.com/view/ID (supports alternative base paths via CAL_BASE)
+                let path = stripBase(location.pathname);
+
+                if (path?.startsWith('/view/')) {
+                    // Read-only view mode
+                    const requestedSlug = path.split('/')[2];
             // Ensure explicit boolean normalization when setting read-only mode
             this.setIsReadOnly(true);
 
