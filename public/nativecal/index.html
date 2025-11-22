@@ -308,28 +308,27 @@
         <div v-if="isEditorOpen" class="fixed inset-0 z-[100] pointer-events-none">
             <div class="pointer-events-auto absolute bg-white border border-gray-200 rounded-lg shadow-xl w-80 max-w-[90vw] p-4"
                  :style="{ top: `${editorPosition.top}px`, left: `${editorPosition.left}px` }">
-                <div class="flex justify-between items-start gap-3 mb-3">
-                    <input v-model="editorForm.title"
-                        type="text"
-                        class="w-full border-b border-gray-300 focus:border-blue-500 focus:outline-none text-base font-semibold"
-                        placeholder="Event title">
+                <div class="flex justify-end">
                     <button @click="closeEditor" class="text-gray-400 hover:text-gray-600">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
                 </div>
-                <div class="flex items-center gap-2 text-sm text-gray-600 mb-3">
-                    <span>{{ formatTime(editorForm.startTs) }}</span>
-                    <span>–</span>
-                    <span>{{ formatTime(editorForm.endTs) }}</span>
-                    <span class="text-gray-400 text-xs">(1h)</span>
+                <div class="mb-3">
+                    <input v-model="editorForm.title"
+                        type="text"
+                        class="w-full border-b border-gray-300 focus:border-blue-500 focus:outline-none text-sm font-semibold"
+                        placeholder="Add title">
                 </div>
-                <div class="flex justify-end gap-2">
-                    <button @click="closeEditor" class="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded">Cancel</button>
-                    <button @click="saveEvent" class="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded">Save</button>
+                <div class="flex items-center gap-2 text-xs text-gray-600 mb-3">
+                    <div class="w-4 h-4 bg-gray-200 rounded-full flex-shrink-0"></div>
+                    <div class="text-gray-700">{{ df.format(editorForm.startTs, 'MMMM d, yyyy') }} ({{ formatTime(editorForm.startTs) }} – {{ formatTime(editorForm.endTs) }})</div>
+                </div>
+                <div class="flex justify-end gap-2 text-xs">
+                    <button @click="closeEditor" class="px-3 py-1 text-gray-600 hover:bg-gray-100 rounded">More Details</button>
+                    <button @click="saveEvent" class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded">Save</button>
                 </div>
             </div>
         </div>
-</div>
                 </div>
             </div>
         </div>
