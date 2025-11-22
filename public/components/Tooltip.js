@@ -2,7 +2,21 @@
 // Reusable tooltip wrapper with mobile detection
 
 const Tooltip = {
-    template: '#tooltip-template',
+    template: /* html */ `
+        <div class="relative" @mouseenter="show = true" @mouseleave="show = false">
+            <slot name="trigger"></slot>
+            <div v-show="show && !isMobile" 
+                class="absolute top-full mt-2 p-3 bg-2 text-color-2 text-xs rounded-lg shadow-xl border border-color-default z-50 transition-opacity duration-200"
+                :class="[widthClass, alignClass]">
+                
+                <slot name="content"></slot>
+                
+                <!-- Arrow -->
+                <div class="absolute -top-1 w-2 h-2 bg-2 transform rotate-45 border-l border-t border-color-default"
+                     :class="arrowAlignClass"></div>
+            </div>
+        </div>
+    `,
     props: {
         width: {
             type: String,
