@@ -713,6 +713,10 @@ const CalendarVueApp = {
         },
 
         handleEventClick({ event, jsEvent }) {
+            // Close other popups
+            this.closeQuickCreate();
+            this.closeEditor();
+
             this.popoverEvent = event;
             
             // Position logic

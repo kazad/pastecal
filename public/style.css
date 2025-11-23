@@ -135,6 +135,11 @@ details[open] summary {
 
 /* --- Syncfusion Overrides --- */
 
+div#Schedule {
+    min-height: 80vh;
+    /* can be short on agenda view */
+}
+
 .e-toolbar-item.e-today {
     display: none !important;
 }

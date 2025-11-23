@@ -10,12 +10,12 @@ const CalendarToolbar = {
             <div class="flex items-center gap-4">
                 <!-- Date Nav -->
                 <div class="flex items-center bg-2 rounded-lg p-0.5">
-                    <button @click="$emit('prev')" class="px-2 hover:bg-1 rounded-md h-7 flex items-center text-color-1 text-lg leading-none mb-0.5">&lsaquo;</button>
-                    <button @click="$emit('today')" class="px-3 text-xs font-bold hover:bg-1 rounded-md h-7 text-color-2 uppercase tracking-wide">Today</button>
-                    <button @click="$emit('next')" class="px-2 hover:bg-1 rounded-md h-7 flex items-center text-color-1 text-lg leading-none mb-0.5">&rsaquo;</button>
+                    <button @click="$emit('prev')" data-testid="nav-prev" class="px-2 hover:bg-1 rounded-md h-7 flex items-center text-color-1 text-lg leading-none mb-0.5">&lsaquo;</button>
+                    <button @click="$emit('today')" data-testid="nav-today" class="px-3 text-xs font-bold hover:bg-1 rounded-md h-7 text-color-2 uppercase tracking-wide">Today</button>
+                    <button @click="$emit('next')" data-testid="nav-next" class="px-2 hover:bg-1 rounded-md h-7 flex items-center text-color-1 text-lg leading-none mb-0.5">&rsaquo;</button>
                 </div>
                 <!-- Date Range -->
-                <div class="text-xl font-medium text-color-2">{{ currentTitle }}</div>
+                <div class="text-xl font-medium text-color-2" data-testid="current-date-range">{{ currentTitle }}</div>
             </div>
 
             <!-- View Switcher -->
@@ -23,6 +23,7 @@ const CalendarToolbar = {
                 <button v-for="view in views" 
                     :key="view"
                     @click="$emit('change-view', view)"
+                    :data-testid="'view-' + view.toLowerCase()"
                     :class="['px-3 py-1 rounded-md text-xs font-medium transition-all', currentView === view ? 'bg-1 text-blue-600 shadow-sm' : 'text-color-1 hover:text-color-2']">
                     {{ view }}
                 </button>
@@ -41,12 +42,13 @@ const MonthView = {
                     {{ day }}
                 </div>
             </div>
-            <div class="calendar-grid flex-1">
+            <div class="calendar-grid flex-1" data-testid="month-view-grid">
                 <div v-for="(cell, idx) in cells" :key="idx" 
                      class="calendar-cell relative group hover:bg-gray-50 dark:hover:bg-gray-800 flex flex-col gap-1 cursor-pointer"
                      :class="{'bg-disabled opacity-50': !cell.isCurrentMonth, 'bg-blue-50 dark:bg-blue-900': isToday(cell.date)}"
                      :data-date="cell.date.toISOString()"
-                     @click.self="$emit('create-event', cell.date, $event)">
+                     :data-testid="'month-cell-' + idx"
+                     @click="$emit('create-event', cell.date, $event)">
                     
                     <span class="text-xs font-medium p-1 ml-auto rounded-full w-7 h-7 flex items-center justify-center"
                           :class="isToday(cell.date) ? 'bg-blue-600 text-white' : 'text-color-2'">
@@ -63,8 +65,10 @@ const MonthView = {
                          class="px-1.5 py-0.5 text-xs rounded truncate cursor-pointer shadow-sm border-l-2 hover:brightness-95 transition-all select-none"
                          :class="{'is-dragging': dragState.eventId === event.id}"
                          :style="getEventStyle(event)"
+                         :data-testid="'event-' + event.id"
                          @mousedown.stop="$emit('start-drag', event, $event, 'month-move')"
                          @click.stop="$emit('select-event', event, $event)">
+                         <span v-if="event.isRecurringInstance">↻ </span>
                         {{ event.title }}
                     </div>
                 </div>
@@ -138,10 +142,11 @@ const TimeGridView = {
                                  'ring-2 ring-offset-1 ring-black': selectedEventId === event.id
                              }"
                              :style="[getEventStyle(event, true), getWeekEventPosition(event), { cursor: eventCursor }]"
+                             :data-testid="'event-' + event.id"
                              @mousedown.stop="$emit('start-drag', event, $event, 'time-move')"
                              @click.stop="$emit('select-event', event, $event)">
                             <div class="event-text-content">
-                                <div class="font-bold leading-tight pointer-events-none">{{ event.title }}</div>
+                                <div class="font-bold leading-tight pointer-events-none"><span v-if="event.isRecurringInstance">↻ </span>{{ event.title }}</div>
                                 <div class="opacity-75 text-[10px] pointer-events-none">{{ formatTime(event.start) }} - {{ formatTime(event.end) }}</div>
                             </div>
                             <div class="resize-handle absolute bottom-0 inset-x-0 h-2 z-20"
@@ -338,9 +343,97 @@ var NativeCalendar = {
             return Array.from({ length: 7 }, (_, i) => df.addDays(start, i));
         });
 
+        // Recurrence Expansion Logic
+        const processedEvents = computed(() => {
+            const results = [];
+            
+            // 1. Determine range (generous padding to avoid edge cases)
+            let rangeStart, rangeEnd;
+            if (currentView.value === 'Month') {
+                 const start = df.startOfMonth(currentDate.value);
+                 rangeStart = df.subWeeks(start, 1);
+                 rangeEnd = df.addWeeks(df.endOfMonth(currentDate.value), 1);
+            } else {
+                // Week/Day
+                const visible = visibleDates.value;
+                rangeStart = df.subDays(visible[0], 1);
+                rangeEnd = df.addDays(visible[visible.length - 1], 1);
+            }
+            
+            // console.log('[NativeCalendar] processedEvents computing. Total events:', props.events?.length);
+
+            (props.events || []).forEach(event => {
+                if (!event.recurrencerule) {
+                    results.push(event);
+                    return;
+                }
+                
+                // console.log('[NativeCalendar] Found recurring event:', event.title, event.recurrencerule);
+
+                if (window.rrule) {
+                    try {
+                        // Ensure we're accessing the library correctly
+                        // rrule library exports might vary (rrule.RRule or just RRule global)
+                        const RRule = window.rrule.RRule || window.RRule;
+                        const rrulestr = window.rrule.rrulestr || window.rrulestr;
+                        
+                        if (!RRule || !rrulestr) {
+                            console.error('[NativeCalendar] RRule library not found correctly', { RRule: !!RRule, rrulestr: !!rrulestr });
+                            results.push(event);
+                            return;
+                        }
+
+                        // "FREQ=WEEKLY;UNTIL=..."
+                        // Handle cases where RRULE: might already be present or not
+                        let ruleString = event.recurrencerule;
+                        
+                        // Clean up potentially trailing semicolons or whitespace
+                        ruleString = ruleString.trim();
+                        if (ruleString.endsWith(';')) {
+                            ruleString = ruleString.slice(0, -1);
+                        }
+                        
+                        ruleString = ruleString.startsWith("RRULE:") 
+                            ? ruleString 
+                            : "RRULE:" + ruleString;
+                            
+                        const options = rrulestr(ruleString).options;
+                        options.dtstart = new Date(event.start);
+                        
+                        const rule = new RRule(options);
+                        
+                        const dates = rule.between(rangeStart, rangeEnd, true);
+                        
+                        const duration = event.end - event.start;
+                        
+                        dates.forEach(date => {
+                             // Virtual event
+                             const start = date.getTime();
+                             const end = start + duration;
+                             results.push({
+                                 ...event,
+                                 start,
+                                 end,
+                                 id: event.id + '_' + start,
+                                 originalEventId: event.id,
+                                 isRecurringInstance: true
+                             });
+                        });
+                    } catch (e) {
+                        console.warn("[NativeCalendar] Recurrence error for event", event.title, e);
+                        results.push(event);
+                    }
+                } else {
+                    results.push(event);
+                }
+            });
+            
+            return results;
+        });
+
         // Event Logic
         const getEventsForDate = (date) => {
-            return (props.events || []).filter(e => df.isSameDay(new Date(e.start), date));
+            return processedEvents.value.filter(e => df.isSameDay(new Date(e.start), date));
         };
 
         const getEventsWithLayout = (date) => {
@@ -425,6 +518,17 @@ var NativeCalendar = {
 
         const selectEvent = (event, e) => {
             if (dragState.value.isDragging || dragState.value.wasDragging) return;
+            
+            // Logic to handle recurring instances selection
+            if (event.isRecurringInstance && event.originalEventId) {
+                 const original = props.events.find(ev => ev.id === event.originalEventId);
+                 if (original) {
+                     selectedEventId.value = original.id;
+                     emit('event-click', { event: original, jsEvent: e });
+                     return;
+                 }
+            }
+            
             selectedEventId.value = event.id;
             emit('event-click', { event, jsEvent: e });
         };
@@ -433,6 +537,12 @@ var NativeCalendar = {
         // In a real app, we might emit 'event-update' here
         const startDrag = (event, e, action) => {
             if (e.button !== 0) return;
+            
+            if (event.isRecurringInstance) {
+                // Disable drag for recurring for now
+                return;
+            }
+            
             dragState.value = {
                 eventId: event.id,
                 isDragging: false,
@@ -452,28 +562,25 @@ var NativeCalendar = {
             if (!dragState.value.isDragging) {
                 const deltaY = Math.abs(e.clientY - dragState.value.startY);
                 const deltaX = Math.abs(e.clientX - dragState.value.mouseX);
-                if (deltaY > 5 || deltaX > 5) dragState.value.isDragging = true;
+                if (deltaY > 5 || deltaX > 5) {
+                    dragState.value.isDragging = true;
+                }
                 else return;
             }
             dragState.value.mouseX = e.clientX;
             dragState.value.mouseY = e.clientY;
             
-            // Logic from previous prototype... (Condensed for brevity, assuming full logic copied or re-implemented in polish phase)
-            // Ideally, we emit 'event-drag' and let parent handle it? 
-            // No, NativeCalendar should handle visual drag, then emit 'event-change' on drop.
-            
-            // For now, modifying local prop copy (which is bad practice in Vue but works for shallow objects if array is reactive)
-            // We should emit updates.
+            // ...
+            // Logic unchanged
             
             const event = props.events.find(ev => ev.id === dragState.value.eventId);
             if (event && dragState.value.action === 'time-move') {
+                 // ...
                  const deltaPixels = e.clientY - dragState.value.startY;
                  const deltaMinutes = Math.round((deltaPixels / 50) * 60 / 30) * 30;
                  const duration = dragState.value.originalEnd - dragState.value.originalStart;
                  const newStartTime = df.addMinutes(dragState.value.originalStart, deltaMinutes);
                  
-                 // Update visual state directly on event object (local mutation of prop object)
-                 // For prototype: ok. For prod: copy events to local state.
                  event.start = newStartTime.getTime();
                  event.end = new Date(newStartTime.getTime() + duration).getTime();
             }
@@ -482,12 +589,12 @@ var NativeCalendar = {
         const stopDrag = (e) => {
             if (!dragState.value.eventId) return;
             if (dragState.value.isDragging) {
-                // Emit change
                 const event = props.events.find(ev => ev.id === dragState.value.eventId);
-                if (event) emit('update:events', [...props.events]); // Signal change
+                if (event) emit('update:events', [...props.events]); 
             }
             const wasDragging = dragState.value.isDragging;
             dragState.value = { eventId: null, isDragging: false, wasDragging, action: 'move' };
+            // console.log('[NativeCalendar] stopDrag, wasDragging:', wasDragging);
             setTimeout(() => dragState.value.wasDragging = false, 50);
         };
 
