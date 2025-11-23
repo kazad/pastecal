@@ -1057,8 +1057,46 @@ Copyright (c) 2025 Kalid Azad
             <native-calendar
                 :events="calendar.events"
                 :time-format="globalSettings.timeFormat"
+                :creating-event="quickCreateEvent"
                 @update:events="calendar.setEvents($event)"
+                @event-create="handleEventCreate"
+                @event-click="handleEventClick"
             ></native-calendar>
+
+            <quick-create-popover
+                v-if="showQuickCreate"
+                :visible="showQuickCreate"
+                :start="quickCreateEvent?.start"
+                :end="quickCreateEvent?.end"
+                :is-all-day="quickCreateEvent?.isAllDay"
+                :top="quickCreatePosition.top"
+                :left="quickCreatePosition.left"
+                :time-format="globalSettings.timeFormat"
+                @save="handleQuickCreateSave"
+                @more-details="handleQuickCreateMoreDetails"
+                @close="closeQuickCreate"
+            ></quick-create-popover>
+
+            <event-popover
+                v-if="showPopover"
+                :visible="showPopover"
+                :event="popoverEvent"
+                :top="popoverPosition.top"
+                :left="popoverPosition.left"
+                :time-format="globalSettings.timeFormat"
+                @edit="openEditorForEvent"
+                @delete="handleDeleteEvent"
+                @close="closePopover"
+            ></event-popover>
+
+            <event-editor
+                v-if="showEditor"
+                v-model:visible="showEditor"
+                :event="editorEvent"
+                :colors="COLORS"
+                @save="handleSaveEvent"
+                @delete="handleDeleteEvent"
+            ></event-editor>
         </div>
 
         <!-- Claim Intervention Modal -->

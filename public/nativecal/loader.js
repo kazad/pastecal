@@ -2,6 +2,9 @@
     const timestamp = new Date().getTime();
     const files = [
         '/nativecal/components/NativeCalendar.js',
+        '/nativecal/components/EventEditor.js',
+        '/nativecal/components/EventPopover.js',
+        '/nativecal/components/QuickCreatePopover.js',
         '/nativecal/app.js'
     ];
 
