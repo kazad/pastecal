@@ -6,24 +6,24 @@ const df = window.dateFns;
 
 const CalendarToolbar = {
     template: /* html */ `
-        <div class="flex justify-between items-center p-3 border-b border-gray-200 bg-white flex-shrink-0">
+        <div class="flex justify-between items-center p-3 border-b border-color-default bg-1 flex-shrink-0">
             <div class="flex items-center gap-4">
                 <!-- Date Nav -->
-                <div class="flex items-center bg-gray-100 rounded-lg p-0.5">
-                    <button @click="$emit('prev')" class="px-2 hover:bg-white rounded-md h-7 flex items-center text-gray-600 text-lg leading-none mb-0.5">&lsaquo;</button>
-                    <button @click="$emit('today')" class="px-3 text-xs font-bold hover:bg-white rounded-md h-7 text-gray-700 uppercase tracking-wide">Today</button>
-                    <button @click="$emit('next')" class="px-2 hover:bg-white rounded-md h-7 flex items-center text-gray-600 text-lg leading-none mb-0.5">&rsaquo;</button>
+                <div class="flex items-center bg-2 rounded-lg p-0.5">
+                    <button @click="$emit('prev')" class="px-2 hover:bg-1 rounded-md h-7 flex items-center text-color-1 text-lg leading-none mb-0.5">&lsaquo;</button>
+                    <button @click="$emit('today')" class="px-3 text-xs font-bold hover:bg-1 rounded-md h-7 text-color-2 uppercase tracking-wide">Today</button>
+                    <button @click="$emit('next')" class="px-2 hover:bg-1 rounded-md h-7 flex items-center text-color-1 text-lg leading-none mb-0.5">&rsaquo;</button>
                 </div>
                 <!-- Date Range -->
-                <div class="text-xl font-medium text-gray-800">{{ currentTitle }}</div>
+                <div class="text-xl font-medium text-color-2">{{ currentTitle }}</div>
             </div>
 
             <!-- View Switcher -->
-            <div class="flex bg-gray-100 rounded-lg p-0.5">
+            <div class="flex bg-2 rounded-lg p-0.5">
                 <button v-for="view in views" 
                     :key="view"
                     @click="$emit('change-view', view)"
-                    :class="['px-3 py-1 rounded-md text-xs font-medium transition-all', currentView === view ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700']">
+                    :class="['px-3 py-1 rounded-md text-xs font-medium transition-all', currentView === view ? 'bg-1 text-blue-600 shadow-sm' : 'text-color-1 hover:text-color-2']">
                     {{ view }}
                 </button>
             </div>
@@ -35,23 +35,29 @@ const CalendarToolbar = {
 
 const MonthView = {
     template: /* html */ `
-        <div class="h-full flex flex-col overflow-y-auto">
-            <div class="grid grid-cols-7 border-b border-gray-200 bg-gray-50">
-                <div v-for="day in weekDays" :key="day" class="py-2 text-center text-sm font-semibold text-gray-500 uppercase tracking-wide">
+        <div class="h-full flex flex-col overflow-y-auto bg-1">
+            <div class="grid grid-cols-7 border-b border-color-default bg-2">
+                <div v-for="day in weekDays" :key="day" class="py-2 text-center text-sm font-semibold text-color-1 uppercase tracking-wide">
                     {{ day }}
                 </div>
             </div>
             <div class="calendar-grid flex-1">
                 <div v-for="(cell, idx) in cells" :key="idx" 
-                     class="calendar-cell relative group hover:bg-gray-50 flex flex-col gap-1 cursor-pointer"
-                     :class="{'bg-gray-50/50': !cell.isCurrentMonth, 'bg-blue-50': isToday(cell.date)}"
+                     class="calendar-cell relative group hover:bg-gray-50 dark:hover:bg-gray-800 flex flex-col gap-1 cursor-pointer"
+                     :class="{'bg-disabled opacity-50': !cell.isCurrentMonth, 'bg-blue-50 dark:bg-blue-900': isToday(cell.date)}"
                      :data-date="cell.date.toISOString()"
                      @click.self="$emit('create-event', cell.date, $event)">
                     
                     <span class="text-xs font-medium p-1 ml-auto rounded-full w-7 h-7 flex items-center justify-center"
-                          :class="isToday(cell.date) ? 'bg-blue-600 text-white' : 'text-gray-700'">
+                          :class="isToday(cell.date) ? 'bg-blue-600 text-white' : 'text-color-2'">
                         {{ cell.dayNumber }}
                     </span>
+                    
+                    <!-- Ghost Event for Month View -->
+                    <div v-if="creatingEvent && creatingEvent.isAllDay && isSameDay(cell.date, new Date(creatingEvent.start))"
+                         class="px-1.5 py-0.5 text-xs rounded border-2 border-dashed border-gray-400 bg-2 text-color-1 font-medium select-none mb-1">
+                         New Event
+                    </div>
 
                     <div v-for="event in getEventsForDate(cell.date)" :key="event.id"
                          class="px-1.5 py-0.5 text-xs rounded truncate cursor-pointer shadow-sm border-l-2 hover:brightness-95 transition-all select-none"
@@ -65,32 +71,37 @@ const MonthView = {
             </div>
         </div>
     `,
-    props: ['cells', 'weekDays', 'dragState', 'getEventsForDate', 'getEventStyle', 'isToday'],
-    emits: ['create-event', 'start-drag', 'select-event']
+    props: ['cells', 'weekDays', 'dragState', 'getEventsForDate', 'getEventStyle', 'isToday', 'creatingEvent'],
+    emits: ['create-event', 'start-drag', 'select-event'],
+    setup() {
+        const df = window.dateFns;
+        const isSameDay = (d1, d2) => df.isSameDay(d1, d2);
+        return { isSameDay };
+    }
 };
 
 const TimeGridView = {
     template: /* html */ `
-        <div class="h-full flex flex-col">
-            <div class="border-b border-gray-200 bg-white flex-shrink-0 grid"
+        <div class="h-full flex flex-col bg-1">
+            <div class="border-b border-color-default bg-1 flex-shrink-0 grid"
                  :style="{ gridTemplateColumns: '60px repeat(' + visibleDates.length + ', 1fr)' }">
-                <div class="border-r border-gray-200 p-2"></div>
+                <div class="border-r border-color-default p-2"></div>
                 <div v-for="(date, idx) in visibleDates" :key="idx" 
-                     class="p-2 text-center border-r border-gray-100">
-                    <div class="text-xs font-semibold text-gray-500 uppercase">{{ weekDays[date.getDay()] }}</div>
-                    <div class="text-xl font-light w-8 h-8 mx-auto rounded-full flex items-center justify-center" 
+                     class="p-2 text-center border-r border-color-default">
+                    <div class="text-xs font-semibold text-color-1 uppercase">{{ weekDays[date.getDay()] }}</div>
+                    <div class="text-xl font-light w-8 h-8 mx-auto rounded-full flex items-center justify-center text-color-2" 
                          :class="{'bg-blue-600 text-white font-bold': isToday(date)}">
                         {{ date.getDate() }}
                     </div>
                 </div>
             </div>
 
-            <div class="flex-1 overflow-y-auto relative" ref="timeScroll">
+            <div class="flex-1 overflow-y-auto relative bg-1" ref="timeScroll">
                 <div class="time-grid relative"
                      :style="{ gridTemplateColumns: '60px repeat(' + visibleDates.length + ', 1fr)' }">
                     
-                    <div class="flex flex-col text-xs text-gray-400 text-right pr-2 pt-[-0.5rem] bg-white sticky left-0 z-10 border-r border-gray-200">
-                        <div v-for="h in 24" :key="h" class="h-[50px] -mt-2.5 bg-white select-none">
+                    <div class="flex flex-col text-xs text-color-1 text-right pr-2 pt-[-0.5rem] bg-1 sticky left-0 z-10 border-r border-color-default">
+                        <div v-for="h in 24" :key="h" class="h-[50px] -mt-2.5 bg-1 select-none">
                             {{ formatTimeLabel(h-1) }}
                         </div>
                     </div>
@@ -108,8 +119,15 @@ const TimeGridView = {
                         </div>
 
                         <div v-if="dragState.isDragging && isSameDay(date, new Date(dragState.originalStart)) && dragState.action === 'time-move'"
-                             class="absolute inset-x-1 rounded border-2 border-gray-400 border-dashed bg-gray-100 opacity-60 pointer-events-none z-0"
+                             class="absolute inset-x-1 rounded border-2 border-gray-400 border-dashed bg-2 opacity-60 pointer-events-none z-0"
                              :style="getGhostStyle()">
+                        </div>
+                        
+                        <!-- Ghost Event for Time View -->
+                        <div v-if="creatingEvent && !creatingEvent.isAllDay && isSameDay(date, new Date(creatingEvent.start))"
+                             class="absolute inset-x-1 rounded border-2 border-dashed border-gray-400 bg-2 opacity-70 pointer-events-none z-20 flex items-center justify-center"
+                             :style="getCreatingEventStyle(creatingEvent)">
+                             <div class="text-xs text-color-1 font-medium">New Event</div>
                         </div>
 
                         <div v-for="event in getEventsWithLayout(date)" :key="event.id" 
@@ -137,7 +155,8 @@ const TimeGridView = {
     props: [
         'currentView', 'visibleDates', 'weekDays', 'isToday', 
         'currentTimeTop', 'dragState', 'selectedEventId', 'eventCursor',
-        'getEventsWithLayout', 'getEventStyle', 'getWeekEventPosition', 'getGhostStyle', 'formatTime', 'isSameDay', 'timeFormat'
+        'getEventsWithLayout', 'getEventStyle', 'getWeekEventPosition', 'getGhostStyle', 'formatTime', 'isSameDay', 'timeFormat',
+        'creatingEvent'
     ],
     emits: ['create-time-event', 'start-drag', 'select-event'],
     methods: {
@@ -145,6 +164,18 @@ const TimeGridView = {
             const date = new Date();
             date.setHours(hours, 0, 0, 0);
             return this.formatTime(date.getTime());
+        },
+        getCreatingEventStyle(evt) {
+            const start = new Date(evt.start);
+            const end = new Date(evt.end);
+            const startMinutes = start.getHours() * 60 + start.getMinutes();
+            const endMinutes = end.getHours() * 60 + end.getMinutes();
+            // Ensure ghost has at least minimal height
+            const diffMinutes = Math.max(endMinutes - startMinutes, 30); 
+            
+            const top = (startMinutes / 60) * 50;
+            const height = (diffMinutes / 60) * 50;
+            return { top: top + 'px', height: height + 'px' };
         }
     }
 };
@@ -160,7 +191,7 @@ var NativeCalendar = {
         'time-grid-view': TimeGridView
     },
     template: /* html */ `
-        <div class="flex flex-col h-full w-full bg-white">
+        <div class="flex flex-col h-full w-full bg-1">
             <calendar-toolbar
                 :current-title="currentTitle"
                 :current-view="currentView"
@@ -179,6 +210,7 @@ var NativeCalendar = {
                     :get-events-for-date="getEventsForDate"
                     :get-event-style="getEventStyle"
                     :is-today="isToday"
+                    :creating-event="creatingEvent"
                     @create-event="createMonthEvent"
                     @start-drag="startDrag"
                     @select-event="selectEvent">
@@ -200,6 +232,7 @@ var NativeCalendar = {
                     :format-time="formatTime"
                     :is-same-day="isSameDay"
                     :time-format="timeFormat"
+                    :creating-event="creatingEvent"
                     @create-time-event="createTimeEvent"
                     @start-drag="startDrag"
                     @select-event="selectEvent">
@@ -214,7 +247,7 @@ var NativeCalendar = {
             </div>
         </div>
     `,
-    props: ['events', 'timeFormat'],
+    props: ['events', 'timeFormat', 'creatingEvent'],
     emits: ['update:events', 'event-click', 'event-create'],
     setup(props, { emit }) {
         const { ref, computed, onMounted, onUnmounted, watch } = Vue;
@@ -357,7 +390,7 @@ var NativeCalendar = {
             const endMinutes = end.getHours() * 60 + end.getMinutes();
             const top = (startMinutes / 60) * 50;
             const height = Math.max(((endMinutes - startMinutes) / 60) * 50, 20);
-            return { top: `top}pxt`, height: `theight}pxt` };
+            return { top: top + 'px', height: height + 'px' };
         };
 
         const getGhostStyle = () => {
@@ -367,15 +400,14 @@ var NativeCalendar = {
             const endMinutes = end.getHours() * 60 + end.getMinutes();
             const top = (startMinutes / 60) * 50;
             const height = Math.max(((endMinutes - startMinutes) / 60) * 50, 20);
-            return { top: `top}pxt`, height: `theight}pxt`, width: '80%', left: '0%' };
+            return { top: top + 'px', height: height + 'px', width: '80%', left: '0%' };
         };
 
         // Interaction Emitters
         const createMonthEvent = (date, evt) => {
-            // Convert to timestamp range
-            const start = df.setHours(date, 9);
-            const end = df.setHours(date, 10);
-            emit('event-create', { start: start.getTime(), end: end.getTime(), event: evt });
+            const start = df.startOfDay(date);
+            const end = df.endOfDay(date);
+            emit('event-create', { start: start.getTime(), end: end.getTime(), isAllDay: true, event: evt });
         };
 
         const createTimeEvent = (date, event) => {
@@ -388,7 +420,7 @@ var NativeCalendar = {
             const hours = Math.floor(hoursFloat);
             const start = df.set(date, { hours: hours, minutes: 0 });
             const end = df.addMinutes(start, 60);
-            emit('event-create', { start: start.getTime(), end: end.getTime(), event: event });
+            emit('event-create', { start: start.getTime(), end: end.getTime(), isAllDay: false, event: event });
         };
 
         const selectEvent = (event, e) => {

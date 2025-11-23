@@ -14,6 +14,7 @@ class Event {
 
         this.recurrenceID = options.RecurrenceID || options.recurrenceID || null;
         this.recurrenceException = options.RecurrenceException || options.recurrenceException || null;
+        this.isAllDay = options.IsAllDay || options.isAllDay || false;
 
         // for SyncFusion Internal Object
         if (options.StartTime) {

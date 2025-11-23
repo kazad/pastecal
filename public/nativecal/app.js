@@ -16,6 +16,9 @@ const COMPONENT_REGISTRY = {
     'quick-add-button': QuickAddButton,        // Quick Add trigger component (button/FAB)
     'quick-add-dialog': QuickAddDialog,        // Quick Add dialog (parsing & create)
     'native-calendar': NativeCalendar,         // Native Calendar component
+    'event-editor': EventEditor,               // Full event editor
+    'event-popover': EventPopover,             // Quick info popover
+    'quick-create-popover': QuickCreatePopover, // Quick create popover
     'icon': Icon,                              // Generic Icon component
     'copy-icon': CopyIcon,                     // Copy icon SVG
     'settings-icon': SettingsIcon,             // Settings icon SVG
@@ -136,6 +139,18 @@ const CalendarVueApp = {
 
             // Mobile Menu
             showMobileMenu: false,
+
+            // NativeCal Interactions
+            showEditor: false,
+            editorEvent: null,
+            showPopover: false,
+            popoverEvent: null,
+            popoverPosition: { top: 0, left: 0 },
+            
+            // Quick Create
+            showQuickCreate: false,
+            quickCreateEvent: null,
+            quickCreatePosition: { top: 0, left: 0 },
         }
     },
 
@@ -619,6 +634,151 @@ const CalendarVueApp = {
             // NativeCal: Reactivity is handled by Vue props binding to <native-calendar :events="calendar.events">
             // No manual sync needed.
             console.log('[updateCalendarView] NativeCal: View updated via reactivity');
+        },
+
+        // ============================================================
+        // REGION: NativeCal Interactions
+        // ============================================================
+        
+        handleEventCreate({ start, end, isAllDay, event }) {
+            this.quickCreateEvent = { start, end, isAllDay };
+            
+            // Position logic
+            let top = 0, left = 0;
+            if (event) {
+                // Prefer mouse coordinates for creation
+                if (event.clientX && event.clientY) {
+                    top = event.clientY - 60; // Slightly above cursor to align with event
+                    left = event.clientX + 20; // To the right
+                } else if (event.target) {
+                    const rect = event.target.getBoundingClientRect();
+                    top = rect.top;
+                    left = rect.right + 10;
+                }
+                
+                // Flip if too far right
+                if (left + 340 > window.innerWidth) {
+                    left = (event.clientX || left) - 340;
+                }
+                // Flip up if near bottom
+                if (top + 250 > window.innerHeight) {
+                     top = window.innerHeight - 260;
+                }
+                // Clamp top
+                if (top < 10) top = 10;
+            } else {
+                // Center screen fallback
+                top = window.innerHeight / 2 - 100;
+                left = window.innerWidth / 2 - 160;
+            }
+
+            this.quickCreatePosition = { top, left };
+            this.showQuickCreate = true;
+            this.closePopover();
+            this.closeEditor();
+        },
+
+        closeQuickCreate() {
+            this.showQuickCreate = false;
+            this.quickCreateEvent = null;
+        },
+
+        handleQuickCreateSave(title) {
+            if (!this.quickCreateEvent) return;
+            
+            const newEventData = {
+                start: this.quickCreateEvent.start,
+                end: this.quickCreateEvent.end,
+                title: title || '(No Title)',
+                isAllDay: this.quickCreateEvent.isAllDay,
+                type: 1
+            };
+            
+            this.handleSaveEvent(newEventData);
+            this.closeQuickCreate();
+        },
+
+        handleQuickCreateMoreDetails(title) {
+             if (!this.quickCreateEvent) return;
+             
+             this.editorEvent = {
+                start: this.quickCreateEvent.start,
+                end: this.quickCreateEvent.end,
+                title: title || '',
+                isAllDay: this.quickCreateEvent.isAllDay,
+                type: 1
+            };
+            this.showEditor = true;
+            this.closeQuickCreate();
+        },
+
+        handleEventClick({ event, jsEvent }) {
+            this.popoverEvent = event;
+            
+            // Position logic
+            let top = 0, left = 0;
+            if (jsEvent && jsEvent.currentTarget) {
+                const rect = jsEvent.currentTarget.getBoundingClientRect();
+                top = rect.bottom + 10;
+                left = rect.left + (rect.width / 2) - 160; // Center (width 320)
+                
+                // Bounds check
+                if (left < 10) left = 10;
+                if (left + 320 > window.innerWidth) left = window.innerWidth - 330;
+                if (top + 200 > window.innerHeight) top = rect.top - 210; // Flip up if no space
+            } else {
+                // Center screen
+                top = window.innerHeight / 2 - 100;
+                left = window.innerWidth / 2 - 160;
+            }
+
+            this.popoverPosition = { top, left };
+            this.showPopover = true;
+        },
+
+        openEditorForEvent(event) {
+            this.editorEvent = { ...event };
+            this.showEditor = true;
+            this.closePopover();
+        },
+
+        closePopover() {
+            this.showPopover = false;
+            this.popoverEvent = null;
+        },
+
+        closeEditor() {
+            this.showEditor = false;
+            this.editorEvent = null;
+        },
+
+        handleSaveEvent(eventData) {
+            // Clone existing events
+            const events = [...this.calendar.events];
+            
+            if (eventData.id) {
+                // Update existing
+                const index = events.findIndex(e => e.id === eventData.id);
+                if (index !== -1) {
+                    // Update fields
+                    events[index] = new Event({ ...events[index], ...eventData });
+                }
+            } else {
+                // Create new
+                const newEvent = new Event(eventData);
+                events.push(newEvent);
+            }
+            
+            // Trigger update
+            this.calendar.setEvents(events);
+            this.closeEditor();
+        },
+
+        handleDeleteEvent(id) {
+            const events = this.calendar.events.filter(e => e.id !== id);
+            this.calendar.setEvents(events);
+            this.closePopover();
+            this.closeEditor();
         },
 
         // ============================================================

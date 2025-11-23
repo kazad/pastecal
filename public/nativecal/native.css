@@ -4,15 +4,20 @@
 .calendar-grid {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
-    border-top: 1px solid #e5e7eb;
-    border-left: 1px solid #e5e7eb;
+    border-top: 1px solid var(--border-color);
+    border-left: 1px solid var(--border-color);
     height: 100%;
 }
 .calendar-cell {
     min-height: 100px;
-    border-right: 1px solid #e5e7eb;
-    border-bottom: 1px solid #e5e7eb;
+    border-right: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
     padding: 0.25rem;
+    background: var(--bg);
+    color: var(--fg);
+}
+.calendar-cell:hover {
+    background: var(--bg-interactive-hover);
 }
 
 /* Time grid (Week/Day) */
@@ -21,13 +26,14 @@
     /* Grid template columns set dynamically via inline style */
 }
 .time-col {
-    border-right: 1px solid #e5e7eb;
+    border-right: 1px solid var(--border-color);
     min-width: 0; 
     position: relative;
+    background: var(--bg);
 }
 .hour-row {
     height: 50px; /* 50px per hour */
-    border-bottom: 1px solid #f3f4f6;
+    border-bottom: 1px solid var(--bg-interactive-hover);
     box-sizing: border-box;
 }
 
