@@ -254,6 +254,11 @@ var NativeCalendar = {
     `,
     props: ['events', 'timeFormat', 'creatingEvent'],
     emits: ['update:events', 'event-click', 'event-create'],
+    /**
+     * @param {NativeCalendarProps} props
+     * @param {Object} context
+     * @param {(event: string, ...args: any[]) => void} context.emit
+     */
     setup(props, { emit }) {
         const { ref, computed, onMounted, onUnmounted, watch } = Vue;
         
@@ -387,11 +392,8 @@ var NativeCalendar = {
                         // Handle cases where RRULE: might already be present or not
                         let ruleString = event.recurrencerule;
                         
-                        // Clean up potentially trailing semicolons or whitespace
-                        ruleString = ruleString.trim();
-                        if (ruleString.endsWith(';')) {
-                            ruleString = ruleString.slice(0, -1);
-                        }
+                        // Clean up potentially trailing semicolons or whitespace and empty segments
+                        ruleString = ruleString.split(';').filter(part => part.trim() !== '').join(';');
                         
                         ruleString = ruleString.startsWith("RRULE:") 
                             ? ruleString 
@@ -466,8 +468,10 @@ var NativeCalendar = {
         };
 
         const formatTime = (timestamp) => {
-            if (props.timeFormat === '12') return df.format(new Date(timestamp), 'h:mm a');
-            return df.format(new Date(timestamp), 'HH:mm');
+            const d = new Date(timestamp);
+            if (isNaN(d.getTime())) return '';
+            if (props.timeFormat === '12') return df.format(d, 'h:mm a');
+            return df.format(d, 'HH:mm');
         };
 
         const getEventStyle = (event, isWeekView = false) => {
