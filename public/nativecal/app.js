@@ -40,6 +40,7 @@ const stripBase = (path) => {
     return path;
 };
 
+/** @type {import('vue').ComponentOptions} */
 const CalendarVueApp = {
     components: COMPONENT_REGISTRY,
     directives: {
@@ -809,12 +810,12 @@ const CalendarVueApp = {
         confirmClaim() {
             if (this.calendar.id) {
                 // Proceed with creation
-                this.create();
+                this._performCreate();
                 this.showClaimDialog = false;
             }
         },
 
-        create() {
+        _performCreate() {
             let slug = this.calendar.id;
             if (!slug) {
                 slug = Utils.randomID(8);
@@ -873,7 +874,7 @@ const CalendarVueApp = {
             CalendarDataService.checkExists(newId, () => {
                 alert("That name is already taken.");
             }, () => {
-                // Does not exist, proceed
+                // does not exist, proceed
                 if (confirm(`Move calendar to pastecal.com/${newId}?`)) {
                     // Create copy with new ID
                     let newCalendar = JSON.parse(JSON.stringify(this.calendar));
@@ -882,7 +883,7 @@ const CalendarVueApp = {
 
                     CalendarDataService.createWithId(newId, newCalendar, () => {
                         // We don't delete the old one (safer, acts as a copy)
-                        window.location = "/" + newId;
+                        window.location.href = "/" + newId;
                     });
                 }
             });
@@ -996,10 +997,8 @@ const CalendarVueApp = {
             clearInterval(this.updateLinkTimer);
         },
 
-        copyToClipboard(target) {
-            target.select();
-            document.execCommand('copy');
-        },
+        // Duplicate copyToClipboard removed from here.
+        // See copyToClipboard with buttonElement feedback below.
 
         // ============================================================
         // REGION: Events & Search Management
@@ -1650,8 +1649,9 @@ const CalendarVueApp = {
 
 const app = Vue.createApp(CalendarVueApp)
     .component('quick-add-button', QuickAddButton)
-    .component('quick-add-dialog', QuickAddDialog)
-    .mount('#app');
+    .component('quick-add-dialog', QuickAddDialog);
+
+window.vm = app.mount('#app');
 
 // Signal to tests that the app has mounted
 try {
@@ -1664,10 +1664,12 @@ try {
 // Sanity guard: verify canEdit exists and matches the inverse of isReadOnly after mount
 setTimeout(() => {
     try {
-        if (typeof app.canEdit === 'undefined') {
-            console.warn('[sanity] app.canEdit is undefined — computed block may be overwritten');
-        } else if (app.canEdit !== !Boolean(app.isReadOnly)) {
-            console.warn('[sanity] canEdit mismatch', { isReadOnly: app.isReadOnly, canEdit: app.canEdit });
+        const vm = window.vm;
+        if (!vm) return;
+        if (typeof vm.canEdit === 'undefined') {
+            console.warn('[sanity] vm.canEdit is undefined — computed block may be overwritten');
+        } else if (vm.canEdit !== !Boolean(vm.isReadOnly)) {
+            console.warn('[sanity] canEdit mismatch', { isReadOnly: vm.isReadOnly, canEdit: vm.canEdit });
         }
     } catch (e) {
         console.warn('[sanity] error checking app computed properties', e);
