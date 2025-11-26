@@ -193,7 +193,74 @@ var NativeCalendar = {
     components: {
         'calendar-toolbar': CalendarToolbar,
         'month-view': MonthView,
-        'time-grid-view': TimeGridView
+        'time-grid-view': TimeGridView,
+        'year-view': {
+            template: /* html */ `
+                <div class="h-full overflow-auto bg-1 p-4">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div v-for="month in months" :key="month.key"
+                             class="rounded-xl border border-color-default bg-2 shadow-sm hover:shadow-md transition-all cursor-pointer p-3"
+                             @click="$emit('jump-to-month', month.date)">
+                            <div class="flex items-center justify-between mb-2">
+                                <div>
+                                    <p class="text-[11px] uppercase tracking-wide text-color-1">{{ month.year }}</p>
+                                    <p class="text-lg font-bold text-color-2">{{ month.label }}</p>
+                                </div>
+                                <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold"
+                                      :class="month.isCurrent ? 'bg-blue-600 text-white' : 'bg-1 text-color-1 border border-color-default'">
+                                    {{ month.count }} events
+                                </span>
+                            </div>
+                            <div class="grid grid-cols-7 gap-1 text-[10px] text-color-1 mb-2">
+                                <span v-for="day in month.weekLabels" :key="day" class="text-center uppercase tracking-wide">{{ day }}</span>
+                            </div>
+                            <div class="grid grid-cols-7 gap-1 text-[10px] leading-5">
+                                <span v-for="day in month.previewDays" :key="day.key"
+                                      class="rounded px-1 text-center"
+                                      :class="day.isToday ? 'bg-blue-600 text-white font-bold' : (day.isCurrentMonth ? 'bg-1 text-color-2' : 'text-color-1 bg-transparent')">
+                                    {{ day.label }}
+                                </span>
+                            </div>
+                            <div class="flex gap-1 mt-3">
+                                <span v-for="(color, idx) in month.topColors" :key="idx" class="w-2.5 h-2.5 rounded-full" :style="{ backgroundColor: color }"></span>
+                                <span v-if="!month.topColors.length" class="text-xs text-color-1">No events yet</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `,
+            props: ['months'],
+            emits: ['jump-to-month']
+        },
+        'agenda-view': {
+            template: /* html */ `
+                <div class="h-full overflow-auto bg-1 p-4 space-y-3">
+                    <div v-if="!agenda.length" class="rounded-xl border border-color-default bg-2 p-6 text-center text-color-1">
+                        No upcoming events in this window.
+                    </div>
+                    <div v-for="section in agenda" :key="section.key" class="rounded-xl border border-color-default bg-2 shadow-sm overflow-hidden">
+                        <div class="px-4 py-3 flex items-center justify-between border-b border-color-default">
+                            <div>
+                                <p class="text-[11px] uppercase tracking-wide text-color-1">{{ section.weekday }}</p>
+                                <p class="text-lg font-bold text-color-2">{{ section.label }}</p>
+                            </div>
+                            <span class="text-[11px] px-3 py-1 rounded-full bg-1 text-color-1 border border-color-default">{{ section.events.length }} items</span>
+                        </div>
+                        <div class="divide-y divide-color-default">
+                            <div v-for="evt in section.events" :key="evt.id" class="px-4 py-3 flex items-center gap-3">
+                                <span class="w-2 h-2 rounded-full" :style="{ backgroundColor: evt.color }"></span>
+                                <div class="flex-1">
+                                    <p class="text-sm font-semibold text-color-2">{{ evt.title }}</p>
+                                    <p class="text-xs text-color-1">{{ evt.timeLabel }}</p>
+                                </div>
+                                <span v-if="evt.isAllDay" class="text-[11px] px-2 py-1 rounded-full bg-1 border border-color-default text-color-1">All day</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `,
+            props: ['agenda']
+        }
     },
     template: /* html */ `
         <div class="flex flex-col h-full w-full bg-1">
@@ -243,6 +310,15 @@ var NativeCalendar = {
                     @select-event="selectEvent">
                 </time-grid-view>
                 
+                <year-view v-if="currentView === 'Year'"
+                    :months="yearMonths"
+                    @jump-to-month="goToMonth">
+                </year-view>
+
+                <agenda-view v-if="currentView === 'Agenda'"
+                    :agenda="agendaSections">
+                </agenda-view>
+                
                 <!-- Drag Ghost -->
                 <div v-if="dragState.isDragging && dragState.action === 'month-move' && dragState.ghostEvent" 
                      class="drag-ghost px-2 py-1 text-xs rounded text-white font-bold truncate w-32 pointer-events-none"
@@ -263,7 +339,7 @@ var NativeCalendar = {
         const { ref, computed, onMounted, onUnmounted, watch } = Vue;
         
         const currentView = ref('Month');
-        const views = ['Day', 'Week', 'Month']; 
+        const views = ['Day', 'Week', 'Month', 'Year', 'Agenda']; 
         const currentDate = ref(new Date());
         const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
         const selectedEventId = ref(null);
@@ -294,6 +370,17 @@ var NativeCalendar = {
         // Date Logic
         const currentTitle = computed(() => {
             if (currentView.value === 'Day') return df.format(currentDate.value, 'MMMM d, yyyy');
+            if (currentView.value === 'Week') {
+                const start = df.startOfWeek(currentDate.value);
+                const end = df.endOfWeek(currentDate.value);
+                return df.format(start, 'MMM d') + ' - ' + df.format(end, 'MMM d');
+            }
+            if (currentView.value === 'Agenda') {
+                const start = df.startOfWeek(currentDate.value);
+                const end = df.addDays(start, 13);
+                return 'Agenda: ' + df.format(start, 'MMM d') + ' - ' + df.format(end, 'MMM d');
+            }
+            if (currentView.value === 'Year') return df.format(currentDate.value, 'yyyy');
             return df.format(currentDate.value, 'MMMM yyyy');
         });
 
@@ -301,18 +388,33 @@ var NativeCalendar = {
         const isSameDay = (d1, d2) => df.isSameDay(d1, d2);
 
         // Navigation
-        const changeView = (view) => currentView.value = view;
+        const changeView = (view) => {
+            currentView.value = view;
+            if (view === 'Week' || view === 'Agenda') {
+                currentDate.value = df.startOfWeek(currentDate.value);
+            } else if (view === 'Year') {
+                currentDate.value = df.startOfYear(currentDate.value);
+            }
+        };
         const prev = () => {
             if (currentView.value === 'Month') currentDate.value = df.subMonths(currentDate.value, 1);
             else if (currentView.value === 'Week') currentDate.value = df.subWeeks(currentDate.value, 1);
+            else if (currentView.value === 'Year') currentDate.value = df.subYears(currentDate.value, 1);
+            else if (currentView.value === 'Agenda') currentDate.value = df.subWeeks(currentDate.value, 2);
             else currentDate.value = df.subDays(currentDate.value, 1);
         };
         const next = () => {
             if (currentView.value === 'Month') currentDate.value = df.addMonths(currentDate.value, 1);
             else if (currentView.value === 'Week') currentDate.value = df.addWeeks(currentDate.value, 1);
+            else if (currentView.value === 'Year') currentDate.value = df.addYears(currentDate.value, 1);
+            else if (currentView.value === 'Agenda') currentDate.value = df.addWeeks(currentDate.value, 2);
             else currentDate.value = df.addDays(currentDate.value, 1);
         };
         const today = () => currentDate.value = new Date();
+        const goToMonth = (date) => {
+            currentDate.value = df.startOfMonth(date);
+            currentView.value = 'Month';
+        };
 
         // Grid Logic
         const monthCells = computed(() => {
@@ -344,8 +446,15 @@ var NativeCalendar = {
 
         const visibleDates = computed(() => {
             if (currentView.value === 'Day') return [currentDate.value];
-            const start = df.startOfWeek(currentDate.value);
-            return Array.from({ length: 7 }, (_, i) => df.addDays(start, i));
+            if (currentView.value === 'Week') {
+                const start = df.startOfWeek(currentDate.value);
+                return Array.from({ length: 7 }, (_, i) => df.addDays(start, i));
+            }
+            if (currentView.value === 'Agenda') {
+                const start = df.startOfWeek(currentDate.value);
+                return Array.from({ length: 14 }, (_, i) => df.addDays(start, i));
+            }
+            return [];
         });
 
         // Recurrence Expansion Logic
@@ -358,11 +467,19 @@ var NativeCalendar = {
                  const start = df.startOfMonth(currentDate.value);
                  rangeStart = df.subWeeks(start, 1);
                  rangeEnd = df.addWeeks(df.endOfMonth(currentDate.value), 1);
+            } else if (currentView.value === 'Year') {
+                 const start = df.startOfYear(currentDate.value);
+                 rangeStart = df.subMonths(start, 1);
+                 rangeEnd = df.addMonths(df.endOfYear(currentDate.value), 1);
             } else {
-                // Week/Day
                 const visible = visibleDates.value;
-                rangeStart = df.subDays(visible[0], 1);
-                rangeEnd = df.addDays(visible[visible.length - 1], 1);
+                if (visible.length) {
+                    rangeStart = df.subDays(visible[0], 1);
+                    rangeEnd = df.addDays(visible[visible.length - 1], 1);
+                } else {
+                    rangeStart = df.subMonths(currentDate.value, 1);
+                    rangeEnd = df.addMonths(currentDate.value, 1);
+                }
             }
             
             // console.log('[NativeCalendar] processedEvents computing. Total events:', props.events?.length);
@@ -474,8 +591,72 @@ var NativeCalendar = {
             return df.format(d, 'HH:mm');
         };
 
+        const yearMonths = computed(() => {
+            const startOfYear = df.startOfYear(currentDate.value);
+            const today = new Date();
+            return Array.from({ length: 12 }, (_, i) => {
+                const monthDate = df.addMonths(startOfYear, i);
+                const start = df.startOfMonth(monthDate);
+                const previewDays = Array.from({ length: 14 }, (_, idx) => {
+                    const dayDate = df.addDays(start, idx);
+                    return {
+                        key: df.format(dayDate, 'yyyy-MM-dd'),
+                        label: df.getDate(dayDate),
+                        isCurrentMonth: df.isSameMonth(dayDate, monthDate),
+                        isToday: df.isSameDay(dayDate, today)
+                    };
+                });
+                const monthEvents = processedEvents.value.filter(ev => df.isSameMonth(new Date(ev.start), monthDate));
+                const topColors = monthEvents.slice(0, 4).map(ev => colors[((ev.type || 1) - 1) % colors.length]);
+                return {
+                    key: df.format(monthDate, 'yyyy-MM'),
+                    date: start,
+                    label: df.format(monthDate, 'MMMM'),
+                    year: df.format(monthDate, 'yyyy'),
+                    previewDays,
+                    topColors,
+                    weekLabels: ['S', 'M', 'T', 'W', 'T', 'F', 'S'],
+                    count: monthEvents.length,
+                    isCurrent: df.isSameMonth(monthDate, today)
+                };
+            });
+        });
+
+        const agendaSections = computed(() => {
+            const dates = visibleDates.value;
+            const start = dates.length ? dates[0] : df.startOfWeek(currentDate.value);
+            const end = dates.length ? dates[dates.length - 1] : df.addDays(start, 13);
+            const items = processedEvents.value
+                .filter(ev => df.isWithinInterval(new Date(ev.start), { start: df.startOfDay(start), end: df.endOfDay(end) }))
+                .sort((a, b) => a.start - b.start)
+                .map(ev => ({
+                    ...ev,
+                    color: colors[((ev.type || 1) - 1) % colors.length],
+                    timeLabel: ev.isAllDay ? 'All day' : `${formatTime(ev.start)} - ${formatTime(ev.end)}`,
+                    dateObj: new Date(ev.start)
+                }));
+
+            const grouped = [];
+            items.forEach(ev => {
+                const key = df.format(ev.dateObj, 'yyyy-MM-dd');
+                let bucket = grouped.find(g => g.key === key);
+                if (!bucket) {
+                    bucket = {
+                        key,
+                        label: df.format(ev.dateObj, 'MMMM d'),
+                        weekday: df.format(ev.dateObj, 'EEEE'),
+                        events: []
+                    };
+                    grouped.push(bucket);
+                }
+                bucket.events.push(ev);
+            });
+
+            return grouped;
+        });
+
         const getEventStyle = (event, isWeekView = false) => {
-            const color = colors[(event.type - 1) % colors.length];
+            const color = colors[((event.type || 1) - 1) % colors.length];
             if (isWeekView) return { borderLeftColor: color, backgroundColor: color + '20', color: color, ...event.style };
             return { backgroundColor: color, color: 'white' };
         };
@@ -622,7 +803,8 @@ var NativeCalendar = {
 
         return {
             currentView, views, currentTitle, weekDays, monthCells, visibleDates,
-            prev, next, today, changeView,
+            yearMonths, agendaSections,
+            prev, next, today, changeView, goToMonth,
             getEventsForDate, getEventsWithLayout, getEventStyle, getWeekEventPosition, getGhostStyle, formatTime,
             createMonthEvent, createTimeEvent, startDrag, selectEvent,
             dragState, eventCursor, currentTimeTop, selectedEventId, isToday, isSameDay
