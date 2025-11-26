@@ -79,7 +79,7 @@ const CalendarVueApp = {
         // Define default colors
         const DEFAULT_COLORS = [
             "#3f51b5", "#e3165b", "#ff6652", "#4caf50",
-            "#ff9800", "03a9f4", "#9e9e9e", "#27282f"
+            "#ff9800", "#03a9f4", "#9e9e9e", "#27282f"
         ];
 
         // COLORS will be updated based on custom colors if available
