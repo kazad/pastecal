@@ -576,7 +576,7 @@ const CalendarVueApp = {
 
         scheduleObj.appendTo('#Schedule');
 
-        // Add event listener to mark month-start dates
+        // Add event listener to mark month-start dates and colorize year view dots
         scheduleObj.dataBound = function () {
             // Find all date headers and mark ones with month names (contain space)
             const dateHeaders = document.querySelectorAll('.e-schedule .e-month-view .e-date-header.e-navigate');
@@ -589,6 +589,88 @@ const CalendarVueApp = {
                     header.classList.remove('month-start');
                 }
             });
+
+            // Colorize year view dots based on event types
+            if (scheduleObj.currentView === 'Year') {
+                // Helper function to check if an event occurs on a given date
+                const eventOccursOnDate = (event, targetDate) => {
+                    const eventStart = new Date(event.StartTime);
+                    const eventEnd = new Date(event.EndTime);
+                    const targetStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+                    const targetEnd = new Date(targetStart.getTime() + 24 * 60 * 60 * 1000);
+
+                    // For non-recurring events, check if date overlaps
+                    if (!event.RecurrenceRule) {
+                        return eventStart < targetEnd && eventEnd > targetStart;
+                    }
+
+                    // For recurring events, use Syncfusion's recurrence helper
+                    try {
+                        const dates = ej.schedule.generate(
+                            eventStart,
+                            event.RecurrenceRule,
+                            event.RecurrenceException || null,
+                            scheduleObj.firstDayOfWeek
+                        );
+                        // Check if any generated date falls within the target day
+                        return dates && dates.some(d => {
+                            const dateMs = typeof d === 'number' ? d : new Date(d).getTime();
+                            return dateMs >= targetStart.getTime() && dateMs < targetEnd.getTime();
+                        });
+                    } catch (e) {
+                        // Fallback: simple date comparison for non-recurring
+                        return eventStart < targetEnd && eventEnd > targetStart;
+                    }
+                };
+
+                const cells = document.querySelectorAll('.e-year-view td.e-cell[data-date]');
+                const allEvents = scheduleObj.eventsData || [];
+
+                cells.forEach(cell => {
+                    const appointmentDiv = cell.querySelector('.e-appointment');
+                    if (!appointmentDiv) return;
+
+                    // Get the date for this cell
+                    const dateMs = parseInt(cell.getAttribute('data-date'));
+                    const cellDate = new Date(dateMs);
+
+                    // Find all events that occur on this date (including recurring)
+                    const eventsOnDate = allEvents.filter(event => eventOccursOnDate(event, cellDate));
+
+                    if (eventsOnDate.length > 0) {
+                        // Get unique event types for this day
+                        const types = [...new Set(eventsOnDate.map(e => e.Type || 1))];
+
+                        if (types.length === 1) {
+                            // Single type: color the dot with that type's color
+                            const color = app.COLORS[types[0] - 1] || app.COLORS[0];
+                            appointmentDiv.style.backgroundColor = color;
+                        } else {
+                            // Multiple types: show multiple dots
+                            appointmentDiv.style.display = 'none';
+
+                            // Remove any existing color dots
+                            cell.querySelectorAll('.color-dot').forEach(d => d.remove());
+
+                            // Create a container for multiple dots
+                            const dotsContainer = document.createElement('div');
+                            dotsContainer.className = 'color-dots-container';
+                            dotsContainer.style.cssText = 'display: flex; gap: 2px; justify-content: center; margin-top: 2px;';
+
+                            // Add a dot for each type (max 3 to avoid overflow)
+                            types.slice(0, 3).forEach(type => {
+                                const dot = document.createElement('div');
+                                dot.className = 'color-dot';
+                                const color = app.COLORS[type - 1] || app.COLORS[0];
+                                dot.style.cssText = `width: 4px; height: 4px; border-radius: 50%; background-color: ${color};`;
+                                dotsContainer.appendChild(dot);
+                            });
+
+                            cell.appendChild(dotsContainer);
+                        }
+                    }
+                });
+            }
         };
 
         // Load and apply global settings after scheduleObj is fully initialized
