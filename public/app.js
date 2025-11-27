@@ -1664,7 +1664,7 @@ const CalendarVueApp = {
                 return;
             }
 
-            this.applyDefaultView();
+            this.applyGlobalSettings();
         },
 
         applyGlobalSettings() {
