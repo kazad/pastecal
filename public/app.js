@@ -592,39 +592,64 @@ const CalendarVueApp = {
 
             // Colorize year view dots based on event types
             if (scheduleObj.currentView === 'Year') {
-                // Helper function to check if an event occurs on a given date
+                const cells = document.querySelectorAll('.e-year-view td.e-cell[data-date]');
+                const allEvents = scheduleObj.eventsData || [];
+
+                // Helper to check if a recurring event occurs on a given date
                 const eventOccursOnDate = (event, targetDate) => {
                     const eventStart = new Date(event.StartTime);
                     const eventEnd = new Date(event.EndTime);
                     const targetStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
                     const targetEnd = new Date(targetStart.getTime() + 24 * 60 * 60 * 1000);
 
+                    // Event must have started on or before target date
+                    const eventStartDay = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate());
+                    if (eventStartDay > targetStart) return false;
+
                     // For non-recurring events, check if date overlaps
                     if (!event.RecurrenceRule) {
                         return eventStart < targetEnd && eventEnd > targetStart;
                     }
 
-                    // For recurring events, use Syncfusion's recurrence helper
-                    try {
-                        const dates = ej.schedule.generate(
-                            eventStart,
-                            event.RecurrenceRule,
-                            event.RecurrenceException || null,
-                            scheduleObj.firstDayOfWeek
-                        );
-                        // Check if any generated date falls within the target day
-                        return dates && dates.some(d => {
-                            const dateMs = typeof d === 'number' ? d : new Date(d).getTime();
-                            return dateMs >= targetStart.getTime() && dateMs < targetEnd.getTime();
-                        });
-                    } catch (e) {
-                        // Fallback: simple date comparison for non-recurring
-                        return eventStart < targetEnd && eventEnd > targetStart;
-                    }
-                };
+                    // For recurring events, parse the RecurrenceRule
+                    const rule = event.RecurrenceRule;
+                    const dayNames = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+                    const targetDayName = dayNames[targetDate.getDay()];
 
-                const cells = document.querySelectorAll('.e-year-view td.e-cell[data-date]');
-                const allEvents = scheduleObj.eventsData || [];
+                    // Check BYDAY constraint
+                    const bydayMatch = rule.match(/BYDAY=([^;]+)/);
+                    if (bydayMatch) {
+                        const allowedDays = bydayMatch[1].split(',');
+                        if (!allowedDays.includes(targetDayName)) return false;
+                    }
+
+                    // Check FREQ and INTERVAL
+                    const freqMatch = rule.match(/FREQ=(\w+)/);
+                    const intervalMatch = rule.match(/INTERVAL=(\d+)/);
+                    const freq = freqMatch ? freqMatch[1] : 'DAILY';
+                    const interval = intervalMatch ? parseInt(intervalMatch[1]) : 1;
+
+                    // Calculate if target date matches the recurrence pattern
+                    const daysDiff = Math.floor((targetStart - eventStartDay) / (24 * 60 * 60 * 1000));
+
+                    if (freq === 'DAILY') {
+                        return daysDiff % interval === 0;
+                    } else if (freq === 'WEEKLY') {
+                        // For weekly with BYDAY, just check if day is in BYDAY (already done above)
+                        // and target is at least interval weeks from a valid occurrence
+                        const weeksDiff = Math.floor(daysDiff / 7);
+                        return weeksDiff % interval === 0 || bydayMatch; // BYDAY takes precedence
+                    } else if (freq === 'MONTHLY') {
+                        // Check if same day of month
+                        return eventStart.getDate() === targetDate.getDate();
+                    } else if (freq === 'YEARLY') {
+                        // Check if same month and day
+                        return eventStart.getMonth() === targetDate.getMonth() &&
+                               eventStart.getDate() === targetDate.getDate();
+                    }
+
+                    return true; // Default: assume it occurs
+                };
 
                 cells.forEach(cell => {
                     const appointmentDiv = cell.querySelector('.e-appointment');
@@ -634,7 +659,7 @@ const CalendarVueApp = {
                     const dateMs = parseInt(cell.getAttribute('data-date'));
                     const cellDate = new Date(dateMs);
 
-                    // Find all events that occur on this date (including recurring)
+                    // Find all events that occur on this date
                     const eventsOnDate = allEvents.filter(event => eventOccursOnDate(event, cellDate));
 
                     if (eventsOnDate.length > 0) {
