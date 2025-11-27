@@ -426,3 +426,8 @@ div#Schedule,
 [v-cloak] {
     display: none !important;
 }
+
+/* Year view: prevent double scrollbar by letting only the page scroll */
+.e-schedule .e-year-view .e-content-wrap {
+    overflow: visible !important;
+}
