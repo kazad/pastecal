@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "checkJs": true,
+    "noEmit": true,
+    "strict": false,
+    "allowJs": true,
+    "lib": ["DOM", "ESNext"],
+    "moduleResolution": "node"
+  },
+  "include": ["**/*.js", "**/*.ts", "types.d.ts"],
+  "exclude": ["node_modules"]
+}
