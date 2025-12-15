@@ -530,7 +530,7 @@ const CalendarVueApp = {
                     let tooltip = createElement('div', {
                         id: 'type-label-hint',
                         className: 'w-full px-4 py-2 text-xs text-center italic hidden flex items-center justify-center gap-1',
-                        innerHTML: `Customize labels in ${getSettingsIconSVG('w-3 h-3')} Settings`
+                        innerHTML: `Customize labels in Settings`
                     });
                     tooltip.style.background = 'var(--panel-bg)';
                     tooltip.style.color = 'var(--text-color-1)';
