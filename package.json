@@ -3,6 +3,12 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "test": "bash test/smoke-llm.sh"
+    "test": "bash test/smoke-llm.sh",
+    "test:parser": "node --test test/parser.test.js",
+    "test:parser:coverage": "c8 --include 'lib/**' --reporter=text --reporter=html node --test test/parser.test.js"
+  },
+  "devDependencies": {
+    "c8": "^10.1.3",
+    "chrono-node": "^2.9.0"
   }
 }
