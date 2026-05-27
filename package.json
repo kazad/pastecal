@@ -3,6 +3,13 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "test": "bash test/smoke-llm.sh"
+    "test:smoke": "bash test/smoke-llm.sh",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:install": "playwright install chromium",
+    "test": "npm run test:e2e"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
   }
 }

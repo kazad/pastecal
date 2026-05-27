@@ -74,3 +74,8 @@ node_modules/
 # dotenv environment variables file
 .env
 .aider*
+
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
