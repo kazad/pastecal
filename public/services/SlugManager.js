@@ -25,9 +25,9 @@ class SlugManager {
             }
             calendar.options.publicViewId = publicViewId;
 
-            // Auto-save for auto-creation
+            // Auto-save for auto-creation. Route through sync() so the Firebase sanitizer applies.
             if (autoCreate) {
-                CalendarDataService.db.child(calendar.id).set(calendar);
+                CalendarDataService.sync(calendar);
             }
 
             console.log(`${autoCreate ? 'Auto-created' : 'Created'} read-only link:`, publicViewId);

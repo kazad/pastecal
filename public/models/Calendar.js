@@ -19,8 +19,7 @@ class Calendar {
                 Description: e.description,
                 RecurrenceRule: e.recurrencerule,
                 Type: parseInt(e.type || 1),
-
-                //                        IsAllDay: e.allday,
+                IsAllDay: !!e.isAllDay,
                 Recurrence: e.repeat,
                 RecurrenceID: e.recurrenceID,
                 RecurrenceException: e.recurrenceException
