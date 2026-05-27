@@ -4,6 +4,27 @@ class CalendarDataService {
     static db = firebase.database().ref('/calendars');
     static db_readonly = firebase.database().ref('/calendars_readonly');
 
+    // Firebase Realtime Database rejects any payload containing `undefined` — the *entire*
+    // write fails. Historically this caused silent save failures (notably the IsAllDay field
+    // commented out in Calendar.getSyncFusionEvents because an early version produced
+    // `IsAllDay: undefined`). Event/Calendar constructors strip undefined to null, but this
+    // is a final belt-and-suspenders pass right before every write — so a future code path
+    // that hands us a plain object with stray undefined fields still saves cleanly instead
+    // of breaking the whole calendar.
+    static _sanitizeForFirebase(value) {
+        if (value === undefined) return null;
+        if (value === null) return null;
+        if (Array.isArray(value)) return value.map(v => this._sanitizeForFirebase(v));
+        if (typeof value === 'object') {
+            const out = {};
+            for (const [k, v] of Object.entries(value)) {
+                out[k] = v === undefined ? null : this._sanitizeForFirebase(v);
+            }
+            return out;
+        }
+        return value;
+    }
+
     // subscribe to live updates
     static subscribe(slug, callback) {
         if (!slug) return;
@@ -135,7 +156,7 @@ class CalendarDataService {
     static sync(calendar) {
         if (calendar && calendar.id && this.connected) {
             // console.log("CalendarDataService.sync()", calendar);
-            this.db.child(calendar.id).set(calendar);
+            this.db.child(calendar.id).set(this._sanitizeForFirebase(calendar));
             console.log('CalendarDataService.sync()');
         }
     }
@@ -144,7 +165,7 @@ class CalendarDataService {
     static debounce_sync = Utils.debounce((cal) => (CalendarDataService.sync(cal)), 500);
 
     static create(item) {
-        return this.db.push(item);
+        return this.db.push(this._sanitizeForFirebase(item));
     }
 
     static checkExists(id, callback_yes, callback_no) {
@@ -158,7 +179,7 @@ class CalendarDataService {
     }
 
     static createWithId(key, value, success) {
-        return this.db.child(key).set(value, (error) => {
+        return this.db.child(key).set(this._sanitizeForFirebase(value), (error) => {
             if (error) {
                 console.log("error creating calendar", error, key, value);
             } else {
@@ -168,7 +189,7 @@ class CalendarDataService {
     }
 
     static update(key, value) {
-        return this.db.child(key).update(value);
+        return this.db.child(key).update(this._sanitizeForFirebase(value));
     }
 
     static delete(key) {
