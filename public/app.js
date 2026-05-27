@@ -706,6 +706,17 @@ const CalendarVueApp = {
         }
         this.applyTheme();
 
+        // Keep theme in sync with OS preference when darkMode is 'auto'.
+        // Without this, toggling the OS theme at runtime leaves data-theme stale
+        // while Syncfusion's CSS doesn't move at all — the mixed-mode bug.
+        if (window.matchMedia) {
+            const mql = window.matchMedia('(prefers-color-scheme: dark)');
+            const onSystemThemeChange = () => {
+                if (this.globalSettings.darkMode === 'auto') this.applyTheme();
+            };
+            mql.addEventListener ? mql.addEventListener('change', onSystemThemeChange) : mql.addListener(onSystemThemeChange);
+        }
+
         // Apply custom colors CSS if any
         this.updateColorCSS();
 
@@ -743,6 +754,18 @@ const CalendarVueApp = {
     },
 
     watch: {
+        // Theme has two outputs: <html data-theme> (drives style.css vars) and the
+        // Syncfusion CSS bundle. They must stay in lockstep — if they desync, the
+        // page renders mixed light/dark (e.g. tooltip on /view/<slug> looks transparent
+        // because bg-2 is light while the calendar grid is dark). This watcher makes
+        // darkMode the single source of truth: any mutation re-applies both outputs.
+        'globalSettings.darkMode': {
+            handler() {
+                this.applyTheme();
+            },
+            immediate: false, // mounted() already calls applyTheme on initial load
+        },
+
         showShare(newValue) {
             if (newValue) {
                 this.updateCurrentViewURL();
