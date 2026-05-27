@@ -1304,18 +1304,26 @@ const CalendarVueApp = {
                 viewParam = viewLower;
             }
 
-            this.currentViewURL = `${window.location.origin}/${this.calendar.id}?date=${currentDate}&view=${viewParam}`;
+            const baseURL = SlugManager.getViewerBaseURL(this.calendar, this.isReadOnly);
+            // baseURL is null only if read-only mode somehow lacks a slug (server race + no
+            // /view/<slug> in the URL). Fall back to the current href so we never leak the edit id.
+            this.currentViewURL = baseURL
+                ? `${baseURL}?date=${currentDate}&view=${viewParam}`
+                : window.location.href;
         },
 
         // ============================================================
         // REGION: URL Generation & Sharing
         // ============================================================
 
+        // Owner-only — returns null in read-only mode so a forgotten v-if can't leak the edit id.
         getEditableURL() {
+            if (this.isReadOnly) return null;
             return `${window.location.origin}/${this.calendar.id}`;
         },
 
         getEditableICSURL() {
+            if (this.isReadOnly) return null;
             return `${window.location.origin}/${this.calendar.id}.ics`;
         },
 

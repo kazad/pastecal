@@ -244,6 +244,11 @@ exports.createPublicLink = onCall(async (request) => {
         }
 
         const publicCalData = JSON.parse(JSON.stringify(calendarData));
+        // Embed publicViewId in the mirror at creation so a viewer who arrives before
+        // the next syncPublicView fires can still resolve the read-only path. Without
+        // this, the client's getViewerBasePath would fall through to /${calendar.id}.
+        publicCalData.options = publicCalData.options || {};
+        publicCalData.options.publicViewId = publicViewId;
 
         await Promise.all([
             sourceCalRef.child('options/publicViewId').set(publicViewId),
