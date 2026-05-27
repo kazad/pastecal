@@ -192,6 +192,12 @@ const CalendarVueApp = {
     },
 
     mounted() {
+        // Load globalSettings from localStorage FIRST, before scheduleObj is constructed.
+        // Syncfusion bakes some properties (e.g. timeFormat, firstDayOfWeek) into the initial
+        // DOM render and doesn't reactively update them when set later — so settings must be
+        // available for the pre-appendTo configuration block below, not just applied after.
+        this.loadGlobalSettings();
+
         // Initialize recents
         this.recentManager = new RecentCalendars();
         this.recentCalendars = this.recentManager.getAll();
@@ -308,7 +314,12 @@ const CalendarVueApp = {
             console.log('[schedule-init] eventsLoaded at', (performance.now() - scheduleInitTimestamp).toFixed(1), 'ms since init');
         });
 
-        scheduleObj.startHour = "05:00";
+        // Apply globalSettings BEFORE appendTo — these properties bake into Syncfusion's
+        // first render and won't reactively update if set later. (See applyGlobalSettings
+        // for the post-render path used when settings change at runtime.)
+        scheduleObj.startHour = this.calendar?.options?.extended ? "00:00" : (this.globalSettings.startHour || "05:00");
+        scheduleObj.timeFormat = this.globalSettings.timeFormat === '24' ? 'HH:mm' : 'hh:mm a';
+        scheduleObj.firstDayOfWeek = parseInt(this.globalSettings.firstDayOfWeek) || 0;
 
         // Build custom view configuration dynamically
         const customViewDuration = this.calendar?.options?.customViewDuration || this.globalSettings.customViewDuration;
@@ -698,12 +709,13 @@ const CalendarVueApp = {
             }
         };
 
-        // Load and apply global settings after scheduleObj is fully initialized
-        this.loadGlobalSettings();
-        // Only apply settings immediately for homepage; remote calendars will apply after data loads
-        if (!this.urlslug) {
-            this.applyGlobalSettings();
-        }
+        // Settings were already loaded at the top of mounted() and applied to scheduleObj
+        // pre-appendTo. Call applyGlobalSettings again here as a safety net for settings that
+        // depend on scheduleObj being fully initialized (e.g. applyDefaultView, which mutates
+        // scheduleObj.views/currentView). This used to be gated behind !this.urlslug, which
+        // meant non-homepage URLs relied on applyGlobalSettingsAfterRemote — and that path
+        // silently no-op'd when scheduleObj wasn't ready at remote-callback time.
+        this.applyGlobalSettings();
         this.applyTheme();
 
         // Keep theme in sync with OS preference when darkMode is 'auto'.
