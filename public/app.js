@@ -105,7 +105,8 @@ const CalendarVueApp = {
                 customViewDuration: 3,
                 customViewUnit: 'Months',
                 startHour: '05:00',
-                darkMode: 'auto'
+                darkMode: 'auto',
+                dateFormat: 'auto' // 'auto' | 'us' | 'iso' | 'eu' — see resolveDateFormat()
             },
             localSettings: {
                 typeLabels: Array(COLORS.length).fill().map((_, i) => `Type ${i + 1}`),
@@ -464,18 +465,26 @@ const CalendarVueApp = {
             if (args.type === 'Editor') {
                 // console.log("Editor call");
 
-                // Configure datetime pickers with strictMode to prevent invalid date/time entries
+                // Configure datetime pickers with strictMode and the user's chosen date format.
+                // Syncfusion's default is en-US (M/d/yy) which is ambiguous internationally
+                // (1/7/26 = Jan 7 in US, July 1 elsewhere). resolveDateFormat() picks a
+                // pattern from globalSettings.dateFormat, falling back to navigator.language.
                 const startElement = args.element.querySelector('[name="StartTime"]');
                 const endElement = args.element.querySelector('[name="EndTime"]');
+                const dateFmt = this.resolveDateFormat();
+                const timeFmt = this.globalSettings.timeFormat === '24' ? 'HH:mm' : 'hh:mm a';
+                const dateTimeFmt = `${dateFmt} ${timeFmt}`;
 
                 if (startElement && startElement.ej2_instances && startElement.ej2_instances[0]) {
                     const startPicker = startElement.ej2_instances[0];
                     startPicker.strictMode = true;
+                    startPicker.format = dateTimeFmt;
                 }
 
                 if (endElement && endElement.ej2_instances && endElement.ej2_instances[0]) {
                     const endPicker = endElement.ej2_instances[0];
                     endPicker.strictMode = true;
+                    endPicker.format = dateTimeFmt;
                 }
 
                 function setColor(id) {
@@ -1638,6 +1647,25 @@ const CalendarVueApp = {
                 hour12: true
             };
             return new Date(dateString).toLocaleString(undefined, options);
+        },
+
+        // Resolves globalSettings.dateFormat to a Syncfusion-compatible date pattern.
+        // 'auto' inspects navigator.language: US locales use M/d/yy; ISO regions (Sweden,
+        // Hungary, Korea, etc.) use yyyy-MM-dd; everywhere else uses dd/MM/yyyy.
+        resolveDateFormat() {
+            const patterns = {
+                us: 'M/d/yy',
+                iso: 'yyyy-MM-dd',
+                eu: 'dd/MM/yyyy',
+            };
+            const choice = this.globalSettings.dateFormat || 'auto';
+            if (choice !== 'auto') return patterns[choice] || patterns.us;
+
+            const locale = (navigator.language || 'en-US').toLowerCase();
+            if (locale.startsWith('en-us')) return patterns.us;
+            // ISO-style: Sweden, Hungary, Korea, Lithuania, Estonia, Latvia, Mongolia, Japan (de facto)
+            if (/^(sv|hu|ko|lt|et|lv|mn|ja)/.test(locale)) return patterns.iso;
+            return patterns.eu;
         },
 
         handleQuickAddEvent(event) {
