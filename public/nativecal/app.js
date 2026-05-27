@@ -914,6 +914,9 @@ const CalendarVueApp = {
         },
 
         updateCurrentViewURL() {
+            // TODO: when implementing properly, route through SlugManager.getViewerBaseURL(this.calendar, this.isReadOnly)
+            // and append ?date=...&view=... params — see public/app.js updateCurrentViewURL.
+            // Do NOT interpolate this.calendar.id directly; that leaks the edit id in read-only mode.
             console.log('[updateCurrentViewURL] NativeCal: Stubbed');
             this.currentViewURL = window.location.href; // Fallback
         },
@@ -922,11 +925,14 @@ const CalendarVueApp = {
         // REGION: URL Generation & Sharing
         // ============================================================
 
+        // Owner-only — returns null in read-only mode so a forgotten v-if can't leak the edit id.
         getEditableURL() {
+            if (this.isReadOnly) return null;
             return `${window.location.origin}/${this.calendar.id}`;
         },
 
         getEditableICSURL() {
+            if (this.isReadOnly) return null;
             return `${window.location.origin}/${this.calendar.id}.ics`;
         },
 
