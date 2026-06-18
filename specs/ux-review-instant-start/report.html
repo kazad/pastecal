@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<style>
+  @page { size: A4; margin: 16mm 14mm; }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: #1f2937; font-size: 11.2px; line-height: 1.5; margin: 0;
+  }
+  h1 { font-size: 27px; margin: 0 0 4px; color: #1d4ed8; letter-spacing: -0.4px; }
+  h2 { font-size: 16px; margin: 26px 0 8px; color: #111827; border-bottom: 2px solid #eff6ff; padding-bottom: 4px; }
+  h3 { font-size: 12.5px; margin: 14px 0 4px; color: #1d4ed8; }
+  p { margin: 6px 0; }
+  .sub { color: #6b7280; font-size: 12px; margin: 0 0 2px; }
+  .meta { color: #9ca3af; font-size: 10px; margin-top: 2px; }
+  .lead { font-size: 12px; background: #f8fafc; border-left: 4px solid #1d4ed8; padding: 10px 14px; border-radius: 6px; }
+  figure { margin: 10px 0 6px; page-break-inside: avoid; }
+  figure img { width: 100%; border: 1px solid #e5e7eb; border-radius: 8px; display: block; }
+  figcaption { font-size: 9.8px; color: #6b7280; margin-top: 4px; }
+  .half { width: 49%; }
+  .row { display: flex; gap: 2%; align-items: flex-start; }
+  ul, ol { margin: 6px 0 6px 0; padding-left: 18px; }
+  li { margin: 3px 0; }
+  .tag { display:inline-block; font-size: 9px; font-weight: 700; padding: 1px 7px; border-radius: 9999px; vertical-align: middle; }
+  .t-keep { background:#dcfce7; color:#166534; }
+  .t-fix  { background:#fee2e2; color:#991b1b; }
+  .t-new  { background:#dbeafe; color:#1e40af; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 10.2px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
+  th { background: #f8fafc; color: #374151; font-weight: 700; }
+  .callout { background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:10px 14px; margin:10px 0; }
+  .callout b { color:#1d4ed8; }
+  .pagebreak { page-break-before: always; }
+  code { background:#f1f5f9; padding:1px 5px; border-radius:4px; font-size:10px; }
+  .pillrow { margin:6px 0; }
+  .pill { display:inline-block; font-size:10px; font-weight:700; color:#1d4ed8; background:#eff6ff; border:1px solid #bfdbfe; border-radius:9999px; padding:4px 11px; margin:2px 3px; }
+  .verdict { font-weight:700; color:#166534; }
+  .foot { margin-top: 18px; color:#9ca3af; font-size:9px; border-top:1px solid #e5e7eb; padding-top:6px; }
+</style>
+</head>
+<body>
+
+  <h1>PasteCal — UX Review</h1>
+  <p class="sub">First-run &amp; onboarding, through the lens of "instant start" (Instacalc) — plus a recommendation on quick-start pills.</p>
+  <p class="meta">Prepared for Kalid · June 18, 2026 · Reviewed: live homepage (desktop + mobile), help panel, quick-add, claim flow.</p>
+
+  <p class="lead">
+    <b>Bottom line.</b> PasteCal already nails the hardest part of the "no-ceremony" promise: you land in a working,
+    editable calendar with a real URL and a sample event — <b>no login, no setup, no blank page.</b> That <i>is</i> the
+    spirit of a microwave's "quick&nbsp;30." The gap isn't the engine, it's the <b>visibility of the one-tap action</b>
+    and the <b>blank-scenario problem</b> for first-timers. Two cheap moves close it: (1) make natural-language Quick Add
+    the always-visible primary action, and (2) add a small row of scenario "Start with" pills. Recommendation on pills: <span class="verdict">Yes — ship a tightly-scoped version.</span>
+  </p>
+
+  <h2>1. What's the "quick 30" equivalent?</h2>
+  <p>
+    A microwave's "quick 30" works for two reasons: it does the <b>single most common thing</b> (add 30s) and it needs
+    <b>zero configuration</b> — one press and it's already running. Crucially, a microwave actually ships <b>two</b> kinds of
+    no-ceremony buttons, and PasteCal maps cleanly onto both:
+  </p>
+  <table>
+    <tr><th style="width:30%">Microwave</th><th style="width:35%">PasteCal equivalent today</th><th>State</th></tr>
+    <tr>
+      <td><b>"+30s" / Quick&nbsp;Start</b><br>one button, most-common action, already cooking</td>
+      <td><b>Auto-created calendar + sample event.</b> You arrive at <code>pastecal.com/9hemdulq</code> already editable, with a 12:00&nbsp;PM "Sample event" placeholder.</td>
+      <td><span class="tag t-keep">STRONG — keep</span></td>
+    </tr>
+    <tr>
+      <td><b>The "+30s" you press again and again</b></td>
+      <td><b>Natural-language Quick Add</b> — type "<i>lunch tomorrow 2pm</i>" → Enter. This is the truest one-action primitive, but it's hidden behind <code>Cmd+E</code> / a small "+Event" / a mobile kebab.</td>
+      <td><span class="tag t-fix">UNDER-SURFACED</span></td>
+    </tr>
+    <tr>
+      <td><b>Preset buttons</b> (Popcorn, Beverage, Pizza)</td>
+      <td><b>Does not exist yet.</b> No scenario starters on the homepage — this is exactly what "quick pills" would be.</td>
+      <td><span class="tag t-new">OPPORTUNITY</span></td>
+    </tr>
+  </table>
+
+  <div class="callout">
+    <b>So, the literal answer:</b> PasteCal's "quick 30" is the <b>auto-calendar + Quick&nbsp;Add typing box</b>. It already
+    exists — it's just not loud enough. Before adding anything new, make that single primitive the visible, default,
+    one-tap action (see §4). <i>Then</i> pills become the "preset buttons" layer on top.
+  </div>
+
+  <h2>2. First-run experience (what a new user actually sees)</h2>
+  <div class="row">
+    <figure class="half">
+      <img src="screenshots/01-firstrun-desktop.png">
+      <figcaption><b>Desktop landing.</b> No login wall. Working month view, random claimable URL top-right, "Claim URL" CTA, and a pre-seeded "Sample event." This is a great instant-start — the user is already inside the product.</figcaption>
+    </figure>
+    <figure class="half">
+      <img src="screenshots/03-quickadd-dialog.png">
+      <figcaption><b>The hidden gem.</b> "Add Event by Typing" — natural language ("birthday party Sat 7pm to 11pm"). This is the Instacalc-style instant input. Today it requires knowing <code>Cmd+E</code> or finding "+Event."</figcaption>
+    </figure>
+  </div>
+  <p>
+    <b>Strengths:</b> zero-friction entry, immediate working surface, a forgiving sample event, and an honest URL-claim model.
+    <b>Friction:</b> the most powerful "just type it" path is the least discoverable, and the sample event is a small chore
+    to clear. A first-timer with a blank calendar still faces a quiet "now what?" moment.
+  </p>
+
+  <h2>3. Where the no-ceremony promise leaks</h2>
+  <div class="row">
+    <figure class="half">
+      <img src="screenshots/06-mobile-firstrun.png">
+      <figcaption><b>Mobile landing.</b> Clean, and the claim pill is prominent. But there is <b>no visible add-event affordance</b> in the header — the primary action is gone.</figcaption>
+    </figure>
+    <figure class="half">
+      <img src="screenshots/07-mobile-menu.png">
+      <figcaption><b>Mobile "⋮" menu.</b> "Quick Add Event" is buried one tap deep, alongside Search/Settings/Help. On the device where typing-to-add matters most, it's the hardest to reach.</figcaption>
+    </figure>
+  </div>
+  <ul>
+    <li><span class="tag t-fix">FIX</span> <b>Quick Add is hidden on mobile</b> (in the kebab). The flagship instant-input is demoted on touch — the exact opposite of "no ceremony."</li>
+    <li><span class="tag t-fix">FIX</span> <b>Discoverability of typing-to-add.</b> Desktop relies on <code>Cmd+E</code> or a low-contrast "+Event" chip; few will find it.</li>
+    <li><span class="tag t-fix">FIX</span> <b>Blank-scenario moment.</b> After the sample event, a new user has no nudge toward <i>what</i> to build (trip? team? RSVP?).</li>
+    <li><span class="tag t-new">NOTE</span> <b>Dead "Name your calendar" modal.</b> The claim-intervention dialog (specced in <code>creation_flow.md</code>) is unreachable — there are two <code>create()</code> methods in <code>app.js</code> and the second silently overrides the first, so clicking Claim navigates immediately and the naming nudge never fires.</li>
+  </ul>
+
+  <h2 class="pagebreak">4. Recommendation A — make the "quick 30" loud (do this first)</h2>
+  <p>Cheapest, highest-leverage. No new concepts; just promote what exists.</p>
+  <ol>
+    <li><b>Always-visible Quick Add.</b> Put a persistent "<b>+ Add event</b>" as the primary button on desktop <i>and</i> a sticky FAB (or first-class header button) on mobile — not in the kebab. One tap opens the type-to-add box.</li>
+    <li><b>Show the magic in the field.</b> Rotating placeholder in the URL/empty state: <i>"Try: dinner Friday 7pm"</i> so the natural-language power is self-evident.</li>
+    <li><b>Replace the sample event with a ghost prompt.</b> Instead of a real event to delete, render a faint "<i>Tap any time, or type 'lunch tomorrow 2pm'</i>" watermark (per <code>ui-ideas.md</code>). Cleaner start, still educational.</li>
+  </ol>
+
+  <h2>5. Recommendation B — quick "Start with" pills</h2>
+  <p class="lead"><b>Should we have quick pills for common scenarios on the homepage? <span class="verdict">Yes</span></b> — as the "preset buttons" layer, scoped tightly. They solve the blank-scenario moment and teach use-cases the hero copy already lists (team schedules, clubs, trips, RSVPs).</p>
+
+  <figure>
+    <img src="screenshots/08-proposal-pills.png">
+    <figcaption><b>Mockup (rendered in the live app):</b> a single "Start with:" row between the top bar and the grid. Tapping a pill seeds a tailored starter calendar and suggests a slug (e.g. Trip&nbsp;planning → <code>/trip-2026</code> with day/agenda view + a couple of example items).</figcaption>
+  </figure>
+
+  <h3>What each pill should do (not just filter — <i>start</i>)</h3>
+  <ul>
+    <li><b>Seed a relevant template</b>: 2–3 example events, the best view (Agenda for trips, Week for office hours), sensible title.</li>
+    <li><b>Suggest a memorable slug</b> — quietly fixing the "random ID never claimed" problem from <code>creation_flow.md</code>.</li>
+    <li><b>Stay one tap from undo</b> — picking a pill shouldn't feel like a commitment.</li>
+  </ul>
+
+  <div class="pillrow">
+    Candidate set (keep to ~5–6):
+    <span class="pill">📅 Team meetings</span>
+    <span class="pill">✈️ Trip planning</span>
+    <span class="pill">🎉 Event / RSVP</span>
+    <span class="pill">🏷️ Office hours</span>
+    <span class="pill">⚽ Club &amp; team schedule</span>
+    <span class="pill">🍽️ Reservations</span>
+  </div>
+
+  <h3>Guardrails (so pills don't add their own ceremony)</h3>
+  <ul>
+    <li><span class="tag t-keep">KEEP</span> <b>Only on a fresh/unclaimed calendar.</b> Hide pills once the user starts editing or claims a URL — they're a starting nudge, not chrome.</li>
+    <li><span class="tag t-keep">KEEP</span> <b>One row, dismissible, no layout thrash.</b> Don't push the grid down on mobile; collapse to a single "Start with a template ▾" entry on small screens.</li>
+    <li><span class="tag t-keep">KEEP</span> <b>Quietly themeable later.</b> Pills are a natural home for seasonal/marketing presets without touching core UI.</li>
+    <li><span class="tag t-fix">MEASURE</span> <b>Instrument it.</b> Pill-click → claim conversion is the success metric. If a pill doesn't lift claims, cut it.</li>
+  </ul>
+
+  <h3>Alternatives considered</h3>
+  <table>
+    <tr><th style="width:26%">Option</th><th>Trade-off</th></tr>
+    <tr><td><b>Pills that seed templates</b> (recommended)</td><td>Best blank-page fix + teaches use-cases + nudges claiming. Slightly more build (needs small templates).</td></tr>
+    <tr><td>Pills that just pre-fill Quick Add text</td><td>Cheaper, but lower payoff — still leaves an empty calendar.</td></tr>
+    <tr><td>A full template gallery / modal</td><td>More ceremony — exactly what we're trying to avoid. Over-built for a "paste &amp; go" product.</td></tr>
+    <tr><td>Do nothing, only promote Quick Add</td><td>Valid &amp; cheapest; solves discoverability but not the "what should I make?" moment.</td></tr>
+  </table>
+
+  <h2>6. Suggested order of work</h2>
+  <table>
+    <tr><th style="width:8%">#</th><th style="width:46%">Change</th><th style="width:20%">Effort</th><th>Payoff</th></tr>
+    <tr><td>1</td><td>Surface Quick Add as a persistent primary button (desktop + mobile, out of the kebab)</td><td>Low</td><td>High</td></tr>
+    <tr><td>2</td><td>Ghost-prompt empty state instead of a deletable sample event</td><td>Low</td><td>Medium</td></tr>
+    <tr><td>3</td><td>"Start with" pills that seed a template + suggest a slug (fresh calendars only)</td><td>Medium</td><td>High</td></tr>
+    <tr><td>4</td><td>Rotating natural-language placeholder to advertise type-to-add</td><td>Low</td><td>Medium</td></tr>
+    <tr><td>5</td><td>Fix the duplicate <code>create()</code> so the "Name your calendar" nudge actually fires</td><td>Low</td><td>Medium</td></tr>
+  </table>
+
+  <div class="callout">
+    <b>One-sentence answer to your question:</b> Yes, add quick pills — but treat them as the microwave's <i>preset
+    buttons</i>, layered on top of a louder, always-visible <i>"+30s" Quick Add</i>, which is the change that most
+    directly delivers the "just gets things going without the ceremony" feel.
+  </div>
+
+  <p class="foot">Screenshots captured from the live PasteCal app (Vue + Syncfusion) at 1280×860 (desktop) and 390×844 (mobile). References: <code>specs/creation_flow.md</code>, <code>specs/ui-ideas.md</code>, <code>specs/ui-improvements.md</code>, <code>NOTES.md</code>.</p>
+
+</body>
+</html>
