@@ -1,0 +1,376 @@
+<!--
+Open sourced under the MIT License: https://opensource.org/licenses/MIT
+Copyright (c) 2025 Kalid Azad
+
+PasteCal Pro — sample marketing / landing page.
+Self-contained (Tailwind via CDN). Drop-in deployable at /pro.
+
+TODO before going live:
+  - Replace STRIPE_MONTHLY / STRIPE_YEARLY / STRIPE_LIFETIME with real
+    Stripe Payment Link URLs (Dashboard > Payment Links).
+  - Swap testimonial placeholders for real quotes (or remove the section).
+  - Point the hero "Lock a calendar" button at your real claim/upgrade flow.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>PasteCal Pro — Lock your shared calendar</title>
+    <meta name="description" content="Keep your shared calendar safe. Lock public editing, restore deleted events, and get notified on every change. No logins for your viewers — ever.">
+
+    <!-- Open Graph -->
+    <meta property="og:url" content="https://pastecal.com/pro">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="PasteCal Pro — Lock your shared calendar">
+    <meta property="og:description" content="Keep your shared calendar safe. Lock public editing, restore deleted events, and get notified on every change.">
+    <meta property="og:image" content="https://pastecal.com/img/screenshot.png">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="PasteCal Pro — Lock your shared calendar">
+    <meta name="twitter:description" content="Keep your shared calendar safe. Lock public editing, restore deleted events, and get notified on every change.">
+    <meta name="twitter:image" content="https://pastecal.com/img/screenshot.png">
+
+    <link rel="icon" type="image/svg+xml" href="/img/icons/favicon.svg" />
+    <link rel="shortcut icon" href="/img/icons/favicon.ico" />
+    <meta name="theme-color" content="#3f51b5">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eef0fb', 100: '#dadef7', 500: '#3f51b5',
+                            600: '#3849a3', 700: '#2f3d8a', 900: '#1f2a63'
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['ui-sans-serif', 'system-ui', '-apple-system', 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', 'sans-serif']
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        html { scroll-behavior: smooth; }
+        .grid-bg {
+            background-image:
+                linear-gradient(to right, rgba(63,81,181,.06) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(63,81,181,.06) 1px, transparent 1px);
+            background-size: 28px 28px;
+        }
+    </style>
+</head>
+
+<body class="font-sans text-slate-800 antialiased">
+
+    <!-- Nav -->
+    <header class="sticky top-0 z-30 backdrop-blur bg-white/80 border-b border-slate-200">
+        <div class="max-w-6xl mx-auto px-5 h-16 flex items-center justify-between">
+            <a href="/" class="flex items-center gap-2 font-bold text-lg text-brand-700">
+                <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-brand-500 text-white">📋</span>
+                PasteCal
+            </a>
+            <nav class="hidden sm:flex items-center gap-7 text-sm font-medium text-slate-600">
+                <a href="#how" class="hover:text-brand-600">How it works</a>
+                <a href="#features" class="hover:text-brand-600">Features</a>
+                <a href="#pricing" class="hover:text-brand-600">Pricing</a>
+                <a href="#faq" class="hover:text-brand-600">FAQ</a>
+            </nav>
+            <a href="#pricing" class="rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-sm font-semibold px-4 py-2 transition">Go Pro</a>
+        </div>
+    </header>
+
+    <!-- Hero -->
+    <section class="grid-bg border-b border-slate-200">
+        <div class="max-w-6xl mx-auto px-5 pt-20 pb-16 text-center">
+            <span class="inline-block rounded-full bg-brand-50 text-brand-700 text-xs font-semibold px-3 py-1 mb-6 border border-brand-100">
+                🔒 New: lock your calendar
+            </span>
+            <h1 class="text-4xl sm:text-6xl font-extrabold tracking-tight text-slate-900 leading-[1.05]">
+                Your shared calendar,<br class="hidden sm:block"> finally <span class="text-brand-500">under control</span>.
+            </h1>
+            <p class="mt-6 max-w-2xl mx-auto text-lg text-slate-600">
+                PasteCal is the calendar you share with a link &mdash; no signups, no app installs.
+                <strong class="text-slate-800">Pro</strong> adds a lock, so only you can edit while everyone else just views.
+                No accidental drags. No mystery deletions. No logins for your viewers, ever.
+            </p>
+            <div class="mt-9 flex flex-col sm:flex-row gap-3 justify-center">
+                <a href="#pricing" class="rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-semibold px-7 py-3.5 text-base shadow-lg shadow-brand-500/20 transition">
+                    Lock a calendar &rarr;
+                </a>
+                <a href="/" class="rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 font-semibold px-7 py-3.5 text-base transition">
+                    Try it free
+                </a>
+            </div>
+            <p class="mt-4 text-sm text-slate-500">Free forever for basic calendars &middot; Pro from $5/mo &middot; Cancel anytime</p>
+
+            <!-- Screenshot -->
+            <div class="mt-14 max-w-4xl mx-auto">
+                <div class="rounded-2xl border border-slate-200 shadow-2xl shadow-slate-300/40 overflow-hidden bg-white">
+                    <div class="h-9 bg-slate-100 border-b border-slate-200 flex items-center gap-1.5 px-4">
+                        <span class="h-3 w-3 rounded-full bg-red-400"></span>
+                        <span class="h-3 w-3 rounded-full bg-amber-400"></span>
+                        <span class="h-3 w-3 rounded-full bg-green-400"></span>
+                        <span class="ml-3 text-xs text-slate-500 font-mono">pastecal.com/summer-trip</span>
+                    </div>
+                    <img src="/img/screenshot.png" alt="PasteCal calendar screenshot" class="w-full block" onerror="this.parentElement.classList.add('hidden')">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Social proof / trust strip -->
+    <section class="bg-white border-b border-slate-200">
+        <div class="max-w-5xl mx-auto px-5 py-8 text-center">
+            <p class="text-sm uppercase tracking-wider text-slate-400 font-semibold">Trusted for</p>
+            <div class="mt-4 flex flex-wrap justify-center gap-x-8 gap-y-3 text-slate-500 font-medium">
+                <span>⚽ Sports teams</span>
+                <span>🎭 Clubs &amp; groups</span>
+                <span>💈 Small businesses</span>
+                <span>🏫 Classrooms</span>
+                <span>👨‍👩‍👧 Families</span>
+                <span>🎟️ Event organizers</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- Problem -->
+    <section class="bg-slate-50 border-b border-slate-200">
+        <div class="max-w-5xl mx-auto px-5 py-20">
+            <div class="text-center max-w-2xl mx-auto">
+                <h2 class="text-3xl font-bold text-slate-900">An open calendar is great&hellip; until it isn't</h2>
+                <p class="mt-4 text-slate-600">The same link that makes sharing effortless lets anyone change anything. Eventually, someone does.</p>
+            </div>
+            <div class="mt-12 grid sm:grid-cols-3 gap-5">
+                <div class="rounded-xl bg-white border border-slate-200 p-6">
+                    <div class="text-2xl">😱</div>
+                    <h3 class="mt-3 font-semibold text-slate-900">Accidental edits</h3>
+                    <p class="mt-1.5 text-sm text-slate-600">A member drags an event by mistake on mobile and nobody notices for a week.</p>
+                </div>
+                <div class="rounded-xl bg-white border border-slate-200 p-6">
+                    <div class="text-2xl">🗑️</div>
+                    <h3 class="mt-3 font-semibold text-slate-900">Vanished events</h3>
+                    <p class="mt-1.5 text-sm text-slate-600">An event disappears and you have no idea who deleted it &mdash; or how to get it back.</p>
+                </div>
+                <div class="rounded-xl bg-white border border-slate-200 p-6">
+                    <div class="text-2xl">🤷</div>
+                    <h3 class="mt-3 font-semibold text-slate-900">No accountability</h3>
+                    <p class="mt-1.5 text-sm text-slate-600">No history, no alerts. You only find out something changed when plans go wrong.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How it works -->
+    <section id="how" class="bg-white border-b border-slate-200">
+        <div class="max-w-5xl mx-auto px-5 py-20">
+            <div class="text-center max-w-2xl mx-auto">
+                <h2 class="text-3xl font-bold text-slate-900">Lock it in three steps</h2>
+                <p class="mt-4 text-slate-600">Keep the magic link. Add the control.</p>
+            </div>
+            <div class="mt-12 grid sm:grid-cols-3 gap-8">
+                <div>
+                    <div class="h-11 w-11 rounded-xl bg-brand-50 text-brand-600 font-bold text-lg flex items-center justify-center border border-brand-100">1</div>
+                    <h3 class="mt-4 font-semibold text-slate-900">Claim your calendar</h3>
+                    <p class="mt-1.5 text-sm text-slate-600">Sign in once with Google and claim any calendar you already created. You become its owner.</p>
+                </div>
+                <div>
+                    <div class="h-11 w-11 rounded-xl bg-brand-50 text-brand-600 font-bold text-lg flex items-center justify-center border border-brand-100">2</div>
+                    <h3 class="mt-4 font-semibold text-slate-900">Flip the lock</h3>
+                    <p class="mt-1.5 text-sm text-slate-600">Toggle <em>Lock editing</em>. Your link instantly becomes read-only for everyone but you.</p>
+                </div>
+                <div>
+                    <div class="h-11 w-11 rounded-xl bg-brand-50 text-brand-600 font-bold text-lg flex items-center justify-center border border-brand-100">3</div>
+                    <h3 class="mt-4 font-semibold text-slate-900">Share like always</h3>
+                    <p class="mt-1.5 text-sm text-slate-600">Send the same link. Viewers see a clean, always-correct schedule &mdash; no account needed.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features -->
+    <section id="features" class="bg-slate-50 border-b border-slate-200">
+        <div class="max-w-5xl mx-auto px-5 py-20">
+            <div class="text-center max-w-2xl mx-auto">
+                <h2 class="text-3xl font-bold text-slate-900">Everything Pro adds</h2>
+                <p class="mt-4 text-slate-600">Peace of mind, not complexity.</p>
+            </div>
+            <div class="mt-12 grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                <div class="rounded-xl bg-white border border-slate-200 p-6">
+                    <div class="text-2xl">🔒</div>
+                    <h3 class="mt-3 font-semibold text-slate-900">Lock public editing</h3>
+                    <p class="mt-1.5 text-sm text-slate-600">Read-only for the world, fully editable for you. The #1 reason people upgrade.</p>
+                </div>
+                <div class="rounded-xl bg-white border border-slate-200 p-6">
+                    <div class="text-2xl">↩️</div>
+                    <h3 class="mt-3 font-semibold text-slate-900">Restore &amp; history</h3>
+                    <p class="mt-1.5 text-sm text-slate-600">Daily snapshots and undo. Roll back an accidental change in one click.</p>
+                </div>
+                <div class="rounded-xl bg-white border border-slate-200 p-6">
+                    <div class="text-2xl">🔔</div>
+                    <h3 class="mt-3 font-semibold text-slate-900">Change alerts</h3>
+                    <p class="mt-1.5 text-sm text-slate-600">Get an email (or Slack ping) whenever something on your calendar changes.</p>
+                </div>
+                <div class="rounded-xl bg-white border border-slate-200 p-6">
+                    <div class="text-2xl">🧑‍🤝‍🧑</div>
+                    <h3 class="mt-3 font-semibold text-slate-900">Trusted editor links</h3>
+                    <p class="mt-1.5 text-sm text-slate-600">Hand out revocable edit links to the few people who should have them.</p>
+                </div>
+                <div class="rounded-xl bg-white border border-slate-200 p-6">
+                    <div class="text-2xl">📊</div>
+                    <h3 class="mt-3 font-semibold text-slate-900">Dashboard</h3>
+                    <p class="mt-1.5 text-sm text-slate-600">All your calendars in one place, with status at a glance.</p>
+                </div>
+                <div class="rounded-xl bg-white border border-slate-200 p-6">
+                    <div class="text-2xl">✨</div>
+                    <h3 class="mt-3 font-semibold text-slate-900">No PasteCal branding</h3>
+                    <p class="mt-1.5 text-sm text-slate-600">Clean, professional calendars to share with clients and members.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Pricing -->
+    <section id="pricing" class="bg-white border-b border-slate-200">
+        <div class="max-w-5xl mx-auto px-5 py-20">
+            <div class="text-center max-w-2xl mx-auto">
+                <h2 class="text-3xl font-bold text-slate-900">Simple pricing. Pay for the calendar, not per person.</h2>
+                <p class="mt-4 text-slate-600">Your viewers and editors are always free. You only pay to manage and protect.</p>
+            </div>
+
+            <div class="mt-12 grid md:grid-cols-3 gap-6 items-stretch">
+                <!-- Free -->
+                <div class="rounded-2xl border border-slate-200 p-7 flex flex-col">
+                    <h3 class="font-semibold text-slate-900">Free</h3>
+                    <p class="mt-1 text-sm text-slate-500">For quick, casual sharing</p>
+                    <div class="mt-5 text-4xl font-extrabold text-slate-900">$0</div>
+                    <ul class="mt-6 space-y-3 text-sm text-slate-600 flex-1">
+                        <li class="flex gap-2"><span class="text-brand-500">✓</span> Unlimited public calendars</li>
+                        <li class="flex gap-2"><span class="text-brand-500">✓</span> Share by link, no signups</li>
+                        <li class="flex gap-2"><span class="text-brand-500">✓</span> iCal export to any app</li>
+                        <li class="flex gap-2"><span class="text-brand-500">✓</span> Day / week / month / year views</li>
+                    </ul>
+                    <a href="/" class="mt-7 rounded-lg border border-slate-300 hover:bg-slate-50 text-center font-semibold py-2.5 text-slate-700 transition">Start free</a>
+                </div>
+
+                <!-- Pro (highlighted) -->
+                <div class="rounded-2xl border-2 border-brand-500 p-7 flex flex-col relative shadow-xl shadow-brand-500/10">
+                    <span class="absolute -top-3 left-1/2 -translate-x-1/2 bg-brand-500 text-white text-xs font-semibold px-3 py-1 rounded-full">Most popular</span>
+                    <h3 class="font-semibold text-slate-900">Pro</h3>
+                    <p class="mt-1 text-sm text-slate-500">For anything you depend on</p>
+                    <div class="mt-5 flex items-end gap-1">
+                        <span class="text-4xl font-extrabold text-slate-900">$5</span>
+                        <span class="text-slate-500 mb-1">/mo</span>
+                    </div>
+                    <p class="text-xs text-slate-500 mt-1">billed $60/yr &middot; 2 months free</p>
+                    <ul class="mt-6 space-y-3 text-sm text-slate-700 flex-1">
+                        <li class="flex gap-2"><span class="text-brand-500">✓</span> <strong>Everything in Free, plus:</strong></li>
+                        <li class="flex gap-2"><span class="text-brand-500">✓</span> 🔒 Lock public editing</li>
+                        <li class="flex gap-2"><span class="text-brand-500">✓</span> ↩️ Restore &amp; daily backups</li>
+                        <li class="flex gap-2"><span class="text-brand-500">✓</span> 🔔 Change notifications</li>
+                        <li class="flex gap-2"><span class="text-brand-500">✓</span> Up to 5 managed calendars</li>
+                        <li class="flex gap-2"><span class="text-brand-500">✓</span> No PasteCal branding</li>
+                    </ul>
+                    <!-- TODO: replace with real Stripe Payment Link -->
+                    <a href="STRIPE_YEARLY" class="mt-7 rounded-lg bg-brand-500 hover:bg-brand-600 text-white text-center font-semibold py-2.5 transition">Go Pro</a>
+                </div>
+
+                <!-- Lifetime -->
+                <div class="rounded-2xl border border-slate-200 p-7 flex flex-col">
+                    <h3 class="font-semibold text-slate-900">Founder's Lifetime</h3>
+                    <p class="mt-1 text-sm text-slate-500">First 100 supporters only</p>
+                    <div class="mt-5 flex items-end gap-1">
+                        <span class="text-4xl font-extrabold text-slate-900">$99</span>
+                        <span class="text-slate-500 mb-1">once</span>
+                    </div>
+                    <p class="text-xs text-slate-500 mt-1">Pay once, Pro forever</p>
+                    <ul class="mt-6 space-y-3 text-sm text-slate-600 flex-1">
+                        <li class="flex gap-2"><span class="text-brand-500">✓</span> All Pro features, for life</li>
+                        <li class="flex gap-2"><span class="text-brand-500">✓</span> All future Pro features</li>
+                        <li class="flex gap-2"><span class="text-brand-500">✓</span> Founder's badge &amp; direct line to me</li>
+                        <li class="flex gap-2"><span class="text-brand-500">✓</span> Fund an indie tool, not a VC</li>
+                    </ul>
+                    <!-- TODO: replace with real Stripe Payment Link -->
+                    <a href="STRIPE_LIFETIME" class="mt-7 rounded-lg border border-slate-900 bg-slate-900 hover:bg-slate-800 text-white text-center font-semibold py-2.5 transition">Get lifetime</a>
+                </div>
+            </div>
+            <p class="mt-6 text-center text-sm text-slate-500">Prefer monthly? <a href="STRIPE_MONTHLY" class="text-brand-600 font-medium underline">$7/mo, cancel anytime</a>.</p>
+        </div>
+    </section>
+
+    <!-- Testimonials (placeholder) -->
+    <section class="bg-slate-50 border-b border-slate-200">
+        <div class="max-w-5xl mx-auto px-5 py-20">
+            <div class="grid sm:grid-cols-3 gap-5">
+                <blockquote class="rounded-xl bg-white border border-slate-200 p-6 text-sm text-slate-700">
+                    &ldquo;Our whole soccer league runs on one PasteCal link. Locking it meant parents stopped accidentally moving games.&rdquo;
+                    <footer class="mt-3 text-slate-500 font-medium">&mdash; Coach, youth league <span class="text-slate-400">(placeholder)</span></footer>
+                </blockquote>
+                <blockquote class="rounded-xl bg-white border border-slate-200 p-6 text-sm text-slate-700">
+                    &ldquo;I send clients a read-only schedule with no signup. It just works. Worth way more than $5.&rdquo;
+                    <footer class="mt-3 text-slate-500 font-medium">&mdash; Freelance consultant <span class="text-slate-400">(placeholder)</span></footer>
+                </blockquote>
+                <blockquote class="rounded-xl bg-white border border-slate-200 p-6 text-sm text-slate-700">
+                    &ldquo;Restore saved us when someone wiped a week of shifts. One click and it was back.&rdquo;
+                    <footer class="mt-3 text-slate-500 font-medium">&mdash; Cafe owner <span class="text-slate-400">(placeholder)</span></footer>
+                </blockquote>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ -->
+    <section id="faq" class="bg-white border-b border-slate-200">
+        <div class="max-w-3xl mx-auto px-5 py-20">
+            <h2 class="text-3xl font-bold text-slate-900 text-center">Questions</h2>
+            <div class="mt-10 divide-y divide-slate-200">
+                <details class="group py-5">
+                    <summary class="flex justify-between items-center cursor-pointer font-semibold text-slate-900">Do the people I share with need an account?<span class="text-brand-500 group-open:rotate-45 transition">+</span></summary>
+                    <p class="mt-3 text-slate-600 text-sm">Never. Only you (the owner) sign in. Everyone you share with just opens the link &mdash; that's the whole point of PasteCal.</p>
+                </details>
+                <details class="group py-5">
+                    <summary class="flex justify-between items-center cursor-pointer font-semibold text-slate-900">What happens to my existing calendars?<span class="text-brand-500 group-open:rotate-45 transition">+</span></summary>
+                    <p class="mt-3 text-slate-600 text-sm">Sign in and "claim" any calendar you already made (you just need its edit link). Nothing moves or breaks &mdash; you simply gain control over it.</p>
+                </details>
+                <details class="group py-5">
+                    <summary class="flex justify-between items-center cursor-pointer font-semibold text-slate-900">Can I cancel?<span class="text-brand-500 group-open:rotate-45 transition">+</span></summary>
+                    <p class="mt-3 text-slate-600 text-sm">Anytime, in one click. Your calendars stay; they just revert to the free, open-edit mode.</p>
+                </details>
+                <details class="group py-5">
+                    <summary class="flex justify-between items-center cursor-pointer font-semibold text-slate-900">How is this different from Google Calendar?<span class="text-brand-500 group-open:rotate-45 transition">+</span></summary>
+                    <p class="mt-3 text-slate-600 text-sm">Google Calendar needs everyone to have a Google account and fiddle with permissions. PasteCal is a single link anyone can open in a browser &mdash; with optional Pro control when you need it.</p>
+                </details>
+            </div>
+        </div>
+    </section>
+
+    <!-- Final CTA -->
+    <section class="bg-brand-500">
+        <div class="max-w-3xl mx-auto px-5 py-20 text-center text-white">
+            <h2 class="text-3xl sm:text-4xl font-extrabold">Take back control of your calendar.</h2>
+            <p class="mt-4 text-brand-50/90">Keep the link everyone loves. Add the lock you've been wishing for.</p>
+            <a href="#pricing" class="mt-8 inline-block rounded-xl bg-white text-brand-700 font-semibold px-8 py-3.5 hover:bg-brand-50 transition">Go Pro for $5/mo</a>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-slate-900 text-slate-400 text-sm">
+        <div class="max-w-6xl mx-auto px-5 py-10 flex flex-col sm:flex-row justify-between gap-4">
+            <div>
+                <div class="text-white font-bold">PasteCal</div>
+                <p class="mt-1">The shareable, no-login calendar.</p>
+            </div>
+            <div class="flex gap-8">
+                <a href="/" class="hover:text-white">Home</a>
+                <a href="#pricing" class="hover:text-white">Pricing</a>
+                <a href="#faq" class="hover:text-white">FAQ</a>
+            </div>
+        </div>
+        <div class="border-t border-slate-800 text-center py-4 text-xs">&copy; 2026 PasteCal &middot; Made by Kalid</div>
+    </footer>
+
+</body>
+</html>
