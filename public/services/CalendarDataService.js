@@ -25,6 +25,28 @@ class CalendarDataService {
         return value;
     }
 
+    // Drop events that can never be rendered (missing/invalid start or end) before they
+    // reach Firebase. Incident: one dateless event persisted here, and the ICS feed for that
+    // whole calendar returned 500 to every subscriber until the data was repaired.
+    //
+    // Dropping rather than rejecting the write: sync() persists the ENTIRE calendar on a
+    // debounced watcher, so refusing the whole payload over one bad event would throw away
+    // the user's other edits. The event is logged loudly so this is never silent.
+    static _dropIncompleteEvents(calendar) {
+        if (!calendar || !Array.isArray(calendar.events)) return calendar;
+
+        const complete = calendar.events.filter(e => Event.isComplete(e));
+        if (complete.length === calendar.events.length) return calendar;
+
+        const dropped = calendar.events.filter(e => !Event.isComplete(e));
+        console.warn(
+            `[CalendarDataService] Refusing to save ${dropped.length} event(s) with a ` +
+            `missing/invalid start or end — they would break this calendar's ICS feed.`,
+            dropped);
+
+        return { ...calendar, events: complete };
+    }
+
     // subscribe to live updates
     static subscribe(slug, callback) {
         if (!slug) return;
@@ -156,7 +178,8 @@ class CalendarDataService {
     static sync(calendar) {
         if (calendar && calendar.id && this.connected) {
             // console.log("CalendarDataService.sync()", calendar);
-            this.db.child(calendar.id).set(this._sanitizeForFirebase(calendar));
+            const safe = this._dropIncompleteEvents(calendar);
+            this.db.child(calendar.id).set(this._sanitizeForFirebase(safe));
             console.log('CalendarDataService.sync()');
         }
     }

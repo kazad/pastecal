@@ -35,6 +35,15 @@ Playwright will reuse it.
 - `unit/ics.test.js` — Cloud Functions ICS generation (`node:test`, no framework). Covers the
   "Server error generating ICS" regression: a single event missing start/end used to crash the
   whole feed, and missing calendars returned 500 instead of 404.
+- `unit/event-model.test.js` — the Event model's date handling: invalid dates degrade to null
+  instead of throwing, and `isComplete()` gates the write path. A dateless Event stays
+  constructible on purpose (`Calendar.defaultEvent` builds one, then assigns dates).
+- `unit/stress.test.js` — fuzz/invariant tests over a cross-product of hostile date and text
+  inputs. The original incident came from a shape nobody thought to write a test for, so these
+  assert invariants ("never throws", "never emits a VEVENT without DTSTART") rather than
+  specific outputs. They caught two real bugs the example-based tests missed.
+- `e2e/write-gate.spec.js` — incomplete events never reach Firebase (`CalendarDataService`
+  can't be unit-tested in node; it calls `firebase.database()` at class load).
 - `smoke-llm.sh`, `debug-recurrence.sh`, `validate-ux.sh` — older bash-based scripts.
 
 ## Writing a regression test

@@ -58,15 +58,33 @@ const ICSService = {
             .replace(/\n/g, '\\n');
     },
 
-    // An event is only renderable if it has both endpoints. Events missing them have been
-    // written by past client bugs; one such record used to throw in formatDateTime and take
-    // down the whole feed, so they are skipped individually instead.
-    isRenderable(event) {
-        return Boolean(event && event.start && event.end);
+    // Normalize a stored date into ICS basic format (YYYYMMDDTHHMMSSZ), or null if the
+    // value isn't a usable date. Values reach us as ISO strings, but Date objects and epoch
+    // numbers have both appeared in stored data, so accept anything Date can parse and
+    // reject the rest rather than throwing.
+    formatDateTime(dateTime) {
+        if (dateTime === null || dateTime === undefined || dateTime === '') return null;
+
+        if (typeof dateTime === 'string') {
+            const parsed = new Date(dateTime);
+            if (isNaN(parsed.getTime())) return null;
+            return dateTime.replace(/[-:]/g, '').replace('.000Z', 'Z');
+        }
+
+        const d = dateTime instanceof Date ? dateTime : new Date(dateTime);
+        if (isNaN(d.getTime())) return null;
+        return d.toISOString().replace(/[-:]/g, '').replace('.000Z', 'Z');
     },
 
-    formatDateTime(dateTime) {
-        return dateTime.replace(/[-:]/g, '').replace('.000Z', 'Z');
+    // An event is only renderable if BOTH endpoints normalize to a real date. A truthiness
+    // check is not enough: a Date object, an epoch number, or `{}` are all truthy but blow
+    // up (or silently corrupt) downstream. Events missing dates entirely were written by
+    // past client bugs; one such record used to throw in formatDateTime and take down the
+    // whole feed, so unusable events are skipped individually instead.
+    isRenderable(event) {
+        if (!event) return false;
+        return this.formatDateTime(event.start) !== null
+            && this.formatDateTime(event.end) !== null;
     },
 
     createEventBlock(event) {
@@ -88,7 +106,13 @@ const ICSService = {
     },
 
     generateICS(calendarData, id) {
-        const allEvents = calendarData?.events ?? [];
+        // Firebase renders an events map as an object (not an array) when keys are sparse
+        // or non-numeric, so never assume Array here.
+        const raw = calendarData?.events;
+        const allEvents = Array.isArray(raw)
+            ? raw
+            : (raw && typeof raw === 'object' ? Object.values(raw) : []);
+
         const renderable = allEvents.filter(event => this.isRenderable(event));
 
         const skipped = allEvents.length - renderable.length;
