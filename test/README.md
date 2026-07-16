@@ -13,9 +13,14 @@ npm run test:e2e:install   # downloads Chromium for Playwright
 
 ```bash
 npm test                   # run all e2e tests (auto-starts firebase serve on :8000)
+npm run test:unit          # run Cloud Functions unit tests (fast, no server needed)
 npm run test:e2e:ui        # interactive UI mode
 npm run test:e2e -- -g timeformat   # run a subset by name/grep
 ```
+
+**Node version for `test:unit`:** use Node 20 or 22 (matching `functions/engines`). On Node
+23+ `firebase-admin` fails to load — a transitive dep uses the removed `SlowBuffer` API — so
+`require('functions/index.js')` throws before any test runs.
 
 If port 8000 is already in use (e.g. you're running `./serve.sh` in another terminal),
 Playwright will reuse it.
@@ -27,6 +32,9 @@ Playwright will reuse it.
   (red), then fix.
 - `e2e/basic.spec.js` — smoke tests for calendar creation, mobile/desktop chrome, dialogs.
 - `e2e/nativecal-sanity.spec.js` — nativecal prototype navigation smoke tests.
+- `unit/ics.test.js` — Cloud Functions ICS generation (`node:test`, no framework). Covers the
+  "Server error generating ICS" regression: a single event missing start/end used to crash the
+  whole feed, and missing calendars returned 500 instead of 404.
 - `smoke-llm.sh`, `debug-recurrence.sh`, `validate-ux.sh` — older bash-based scripts.
 
 ## Writing a regression test

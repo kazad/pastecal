@@ -52,10 +52,17 @@ const CalendarService = {
 // ICS Generation Service
 const ICSService = {
     escapeText(text) {
-        return text.replace(/\\/g, '\\\\')
+        return String(text ?? '').replace(/\\/g, '\\\\')
             .replace(/;/g, '\\;')
             .replace(/,/g, '\\,')
             .replace(/\n/g, '\\n');
+    },
+
+    // An event is only renderable if it has both endpoints. Events missing them have been
+    // written by past client bugs; one such record used to throw in formatDateTime and take
+    // down the whole feed, so they are skipped individually instead.
+    isRenderable(event) {
+        return Boolean(event && event.start && event.end);
     },
 
     formatDateTime(dateTime) {
@@ -81,7 +88,15 @@ const ICSService = {
     },
 
     generateICS(calendarData, id) {
-        const events = (calendarData?.events ?? []).map(event => this.createEventBlock(event));
+        const allEvents = calendarData?.events ?? [];
+        const renderable = allEvents.filter(event => this.isRenderable(event));
+
+        const skipped = allEvents.length - renderable.length;
+        if (skipped > 0) {
+            console.warn(`Skipped ${skipped} malformed event(s) missing start/end in calendar ${id}`);
+        }
+
+        const events = renderable.map(event => this.createEventBlock(event));
 
         return [
             "BEGIN:VCALENDAR",
@@ -215,8 +230,17 @@ exports.generateICSV2 = onRequest({ cors: true }, async (req, res) => {
 
         res.set('Content-Type', 'text/calendar').send(icsData);
     } catch (err) {
-        console.error('Error generating ICS:', err);
-        res.status(500).send('Server error generating ICS');
+        // A missing calendar is a client error, not a server fault. Returning 500 here made
+        // subscribed calendar apps retry a deleted feed forever; 404 tells them to stop.
+        const status = err?.httpErrorCode?.status ?? 500;
+
+        if (status >= 500) {
+            console.error('Error generating ICS:', err);
+            res.status(status).send('Server error generating ICS');
+        } else {
+            console.log(`ICS request failed with ${status}: ${err.message}`);
+            res.status(status).send(err.message || 'Calendar not found');
+        }
     }
 });
 
@@ -311,8 +335,11 @@ exports.lookupCalendar = onCall(async (request) => {
     }
 });
 
+// Exported for unit tests (test/unit/ics.test.js). Not used by deployed functions.
+exports._internal = { ICSService, CalendarService, SlugService };
+
 /*
-// local cleanup task: Update eventIDs to be GUIDs 
+// local cleanup task: Update eventIDs to be GUIDs
 // uncomment, run locally:  
 // curl -X GET http://localhost:8081/pastecal-web/us-central1/updateEventIds
 exports.updateEventIds = functions.https.onRequest(async (req, res) => {
