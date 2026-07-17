@@ -18,9 +18,9 @@ npm run test:e2e:ui        # interactive UI mode
 npm run test:e2e -- -g timeformat   # run a subset by name/grep
 ```
 
-**Node version for `test:unit`:** use Node 20 or 22 (matching `functions/engines`). On Node
-23+ `firebase-admin` fails to load — a transitive dep uses the removed `SlowBuffer` API — so
-`require('functions/index.js')` throws before any test runs.
+**Node version for `test:unit`:** any modern Node (18+) works. Historically this needed
+Node 20 exactly, because `firebase-admin@11`'s dep chain used the `SlowBuffer` API removed
+in Node 22+; `firebase-admin@14` fixed that.
 
 If port 8000 is already in use (e.g. you're running `./serve.sh` in another terminal),
 Playwright will reuse it.
