@@ -13,7 +13,9 @@ npm run test:e2e:install   # downloads Chromium for Playwright
 
 ```bash
 npm test                   # run all e2e tests (auto-starts firebase serve on :8000)
-npm run test:unit          # run Cloud Functions unit tests (fast, no server needed)
+npm run test:unit          # run all Cloud Functions unit tests (fast + emulator-backed)
+npm run test:unit:fast     # pure-logic tests only, no emulator startup (~instant)
+npm run test:unit:emulator # emulator-backed tests only (starts/stops the Database emulator)
 npm run test:e2e:ui        # interactive UI mode
 npm run test:e2e -- -g timeformat   # run a subset by name/grep
 ```
@@ -42,6 +44,15 @@ Playwright will reuse it.
   inputs. The original incident came from a shape nobody thought to write a test for, so these
   assert invariants ("never throws", "never emits a VEVENT without DTSTART") rather than
   specific outputs. They caught two real bugs the example-based tests missed.
+- `unit/lookup-calendar.emulator.test.js` — runs `SlugService.lookupCalendar` and
+  `CalendarService.getCalendarData` against a real (emulated) Realtime Database. Every other
+  unit test mocks nothing but also touches nothing that calls `admin.database()` — this is the
+  only file that does. It exists because the firebase-admin 11->14 upgrade (2026-07-16) broke
+  `admin.database()` in production ("admin.database is not a function") and shipped anyway:
+  35 unit tests passed because none of them exercised the Admin SDK at all. Any future change
+  to `functions/package.json`'s `firebase-admin` or `firebase-functions` version must pass
+  `npm run test:unit:emulator` before deploying. New Cloud Functions code that calls
+  `admin.database()` should get a case here, not just in `test:unit:fast`.
 - `e2e/write-gate.spec.js` — incomplete events never reach Firebase (`CalendarDataService`
   can't be unit-tested in node; it calls `firebase.database()` at class load).
 - `smoke-llm.sh`, `debug-recurrence.sh`, `validate-ux.sh` — older bash-based scripts.

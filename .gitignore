@@ -11,6 +11,10 @@ internal/
 snapshots/
 tmp/
 
+# Private scratch specs — files already tracked in specs/ stay tracked; this only
+# stops NEW files from being added (git ignores this rule for already-tracked paths).
+specs/
+
 .claude/
 .gemini-clipboard/
 .playwright-mcp/
