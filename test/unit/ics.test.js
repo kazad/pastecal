@@ -109,8 +109,9 @@ test('generateICS: empty and absent event lists produce a valid empty calendar',
 // --- Invariants that must survive the fix -------------------------------------------------
 // The fix must not change output for well-formed data. These lock the existing contract.
 
-test('generateICS: valid event output is unchanged (full block)', () => {
+test('generateICS: valid event output is unchanged aside from DTSTAMP/CRLF', () => {
   const ics = ICSService.generateICS({ events: [GOOD_EVENT] }, 'test');
+  const dtstamp = ics.match(/DTSTAMP:(\S+)/)[1];
 
   assert.equal(ics, [
     'BEGIN:VCALENDAR',
@@ -118,13 +119,38 @@ test('generateICS: valid event output is unchanged (full block)', () => {
     'PRODID:-//PasteCal//test//EN',
     'BEGIN:VEVENT',
     'UID:27',
+    `DTSTAMP:${dtstamp}`,
     'DTSTART:20260527T100000Z',
     'DTEND:20260527T130000Z',
     'SUMMARY:Verkehr',
     'DESCRIPTION:',
     'END:VEVENT',
     'END:VCALENDAR',
-  ].join('\n'));
+  ].join('\r\n'));
+});
+
+// --- RFC 5545 compliance (issue #37, minor findings) ---------------------------------------
+
+test('generateICS: lines are joined with CRLF per RFC 5545 §3.1', () => {
+  const ics = ICSService.generateICS({ events: [GOOD_EVENT] }, 'test');
+
+  assert.ok(ics.includes('\r\n'), 'expected CRLF line endings');
+  assert.ok(!ics.replace(/\r\n/g, '').includes('\n'), 'no bare LF should remain');
+});
+
+test('generateICS: every VEVENT includes a well-formed DTSTAMP', () => {
+  const ics = ICSService.generateICS({ events: [GOOD_EVENT] }, 'test');
+
+  assert.match(ics, /DTSTAMP:\d{8}T\d{6}Z/);
+});
+
+test('generateICS: all events in one export share the same DTSTAMP', () => {
+  const events = [GOOD_EVENT, { ...GOOD_EVENT, id: 28, title: 'Bildung' }];
+  const ics = ICSService.generateICS({ events }, 'test');
+  const stamps = [...ics.matchAll(/DTSTAMP:(\S+)/g)].map(m => m[1]);
+
+  assert.equal(stamps.length, 2);
+  assert.equal(stamps[0], stamps[1]);
 });
 
 test('generateICS: recurrence rule is preserved', () => {

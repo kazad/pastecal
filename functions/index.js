@@ -4,10 +4,20 @@ const { onValueUpdated } = require("firebase-functions/v2/database");
 const admin = require('firebase-admin');
 
 const isLocal = process.env.FUNCTIONS_EMULATOR === 'true';
+// Set by `firebase emulators:start --only database` and by our own test harness
+// (test/unit/lookup-calendar.emulator.test.js) — when present, the Admin SDK routes
+// all admin.database() calls at this host instead of databaseURL below, so tests never
+// touch production data even though databaseURL still points at the real project.
+const usingDatabaseEmulator = !!process.env.FIREBASE_DATABASE_EMULATOR_HOST;
 //console.log('Environment:', process.env);
-console.log('Running in', isLocal ? 'local' : 'production', 'environment');
+console.log('Running in', isLocal ? 'local' : 'production', 'environment',
+    usingDatabaseEmulator ? `(database emulator: ${process.env.FIREBASE_DATABASE_EMULATOR_HOST})` : '');
 
-if (isLocal) {
+if (usingDatabaseEmulator) {
+    // Emulator ignores credentials entirely; a real service account isn't needed and
+    // shouldn't be required to run tests (e.g. in CI where internal/keys/ doesn't exist).
+    admin.initializeApp({ databaseURL: "https://pastecal-web-default-rtdb.firebaseio.com" });
+} else if (isLocal) {
     var serviceAccount = require("../internal/keys/pastecal-web-firebase-adminsdk-scf60-24fc54f2df.json");
 
     admin.initializeApp({
@@ -27,9 +37,12 @@ const CalendarService = {
     parseCalendarPath(path) {
         //console.log('Parsing calendar path:', path);
         const parts = path.split('/').filter(x => x); // "/view/123" and "view/123"
+        const isReadOnly = parts[0] === "view";
+        const rawSlug = isReadOnly ? parts[1] : parts[0];
         let ret = {
-            isReadOnly: parts[0] === "view",
-            id: parts[0] === "view" ? SlugService.normalizeSlug(parts[1]) : SlugService.normalizeSlug(parts[0])
+            isReadOnly,
+            rawSlug,
+            id: SlugService.normalizeSlug(rawSlug)
         };
         //console.log('Parsed calendar path:', ret);
         return ret;
@@ -68,12 +81,12 @@ const ICSService = {
         if (typeof dateTime === 'string') {
             const parsed = new Date(dateTime);
             if (isNaN(parsed.getTime())) return null;
-            return dateTime.replace(/[-:]/g, '').replace('.000Z', 'Z');
+            return dateTime.replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
         }
 
         const d = dateTime instanceof Date ? dateTime : new Date(dateTime);
         if (isNaN(d.getTime())) return null;
-        return d.toISOString().replace(/[-:]/g, '').replace('.000Z', 'Z');
+        return d.toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
     },
 
     // An event is only renderable if BOTH endpoints normalize to a real date. A truthiness
@@ -87,10 +100,11 @@ const ICSService = {
             && this.formatDateTime(event.end) !== null;
     },
 
-    createEventBlock(event) {
+    createEventBlock(event, dtstamp) {
         const eventLines = [
             "BEGIN:VEVENT",
             `UID:${event.id}`,
+            `DTSTAMP:${dtstamp}`,
             `DTSTART:${this.formatDateTime(event.start)}`,
             `DTEND:${this.formatDateTime(event.end)}`,
             `SUMMARY:${this.escapeText(event.title)}`,
@@ -102,7 +116,7 @@ const ICSService = {
         }
 
         eventLines.push("END:VEVENT");
-        return eventLines.join("\n");
+        return eventLines.join("\r\n");
     },
 
     generateICS(calendarData, id) {
@@ -120,7 +134,10 @@ const ICSService = {
             console.warn(`Skipped ${skipped} malformed event(s) missing start/end in calendar ${id}`);
         }
 
-        const events = renderable.map(event => this.createEventBlock(event));
+        // DTSTAMP is "when this representation of the calendar was generated," not an
+        // event property in our data model, so every VEVENT in a given export shares one.
+        const dtstamp = this.formatDateTime(new Date());
+        const events = renderable.map(event => this.createEventBlock(event, dtstamp));
 
         return [
             "BEGIN:VCALENDAR",
@@ -128,7 +145,7 @@ const ICSService = {
             `PRODID:-//PasteCal//${id}//EN`,
             ...events,
             "END:VCALENDAR"
-        ].join("\n");
+        ].join("\r\n");
     }
 };
 
@@ -244,8 +261,18 @@ exports.generateICSV2 = onRequest({ cors: true }, async (req, res) => {
     try {
         const pathWithoutICS = req.path.replace(/[.]ICS.*/i, '');
         //console.log('Path without ICS:', pathWithoutICS);
-        const { id, isReadOnly } = CalendarService.parseCalendarPath(pathWithoutICS);
-        const cleanId = id; //id.replace(/[.]ICS.*/i, '');
+        const { rawSlug } = CalendarService.parseCalendarPath(pathWithoutICS);
+
+        // Calendars are stored under their original casing, but URLs (and the naive
+        // lowercase in parseCalendarPath) may not match it — resolve via the same
+        // case-insensitive lookup the web app uses, instead of reading the lowercased
+        // key directly, which silently 404s or returns an unrelated calendar (#37).
+        const lookup = await SlugService.lookupCalendar(rawSlug);
+        if (!lookup.found) {
+            throw new functions.https.HttpsError('not-found', 'Calendar not found');
+        }
+        const cleanId = lookup.actualSlug;
+        const isReadOnly = lookup.isReadOnly;
 
         console.log('Generating ICS for calendar ID: path, id, readonly', req.path, cleanId, isReadOnly);
 
