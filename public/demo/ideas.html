@@ -1,0 +1,1282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PasteCal Design Ideas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Custom Glass effect */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        .dark-glass {
+            background: rgba(30, 41, 59, 0.8);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen font-sans selection:bg-blue-100 selection:text-blue-900 overflow-x-hidden overflow-y-auto">
+
+    <!-- Background Grid Simulation -->
+    <div class="fixed inset-0 grid grid-cols-7 grid-rows-6 gap-[1px] bg-gray-200 pointer-events-none z-0 opacity-50">
+        <!-- Generating fake grid cells -->
+        <script>
+            for(let i=0; i<42; i++) {
+                document.write('<div class="bg-white h-full w-full"></div>');
+            }
+        </script>
+    </div>
+
+    <!-- Floating Controls -->
+    <div class="fixed bottom-6 right-6 z-50 bg-white/95 backdrop-blur-md p-3 rounded-2xl shadow-2xl border border-gray-200 w-[320px] max-w-[80vw] grid grid-cols-2 gap-3">
+        <div class="col-span-2 flex items-center justify-between">
+            <span class="text-[11px] font-bold uppercase tracking-[0.2em] text-gray-500">Context</span>
+            <div class="flex gap-2">
+                <button onclick="setContext('popover')" class="px-4 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all context-btn bg-gray-800 text-white" id="ctx-popover">Popover</button>
+                <button onclick="setContext('editor')" class="px-4 py-1.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all context-btn text-gray-600 bg-gray-100 hover:bg-gray-200" id="ctx-editor">Editor</button>
+            </div>
+        </div>
+        <div class="col-span-2 h-px bg-gray-200"></div>
+        <div class="flex items-center gap-2">
+            <span class="text-[11px] font-bold uppercase tracking-[0.2em] text-gray-500">Style</span>
+        </div>
+        <div class="grid grid-cols-2 gap-2 col-span-2">
+            <button onclick="setVariant('classic')" class="px-3 py-2 rounded-xl text-sm font-semibold transition-all hover:bg-blue-50 focus:ring-2 ring-blue-500 variant-btn bg-blue-600 text-white text-left" id="btn-classic">Classic</button>
+            <button onclick="setVariant('minimal')" class="px-3 py-2 rounded-xl text-sm font-semibold transition-all hover:bg-gray-100 focus:ring-2 ring-gray-400 variant-btn text-gray-700 text-left" id="btn-minimal">Minimal</button>
+            <button onclick="setVariant('modern')" class="px-3 py-2 rounded-xl text-sm font-semibold transition-all hover:bg-indigo-50 focus:ring-2 ring-indigo-500 variant-btn text-indigo-700 text-left" id="btn-modern">Modern</button>
+            <button onclick="setVariant('glass')" class="px-3 py-2 rounded-xl text-sm font-semibold transition-all hover:bg-purple-50 focus:ring-2 ring-purple-500 variant-btn text-purple-700 text-left" id="btn-glass">Glass</button>
+            <button onclick="setVariant('dark')" class="px-3 py-2 rounded-xl text-sm font-semibold transition-all hover:bg-gray-800 hover:text-white focus:ring-2 ring-black variant-btn text-gray-800 text-left" id="btn-dark">Dark</button>
+        </div>
+    </div>
+
+    <!-- Main Canvas -->
+    <div class="relative z-10 w-full min-h-screen flex flex-col items-center justify-start p-4 space-y-16">
+        
+        <!-- POPOVER CONTAINER -->
+        <div id="popover-container" class="relative w-full min-h-[640px] flex items-center justify-center">
+            <!-- Click Target (Fake Event) -->
+            <div class="absolute top-1/3 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
+                <div class="bg-blue-600 text-white text-xs px-2 py-1 rounded shadow-sm cursor-pointer hover:bg-blue-700 transition-colors w-32 truncate">
+                    Strategy Meeting
+                </div>
+                <!-- The Arrow/Pointer placeholder -->
+                <div class="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[6px] border-b-gray-300 absolute top-full left-1/2 -translate-x-1/2 mt-1" id="popover-arrow"></div>
+            </div>
+
+            <!-- VARIANT 1: CLASSIC POPOVER -->
+            <div id="popover-classic" class="design-variant w-[320px] bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden mt-12 transition-all duration-300">
+                <!-- Header -->
+                <div class="bg-blue-600 px-4 py-3 flex justify-between items-start text-white">
+                    <h3 class="font-bold text-lg truncate flex-1 mr-2">Strategy Meeting</h3>
+                    <div class="flex items-center gap-1">
+                        <button class="p-1 hover:bg-blue-700 rounded transition-colors"><i data-lucide="pencil" class="w-4 h-4"></i></button>
+                        <button class="p-1 hover:bg-blue-700 rounded transition-colors"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+                        <button class="p-1 hover:bg-blue-700 rounded transition-colors ml-1"><i data-lucide="x" class="w-5 h-5"></i></button>
+                    </div>
+                </div>
+                <!-- Body -->
+                <div class="p-4">
+                    <div class="flex items-start gap-3 mb-3">
+                        <i data-lucide="clock" class="w-5 h-5 text-gray-400 mt-0.5"></i>
+                        <div class="text-sm text-gray-700">
+                            <div class="font-medium text-gray-900">Wednesday, Nov 24</div>
+                            <div>10:00 AM - 11:30 AM</div>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3 mb-3 text-sm text-blue-600 font-medium">
+                        <i data-lucide="repeat" class="w-5 h-5 mt-0.5"></i>
+                        <div>Every Week</div>
+                    </div>
+                    <div class="flex items-start gap-3 mt-3 pt-3 border-t border-gray-100 text-sm text-gray-600">
+                        <i data-lucide="align-left" class="w-5 h-5 text-gray-400 mt-0.5"></i>
+                        <p>Discussing Q4 roadmap, resource allocation, and hiring plans for the engineering team.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VARIANT 2: MINIMAL POPOVER -->
+            <div id="popover-minimal" class="design-variant hidden w-[300px] bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden mt-12 transition-all duration-300 transform hover:scale-[1.02]">
+                <div class="p-5">
+                    <div class="flex justify-between items-start mb-3">
+                        <span class="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide">Work</span>
+                        <div class="flex gap-2 text-gray-400">
+                            <button class="hover:text-gray-900 transition-colors"><i data-lucide="pencil" class="w-4 h-4"></i></button>
+                            <button class="hover:text-red-600 transition-colors"><i data-lucide="x" class="w-4 h-4"></i></button>
+                        </div>
+                    </div>
+                    
+                    <h3 class="text-xl font-bold text-gray-900 leading-tight mb-4">Strategy Meeting</h3>
+                    
+                    <div class="space-y-3">
+                        <div class="flex items-center gap-3 text-sm group">
+                            <div class="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-500 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
+                                <i data-lucide="calendar" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <div class="font-semibold text-gray-900">Nov 24, 2025</div>
+                                <div class="text-gray-500 text-xs">Wednesday</div>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-3 text-sm group">
+                            <div class="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center text-gray-500 group-hover:bg-blue-50 group-hover:text-blue-600 transition-colors">
+                                <i data-lucide="clock" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <div class="font-semibold text-gray-900">10:00 - 11:30 AM</div>
+                                <div class="text-gray-500 text-xs">1h 30m</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-5 pt-4 border-t border-gray-100">
+                        <p class="text-sm text-gray-600 leading-relaxed">Discussing Q4 roadmap, resource allocation, and hiring plans.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VARIANT 3: MODERN POPOVER -->
+            <div id="popover-modern" class="design-variant hidden w-[340px] bg-white rounded-lg shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-200 mt-12 font-sans">
+                <!-- Cover Image Placeholder -->
+                <div class="h-2 w-full bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"></div>
+                
+                <div class="p-5">
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="flex gap-2">
+                            <span class="px-2 py-1 rounded-md bg-gray-100 text-gray-600 text-xs font-medium border border-gray-200">High Priority</span>
+                            <span class="px-2 py-1 rounded-md bg-indigo-50 text-indigo-600 text-xs font-medium border border-indigo-100 flex items-center gap-1">
+                                <i data-lucide="repeat" class="w-3 h-3"></i> Weekly
+                            </span>
+                        </div>
+                        <button class="text-gray-400 hover:text-gray-800"><i data-lucide="more-horizontal" class="w-5 h-5"></i></button>
+                    </div>
+
+                    <h3 class="text-2xl font-bold text-gray-900 mb-4 tracking-tight">Strategy Retreat</h3>
+
+                    <div class="grid grid-cols-[24px_1fr] gap-y-3 items-center text-sm mb-4">
+                        <i data-lucide="clock" class="w-4 h-4 text-gray-400"></i>
+                        <span class="text-gray-700">Wed 24 Nov, 10:00 AM</span>
+                        
+                        <i data-lucide="users" class="w-4 h-4 text-gray-400"></i>
+                        <div class="flex -space-x-2 overflow-hidden">
+                            <img class="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-gray-200" src="https://api.dicebear.com/7.x/avataaars/svg?seed=1" alt=""/>
+                            <img class="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-gray-200" src="https://api.dicebear.com/7.x/avataaars/svg?seed=2" alt=""/>
+                            <img class="inline-block h-6 w-6 rounded-full ring-2 ring-white bg-gray-200" src="https://api.dicebear.com/7.x/avataaars/svg?seed=3" alt=""/>
+                        </div>
+
+                        <i data-lucide="text" class="w-4 h-4 text-gray-400 self-start mt-1"></i>
+                        <p class="text-gray-600 leading-relaxed">
+                            Reviewing Q3 metrics and planning for the upcoming quarter. 
+                            <a href="#" class="text-indigo-600 hover:underline decoration-indigo-300 underline-offset-2">View agenda docs &rarr;</a>
+                        </p>
+                    </div>
+
+                    <div class="flex gap-2 mt-4 pt-4 border-t border-gray-100">
+                        <button class="flex-1 bg-gray-900 text-white py-2 rounded-md text-sm font-medium hover:bg-gray-800 transition">Edit Event</button>
+                        <button class="px-3 py-2 border border-gray-200 rounded-md hover:bg-gray-50 text-gray-600 transition"><i data-lucide="trash" class="w-4 h-4"></i></button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VARIANT 4: GLASS POPOVER -->
+            <div id="popover-glass" class="design-variant hidden w-[320px] glass-panel rounded-2xl shadow-2xl mt-12 text-gray-800">
+                <div class="p-5 relative">
+                    <!-- Close Button absolute -->
+                    <button class="absolute top-4 right-4 w-6 h-6 rounded-full bg-gray-200/50 hover:bg-gray-300/50 flex items-center justify-center transition-colors">
+                        <i data-lucide="x" class="w-3 h-3 text-gray-600"></i>
+                    </button>
+
+                    <!-- Date Badge -->
+                    <div class="flex flex-col items-center justify-center w-12 h-12 rounded-xl bg-white/60 shadow-sm mb-4 text-center backdrop-blur-sm border border-white/50">
+                        <span class="text-[10px] uppercase font-bold text-red-500">Nov</span>
+                        <span class="text-lg font-bold leading-none text-gray-900">24</span>
+                    </div>
+
+                    <h3 class="text-xl font-semibold mb-1 text-gray-900">Strategy Meeting</h3>
+                    <p class="text-sm text-gray-500 font-medium mb-4">10:00 AM - 11:30 AM</p>
+
+                    <div class="space-y-2">
+                        <div class="flex items-center gap-3 p-2 rounded-lg hover:bg-white/40 transition-colors cursor-pointer">
+                            <div class="w-8 h-8 rounded-full bg-blue-100/80 flex items-center justify-center text-blue-600">
+                                <i data-lucide="video" class="w-4 h-4"></i>
+                            </div>
+                            <div class="text-sm">
+                                <div class="font-medium">Join Zoom Call</div>
+                                <div class="text-xs text-gray-500">pastecal.zoom.us/j/123...</div>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-center gap-3 p-2 rounded-lg hover:bg-white/40 transition-colors cursor-pointer">
+                            <div class="w-8 h-8 rounded-full bg-green-100/80 flex items-center justify-center text-green-600">
+                                <i data-lucide="file-text" class="w-4 h-4"></i>
+                            </div>
+                            <div class="text-sm">
+                                <div class="font-medium">Quarterly Report.pdf</div>
+                                <div class="text-xs text-gray-500">2.4 MB</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 flex justify-end gap-2">
+                        <button class="text-sm px-4 py-2 font-medium text-gray-600 hover:text-gray-900">Delete</button>
+                        <button class="text-sm px-4 py-2 bg-blue-600 text-white rounded-lg shadow-lg shadow-blue-600/20 hover:bg-blue-700 transition-all">Edit</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VARIANT 5: DARK POPOVER -->
+            <div id="popover-dark" class="design-variant hidden w-[360px] dark-glass rounded-lg shadow-2xl mt-12 font-mono text-sm border border-gray-700">
+                <div class="flex items-center justify-between px-4 py-2 border-b border-gray-700 bg-black/20">
+                    <div class="flex gap-1.5">
+                        <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                        <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+                        <div class="w-3 h-3 rounded-full bg-green-500"></div>
+                    </div>
+                    <span class="text-xs text-gray-400">event_details.json</span>
+                </div>
+                <div class="p-4 space-y-3">
+                    <div class="flex">
+                        <span class="text-blue-400 w-20">Title:</span>
+                        <span class="text-gray-200 font-bold">Strategy Meeting</span>
+                    </div>
+                    <div class="flex">
+                        <span class="text-blue-400 w-20">Time:</span>
+                        <span class="text-green-400">10:00</span>
+                        <span class="text-gray-500 mx-1">-></span>
+                        <span class="text-green-400">11:30</span>
+                    </div>
+                    <div class="flex">
+                        <span class="text-blue-400 w-20">Recur:</span>
+                        <span class="text-purple-400">FREQ=WEEKLY;INTERVAL=1</span>
+                    </div>
+                    <div class="flex">
+                        <span class="text-blue-400 w-20">Notes:</span>
+                        <span class="text-gray-400 flex-1">"Discussing Q4 roadmap..."</span>
+                    </div>
+                    
+                    <div class="pt-3 mt-2 border-t border-gray-700 flex gap-2">
+                        <button class="flex-1 bg-gray-800 hover:bg-gray-700 text-white py-1.5 px-3 rounded border border-gray-600 transition-colors text-xs uppercase tracking-wider">
+                            $ edit
+                        </button>
+                        <button class="bg-red-900/30 hover:bg-red-900/50 text-red-400 py-1.5 px-3 rounded border border-red-900/50 transition-colors text-xs uppercase tracking-wider">
+                            $ rm
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- EDITOR CONTAINER (Initially Hidden) -->
+        <div id="editor-container" class="fixed inset-0 z-40 flex items-center justify-center bg-black/20 hidden">
+            
+            <!-- EDITOR 1: CLASSIC -->
+            <div id="editor-classic" class="design-variant w-full max-w-md bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden hidden">
+                <div class="px-4 py-3 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                    <h3 class="font-bold text-gray-700">Edit Event</h3>
+                    <button class="text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+                </div>
+                <div class="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
+                    <input type="text" class="w-full text-xl font-semibold border-b border-gray-300 focus:border-blue-500 focus:outline-none pb-1" value="Strategy Meeting">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Start</label>
+                            <input type="datetime-local" class="w-full p-2 border rounded text-sm bg-gray-50" value="2025-11-24T10:00">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">End</label>
+                            <input type="datetime-local" class="w-full p-2 border rounded text-sm bg-gray-50" value="2025-11-24T11:30">
+                        </div>
+                    </div>
+                    <!-- Recurrence & Color -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Repeat</label>
+                            <select class="w-full p-2 border rounded text-sm bg-gray-50">
+                                <option>Does not repeat</option>
+                                <option selected>Weekly</option>
+                                <option>Monthly</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Every</label>
+                            <div class="flex items-center">
+                                <input type="number" value="1" class="w-16 p-2 border rounded text-sm bg-gray-50 mr-2">
+                                <span class="text-xs text-gray-500">Week(s)</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Color</label>
+                        <div class="flex gap-2">
+                            <button class="w-6 h-6 rounded-full bg-blue-600 ring-2 ring-offset-1 ring-gray-400"></button>
+                            <button class="w-6 h-6 rounded-full bg-red-500"></button>
+                            <button class="w-6 h-6 rounded-full bg-green-500"></button>
+                            <button class="w-6 h-6 rounded-full bg-purple-500"></button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Description</label>
+                        <textarea class="w-full p-2 border rounded text-sm bg-gray-50" rows="3">Discussing Q4 roadmap.</textarea>
+                    </div>
+                </div>
+                <div class="px-4 py-3 border-t border-gray-200 bg-gray-50 flex justify-between">
+                    <button class="text-red-600 text-sm font-medium hover:text-red-800">Delete</button>
+                    <div class="flex gap-2">
+                        <button class="px-4 py-2 text-sm text-gray-600 hover:bg-gray-200 rounded">Cancel</button>
+                        <button class="px-4 py-2 text-sm bg-blue-600 text-white hover:bg-blue-700 rounded font-medium shadow-sm">Save</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- EDITOR 2: MINIMAL -->
+            <div id="editor-minimal" class="design-variant w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 hidden">
+                <div class="flex justify-between items-start mb-6">
+                    <h2 class="text-2xl font-bold text-gray-900">Details</h2>
+                    <button class="p-1 rounded-full hover:bg-gray-100"><i data-lucide="x" class="w-6 h-6 text-gray-400"></i></button>
+                </div>
+                <div class="space-y-6 max-h-[70vh] overflow-y-auto pr-2 custom-scroll">
+                    <div class="group">
+                        <label class="block text-sm font-medium text-gray-400 mb-1 group-focus-within:text-blue-600 transition-colors">Title</label>
+                        <input type="text" class="w-full text-lg font-semibold text-gray-900 border-b border-gray-200 focus:border-blue-600 focus:outline-none py-1 transition-colors" value="Strategy Meeting">
+                    </div>
+                    <div class="flex gap-4">
+                        <div class="flex-1">
+                            <label class="block text-sm font-medium text-gray-400 mb-1">From</label>
+                            <div class="flex items-center bg-gray-50 rounded-lg p-2">
+                                <i data-lucide="calendar" class="w-4 h-4 text-gray-400 mr-2"></i>
+                                <span class="text-sm font-medium">Nov 24, 10:00</span>
+                            </div>
+                        </div>
+                        <div class="flex-1">
+                            <label class="block text-sm font-medium text-gray-400 mb-1">To</label>
+                            <div class="flex items-center bg-gray-50 rounded-lg p-2">
+                                <i data-lucide="arrow-right" class="w-4 h-4 text-gray-400 mr-2"></i>
+                                <span class="text-sm font-medium">11:30</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Recur -->
+                    <div class="bg-gray-50 rounded-xl p-4 flex justify-between items-center">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+                                <i data-lucide="repeat" class="w-4 h-4"></i>
+                            </div>
+                            <div>
+                                <div class="text-sm font-bold text-gray-900">Weekly</div>
+                                <div class="text-xs text-gray-500">Every 1 week</div>
+                            </div>
+                        </div>
+                        <i data-lucide="chevron-down" class="w-4 h-4 text-gray-400"></i>
+                    </div>
+
+                    <!-- Colors -->
+                    <div>
+                        <label class="block text-sm font-medium text-gray-400 mb-2">Color Code</label>
+                        <div class="flex gap-3">
+                            <div class="w-8 h-8 rounded-full bg-black ring-2 ring-offset-2 ring-gray-200 cursor-pointer"></div>
+                            <div class="w-8 h-8 rounded-full bg-blue-500 cursor-pointer hover:scale-110 transition-transform"></div>
+                            <div class="w-8 h-8 rounded-full bg-green-500 cursor-pointer hover:scale-110 transition-transform"></div>
+                            <div class="w-8 h-8 rounded-full bg-orange-500 cursor-pointer hover:scale-110 transition-transform"></div>
+                        </div>
+                    </div>
+
+                    <!-- Notes -->
+                    <div class="group">
+                        <label class="block text-sm font-medium text-gray-400 mb-1 group-focus-within:text-blue-600 transition-colors">Notes</label>
+                        <textarea class="w-full border-b border-gray-200 focus:border-blue-600 focus:outline-none py-1 text-gray-700 resize-none h-20" placeholder="Add details...">Discussing Q4 roadmap.</textarea>
+                    </div>
+
+                    <div class="flex justify-end gap-3 pt-4">
+                        <button class="text-sm font-medium text-gray-500 hover:text-gray-900">Cancel</button>
+                        <button class="bg-black text-white text-sm font-bold px-6 py-2 rounded-full hover:bg-gray-800 transition-transform transform active:scale-95">Save Event</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- EDITOR 3: MODERN -->
+            <div id="editor-modern" class="design-variant w-full max-w-lg bg-white rounded-xl shadow-2xl overflow-hidden hidden font-sans">
+                <div class="flex h-[600px]">
+                    <!-- Sidebar -->
+                    <div class="w-1/3 bg-gray-50 border-r border-gray-200 p-4 space-y-6">
+                        <div>
+                            <label class="text-xs font-bold text-gray-400 uppercase tracking-wide">Calendar</label>
+                            <div class="flex items-center gap-2 mt-2 text-sm font-medium text-gray-700 p-2 bg-white rounded border border-gray-200 shadow-sm">
+                                <div class="w-3 h-3 rounded-full bg-indigo-500"></div>
+                                Strategy
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-xs font-bold text-gray-400 uppercase tracking-wide">Recurrence</label>
+                            <div class="mt-2">
+                                <select class="w-full p-2 text-sm bg-white border border-gray-200 rounded shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                    <option>Does not repeat</option>
+                                    <option selected>Weekly</option>
+                                    <option>Monthly</option>
+                                </select>
+                                <div class="flex items-center gap-2 mt-2">
+                                    <span class="text-xs text-gray-500">Every</span>
+                                    <input type="number" value="1" class="w-12 p-1 text-sm border border-gray-200 rounded text-center">
+                                    <span class="text-xs text-gray-500">weeks</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-xs font-bold text-gray-400 uppercase tracking-wide">Color</label>
+                            <div class="grid grid-cols-4 gap-2 mt-2">
+                                <button class="w-6 h-6 rounded-md bg-indigo-500 ring-2 ring-offset-1 ring-gray-300"></button>
+                                <button class="w-6 h-6 rounded-md bg-pink-500"></button>
+                                <button class="w-6 h-6 rounded-md bg-teal-500"></button>
+                                <button class="w-6 h-6 rounded-md bg-orange-500"></button>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Main Content -->
+                    <div class="flex-1 p-6 flex flex-col">
+                        <input type="text" class="text-2xl font-bold text-gray-900 placeholder-gray-300 focus:outline-none mb-6" value="Strategy Meeting">
+                        
+                        <div class="space-y-4 flex-1">
+                            <div class="flex items-center text-sm text-gray-600 group">
+                                <i data-lucide="clock" class="w-4 h-4 mr-3 text-gray-400 group-hover:text-indigo-500"></i>
+                                <input type="datetime-local" value="2025-11-24T10:00" class="bg-transparent focus:bg-gray-50 rounded p-1">
+                                <span class="mx-2 text-gray-300">&rarr;</span>
+                                <input type="datetime-local" value="2025-11-24T11:30" class="bg-transparent focus:bg-gray-50 rounded p-1">
+                            </div>
+                            
+                            <div class="flex items-start text-sm text-gray-600 group h-full">
+                                <i data-lucide="align-left" class="w-4 h-4 mr-3 text-gray-400 mt-1 group-hover:text-indigo-500"></i>
+                                <textarea class="w-full h-full resize-none focus:outline-none text-gray-700 leading-relaxed p-2 -ml-2 rounded focus:bg-gray-50" placeholder="Add description...">Discussing Q4 roadmap, resource allocation, and hiring plans.</textarea>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-end gap-2 pt-4 border-t border-gray-100 mt-4">
+                            <button class="px-4 py-2 rounded text-sm font-medium text-gray-500 hover:bg-gray-50">Discard</button>
+                            <button class="px-4 py-2 rounded text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm">Save Changes</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- EDITOR 4: GLASS -->
+            <div id="editor-glass" class="design-variant w-full max-w-md glass-panel rounded-3xl shadow-2xl p-8 text-gray-800 hidden relative">
+                <button class="absolute top-4 right-4 bg-white/50 hover:bg-white/80 p-2 rounded-full transition-colors"><i data-lucide="x" class="w-4 h-4"></i></button>
+                
+                <div class="text-center mb-6">
+                    <div class="inline-block p-3 bg-white/40 rounded-2xl mb-4 shadow-sm backdrop-blur-sm">
+                        <i data-lucide="calendar-plus" class="w-8 h-8 text-purple-600"></i>
+                    </div>
+                    <input type="text" class="block w-full text-center text-2xl font-bold bg-transparent focus:outline-none placeholder-gray-500/50 text-gray-900 border-b-2 border-transparent focus:border-white/50 transition-all" value="Strategy Meeting">
+                </div>
+
+                <div class="space-y-3 mb-6 max-h-[60vh] overflow-y-auto pr-1 custom-scroll">
+                    <!-- Time -->
+                    <div class="bg-white/40 p-3 rounded-xl backdrop-blur-sm border border-white/40 shadow-sm">
+                        <div class="flex items-center mb-2">
+                            <div class="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 mr-3">
+                                <i data-lucide="clock" class="w-4 h-4"></i>
+                            </div>
+                            <span class="text-xs font-bold uppercase text-gray-500">Time</span>
+                        </div>
+                        <div class="flex gap-2 text-sm">
+                            <input type="datetime-local" value="2025-11-24T10:00" class="w-full bg-white/50 rounded p-1 border-none">
+                            <input type="datetime-local" value="2025-11-24T11:30" class="w-full bg-white/50 rounded p-1 border-none">
+                        </div>
+                    </div>
+
+                    <!-- Recurrence -->
+                    <div class="bg-white/40 p-3 rounded-xl backdrop-blur-sm border border-white/40 shadow-sm flex justify-between items-center">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center text-purple-600">
+                                <i data-lucide="repeat" class="w-4 h-4"></i>
+                            </div>
+                            <select class="bg-transparent font-semibold text-gray-800 focus:outline-none">
+                                <option>Does not repeat</option>
+                                <option selected>Weekly</option>
+                            </select>
+                        </div>
+                        <div class="flex items-center gap-1 bg-white/50 rounded px-2 py-1">
+                            <input type="number" value="1" class="w-8 bg-transparent text-center font-bold">
+                            <span class="text-xs text-gray-500">wks</span>
+                        </div>
+                    </div>
+
+                    <!-- Color -->
+                    <div class="bg-white/40 p-3 rounded-xl backdrop-blur-sm border border-white/40 shadow-sm flex justify-between items-center">
+                        <span class="text-sm font-medium pl-1">Color</span>
+                        <div class="flex gap-2">
+                            <button class="w-6 h-6 rounded-full bg-purple-500 ring-2 ring-white shadow-sm transform scale-110"></button>
+                            <button class="w-6 h-6 rounded-full bg-pink-500 opacity-50 hover:opacity-100 transition-opacity"></button>
+                            <button class="w-6 h-6 rounded-full bg-blue-500 opacity-50 hover:opacity-100 transition-opacity"></button>
+                        </div>
+                    </div>
+
+                    <!-- Notes -->
+                    <div class="bg-white/40 p-3 rounded-xl backdrop-blur-sm border border-white/40 shadow-sm">
+                        <textarea class="w-full bg-transparent border-none focus:outline-none text-sm resize-none h-20 placeholder-gray-500" placeholder="Notes...">Discussing Q4 roadmap.</textarea>
+                    </div>
+                </div>
+
+                <button class="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl shadow-lg shadow-purple-500/30 transition-all transform active:scale-95">
+                    Save Event
+                </button>
+            </div>
+
+            <!-- EDITOR 5: DARK -->
+            <div id="editor-dark" class="design-variant w-full max-w-2xl dark-glass rounded-lg shadow-2xl border border-gray-700 font-mono text-sm hidden flex flex-col max-h-[80vh]">
+                <div class="flex items-center justify-between px-4 py-2 border-b border-gray-700 bg-black/40 flex-shrink-0">
+                    <div class="flex gap-2">
+                        <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                        <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+                        <div class="w-3 h-3 rounded-full bg-green-500"></div>
+                    </div>
+                    <div class="text-gray-500 text-xs">vim event.conf</div>
+                </div>
+                <div class="p-6 space-y-4 overflow-y-auto flex-1 custom-scroll-dark">
+                    <div class="flex items-center border-b border-gray-700 pb-2">
+                        <span class="text-pink-500 mr-4 w-24">title</span>
+                        <span class="text-gray-500 mr-2">=</span>
+                        <input type="text" class="bg-transparent text-green-400 w-full focus:outline-none font-bold" value='"Strategy Meeting"'>
+                    </div>
+                    <div class="flex items-center border-b border-gray-700 pb-2">
+                        <span class="text-blue-500 mr-4 w-24">start</span>
+                        <span class="text-gray-500 mr-2">=</span>
+                        <input type="text" class="bg-transparent text-yellow-300 focus:outline-none" value="2025-11-24T10:00:00Z">
+                    </div>
+                    <div class="flex items-center border-b border-gray-700 pb-2">
+                        <span class="text-blue-500 mr-4 w-24">end</span>
+                        <span class="text-gray-500 mr-2">=</span>
+                        <input type="text" class="bg-transparent text-yellow-300 focus:outline-none" value="2025-11-24T11:30:00Z">
+                    </div>
+                    <div class="flex items-center border-b border-gray-700 pb-2">
+                        <span class="text-orange-500 mr-4 w-24">recurrence</span>
+                        <span class="text-gray-500 mr-2">=</span>
+                        <div class="flex gap-2">
+                            <select class="bg-gray-800 text-purple-400 border border-gray-600 text-xs p-1">
+                                <option>NONE</option>
+                                <option selected>WEEKLY</option>
+                            </select>
+                            <span class="text-gray-500">interval:</span>
+                            <input type="number" value="1" class="w-8 bg-gray-800 text-purple-400 border border-gray-600 text-xs p-1 text-center">
+                        </div>
+                    </div>
+                    <div class="flex items-center border-b border-gray-700 pb-2">
+                        <span class="text-teal-500 mr-4 w-24">color_id</span>
+                        <span class="text-gray-500 mr-2">=</span>
+                        <div class="flex gap-2">
+                            <label class="flex items-center gap-1 cursor-pointer">
+                                <input type="radio" name="dark-color" checked class="accent-red-500">
+                                <span class="text-red-500">red</span>
+                            </label>
+                            <label class="flex items-center gap-1 cursor-pointer">
+                                <input type="radio" name="dark-color" class="accent-blue-500">
+                                <span class="text-blue-500">blue</span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="flex items-start pt-2">
+                        <span class="text-gray-500 mr-4 w-24">desc</span>
+                        <span class="text-gray-500 mr-2">=</span>
+                        <textarea class="bg-transparent text-gray-300 w-full focus:outline-none h-20 resize-none font-mono">"""
+Discussing Q4 roadmap, 
+resource allocation, 
+and hiring plans.
+"""</textarea>
+                    </div>
+                </div>
+                <div class="bg-black/40 px-4 py-2 border-t border-gray-700 flex justify-between items-center flex-shrink-0">
+                    <div class="text-xs text-gray-500">INSERT MODE</div>
+                    <div class="flex gap-2">
+                        <button class="text-gray-400 hover:text-white px-3 py-1 border border-gray-600 rounded hover:bg-gray-700 transition-colors">:q!</button>
+                        <button class="text-green-400 hover:text-white px-3 py-1 border border-green-800 bg-green-900/20 rounded hover:bg-green-900/50 transition-colors">:wq</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Day / Week / Month View Explorations -->
+        <section class="w-full max-w-6xl mx-auto bg-white/90 border border-gray-200 rounded-3xl shadow-xl p-6 md:p-10 space-y-8">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                    <p class="text-xs font-bold uppercase tracking-[0.2em] text-blue-600">Canvas Concepts</p>
+                    <h2 class="text-3xl font-black text-gray-900 leading-tight">Day / Week / Month view ideas</h2>
+                    <p class="text-gray-500 max-w-2xl mt-2">A grab bag of layouts to mix-and-match. Each card leans into a different vibe so you can see how density, color, and hierarchy play together.</p>
+                </div>
+                <div class="flex gap-2">
+                    <span class="px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-semibold border border-blue-100">Day</span>
+                    <span class="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-100">Week</span>
+                    <span class="px-3 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-semibold border border-amber-100">Month</span>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Day: Focus timeline -->
+                <div class="rounded-2xl border border-gray-100 shadow-lg overflow-hidden bg-gradient-to-br from-white to-blue-50/60">
+                    <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                        <div class="flex items-center gap-3">
+                            <i data-lucide="sunrise" class="w-5 h-5 text-blue-500"></i>
+                            <div>
+                                <p class="text-xs uppercase font-semibold text-blue-500 tracking-wide">Day View</p>
+                                <p class="text-lg font-bold text-gray-900">Monday, Nov 24</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-2">
+                            <button class="px-2 py-1 text-xs rounded-full bg-white border border-gray-200 text-gray-600 hover:bg-blue-50">Prev</button>
+                            <button class="px-3 py-1 text-xs rounded-full bg-blue-600 text-white shadow-sm hover:bg-blue-700">Today</button>
+                            <button class="px-2 py-1 text-xs rounded-full bg-white border border-gray-200 text-gray-600 hover:bg-blue-50">Next</button>
+                        </div>
+                    </div>
+                    <div class="p-4 space-y-3">
+                        <div class="flex gap-4">
+                            <div class="w-20 text-xs text-right text-gray-400 pt-1">9:00 AM</div>
+                            <div class="flex-1 bg-white rounded-xl border border-blue-100 shadow-sm p-3 flex justify-between">
+                                <div>
+                                    <p class="text-sm font-bold text-gray-900">Design Review</p>
+                                    <p class="text-xs text-gray-500">Conference Room B</p>
+                                </div>
+                                <span class="text-[10px] px-2 py-1 rounded-full bg-blue-100 text-blue-700 font-semibold">60m</span>
+                            </div>
+                        </div>
+                        <div class="flex gap-4">
+                            <div class="w-20 text-xs text-right text-gray-400 pt-1">11:30 AM</div>
+                            <div class="flex-1 bg-white rounded-xl border border-amber-100 shadow-sm p-3 flex justify-between">
+                                <div>
+                                    <p class="text-sm font-bold text-gray-900">Client Call</p>
+                                    <p class="text-xs text-gray-500">Zoom</p>
+                                </div>
+                                <span class="text-[10px] px-2 py-1 rounded-full bg-amber-100 text-amber-700 font-semibold">45m</span>
+                            </div>
+                        </div>
+                        <div class="flex gap-4">
+                            <div class="w-20 text-xs text-right text-gray-400 pt-1">2:00 PM</div>
+                            <div class="flex-1 bg-gradient-to-r from-emerald-50 to-white rounded-xl border border-emerald-100 shadow-sm p-3">
+                                <p class="text-sm font-bold text-emerald-900">Maker Time</p>
+                                <p class="text-xs text-emerald-600">Block notifications • Deep work</p>
+                            </div>
+                        </div>
+                        <div class="flex gap-4">
+                            <div class="w-20 text-xs text-right text-gray-400 pt-1">All day</div>
+                            <div class="flex-1 border border-dashed border-gray-200 rounded-lg p-3 text-xs text-gray-500 bg-white">Drop files, drag to reorder, fast add bar here →</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Day: Split agenda + timeline -->
+                <div class="rounded-2xl border border-gray-200 bg-gray-900 text-white shadow-xl overflow-hidden">
+                    <div class="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <i data-lucide="clock-4" class="w-5 h-5 text-teal-300"></i>
+                            <div>
+                                <p class="text-[11px] uppercase tracking-[0.2em] text-gray-400">Day Split</p>
+                                <p class="text-lg font-bold">Tue, Nov 25</p>
+                            </div>
+                        </div>
+                        <button class="px-3 py-1 text-xs rounded-full bg-gray-800 border border-gray-700 hover:border-teal-400 hover:text-teal-200">Focus Mode</button>
+                    </div>
+                    <div class="grid grid-cols-5 divide-x divide-gray-800">
+                        <div class="col-span-3 p-4 space-y-3 bg-black/30">
+                            <div class="bg-gray-800/70 rounded-xl p-3 border border-gray-700">
+                                <div class="flex justify-between text-xs text-gray-400 mb-2">
+                                    <span>08:30</span><span>09:30</span>
+                                </div>
+                                <p class="text-sm font-semibold">Product Sync</p>
+                                <p class="text-xs text-gray-400">#roadmap • 6 people</p>
+                            </div>
+                            <div class="bg-gradient-to-r from-indigo-600/30 to-purple-600/30 rounded-xl p-3 border border-purple-500/30 shadow-lg">
+                                <div class="flex justify-between text-xs text-purple-200 mb-2">
+                                    <span>10:00</span><span>12:00</span>
+                                </div>
+                                <p class="text-sm font-semibold text-white">Workshop: ICP</p>
+                                <p class="text-xs text-purple-100">Slides + Miro links</p>
+                            </div>
+                            <div class="bg-gray-800/70 rounded-xl p-3 border border-gray-700">
+                                <div class="flex justify-between text-xs text-gray-400 mb-2">
+                                    <span>14:00</span><span>15:00</span>
+                                </div>
+                                <p class="text-sm font-semibold">User Interviews</p>
+                                <p class="text-xs text-gray-400">3/5 scheduled</p>
+                            </div>
+                        </div>
+                        <div class="col-span-2 p-4 space-y-3">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs text-gray-400 uppercase tracking-wide">Agenda</span>
+                                <span class="text-[11px] px-2 py-1 rounded-full bg-teal-500/10 text-teal-200 border border-teal-500/40">7 items</span>
+                            </div>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex items-center gap-2">
+                                    <span class="w-2 h-2 rounded-full bg-teal-400"></span>
+                                    <span class="flex-1">Prep deck for execs</span>
+                                    <span class="text-[11px] text-gray-400">20m</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                                    <span class="flex-1">Send recap emails</span>
+                                    <span class="text-[11px] text-gray-400">10m</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="w-2 h-2 rounded-full bg-indigo-400"></span>
+                                    <span class="flex-1">QA build from CI</span>
+                                    <span class="text-[11px] text-gray-400">45m</span>
+                                </div>
+                            </div>
+                            <div class="mt-4 text-xs text-gray-500 border-t border-gray-800 pt-3">Drag to pin agenda to timeline • auto-fit when slots change.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Week: Swimlanes -->
+                <div class="rounded-2xl border border-gray-100 bg-white shadow-md overflow-hidden">
+                    <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <i data-lucide="columns" class="w-5 h-5 text-emerald-600"></i>
+                            <div>
+                                <p class="text-xs uppercase font-semibold text-emerald-600 tracking-wide">Week Swimlanes</p>
+                                <p class="text-lg font-bold text-gray-900">Nov 24 → Nov 30</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 text-xs">
+                            <span class="px-2 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">Auto-resize</span>
+                            <span class="px-2 py-1 rounded-full bg-gray-100 text-gray-600 border border-gray-200">Heatmap</span>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-7 divide-x divide-gray-100">
+                        <div class="p-3 space-y-2">
+                            <div class="flex items-center justify-between text-xs text-gray-500 mb-1">
+                                <span class="font-semibold text-gray-800">Mon</span>
+                                <span class="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">3</span>
+                            </div>
+                            <div class="space-y-1">
+                                <div class="p-2 rounded-lg bg-emerald-50 border border-emerald-100 text-[11px] text-emerald-800">Sprint planning</div>
+                                <div class="p-2 rounded-lg bg-blue-50 border border-blue-100 text-[11px] text-blue-800">Design standup</div>
+                                <div class="p-2 rounded-lg bg-amber-50 border border-amber-100 text-[11px] text-amber-800">Launch prep</div>
+                            </div>
+                        </div>
+                        <div class="p-3 space-y-2">
+                            <div class="flex items-center justify-between text-xs text-gray-500 mb-1">
+                                <span class="font-semibold text-gray-800">Tue</span>
+                                <span class="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">2</span>
+                            </div>
+                            <div class="space-y-1">
+                                <div class="p-2 rounded-lg bg-blue-50 border border-blue-100 text-[11px] text-blue-800">1:1s</div>
+                                <div class="p-2 rounded-lg bg-emerald-50 border border-emerald-100 text-[11px] text-emerald-800">Hiring loop</div>
+                            </div>
+                        </div>
+                        <div class="p-3 space-y-2">
+                            <div class="flex items-center justify-between text-xs text-gray-500 mb-1">
+                                <span class="font-semibold text-gray-800">Wed</span>
+                                <span class="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">4</span>
+                            </div>
+                            <div class="space-y-1">
+                                <div class="p-2 rounded-lg bg-amber-50 border border-amber-100 text-[11px] text-amber-800">Launch prep</div>
+                                <div class="p-2 rounded-lg bg-blue-50 border border-blue-100 text-[11px] text-blue-800">Demo reviews</div>
+                                <div class="p-2 rounded-lg bg-emerald-50 border border-emerald-100 text-[11px] text-emerald-800">Infra sync</div>
+                                <div class="p-2 rounded-lg bg-purple-50 border border-purple-100 text-[11px] text-purple-800">Training</div>
+                            </div>
+                        </div>
+                        <div class="p-3 space-y-2">
+                            <div class="flex items-center justify-between text-xs text-gray-500 mb-1">
+                                <span class="font-semibold text-gray-800">Thu</span>
+                                <span class="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">3</span>
+                            </div>
+                            <div class="space-y-1">
+                                <div class="p-2 rounded-lg bg-emerald-50 border border-emerald-100 text-[11px] text-emerald-800">Sprint review</div>
+                                <div class="p-2 rounded-lg bg-blue-50 border border-blue-100 text-[11px] text-blue-800">Team retro</div>
+                                <div class="p-2 rounded-lg bg-amber-50 border border-amber-100 text-[11px] text-amber-800">Launch prep</div>
+                            </div>
+                        </div>
+                        <div class="p-3 space-y-2">
+                            <div class="flex items-center justify-between text-xs text-gray-500 mb-1">
+                                <span class="font-semibold text-gray-800">Fri</span>
+                                <span class="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">2</span>
+                            </div>
+                            <div class="space-y-1">
+                                <div class="p-2 rounded-lg bg-indigo-50 border border-indigo-100 text-[11px] text-indigo-800">Show &amp; tell</div>
+                                <div class="p-2 rounded-lg bg-emerald-50 border border-emerald-100 text-[11px] text-emerald-800">Weekly recap</div>
+                            </div>
+                        </div>
+                        <div class="p-3 space-y-2">
+                            <div class="flex items-center justify-between text-xs text-gray-500 mb-1">
+                                <span class="font-semibold text-gray-800">Sat</span>
+                                <span class="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">1</span>
+                            </div>
+                            <div class="space-y-1">
+                                <div class="p-2 rounded-lg bg-gray-50 border border-gray-200 text-[11px] text-gray-700">Maintenance window</div>
+                            </div>
+                        </div>
+                        <div class="p-3 space-y-2">
+                            <div class="flex items-center justify-between text-xs text-gray-500 mb-1">
+                                <span class="font-semibold text-gray-800">Sun</span>
+                                <span class="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">0</span>
+                            </div>
+                            <div class="space-y-1 text-[11px] text-gray-400">
+                                <div class="p-2 rounded-lg border border-dashed border-gray-200">Open planning</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Week: Split grid -->
+                <div class="rounded-2xl border border-gray-200 bg-gradient-to-b from-white via-slate-50 to-slate-100 shadow-lg overflow-hidden">
+                    <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <i data-lucide="layout-dashboard" class="w-5 h-5 text-indigo-600"></i>
+                            <div>
+                                <p class="text-xs uppercase font-semibold text-indigo-600 tracking-wide">Week Board</p>
+                                <p class="text-lg font-bold text-gray-900">Compact grid + side agenda</p>
+                            </div>
+                        </div>
+                        <button class="px-3 py-1 text-xs rounded-full bg-indigo-600 text-white shadow-sm hover:bg-indigo-700">Add Block</button>
+                    </div>
+                    <div class="grid grid-cols-4 divide-x divide-gray-200">
+                        <div class="col-span-3">
+                            <div class="grid grid-cols-6 gap-2 p-3">
+                                <div class="col-span-2 bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
+                                    <p class="text-xs font-semibold text-gray-500 mb-1">Morning</p>
+                                    <p class="text-sm font-bold text-gray-900">Ship roadmap</p>
+                                    <p class="text-xs text-gray-500">Highlights + blockers</p>
+                                </div>
+                                <div class="col-span-4 bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
+                                    <p class="text-xs font-semibold text-gray-500 mb-1">Tuesday</p>
+                                    <div class="flex gap-2">
+                                        <span class="px-2 py-1 text-[11px] rounded-full bg-blue-50 text-blue-700 border border-blue-100">Team Retro</span>
+                                        <span class="px-2 py-1 text-[11px] rounded-full bg-pink-50 text-pink-700 border border-pink-100">PM Sync</span>
+                                    </div>
+                                </div>
+                                <div class="col-span-3 bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
+                                    <p class="text-xs font-semibold text-gray-500 mb-1">Thursday</p>
+                                    <p class="text-sm font-bold text-gray-900 mb-1">Customer Advisory Board</p>
+                                    <p class="text-xs text-gray-500">90m • with GTM</p>
+                                </div>
+                                <div class="col-span-3 bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
+                                    <p class="text-xs font-semibold text-gray-500 mb-1">Friday</p>
+                                    <p class="text-sm font-bold text-gray-900 mb-1">Demos + Showcase</p>
+                                    <p class="text-xs text-gray-500">Recordings auto-post</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-span-1 bg-white/60 backdrop-blur-sm p-4 space-y-3">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-semibold text-gray-500 uppercase">Side Agenda</span>
+                                <span class="text-[11px] px-2 py-0.5 rounded-full bg-gray-200 text-gray-700">Pin</span>
+                            </div>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex items-center gap-2">
+                                    <span class="w-2 h-2 rounded-full bg-indigo-500"></span>
+                                    <span class="flex-1 text-gray-800">Docs to finalize</span>
+                                    <span class="text-[11px] text-gray-500">Tue</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                                    <span class="flex-1 text-gray-800">Budget checkpoint</span>
+                                    <span class="text-[11px] text-gray-500">Thu</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+                                    <span class="flex-1 text-gray-800">Video walkthrough</span>
+                                    <span class="text-[11px] text-gray-500">Fri</span>
+                                </div>
+                            </div>
+                            <div class="text-xs text-gray-500 pt-2 border-t border-gray-200">Ideal for small teams needing prioritization + quick drag.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Month: Calendar tiles -->
+                <div class="rounded-2xl border border-gray-100 bg-white shadow-md overflow-hidden">
+                    <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <i data-lucide="calendar" class="w-5 h-5 text-amber-600"></i>
+                            <div>
+                                <p class="text-xs uppercase font-semibold text-amber-600 tracking-wide">Month Tiles</p>
+                                <p class="text-lg font-bold text-gray-900">November 2025</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 text-xs">
+                            <span class="px-2 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-100">Badges</span>
+                            <span class="px-2 py-1 rounded-full bg-gray-100 text-gray-600 border border-gray-200">Density</span>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-7 border-t border-l border-gray-100">
+                        <div class="p-2 min-h-[110px] border-r border-b border-gray-100">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-semibold text-gray-500">Nov 1</span>
+                            </div>
+                            <div class="space-y-1">
+                                <div class="text-[11px] px-2 py-1 rounded-md bg-blue-50 text-blue-700 border border-blue-100 truncate">Launch planning</div>
+                            </div>
+                        </div>
+                        <div class="p-2 min-h-[110px] border-r border-b border-gray-100">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-semibold text-gray-500">Nov 2</span>
+                                <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                            </div>
+                            <div class="space-y-1">
+                                <div class="text-[11px] px-2 py-1 rounded-md bg-green-50 text-green-700 border border-green-100 truncate">Content sprint</div>
+                            </div>
+                        </div>
+                        <div class="p-2 min-h-[110px] border-r border-b border-gray-100">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-semibold text-gray-500">Nov 3</span>
+                            </div>
+                            <div class="space-y-1">
+                                <div class="text-[11px] px-2 py-1 rounded-md bg-rose-50 text-rose-700 border border-rose-100 truncate">Team day off</div>
+                            </div>
+                        </div>
+                        <div class="p-2 min-h-[110px] border-r border-b border-gray-100">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-semibold text-gray-500">Nov 4</span>
+                            </div>
+                            <div class="space-y-1">
+                                <div class="text-[11px] px-2 py-1 rounded-md bg-blue-50 text-blue-700 border border-blue-100 truncate">Launch planning</div>
+                                <div class="text-[11px] px-2 py-1 rounded-md bg-green-50 text-green-700 border border-green-100 truncate">Content sprint</div>
+                            </div>
+                        </div>
+                        <div class="p-2 min-h-[110px] border-r border-b border-gray-100">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-semibold text-gray-500">Nov 5</span>
+                                <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                            </div>
+                            <div class="space-y-1">
+                                <div class="text-[11px] px-2 py-1 rounded-md bg-blue-50 text-blue-700 border border-blue-100 truncate">Launch planning</div>
+                                <div class="text-[11px] px-2 py-1 rounded-md bg-rose-50 text-rose-700 border border-rose-100 truncate">Team day off</div>
+                            </div>
+                        </div>
+                        <div class="p-2 min-h-[110px] border-r border-b border-gray-100">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-semibold text-gray-500">Nov 6</span>
+                            </div>
+                            <div class="space-y-1">
+                                <div class="text-[11px] px-2 py-1 rounded-md bg-green-50 text-green-700 border border-green-100 truncate">Content sprint</div>
+                            </div>
+                        </div>
+                        <div class="p-2 min-h-[110px] border-r border-b border-gray-100">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-semibold text-gray-500">Nov 7</span>
+                            </div>
+                            <div class="space-y-1">
+                                <div class="text-[11px] px-2 py-1 rounded-md bg-blue-50 text-blue-700 border border-blue-100 truncate">Launch planning</div>
+                            </div>
+                        </div>
+                        <div class="p-2 min-h-[110px] border-r border-b border-gray-100">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-semibold text-gray-500">Nov 8</span>
+                                <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                            </div>
+                            <div class="space-y-1">
+                                <div class="text-[11px] px-2 py-1 rounded-md bg-green-50 text-green-700 border border-green-100 truncate">Content sprint</div>
+                                <div class="text-[11px] px-2 py-1 rounded-md bg-rose-50 text-rose-700 border border-rose-100 truncate">Team day off</div>
+                            </div>
+                        </div>
+                        <div class="p-2 min-h-[110px] border-r border-b border-gray-100">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-semibold text-gray-500">Nov 9</span>
+                            </div>
+                            <div class="space-y-1">
+                                <div class="text-[11px] px-2 py-1 rounded-md bg-blue-50 text-blue-700 border border-blue-100 truncate">Launch planning</div>
+                            </div>
+                        </div>
+                        <div class="p-2 min-h-[110px] border-r border-b border-gray-100">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-semibold text-gray-500">Nov 10</span>
+                                <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                            </div>
+                            <div class="space-y-1">
+                                <div class="text-[11px] px-2 py-1 rounded-md bg-green-50 text-green-700 border border-green-100 truncate">Content sprint</div>
+                                <div class="text-[11px] px-2 py-1 rounded-md bg-blue-50 text-blue-700 border border-blue-100 truncate">Launch planning</div>
+                            </div>
+                        </div>
+                        <div class="p-2 min-h-[110px] border-r border-b border-gray-100">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-semibold text-gray-500">Nov 11</span>
+                            </div>
+                            <div class="space-y-1">
+                                <div class="text-[11px] px-2 py-1 rounded-md bg-rose-50 text-rose-700 border border-rose-100 truncate">Team day off</div>
+                            </div>
+                        </div>
+                        <div class="p-2 min-h-[110px] border-r border-b border-gray-100">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-semibold text-gray-500">Nov 12</span>
+                                <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                            </div>
+                            <div class="space-y-1">
+                                <div class="text-[11px] px-2 py-1 rounded-md bg-blue-50 text-blue-700 border border-blue-100 truncate">Launch planning</div>
+                                <div class="text-[11px] px-2 py-1 rounded-md bg-green-50 text-green-700 border border-green-100 truncate">Content sprint</div>
+                            </div>
+                        </div>
+                        <div class="p-2 min-h-[110px] border-r border-b border-gray-100">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-semibold text-gray-500">Nov 13</span>
+                            </div>
+                            <div class="space-y-1">
+                                <div class="text-[11px] px-2 py-1 rounded-md bg-blue-50 text-blue-700 border border-blue-100 truncate">Launch planning</div>
+                            </div>
+                        </div>
+                        <div class="p-2 min-h-[110px] border-r border-b border-gray-100">
+                            <div class="flex items-center justify-between mb-2">
+                                <span class="text-xs font-semibold text-gray-500">Nov 14</span>
+                                <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                            </div>
+                            <div class="space-y-1">
+                                <div class="text-[11px] px-2 py-1 rounded-md bg-rose-50 text-rose-700 border border-rose-100 truncate">Team day off</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Month: Agenda-first -->
+                <div class="rounded-2xl border border-gray-200 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white shadow-xl overflow-hidden">
+                    <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <i data-lucide="calendar-clock" class="w-5 h-5 text-cyan-300"></i>
+                            <div>
+                                <p class="text-xs uppercase font-semibold text-cyan-200 tracking-wide">Month + Agenda</p>
+                                <p class="text-lg font-bold">Scroll-less digest</p>
+                            </div>
+                        </div>
+                        <button class="px-3 py-1 text-xs rounded-full bg-white/10 border border-white/20 hover:bg-white/20">Export</button>
+                    </div>
+                    <div class="grid grid-cols-5 divide-x divide-slate-800">
+                        <div class="col-span-3 p-4">
+                            <div class="grid grid-cols-7 gap-2 text-[11px] text-slate-300">
+                                <div class="h-16 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center font-semibold text-white">M</div>
+                                <div class="h-16 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center font-semibold text-white">T</div>
+                                <div class="h-16 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center font-semibold text-white">W</div>
+                                <div class="h-16 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center font-semibold text-white">T</div>
+                                <div class="h-16 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center font-semibold text-white">F</div>
+                                <div class="h-16 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center font-semibold text-white">S</div>
+                                <div class="h-16 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center font-semibold text-white">S</div>
+                            </div>
+                            <p class="text-xs text-slate-400 mt-3">Hover for inline agenda • pin important days to keep them tall.</p>
+                        </div>
+                        <div class="col-span-2 p-4 space-y-3 bg-slate-900/60">
+                            <div class="flex items-center justify-between">
+                                <span class="text-xs font-semibold text-slate-200 uppercase">Agenda Highlights</span>
+                                <span class="text-[11px] px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-200 border border-cyan-500/30">Auto-grouped</span>
+                            </div>
+                            <div class="space-y-2 text-sm">
+                                <div class="flex items-center gap-2">
+                                    <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+                                    <span class="flex-1">Board meeting</span>
+                                    <span class="text-[11px] text-slate-400">Nov 12</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="w-2 h-2 rounded-full bg-rose-400"></span>
+                                    <span class="flex-1">Holiday block</span>
+                                    <span class="text-[11px] text-slate-400">Nov 23</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                                    <span class="flex-1">Release candidate</span>
+                                    <span class="text-[11px] text-slate-400">Nov 28</span>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <span class="w-2 h-2 rounded-full bg-indigo-400"></span>
+                                    <span class="flex-1">Team summit</span>
+                                    <span class="text-[11px] text-slate-400">Dec 3</span>
+                                </div>
+                            </div>
+                            <div class="text-xs text-slate-400 pt-3 border-t border-slate-800">Use when you want monthly context but agenda-first navigation.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Layout iframe gallery -->
+        <section class="w-full max-w-6xl mx-auto bg-white/90 border border-gray-200 rounded-3xl shadow-xl p-6 md:p-10 space-y-10">
+            <div>
+                <p class="text-xs font-bold uppercase tracking-[0.2em] text-indigo-600">Layout Gallery</p>
+                <h2 class="text-3xl font-black text-gray-900 leading-tight">Side-by-side layout explorations</h2>
+                <p class="text-gray-500 max-w-2xl mt-2">Each set packs six variations into iframes so you can skim quickly. Click into any frame to see the micro layout details.</p>
+            </div>
+
+            <!-- Day -->
+            <div class="space-y-4">
+                <div class="flex items-center gap-2">
+                    <span class="text-sm font-bold text-gray-900">Day layouts</span>
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">6 versions</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <iframe class="w-full h-56 rounded-xl border border-gray-200 shadow-sm" loading="lazy" srcdoc='<!DOCTYPE html><html><head><style>body{margin:0;font-family:Inter,sans-serif;background:#f8fafc} .wrap{padding:16px} .header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px} .pill{background:#e0f2fe;color:#0369a1;font-size:12px;font-weight:700;padding:4px 8px;border-radius:12px} .slot{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:10px 12px;margin-top:8px;box-shadow:0 10px 25px rgba(15,23,42,0.08);} .time{font-size:12px;color:#6b7280} .title{font-weight:800;color:#0f172a} </style></head><body><div class="wrap"><div class="header"><div><div class="pill">Day View</div><div style="font-weight:800;font-size:18px;color:#0f172a">Mon, Nov 24</div></div><button style="border:1px solid #e5e7eb;border-radius:10px;padding:6px 12px;background:white;font-weight:700;color:#0f172a;">Today</button></div><div class="slot"><div class="title">Design Review</div><div class="time">9:00 - 10:00</div></div><div class="slot" style="background:#ecfeff;border-color:#cffafe"><div class="title" style="color:#0ea5e9">Client Call</div><div class="time">11:30 - 12:15</div></div><div class="slot"><div class="title">Maker Time</div><div class="time">14:00 - 16:00</div></div></div></body></html>'></iframe>
+                    <iframe class="w-full h-56 rounded-xl border border-gray-200 shadow-sm" loading="lazy" srcdoc='<!DOCTYPE html><html><head><style>body{margin:0;background:#0f172a;color:#e2e8f0;font-family:Inter,sans-serif} .wrap{padding:16px} .head{display:flex;justify-content:space-between;align-items:center} .chip{background:#0ea5e9;color:white;padding:4px 10px;border-radius:12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;} .card{background:#1f2937;border:1px solid #334155;border-radius:14px;padding:10px 12px;margin-top:10px} .grid{display:grid;grid-template-columns:60px 1fr;gap:10px;align-items:center;} .time{color:#94a3b8;font-size:12px;text-align:right} .title{font-weight:800} </style></head><body><div class="wrap"><div class="head"><div><div class="chip">Focus</div><div style="font-size:18px;font-weight:800;">Tue, Nov 25</div></div><div style="font-size:12px;color:#94a3b8;">Focus mode</div></div><div class="card"><div class="grid"><div class="time">08:30</div><div class="title">Product Sync</div><div class="time">10:00</div><div class="title" style="color:#67e8f9;">ICP Workshop</div><div class="time">14:00</div><div class="title">User Interviews</div></div></div></div></body></html>'></iframe>
+                    <iframe class="w-full h-56 rounded-xl border border-gray-200 shadow-sm" loading="lazy" srcdoc='<!DOCTYPE html><html><head><style>body{margin:0;background:#fff7ed;font-family:Inter,sans-serif;color:#7c2d12} .wrap{padding:14px} .title{font-weight:900;font-size:18px} .lane{background:white;border:1px solid #fed7aa;border-radius:12px;padding:10px;margin-top:8px;box-shadow:0 8px 20px rgba(251,146,60,0.15);} .lane h4{margin:0;font-size:14px;color:#9a3412;} .lane p{margin:2px 0;font-size:12px;color:#a16207;} </style></head><body><div class="wrap"><div class="title">Dayboard</div><div class="lane"><h4>Morning</h4><p>Standup • Retro</p></div><div class="lane" style="border-color:#fbcfe8;"><h4 style="color:#be185d;">Midday</h4><p>Client call • Docs review</p></div><div class="lane" style="border-color:#bfdbfe;"><h4 style="color:#1d4ed8;">Afternoon</h4><p>Deep work block</p></div></div></body></html>'></iframe>
+                    <iframe class="w-full h-56 rounded-xl border border-gray-200 shadow-sm" loading="lazy" srcdoc='<!DOCTYPE html><html><head><style>body{margin:0;background:#f1f5f9;font-family:Inter,sans-serif;} .wrap{padding:12px} .row{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:8px 10px;margin-top:6px;} .time{width:60px;text-align:right;font-size:12px;color:#94a3b8;} .dot{width:10px;height:10px;border-radius:50%;background:#6366f1;} .info{flex:1;} .info div:first-child{font-weight:800;color:#0f172a;} .info div:last-child{font-size:12px;color:#475569;} </style></head><body><div class="wrap"><div style="font-weight:900;color:#0f172a;margin-bottom:6px;">Timeline Lite</div><div class="row"><div class="time">09:00</div><div class="dot"></div><div class="info"><div>Design Review</div><div>Room B</div></div></div><div class="row"><div class="time">11:30</div><div class="dot" style="background:#10b981;"></div><div class="info"><div>Client Call</div><div>Zoom</div></div></div><div class="row"><div class="time">14:00</div><div class="dot" style="background:#f59e0b;"></div><div class="info"><div>Maker Time</div><div>Heads down</div></div></div></div></body></html>'></iframe>
+                    <iframe class="w-full h-56 rounded-xl border border-gray-200 shadow-sm" loading="lazy" srcdoc='<!DOCTYPE html><html><head><style>body{margin:0;background:#0b1120;color:#e2e8f0;font-family:Inter,sans-serif;} .wrap{padding:14px} .badge{padding:4px 8px;border-radius:12px;background:#1e293b;border:1px solid #334155;font-size:11px;text-transform:uppercase;letter-spacing:.05em;} .slot{margin-top:8px;padding:10px;border-radius:12px;border:1px solid #1e293b;background:linear-gradient(120deg,#0ea5e9 0%,#6366f1 100%);color:white;} .slot h4{margin:0;font-size:14px;} .slot p{margin:2px 0;font-size:12px;} </style></head><body><div class="wrap"><div class="badge">Day split</div><div style="font-weight:900;font-size:18px;margin-top:6px;">Compact timeline</div><div class="slot"><h4>AM Labs</h4><p>Infra experiment</p></div><div class="slot" style="background:linear-gradient(120deg,#22d3ee,#14b8a6);"><h4>Interviews</h4><p>3 candidates</p></div><div class="slot" style="background:linear-gradient(120deg,#f97316,#ef4444);"><h4>Release Prep</h4><p>Tag & ship</p></div></div></body></html>'></iframe>
+                    <iframe class="w-full h-56 rounded-xl border border-gray-200 shadow-sm" loading="lazy" srcdoc='<!DOCTYPE html><html><head><style>body{margin:0;background:#fafafa;font-family:Inter,sans-serif;} .wrap{padding:12px} .header{display:flex;align-items:center;gap:6px;margin-bottom:8px;} .chip{background:black;color:white;padding:4px 8px;border-radius:9999px;font-size:11px;font-weight:700;} .box{background:white;border:1px solid #e5e7eb;border-radius:14px;padding:12px;box-shadow:0 12px 28px rgba(0,0,0,0.08);margin-bottom:8px;} .box h4{margin:0;font-weight:800;} .box span{display:inline-block;margin-top:4px;font-size:12px;color:#6b7280;} </style></head><body><div class="wrap"><div class="header"><div class="chip">Day card</div><div style="font-weight:900;">One-screen digest</div></div><div class="box"><h4>Highlights</h4><span>3 meetings • 2 blocks</span></div><div class="box"><h4>Meetings</h4><span>Design Review, PM Sync, 1:1</span></div><div class="box"><h4>Blocks</h4><span>Deep work, QA sweep</span></div></div></body></html>'></iframe>
+                </div>
+            </div>
+
+            <!-- Week -->
+            <div class="space-y-4">
+                <div class="flex items-center gap-2">
+                    <span class="text-sm font-bold text-gray-900">Week layouts</span>
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">6 versions</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <iframe class="w-full h-56 rounded-xl border border-gray-200 shadow-sm" loading="lazy" srcdoc='<!DOCTYPE html><html><head><style>body{margin:0;font-family:Inter,sans-serif;background:#f1f5f9;} .wrap{padding:12px} .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;} .day{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:8px;} .day h4{margin:0;font-size:12px;color:#475569;} .pill{display:inline-block;padding:3px 6px;border-radius:8px;font-size:10px;font-weight:700;margin-top:4px;} </style></head><body><div class="wrap"><div style="font-weight:900;margin-bottom:6px;">Grid Week</div><div class="grid"><div class="day"><h4>Mon</h4><span class="pill" style="background:#dbeafe;color:#1d4ed8;">Sprint</span><span class="pill" style="background:#ecfeff;color:#0ea5e9;">1:1s</span></div><div class="day"><h4>Tue</h4><span class="pill" style="background:#fef9c3;color:#a16207;">Retro</span></div><div class="day"><h4>Wed</h4><span class="pill" style="background:#dcfce7;color:#166534;">Roadmap</span></div><div class="day"><h4>Thu</h4><span class="pill" style="background:#fee2e2;color:#b91c1c;">Launch</span></div><div class="day"><h4>Fri</h4><span class="pill" style="background:#e0f2fe;color:#0369a1;">Showcase</span></div><div class="day"><h4>Sat</h4></div><div class="day"><h4>Sun</h4></div></div></div></body></html>'></iframe>
+                    <iframe class="w-full h-56 rounded-xl border border-gray-200 shadow-sm" loading="lazy" srcdoc='<!DOCTYPE html><html><head><style>body{margin:0;font-family:Inter,sans-serif;background:#0f172a;color:#e2e8f0;} .wrap{padding:12px} .lane{display:grid;grid-template-columns:60px 1fr;gap:8px;align-items:center;margin-top:6px;} .chip{background:#1e293b;border:1px solid #334155;border-radius:10px;padding:4px 8px;font-size:11px;} .bar{height:10px;border-radius:999px;background:linear-gradient(90deg,#22d3ee,#6366f1);} </style></head><body><div class="wrap"><div style="font-weight:900;">Load Map</div><div class="lane"><div class="chip">Mon</div><div class="bar"></div></div><div class="lane"><div class="chip">Tue</div><div class="bar" style="background:linear-gradient(90deg,#10b981,#14b8a6);width:70%;"></div></div><div class="lane"><div class="chip">Wed</div><div class="bar" style="background:linear-gradient(90deg,#f59e0b,#ef4444);width:90%;"></div></div><div class="lane"><div class="chip">Thu</div><div class="bar" style="width:40%;"></div></div><div class="lane"><div class="chip">Fri</div><div class="bar" style="background:linear-gradient(90deg,#c084fc,#a855f7);width:60%;"></div></div></div></body></html>'></iframe>
+                    <iframe class="w-full h-56 rounded-xl border border-gray-200 shadow-sm" loading="lazy" srcdoc='<!DOCTYPE html><html><head><style>body{margin:0;background:#fff7ed;font-family:Inter,sans-serif;color:#9a3412;} .wrap{padding:12px} .board{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;} .card{background:white;border:1px solid #fed7aa;border-radius:12px;padding:10px;box-shadow:0 8px 20px rgba(251,146,60,0.12);} .card h4{margin:0;font-size:12px;color:#b45309;} .tag{display:inline-block;margin-top:6px;padding:4px 8px;border-radius:8px;background:#fef3c7;color:#b45309;font-size:11px;font-weight:700;} </style></head><body><div class="wrap"><div style="font-weight:900;">Week Board</div><div class="board"><div class="card"><h4>Planning</h4><div class="tag">Mon</div></div><div class="card"><h4>Research</h4><div class="tag" style="background:#ffedd5;">Tue</div></div><div class="card"><h4>Delivery</h4><div class="tag" style="background:#ffe4e6;color:#be123c;">Thu</div></div><div class="card"><h4>Retro</h4><div class="tag" style="background:#e0f2fe;color:#075985;">Fri</div></div><div class="card"><h4>Showcase</h4><div class="tag" style="background:#dcfce7;color:#166534;">Fri</div></div><div class="card"><h4>Buffer</h4><div class="tag" style="background:#ede9fe;color:#6b21a8;">Sat</div></div></div></div></body></html>'></iframe>
+                    <iframe class="w-full h-56 rounded-xl border border-gray-200 shadow-sm" loading="lazy" srcdoc='<!DOCTYPE html><html><head><style>body{margin:0;background:#f8fafc;font-family:Inter,sans-serif;} .wrap{padding:12px} table{width:100%;border-collapse:collapse;font-size:12px;} th,td{text-align:left;padding:6px;border-bottom:1px solid #e2e8f0;} th{color:#475569;text-transform:uppercase;letter-spacing:.06em;font-size:11px;} td strong{color:#0f172a;} .pill{padding:3px 6px;border-radius:999px;background:#e0f2fe;color:#075985;font-weight:700;font-size:10px;} </style></head><body><div class="wrap"><div style="font-weight:900;margin-bottom:6px;">Table Week</div><table><thead><tr><th>Day</th><th>Focus</th><th>Notes</th></tr></thead><tbody><tr><td>Mon</td><td><strong>Roadmap</strong></td><td><span class="pill">3 items</span></td></tr><tr><td>Tue</td><td><strong>Research</strong></td><td>Interviews</td></tr><tr><td>Wed</td><td><strong>Build</strong></td><td>Feature A</td></tr><tr><td>Thu</td><td><strong>QA</strong></td><td>Bug bash</td></tr><tr><td>Fri</td><td><strong>Ship</strong></td><td>Release 1.2</td></tr></tbody></table></div></body></html>'></iframe>
+                    <iframe class="w-full h-56 rounded-xl border border-gray-200 shadow-sm" loading="lazy" srcdoc='<!DOCTYPE html><html><head><style>body{margin:0;background:#0b1120;color:#e2e8f0;font-family:Inter,sans-serif;} .wrap{padding:12px} .bar{height:20px;border-radius:10px;background:#1e293b;border:1px solid #334155;position:relative;overflow:hidden;} .fill{height:100%;background:linear-gradient(90deg,#22c55e,#14b8a6);} .row{margin-top:6px;} </style></head><body><div class="wrap"><div style="font-weight:900;">Heat Week</div><div class="row">Mon<div class="bar"><div class="fill" style="width:70%;"></div></div></div><div class="row">Tue<div class="bar"><div class="fill" style="width:40%;background:linear-gradient(90deg,#f59e0b,#ef4444);"></div></div></div><div class="row">Wed<div class="bar"><div class="fill" style="width:90%;"></div></div></div><div class="row">Thu<div class="bar"><div class="fill" style="width:50%;background:linear-gradient(90deg,#6366f1,#22c55e);"></div></div></div><div class="row">Fri<div class="bar"><div class="fill" style="width:30%;background:linear-gradient(90deg,#a855f7,#f472b6);"></div></div></div></div></body></html>'></iframe>
+                    <iframe class="w-full h-56 rounded-xl border border-gray-200 shadow-sm" loading="lazy" srcdoc='<!DOCTYPE html><html><head><style>body{margin:0;background:#ffffff;font-family:Inter,sans-serif;} .wrap{padding:12px} .list{display:flex;gap:8px;overflow:hidden;} .col{flex:1;border:1px solid #e5e7eb;border-radius:12px;padding:10px;background:#f8fafc;} .col h4{margin:0;font-size:12px;color:#475569;} .item{margin-top:6px;padding:6px 8px;border-radius:10px;background:white;border:1px solid #e2e8f0;font-size:12px;font-weight:700;color:#0f172a;} </style></head><body><div class="wrap"><div style="font-weight:900;margin-bottom:6px;">Column Week</div><div class="list"><div class="col"><h4>Mon</h4><div class="item">Kickoff</div><div class="item">Design</div></div><div class="col"><h4>Tue</h4><div class="item">Research</div></div><div class="col"><h4>Wed</h4><div class="item">Build</div><div class="item">Review</div></div><div class="col"><h4>Thu</h4><div class="item">QA</div></div><div class="col"><h4>Fri</h4><div class="item">Ship</div></div></div></div></body></html>'></iframe>
+                </div>
+            </div>
+
+            <!-- Month -->
+            <div class="space-y-4">
+                <div class="flex items-center gap-2">
+                    <span class="text-sm font-bold text-gray-900">Month layouts</span>
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">6 versions</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <iframe class="w-full h-56 rounded-xl border border-gray-200 shadow-sm" loading="lazy" srcdoc='<!DOCTYPE html><html><head><style>body{margin:0;background:#f8fafc;font-family:Inter,sans-serif;} .wrap{padding:10px} .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;} .cell{background:white;border:1px solid #e2e8f0;border-radius:10px;padding:6px;height:70px;} .day{font-size:11px;color:#94a3b8;} .tag{display:block;background:#dbeafe;color:#1d4ed8;padding:2px 4px;border-radius:6px;font-size:10px;margin-top:4px;} </style></head><body><div class="wrap"><div style="font-weight:900;margin-bottom:6px;">Classic month</div><div class="grid"><div class="cell"><div class="day">1</div><span class="tag">Launch</span></div><div class="cell"><div class="day">2</div><span class="tag" style="background:#dcfce7;color:#166534;">Content</span></div><div class="cell"><div class="day">3</div><span class="tag" style="background:#fee2e2;color:#b91c1c;">Day off</span></div><div class="cell"><div class="day">4</div></div><div class="cell"><div class="day">5</div></div><div class="cell"><div class="day">6</div></div><div class="cell"><div class="day">7</div></div></div></div></body></html>'></iframe>
+                    <iframe class="w-full h-56 rounded-xl border border-gray-200 shadow-sm" loading="lazy" srcdoc='<!DOCTYPE html><html><head><style>body{margin:0;background:#0f172a;color:#e2e8f0;font-family:Inter,sans-serif;} .wrap{padding:12px} .mini{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;} .box{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:10px;} .box h4{margin:0;font-size:12px;color:#cbd5e1;} .dots{display:flex;gap:4px;margin-top:8px;} .dot{width:8px;height:8px;border-radius:50%;background:#22d3ee;} </style></head><body><div class="wrap"><div style="font-weight:900;">Quarter view</div><div class="mini"><div class="box"><h4>Nov</h4><div class="dots"><div class="dot"></div><div class="dot" style="background:#f59e0b;"></div><div class="dot" style="background:#a855f7;"></div></div></div><div class="box"><h4>Dec</h4><div class="dots"><div class="dot" style="background:#22c55e;"></div></div></div><div class="box"><h4>Jan</h4><div class="dots"><div class="dot" style="background:#f472b6;"></div></div></div><div class="box"><h4>Feb</h4><div class="dots"><div class="dot" style="background:#94a3b8;"></div></div></div></div></div></body></html>'></iframe>
+                    <iframe class="w-full h-56 rounded-xl border border-gray-200 shadow-sm" loading="lazy" srcdoc='<!DOCTYPE html><html><head><style>body{margin:0;background:#fff7ed;font-family:Inter,sans-serif;color:#9a3412;} .wrap{padding:12px} .row{display:flex;align-items:center;gap:8px;margin-top:6px;} .badge{padding:4px 8px;border-radius:10px;background:#ffedd5;font-size:11px;font-weight:700;} .bar{flex:1;height:10px;border-radius:999px;background:linear-gradient(90deg,#f97316,#facc15);} </style></head><body><div class="wrap"><div style="font-weight:900;">Heat month</div><div class="row"><span class="badge">Week 1</span><div class="bar" style="width:70%;"></div></div><div class="row"><span class="badge">Week 2</span><div class="bar" style="width:90%;background:linear-gradient(90deg,#22c55e,#10b981);"></div></div><div class="row"><span class="badge">Week 3</span><div class="bar" style="width:50%;background:linear-gradient(90deg,#6366f1,#22d3ee);"></div></div><div class="row"><span class="badge">Week 4</span><div class="bar" style="width:40%;background:linear-gradient(90deg,#f472b6,#a855f7);"></div></div></div></body></html>'></iframe>
+                    <iframe class="w-full h-56 rounded-xl border border-gray-200 shadow-sm" loading="lazy" srcdoc='<!DOCTYPE html><html><head><style>body{margin:0;background:#f8fafc;font-family:Inter,sans-serif;} .wrap{padding:12px} .timeline{border-left:2px solid #e2e8f0;padding-left:10px;} .item{margin-bottom:10px;} .date{font-size:11px;color:#94a3b8;} .title{font-weight:800;color:#0f172a;} </style></head><body><div class="wrap"><div style="font-weight:900;margin-bottom:6px;">Agenda-first month</div><div class="timeline"><div class="item"><div class="date">Nov 3</div><div class="title">Board meeting</div></div><div class="item"><div class="date">Nov 12</div><div class="title">Release candidate</div></div><div class="item"><div class="date">Nov 23</div><div class="title">Holiday block</div></div><div class="item"><div class="date">Dec 3</div><div class="title">Team summit</div></div></div></div></body></html>'></iframe>
+                    <iframe class="w-full h-56 rounded-xl border border-gray-200 shadow-sm" loading="lazy" srcdoc='<!DOCTYPE html><html><head><style>body{margin:0;background:#0b1120;color:#e2e8f0;font-family:Inter,sans-serif;} .wrap{padding:12px} .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;} .cell{border:1px solid #1e293b;border-radius:10px;padding:6px;height:70px;background:#0f172a;} .dot{width:6px;height:6px;border-radius:50%;display:inline-block;margin-right:4px;} .label{color:#94a3b8;font-size:11px;} </style></head><body><div class="wrap"><div style="font-weight:900;margin-bottom:6px;">Dark month</div><div class="grid"><div class="cell"><div class="label">1</div><div><span class="dot" style="background:#22d3ee;"></span><span class="dot" style="background:#f472b6;"></span></div></div><div class="cell"><div class="label">2</div></div><div class="cell"><div class="label">3</div></div><div class="cell"><div class="label">4</div></div><div class="cell"><div class="label">5</div></div><div class="cell"><div class="label">6</div></div><div class="cell"><div class="label">7</div></div></div></div></body></html>'></iframe>
+                    <iframe class="w-full h-56 rounded-xl border border-gray-200 shadow-sm" loading="lazy" srcdoc='<!DOCTYPE html><html><head><style>body{margin:0;background:#ffffff;font-family:Inter,sans-serif;} .wrap{padding:12px} .flex{display:flex;gap:10px;} .left{flex:2;border:1px solid #e5e7eb;border-radius:12px;padding:10px;background:#f8fafc;} .right{flex:1;border:1px solid #e5e7eb;border-radius:12px;padding:10px;background:#fff;} .badge{display:inline-block;padding:3px 6px;border-radius:8px;background:#dbeafe;color:#1d4ed8;font-weight:700;font-size:10px;} </style></head><body><div class="wrap"><div style="font-weight:900;margin-bottom:6px;">Split month</div><div class="flex"><div class="left"><div class="badge">Calendar</div><p style="font-size:12px;color:#475569;margin-top:6px;">Full grid lives here…</p></div><div class="right"><div class="badge" style="background:#dcfce7;color:#166534;">Agenda</div><p style="font-size:12px;color:#475569;margin-top:6px;">Pinned highlights</p></div></div></div></body></html>'></iframe>
+                </div>
+            </div>
+
+            <!-- Year -->
+            <div class="space-y-4">
+                <div class="flex items-center gap-2">
+                    <span class="text-sm font-bold text-gray-900">Year layouts</span>
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">6 versions</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <iframe class="w-full h-56 rounded-xl border border-gray-200 shadow-sm" loading="lazy" srcdoc='<!DOCTYPE html><html><head><style>body{margin:0;background:#f1f5f9;font-family:Inter,sans-serif;} .wrap{padding:10px} .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;} .box{background:white;border:1px solid #e2e8f0;border-radius:10px;padding:8px;} .box h4{margin:0;font-size:12px;color:#475569;} .dots{display:flex;gap:4px;margin-top:6px;} .dot{width:6px;height:6px;border-radius:50%;background:#1d4ed8;} </style></head><body><div class="wrap"><div style="font-weight:900;margin-bottom:6px;">Quarter tiles</div><div class="grid"><div class="box"><h4>Q1</h4><div class="dots"><div class="dot"></div><div class="dot" style="background:#f97316;"></div></div></div><div class="box"><h4>Q2</h4><div class="dots"><div class="dot" style="background:#22c55e;"></div></div></div><div class="box"><h4>Q3</h4><div class="dots"><div class="dot" style="background:#e11d48;"></div></div></div><div class="box"><h4>Q4</h4><div class="dots"><div class="dot" style="background:#a855f7;"></div></div></div></div></div></body></html>'></iframe>
+                    <iframe class="w-full h-56 rounded-xl border border-gray-200 shadow-sm" loading="lazy" srcdoc='<!DOCTYPE html><html><head><style>body{margin:0;background:#0f172a;color:#e2e8f0;font-family:Inter,sans-serif;} .wrap{padding:12px} .mini{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;} .cell{border:1px solid #1e293b;border-radius:10px;padding:6px;background:#111827;} .cell h4{margin:0;font-size:11px;color:#cbd5e1;} .bar{height:8px;border-radius:999px;background:linear-gradient(90deg,#22d3ee,#6366f1);margin-top:6px;} </style></head><body><div class="wrap"><div style="font-weight:900;">Micro months</div><div class="mini"><div class="cell"><h4>Jan</h4><div class="bar" style="width:60%;"></div></div><div class="cell"><h4>Feb</h4><div class="bar" style="width:30%;background:linear-gradient(90deg,#f59e0b,#ef4444);"></div></div><div class="cell"><h4>Mar</h4><div class="bar" style="width:80%;"></div></div><div class="cell"><h4>Apr</h4><div class="bar" style="width:45%;"></div></div><div class="cell"><h4>May</h4><div class="bar" style="width:70%;background:linear-gradient(90deg,#22c55e,#14b8a6);"></div></div><div class="cell"><h4>Jun</h4><div class="bar" style="width:25%;"></div></div></div></div></body></html>'></iframe>
+                    <iframe class="w-full h-56 rounded-xl border border-gray-200 shadow-sm" loading="lazy" srcdoc='<!DOCTYPE html><html><head><style>body{margin:0;background:#fff7ed;font-family:Inter,sans-serif;color:#9a3412;} .wrap{padding:12px} .timeline{border-left:2px solid #f59e0b;padding-left:10px;} .item{margin-bottom:10px;} .item h4{margin:0;font-size:12px;color:#b45309;} .item p{margin:2px 0;font-size:11px;color:#92400e;} </style></head><body><div class="wrap"><div style="font-weight:900;">Year storyline</div><div class="timeline"><div class="item"><h4>Q1</h4><p>Platform hardening</p></div><div class="item"><h4>Q2</h4><p>Mobile polish</p></div><div class="item"><h4>Q3</h4><p>Integrations wave</p></div><div class="item"><h4>Q4</h4><p>Growth levers</p></div></div></div></body></html>'></iframe>
+                    <iframe class="w-full h-56 rounded-xl border border-gray-200 shadow-sm" loading="lazy" srcdoc='<!DOCTYPE html><html><head><style>body{margin:0;background:#f8fafc;font-family:Inter,sans-serif;} .wrap{padding:12px} .matrix{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;} .card{background:white;border:1px solid #e5e7eb;border-radius:12px;padding:10px;} .card h4{margin:0;font-size:12px;color:#475569;} .list{margin-top:6px;font-size:11px;color:#0f172a;font-weight:700;} </style></head><body><div class="wrap"><div style="font-weight:900;">Themes</div><div class="matrix"><div class="card"><h4>Reliability</h4><div class="list">Latency • SLOs</div></div><div class="card"><h4>Collab</h4><div class="list">Comments • Presence</div></div><div class="card"><h4>Growth</h4><div class="list">Onboarding • Invites</div></div><div class="card"><h4>Mobile</h4><div class="list">PWA • Offline</div></div><div class="card"><h4>Integrations</h4><div class="list">Google • Outlook</div></div><div class="card"><h4>Data</h4><div class="list">Export • API</div></div></div></div></body></html>'></iframe>
+                    <iframe class="w-full h-56 rounded-xl border border-gray-200 shadow-sm" loading="lazy" srcdoc='<!DOCTYPE html><html><head><style>body{margin:0;background:#0b1120;color:#e2e8f0;font-family:Inter,sans-serif;} .wrap{padding:12px} .rings{display:flex;gap:10px;align-items:center;} .circle{width:60px;height:60px;border-radius:50%;border:6px solid #22d3ee;position:relative;} .circle:after{content:"";position:absolute;inset:8px;border-radius:50%;border:6px solid #6366f1;} .meta{font-size:12px;color:#cbd5e1;} </style></head><body><div class="wrap"><div style="font-weight:900;">Year radar</div><div class="rings"><div class="circle"></div><div class="meta">Visual cue for coverage density per quarter.</div></div></div></body></html>'></iframe>
+                    <iframe class="w-full h-56 rounded-xl border border-gray-200 shadow-sm" loading="lazy" srcdoc='<!DOCTYPE html><html><head><style>body{margin:0;background:#ffffff;font-family:Inter,sans-serif;} .wrap{padding:12px} .row{display:flex;gap:6px;align-items:center;margin-top:6px;} .tag{padding:4px 8px;border-radius:10px;background:#e0f2fe;color:#075985;font-size:11px;font-weight:700;} .bar{flex:1;height:12px;border-radius:999px;background:linear-gradient(90deg,#22c55e,#84cc16);} </style></head><body><div class="wrap"><div style="font-weight:900;">Roadmap bands</div><div class="row"><span class="tag">Infra</span><div class="bar" style="width:70%;"></div></div><div class="row"><span class="tag" style="background:#fee2e2;color:#b91c1c;">UI</span><div class="bar" style="width:50%;background:linear-gradient(90deg,#6366f1,#22d3ee);"></div></div><div class="row"><span class="tag" style="background:#dcfce7;color:#166534;">Growth</span><div class="bar" style="width:40%;background:linear-gradient(90deg,#f97316,#facc15);"></div></div></div></body></html>'></iframe>
+                </div>
+            </div>
+
+            <!-- Agenda -->
+            <div class="space-y-4">
+                <div class="flex items-center gap-2">
+                    <span class="text-sm font-bold text-gray-900">Agenda layouts</span>
+                    <span class="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200">6 versions</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <iframe class="w-full h-56 rounded-xl border border-gray-200 shadow-sm" loading="lazy" srcdoc='<!DOCTYPE html><html><head><style>body{margin:0;background:#f8fafc;font-family:Inter,sans-serif;} .wrap{padding:12px} .item{background:white;border:1px solid #e5e7eb;border-radius:12px;padding:10px;margin-top:6px;} .time{font-size:11px;color:#94a3b8;} .title{font-weight:800;color:#0f172a;} </style></head><body><div class="wrap"><div style="font-weight:900;">Agenda stack</div><div class="item"><div class="title">Board meeting</div><div class="time">Nov 12 • 2h</div></div><div class="item"><div class="title">Release candidate</div><div class="time">Nov 28 • 1h</div></div><div class="item"><div class="title">Team summit</div><div class="time">Dec 3 • All day</div></div></div></body></html>'></iframe>
+                    <iframe class="w-full h-56 rounded-xl border border-gray-200 shadow-sm" loading="lazy" srcdoc='<!DOCTYPE html><html><head><style>body{margin:0;background:#0f172a;color:#e2e8f0;font-family:Inter,sans-serif;} .wrap{padding:12px} .row{display:flex;align-items:center;gap:10px;margin-top:8px;} .dot{width:10px;height:10px;border-radius:50%;background:#22d3ee;} .info{flex:1;} .time{font-size:11px;color:#94a3b8;} </style></head><body><div class="wrap"><div style="font-weight:900;">Minimal agenda</div><div class="row"><div class="dot"></div><div class="info"><div style="font-weight:800;">Onboarding flow</div><div class="time">Nov 14 • 45m</div></div></div><div class="row"><div class="dot" style="background:#a855f7;"></div><div class="info"><div style="font-weight:800;">Revenue review</div><div class="time">Nov 18 • 1h</div></div></div><div class="row"><div class="dot" style="background:#f97316;"></div><div class="info"><div style="font-weight:800;">Launch prep</div><div class="time">Nov 23 • 90m</div></div></div></div></body></html>'></iframe>
+                    <iframe class="w-full h-56 rounded-xl border border-gray-200 shadow-sm" loading="lazy" srcdoc='<!DOCTYPE html><html><head><style>body{margin:0;background:#fff7ed;font-family:Inter,sans-serif;color:#9a3412;} .wrap{padding:12px} .card{background:white;border:1px solid #fed7aa;border-radius:12px;padding:10px;margin-top:8px;box-shadow:0 8px 20px rgba(251,146,60,0.12);} .card h4{margin:0;font-size:14px;color:#b45309;} .card p{margin:2px 0;font-size:12px;color:#92400e;} </style></head><body><div class="wrap"><div style="font-weight:900;">Agenda cards</div><div class="card"><h4>Executive sync</h4><p>Nov 15 • 60m • Zoom</p></div><div class="card"><h4>Design showcase</h4><p>Nov 19 • 30m • Loom</p></div><div class="card"><h4>Hiring loop</h4><p>Nov 21 • 2h • Office</p></div></div></body></html>'></iframe>
+                    <iframe class="w-full h-56 rounded-xl border border-gray-200 shadow-sm" loading="lazy" srcdoc='<!DOCTYPE html><html><head><style>body{margin:0;background:#f1f5f9;font-family:Inter,sans-serif;} .wrap{padding:12px} .table{width:100%;border-collapse:collapse;font-size:12px;} th,td{padding:6px;border-bottom:1px solid #e2e8f0;text-align:left;} th{color:#475569;text-transform:uppercase;letter-spacing:.06em;font-size:11px;} td strong{color:#0f172a;} </style></head><body><div class="wrap"><div style="font-weight:900;margin-bottom:6px;">Agenda table</div><table class="table"><thead><tr><th>Date</th><th>Event</th><th>Duration</th></tr></thead><tbody><tr><td>Nov 12</td><td><strong>Board</strong></td><td>2h</td></tr><tr><td>Nov 18</td><td><strong>Revenue review</strong></td><td>1h</td></tr><tr><td>Nov 23</td><td><strong>Launch prep</strong></td><td>90m</td></tr><tr><td>Dec 3</td><td><strong>Summit</strong></td><td>All day</td></tr></tbody></table></div></body></html>'></iframe>
+                    <iframe class="w-full h-56 rounded-xl border border-gray-200 shadow-sm" loading="lazy" srcdoc='<!DOCTYPE html><html><head><style>body{margin:0;background:#0b1120;color:#e2e8f0;font-family:Inter,sans-serif;} .wrap{padding:12px} .badge{padding:4px 8px;border-radius:10px;background:#1e293b;border:1px solid #334155;font-size:11px;} .panel{margin-top:8px;padding:10px;border:1px solid #1e293b;border-radius:12px;background:#111827;} .panel h4{margin:0;font-size:13px;} .panel p{margin:2px 0;font-size:11px;color:#94a3b8;} </style></head><body><div class="wrap"><div class="badge">Agenda+</div><div class="panel"><h4>Clips</h4><p>Attach Looms / PDFs</p></div><div class="panel"><h4>Decisions</h4><p>Log decisions inline</p></div><div class="panel"><h4>Follow-ups</h4><p>Auto-pipe to tasks</p></div></div></body></html>'></iframe>
+                    <iframe class="w-full h-56 rounded-xl border border-gray-200 shadow-sm" loading="lazy" srcdoc='<!DOCTYPE html><html><head><style>body{margin:0;background:#ffffff;font-family:Inter,sans-serif;} .wrap{padding:12px} .lane{display:grid;grid-template-columns:90px 1fr;gap:8px;align-items:center;margin-top:6px;} .slot{background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:8px;} .time{font-size:11px;color:#94a3b8;text-align:right;} .slot h4{margin:0;font-size:13px;color:#0f172a;} .slot p{margin:2px 0;font-size:11px;color:#475569;} </style></head><body><div class="wrap"><div style="font-weight:900;">Two-column agenda</div><div class="lane"><div class="time">Mon</div><div class="slot"><h4>Kickoff</h4><p>9:00</p></div></div><div class="lane"><div class="time">Tue</div><div class="slot"><h4>Research</h4><p>11:00</p></div></div><div class="lane"><div class="time">Wed</div><div class="slot"><h4>Build</h4><p>All day</p></div></div><div class="lane"><div class="time">Thu</div><div class="slot"><h4>QA</h4><p>13:00</p></div></div><div class="lane"><div class="time">Fri</div><div class="slot"><h4>Ship</h4><p>15:00</p></div></div></div></body></html>'></iframe>
+                </div>
+            </div>
+        </section>
+
+    </div>
+
+    <script>
+        // Init Lucide icons
+        lucide.createIcons();
+
+        let currentContext = 'popover'; // 'popover' or 'editor'
+        let currentVariant = 'classic';
+
+        function setContext(ctx) {
+            currentContext = ctx;
+            
+            // Update Buttons
+            document.getElementById('ctx-popover').className = ctx === 'popover' 
+                ? "px-4 py-1 rounded-full text-xs font-bold uppercase tracking-wider transition-all context-btn bg-gray-800 text-white"
+                : "px-4 py-1 rounded-full text-xs font-bold uppercase tracking-wider transition-all context-btn text-gray-500 hover:bg-gray-100";
+            
+            document.getElementById('ctx-editor').className = ctx === 'editor'
+                ? "px-4 py-1 rounded-full text-xs font-bold uppercase tracking-wider transition-all context-btn bg-gray-800 text-white"
+                : "px-4 py-1 rounded-full text-xs font-bold uppercase tracking-wider transition-all context-btn text-gray-500 hover:bg-gray-100";
+
+            // Toggle Container Visibility
+            if (ctx === 'popover') {
+                document.getElementById('popover-container').classList.remove('hidden');
+                document.getElementById('editor-container').classList.add('hidden');
+            } else {
+                document.getElementById('popover-container').classList.add('hidden');
+                document.getElementById('editor-container').classList.remove('hidden');
+            }
+
+            // Re-apply variant for the new context
+            setVariant(currentVariant);
+        }
+
+        function setVariant(variant) {
+            currentVariant = variant;
+
+            // Hide all variants in CURRENT context
+            const prefix = currentContext === 'popover' ? 'popover-' : 'editor-';
+            
+            // Hide ALL variants first (to be safe)
+            document.querySelectorAll('.design-variant').forEach(el => {
+                el.classList.add('hidden');
+            });
+            
+            // Reset variant buttons
+            document.querySelectorAll('.variant-btn').forEach(btn => {
+                btn.classList.remove('bg-blue-600', 'text-white', 'bg-indigo-600', 'bg-purple-600', 'bg-gray-800');
+                if(btn.id === 'btn-dark') {
+                    btn.classList.add('text-gray-800');
+                    btn.classList.remove('text-white');
+                }
+            });
+
+            // Show selected variant
+            const targetId = prefix + variant;
+            const targetEl = document.getElementById(targetId);
+            if (targetEl) targetEl.classList.remove('hidden');
+
+            // Highlight button
+            const btn = document.getElementById('btn-' + variant);
+            btn.classList.add('text-white');
+            
+            // Update arrow color (Popover Only)
+            if (currentContext === 'popover') {
+                const arrow = document.getElementById('popover-arrow');
+                arrow.className = "w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[6px] absolute top-full left-1/2 -translate-x-1/2 mt-1";
+                
+                if (variant === 'classic') {
+                    btn.classList.add('bg-blue-600');
+                    arrow.classList.add('border-b-blue-600');
+                } else if (variant === 'minimal') {
+                    btn.classList.add('bg-gray-700');
+                    arrow.classList.add('border-b-white');
+                } else if (variant === 'modern') {
+                    btn.classList.add('bg-indigo-600');
+                    arrow.classList.add('border-b-white');
+                } else if (variant === 'glass') {
+                    btn.classList.add('bg-purple-600');
+                    arrow.classList.add('hidden');
+                } else if (variant === 'dark') {
+                    btn.classList.add('bg-gray-900');
+                    btn.classList.remove('text-gray-800');
+                    arrow.classList.add('hidden');
+                }
+            } else {
+                // Editor button styling (simpler)
+                if (variant === 'classic') btn.classList.add('bg-blue-600');
+                else if (variant === 'minimal') btn.classList.add('bg-gray-700');
+                else if (variant === 'modern') btn.classList.add('bg-indigo-600');
+                else if (variant === 'glass') btn.classList.add('bg-purple-600');
+                else if (variant === 'dark') {
+                    btn.classList.add('bg-gray-900');
+                    btn.classList.remove('text-gray-800');
+                }
+            }
+        }
+    </script>
+</body>
+</html>

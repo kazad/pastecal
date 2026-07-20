@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PasteCal View Designs</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            /* Base Theme Variables */
+            --bg-app: #ffffff;
+            --bg-panel: #f8f9fa;
+            --border-color: #e5e7eb;
+            --text-primary: #1f2937;
+            --text-secondary: #6b7280;
+            --accent-color: #2563eb;
+            
+            /* Geometry */
+            --cell-spacing: 0px;
+            --cell-radius: 0px;
+            --container-radius: 0px;
+            --container-padding: 0px;
+            
+            /* Shadows */
+            --card-shadow: none;
+            
+            /* Grid Lines */
+            --grid-line-color: #e5e7eb;
+            --grid-line-width: 1px;
+        }
+
+        body {
+            background-color: #f3f4f6; /* Demo background */
+            color: var(--text-primary);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        /* The Themed Container */
+        .theme-container {
+            background-color: var(--bg-app);
+            border-radius: var(--container-radius);
+            padding: var(--container-padding);
+            box-shadow: var(--card-shadow);
+            height: 800px;
+            display: flex;
+            flex-direction: column;
+            transition: all 0.3s ease;
+        }
+
+        /* Grid System */
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: var(--cell-spacing);
+            background-color: var(--bg-app); /* Gap color matches app bg usually, or border color if gap > 0 */
+            border: var(--grid-line-width) solid var(--grid-line-color);
+            flex: 1;
+        }
+
+        /* In "Gap" modes, the background of the grid container acts as the border lines if gap > 0 */
+        .calendar-grid.gap-mode {
+            background-color: var(--grid-line-color);
+            border: none;
+        }
+
+        .calendar-cell {
+            background-color: var(--bg-panel);
+            border-radius: var(--cell-radius);
+            position: relative;
+            min-height: 100px;
+            padding: 0.5rem;
+            /* Standard borders if not using gap mode */
+            border-right: var(--grid-line-width) solid var(--grid-line-color);
+            border-bottom: var(--grid-line-width) solid var(--grid-line-color);
+        }
+        
+        .gap-mode .calendar-cell {
+            border: none; /* Gaps handle separation */
+        }
+
+        .event-pill {
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-size: 12px;
+            margin-bottom: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        .event-pill:hover {
+            transform: scale(1.02);
+        }
+
+    </style>
+</head>
+<body class="p-8 flex flex-col items-center">
+
+    <div class="mb-6 text-center">
+        <h1 class="text-2xl font-bold text-gray-800">View Design Playground</h1>
+        <p class="text-gray-500">Explore layout and styling variations</p>
+    </div>
+
+    <!-- Theme Switcher -->
+    <div class="flex gap-2 mb-8 bg-white p-2 rounded-full shadow-lg border border-gray-200">
+        <button onclick="setTheme('classic')" class="theme-btn px-4 py-2 rounded-full text-sm font-bold bg-gray-900 text-white">Classic</button>
+        <button onclick="setTheme('minimal')" class="theme-btn px-4 py-2 rounded-full text-sm font-medium text-gray-600 hover:bg-gray-100">Minimal</button>
+        <button onclick="setTheme('cards')" class="theme-btn px-4 py-2 rounded-full text-sm font-medium text-gray-600 hover:bg-gray-100">Cards</button>
+        <button onclick="setTheme('linear')" class="theme-btn px-4 py-2 rounded-full text-sm font-medium text-gray-600 hover:bg-gray-100">Linear</button>
+        <button onclick="setTheme('glass')" class="theme-btn px-4 py-2 rounded-full text-sm font-medium text-gray-600 hover:bg-gray-100">Glass</button>
+    </div>
+
+    <!-- Main Calendar Container -->
+    <div class="w-full max-w-6xl theme-container shadow-2xl" id="calendar-root">
+        
+        <!-- Toolbar -->
+        <div class="flex justify-between items-center p-4 border-b border-[var(--grid-line-color)] mb-0" id="toolbar">
+            <div class="flex items-center gap-4">
+                <div class="flex items-center gap-1 bg-[var(--bg-panel)] rounded-md p-1 border border-[var(--border-color)]">
+                    <button class="p-1 hover:bg-[var(--bg-app)] rounded text-[var(--text-secondary)]"><i data-lucide="chevron-left" class="w-4 h-4"></i></button>
+                    <span class="text-xs font-bold px-2 uppercase text-[var(--text-secondary)]">Today</span>
+                    <button class="p-1 hover:bg-[var(--bg-app)] rounded text-[var(--text-secondary)]"><i data-lucide="chevron-right" class="w-4 h-4"></i></button>
+                </div>
+                <h2 class="text-xl font-semibold text-[var(--text-primary)]">November 2025</h2>
+            </div>
+            <div class="flex gap-1 bg-[var(--bg-panel)] p-1 rounded-md border border-[var(--border-color)]">
+                <button class="px-3 py-1 text-sm font-medium rounded bg-[var(--bg-app)] shadow-sm text-[var(--text-primary)]">Month</button>
+                <button class="px-3 py-1 text-sm font-medium rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)]">Week</button>
+                <button class="px-3 py-1 text-sm font-medium rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)]">Day</button>
+            </div>
+        </div>
+
+        <!-- Days Header -->
+        <div class="grid grid-cols-7 border-b border-[var(--grid-line-color)] bg-[var(--bg-panel)]" id="days-header">
+            <div class="p-2 text-center text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Sun</div>
+            <div class="p-2 text-center text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Mon</div>
+            <div class="p-2 text-center text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Tue</div>
+            <div class="p-2 text-center text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Wed</div>
+            <div class="p-2 text-center text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Thu</div>
+            <div class="p-2 text-center text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Fri</div>
+            <div class="p-2 text-center text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider">Sat</div>
+        </div>
+
+        <!-- Calendar Grid -->
+        <div class="calendar-grid" id="grid-container">
+            <!-- Generating cells via JS for ease -->
+        </div>
+
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        const themes = {
+            classic: {
+                '--bg-app': '#ffffff',
+                '--bg-panel': '#ffffff',
+                '--border-color': '#e5e7eb',
+                '--grid-line-color': '#e5e7eb',
+                '--grid-line-width': '1px',
+                '--cell-spacing': '0px',
+                '--cell-radius': '0px',
+                '--container-radius': '8px',
+                '--container-padding': '0px',
+                '--card-shadow': '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+                'gapMode': false
+            },
+            minimal: {
+                '--bg-app': '#ffffff',
+                '--bg-panel': '#ffffff',
+                '--border-color': 'transparent',
+                '--grid-line-color': '#f3f4f6',
+                '--grid-line-width': '1px',
+                '--cell-spacing': '0px',
+                '--cell-radius': '0px',
+                '--container-radius': '0px',
+                '--container-padding': '0px',
+                '--card-shadow': 'none',
+                'gapMode': false
+            },
+            cards: {
+                '--bg-app': '#f3f4f6',
+                '--bg-panel': '#ffffff',
+                '--border-color': 'transparent',
+                '--grid-line-color': 'transparent',
+                '--grid-line-width': '0px',
+                '--cell-spacing': '8px',
+                '--cell-radius': '12px',
+                '--container-radius': '16px',
+                '--container-padding': '16px',
+                '--card-shadow': 'none',
+                'gapMode': true
+            },
+            linear: {
+                '--bg-app': '#18181b',
+                '--bg-panel': '#27272a',
+                '--border-color': '#3f3f46',
+                '--grid-line-color': '#3f3f46',
+                '--grid-line-width': '1px',
+                '--text-primary': '#f4f4f5',
+                '--text-secondary': '#a1a1aa',
+                '--cell-spacing': '0px',
+                '--cell-radius': '0px',
+                '--container-radius': '0px',
+                '--container-padding': '0px',
+                '--card-shadow': '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+                'gapMode': false
+            },
+            glass: {
+                '--bg-app': 'rgba(255, 255, 255, 0.4)',
+                '--bg-panel': 'rgba(255, 255, 255, 0.3)',
+                '--border-color': 'rgba(255,255,255,0.5)',
+                '--grid-line-color': 'rgba(255,255,255,0.2)',
+                '--grid-line-width': '1px',
+                '--text-primary': '#374151',
+                '--text-secondary': '#6b7280',
+                '--cell-spacing': '1px',
+                '--cell-radius': '0px',
+                '--container-radius': '24px',
+                '--container-padding': '0px',
+                '--card-shadow': '0 8px 32px 0 rgba(31, 38, 135, 0.15)',
+                'backdrop-filter': 'blur(12px)',
+                'gapMode': true
+            }
+        };
+
+        // Sample Data
+        const events = [
+            { day: 3, title: "Kickoff", color: "bg-blue-500 text-white" },
+            { day: 3, title: "Design Review", color: "bg-indigo-100 text-indigo-700" },
+            { day: 5, title: "Lunch", color: "bg-green-100 text-green-700" },
+            { day: 8, title: "Weekly Sync", color: "bg-purple-100 text-purple-700" },
+            { day: 15, title: "Client Demo", color: "bg-red-500 text-white" },
+            { day: 15, title: "Prep", color: "bg-gray-100 text-gray-700" },
+            { day: 24, title: "Strategy Retreat", color: "bg-blue-600 text-white" },
+            { day: 24, title: "Dinner", color: "bg-yellow-100 text-yellow-800" },
+        ];
+
+        let currentView = 'Month';
+
+        function setView(view) {
+            currentView = view;
+            
+            // Update buttons
+            document.querySelectorAll('#toolbar button').forEach(btn => {
+                const text = btn.innerText.trim();
+                if (['Month', 'Week', 'Day'].includes(text)) {
+                    if (text === view) {
+                        btn.className = "px-3 py-1 text-sm font-medium rounded bg-[var(--bg-app)] shadow-sm text-[var(--text-primary)]";
+                    } else {
+                        btn.className = "px-3 py-1 text-sm font-medium rounded text-[var(--text-secondary)] hover:text-[var(--text-primary)]";
+                    }
+                }
+            });
+
+            renderGrid();
+        }
+
+        function renderGrid() {
+            const container = document.getElementById('grid-container');
+            const header = document.getElementById('days-header');
+            container.innerHTML = '';
+            
+            // Reset Header
+            if (currentView === 'Day') {
+                header.innerHTML = `
+                    <div class="p-2 text-center text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider w-16 border-r border-[var(--grid-line-color)]">Time</div>
+                    <div class="p-2 text-center text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider flex-1">Today</div>
+                `;
+                header.className = "flex border-b border-[var(--grid-line-color)] bg-[var(--bg-panel)]";
+                container.style.display = "flex";
+                container.style.flexDirection = "column";
+                container.style.overflowY = "auto";
+            } else if (currentView === 'Week') {
+                header.innerHTML = `<div class="w-16 border-r border-[var(--grid-line-color)] flex-shrink-0"></div>`;
+                const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                days.forEach(d => {
+                    header.innerHTML += `<div class="p-2 text-center text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider flex-1 border-r border-[var(--grid-line-color)]">${d}</div>`;
+                });
+                header.className = "flex border-b border-[var(--grid-line-color)] bg-[var(--bg-panel)] pr-4"; // pr-4 for scrollbar
+                container.style.display = "flex";
+                container.style.flexDirection = "column";
+                container.style.overflowY = "auto";
+            } else {
+                // Month View Reset
+                header.innerHTML = '';
+                const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                days.forEach(d => {
+                    const div = document.createElement('div');
+                    div.className = "p-2 text-center text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider";
+                    div.textContent = d;
+                    header.appendChild(div);
+                });
+                header.className = "grid grid-cols-7 border-b border-[var(--grid-line-color)] bg-[var(--bg-panel)]";
+                container.style.display = "grid";
+                container.style.gridTemplateColumns = "repeat(7, 1fr)";
+                container.style.overflowY = "hidden";
+            }
+
+            if (currentView === 'Month') {
+                // 5 days prev month, 30 days current, 7 days next
+                for(let i=0; i < 42; i++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'calendar-cell flex flex-col gap-1';
+                    
+                    // Date Number
+                    const dayNum = i < 5 ? 26 + i : (i < 35 ? i - 4 : i - 34);
+                    const isCurrent = i >= 5 && i < 35;
+                    
+                    const numSpan = document.createElement('span');
+                    numSpan.textContent = dayNum;
+                    numSpan.className = `text-xs font-medium ml-auto w-6 h-6 flex items-center justify-center rounded-full ${isCurrent ? 'text-[var(--text-secondary)]' : 'text-gray-300 opacity-50'}`;
+                    
+                    if (isCurrent && dayNum === 24) { // Mock "Today"
+                        numSpan.className = "text-xs font-bold ml-auto w-6 h-6 flex items-center justify-center rounded-full bg-blue-600 text-white shadow-sm";
+                    }
+                    
+                    cell.appendChild(numSpan);
+
+                    // Events
+                    if (isCurrent) {
+                        const dayEvents = events.filter(e => e.day === dayNum);
+                        dayEvents.forEach(evt => {
+                            const pill = document.createElement('div');
+                            pill.className = `event-pill ${evt.color} font-medium`;
+                            pill.textContent = evt.title;
+                            cell.appendChild(pill);
+                        });
+                    }
+
+                    container.appendChild(cell);
+                }
+            } 
+            else {
+                // Week or Day View (Time Grid)
+                const hours = 24;
+                const cols = currentView === 'Week' ? 7 : 1;
+                
+                // Render Time Grid Container
+                const gridBody = document.createElement('div');
+                gridBody.className = "flex relative min-h-[1200px]"; // Scrollable area
+                
+                // Time Column
+                const timeCol = document.createElement('div');
+                timeCol.className = "w-16 border-r border-[var(--grid-line-color)] flex-shrink-0 bg-[var(--bg-panel)]";
+                for(let h=0; h<hours; h++) {
+                    const row = document.createElement('div');
+                    row.className = "h-[50px] text-xs text-[var(--text-secondary)] text-right pr-2 pt-[-6px]";
+                    row.innerHTML = `<span class="-mt-2 block">${h === 0 ? '12 AM' : (h > 12 ? (h-12)+' PM' : h + ' AM')}</span>`;
+                    timeCol.appendChild(row);
+                }
+                gridBody.appendChild(timeCol);
+
+                // Day Columns
+                for(let c=0; c<cols; c++) {
+                    const dayCol = document.createElement('div');
+                    dayCol.className = "flex-1 border-r border-[var(--grid-line-color)] relative bg-[var(--bg-app)]";
+                    
+                    // Hour Rows
+                    for(let h=0; h<hours; h++) {
+                        const row = document.createElement('div');
+                        row.className = "h-[50px] border-b border-[var(--grid-line-color)]";
+                        dayCol.appendChild(row);
+                    }
+
+                    // Mock Events in Week View (Wed = Index 3, Fri = Index 5)
+                    if (currentView === 'Week') {
+                        if (c === 3) { // Wed
+                            const evt = document.createElement('div');
+                            evt.className = "absolute left-1 right-1 top-[500px] h-[75px] bg-blue-600 text-white rounded p-1 text-xs font-bold shadow-sm z-10";
+                            evt.textContent = "Strategy Retreat";
+                            dayCol.appendChild(evt);
+                        }
+                    } else {
+                        // Day View (Today)
+                        const evt = document.createElement('div');
+                        evt.className = "absolute left-2 right-2 top-[500px] h-[75px] bg-blue-600 text-white rounded p-2 text-sm font-bold shadow-md z-10";
+                        evt.textContent = "Strategy Retreat";
+                        dayCol.appendChild(evt);
+                    }
+
+                    gridBody.appendChild(dayCol);
+                }
+                
+                container.appendChild(gridBody);
+            }
+        }
+
+        function setTheme(name) {
+            const root = document.documentElement;
+            const theme = themes[name];
+            const grid = document.getElementById('grid-container');
+            const calRoot = document.getElementById('calendar-root');
+
+            // Apply Variables
+            for (const [key, value] of Object.entries(theme)) {
+                if (key.startsWith('--')) {
+                    root.style.setProperty(key, value);
+                }
+            }
+
+            // Mode Switching
+            if (theme.gapMode && currentView === 'Month') {
+                grid.classList.add('gap-mode');
+            } else {
+                grid.classList.remove('gap-mode');
+            }
+
+            // Special Glass handling
+            if (name === 'glass') {
+                calRoot.style.backdropFilter = "blur(20px)";
+                calRoot.style.border = "1px solid rgba(255,255,255,0.5)";
+                document.body.style.backgroundImage = "linear-gradient(135deg, #667eea 0%, #764ba2 100%)";
+            } else {
+                calRoot.style.backdropFilter = "none";
+                calRoot.style.border = "none";
+                document.body.style.backgroundImage = "none";
+                document.body.style.backgroundColor = name === 'linear' ? '#000' : '#f3f4f6';
+            }
+
+            // Button styling
+            document.querySelectorAll('.theme-btn').forEach(btn => {
+                if (btn.textContent.toLowerCase() === name) {
+                    btn.className = 'theme-btn px-4 py-2 rounded-full text-sm font-bold bg-blue-600 text-white shadow-md transform scale-105 transition-all';
+                } else {
+                    btn.className = 'theme-btn px-4 py-2 rounded-full text-sm font-medium text-gray-500 hover:bg-gray-200 transition-all';
+                }
+            });
+        }
+
+        // Attach event listeners to toolbar
+        document.querySelectorAll('#toolbar button').forEach(btn => {
+            const text = btn.innerText.trim();
+            if (['Month', 'Week', 'Day'].includes(text)) {
+                btn.onclick = () => setView(text);
+            }
+        });
+
+        // Init
+        renderGrid();
+        setTheme('classic');
+
+    </script>
+</body>
+</html>
