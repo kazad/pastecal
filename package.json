@@ -4,7 +4,9 @@
   "private": true,
   "scripts": {
     "test:smoke": "bash test/smoke-llm.sh",
-    "test:unit": "node --test test/unit/*.test.js",
+    "test:unit": "npm run test:unit:fast && npm run test:unit:emulator",
+    "test:unit:fast": "node --test test/unit/event-model.test.js test/unit/ics.test.js test/unit/stress.test.js",
+    "test:unit:emulator": "bash test/run-emulator-tests.sh",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:install": "playwright install chromium",

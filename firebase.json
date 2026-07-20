@@ -51,6 +51,9 @@
     "functions": {
       "port": 5101
     },
+    "database": {
+      "port": 9000
+    },
     "hosting": {
       "port": 5103
     },
