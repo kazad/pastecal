@@ -91,3 +91,34 @@ test('long description in the legacy popup does not clip its top on a short view
 
   await expect(page.getByText('Line 1: This is a long event description')).toBeInViewport();
 });
+
+// Regression test for a fix that overcorrected: the top-clipping fix above force-centers
+// EVERY popup vertically via .pc-clamp-top, regardless of whether it actually overflows.
+// A short popup (e.g. "Dentist Appointment", a one-line description) fits fine near its
+// event and should stay anchored close to it, not get dragged to the vertical center of
+// the viewport -- which reads as "the popup appears far away from the event" to a user.
+// Reproduces on a tall viewport, where the event (near the top of the month grid) and the
+// viewport's vertical center are far apart.
+test('short description popup stays anchored near its event, not force-centered', async ({ page }) => {
+  // A tall viewport makes the gap between an event near the top of the month grid and
+  // viewport-vertical-center large, which is what makes the force-centering bug visible.
+  await page.setViewportSize({ width: 2000, height: 1250 });
+  await page.goto('/test-popover-verify');
+  await page.waitForTimeout(1500);
+
+  const event = page.getByText('Dentist Appointment').first();
+  await expect(event).toBeVisible({ timeout: 10000 });
+  const eventBox = await event.boundingBox();
+
+  await event.click({ force: true });
+  await page.waitForTimeout(500);
+
+  const popup = page.locator('.e-quick-popup-wrapper');
+  await expect(popup).toBeVisible({ timeout: 5000 });
+  const popupBox = await popup.boundingBox();
+
+  // A popup that fits comfortably near its event shouldn't move far from it -- this event
+  // sits near row 2 of the month grid, so a popup dragged toward viewport-center would land
+  // multiple rows away, which is exactly what a user sees as "the popup is far from the event".
+  expect(Math.abs(popupBox.y - eventBox.y)).toBeLessThan(150);
+});

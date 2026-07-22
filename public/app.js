@@ -608,9 +608,35 @@ const CalendarVueApp = {
             // position: fixed + vertical centering via pure CSS, which sidesteps that
             // entirely since it participates in Syncfusion's own layout/paint pass instead
             // of fighting it after the fact.
+            //
+            // The class must only apply when the popup actually overflows -- applying it
+            // unconditionally force-centers every popup regardless of size, dragging a
+            // short popup (e.g. a one-line description) away from the event it belongs to
+            // even when it would have fit fine at Syncfusion's own position.
             const wrapper = args.element.closest('.e-quick-popup-wrapper');
             if (wrapper) {
-                wrapper.classList.add('pc-clamp-top');
+                const applyClampIfOverflowing = () => {
+                    const margin = 10;
+                    const rect = wrapper.getBoundingClientRect();
+                    const overflows = rect.top < margin || rect.bottom > window.innerHeight - margin;
+                    wrapper.classList.toggle('pc-clamp-top', overflows);
+                };
+
+                // popupOpen fires while the wrapper still carries its closed-state class
+                // (e-popup-close) and pre-open position -- Syncfusion applies its final
+                // position asynchronously as part of the open transition. Wait for the
+                // class to flip to e-popup-open before measuring for overflow.
+                if (wrapper.classList.contains('e-popup-open')) {
+                    applyClampIfOverflowing();
+                } else {
+                    const classObserver = new MutationObserver(() => {
+                        if (wrapper.classList.contains('e-popup-open')) {
+                            classObserver.disconnect();
+                            requestAnimationFrame(applyClampIfOverflowing);
+                        }
+                    });
+                    classObserver.observe(wrapper, { attributes: true, attributeFilter: ['class'] });
+                }
             }
         }
 
