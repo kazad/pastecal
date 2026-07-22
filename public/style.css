@@ -457,6 +457,14 @@ div#Schedule,
     overflow-y: auto;
 }
 
+/* Syncfusion sets user-select: none on the whole popup by default (presumably to guard
+   drag/resize interactions elsewhere in the scheduler), which cascades down and makes the
+   description -- plain read-only text with no drag affordance of its own -- impossible to
+   select or copy. */
+.e-quick-popup-wrapper .e-description-details {
+    user-select: text;
+}
+
 /* Year view: prevent double scrollbar by letting only the page scroll */
 .e-schedule .e-year-view .e-content-wrap {
     overflow: visible !important;

@@ -122,3 +122,30 @@ test('short description popup stays anchored near its event, not force-centered'
   // multiple rows away, which is exactly what a user sees as "the popup is far from the event".
   expect(Math.abs(popupBox.y - eventBox.y)).toBeLessThan(150);
 });
+
+// Regression test: Syncfusion's default popup styling sets user-select: none on
+// .e-quick-popup-wrapper, which cascades down to .e-description-details -- a user can't
+// select or copy any part of the description (e.g. to copy a phone number or address that
+// wasn't linkified), even though it's plain read-only text with no drag/resize affordance
+// that user-select: none would normally protect.
+test('description text in the legacy popup can be selected and copied', async ({ page }) => {
+  await page.goto('/test-popover-verify');
+  await page.waitForTimeout(1500);
+
+  const event = page.getByText('Conference Call').first();
+  await expect(event).toBeVisible({ timeout: 10000 });
+  await event.click({ force: true });
+  await page.waitForTimeout(500);
+
+  const description = page.locator('.e-description-details');
+  await expect(description).toBeVisible({ timeout: 5000 });
+
+  const userSelect = await description.evaluate(el => getComputedStyle(el).userSelect);
+  expect(userSelect, 'description text must be selectable, not user-select: none').not.toBe('none');
+
+  // Simulate an actual selection (double-click a word) and confirm the browser selection
+  // API reports non-empty text, not just that the CSS property changed.
+  await description.dblclick({ position: { x: 10, y: 5 } });
+  const selectedText = await page.evaluate(() => window.getSelection().toString());
+  expect(selectedText.length, 'double-click should select a word of description text').toBeGreaterThan(0);
+});
