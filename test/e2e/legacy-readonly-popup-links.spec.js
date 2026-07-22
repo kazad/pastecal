@@ -58,8 +58,36 @@ test('long description in the legacy popup stays within the viewport and scrolls
   const viewportHeight = page.viewportSize().height;
   const box = await popup.boundingBox();
   expect(box.height).toBeLessThanOrEqual(viewportHeight);
+  // Capping height alone isn't enough: Syncfusion positions the popup (often trying to
+  // vertically center it near the click target) based on its natural, pre-clamp height,
+  // so a shrunk popup can still end up with a negative `top` -- its header and first
+  // lines pushed above the viewport with no way to scroll back up to them.
+  expect(box.y, 'popup top must not be pushed above the viewport').toBeGreaterThanOrEqual(0);
+
+  const firstLine = page.getByText('Line 1: This is a long event description');
+  await expect(firstLine).toBeInViewport();
 
   const lastLine = page.getByText('Line 35: This is a long event description');
   await lastLine.scrollIntoViewIfNeeded();
   await expect(lastLine).toBeInViewport();
+});
+
+test('long description in the legacy popup does not clip its top on a short viewport', async ({ page }) => {
+  // A shorter viewport is more likely to trigger Syncfusion's vertical-centering math
+  // producing a large negative `top` for a tall popup.
+  await page.setViewportSize({ width: 1000, height: 620 });
+  await page.goto('/test-popover-verify');
+  await page.waitForTimeout(1500);
+
+  const event = page.getByText('Long Description Test').first();
+  await expect(event).toBeVisible({ timeout: 10000 });
+  await event.click({ force: true });
+  await page.waitForTimeout(500);
+
+  const popup = page.locator('.e-quick-popup-wrapper');
+  await expect(popup).toBeVisible({ timeout: 5000 });
+  const box = await popup.boundingBox();
+  expect(box.y, 'popup top must not be pushed above the viewport').toBeGreaterThanOrEqual(0);
+
+  await expect(page.getByText('Line 1: This is a long event description')).toBeInViewport();
 });

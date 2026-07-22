@@ -592,6 +592,27 @@ const CalendarVueApp = {
 
                 //setColor(args.data.Type);
             }
+
+            // Syncfusion positions the popup (top/left) based on its natural,
+            // pre-clamp height -- our CSS max-height on .e-quick-popup-wrapper then
+            // shrinks a long-description popup without updating that position, so a
+            // popup meant to be vertically centered near the click target can end up
+            // with a negative `top`, pushing its header off the top of the viewport
+            // with no way to scroll back up to it. Clamp after Syncfusion positions it.
+            const wrapper = args.element.closest('.e-quick-popup-wrapper');
+            if (wrapper) {
+                requestAnimationFrame(() => {
+                    const top = parseFloat(wrapper.style.top) || 0;
+                    if (top < 10) {
+                        wrapper.style.top = '10px';
+                    }
+                    const rect = wrapper.getBoundingClientRect();
+                    if (rect.bottom > window.innerHeight - 10) {
+                        const newTop = Math.max(10, window.innerHeight - 10 - rect.height);
+                        wrapper.style.top = `${newTop}px`;
+                    }
+                });
+            }
         }
 
         scheduleObj.appendTo('#Schedule');
