@@ -2,6 +2,7 @@ const functions = require('firebase-functions');
 const { onRequest, onCall } = require('firebase-functions/v2/https');
 const { onValueUpdated } = require("firebase-functions/v2/database");
 const admin = require('firebase-admin');
+const crypto = require('crypto');
 
 const isLocal = process.env.FUNCTIONS_EMULATOR === 'true';
 // Set by `firebase emulators:start --only database` and by our own test harness
@@ -31,6 +32,34 @@ if (usingDatabaseEmulator) {
 
 const DEFAULT_ROOT = "calendars";
 const READONLY_ROOT = "calendars_readonly";
+const STATS_ROOT = "calendar_stats";
+
+// Records ICS feed popularity/bandwidth per calendar so a bandwidth spike can be traced to a
+// specific calendar without digging through Cloud Logging (see the bandwidth investigation
+// that motivated this — RTDB egress jumped ~15x with no matching rise in request counts, and
+// there was no per-calendar breakdown anywhere to narrow it down).
+//
+// Must be awaited before the response is sent, not fire-and-forget: this function's instances
+// get frozen/recycled immediately after the HTTP response completes (observed directly —
+// "Container terminated on signal 6" landed right after a served response, and the write
+// initiated alongside it never reached the database), so anything not awaited can be silently
+// dropped. A failure here is logged but swallowed — a stats write must never fail the request.
+async function recordIcsStat(id, { bytes, wasNotModified }) {
+    const update = {
+        lastServedAt: admin.database.ServerValue.TIMESTAMP,
+        icsRequestCount: admin.database.ServerValue.increment(1),
+    };
+    if (wasNotModified) {
+        update.ics304Count = admin.database.ServerValue.increment(1);
+    } else {
+        update.bytesServedTotal = admin.database.ServerValue.increment(bytes);
+    }
+    try {
+        await admin.database().ref(STATS_ROOT).child(id).update(update);
+    } catch (err) {
+        console.error(`Failed to record ICS stat for ${id}:`, err);
+    }
+}
 
 // Calendar Data Service
 const CalendarService = {
@@ -274,12 +303,32 @@ exports.generateICSV2 = onRequest({ cors: true }, async (req, res) => {
         const cleanId = lookup.actualSlug;
         const isReadOnly = lookup.isReadOnly;
 
-        console.log('Generating ICS for calendar ID: path, id, readonly', req.path, cleanId, isReadOnly);
-
         const { data: calendarData } = await CalendarService.getCalendarData(cleanId, isReadOnly);
+
+        // ETag is a hash of the events data only, so it's stable across requests when
+        // nothing has changed and busts automatically the moment an event is added/edited/
+        // removed — this is what lets calendar-app pollers 304 instead of re-downloading the
+        // full feed every few minutes (the previous bandwidth spike investigation showed this
+        // route had no caching at all).
+        const etag = '"' + crypto.createHash('sha1').update(JSON.stringify(calendarData?.events ?? null)).digest('hex') + '"';
+        const userAgent = req.headers['user-agent'] || 'unknown';
+
+        if (req.headers['if-none-match'] === etag) {
+            console.log(`ICS 304: id=${cleanId} readonly=${isReadOnly} ua="${userAgent}"`);
+            await recordIcsStat(cleanId, { wasNotModified: true });
+            res.set('ETag', etag).set('Cache-Control', 'public, max-age=300').status(304).end();
+            return;
+        }
+
         const icsData = ICSService.generateICS(calendarData, cleanId);
 
-        res.set('Content-Type', 'text/calendar').send(icsData);
+        console.log(`ICS served: id=${cleanId} readonly=${isReadOnly} bytes=${icsData.length} ua="${userAgent}"`);
+        await recordIcsStat(cleanId, { bytes: icsData.length, wasNotModified: false });
+
+        res.set('Content-Type', 'text/calendar')
+            .set('ETag', etag)
+            .set('Cache-Control', 'public, max-age=300')
+            .send(icsData);
     } catch (err) {
         // A missing calendar is a client error, not a server fault. Returning 500 here made
         // subscribed calendar apps retry a deleted feed forever; 404 tells them to stop.
