@@ -9,9 +9,9 @@ test.describe('NativeCal Event Popover', () => {
     await expect(page.getByTestId('month-view-grid')).toBeVisible({ timeout: 10000 });
   });
 
-  async function createEventWithDescription(page, title, description) {
+  async function createEventWithDescription(page, title, description, cellIndex = 10) {
     const currentMonthCells = page.locator('.calendar-cell:not(.opacity-50)');
-    await currentMonthCells.nth(10).click();
+    await currentMonthCells.nth(cellIndex).click();
     await page.getByTestId('quick-create-more-details').click();
     await page.getByTestId('editor-title').fill(title);
     await page.getByTestId('editor-description').fill(description);
@@ -45,6 +45,20 @@ test.describe('NativeCal Event Popover', () => {
     const link = page.locator('[data-testid="popover-description"] a', { hasText: url });
     await expect(link).toBeVisible();
     await expect(link).toHaveAttribute('href', url);
+  });
+
+  test('popover widens for a long description and stays compact for a short one', async ({ page }) => {
+    const longDescription = Array.from({ length: 10 }, (_, i) => `Line ${i + 1} of a fairly long event description.`).join('\n');
+    await createEventWithDescription(page, 'Long Description Event', longDescription, 3);
+    const wideBox = await page.getByTestId('popover-title').locator('xpath=ancestor::div[contains(@class, "fixed")][1]').boundingBox();
+    await page.getByTestId('popover-close').click();
+    await page.waitForTimeout(300);
+
+    await createEventWithDescription(page, 'Short Description Event', 'Quick note.', 24);
+    const narrowBox = await page.getByTestId('popover-title').locator('xpath=ancestor::div[contains(@class, "fixed")][1]').boundingBox();
+
+    expect(wideBox.width, 'long description popover should be wider than the default').toBeGreaterThan(narrowBox.width);
+    expect(narrowBox.width, 'short description popover should stay at the compact default').toBeCloseTo(320, 0);
   });
 
 });

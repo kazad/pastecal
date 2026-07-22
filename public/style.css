@@ -433,6 +433,15 @@ div#Schedule,
     max-height: calc(100vh - 20px) !important;
 }
 
+/* Widen the popup for long descriptions (see .pc-wide added in app.js's popupOpen).
+   Mirrors nativecal's EventPopover, which widens from w-80 (320px) to w-[480px] under
+   the same threshold. Syncfusion's default popup is width: 365px AND max-width: 365px --
+   overriding width alone does nothing since max-width still clamps it back down. */
+.e-quick-popup-wrapper.pc-wide {
+    width: 480px !important;
+    max-width: 480px !important;
+}
+
 /* Syncfusion computes `top` from the popup's natural, pre-clamp height, so a popup
    shrunk by max-height above can still end up positioned with its top or bottom outside
    the viewport (mirrors the bug already fixed in nativecal's EventPopover). Override with

@@ -720,21 +720,29 @@ const CalendarVueApp = {
 
             this.popoverEvent = event;
             
+            // EventPopover.js widens itself past the default 320px for long descriptions
+            // (see LONG_DESCRIPTION_THRESHOLD there) -- this positioning math has to use
+            // the same width the popover will actually render at, or a wide popover for a
+            // long description can get centered/bounds-checked as if it were still 320px
+            // and end up pushed off the right edge of the viewport.
+            const LONG_DESCRIPTION_THRESHOLD = 140;
+            const popoverWidth = (event?.description?.length || 0) > LONG_DESCRIPTION_THRESHOLD ? 480 : 320;
+
             // Position logic
             let top = 0, left = 0;
             if (jsEvent && jsEvent.currentTarget) {
                 const rect = jsEvent.currentTarget.getBoundingClientRect();
                 top = rect.bottom + 10;
-                left = rect.left + (rect.width / 2) - 160; // Center (width 320)
-                
+                left = rect.left + (rect.width / 2) - (popoverWidth / 2); // Center
+
                 // Bounds check
                 if (left < 10) left = 10;
-                if (left + 320 > window.innerWidth) left = window.innerWidth - 330;
+                if (left + popoverWidth > window.innerWidth) left = window.innerWidth - popoverWidth - 10;
                 if (top + 200 > window.innerHeight) top = rect.top - 210; // Flip up if no space
             } else {
                 // Center screen
                 top = window.innerHeight / 2 - 100;
-                left = window.innerWidth / 2 - 160;
+                left = window.innerWidth / 2 - (popoverWidth / 2);
             }
 
             this.popoverPosition = { top, left };

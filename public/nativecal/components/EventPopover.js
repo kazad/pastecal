@@ -1,7 +1,8 @@
 const EventPopover = {
     template: /* html */ `
         <div v-if="visible"
-             class="fixed z-40 bg-1 rounded-lg shadow-xl border border-color-default w-80 flex flex-col"
+             class="fixed z-40 bg-1 rounded-lg shadow-xl border border-color-default flex flex-col"
+             :class="isLongDescription ? 'w-[480px]' : 'w-80'"
              :style="{ top: top + 'px', left: left + 'px', maxHeight: 'calc(100vh - 20px)' }">
              
              <!-- Close Button (positioned absolutely) -->
@@ -67,6 +68,13 @@ const EventPopover = {
             return props.timeFormat === '12' ? df.format(d, 'h:mm a') : df.format(d, 'HH:mm');
         };
 
+        // Widen the popup for long descriptions -- narrow-column wrapping makes a
+        // multi-paragraph description feel cramped. Short descriptions stay at the
+        // original compact width so a quick one-liner doesn't get an oversized card.
+        const LONG_DESCRIPTION_THRESHOLD = 140;
+        const isLongDescription = computed(() =>
+            (props.event?.description?.length || 0) > LONG_DESCRIPTION_THRESHOLD);
+
         const escapeHtml = (str) => str
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
@@ -87,6 +95,6 @@ const EventPopover = {
             });
         });
 
-        return { formatDate, formatTime, linkifiedDescription };
+        return { formatDate, formatTime, linkifiedDescription, isLongDescription };
     }
 };

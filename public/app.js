@@ -615,6 +615,13 @@ const CalendarVueApp = {
             // even when it would have fit fine at Syncfusion's own position.
             const wrapper = args.element.closest('.e-quick-popup-wrapper');
             if (wrapper) {
+                // Widen the popup for long descriptions -- narrow-column wrapping makes a
+                // multi-paragraph description feel cramped. Must run before the overflow
+                // clamp below, since widening changes how the text wraps and therefore
+                // how tall (and whether it overflows) the popup ends up.
+                const LONG_DESCRIPTION_THRESHOLD = 140;
+                wrapper.classList.toggle('pc-wide', (args.data.Description || '').length > LONG_DESCRIPTION_THRESHOLD);
+
                 const applyClampIfOverflowing = () => {
                     const margin = 10;
                     const rect = wrapper.getBoundingClientRect();

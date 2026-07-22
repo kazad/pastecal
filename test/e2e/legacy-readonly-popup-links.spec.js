@@ -149,3 +149,25 @@ test('description text in the legacy popup can be selected and copied', async ({
   const selectedText = await page.evaluate(() => window.getSelection().toString());
   expect(selectedText.length, 'double-click should select a word of description text').toBeGreaterThan(0);
 });
+
+// Regression test: the popup should widen for long descriptions (narrow-column wrapping
+// makes multi-paragraph text feel cramped) but stay compact for short ones -- Syncfusion's
+// default is width: 365px AND max-width: 365px, so overriding width alone silently does
+// nothing since max-width still clamps it back down.
+test('popup widens for a long description and stays compact for a short one', async ({ page }) => {
+  await page.goto('/test-popover-verify');
+  await page.waitForTimeout(1500);
+
+  await page.getByText('Long Description Test').first().click({ force: true });
+  await page.waitForTimeout(500);
+  const wideBox = await page.locator('.e-quick-popup-wrapper').boundingBox();
+  await page.locator('.e-quick-popup-wrapper .e-close').click({ force: true }).catch(() => {});
+  await page.waitForTimeout(500);
+
+  await page.getByText('Dentist Appointment').first().click({ force: true });
+  await page.waitForTimeout(500);
+  const narrowBox = await page.locator('.e-quick-popup-wrapper').boundingBox();
+
+  expect(wideBox.width, 'long description popup should be wider than the default').toBeGreaterThan(365);
+  expect(narrowBox.width, 'short description popup should stay at the default width').toBeLessThanOrEqual(365);
+});
