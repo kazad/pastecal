@@ -9,13 +9,22 @@ class Calendar {
         this.options = options || {};
     }
 
+    // e.start/e.end may be a raw epoch-ms number (nativecal's EventEditor) or an ISO
+    // string (the legacy Event model) -- Syncfusion's StartTime/EndTime require a real
+    // Date instance and silently fail to render otherwise.
+    static toDateOrNull(value) {
+        if (value === null || value === undefined || value === "") return null;
+        const d = new Date(value);
+        return isNaN(d.getTime()) ? null : d;
+    }
+
     getSyncFusionEvents() {
         return this.events.map(e => {
             return {
                 Id: e.id,
                 Subject: e.title,
-                StartTime: e.start,
-                EndTime: e.end,
+                StartTime: Calendar.toDateOrNull(e.start),
+                EndTime: Calendar.toDateOrNull(e.end),
                 Description: e.description,
                 RecurrenceRule: e.recurrencerule,
                 Type: parseInt(e.type || 1),

@@ -297,23 +297,28 @@ function extractDuration(text) {
 window.RecentCalendars = RecentCalendars;
 
 // Linkify utility - converts URLs and emails in text to clickable links
+const LINKIFY_LINK_STYLE = 'color:#2563eb;text-decoration:underline;';
+
 function linkify(inputText) {
     let replacedText, replacePattern1, replacePattern2, replacePattern3;
 
     replacePattern1 = /(\b(https?|ftp):\/\/[^<>\s"']*[-A-Z0-9+&@#\/%=~_|])/gim;
-    replacedText = inputText.replace(replacePattern1, '<a href="$1" target="_blank">$1</a>');
+    replacedText = inputText.replace(replacePattern1,
+        `<a href="$1" target="_blank" rel="noopener noreferrer" style="${LINKIFY_LINK_STYLE}">$1</a>`);
 
     replacePattern2 = /(^|[^\/])(www\.[^<>\s"']+(\b|$))/gim;
-    replacedText = replacedText.replace(replacePattern2, '$1<a href="http://$2" target="_blank">$2</a>');
+    replacedText = replacedText.replace(replacePattern2,
+        `$1<a href="http://$2" target="_blank" rel="noopener noreferrer" style="${LINKIFY_LINK_STYLE}">$2</a>`);
 
     replacePattern3 = /(([a-zA-Z0-9\-\_\.])+@[a-zA-Z\_]+?(\.[a-zA-Z]{2,6})+)/gim;
-    replacedText = replacedText.replace(replacePattern3, '<a href="mailto:$1">$1</a>');
+    replacedText = replacedText.replace(replacePattern3,
+        `<a href="mailto:$1" style="${LINKIFY_LINK_STYLE}">$1</a>`);
 
     return replacedText;
 }
 
 // MutationObserver to linkify schedule descriptions
-if (typeof MutationObserver !== 'undefined' && typeof document !== 'undefined' && document.body) {
+function startLinkifyObserver() {
     const linkifyObserver = new MutationObserver((mutations) => {
         mutations.forEach((mutation) => {
             if (mutation.type === 'childList') {
@@ -330,6 +335,17 @@ if (typeof MutationObserver !== 'undefined' && typeof document !== 'undefined' &
         childList: true,
         subtree: true
     });
+}
+
+// This script runs from a <head> <script> tag with no `defer`, so document.body is null
+// at execution time -- observing it immediately would silently no-op. Defer to
+// DOMContentLoaded when body isn't available yet.
+if (typeof MutationObserver !== 'undefined' && typeof document !== 'undefined') {
+    if (document.body) {
+        startLinkifyObserver();
+    } else {
+        document.addEventListener('DOMContentLoaded', startLinkifyObserver);
+    }
 }
 
 Object.assign(Utils, { linkify });

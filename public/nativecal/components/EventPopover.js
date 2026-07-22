@@ -1,8 +1,8 @@
 const EventPopover = {
     template: /* html */ `
-        <div v-if="visible" 
-             class="fixed z-40 bg-1 rounded-lg shadow-xl border border-color-default w-80 overflow-hidden"
-             :style="{ top: top + 'px', left: left + 'px' }">
+        <div v-if="visible"
+             class="fixed z-40 bg-1 rounded-lg shadow-xl border border-color-default w-80 flex flex-col"
+             :style="{ top: top + 'px', left: left + 'px', maxHeight: 'calc(100vh - 20px)' }">
              
              <!-- Close Button (positioned absolutely) -->
              <button @click="$emit('close')" data-testid="popover-close" 
@@ -12,7 +12,7 @@ const EventPopover = {
              </button>
 
              <!-- Header -->
-             <div class="bg-blue-600 px-4 py-3 flex justify-between items-start text-white">
+             <div class="bg-blue-600 px-4 py-3 flex justify-between items-start text-white shrink-0 rounded-t-lg">
                 <h3 class="font-bold text-lg truncate flex-1 mr-2" data-testid="popover-title">{{ event.title || '(No Title)' }}</h3>
                 <div class="flex items-center gap-1">
                     <button @click="$emit('edit', event)" data-testid="popover-edit" class="p-1 hover:bg-blue-700 rounded transition-colors" title="Edit">
@@ -25,7 +25,7 @@ const EventPopover = {
              </div>
 
              <!-- Body -->
-             <div class="p-4 bg-1">
+             <div class="p-4 bg-1 overflow-y-auto">
                  <div class="flex items-start gap-3 mb-2">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-color-1 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                     <div class="text-sm text-color-2">
@@ -43,7 +43,7 @@ const EventPopover = {
 
                  <div v-if="event.description" class="flex items-start gap-3 mt-3 pt-3 border-t border-color-default">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-color-1 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7" /></svg>
-                    <div class="text-sm text-color-1 whitespace-pre-wrap">{{ event.description }}</div>
+                    <div data-testid="popover-description" class="text-sm text-color-1 whitespace-pre-wrap" v-html="linkifiedDescription"></div>
                  </div>
              </div>
         </div>
@@ -57,6 +57,7 @@ const EventPopover = {
     },
     emits: ['close', 'edit', 'delete'],
     setup(props) {
+        const { computed } = Vue;
         const df = window.dateFns;
 
         const formatDate = (ts) => df.format(new Date(ts), 'MMMM d, yyyy');
@@ -66,6 +67,26 @@ const EventPopover = {
             return props.timeFormat === '12' ? df.format(d, 'h:mm a') : df.format(d, 'HH:mm');
         };
 
-        return { formatDate, formatTime };
+        const escapeHtml = (str) => str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+
+        const URL_PATTERN = /(https?:\/\/[^\s<]+)/g;
+
+        const linkifiedDescription = computed(() => {
+            const text = props.event?.description || '';
+            return escapeHtml(text).replace(URL_PATTERN, (url) => {
+                // Trim trailing punctuation that's likely sentence formatting, not part of the URL.
+                const trailing = url.match(/[)\].,!?;:]+$/);
+                const cleanUrl = trailing ? url.slice(0, -trailing[0].length) : url;
+                const suffix = trailing ? trailing[0] : '';
+                return `<a href="${cleanUrl}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">${cleanUrl}</a>${suffix}`;
+            });
+        });
+
+        return { formatDate, formatTime, linkifiedDescription };
     }
 };

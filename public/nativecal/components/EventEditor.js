@@ -86,6 +86,7 @@ const EventEditor = {
                     <div class="mb-2">
                         <label class="block text-xs font-medium text-color-1 uppercase mb-1">Description</label>
                         <textarea v-model="localEvent.description" rows="3" placeholder="Add description"
+                                  data-testid="editor-description"
                                   class="w-full p-2 border border-color-default rounded text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none resize-none bg-1 text-color-2"></textarea>
                     </div>
                 </div>
