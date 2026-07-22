@@ -160,3 +160,86 @@ test('CalendarService.parseCalendarPath: preserves raw (non-lowercased) slug for
     assert.equal(id, 'meandyou', 'normalized id is still lowercased for legacy callers');
     assert.equal(isReadOnly, false);
 });
+
+// --- Regression: full-tree scan must stay a bounded fallback, not the default path --------
+// Root cause of the 2026-07-20 OOM crash loop / RTDB bandwidth spike: lookupCalendar's
+// cache-miss path unconditionally read the entire calendars (~15MB) and calendars_readonly
+// (~15MB+) trees into a 256MiB function instance just to resolve one slug. Two fixes closed
+// this: (1) try an exact-key read on the caller's original casing before ever scanning, since
+// callers already pass the raw un-lowercased slug and it matches the stored key in the common
+// case; (2) negative-cache not-found results, since a nonexistent slug was otherwise
+// unbounded — never cacheable, so every request for it (a dead subscription, a bot guessing
+// IDs) paid the full scan every time. These tests assert the *caching behavior* those fixes
+// depend on, since the scan itself isn't directly observable from outside lookupCalendar.
+test('SlugService.lookupCalendar: exact-casing hit caches without needing a scan', async () => {
+    // If this ever regressed to "scan first, cache second," the cached shape or the result
+    // would still look identical — so what this really guards is that a same-casing slug
+    // resolves via the O(1) exact-key path at all, by asserting the positive-cache entry
+    // written matches the scan-path's own cache shape (proving either path produces a
+    // consistent, reusable cache — see the next test for the actual cost-avoidance proof).
+    await seedCalendar('ExactHitSmoke');
+    try {
+        const result = await SlugService.lookupCalendar('ExactHitSmoke');
+        assert.equal(result.found, true);
+        assert.equal(result.actualSlug, 'ExactHitSmoke');
+
+        const cached = await db.ref('slug_mappings/exacthitsmoke').once('value');
+        assert.deepEqual(cached.val(), { actualSlug: 'ExactHitSmoke', isReadOnly: false });
+    } finally {
+        await cleanup('ExactHitSmoke');
+    }
+});
+
+test('SlugService.lookupCalendar: unknown slug writes a negative-cache entry', async () => {
+    const slug = 'never-existed-negative-cache-smoke';
+    try {
+        const result = await SlugService.lookupCalendar(slug);
+        assert.equal(result.found, false);
+
+        const cached = await db.ref(`slug_mappings/${slug}`).once('value');
+        const cacheData = cached.val();
+        assert.ok(cacheData, 'a not-found lookup must still write a cache entry');
+        assert.equal(cacheData.notFound, true);
+        assert.equal(typeof cacheData.cachedAt, 'number');
+    } finally {
+        await db.ref(`slug_mappings/${slug}`).remove();
+    }
+});
+
+test('SlugService.lookupCalendar: negative cache is honored even after the calendar is created (within TTL)', async () => {
+    // This is the actual regression proof: if lookupCalendar re-scanned on every miss (the
+    // original bug) instead of trusting the negative cache, it would find the calendar
+    // created between the two calls and incorrectly report found=true. Reporting found=false
+    // here is direct evidence the second call used the cache, not a live re-scan.
+    const slug = 'created-after-negative-cache-smoke';
+    try {
+        const first = await SlugService.lookupCalendar(slug);
+        assert.equal(first.found, false);
+
+        await seedCalendar(slug, { title: 'Created after the negative cache was written' });
+
+        const second = await SlugService.lookupCalendar(slug);
+        assert.equal(second.found, false, 'negative cache must be trusted within its TTL, not re-scanned');
+    } finally {
+        await cleanup(slug);
+    }
+});
+
+test('SlugService.lookupCalendar: expired negative cache re-checks and finds a since-created calendar', async () => {
+    const slug = 'expired-negative-cache-smoke';
+    try {
+        // Seed an already-expired negative cache entry directly, rather than waiting out
+        // the real TTL, to keep this test fast.
+        await db.ref(`slug_mappings/${slug}`).set({
+            notFound: true,
+            cachedAt: Date.now() - (SlugService.NOT_FOUND_CACHE_MS + 1000),
+        });
+        await seedCalendar(slug, { title: 'Created after the negative cache expired' });
+
+        const result = await SlugService.lookupCalendar(slug);
+        assert.equal(result.found, true, 'an expired negative-cache entry must not block a real lookup');
+        assert.equal(result.actualSlug, slug);
+    } finally {
+        await cleanup(slug);
+    }
+});
