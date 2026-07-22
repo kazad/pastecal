@@ -433,6 +433,20 @@ div#Schedule,
     max-height: calc(100vh - 20px) !important;
 }
 
+/* Syncfusion computes `top` from the popup's natural, pre-clamp height, so a popup
+   shrunk by max-height above can still end up positioned with its top or bottom outside
+   the viewport (mirrors the bug already fixed in nativecal's EventPopover). Override with
+   a pure CSS clamp -- a JS fix that rewrote style.top after the fact was tried and
+   reverted: it broke the header icon buttons' icon-font glyph paint (rendered blank)
+   despite identical DOM/computed styles, a paint bug from mutating position mid-transition.
+   This class is added in app.js's popupOpen handler. !important is required to win over
+   Syncfusion's inline style="top: ...". */
+.e-quick-popup-wrapper.pc-clamp-top {
+    position: fixed !important;
+    top: 50% !important;
+    transform: translateY(-50%);
+}
+
 .e-quick-popup-wrapper .e-event-popup {
     max-height: inherit;
     display: flex;

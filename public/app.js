@@ -597,21 +597,20 @@ const CalendarVueApp = {
             // pre-clamp height -- our CSS max-height on .e-quick-popup-wrapper then
             // shrinks a long-description popup without updating that position, so a
             // popup meant to be vertically centered near the click target can end up
-            // with a negative `top`, pushing its header off the top of the viewport
-            // with no way to scroll back up to it. Clamp after Syncfusion positions it.
+            // with its top or bottom pushed outside the viewport, with no way to scroll
+            // back to the clipped part.
+            //
+            // A JS fix that rewrites style.top after the fact was tried and reverted: it
+            // reliably broke the header icon buttons' icon-font glyph paint (edit/delete/
+            // close rendered blank) even though DOM and computed styles were identical to
+            // the working case -- a genuine paint bug from mutating position mid-transition,
+            // not a layout bug. The .pc-clamp-top class (see style.css) instead forces
+            // position: fixed + vertical centering via pure CSS, which sidesteps that
+            // entirely since it participates in Syncfusion's own layout/paint pass instead
+            // of fighting it after the fact.
             const wrapper = args.element.closest('.e-quick-popup-wrapper');
             if (wrapper) {
-                requestAnimationFrame(() => {
-                    const top = parseFloat(wrapper.style.top) || 0;
-                    if (top < 10) {
-                        wrapper.style.top = '10px';
-                    }
-                    const rect = wrapper.getBoundingClientRect();
-                    if (rect.bottom > window.innerHeight - 10) {
-                        const newTop = Math.max(10, window.innerHeight - 10 - rect.height);
-                        wrapper.style.top = `${newTop}px`;
-                    }
-                });
+                wrapper.classList.add('pc-clamp-top');
             }
         }
 
