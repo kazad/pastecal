@@ -35,3 +35,31 @@ test('URL in description renders as a clickable link in the legacy read-only qui
   const link = page.locator('.e-description-details a[href="https://example.com/meeting/abc-123"]');
   await expect(link).toBeVisible({ timeout: 5000 });
 });
+
+// Regression test for the legacy app's own event popup (Syncfusion's default
+// e-quick-popup-wrapper): a long description must not push the popup off the bottom of
+// the viewport with no way to reach the rest of it. Syncfusion's default styling has no
+// height cap or scroll handling here, unlike nativecal's EventPopover (already fixed).
+//
+// Relies on the "test-popover-verify" calendar's "Long Description Test" event (35 lines,
+// seeded while investigating the original nativecal-only fix for this same class of bug).
+test('long description in the legacy popup stays within the viewport and scrolls', async ({ page }) => {
+  await page.goto('/test-popover-verify');
+  await page.waitForTimeout(1500);
+
+  const event = page.getByText('Long Description Test').first();
+  await expect(event).toBeVisible({ timeout: 10000 });
+  await event.click({ force: true });
+  await page.waitForTimeout(500);
+
+  const popup = page.locator('.e-quick-popup-wrapper');
+  await expect(popup).toBeVisible({ timeout: 5000 });
+
+  const viewportHeight = page.viewportSize().height;
+  const box = await popup.boundingBox();
+  expect(box.height).toBeLessThanOrEqual(viewportHeight);
+
+  const lastLine = page.getByText('Line 35: This is a long event description');
+  await lastLine.scrollIntoViewIfNeeded();
+  await expect(lastLine).toBeInViewport();
+});

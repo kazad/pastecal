@@ -427,6 +427,22 @@ div#Schedule,
     display: none !important;
 }
 
+/* Event popup: cap height to the viewport and let the body scroll instead of pushing
+   long descriptions off-screen with no way to reach the rest of the content. */
+.e-quick-popup-wrapper {
+    max-height: calc(100vh - 20px) !important;
+}
+
+.e-quick-popup-wrapper .e-event-popup {
+    max-height: inherit;
+    display: flex;
+    flex-direction: column;
+}
+
+.e-quick-popup-wrapper .e-popup-content {
+    overflow-y: auto;
+}
+
 /* Year view: prevent double scrollbar by letting only the page scroll */
 .e-schedule .e-year-view .e-content-wrap {
     overflow: visible !important;
