@@ -222,13 +222,42 @@ const SlugService = {
             }
         }
         
-        // Cache miss - scan both editable and read-only calendars
-        
+        // Cache miss - try an exact-key read on the caller's original casing before falling
+        // back to a full scan. Callers pass the raw, non-lowercased slug (see
+        // CalendarService.parseCalendarPath), which matches the stored key in the vast
+        // majority of cases, so this single-key read resolves most cache misses immediately.
+        //
+        // The full-tree scan below used to run on every cache miss regardless — a bounded read
+        // of one key ballooned into pulling the entire calendars (~15MB) and, on a second miss,
+        // calendars_readonly (~15MB+) tree into a 256MiB function instance. That repeatedly
+        // exceeded the memory limit and crashed the instance (OOM crashes starting 2026-07-20,
+        // 'Memory limit of 256 MiB exceeded'), and each crash-triggered instance restart's
+        // fresh Admin SDK connection is what was driving a sustained RTDB bandwidth spike —
+        // not any single popular calendar or external scraping, which the bandwidth
+        // investigation had otherwise ruled out.
+        const exactEditable = await admin.database().ref(DEFAULT_ROOT).child(requestedSlug).once('value');
+        if (exactEditable.exists()) {
+            const key = requestedSlug;
+            await cacheRef.set({ actualSlug: key, isReadOnly: false });
+            return { found: true, actualSlug: key, isReadOnly: false };
+        }
+
+        const exactReadOnly = await admin.database().ref(READONLY_ROOT).child(requestedSlug).once('value');
+        if (exactReadOnly.exists()) {
+            const key = requestedSlug;
+            await cacheRef.set({ actualSlug: key, isReadOnly: true });
+            return { found: true, actualSlug: key, isReadOnly: true };
+        }
+
+        // Still not found — the slug's casing must actually differ from the stored key (e.g.
+        // a URL typed in a different case than the calendar was created with). This is the
+        // rare path; fall back to the full case-insensitive scan to find it.
+
         // First check editable calendars
         const calendarsRef = admin.database().ref(`/${DEFAULT_ROOT}`);
         const editableSnapshot = await calendarsRef.once('value');
         const editableCalendars = editableSnapshot.val() || {};
-        
+
         // Find case-insensitive match in editable calendars
         for (const key of Object.keys(editableCalendars)) {
             if (this.normalizeSlug(key) === normalizedSlug) {
@@ -237,12 +266,12 @@ const SlugService = {
                 return { found: true, actualSlug: key, isReadOnly: false };
             }
         }
-        
+
         // Then check read-only calendars
         const readOnlyRef = admin.database().ref(`/${READONLY_ROOT}`);
         const readOnlySnapshot = await readOnlyRef.once('value');
         const readOnlyCalendars = readOnlySnapshot.val() || {};
-        
+
         // Find case-insensitive match in read-only calendars
         for (const key of Object.keys(readOnlyCalendars)) {
             if (this.normalizeSlug(key) === normalizedSlug) {
@@ -251,7 +280,7 @@ const SlugService = {
                 return { found: true, actualSlug: key, isReadOnly: true };
             }
         }
-        
+
         return { found: false };
     }
 };
