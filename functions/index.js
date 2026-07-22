@@ -203,25 +203,38 @@ const SlugService = {
         return !snapshot.exists();
     },
 
+    // A not-found result is cached for this long, then re-checked with a real lookup. Short
+    // relative to how long a slug stays unclaimed, but long enough that a burst of requests
+    // for the same dead/expired/guessed slug (the case that motivated this cache) only pays
+    // for one full scan instead of one per request.
+    NOT_FOUND_CACHE_MS: 10 * 60 * 1000,
+
     async lookupCalendar(requestedSlug) {
         const normalizedSlug = this.normalizeSlug(requestedSlug);
-        
+
         // Check cache first
         const cacheRef = admin.database().ref(`/slug_mappings/${normalizedSlug}`);
         const cached = await cacheRef.once('value');
-        
-        if (cached.val()) {
-            // Found in cache
-            const cacheData = cached.val();
+        const cacheData = cached.val();
+
+        if (cacheData) {
             if (typeof cacheData === 'string') {
                 // Legacy cache format - assume editable
                 return { found: true, actualSlug: cacheData, isReadOnly: false };
+            } else if (cacheData.notFound) {
+                // Negative cache entry — a calendar can be created later under a slug that
+                // was previously not found, so this must expire rather than cache forever
+                // (see the full-scan comment below for why an uncached miss is expensive).
+                if (Date.now() - cacheData.cachedAt < this.NOT_FOUND_CACHE_MS) {
+                    return { found: false };
+                }
+                // Expired — fall through and re-check for real.
             } else {
                 // New cache format with type
                 return { found: true, actualSlug: cacheData.actualSlug, isReadOnly: cacheData.isReadOnly };
             }
         }
-        
+
         // Cache miss - try an exact-key read on the caller's original casing before falling
         // back to a full scan. Callers pass the raw, non-lowercased slug (see
         // CalendarService.parseCalendarPath), which matches the stored key in the vast
@@ -281,6 +294,12 @@ const SlugService = {
             }
         }
 
+        // Genuinely not found. Without this, a request for a slug that never existed (a
+        // dead/expired subscription, a bot guessing IDs, a typo'd URL) is never cacheable —
+        // there's no key to write a positive cache entry under — so it pays the full
+        // ~30MB scan on every single request. That's the same OOM shape as the original bug,
+        // just gated behind "the calendar doesn't exist" instead of "the cache is cold."
+        await cacheRef.set({ notFound: true, cachedAt: Date.now() });
         return { found: false };
     }
 };
