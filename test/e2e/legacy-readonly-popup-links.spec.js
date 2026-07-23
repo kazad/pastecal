@@ -214,3 +214,58 @@ test('clicking a different event while a wide popup is open opens the correct on
   const width = await page.locator('.e-quick-popup-wrapper').evaluate(el => getComputedStyle(el).width);
   expect(width).toBe('365px'); // short description -> compact default, not stuck at the wide size
 });
+
+// Regression test for a variant of the above the width fix alone didn't catch: the Long
+// Description Test popup gets clamped to nearly full viewport HEIGHT (not just width) via
+// pc-clamp-top, so it can cover an event anywhere on screen vertically even at the
+// narrower 480px width -- e.g. Dentist Appointment, several rows below where it was
+// clicked. Clicking that event lands on the still-open popup instead, which Syncfusion
+// doesn't register as a new event click, leaving the wrong (Long Description Test)
+// content/position showing with no visible error.
+test('clicking an event covered by a tall clamped popup still opens the correct one', async ({ page }) => {
+  await page.goto('/test-popover-verify');
+  await page.waitForTimeout(1500);
+
+  const longEvent = page.getByText('Long Description Test').first();
+  const longBox = await longEvent.boundingBox();
+  await page.mouse.click(longBox.x + longBox.width / 2, longBox.y + longBox.height / 2);
+  await page.waitForTimeout(500);
+  await expect(page.locator('.e-quick-popup-wrapper .e-subject')).toHaveText('Long Description Test');
+
+  const dentistBox = await page.getByText('Dentist Appointment').first().boundingBox();
+  await page.mouse.click(dentistBox.x + dentistBox.width / 2, dentistBox.y + dentistBox.height / 2);
+  await page.waitForTimeout(800);
+
+  await expect(page.locator('.e-quick-popup-wrapper .e-subject')).toHaveText('Dentist Appointment');
+  const popupBox = await page.locator('.e-quick-popup-wrapper').boundingBox();
+  expect(Math.abs(popupBox.x - dentistBox.x), 'popup should open near its own event').toBeLessThan(400);
+});
+
+// Regression test for the underlying defect, reported live: Syncfusion's own popup
+// centering math can be wildly wrong (1000px+ off) on a wide viewport, independent of any
+// collision/click-swallowing issue -- confirmed via a clean popupOpen with the correct
+// title/data but a `left` far from the clicked appointment's actual on-screen position.
+// Worse right after a DIFFERENT popup was open and closed (its clamped/offset state seems
+// to leak into Syncfusion's next centering calculation), but present even on a cold click.
+// Rather than chase Syncfusion's internal math, force the popup to the appointment's own
+// on-screen rect after Syncfusion positions it -- ground truth from the DOM, not trust in
+// Syncfusion's calculation.
+test('popup opens anchored to its own event on a wide viewport, even after another popup closed', async ({ page }) => {
+  await page.setViewportSize({ width: 2560, height: 1000 });
+  await page.goto('/test-popover-verify');
+  await page.waitForTimeout(1500);
+
+  const longBox = await page.getByText('Long Description Test').first().boundingBox();
+  await page.mouse.click(longBox.x + longBox.width / 2, longBox.y + longBox.height / 2);
+  await page.waitForTimeout(600);
+  await page.locator('.e-quick-popup-wrapper .e-close').click();
+  await page.waitForTimeout(400);
+
+  const dentistBox = await page.getByText('Dentist Appointment').first().boundingBox();
+  await page.mouse.click(dentistBox.x + dentistBox.width / 2, dentistBox.y + dentistBox.height / 2);
+  await page.waitForTimeout(600);
+
+  await expect(page.locator('.e-quick-popup-wrapper .e-subject')).toHaveText('Dentist Appointment');
+  const popupBox = await page.locator('.e-quick-popup-wrapper').boundingBox();
+  expect(Math.abs(popupBox.x - dentistBox.x), 'popup should anchor to its own event, not float far away').toBeLessThan(400);
+});

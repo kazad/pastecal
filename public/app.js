@@ -634,20 +634,45 @@ const CalendarVueApp = {
 
                 const applyClampIfOverflowing = () => {
                     const margin = 10;
+
+                    // Syncfusion's own horizontal centering can be wildly wrong -- confirmed
+                    // 1000px+ off on a wide viewport, worse right after a different popup was
+                    // open and closed (its clamped/offset state seems to leak into the next
+                    // centering calculation), but present even on a cold click. Rather than
+                    // chase Syncfusion's internal math, anchor to args.target -- the actual
+                    // clicked .e-appointment element -- which is ground truth for where the
+                    // popup should visually appear, regardless of what Syncfusion computed.
+                    if (args.target) {
+                        const targetRect = args.target.getBoundingClientRect();
+                        const wrapperRect = wrapper.getBoundingClientRect();
+                        const offsetParentRect = wrapper.offsetParent
+                            ? wrapper.offsetParent.getBoundingClientRect()
+                            : { left: 0, top: 0 };
+
+                        let desiredLeft = targetRect.left - offsetParentRect.left;
+                        let desiredTop = targetRect.bottom - offsetParentRect.top + margin;
+
+                        // Keep it on-screen: clamp horizontally, and flip above the target if
+                        // there's no room below.
+                        const viewportLeft = desiredLeft + offsetParentRect.left;
+                        if (viewportLeft + wrapperRect.width > window.innerWidth - margin) {
+                            desiredLeft -= (viewportLeft + wrapperRect.width) - (window.innerWidth - margin);
+                        }
+                        if (desiredLeft + offsetParentRect.left < margin) {
+                            desiredLeft = margin - offsetParentRect.left;
+                        }
+                        const viewportTop = desiredTop + offsetParentRect.top;
+                        if (viewportTop + wrapperRect.height > window.innerHeight - margin) {
+                            desiredTop = (targetRect.top - offsetParentRect.top) - wrapperRect.height - margin;
+                        }
+
+                        wrapper.style.left = `${desiredLeft}px`;
+                        wrapper.style.top = `${desiredTop}px`;
+                    }
+
                     const rect = wrapper.getBoundingClientRect();
                     const overflowsVertically = rect.top < margin || rect.bottom > window.innerHeight - margin;
                     wrapper.classList.toggle('pc-clamp-top', overflowsVertically);
-
-                    // A wide popup (pc-wide, 480px) is more likely to overflow either
-                    // horizontal edge than the old fixed 365px one -- nudge it back into
-                    // the viewport rather than letting it run off either side.
-                    const currentLeft = parseFloat(wrapper.style.left) || 0;
-                    if (rect.right > window.innerWidth - margin) {
-                        const overshoot = rect.right - (window.innerWidth - margin);
-                        wrapper.style.left = `${Math.max(margin, currentLeft - overshoot)}px`;
-                    } else if (rect.left < margin) {
-                        wrapper.style.left = `${currentLeft + (margin - rect.left)}px`;
-                    }
                 };
 
                 // popupOpen fires while the wrapper still carries its closed-state class
@@ -669,6 +694,29 @@ const CalendarVueApp = {
         }
 
         scheduleObj.appendTo('#Schedule');
+
+        // Safety net for a real bug: the quick-info popup can end up tall/wide enough to
+        // visually cover a DIFFERENT event still in the grid (most often the popup for a
+        // long description, clamped to ~full viewport height). Clicking what looks like
+        // that other event actually lands ON the popup's own body -- the click target IS
+        // inside the popup, not the appointment underneath -- so Syncfusion never sees it
+        // as a click on an appointment at all, and silently keeps showing the wrong
+        // (first) event's title/content/position with no visible error. A click on the
+        // popup's own body (not its header buttons, which have their own handlers, or its
+        // description text, which is meant to be selectable -- see the user-select fix
+        // above) most likely means the user is trying to reach something behind it, so
+        // close it and let the click's normal follow-through (e.g. the eventual `click`
+        // after this `mousedown`) land on the calendar underneath instead.
+        document.getElementById('Schedule')?.addEventListener('mousedown', (e) => {
+            const openPopup = document.querySelector('.e-quick-popup-wrapper.e-popup-open');
+            if (!openPopup) return;
+            const clickedInsidePopupBody = openPopup.contains(e.target)
+                && !e.target.closest('.e-popup-header')
+                && !e.target.closest('.e-description-details');
+            if (clickedInsidePopupBody) {
+                scheduleObj.closeQuickInfoPopup();
+            }
+        }, true);
 
         // Add event listener to mark month-start dates and colorize year view dots
         scheduleObj.dataBound = function () {
