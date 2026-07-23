@@ -616,9 +616,19 @@ const CalendarVueApp = {
             const wrapper = args.element.closest('.e-quick-popup-wrapper');
             if (wrapper) {
                 // Widen the popup for long descriptions -- narrow-column wrapping makes a
-                // multi-paragraph description feel cramped. Must run before the overflow
-                // clamp below, since widening changes how the text wraps and therefore
-                // how tall (and whether it overflows) the popup ends up.
+                // multi-paragraph description feel cramped. 480px was chosen (not something
+                // wider, like 700px) specifically to keep collision risk low: on a month view
+                // packed with events, a much wider popup routinely covers a neighboring day's
+                // event, and clicking what looks like that event actually lands on the
+                // popup's own content -- Syncfusion doesn't see it as an event click at all,
+                // so the popup silently keeps showing the wrong title/content at the wrong
+                // position. Rather than chase that with active collision-avoidance (tried:
+                // pushing the popup down until clear doesn't converge on a busy grid, and
+                // shrinking-until-it-fits makes width inconsistent/unpredictable), the fix is
+                // to stay narrow enough that overlap is rare in the first place -- matching
+                // how other calendar apps (e.g. Google Calendar) handle this same tension.
+                // Must run before the overflow clamp below, since widening changes how the
+                // text wraps and therefore how tall (and whether it overflows) the popup ends up.
                 const LONG_DESCRIPTION_THRESHOLD = 140;
                 wrapper.classList.toggle('pc-wide', (args.data.Description || '').length > LONG_DESCRIPTION_THRESHOLD);
 
@@ -628,7 +638,7 @@ const CalendarVueApp = {
                     const overflowsVertically = rect.top < margin || rect.bottom > window.innerHeight - margin;
                     wrapper.classList.toggle('pc-clamp-top', overflowsVertically);
 
-                    // A wide popup (pc-wide, 700px) is far more likely to overflow either
+                    // A wide popup (pc-wide, 480px) is more likely to overflow either
                     // horizontal edge than the old fixed 365px one -- nudge it back into
                     // the viewport rather than letting it run off either side.
                     const currentLeft = parseFloat(wrapper.style.left) || 0;

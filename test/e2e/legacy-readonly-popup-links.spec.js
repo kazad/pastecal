@@ -187,3 +187,30 @@ test('wide popup for a long description stays within the viewport horizontally',
   expect(box.x, 'popup left edge must not be pushed off-screen').toBeGreaterThanOrEqual(0);
   expect(box.x + box.width, 'popup right edge must not overflow the viewport').toBeLessThanOrEqual(900);
 });
+
+// Regression test for a bug found after widening the popup: a 700px popup routinely
+// covered other visible events on the month grid, so clicking what looked like a
+// different event actually landed on the still-open popup's own content -- Syncfusion
+// never registered it as a new event click, and the popup silently kept showing the
+// first event's title/content at the old position/size (10-whys root cause). Settled on
+// 480px specifically to keep this collision risk low, rather than actively avoiding
+// collisions (tried and reverted: push-until-clear doesn't converge on a dense grid;
+// shrink-until-fits makes width unpredictable).
+test('clicking a different event while a wide popup is open opens the correct one', async ({ page }) => {
+  await page.goto('/test-popover-verify');
+  await page.waitForTimeout(1500);
+
+  const longEvent = page.getByText('Long Description Test').first();
+  const longBox = await longEvent.boundingBox();
+  await page.mouse.click(longBox.x + longBox.width / 2, longBox.y + longBox.height / 2);
+  await page.waitForTimeout(500);
+  await expect(page.locator('.e-quick-popup-wrapper .e-subject')).toHaveText('Long Description Test');
+
+  const confBox = await page.getByText('Conference Call').first().boundingBox();
+  await page.mouse.click(confBox.x + confBox.width / 2, confBox.y + confBox.height / 2);
+  await page.waitForTimeout(500);
+
+  await expect(page.locator('.e-quick-popup-wrapper .e-subject')).toHaveText('Conference Call');
+  const width = await page.locator('.e-quick-popup-wrapper').evaluate(el => getComputedStyle(el).width);
+  expect(width).toBe('365px'); // short description -> compact default, not stuck at the wide size
+});

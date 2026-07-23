@@ -729,7 +729,7 @@ const CalendarVueApp = {
             // clamp here too.
             const LONG_DESCRIPTION_THRESHOLD = 140;
             const isLong = (event?.description?.length || 0) > LONG_DESCRIPTION_THRESHOLD;
-            const popoverWidth = isLong ? Math.min(700, window.innerWidth - 20) : 320;
+            const popoverWidth = isLong ? Math.min(480, window.innerWidth - 20) : 320;
 
             // Position logic
             let top = 0, left = 0;

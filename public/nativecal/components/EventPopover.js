@@ -2,7 +2,7 @@ const EventPopover = {
     template: /* html */ `
         <div v-if="visible"
              class="fixed z-40 bg-1 rounded-lg shadow-xl border border-color-default flex flex-col"
-             :class="isLongDescription ? 'w-[700px] max-w-[calc(100vw-20px)]' : 'w-80'"
+             :class="isLongDescription ? 'w-[480px] max-w-[calc(100vw-20px)]' : 'w-80'"
              :style="{ top: top + 'px', left: left + 'px', maxHeight: 'calc(100vh - 20px)' }">
              
              <!-- Close Button (positioned absolutely) -->
