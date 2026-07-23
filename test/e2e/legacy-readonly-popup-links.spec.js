@@ -171,3 +171,19 @@ test('popup widens for a long description and stays compact for a short one', as
   expect(wideBox.width, 'long description popup should be wider than the default').toBeGreaterThan(365);
   expect(narrowBox.width, 'short description popup should stay at the default width').toBeLessThanOrEqual(365);
 });
+
+// Regression test: a 700px-wide popup is far more likely to overflow either horizontal
+// edge of the viewport than the old fixed 365px one, especially when Syncfusion centers
+// it near an event that isn't itself centered on the page.
+test('wide popup for a long description stays within the viewport horizontally', async ({ page }) => {
+  await page.setViewportSize({ width: 900, height: 900 });
+  await page.goto('/test-popover-verify');
+  await page.waitForTimeout(1500);
+
+  await page.getByText('Long Description Test').first().click({ force: true });
+  await page.waitForTimeout(500);
+
+  const box = await page.locator('.e-quick-popup-wrapper').boundingBox();
+  expect(box.x, 'popup left edge must not be pushed off-screen').toBeGreaterThanOrEqual(0);
+  expect(box.x + box.width, 'popup right edge must not overflow the viewport').toBeLessThanOrEqual(900);
+});

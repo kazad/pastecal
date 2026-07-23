@@ -625,8 +625,19 @@ const CalendarVueApp = {
                 const applyClampIfOverflowing = () => {
                     const margin = 10;
                     const rect = wrapper.getBoundingClientRect();
-                    const overflows = rect.top < margin || rect.bottom > window.innerHeight - margin;
-                    wrapper.classList.toggle('pc-clamp-top', overflows);
+                    const overflowsVertically = rect.top < margin || rect.bottom > window.innerHeight - margin;
+                    wrapper.classList.toggle('pc-clamp-top', overflowsVertically);
+
+                    // A wide popup (pc-wide, 700px) is far more likely to overflow either
+                    // horizontal edge than the old fixed 365px one -- nudge it back into
+                    // the viewport rather than letting it run off either side.
+                    const currentLeft = parseFloat(wrapper.style.left) || 0;
+                    if (rect.right > window.innerWidth - margin) {
+                        const overshoot = rect.right - (window.innerWidth - margin);
+                        wrapper.style.left = `${Math.max(margin, currentLeft - overshoot)}px`;
+                    } else if (rect.left < margin) {
+                        wrapper.style.left = `${currentLeft + (margin - rect.left)}px`;
+                    }
                 };
 
                 // popupOpen fires while the wrapper still carries its closed-state class

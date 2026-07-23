@@ -434,12 +434,15 @@ div#Schedule,
 }
 
 /* Widen the popup for long descriptions (see .pc-wide added in app.js's popupOpen).
-   Mirrors nativecal's EventPopover, which widens from w-80 (320px) to w-[480px] under
-   the same threshold. Syncfusion's default popup is width: 365px AND max-width: 365px --
-   overriding width alone does nothing since max-width still clamps it back down. */
+   700px targets a ~65-70 character reading line at normal body text size -- the range
+   generally considered comfortable for scanning line to line. Mirrors nativecal's
+   EventPopover, which widens from w-80 (320px) to w-[700px] under the same threshold.
+   Syncfusion's default popup is width: 365px AND max-width: 365px -- overriding width
+   alone does nothing since max-width still clamps it back down. calc(100vw - 20px) keeps
+   it from overflowing a narrow browser window. */
 .e-quick-popup-wrapper.pc-wide {
-    width: 480px !important;
-    max-width: 480px !important;
+    width: 700px !important;
+    max-width: calc(100vw - 20px) !important;
 }
 
 /* Syncfusion computes `top` from the popup's natural, pre-clamp height, so a popup
