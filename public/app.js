@@ -695,29 +695,6 @@ const CalendarVueApp = {
 
         scheduleObj.appendTo('#Schedule');
 
-        // Safety net for a real bug: the quick-info popup can end up tall/wide enough to
-        // visually cover a DIFFERENT event still in the grid (most often the popup for a
-        // long description, clamped to ~full viewport height). Clicking what looks like
-        // that other event actually lands ON the popup's own body -- the click target IS
-        // inside the popup, not the appointment underneath -- so Syncfusion never sees it
-        // as a click on an appointment at all, and silently keeps showing the wrong
-        // (first) event's title/content/position with no visible error. A click on the
-        // popup's own body (not its header buttons, which have their own handlers, or its
-        // description text, which is meant to be selectable -- see the user-select fix
-        // above) most likely means the user is trying to reach something behind it, so
-        // close it and let the click's normal follow-through (e.g. the eventual `click`
-        // after this `mousedown`) land on the calendar underneath instead.
-        document.getElementById('Schedule')?.addEventListener('mousedown', (e) => {
-            const openPopup = document.querySelector('.e-quick-popup-wrapper.e-popup-open');
-            if (!openPopup) return;
-            const clickedInsidePopupBody = openPopup.contains(e.target)
-                && !e.target.closest('.e-popup-header')
-                && !e.target.closest('.e-description-details');
-            if (clickedInsidePopupBody) {
-                scheduleObj.closeQuickInfoPopup();
-            }
-        }, true);
-
         // Add event listener to mark month-start dates and colorize year view dots
         scheduleObj.dataBound = function () {
             // Find all date headers and mark ones with month names (contain space)
