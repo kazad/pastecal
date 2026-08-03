@@ -242,7 +242,9 @@ Object.assign(Utils, {
         let endDate = result.end ? result.end.date() : null;
 
         const parsedText = result.text;
-        let remainingText = entry.replace(parsedText, '').trim();
+        // Removing a mid-sentence date phrase leaves the spaces from both sides
+        // behind, so collapse runs of whitespace rather than only trimming ends.
+        let remainingText = entry.replace(parsedText, '').replace(/\s+/g, ' ').trim();
 
         const { subject, duration } = extractDuration(remainingText);
 

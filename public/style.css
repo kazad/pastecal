@@ -2,6 +2,9 @@
 
 :root {
 
+    /* Render native form controls (date/time pickers, spinners, scrollbars) light */
+    color-scheme: light;
+
     --bg: #ffffff;
 
     --bg-disabled: #eaeaea;
@@ -28,6 +31,10 @@
 
 
 [data-theme="dark"] {
+
+    /* Makes the browser draw its built-in date/time icons and pickers dark;
+       these glyphs ignore currentColor, so a variable alone can't reach them. */
+    color-scheme: dark;
 
     --bg: #1e1e1e;
 
