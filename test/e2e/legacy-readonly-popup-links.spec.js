@@ -1,5 +1,5 @@
 // @ts-check
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 
 // Regression test for the legacy (Syncfusion) app's read-only "View Only" popup
 // (public/app.js, shown at /view/{publicViewId}): URLs in an event's description must

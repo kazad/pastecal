@@ -31,10 +31,18 @@ class SlugManager {
             }
 
             console.log(`${autoCreate ? 'Auto-created' : 'Created'} read-only link:`, publicViewId);
+            if (customSlug && typeof Analytics !== 'undefined') {
+                Analytics.slugClaimed(publicViewId, calendar);
+            }
             return publicViewId;
 
         } catch (error) {
             console.error('Error creating read-only link:', error);
+            if (customSlug && typeof Analytics !== 'undefined') {
+                // 'already-exists' vs 'invalid-argument' tells you whether to build
+                // name suggestions or fix the validation copy.
+                Analytics.slugClaimFailed(error?.code || 'unknown');
+            }
             if (!autoCreate) {
                 alert('Failed to create read-only link: ' + (error.message || 'Please try again.'));
             }
@@ -45,6 +53,10 @@ class SlugManager {
     // Specific read-only link operations with clear naming
     static autoCreateReadOnlyLink(calendar) {
         if (!calendar.options?.publicViewId) {
+            // The moment a calendar silently gets a name nobody chose. This is the
+            // denominator for "was the low custom-slug rate a discoverability
+            // problem?" -- without it, claims have no base to be a rate of.
+            if (typeof Analytics !== 'undefined') Analytics.slugAutoAssigned(calendar);
             return this.createReadOnlyLink(calendar, { autoCreate: true });
         }
     }

@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 
 /**
  * Write-path gate: incomplete events must never reach Firebase.

@@ -1,5 +1,5 @@
 // @ts-check
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 
 /**
  * Regression tests for the Quick Add dialog's editable parsed fields.

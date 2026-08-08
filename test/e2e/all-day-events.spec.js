@@ -9,7 +9,7 @@
 //      Syncfusion never received the flag.
 // The Event model stored isAllDay correctly — only the Syncfusion mapper dropped it.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 
 const BASE = 'http://localhost:8000';
 

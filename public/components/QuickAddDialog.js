@@ -215,6 +215,7 @@ const QuickAddDialog = {
         },
         createEvent() {
             if (!this.isValidEvent) return;
+            if (typeof Analytics !== 'undefined') Analytics.eventAdded('quick_add');
             this.$emit('event-created', {
                 subject: this.fields.subject.trim(),
                 startDateTime: this.startDateTime,

@@ -8,7 +8,7 @@
 // skipped Syncfusion application, leaving the calendar grid rendering 12-hour
 // even though localStorage and the settings dropdown both said 24-hour.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 
 const BASE = 'http://localhost:8000';
 

@@ -8,7 +8,7 @@
 // Fix: globalSettings.dateFormat with values 'auto' | 'us' | 'iso' | 'eu',
 // applied to Syncfusion's DateTimePicker in the popupOpen hook.
 
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 
 const BASE = 'http://localhost:8000';
 
