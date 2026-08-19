@@ -100,6 +100,159 @@ body {
 
 
 
+/* --- Design language: controls we build ourselves ---------------------------
+   Syncfusion styles the calendar grid itself; everything AROUND it (our own
+   buttons, modals, inputs) uses the classes below so one change updates every
+   surface. Built on the theme variables above, so light/dark comes for free.
+
+   Usage:
+     .pc-btn .pc-btn-primary    blue, for the main action in a view
+     .pc-btn .pc-btn-secondary  neutral, for supporting actions
+     .pc-btn .pc-btn-danger     destructive actions
+     .pc-btn-sm                 size modifier for dense toolbars
+     .pc-modal > .pc-modal-panel   overlay + centered card
+     .pc-input, .pc-input-group    text fields, optionally with a prefix chip
+--------------------------------------------------------------------------- */
+
+.pc-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    border: 1px solid transparent;
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.25rem;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.pc-btn:disabled {
+    background: var(--bg-disabled);
+    color: var(--text-color-1);
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+/* Keyboard focus stays visible on every variant. */
+.pc-btn:focus-visible,
+.pc-input:focus-visible,
+.pc-input-group:focus-within {
+    outline: 2px solid var(--link);
+    outline-offset: 2px;
+}
+
+.pc-btn-sm {
+    padding: 0.25rem 0.75rem;
+    font-size: 0.75rem;
+    border-radius: 9999px;
+}
+
+.pc-btn-primary {
+    background: #2563eb;
+    color: #fff;
+}
+
+.pc-btn-primary:not(:disabled):hover {
+    background: #1d4ed8;
+}
+
+.pc-btn-secondary {
+    background: var(--panel-bg);
+    color: var(--text-color-2);
+    border-color: var(--border-color);
+}
+
+.pc-btn-secondary:not(:disabled):hover {
+    background: var(--bg-interactive-hover);
+}
+
+.pc-btn-danger {
+    background: #dc2626;
+    color: #fff;
+}
+
+.pc-btn-danger:not(:disabled):hover {
+    background: #b91c1c;
+}
+
+/* Modal: one overlay treatment and one panel treatment for every dialog. */
+.pc-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.5);
+    padding: 1rem;
+}
+
+.pc-modal-panel {
+    position: relative;
+    width: 100%;
+    max-width: 28rem;
+    padding: 1.5rem;
+    border-radius: 0.5rem;
+    background: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.25), 0 8px 10px -6px rgba(0, 0, 0, 0.25);
+}
+
+/* Inputs */
+.pc-input {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.375rem;
+    background: var(--bg);
+    color: var(--text-color-2);
+    font-size: 0.875rem;
+}
+
+.pc-input::placeholder {
+    color: var(--text-color-1);
+}
+
+/* Prefix-chip input (e.g. "pastecal.com/" + slug) */
+.pc-input-group {
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    border: 2px solid var(--link);
+    border-radius: 0.375rem;
+    background: var(--bg);
+}
+
+.pc-input-group>.pc-input-prefix {
+    display: flex;
+    align-items: center;
+    height: 2.5rem;
+    padding: 0 0.25rem 0 0.75rem;
+    background: var(--panel-bg);
+    border-right: 1px solid var(--border-color);
+    color: var(--text-color-1);
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.pc-input-group>.pc-input {
+    flex: 1;
+    border: 0;
+    border-radius: 0;
+    font-weight: 500;
+}
+
+.pc-input-group>.pc-input:focus {
+    outline: none;
+}
+
+
+
 select,
 option,
 input,
