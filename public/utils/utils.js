@@ -92,16 +92,39 @@ class RecentCalendars {
     }
 
     load() {
-        this.items = JSON.parse(localStorage.getItem('recentCalendars')) || [];
+        // Calendars you created live under their own key and are never evicted.
+        // Calendars you merely visited stay in the capped `recentCalendars` list.
+        const mine = JSON.parse(localStorage.getItem('myCalendars')) || [];
+        const visited = JSON.parse(localStorage.getItem('recentCalendars')) || [];
+
+        // Older builds stored everything in `recentCalendars`. Anything already
+        // flagged `mine` there is migrated across on first load so upgrading
+        // users don't lose ownership of calendars they made.
+        const migrated = visited.filter(item => item.mine);
+
+        this.items = [
+            ...mine.map(item => ({ ...item, mine: true })),
+            ...migrated.map(item => ({ ...item, mine: true })),
+            ...visited.filter(item => !item.mine).map(item => ({ ...item, mine: false })),
+        ].filter((item, i, all) => all.findIndex(o => o.id === item.id) === i);
+
+        if (migrated.length) this.save();
     }
 
     save() {
-        localStorage.setItem('recentCalendars', JSON.stringify(this.items));
+        const mine = this.items.filter(item => item.mine);
+        const visited = this.items.filter(item => !item.mine);
+        localStorage.setItem('myCalendars', JSON.stringify(mine));
+        localStorage.setItem('recentCalendars', JSON.stringify(visited));
     }
 
-    add(id, title) {
+    add(id, title, mine = false) {
         const existingItem = this.items.find(item => item.id === id);
         const wasPinned = existingItem ? existingItem.pinned : false;
+        // `mine` is sticky: visiting a calendar you created must never demote it
+        // back to a plain visit.
+        const isMine = mine || (existingItem ? !!existingItem.mine : false);
+        const createdAt = existingItem?.createdAt || (isMine ? new Date().toISOString() : undefined);
 
         // Remove if exists
         this.items = this.items.filter(item => item.id !== id);
@@ -111,15 +134,29 @@ class RecentCalendars {
             id: id,
             title: title || id,
             pinned: wasPinned,
+            mine: isMine,
+            ...(createdAt ? { createdAt } : {}),
             lastVisited: new Date().toISOString()
         });
 
-        // Keep only last 10 unpinned items
-        const pinnedItems = this.items.filter(item => item.pinned);
-        const unpinnedItems = this.items.filter(item => !item.pinned).slice(0, 10);
-        this.items = [...pinnedItems, ...unpinnedItems];
+        // Keep only the last 10 unpinned *visited* calendars. Calendars you
+        // created are exempt: browsing 10 other calendars must never push your
+        // own work out of the list.
+        const keep = this.items.filter(item => item.pinned || item.mine);
+        const capped = this.items.filter(item => !item.pinned && !item.mine).slice(0, 10);
+        this.items = [...keep, ...capped];
 
         this.save();
+    }
+
+    /** Calendars this browser created — never evicted by the recents cap. */
+    getMine() {
+        return this.getAll().filter(item => item.mine);
+    }
+
+    /** Calendars merely visited, most recent first. */
+    getVisited() {
+        return this.getAll().filter(item => !item.mine);
     }
 
     remove(id) {
@@ -137,8 +174,8 @@ class RecentCalendars {
 
     getAll() {
         return [...this.items].sort((a, b) => {
-            if (a.pinned && !b.pinned) return -1;
-            if (!a.pinned && b.pinned) return 1;
+            if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+            if (!!a.mine !== !!b.mine) return a.mine ? -1 : 1;
             return new Date(b.lastVisited) - new Date(a.lastVisited);
         });
     }

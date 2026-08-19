@@ -240,7 +240,9 @@ const CalendarVueApp = {
                             this.initializeLocalSettings();
                             // Add to recents when calendar loads, but mark as read-only
                             if (c.title) {
-                                this.recentManager.add(actualSlug, `${c.title} (View Only)`, true);
+                                // A read-only calendar you were linked to is a visit,
+                                // not something you created.
+                                this.recentManager.add(actualSlug, `${c.title} (View Only)`);
                                 this.recentCalendars = this.recentManager.getAll();
                             }
 
@@ -1351,6 +1353,12 @@ const CalendarVueApp = {
                 CalendarDataService.createWithId(slug, this.calendar, () => {
                     // success - clear localStorage so homepage starts fresh next time
                     this.clearLocalStorage();
+                    // Record in recents here rather than relying on the post-redirect
+                    // load to do it, so a calendar you just made is always in the list.
+                    // Flagged `mine` so it's stored durably and never evicted by the
+                    // recents cap — this list is the only way back without a login.
+                    this.recentManager.add(slug, this.calendar.title, true);
+                    this.recentCalendars = this.recentManager.getAll();
                     this.showToast('Calendar created!', 'success');
                     window.location.href = "/" + slug;
                 });
@@ -1396,8 +1404,20 @@ const CalendarVueApp = {
                     newCalendar.id = newId;
                     newCalendar.title = newCalendar.title || "New Calendar";
 
+                    const oldId = this.calendar.id;
+
                     CalendarDataService.createWithId(newId, newCalendar, () => {
-                        // We don't delete the old one (safer, acts as a copy)
+                        // We don't delete the old one (safer, acts as a copy), but the
+                        // recents entry has to move: leaving both would list a stale copy
+                        // alongside the live calendar with no way to tell them apart.
+                        const previous = this.recentManager.getAll()
+                            .find(item => item.id === oldId);
+                        this.recentManager.remove(oldId);
+                        // Renaming your own calendar keeps it yours.
+                        this.recentManager.add(newId, newCalendar.title, !!previous?.mine);
+                        if (previous?.pinned) this.recentManager.togglePin(newId);
+                        this.recentCalendars = this.recentManager.getAll();
+
                         window.location = "/" + newId;
                     });
                 }
