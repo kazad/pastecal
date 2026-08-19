@@ -20,9 +20,19 @@ npm run test:e2e:ui        # interactive UI mode
 npm run test:e2e -- -g timeformat   # run a subset by name/grep
 ```
 
-**Node version for `test:unit`:** use Node 20 or 22 (matching `functions/engines`). On Node
-23+ `firebase-admin` fails to load — a transitive dep uses the removed `SlowBuffer` API — so
-`require('functions/index.js')` throws before any test runs.
+**Node version for `test:unit`:** use Node 20–22 (matching `functions/engines`). Run
+`nvm use` to pick it up from `.nvmrc`.
+
+On Node 24+ `firebase-admin` fails to load: it requires `jsonwebtoken` → `jwa` →
+`buffer-equal-constant-time`, which reads `SlowBuffer.prototype` at module scope, and
+Node removed `SlowBuffer` in v24. `require('functions/index.js')` therefore throws
+before any test runs, and node reports it as a test failure with a stack trace pointing
+into `node_modules`.
+
+`test:unit:fast` runs `test/check-node-version.js` first so an unsupported runtime fails
+with one actionable line instead of that stack trace. Upgrading won't fix it —
+`buffer-equal-constant-time` has only ever published 1.0.x, and `jsonwebtoken` still
+depends on it in its latest release.
 
 If port 8000 is already in use (e.g. you're running `./serve.sh` in another terminal),
 Playwright will reuse it.
