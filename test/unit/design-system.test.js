@@ -43,6 +43,7 @@ const OUR_MARKUP = [
   'public/components/CalendarTitle.js',
   'public/components/ToastNotification.js',
   'public/components/Tooltip.js',
+  'public/components/WelcomeDock.js',
 ];
 
 const CLASS_ATTR = /class="([^"]*)"/g;

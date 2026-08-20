@@ -82,6 +82,7 @@ const CalendarVueApp = {
 
             showRecents: false,
             hoverTimeout: null,
+            showWelcome: false,
             showHelp: false,
             showNotes: false,
             showShare: false,
@@ -202,6 +203,10 @@ const CalendarVueApp = {
         // Initialize recents
         this.recentManager = new RecentCalendars();
         this.recentCalendars = this.recentManager.getAll();
+
+        // Decide on the first-run welcome here, before this visit gets recorded
+        // into recents -- otherwise every new visitor looks like a returning one.
+        this.maybeShowWelcome();
 
         // Ensure calendar.options has proper defaults
         this.ensureCalendarOptionsDefaults();
@@ -1684,6 +1689,48 @@ const CalendarVueApp = {
             return this.showNotes || this.showSearch || this.showHelp || this.showShare || this.showSettings;
         },
 
+        // First-run welcome. Deliberately narrow: it's for someone who has never
+        // been here, landing on the homepage. Anyone who arrived at a shared link
+        // came to read a calendar, not to be pitched the product.
+        shouldShowWelcome() {
+            try {
+                if (localStorage.getItem('pastecal_welcome_seen')) return false;
+            } catch (e) {
+                // Private browsing with storage blocked: skip rather than nag on
+                // every page load, since we'd have no way to remember a dismissal.
+                return false;
+            }
+
+            // Checked from mounted(), before the load callback resolves
+            // isExisting -- so test urlslug directly rather than going through
+            // isHomepageCalendar, which isn't trustworthy this early.
+            if (this.urlslug) return false;
+            if (this.isReadOnly) return false;
+
+            // Been here before, in any capacity: they don't need the pitch.
+            if (this.recentManager && this.recentManager.getAll().length > 0) return false;
+
+            return true;
+        },
+
+        maybeShowWelcome() {
+            this.showWelcome = this.shouldShowWelcome();
+        },
+
+        dismissWelcome() {
+            this.showWelcome = false;
+            try {
+                localStorage.setItem('pastecal_welcome_seen', '1');
+            } catch (e) {
+                console.warn('[welcome] unable to persist dismissal', e);
+            }
+        },
+
+        welcomeShowHelp() {
+            this.dismissWelcome();
+            this.toggleHelp();
+        },
+
         toggleHelp() {
             // If help is already open, close it
             if (this.showHelp) {
@@ -2286,6 +2333,7 @@ const CalendarVueApp = {
 const app = Vue.createApp(CalendarVueApp)
     .component('quick-add-button', QuickAddButton)
     .component('quick-add-dialog', QuickAddDialog)
+    .component('welcome-dock', WelcomeDock)
     .mount('#app');
 
 // Signal to tests that the app has mounted

@@ -136,6 +136,7 @@ Copyright (c) 2025 Kalid Azad
     <script src="/components/QuickAddDialog.js?v=1787098286"></script>
     <script src="/components/CalendarTitle.js?v=1787098286"></script>
     <script src="/components/NavigationDropdown.js?v=1787098286"></script>
+    <script src="/components/WelcomeDock.js?v=1787098286"></script>
 
     <script>
         // Load-order guard for critical globals
@@ -150,6 +151,7 @@ Copyright (c) 2025 Kalid Azad
                 ['QuickAddDialog', () => typeof QuickAddDialog !== 'undefined'],
                 ['ToastNotification', () => typeof ToastNotification !== 'undefined'],
                 ['Tooltip', () => typeof Tooltip !== 'undefined'],
+                ['WelcomeDock', () => typeof WelcomeDock !== 'undefined'],
             ];
 
             const missing = required.filter(([, check]) => !check()).map(([name]) => name);
@@ -1140,6 +1142,10 @@ Copyright (c) 2025 Kalid Azad
         <pre v-text="calendar" v-if="debug"></pre>
 
         <toast-notification ref="toast"></toast-notification>
+
+        <!-- First-run explainer; gated by shouldShowWelcome() in app.js -->
+        <welcome-dock v-if="showWelcome" @dismissed="dismissWelcome"
+            @show-help="welcomeShowHelp"></welcome-dock>
     </div>
 
     

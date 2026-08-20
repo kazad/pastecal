@@ -645,3 +645,86 @@ div#Schedule,
 .e-schedule .e-year-view .e-content-wrap {
     overflow: visible !important;
 }
+/* --- First-run welcome dock --- */
+
+/* Anchored bottom-left over the calendar's quietest corner, so it never covers
+   the toolbar, the URL pill, or today's date. Colors come from the theme
+   variables rather than Tailwind's gray scale, which doesn't read them. */
+.welcome-dock {
+    position: fixed;
+    left: 16px;
+    bottom: 16px;
+    z-index: 45;
+    width: 340px;
+    max-width: calc(100vw - 32px);
+    padding: 14px 15px;
+    border-radius: 10px;
+    background: var(--panel-bg);
+    box-shadow: 0 2px 4px rgba(22, 32, 43, .07), 0 16px 32px -14px rgba(22, 32, 43, .4);
+    overflow: hidden;
+    animation: welcome-dock-in .25s ease-out;
+}
+
+[data-theme="dark"] .welcome-dock {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, .5), 0 16px 32px -14px rgba(0, 0, 0, .8);
+}
+
+.welcome-dock--leaving {
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity .3s ease, transform .3s ease;
+    pointer-events: none;
+}
+
+/* Keeps the example URL from breaking across lines mid-domain. */
+.welcome-dock__url {
+    white-space: nowrap;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px;
+    padding: .1em .35em;
+    border-radius: 3px;
+}
+
+/* Shows the auto-dismiss running down, so the card doesn't just vanish
+   unexplained. Paused on hover/focus via inline animation-play-state. */
+.welcome-dock__progress {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 2px;
+    width: 0;
+    background: var(--link);
+    opacity: .25;
+    animation-name: welcome-dock-progress;
+    animation-timing-function: linear;
+    animation-fill-mode: forwards;
+}
+
+.welcome-dock:hover .welcome-dock__progress,
+.welcome-dock:focus-within .welcome-dock__progress {
+    animation-play-state: paused;
+}
+
+@keyframes welcome-dock-progress {
+    to { width: 100%; }
+}
+
+@keyframes welcome-dock-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@media (max-width: 640px) {
+    .welcome-dock {
+        left: 12px;
+        right: 12px;
+        bottom: 12px;
+        width: auto;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .welcome-dock { animation: none; }
+    .welcome-dock--leaving { transition: none; }
+    .welcome-dock__progress { animation: none; width: 100%; }
+}
