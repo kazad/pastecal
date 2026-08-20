@@ -306,16 +306,32 @@ const CalendarVueApp = {
                     this.updateCustomViewInSchedule();
                     // Re-initialize local settings to load custom colors and labels
                     this.initializeLocalSettings();
-                    // Add to recents when calendar loads
-                    this.recentManager.add(this.calendar.id, this.calendar.title);
+                    // Add to recents when calendar loads.
+                    //
+                    // This callback is a live subscription: it re-fires on every
+                    // remote edit, not just on load. add() bumps visitCount, so
+                    // counting here unguarded would turn "visits" into "edits made
+                    // by anyone while this tab was open" -- someone watching a busy
+                    // calendar would rack up hundreds. Count the visit once per page
+                    // load; later fires only refresh the title.
+                    const firstLoad = !this.visitCounted;
+                    this.visitCounted = true;
+
+                    if (firstLoad) {
+                        this.recentManager.add(this.calendar.id, this.calendar.title);
+                    } else {
+                        this.recentManager.touchTitle(this.calendar.id, this.calendar.title);
+                    }
                     this.recentCalendars = this.recentManager.getAll();
 
                     // Return depth: only interesting from the second visit on, since
                     // every first load would otherwise report visit 1 and swamp it.
-                    const visited = this.recentManager.getAll()
-                        .find(item => item.id === this.calendar.id);
-                    if (visited && visited.visitCount > 1) {
-                        track(a => a.calendarReturned(this.calendar, visited.visitCount));
+                    if (firstLoad) {
+                        const visited = this.recentManager.getAll()
+                            .find(item => item.id === this.calendar.id);
+                        if (visited && visited.visitCount > 1) {
+                            track(a => a.calendarReturned(this.calendar, visited.visitCount));
+                        }
                     }
 
                     if (!this.remoteSettingsApplied) {
@@ -1393,17 +1409,29 @@ const CalendarVueApp = {
 
             // check for existing
             CalendarDataService.checkExists(slug, () => {
-                track(a => a.slugClaimFailed('taken'));
+                track(a => a.track('slug_claim_failed', {
+                    where: 'calendar_url',
+                    reason: 'taken',
+                }));
                 // Revert to alert for this validation as per user request
                 alert("This URL is already taken. Please choose another.");
             }, () => {
                 // does not exist, proceed
                 this.isLoading = true;
                 CalendarDataService.createWithId(slug, this.calendar, () => {
+                    // `where` matches the tag SlugManager puts on the read-only
+                    // link flow, so the two never get conflated in reporting.
                     if (chosen) {
-                        track(a => a.slugClaimed(slug, this.calendar));
+                        track(a => a.track('slug_claimed', {
+                            where: 'calendar_url',
+                            slug_length: slug ? slug.length : 0,
+                            event_count_bucket: a.bucketEvents(this.calendar?.events?.length),
+                        }));
                     } else {
-                        track(a => a.slugAutoAssigned(this.calendar));
+                        track(a => a.track('slug_autoassigned', {
+                            where: 'calendar_url',
+                            event_count_bucket: a.bucketEvents(this.calendar?.events?.length),
+                        }));
                     }
                     // success - clear localStorage so homepage starts fresh next time
                     this.clearLocalStorage();

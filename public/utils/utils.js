@@ -156,6 +156,20 @@ class RecentCalendars {
         this.save();
     }
 
+    /**
+     * Update a stored title in place, without counting a visit.
+     *
+     * The calendar subscription re-fires on every remote edit, so the title can
+     * change while the tab is open. Routing that through add() would inflate
+     * visitCount with other people's edits, so this touches only the title.
+     */
+    touchTitle(id, title) {
+        const item = this.items.find(entry => entry.id === id);
+        if (!item || !title || item.title === title) return;
+        item.title = title;
+        this.save();
+    }
+
     /** Calendars this browser created — never evicted by the recents cap. */
     getMine() {
         return this.getAll().filter(item => item.mine);

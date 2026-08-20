@@ -275,3 +275,39 @@ test('visitCount survives a save/load round trip', () => {
   assert.equal(reloaded.getAll().find((c) => c.id === 'persisted').visitCount, 2);
   assert.ok(store.recentCalendars.includes('visitCount'), 'counter is persisted');
 });
+
+test('touchTitle updates the title without counting a visit', () => {
+  const { manager } = makeManager();
+
+  manager.add('team-cal', 'Old Name');
+  manager.touchTitle('team-cal', 'New Name');
+
+  const entry = manager.getAll()[0];
+  assert.equal(entry.title, 'New Name', 'title is updated');
+  assert.equal(entry.visitCount, 1, 'a title change is not a visit');
+});
+
+test('touchTitle ignores unknown calendars and empty titles', () => {
+  const { manager } = makeManager();
+  manager.add('team-cal', 'Name');
+
+  manager.touchTitle('does-not-exist', 'Whatever');
+  manager.touchTitle('team-cal', '');
+
+  const entry = manager.getAll()[0];
+  assert.equal(entry.title, 'Name', 'an empty title never clobbers a real one');
+  assert.equal(manager.getAll().length, 1, 'no phantom entry is created');
+});
+
+test('touchTitle does not reorder the list', () => {
+  const { manager } = makeManager();
+  manager.add('first', 'First');
+  manager.add('second', 'Second');
+
+  // 'second' is most recent, so it sorts ahead of 'first'.
+  assert.equal(manager.getAll()[0].id, 'second');
+
+  manager.touchTitle('first', 'First Renamed');
+  assert.equal(manager.getAll()[0].id, 'second',
+    'renaming an older calendar must not promote it to most-recent');
+});

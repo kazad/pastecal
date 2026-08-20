@@ -215,7 +215,10 @@ const QuickAddDialog = {
         },
         createEvent() {
             if (!this.isValidEvent) return;
-            if (typeof Analytics !== 'undefined') Analytics.eventAdded('quick_add');
+            // Deliberately not counted here. handleQuickAddEvent() in app.js owns
+            // the event_added call: it has the calendar, so the count bucket is
+            // right, and it runs through track() so a throwing helper can't stop
+            // hideDialog() below and strand the dialog open with the event lost.
             this.$emit('event-created', {
                 subject: this.fields.subject.trim(),
                 startDateTime: this.startDateTime,

@@ -1,3 +1,16 @@
+// Null-safe analytics for this module. analytics.js is a separate <script>, so
+// an ad blocker or CDN failure leaves the global undefined -- and a helper that
+// throws must not abort a slug operation half-way. Mirrors track() in app.js.
+function trackSafely(fn, when = true) {
+    try {
+        if (!when) return;
+        if (typeof Analytics === 'undefined' || !Analytics) return;
+        fn(Analytics);
+    } catch (err) {
+        /* observational only: never surface, never rethrow */
+    }
+}
+
 // SlugManager static class for centralized read-only link operations
 class SlugManager {
     // Normalize slug for consistent lookup (matches backend)
@@ -31,18 +44,24 @@ class SlugManager {
             }
 
             console.log(`${autoCreate ? 'Auto-created' : 'Created'} read-only link:`, publicViewId);
-            if (customSlug && typeof Analytics !== 'undefined') {
-                Analytics.slugClaimed(publicViewId, calendar);
-            }
+            // `where` separates this from claiming the calendar's own URL in
+            // app.js -- same event name, different user action, and conflating
+            // them would make the claim rate unreadable.
+            trackSafely(a => a.track('slug_claimed', {
+                where: 'readonly_link',
+                slug_length: publicViewId ? publicViewId.length : 0,
+                event_count_bucket: a.bucketEvents(calendar?.events?.length),
+            }), customSlug);
             return publicViewId;
 
         } catch (error) {
             console.error('Error creating read-only link:', error);
-            if (customSlug && typeof Analytics !== 'undefined') {
-                // 'already-exists' vs 'invalid-argument' tells you whether to build
-                // name suggestions or fix the validation copy.
-                Analytics.slugClaimFailed(error?.code || 'unknown');
-            }
+            // 'already-exists' vs 'invalid-argument' tells you whether to build
+            // name suggestions or fix the validation copy.
+            trackSafely(a => a.track('slug_claim_failed', {
+                where: 'readonly_link',
+                reason: error?.code || 'unknown',
+            }), customSlug);
             if (!autoCreate) {
                 alert('Failed to create read-only link: ' + (error.message || 'Please try again.'));
             }
@@ -56,7 +75,10 @@ class SlugManager {
             // The moment a calendar silently gets a name nobody chose. This is the
             // denominator for "was the low custom-slug rate a discoverability
             // problem?" -- without it, claims have no base to be a rate of.
-            if (typeof Analytics !== 'undefined') Analytics.slugAutoAssigned(calendar);
+            trackSafely(a => a.track('slug_autoassigned', {
+                where: 'readonly_link',
+                event_count_bucket: a.bucketEvents(calendar?.events?.length),
+            }));
             return this.createReadOnlyLink(calendar, { autoCreate: true });
         }
     }

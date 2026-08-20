@@ -182,3 +182,67 @@ test.describe('Analytics is optional', () => {
     await expect(page.locator('#qa-subject')).toHaveValue('dinner');
   });
 });
+
+test.describe('Events are counted once, and surfaces stay distinct', () => {
+  // QuickAddDialog.js used to call Analytics.eventAdded('quick_add') itself while
+  // app.js also counted the same action, so every typed event was recorded twice
+  // -- and the component's call was unguarded, so a throwing helper stranded the
+  // dialog open with the event lost. app.js owns the call now.
+  test('a quick-add event produces exactly one event_added', async ({ page }) => {
+    await captureEvents(page);
+    await page.goto('/');
+    await expect(page.locator('.e-schedule')).toBeVisible({ timeout: 10_000 });
+
+    await page.locator('[data-testid="desktop-add-event-button"]').click();
+    await page.locator('textarea[aria-label="Event description"]').fill('lunch tomorrow 2pm');
+    await page.locator('button[type="submit"]').click();
+    await page.waitForTimeout(1500);
+
+    const added = await page.evaluate(() =>
+      window.__fired.filter((e) => e.name === 'event_added'));
+
+    expect(added).toHaveLength(1);
+    expect(added[0].params.source).toBe('quick_add');
+    // The component's version passed no calendar, so the bucket was always wrong.
+    expect(added[0].params.event_count_bucket).toBeTruthy();
+  });
+
+  // SlugManager instruments the read-only link flow with the same event names
+  // app.js uses for claiming the calendar's own URL. Without a discriminator the
+  // two actions are indistinguishable in reporting, which defeats the point.
+  test('claiming the calendar URL is tagged as a distinct surface', async ({ page }) => {
+    await captureEvents(page);
+    await page.goto('/');
+    await expect(page.locator('.e-schedule')).toBeVisible({ timeout: 10_000 });
+
+    // The homepage assigns a generated id during boot; filling before that lands
+    // gets silently overwritten, and the claim then reads as auto-assigned.
+    await expect(page.locator('#slug')).not.toHaveValue('');
+
+    const slug = `t-where-${Date.now().toString(36)}`;
+    await page.locator('#slug').fill(slug);
+    await expect(page.locator('#slug')).toHaveValue(slug);
+
+    // A successful claim redirects to /<slug>, which tears down window.__fired.
+    // sessionStorage survives a same-origin navigation, so mirror into it.
+    await page.evaluate(() => {
+      const original = window.Analytics.track.bind(window.Analytics);
+      window.Analytics.track = function (name, params) {
+        const kept = JSON.parse(sessionStorage.getItem('__kept') || '[]');
+        kept.push({ name, params });
+        sessionStorage.setItem('__kept', JSON.stringify(kept));
+        return original(name, params);
+      };
+    });
+
+    await page.getByRole('button', { name: /^Claim/ }).first().click();
+    await page.waitForURL(`**/${slug}`, { timeout: 20_000 });
+
+    const claims = await page.evaluate(() =>
+      JSON.parse(sessionStorage.getItem('__kept') || '[]')
+        .filter((e) => e.name === 'slug_claimed'));
+
+    expect(claims.length).toBeGreaterThan(0);
+    expect(claims[0].params.where).toBe('calendar_url');
+  });
+});

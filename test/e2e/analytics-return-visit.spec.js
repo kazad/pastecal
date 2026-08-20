@@ -108,3 +108,66 @@ test.describe('Return-visit tracking', () => {
     expect(count).toBe(2);
   });
 });
+
+test.describe('Live sync does not inflate visit counts', () => {
+  // The calendar subscription re-fires on every remote edit, and recents.add()
+  // bumps visitCount. Counting there unguarded turns "visits" into "edits anyone
+  // made while this tab was open" -- a busy shared calendar would report hundreds
+  // of visits for one person sitting on one page.
+  test('a remote edit does not count as another visit', async ({ page }) => {
+    await captureEvents(page);
+
+    await page.goto('/');
+    await page.evaluate(() => localStorage.clear());
+
+    await page.goto('/rldispatch');
+    await expect(page.locator('.e-schedule')).toBeVisible({ timeout: 10_000 });
+    await page.waitForTimeout(2000);
+
+    const readCount = () => page.evaluate(() => {
+      const all = [
+        ...JSON.parse(localStorage.getItem('myCalendars') || '[]'),
+        ...JSON.parse(localStorage.getItem('recentCalendars') || '[]'),
+      ];
+      const entry = all.find((item) => item.id === 'rldispatch');
+      return entry && entry.visitCount;
+    });
+
+    const before = await readCount();
+
+    // Add events from this tab: each save round-trips through Firebase and
+    // re-fires the same subscription callback that records the visit.
+    for (const text of ['sync test one tomorrow 9am', 'sync test two tomorrow 10am']) {
+      await page.locator('[data-testid="desktop-add-event-button"]').click();
+      await page.locator('textarea[aria-label="Event description"]').fill(text);
+      await page.locator('button[type="submit"]').click();
+      await page.waitForTimeout(2500);
+    }
+
+    expect(await readCount()).toBe(before);
+  });
+
+  test('calendar_returned fires at most once per page load', async ({ page }) => {
+    await captureEvents(page);
+
+    await page.goto('/');
+    await page.evaluate(() => localStorage.clear());
+
+    // Two loads: the second is the one that should report a return.
+    await page.goto('/rldispatch');
+    await page.waitForTimeout(2500);
+    await page.goto('/rldispatch');
+    await expect(page.locator('.e-schedule')).toBeVisible({ timeout: 10_000 });
+
+    // Make edits so the subscription re-fires several times.
+    await page.locator('[data-testid="desktop-add-event-button"]').click();
+    await page.locator('textarea[aria-label="Event description"]').fill('once only tomorrow 4pm');
+    await page.locator('button[type="submit"]').click();
+    await page.waitForTimeout(3000);
+
+    const returns = await page.evaluate(() =>
+      window.__fired.filter((e) => e.name === 'calendar_returned'));
+
+    expect(returns).toHaveLength(1);
+  });
+});
