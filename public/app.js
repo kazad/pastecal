@@ -1,5 +1,25 @@
 // CopyIcon and SettingsIcon already defined above, no need to redeclare
 
+/**
+ * Null-safe analytics. `track(fn)` runs `fn` against the Analytics module if it
+ * loaded, and does nothing at all if it didn't.
+ *
+ * analytics.js is a separate <script>: a CDN hiccup, an ad blocker, or a corrupt
+ * response leaves the global undefined, and a bare `Analytics.foo()` call site
+ * then throws a ReferenceError that takes the whole calendar down with it. The
+ * module promises internally that "a broken sink must not affect a single
+ * calendar operation" -- this extends that promise to the module not existing.
+ * See test/e2e/analytics-failsafe.spec.js.
+ */
+function track(fn) {
+    try {
+        if (typeof Analytics === 'undefined' || !Analytics) return;
+        fn(Analytics);
+    } catch (err) {
+        /* observational only: never surface, never rethrow */
+    }
+}
+
 // ============================================================
 // COMPONENT REGISTRY
 // ============================================================
@@ -290,6 +310,14 @@ const CalendarVueApp = {
                     this.recentManager.add(this.calendar.id, this.calendar.title);
                     this.recentCalendars = this.recentManager.getAll();
 
+                    // Return depth: only interesting from the second visit on, since
+                    // every first load would otherwise report visit 1 and swamp it.
+                    const visited = this.recentManager.getAll()
+                        .find(item => item.id === this.calendar.id);
+                    if (visited && visited.visitCount > 1) {
+                        track(a => a.calendarReturned(this.calendar, visited.visitCount));
+                    }
+
                     if (!this.remoteSettingsApplied) {
                         this.applyGlobalSettingsAfterRemote();
                         this.remoteSettingsApplied = true;
@@ -305,6 +333,11 @@ const CalendarVueApp = {
             this.isExisting = false;
             this.calendar.id = Utils.randomID(8);
             this.isLoading = false;
+
+            // The claim bar is on screen with a generated name in it. This is the
+            // denominator for the naming question: everyone who was offered a name
+            // to change, whether or not they ever touch it.
+            track(a => a.slugPromptShown('homepage_bar', this.calendar));
         }
 
         const scheduleObj = window.scheduleObj = new ej.schedule.Schedule();
@@ -450,6 +483,11 @@ const CalendarVueApp = {
                     console.log(` - syncFusionEvents ${this.syncFusionEvents.length}`, this.syncFusionEvents);
                     console.log(` - eventsData ${scheduleObj.eventsData.length}`, scheduleObj.eventsData);
                     this.calendar.setEvents(this.syncFusionEvents);
+                    if (ev.requestType === 'eventCreated') {
+                        // Everything the scheduler itself creates: grid drag, the
+                        // built-in editor, and the cell popup all land here.
+                        track(a => a.eventAdded('grid', this.calendar));
+                    }
                     break;
             }
             // console.log(ev);
@@ -1348,14 +1386,25 @@ const CalendarVueApp = {
             slug = SlugManager.normalizeSlug(slug);
             this.calendar.id = slug;
 
+            // Whether the name was chosen or just accepted is the whole naming
+            // question -- a claim of an untouched generated id is not evidence
+            // that anyone wanted that name.
+            const chosen = this.userHasEditedSlug;
+
             // check for existing
             CalendarDataService.checkExists(slug, () => {
+                track(a => a.slugClaimFailed('taken'));
                 // Revert to alert for this validation as per user request
                 alert("This URL is already taken. Please choose another.");
             }, () => {
                 // does not exist, proceed
                 this.isLoading = true;
                 CalendarDataService.createWithId(slug, this.calendar, () => {
+                    if (chosen) {
+                        track(a => a.slugClaimed(slug, this.calendar));
+                    } else {
+                        track(a => a.slugAutoAssigned(this.calendar));
+                    }
                     // success - clear localStorage so homepage starts fresh next time
                     this.clearLocalStorage();
                     // Record in recents here rather than relying on the post-redirect
@@ -1842,10 +1891,12 @@ const CalendarVueApp = {
             });
             this.calendar.events.push(newEvent);
             this.calendar.setEvents(this.calendar.events);
+            track(a => a.eventAdded('quick_add', this.calendar));
         },
 
         shareUrl(url, title) {
             if (navigator.share) {
+                track(a => a.calendarShared('native'));
                 navigator.share({
                     title: 'PasteCal Calendar',
                     text: title,
@@ -2282,11 +2333,19 @@ const CalendarVueApp = {
             this.calendar.options.notes = newNotes;
         },
 
-        copyToClipboard(textToCopy, buttonElement) {
+        /**
+         * @param method What was copied, for analytics: 'copy' for a calendar link,
+         *   'ics' for a feed URL. The function itself can't tell them apart, so the
+         *   call site says which -- an untagged copy still works, it just isn't
+         *   attributed.
+         */
+        copyToClipboard(textToCopy, buttonElement, method) {
             if (!textToCopy) {
                 this.showToast('Nothing to copy', 'error');
                 return;
             }
+
+            if (method) track(a => a.calendarShared(method));
 
             navigator.clipboard.writeText(textToCopy).then(() => {
                 const originalContent = buttonElement.innerHTML;

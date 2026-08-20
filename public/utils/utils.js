@@ -126,6 +126,12 @@ class RecentCalendars {
         const isMine = mine || (existingItem ? !!existingItem.mine : false);
         const createdAt = existingItem?.createdAt || (isMine ? new Date().toISOString() : undefined);
 
+        // How many times this browser has opened this calendar. Return depth is the
+        // one signal that separates a calendar someone keeps using from one they
+        // made once, and lastVisited alone can't express it. Entries written before
+        // this existed have no count, so treat a missing value as the first visit.
+        const visitCount = (existingItem?.visitCount || 1) + (existingItem ? 1 : 0);
+
         // Remove if exists
         this.items = this.items.filter(item => item.id !== id);
 
@@ -135,6 +141,7 @@ class RecentCalendars {
             title: title || id,
             pinned: wasPinned,
             mine: isMine,
+            visitCount: visitCount,
             ...(createdAt ? { createdAt } : {}),
             lastVisited: new Date().toISOString()
         });

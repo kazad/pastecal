@@ -142,6 +142,8 @@ Copyright (c) 2025 Kalid Azad
         // Load-order guard for critical globals
         (function () {
             const required = [
+                // Analytics is deliberately absent from this list: it is optional
+                // by design, and app.js degrades to a no-op without it.
                 ['Utils', () => typeof Utils !== 'undefined'],
                 ['Event', () => typeof Event !== 'undefined'],
                 ['Calendar', () => typeof Calendar !== 'undefined'],
@@ -714,7 +716,7 @@ Copyright (c) 2025 Kalid Azad
                         <div class="flex gap-2">
                             <input type="text" :value="getEditableURL()" readonly
                                 class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
-                            <button @click="copyToClipboard(getEditableURL(), $event.currentTarget)"
+                            <button @click="copyToClipboard(getEditableURL(), $event.currentTarget, 'copy')"
                                 class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
                                 <icon name="copy" class="h-4 w-4 mr-1"></icon>
                                 <span>Copy</span>
@@ -752,7 +754,7 @@ Copyright (c) 2025 Kalid Azad
                             <div class="flex gap-2">
                                 <input type="text" :value="getReadOnlyURL()" readonly
                                     class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
-                                <button @click="copyToClipboard(getReadOnlyURL(), $event.currentTarget)"
+                                <button @click="copyToClipboard(getReadOnlyURL(), $event.currentTarget, 'copy')"
                                     class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
                                     <icon name="copy" class="h-4 w-4 mr-1"></icon>
                                     <span>Copy</span>
@@ -814,7 +816,7 @@ Copyright (c) 2025 Kalid Azad
                         <div class="flex gap-2">
                             <input type="text" :value="currentViewURL" readonly
                                 class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
-                            <button @click="copyToClipboard(currentViewURL, $event.currentTarget)"
+                            <button @click="copyToClipboard(currentViewURL, $event.currentTarget, 'copy')"
                                 class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
                                 <icon name="copy" class="h-4 w-4 mr-1"></icon>
                                 <span>Copy</span>
@@ -853,7 +855,7 @@ Copyright (c) 2025 Kalid Azad
                                 <div class="flex gap-2">
                                     <input type="text" :value="getEditableICSURL()" readonly
                                         class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
-                                    <button @click="copyToClipboard(getEditableICSURL(), $event.currentTarget)"
+                                    <button @click="copyToClipboard(getEditableICSURL(), $event.currentTarget, 'ics')"
                                         class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
                                         <icon name="copy" class="h-4 w-4 mr-1"></icon>
                                         <span>Copy</span>
@@ -867,7 +869,7 @@ Copyright (c) 2025 Kalid Azad
                                 <div class="flex gap-2">
                                     <input type="text" :value="getReadOnlyICSURL()" readonly
                                         class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
-                                    <button @click="copyToClipboard(getReadOnlyICSURL(), $event.currentTarget)"
+                                    <button @click="copyToClipboard(getReadOnlyICSURL(), $event.currentTarget, 'ics')"
                                         class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
                                         <icon name="copy" class="h-4 w-4 mr-1"></icon>
                                         <span>Copy</span>

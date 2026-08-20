@@ -221,3 +221,57 @@ test('renaming moves the entry and keeps ownership and pin state', () => {
   assert.equal(all[0].pinned, true, 'pin state carries across the rename');
   assert.equal(all[0].mine, true, 'ownership carries across the rename');
 });
+
+// --- visit counting -------------------------------------------------------
+//
+// Return depth is the signal that separates a calendar someone keeps using from
+// one they made once. lastVisited alone can't express it, so add() keeps a count.
+
+test('visitCount starts at 1 and increments on each subsequent visit', () => {
+  const { manager } = makeManager();
+
+  manager.add('team-cal', 'Team');
+  assert.equal(manager.getAll()[0].visitCount, 1, 'first visit is 1, not 0 or 2');
+
+  manager.add('team-cal', 'Team');
+  manager.add('team-cal', 'Team');
+  assert.equal(manager.getAll()[0].visitCount, 3);
+});
+
+test('visitCount is tracked per calendar, not globally', () => {
+  const { manager } = makeManager();
+
+  manager.add('a', 'A');
+  manager.add('a', 'A');
+  manager.add('b', 'B');
+
+  const all = manager.getAll();
+  assert.equal(all.find((c) => c.id === 'a').visitCount, 2);
+  assert.equal(all.find((c) => c.id === 'b').visitCount, 1);
+});
+
+test('an entry saved before visitCount existed is treated as one prior visit', () => {
+  // A browser that used pastecal before the counter shipped.
+  const { manager } = makeManager({
+    recentCalendars: JSON.stringify([
+      { id: 'legacy', title: 'Legacy', pinned: false, mine: false,
+        lastVisited: '2026-01-01T00:00:00.000Z' },
+    ]),
+  });
+
+  manager.add('legacy', 'Legacy');
+  // Must not be NaN, and must not reset the history to 1.
+  assert.equal(manager.getAll()[0].visitCount, 2);
+});
+
+test('visitCount survives a save/load round trip', () => {
+  const { manager, store, RecentCalendars } = makeManager();
+
+  manager.add('persisted', 'Persisted');
+  manager.add('persisted', 'Persisted');
+
+  // A fresh manager over the same backing store, as a reload would see it.
+  const reloaded = new RecentCalendars();
+  assert.equal(reloaded.getAll().find((c) => c.id === 'persisted').visitCount, 2);
+  assert.ok(store.recentCalendars.includes('visitCount'), 'counter is persisted');
+});
