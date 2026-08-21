@@ -1,5 +1,31 @@
 IN PROGRESS:
 
+## Checking the numbers
+
+```bash
+./scripts/stats.sh              # visitors + product events, last 30 days
+./scripts/stats.sh funnel       # of people offered a name, how many chose one
+./scripts/stats.sh calendars    # busiest calendars, with visits-per-user
+./scripts/stats.sh -d 90 events # any command takes -d for the window
+./scripts/stats.sh -j summary   # -j for JSON instead of a table
+./scripts/stats.sh setup        # check GA4 can actually answer the above
+```
+
+Auth is the ADC you already have; if it 401s, `gcloud auth login --update-adc`.
+
+Two analytics views, deliberately separate:
+
+- `scripts/stats.sh` — GA4, i.e. visitor behavior. Claim rate, return depth,
+  where events get added, how calendars get shared.
+- `internal/scripts/local-analytics.js` — Firebase, i.e. the data itself.
+  Calendar count, titles, event counts, ICS feed hits. Serves HTML on :5197.
+
+**Run `./scripts/stats.sh setup` before relying on any breakdown.** Event
+parameters (`source`, `method`, `visit_bucket`, `where`, ...) are collected as
+soon as the code ships, but are not queryable until a matching custom dimension
+exists in GA4 — and GA4 does not backfill, so a dimension created today shows
+nothing for yesterday. As of 2026-08-21 none are registered.
+
 FUTURE:
 
 - Import other ICS calendars to current pastecal (have a list)
