@@ -105,6 +105,48 @@ def sparkline(series, width=760, height=128):
 <div class="axis"><span>{esc(series[0][0])}</span><span>{esc(series[-1][0])}</span></div>'''
 
 
+def monthly_chart(items, partial_item=None):
+    """Monthly users, returning vs new, as stacked columns.
+
+    Stacked rather than two lines because the QUESTION is the mix -- how much of
+    the growth is people coming back -- and a stack answers that directly. A 2px
+    surface gap separates the segments so the boundary is never ambiguous.
+    """
+    if len(items) < 2:
+        return '<p class="empty">Not enough months yet.</p>'
+    show = items[-12:]
+    hi = max(r["users"] for r in show) or 1
+    cols = []
+    for r in show:
+        ret_h = r["returning"] / hi * 100
+        new_h = r["new"] / hi * 100
+        cols.append(
+            f'<div class="mcol" title="{esc(r["label"])}: {esc(num(r["users"]))} people">'
+            f'<span class="mplot"><span class="mstack">'
+            f'<span class="mnew" style="height:{new_h:.1f}%"></span>'
+            f'<span class="mret" style="height:{ret_h:.1f}%"></span>'
+            f'</span></span>'
+            f'<span class="mlab">{esc(r["short"])}</span></div>')
+    tail = ""
+    if partial_item:
+        ret_h = partial_item["returning"] / hi * 100
+        new_h = partial_item["new"] / hi * 100
+        tail = (f'<div class="mcol partial" title="{esc(partial_item["label"])}: '
+                f'month still in progress">'
+                f'<span class="mplot"><span class="mstack">'
+                f'<span class="mnew" style="height:{new_h:.1f}%"></span>'
+                f'<span class="mret" style="height:{ret_h:.1f}%"></span>'
+                f'</span></span>'
+                f'<span class="mlab">{esc(partial_item["short"])}</span></div>')
+    return (
+        '<div class="mlegend">'
+        '<span><i class="sw ret"></i>Returning</span>'
+        '<span><i class="sw new"></i>New</span></div>'
+        '<div class="months">' + "".join(cols) + tail + "</div>"
+        + ('<p class="mnote">The final column is the current month, still in '
+           'progress &mdash; it is not a decline.</p>' if partial_item else ""))
+
+
 def bars(items, unit=""):
     """Ranked horizontal bars. Magnitude by length; value direct-labelled."""
     if not items:
@@ -265,6 +307,43 @@ def sticky(items, min_people=3):
             and r["path"] != "/" and not r["path"].startswith("/view/")]
 
 
+# ---- monthly history --------------------------------------------------------
+# The single most important context in the report. A two-window delta on a noisy
+# site says almost nothing; twelve months of direction says a lot.
+monthly = []
+for dims, mets in sorted(rows(d.get("monthly")), key=lambda r: r[0][0]):
+    ym = dims[0]
+    if len(ym) != 6:
+        continue
+    users, new_users = mets[0], mets[1]
+    monthly.append({
+        "ym": ym,
+        "label": f"{ym[:4]}-{ym[4:]}",
+        "short": ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][int(ym[4:]) - 1] + " " + ym[2:4],
+        "users": users,
+        "new": new_users,
+        "returning": max(users - new_users, 0),
+    })
+
+# The current month is partial, so it always looks like a crash. Flag it rather
+# than letting it read as a decline.
+partial = monthly[-1] if monthly else None
+complete = monthly[:-1] if len(monthly) > 1 else monthly
+
+
+def growth_multiple(items, key):
+    if len(items) < 2 or not items[0][key]:
+        return None
+    return items[-1][key] / items[0][key]
+
+
+def avg_mom(items, key):
+    if len(items) < 2 or not items[0][key]:
+        return None
+    n = len(items) - 1
+    return ((items[-1][key] / items[0][key]) ** (1.0 / n) - 1) * 100
+
+
 cur_ret, cur_new = split_users(d.get("overview"))
 prev_ret, prev_new = split_users(d.get("prevOverview"))
 
@@ -370,6 +449,27 @@ code{{font-family:var(--mono);font-size:.87em;background:var(--sunk);
 .kd.down{{background:var(--warn-soft);color:var(--warn)}}
 .kd.flat{{background:var(--sunk);color:var(--muted)}}
 .kpi .kw{{font-size:13px;color:var(--muted);margin-top:10px;line-height:1.45}}
+.mlegend{{display:flex;gap:16px;font-size:12.5px;color:var(--muted);margin-bottom:10px}}
+.mlegend .sw{{display:inline-block;width:10px;height:10px;border-radius:2px;
+              margin-right:5px;vertical-align:-1px}}
+.sw.ret{{background:var(--s1)}} .sw.new{{background:var(--s3)}}
+.months{{display:flex;gap:6px;align-items:flex-end}}
+.mcol{{flex:1;display:flex;flex-direction:column;align-items:center;min-width:0}}
+/* The stack needs a RESOLVED height for its percentage segments to size against;
+   flex:1 inside an auto-height parent gives them nothing to resolve to, and every
+   bar collapses to min-height. */
+.mplot{{height:170px;width:100%;display:flex;align-items:flex-end}}
+/* Columns grow UP from a shared baseline: the stack is bottom-aligned inside a
+   full-height cell, with the returning segment written last so column-reverse
+   puts it at the bottom. The duplicate justify-content here previously made the
+   bars hang from the top instead. */
+.mstack{{width:100%;display:flex;flex-direction:column-reverse;
+         justify-content:flex-start;gap:2px;height:100%}}
+.mret{{background:var(--s1);border-radius:0 0 3px 3px;min-height:2px}}
+.mnew{{background:var(--s3);border-radius:3px 3px 0 0;min-height:2px}}
+.mcol.partial .mstack{{opacity:.42}}
+.mlab{{font-size:10.5px;color:var(--faint);margin-top:6px;white-space:nowrap}}
+.mnote{{font-size:12.5px;color:var(--faint);margin-top:10px;font-style:italic}}
 .tiles{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
         gap:10px;margin-top:18px}}
 .tile{{border:1px solid var(--rule);border-radius:10px;background:var(--panel);
@@ -431,6 +531,41 @@ footer{{border-top:1px solid var(--rule);padding-top:20px;margin-top:14px;
      <code>pastecal-web</code>. This file is local; nothing is published.</p>
 </header>''')
 
+# ---- growth (leads the report: direction before detail)
+if len(complete) >= 3:
+    mult_u = growth_multiple(complete, "users")
+    mult_r = growth_multiple(complete, "returning")
+    mom = avg_mom(complete, "users")
+    span = f"{complete[0]['short']} to {complete[-1]['short']}"
+
+    A(f'''<section>
+<h2>Growth</h2>
+<p class="lede">Twelve months of direction. A two-window comparison on a site
+this noisy can say the opposite of the trend, so this comes first.</p>
+
+<div class="tiles">
+  <div class="tile hi"><div class="v">{num(mult_u, 1)}&times;</div>
+    <div class="k">People, {esc(span)}</div></div>
+  <div class="tile hi"><div class="v">{num(mult_r, 1)}&times;</div>
+    <div class="k">Returning people, same span</div></div>
+  <div class="tile good"><div class="v">{num(mom, 1)}%</div>
+    <div class="k">Average month over month</div></div>
+</div>
+
+<div class="card">
+  <h3>People per month</h3>
+  {monthly_chart(complete, partial)}
+</div>
+
+<div class="note good">
+<h3>Returning growth is tracking total growth</h3>
+<p>People grew <b>{num(mult_u, 1)}&times;</b> and returning people grew
+<b>{num(mult_r, 1)}&times;</b> over the same span. Retention is keeping pace with
+acquisition rather than lagging it &mdash; the audience is compounding, not
+churning through.</p>
+</div>
+</section>''')
+
 # ---- KPIs
 def kpi(name, value, now, before, note, invert=False):
     change, direction = delta(now, before)
@@ -450,10 +585,11 @@ def kpi(name, value, now, before, note, invert=False):
 
 A(f'''<section>
 <h2>The three numbers</h2>
-<p class="lede">Everything else in this report is diagnosis. These are the ones
-worth watching week to week, chosen against the growth model: people who come
-back, whether calendars actually get shared, and how many calendars have a real
-audience.</p>
+<p class="lede">Chosen against the growth model: people who come back, whether
+calendars actually get shared, and how many calendars have a real audience.</p>
+<p class="lede"><b>Read the deltas against the trend above, not on their own.</b>
+A {days}-day window is short enough that a busy fortnight can invert the sign
+&mdash; these say what changed recently, not which way the product is going.</p>
 <div class="kpis">
 {kpi("Returning people", num(cur_ret), cur_ret, prev_ret,
      "People who came back at least once. Total visitors flatters &mdash; most arrive once "

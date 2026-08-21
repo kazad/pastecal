@@ -110,6 +110,12 @@ prev_range="{\"startDate\":\"${prev_start}daysAgo\",\"endDate\":\"${prev_end}day
 prev_overview="$(post "$API" "$(printf '{"dateRanges":[%s],"dimensions":[{"name":"newVsReturning"}],"metrics":[{"name":"sessions"},{"name":"totalUsers"},{"name":"averageSessionDuration"}]}' "$prev_range")")"
 prev_reach="$(post "$API" "$(printf '{"dateRanges":[%s],"dimensions":[{"name":"pagePath"}],"metrics":[{"name":"screenPageViews"},{"name":"totalUsers"},{"name":"newUsers"}],"limit":200,"orderBys":[{"metric":{"metricName":"screenPageViews"},"desc":true}]}' "$prev_range")")"
 
+# Month-over-month history. The KPI deltas compare two adjacent windows, which
+# is far too short a baseline for a site with this much week-to-week noise -- a
+# 30-day comparison showed "returning users flat, sharing ratio down 36%" during
+# a year in which both actually grew 6x. Trend beats delta; show both.
+monthly="$(post "$API" '{"dateRanges":[{"startDate":"365daysAgo","endDate":"yesterday"}],"dimensions":[{"name":"yearMonth"}],"metrics":[{"name":"totalUsers"},{"name":"newUsers"},{"name":"sessions"}],"limit":24,"orderBys":[{"dimension":{"dimensionName":"yearMonth"}}]}')"
+
 # Realtime has no processing delay, so it shows whether instrumentation is live
 # right now even when the daily tables have not caught up yet.
 realtime="$(post "$RT_API" '{"dimensions":[{"name":"eventName"}],"metrics":[{"name":"eventCount"}],"limit":30}')"
@@ -151,12 +157,13 @@ DATA="$(jq -n \
     --argjson pages "$pages" --argjson events "$events" \
     --argjson reach "$reach" \
     --argjson prevOverview "$prev_overview" --argjson prevReach "$prev_reach" \
+    --argjson monthly "$monthly" \
     --argjson countries "$countries" --argjson realtime "$realtime" \
     --argjson dims "$dims" --argjson breakdowns "$breakdowns" \
     --arg days "$DAYS" --arg generated "$(date '+%Y-%m-%d %H:%M')" \
     '{overview:$overview, daily:$daily, devices:$devices, channels:$channels,
       pages:$pages, reach:$reach, events:$events, countries:$countries, realtime:$realtime,
-      prevOverview:$prevOverview, prevReach:$prevReach,
+      prevOverview:$prevOverview, prevReach:$prevReach, monthly:$monthly,
       dims:$dims, breakdowns:$breakdowns, days:($days|tonumber), generated:$generated}')"
 
 echo "Rendering..." >&2
