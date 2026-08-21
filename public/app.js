@@ -1577,6 +1577,50 @@ const CalendarVueApp = {
             return SlugManager.getReadOnlyICSURL(this.calendar);
         },
 
+        /**
+         * The feed to hand out for subscribing. Prefers the read-only link: someone
+         * adding a roster to their phone wants to read it, and defaulting to the
+         * editable feed would spread write access further than anyone intended.
+         */
+        getSubscribeICSURL() {
+            return this.getReadOnlyICSURL() || this.getEditableICSURL();
+        },
+
+        /**
+         * webcal:// is the scheme operating systems hand to the default calendar
+         * app, which is what turns "subscribe" into one tap instead of copy, find
+         * your calendar app, locate add-by-URL, paste.
+         *
+         * It can fail silently -- if nothing is registered for the scheme, the
+         * click does nothing at all -- which is why the named app buttons and the
+         * plain feed URL stay visible next to it.
+         */
+        getWebcalURL() {
+            const url = this.getSubscribeICSURL();
+            if (!url) return null;
+            return url.replace(/^https?:\/\//, 'webcal://');
+        },
+
+        getGoogleSubscribeURL() {
+            const webcal = this.getWebcalURL();
+            if (!webcal) return null;
+            return 'https://calendar.google.com/calendar/r?cid=' + encodeURIComponent(webcal);
+        },
+
+        getOutlookSubscribeURL() {
+            // Outlook's add-from-web takes the https URL, not the webcal one.
+            const url = this.getSubscribeICSURL();
+            if (!url) return null;
+            return 'https://outlook.live.com/calendar/0/addfromweb?url='
+                + encodeURIComponent(url)
+                + '&name=' + encodeURIComponent(this.calendar.title || 'PasteCal');
+        },
+
+        /** Records which subscribe path was used, so the rate is measurable. */
+        trackSubscribe(method) {
+            track(a => a.calendarShared(method));
+        },
+
         createReadOnlyLink() {
             // Use SlugManager for centralized read-only link operations
             return SlugManager.createReadOnlyLink(this.calendar);

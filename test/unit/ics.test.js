@@ -117,6 +117,14 @@ test('generateICS: valid event output is unchanged aside from DTSTAMP/CRLF', () 
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
     'PRODID:-//PasteCal//test//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    // No title on this fixture, so the name falls back to the id rather than
+    // emitting an empty X-WR-CALNAME (some clients render that as blank).
+    'X-WR-CALNAME:test',
+    'NAME:test',
+    'REFRESH-INTERVAL;VALUE=DURATION:PT1H',
+    'X-PUBLISHED-TTL:PT1H',
     'BEGIN:VEVENT',
     'UID:27',
     `DTSTAMP:${dtstamp}`,
@@ -187,4 +195,59 @@ test('status mapping: an unexpected error still maps to 500', () => {
   assert.equal(statusFor(new TypeError('boom')), 500);
   assert.equal(statusFor(new functions.https.HttpsError('internal', 'kaboom')), 500);
   assert.equal(statusFor(undefined), 500);
+});
+
+// --- Feed metadata (subscription quality) --------------------------------------------------
+//
+// A subscribed feed is judged on what the client shows in the calendar list and
+// how often it re-polls. Without these headers the subscription appears as the
+// raw URL or "Untitled", and clients fall back to their own refresh interval --
+// some default to once a day, which makes a shared calendar look broken.
+
+test('generateICS: the calendar title becomes the subscription name', () => {
+  const ics = ICSService.generateICS(
+    { title: 'Rebel Loons Dispatch', events: [GOOD_EVENT] }, 'rldispatch');
+
+  assert.match(ics, /^X-WR-CALNAME:Rebel Loons Dispatch$/m);
+  // NAME is the RFC 7986 spelling; X-WR-CALNAME is what most clients actually read.
+  assert.match(ics, /^NAME:Rebel Loons Dispatch$/m);
+});
+
+test('generateICS: a missing title falls back to the calendar id', () => {
+  const ics = ICSService.generateICS({ events: [GOOD_EVENT] }, 'rldispatch');
+
+  // An empty X-WR-CALNAME renders as blank in some clients, which is worse than
+  // showing the id.
+  assert.match(ics, /^X-WR-CALNAME:rldispatch$/m);
+  assert.ok(!ics.includes('X-WR-CALNAME:\r\n'), 'never emit an empty name');
+});
+
+test('generateICS: a title with commas or semicolons is escaped', () => {
+  const ics = ICSService.generateICS(
+    { title: 'Ops; staffing, on-call', events: [GOOD_EVENT] }, 'ops');
+
+  // Unescaped, these would be read as ICS property-parameter separators and
+  // truncate the name at the first comma. Compared as a plain string: the
+  // backslashes make the regex form of this assertion easy to get wrong.
+  assert.ok(
+    ics.split('\r\n').includes('X-WR-CALNAME:Ops\\; staffing\\, on-call'),
+    'commas and semicolons in the title must be backslash-escaped');
+});
+
+test('generateICS: clients are told how often to refresh', () => {
+  const ics = ICSService.generateICS({ events: [GOOD_EVENT] }, 'test');
+
+  assert.match(ics, /^REFRESH-INTERVAL;VALUE=DURATION:PT1H$/m);
+  // Outlook reads the older Microsoft spelling instead; harmless to send both.
+  assert.match(ics, /^X-PUBLISHED-TTL:PT1H$/m);
+});
+
+test('generateICS: metadata sits before the first event', () => {
+  const ics = ICSService.generateICS(
+    { title: 'Team', events: [GOOD_EVENT] }, 'team');
+
+  // Calendar-level properties must precede any component, or strict parsers
+  // treat them as belonging to the VEVENT.
+  assert.ok(ics.indexOf('X-WR-CALNAME:') < ics.indexOf('BEGIN:VEVENT'));
+  assert.ok(ics.indexOf('REFRESH-INTERVAL') < ics.indexOf('BEGIN:VEVENT'));
 });

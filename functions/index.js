@@ -168,10 +168,26 @@ const ICSService = {
         const dtstamp = this.formatDateTime(new Date());
         const events = renderable.map(event => this.createEventBlock(event, dtstamp));
 
+        // Without X-WR-CALNAME a subscription shows up in the user's calendar list
+        // as the raw feed URL, or as "Untitled" -- so a shared roster is unlabelled
+        // in the one place the subscriber actually looks. Fall back to the id
+        // rather than emitting an empty name, which some clients render as blank.
+        const name = this.escapeText(calendarData?.title || id);
+
+        // REFRESH-INTERVAL is the RFC 7986 hint; X-PUBLISHED-TTL is the older
+        // Microsoft equivalent that Outlook still honours. Clients that read
+        // neither pick their own interval, and some default to once a day, which
+        // makes a shared calendar feel broken when an edit doesn't show up.
         return [
             "BEGIN:VCALENDAR",
             "VERSION:2.0",
             `PRODID:-//PasteCal//${id}//EN`,
+            "CALSCALE:GREGORIAN",
+            "METHOD:PUBLISH",
+            `X-WR-CALNAME:${name}`,
+            `NAME:${name}`,
+            "REFRESH-INTERVAL;VALUE=DURATION:PT1H",
+            "X-PUBLISHED-TTL:PT1H",
             ...events,
             "END:VCALENDAR"
         ].join("\r\n");
