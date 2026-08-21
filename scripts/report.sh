@@ -93,6 +93,9 @@ daily="$(post "$API" "$(q 'date' 'totalUsers,sessions' '' 400)")"
 devices="$(post "$API" "$(q 'deviceCategory' 'sessions,totalUsers')")"
 channels="$(post "$API" "$(q 'sessionDefaultChannelGroup' 'sessions,totalUsers' '' 12)")"
 pages="$(post "$API" "$(q 'landingPage' 'sessions,totalUsers' '' 25)")"
+# pagePath rather than landingPage: landingPage only counts sessions that
+# STARTED on a page, so a calendar reached from the homepage is undercounted.
+reach="$(post "$API" "$(q 'pagePath' 'screenPageViews,totalUsers,newUsers' '' 30)")"
 events="$(post "$API" "$(q 'eventName' 'eventCount,totalUsers' "$(only "$CUSTOM")")")"
 countries="$(post "$API" "$(q 'country' 'totalUsers' '' 10)")"
 
@@ -135,11 +138,12 @@ DATA="$(jq -n \
     --argjson overview "$overview" --argjson daily "$daily" \
     --argjson devices "$devices" --argjson channels "$channels" \
     --argjson pages "$pages" --argjson events "$events" \
+    --argjson reach "$reach" \
     --argjson countries "$countries" --argjson realtime "$realtime" \
     --argjson dims "$dims" --argjson breakdowns "$breakdowns" \
     --arg days "$DAYS" --arg generated "$(date '+%Y-%m-%d %H:%M')" \
     '{overview:$overview, daily:$daily, devices:$devices, channels:$channels,
-      pages:$pages, events:$events, countries:$countries, realtime:$realtime,
+      pages:$pages, reach:$reach, events:$events, countries:$countries, realtime:$realtime,
       dims:$dims, breakdowns:$breakdowns, days:($days|tonumber), generated:$generated}')"
 
 echo "Rendering..." >&2

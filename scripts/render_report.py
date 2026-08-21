@@ -189,6 +189,24 @@ NEEDED = ["where", "source", "method", "visit_bucket", "slug_length",
           "event_count_bucket", "has_custom_slug", "reason", "surface"]
 missing = [p for p in NEEDED if not dims_list or p not in dims_list] if dims_list is not None else NEEDED
 
+# Reach: how many DIFFERENT people saw a calendar, vs the same few reloading.
+# pagePath, not landingPage -- landingPage only counts sessions that started on
+# the page, undercounting anything reached from the homepage.
+reach_rows = []
+for dims, mets in rows(d.get("reach")):
+    path = dims[0] or "(not set)"
+    views, users, new_users = mets[0], mets[1], (mets[2] if len(mets) > 2 else 0)
+    if users <= 0:
+        continue
+    reach_rows.append({
+        "path": path,
+        "views": views,
+        "users": users,
+        "new": new_users,
+        "returning": max(users - new_users, 0),
+        "per": views / users,
+    })
+
 bd = d.get("breakdowns") or {}
 
 # ---------------------------------------------------------------- html
@@ -416,14 +434,46 @@ if bd:
                 A(f'<div class="card"><h3>{esc(title)}</h3>{bars(items)}</div>')
     A("</section>")
 
-# ---- calendars
+# ---- reach
+by_people = sorted(reach_rows, key=lambda r: -r["users"])[:12]
+by_loyalty = sorted([r for r in reach_rows if r["users"] >= 3],
+                    key=lambda r: -r["per"])[:12]
+
 A(f'''<section>
-<h2>Busiest calendars</h2>
-<p class="lede">Ranked by visits per person, which separates a standing schedule
-people keep checking from a page that got linked once.</p>
-{table(["Calendar", "Sessions", "People", "Visits each"],
-       [[f"<code>{esc(p)}</code>", num(s), num(u), num(r, 1)] for p, s, u, r in cal_rows],
-       ["l", "r", "r", "r"])}
+<h2>Reach: how many people, versus how often</h2>
+<p class="lede">Two different questions, and a calendar can score high on one and
+low on the other. <b>People</b> is distinct visitors; <b>views each</b> is how
+hard those same people are reloading it.</p>
+
+<div class="card">
+  <h3>Seen by the most different people</h3>
+  {table(["Calendar", "People", "New", "Returning", "Views", "Views each"],
+         [[f"<code>{esc(r['path'])}</code>", num(r["users"]), num(r["new"]),
+           num(r["returning"]), num(r["views"]), num(r["per"], 1)]
+          for r in by_people],
+         ["l", "r", "r", "r", "r", "r"])}
+</div>
+
+<div class="card">
+  <h3>Reloaded hardest by the fewest people</h3>
+  <p class="lede" style="margin-bottom:0">Three or more people, ranked by views
+  each. A high number here is a small group depending on the calendar daily.</p>
+  {table(["Calendar", "Views each", "People", "Views"],
+         [[f"<code>{esc(r['path'])}</code>", num(r["per"], 1), num(r["users"]),
+           num(r["views"])]
+          for r in by_loyalty],
+         ["l", "r", "r", "r"])}
+</div>
+
+<div class="note">
+<h3>How to read the two together</h3>
+<p><b>Many people, few views each</b> is a calendar being discovered or shared
+around. <b>Few people, many views each</b> is a small group who depend on it
+&mdash; the strongest signal that a calendar matters to someone.</p>
+<p>"New" counts people first seen in this window, so a calendar whose users are
+mostly new is still spreading; one where few are new has settled into a regular
+audience.</p>
+</div>
 </section>''')
 
 # ---- where from

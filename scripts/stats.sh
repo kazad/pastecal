@@ -5,6 +5,7 @@
 #   ./scripts/stats.sh funnel          # claim funnel: shown -> claimed
 #   ./scripts/stats.sh events          # every event, by count
 #   ./scripts/stats.sh calendars       # busiest calendars by return depth
+#   ./scripts/stats.sh reach           # per calendar: how many PEOPLE vs how often they return
 #   ./scripts/stats.sh returns         # how deep people come back
 #   ./scripts/stats.sh adds            # where events get created
 #   ./scripts/stats.sh shares          # how calendars get shared
@@ -252,6 +253,44 @@ raw)
     body="${2:-}"
     [ -n "$body" ] || { echo "usage: $0 raw '<runReport JSON body>'" >&2; exit 1; }
     report "$body" | jq '.'
+    ;;
+
+reach)
+    # How many different people have seen a calendar, versus the same few
+    # reloading it. Uses pagePath rather than landingPage: landingPage only
+    # counts sessions that STARTED on that page, so a calendar people navigate
+    # to from the homepage is undercounted.
+    #
+    # totalUsers is the unique-people count. newUsers is how many of them were
+    # first-timers in the window, which is the reach-vs-loyalty split: a calendar
+    # where most users are new is spreading; one where few are is a small group
+    # checking back.
+    json="$(report "$(mk 'pagePath' 'screenPageViews,totalUsers,newUsers' '' 40)")"
+    if [ "$JSON_ONLY" = "1" ]; then echo "$json" | jq '.'; exit 0; fi
+
+    echo "Reach per calendar - last ${DAYS} days"
+    echo
+    echo "$json" | jq -r '
+        def n: (tonumber? // 0);
+        ["calendar","views","people","new","returning","views each"],
+        ((.rows // [])[]
+         | (.metricValues[0].value|n) as $v
+         | (.metricValues[1].value|n) as $u
+         | (.metricValues[2].value|n) as $nu
+         | select($u > 0)
+         | [.dimensionValues[0].value,
+            ($v|tostring),
+            ($u|tostring),
+            ($nu|tostring),
+            (($u - $nu)|tostring),
+            (($v / $u * 10 | round / 10)|tostring)])
+        | @tsv' | column -t -s "$(printf '\t')"
+
+    echo
+    echo "  people      distinct visitors in the window"
+    echo "  new         first seen during the window"
+    echo "  returning   people = new, i.e. already knew about it"
+    echo "  views each  a high number with few people means the same few reloading"
     ;;
 
 setup)
