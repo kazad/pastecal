@@ -61,6 +61,30 @@ Copyright (c) 2025 Kalid Azad
     </script>
     <!-- End Google Tag Manager -->
 
+    <!-- gtag.js, for the custom events in utils/analytics.js.
+         GTM alone is not enough: a dataLayer push is only something GTM can
+         listen for, and forwarding each one to GA4 needs a matching trigger and
+         event tag configured in the container. Without those, custom events were
+         reaching the dataLayer and stopping there -- verified in production,
+         where the only hit sent to /g/collect was page_view.
+         gtag.js talks to the measurement ID directly, so no container config is
+         needed for a new event name. send_page_view is off because GTM already
+         sends one; leaving it on double-counts every pageview. -->
+    <script>
+        (function () {
+            if (window.__TEST__ || window.location.search.includes('no-analytics')) return;
+            var s = document.createElement('script');
+            s.async = true;
+            s.src = 'https://www.googletagmanager.com/gtag/js?id=G-4J99GY9KE6';
+            document.head.appendChild(s);
+
+            window.dataLayer = window.dataLayer || [];
+            window.gtag = function () { window.dataLayer.push(arguments); };
+            window.gtag('js', new Date());
+            window.gtag('config', 'G-4J99GY9KE6', { send_page_view: false });
+        })();
+    </script>
+
     <!-- Core styles -->
     <link id="syncfusion-base-theme" href="https://cdn.syncfusion.com/ej2/ej2-base/styles/material.css" rel="stylesheet" type="text/css" />
     <link id="syncfusion-theme" href="https://cdn.syncfusion.com/ej2/material.css" rel="stylesheet" type="text/css" />

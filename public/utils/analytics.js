@@ -24,13 +24,31 @@ const Analytics = {
     // Sinks receive (name, params). Add or remove freely; each is independent and
     // a throwing sink must never break the caller.
     SINKS: {
-        // Google Analytics 4, via the gtag shim GTM installs.
+        /**
+         * Google Analytics 4.
+         *
+         * Sends via gtag(), defining it if nothing else has. The obvious-looking
+         * alternative -- dataLayer.push({event: name, ...}) -- does NOT reach GA4
+         * on its own: a dataLayer push is only an event GTM can listen for, and
+         * forwarding it requires a matching trigger and GA4 event tag configured
+         * in the GTM container for every event name. Without those it lands in
+         * the dataLayer and stops there.
+         *
+         * That is exactly what happened here: verified against production, the
+         * custom events reached window.dataLayer while the only hit sent to
+         * /g/collect was page_view. GTM loads gtm.js but does not define
+         * window.gtag, so the old preference order silently chose the path that
+         * never delivered.
+         *
+         * The gtag shim below is the standard snippet. It shares the same
+         * dataLayer GTM already created, so both continue to work.
+         */
         ga4(name, params) {
+            // index.html defines the shim and configures the stream before this
+            // ever runs. The guard is for the case where that block was skipped
+            // (test mode, ?no-analytics) -- there, dropping the event is correct.
             if (typeof window.gtag === 'function') {
                 window.gtag('event', name, params);
-            } else if (Array.isArray(window.dataLayer)) {
-                // GTM without the gtag shim: push it as a dataLayer event instead.
-                window.dataLayer.push(Object.assign({ event: name }, params));
             }
         },
 
