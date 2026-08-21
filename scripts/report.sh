@@ -95,9 +95,20 @@ channels="$(post "$API" "$(q 'sessionDefaultChannelGroup' 'sessions,totalUsers' 
 pages="$(post "$API" "$(q 'landingPage' 'sessions,totalUsers' '' 25)")"
 # pagePath rather than landingPage: landingPage only counts sessions that
 # STARTED on a page, so a calendar reached from the homepage is undercounted.
-reach="$(post "$API" "$(q 'pagePath' 'screenPageViews,totalUsers,newUsers' '' 30)")"
+reach="$(post "$API" "$(q 'pagePath' 'screenPageViews,totalUsers,newUsers' '' 200)")"
 events="$(post "$API" "$(q 'eventName' 'eventCount,totalUsers' "$(only "$CUSTOM")")")"
 countries="$(post "$API" "$(q 'country' 'totalUsers' '' 10)")"
+
+# The previous window, same length, so every KPI can show a trend rather than a
+# bare number. A KPI without a direction is just trivia.
+prev_start=$((DAYS * 2))
+prev_end=$((DAYS + 1))
+prev_range="{\"startDate\":\"${prev_start}daysAgo\",\"endDate\":\"${prev_end}daysAgo\"}"
+# Metric ORDER must match the current-window overview query above: the renderer
+# reads these positionally, so swapping them silently compares sessions against
+# users.
+prev_overview="$(post "$API" "$(printf '{"dateRanges":[%s],"dimensions":[{"name":"newVsReturning"}],"metrics":[{"name":"sessions"},{"name":"totalUsers"},{"name":"averageSessionDuration"}]}' "$prev_range")")"
+prev_reach="$(post "$API" "$(printf '{"dateRanges":[%s],"dimensions":[{"name":"pagePath"}],"metrics":[{"name":"screenPageViews"},{"name":"totalUsers"},{"name":"newUsers"}],"limit":200,"orderBys":[{"metric":{"metricName":"screenPageViews"},"desc":true}]}' "$prev_range")")"
 
 # Realtime has no processing delay, so it shows whether instrumentation is live
 # right now even when the daily tables have not caught up yet.
@@ -139,11 +150,13 @@ DATA="$(jq -n \
     --argjson devices "$devices" --argjson channels "$channels" \
     --argjson pages "$pages" --argjson events "$events" \
     --argjson reach "$reach" \
+    --argjson prevOverview "$prev_overview" --argjson prevReach "$prev_reach" \
     --argjson countries "$countries" --argjson realtime "$realtime" \
     --argjson dims "$dims" --argjson breakdowns "$breakdowns" \
     --arg days "$DAYS" --arg generated "$(date '+%Y-%m-%d %H:%M')" \
     '{overview:$overview, daily:$daily, devices:$devices, channels:$channels,
       pages:$pages, reach:$reach, events:$events, countries:$countries, realtime:$realtime,
+      prevOverview:$prevOverview, prevReach:$prevReach,
       dims:$dims, breakdowns:$breakdowns, days:($days|tonumber), generated:$generated}')"
 
 echo "Rendering..." >&2

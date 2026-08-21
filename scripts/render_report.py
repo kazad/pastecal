@@ -207,6 +207,89 @@ for dims, mets in rows(d.get("reach")):
         "per": views / users,
     })
 
+# ---------------------------------------------------------------- KPIs
+#
+# Three numbers, chosen against the business model in internal/specs/pro.md:
+# MAU -> conversion -> MRR, with the free tier as the growth engine. Each answers
+# a question that would change what gets built next.
+#
+#   1. Returning people   -- the population that could ever convert. Total users
+#                            flatters: most are one-visit arrivals.
+#   2. Sharing ratio      -- calendar viewers per homepage visitor. The free tier
+#                            exists to be shared; this is whether that works.
+#   3. Calendars that stick -- calendars with 3+ people AND returning visitors.
+#                            The unit of real value, and the Pro upsell target.
+
+
+def split_users(block):
+    """(returning people, new people). Index 1 is totalUsers: the overview query
+    asks for sessions,totalUsers,averageSessionDuration in that order, and both
+    windows must use the same order or this compares sessions against people."""
+    o = {dims[0]: mets for dims, mets in rows(block)}
+    ret = o.get("returning", (0, 0, 0))
+    new_ = o.get("new", (0, 0, 0))
+    return (ret[1] if len(ret) > 1 else 0, new_[1] if len(new_) > 1 else 0)
+
+
+def reach_of(block):
+    out = []
+    for dims, mets in rows(block):
+        path = dims[0] or ""
+        if not path:
+            continue
+        views, users = mets[0], mets[1]
+        new_u = mets[2] if len(mets) > 2 else 0
+        if users <= 0:
+            continue
+        out.append({"path": path, "views": views, "users": users,
+                    "new": new_u, "returning": max(users - new_u, 0)})
+    return out
+
+
+def sharing_ratio(items):
+    """Calendar viewers per homepage visitor.
+
+    /view/ paths are excluded: they are the read-only mirror of a calendar
+    already counted under its own path, so including them double-counts reach.
+    """
+    home = sum(r["users"] for r in items if r["path"] == "/")
+    cals = sum(r["users"] for r in items
+               if r["path"] != "/" and not r["path"].startswith("/view/"))
+    return (cals / home) if home else 0.0
+
+
+def sticky(items, min_people=3):
+    """Calendars with a real audience: several people, some of them returning."""
+    return [r for r in items
+            if r["users"] >= min_people and r["returning"] >= 1
+            and r["path"] != "/" and not r["path"].startswith("/view/")]
+
+
+cur_ret, cur_new = split_users(d.get("overview"))
+prev_ret, prev_new = split_users(d.get("prevOverview"))
+
+cur_reach = reach_of(d.get("reach"))
+prev_reach_items = reach_of(d.get("prevReach"))
+
+cur_ratio = sharing_ratio(cur_reach)
+prev_ratio = sharing_ratio(prev_reach_items)
+
+cur_sticky = sticky(cur_reach)
+prev_sticky = sticky(prev_reach_items)
+
+
+def delta(now, before):
+    """Percent change, and a direction word. None when there is no baseline."""
+    if not before:
+        return None, "flat"
+    change = (now - before) * 100.0 / before
+    if change >= 3:
+        return change, "up"
+    if change <= -3:
+        return change, "down"
+    return change, "flat"
+
+
 bd = d.get("breakdowns") or {}
 
 # ---------------------------------------------------------------- html
@@ -272,6 +355,21 @@ p{{margin:0 0 13px;max-width:68ch}} p:last-child{{margin-bottom:0}}
 .lede{{font-size:15.5px;color:var(--muted);max-width:66ch}}
 code{{font-family:var(--mono);font-size:.87em;background:var(--sunk);
       padding:.1em .4em;border-radius:4px;border:1px solid var(--rule)}}
+.kpis{{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));
+       gap:12px;margin-top:20px}}
+.kpi{{border:1px solid var(--rule);border-radius:12px;background:var(--panel);
+      box-shadow:var(--shadow);padding:18px 20px;display:flex;flex-direction:column}}
+.kpi .kn{{font-size:11.5px;font-weight:650;letter-spacing:.08em;
+          text-transform:uppercase;color:var(--faint);margin-bottom:9px}}
+.kpi .kv{{font-size:34px;font-weight:700;letter-spacing:-.03em;line-height:1;
+          font-variant-numeric:tabular-nums}}
+.kpi .kd{{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;
+          font-weight:650;margin-top:8px;padding:3px 9px;border-radius:100px;
+          align-self:flex-start}}
+.kd.up{{background:var(--good-soft);color:var(--good)}}
+.kd.down{{background:var(--warn-soft);color:var(--warn)}}
+.kd.flat{{background:var(--sunk);color:var(--muted)}}
+.kpi .kw{{font-size:13px;color:var(--muted);margin-top:10px;line-height:1.45}}
 .tiles{{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
         gap:10px;margin-top:18px}}
 .tile{{border:1px solid var(--rule);border-radius:10px;background:var(--panel);
@@ -332,6 +430,42 @@ footer{{border-top:1px solid var(--rule);padding-top:20px;margin-top:14px;
   <p class="sub">Generated {esc(d.get("generated", ""))} from GA4 property
      <code>pastecal-web</code>. This file is local; nothing is published.</p>
 </header>''')
+
+# ---- KPIs
+def kpi(name, value, now, before, note, invert=False):
+    change, direction = delta(now, before)
+    if change is None:
+        chip = '<span class="kd flat">no baseline</span>'
+    else:
+        arrow = {"up": "&uarr;", "down": "&darr;", "flat": "&rarr;"}[direction]
+        cls = direction
+        if invert and direction in ("up", "down"):
+            cls = "down" if direction == "up" else "up"
+        chip = (f'<span class="kd {cls}">{arrow} {abs(change):.0f}% '
+                f'vs previous {days}d</span>')
+    return (f'<div class="kpi"><div class="kn">{esc(name)}</div>'
+            f'<div class="kv">{value}</div>{chip}'
+            f'<div class="kw">{note}</div></div>')
+
+
+A(f'''<section>
+<h2>The three numbers</h2>
+<p class="lede">Everything else in this report is diagnosis. These are the ones
+worth watching week to week, chosen against the growth model: people who come
+back, whether calendars actually get shared, and how many calendars have a real
+audience.</p>
+<div class="kpis">
+{kpi("Returning people", num(cur_ret), cur_ret, prev_ret,
+     "People who came back at least once. Total visitors flatters &mdash; most arrive once "
+     "and never return, so this is the population that could ever matter commercially.")}
+{kpi("Sharing ratio", f"{cur_ratio:.2f}&times;", cur_ratio, prev_ratio,
+     "Calendar viewers per homepage visitor. The free tier exists to be shared; "
+     "below 1.0 means calendars are being made but not sent to anyone.")}
+{kpi("Calendars that stick", num(len(cur_sticky)), len(cur_sticky), len(prev_sticky),
+     "Calendars with 3+ people where someone returned. A calendar a group depends "
+     "on, not a link opened once.")}
+</div>
+</section>''')
 
 # ---- headline
 A(f'''<section>
