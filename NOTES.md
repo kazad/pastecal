@@ -3,6 +3,10 @@ IN PROGRESS:
 ## Checking the numbers
 
 ```bash
+./scripts/report.sh             # full HTML report, opens in your browser
+./scripts/report.sh -d 90       # different window
+./scripts/report.sh -n -o r.html  # write only, don't open
+
 ./scripts/stats.sh              # visitors + product events, last 30 days
 ./scripts/stats.sh funnel       # of people offered a name, how many chose one
 ./scripts/stats.sh calendars    # busiest calendars, with visits-per-user
