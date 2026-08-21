@@ -623,6 +623,46 @@ div#Schedule,
     transform: translateY(-50%);
 }
 
+/* Phones: centre the popup instead of anchoring it to the tapped event.
+   Syncfusion's popup is 365px wide and never shrinks, so on a 390px screen it
+   spans almost the entire width -- "next to the event" stops meaning anything,
+   and the anchored `left` just pushes it sideways. At 320px it ran 11px past the
+   right edge, putting the edit/delete/close buttons off-screen entirely.
+
+   Both `left` and `top` here must beat Syncfusion's inline styles, hence
+   !important. The width cap keeps a 10px gutter on each side at every phone
+   width, and `right: auto` stops a stale inline right from fighting the centre.
+   Scoped to a real max-width query rather than a JS branch so it re-evaluates on
+   rotation without needing the popup to reopen. */
+@media (max-width: 480px) {
+    .e-quick-popup-wrapper {
+        left: 50% !important;
+        right: auto !important;
+        transform: translateX(-50%);
+        width: calc(100vw - 20px) !important;
+        max-width: calc(100vw - 20px) !important;
+        /* min-width beats max-width in CSS, always. Syncfusion's popup picks up
+           the 320px min-width from body, so on a 320px phone the max-width above
+           was ignored and the popup stayed full-bleed, running 4px past each
+           edge. Without this the whole rule silently does nothing at the exact
+           width where it matters most. */
+        min-width: 0 !important;
+    }
+
+    /* When the popup is ALSO too tall, it needs both transforms at once --
+       the vertical rule above would otherwise replace the horizontal one. */
+    .e-quick-popup-wrapper.pc-clamp-top {
+        transform: translate(-50%, -50%);
+    }
+
+    /* .pc-wide widens to 480px for long descriptions; on a phone that is wider
+       than the screen, so the cap above has to win. */
+    .e-quick-popup-wrapper.pc-wide {
+        width: calc(100vw - 20px) !important;
+        max-width: calc(100vw - 20px) !important;
+    }
+}
+
 .e-quick-popup-wrapper .e-event-popup {
     max-height: inherit;
     display: flex;
