@@ -24,7 +24,15 @@ Two analytics views, deliberately separate:
 parameters (`source`, `method`, `visit_bucket`, `where`, ...) are collected as
 soon as the code ships, but are not queryable until a matching custom dimension
 exists in GA4 — and GA4 does not backfill, so a dimension created today shows
-nothing for yesterday. As of 2026-08-21 none are registered.
+nothing for yesterday.
+
+`./scripts/stats.sh setup --create` makes all nine at once. It needs an Analytics
+edit scope the default ADC does not carry, granted once with:
+
+```bash
+gcloud auth application-default login \
+  --scopes=openid,https://www.googleapis.com/auth/cloud-platform,https://www.googleapis.com/auth/analytics.edit
+```
 
 FUTURE:
 

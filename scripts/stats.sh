@@ -10,6 +10,7 @@
 #   ./scripts/stats.sh shares          # how calendars get shared
 #   ./scripts/stats.sh raw <json>      # any runReport body, printed as JSON
 #   ./scripts/stats.sh setup           # check GA4 is configured to answer all of the above
+#   ./scripts/stats.sh setup --create  # create the missing custom dimensions
 #
 # Options (before the subcommand):
 #   -d N        days back, default 30
@@ -289,19 +290,82 @@ setup)
     echo
     if [ "$missing" = "0" ]; then
         echo "All parameters are queryable."
-    else
+        exit 0
+    fi
+
+    if [ "${2:-}" != "--create" ]; then
         cat <<'MSG'
 Missing parameters are still being COLLECTED -- they are just not queryable as a
 breakdown until a custom dimension exists. GA4 does not backfill them, so a
-dimension created today shows nothing for yesterday.
+dimension created today shows nothing for yesterday. Create them sooner rather
+than later.
 
-To fix, once per parameter:
+Create them all:
+    ./scripts/stats.sh setup --create
+
+That needs a one-time scope grant, which it will tell you about if missing:
+    gcloud auth application-default login \
+        --scopes=openid,https://www.googleapis.com/auth/cloud-platform,\
+https://www.googleapis.com/auth/analytics.edit
+
+Or by hand, once per parameter:
   analytics.google.com -> Admin -> Custom definitions -> Create custom dimension
-    Dimension name:  whatever reads well in reports
-    Scope:           Event
-    Event parameter: the name printed above
+    Scope: Event, Event parameter: the name printed above
+MSG
+        exit 0
+    fi
 
-The 50-dimension limit is per property, so there is room for all of these.
+    # --create: make each missing dimension. Names are chosen to read well in
+    # GA4 reports, where the raw parameter name is not shown.
+    echo "Creating missing dimensions..."
+    echo
+    created=0
+    failed=0
+    for p in where source method visit_bucket slug_length event_count_bucket has_custom_slug reason surface; do
+        echo " $dims " | grep -q " $p " && continue
+
+        case "$p" in
+            where)              label="Surface" ;;
+            source)             label="Event source" ;;
+            method)             label="Share method" ;;
+            visit_bucket)       label="Visit depth" ;;
+            slug_length)        label="Slug length" ;;
+            event_count_bucket) label="Calendar size" ;;
+            has_custom_slug)    label="Has custom slug" ;;
+            reason)             label="Failure reason" ;;
+            surface)            label="Platform" ;;
+        esac
+
+        body="$(jq -n --arg p "$p" --arg l "$label" \
+            '{parameterName:$p, displayName:$l, scope:"EVENT"}')"
+        out="$(mktemp)"
+        http="$(curl -sS -o "$out" -w '%{http_code}' -X POST \
+            "https://analyticsadmin.googleapis.com/v1beta/properties/${PROPERTY_ID}/customDimensions" \
+            -H "Authorization: Bearer ${TOKEN}" \
+            -H 'Content-Type: application/json' -d "$body")"
+
+        if [ "$http" = "200" ]; then
+            printf '  created  %-20s as "%s"\n' "$p" "$label"
+            created=$((created + 1))
+        else
+            printf '  FAILED   %-20s (HTTP %s) %s\n' "$p" "$http" \
+                "$(jq -r '.error.message // empty' < "$out" 2>/dev/null | head -1)"
+            failed=$((failed + 1))
+        fi
+        rm -f "$out"
+    done
+
+    echo
+    echo "Created $created, failed $failed."
+    if [ "$failed" -gt 0 ]; then
+        cat <<'MSG'
+
+A 403 about scopes means the local credentials cannot edit Analytics. Grant it
+once, then re-run:
+
+    gcloud auth application-default login \
+        --scopes=openid,https://www.googleapis.com/auth/cloud-platform,\
+https://www.googleapis.com/auth/analytics.edit
 MSG
     fi
     ;;
