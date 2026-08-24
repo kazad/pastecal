@@ -84,7 +84,7 @@ only() {
     printf '{"filter":{"fieldName":"eventName","inListFilter":{"values":%s}}}' "$list"
 }
 
-CUSTOM="slug_prompt_shown,slug_claimed,slug_autoassigned,slug_claim_failed,event_added,calendar_shared,calendar_returned"
+CUSTOM="calendar_created,slug_prompt_shown,slug_claimed,slug_autoassigned,slug_claim_failed,event_added,calendar_shared,calendar_returned,feature_used"
 
 echo "Pulling ${DAYS} days from GA4..." >&2
 
@@ -149,6 +149,7 @@ if [ "$dims" != "null" ]; then
     add_bd methods method calendar_shared
     add_bd visits visit_bucket calendar_returned
     add_bd surfaces where "slug_claimed,slug_autoassigned,slug_prompt_shown"
+    add_bd features feature feature_used
 fi
 
 DATA="$(jq -n \

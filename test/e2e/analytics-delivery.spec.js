@@ -4,6 +4,44 @@
 // it needs a page where analytics is live.
 const { test, expect } = require('@playwright/test');
 
+
+/**
+ * Every event name in a /g/collect hit.
+ *
+ * gtag sends ONE event as `?en=<name>` on the URL, but batches MULTIPLE events
+ * into the POST body as `en=<name>` lines. Reading only the URL therefore finds
+ * page_view and silently misses everything else the moment a second event fires
+ * -- which is exactly what happened when a new event was added, and it looked
+ * like a delivery regression rather than a test that only handled one shape.
+ */
+function eventNames(request) {
+  const names = [];
+  const fromUrl = request.url().match(/[?&]en=([^&]*)/);
+  if (fromUrl) names.push(decodeURIComponent(fromUrl[1]));
+  for (const m of (request.postData() || '').matchAll(/(?:^|[&\n\r])en=([^&\n\r]*)/g)) {
+    names.push(decodeURIComponent(m[1]));
+  }
+  return names;
+}
+
+/** Event params from a hit, for the single-event (URL) form and the batched form. */
+function eventParams(request, eventName) {
+  const out = [];
+  const url = request.url();
+  if (new RegExp(`[?&]en=${eventName}(?:&|$)`).test(url)) {
+    for (const m of url.matchAll(/[?&]ep\.([^=&]+)=([^&]*)/g)) {
+      out.push(m[1] + '=' + decodeURIComponent(m[2]));
+    }
+  }
+  for (const line of (request.postData() || '').split(/[\r\n]+/)) {
+    if (!line.includes(`en=${eventName}`)) continue;
+    for (const m of line.matchAll(/(?:^|&)ep\.([^=&]+)=([^&]*)/g)) {
+      out.push(m[1] + '=' + decodeURIComponent(m[2]));
+    }
+  }
+  return out;
+}
+
 test.describe('Events actually reach GA4', () => {
   // The bug this guards: analytics.js preferred gtag() but fell back to
   // dataLayer.push when it was undefined -- and GTM loads gtm.js WITHOUT
@@ -17,10 +55,7 @@ test.describe('Events actually reach GA4', () => {
   test('a custom event is sent to the GA4 collect endpoint', async ({ page }) => {
     const sent = [];
     page.on('request', (r) => {
-      const url = r.url();
-      if (!url.includes('/g/collect')) return;
-      const en = url.match(/[?&]en=([^&]*)/);
-      if (en) sent.push(decodeURIComponent(en[1]));
+      if (r.url().includes('/g/collect')) sent.push(...eventNames(r));
     });
 
     // Deliberately NOT using the ./fixtures page: that sets __TEST__, which
@@ -35,12 +70,7 @@ test.describe('Events actually reach GA4', () => {
   test('event parameters ride along on the collect hit', async ({ page }) => {
     const params = [];
     page.on('request', (r) => {
-      const url = r.url();
-      if (!url.includes('/g/collect')) return;
-      if (!/[?&]en=slug_prompt_shown/.test(url)) return;
-      for (const m of url.matchAll(/[?&]ep\.([^=]+)=([^&]*)/g)) {
-        params.push(m[1] + '=' + decodeURIComponent(m[2]));
-      }
+      if (r.url().includes('/g/collect')) params.push(...eventParams(r, 'slug_prompt_shown'));
     });
 
     await page.goto('/');
@@ -58,10 +88,8 @@ test.describe('Events actually reach GA4', () => {
     // Getting that wrong doubles every pageview in the property.
     const pageviews = [];
     page.on('request', (r) => {
-      const url = r.url();
-      if (url.includes('/g/collect') && /[?&]en=page_view/.test(url)) {
-        pageviews.push(url);
-      }
+      if (!r.url().includes('/g/collect')) return;
+      pageviews.push(...eventNames(r).filter((n) => n === 'page_view'));
     });
 
     await page.goto('/');

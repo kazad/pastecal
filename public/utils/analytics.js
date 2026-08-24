@@ -4,9 +4,16 @@
 // end up is decided here, so swapping GA4 for Cloudflare Analytics Engine, Plausible,
 // or a self-hosted collector is a change to SINKS below and nothing else.
 //
-// Design notes (why these events and not "calendar_created"):
+// Design notes:
 //   - We track DECISIONS, not actions. An event earns its place only if it can
-//     change a product decision.
+//     change a product decision. `search_opened` would not earn it; `notes_edited`
+//     does, because nobody currently knows whether notes are used at all.
+//   - `calendar_created` was originally left out, on the grounds that
+//     slug_claimed + slug_autoassigned already fire at persist time. In practice
+//     that derivation is fragile: the read-only-link flow emits the same two
+//     names (separated only by `where`), so summing them without filtering
+//     overcounts. It is also the one number pro.md's whole model rests on. It is
+//     now its own event.
 //   - The open question is whether the ~8% custom-slug rate is a discoverability
 //     failure. Counting claims can't answer that; you need the denominator of
 //     people who were auto-assigned a name and never asked. Hence
@@ -275,6 +282,37 @@ const Analytics = {
     /** The calendar was shared or its link copied — precedes most multi-user use. */
     calendarShared(method) {
         this.track('calendar_shared', { method }); // 'copy' | 'native' | 'ics'
+    },
+
+    /**
+     * A calendar was persisted to the server. THE top-of-funnel number, and the
+     * one pro.md's MAU -> conversion model is built on.
+     *
+     * Deliberately separate from slug_claimed/slug_autoassigned even though all
+     * three fire at the same moment: those two answer "did they choose a name",
+     * this one answers "how many calendars exist", and the read-only-link flow
+     * reuses the slug event names for something that is NOT a new calendar.
+     */
+    calendarCreated(named, calendar) {
+        this.track('calendar_created', {
+            named: !!named,
+            event_count_bucket: this.bucketEvents(calendar?.events?.length),
+        });
+    },
+
+    /**
+     * A feature outside the create/add/share funnel was actually used.
+     *
+     * One event name with a `feature` param rather than one name per feature:
+     * these are all the same question ("is this used at all, and by whom"), and
+     * a dozen near-empty event names makes that harder to read, not easier.
+     * Registering one custom dimension unlocks every feature at once.
+     */
+    featureUsed(feature, detail) {
+        this.track('feature_used', {
+            feature,               // 'notes' | 'colors' | 'settings' | 'event_type'
+            ...(detail ? { detail } : {}),
+        });
     },
 
     // Generated ids come from IDService.generateNanoId(5): 5 alphanumeric chars.

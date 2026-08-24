@@ -246,3 +246,83 @@ test.describe('Events are counted once, and surfaces stay distinct', () => {
     expect(claims[0].params.where).toBe('calendar_url');
   });
 });
+
+test.describe('Creation and feature usage', () => {
+  // calendar_created exists as its own event rather than being derived from
+  // slug_claimed + slug_autoassigned. Deriving it overcounts: the read-only-link
+  // flow emits slug_autoassigned too, so one real calendar produced THREE slug
+  // events in a captured run. This is the number pro.md's model rests on, so it
+  // gets to be unambiguous.
+  test('creating a calendar fires calendar_created exactly once', async ({ page }) => {
+    test.setTimeout(90_000);
+
+    await page.addInitScript(() => {
+      let held;
+      Object.defineProperty(window, 'Analytics', {
+        configurable: true,
+        get() { return held; },
+        set(v) {
+          held = v;
+          const original = v.track.bind(v);
+          v.track = function (name, params) {
+            // sessionStorage survives the redirect to /<slug>.
+            const kept = JSON.parse(sessionStorage.getItem('__kept') || '[]');
+            kept.push({ name, params });
+            sessionStorage.setItem('__kept', JSON.stringify(kept));
+            return original(name, params);
+          };
+        },
+      });
+    });
+
+    await page.goto('/');
+    await expect(page.locator('.e-schedule')).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator('#slug')).not.toHaveValue('');
+
+    const slug = `t-created-${Date.now().toString(36)}`;
+    await page.locator('#slug').fill(slug);
+    await expect(page.locator('#slug')).toHaveValue(slug);
+
+    await page.getByRole('button', { name: /^Claim/ }).first().click();
+    await page.waitForURL(`**/${slug}`, { timeout: 20_000 });
+
+    const created = await page.evaluate(() =>
+      JSON.parse(sessionStorage.getItem('__kept') || '[]')
+        .filter((e) => e.name === 'calendar_created'));
+
+    expect(created).toHaveLength(1);
+    expect(created[0].params.named).toBe(true);
+  });
+
+  test('changing a setting is recorded as feature usage', async ({ page }) => {
+    await captureEvents(page);
+    await page.goto('/');
+    await expect(page.locator('.e-schedule')).toBeVisible({ timeout: 20_000 });
+    await page.waitForTimeout(1500);
+
+    const used = await page.evaluate(() =>
+      window.__fired.filter((e) => e.name === 'feature_used').map((e) => e.params.feature));
+
+    // saveGlobalSettings runs on load to persist locale defaults, so this also
+    // proves the call site is reached at all.
+    expect(used).toContain('settings');
+  });
+
+  test('feature_used carries a feature name, never bare', async ({ page }) => {
+    await captureEvents(page);
+    await page.goto('/');
+    await expect(page.locator('.e-schedule')).toBeVisible({ timeout: 20_000 });
+    await page.waitForTimeout(1500);
+
+    // One event name with a `feature` param is the whole design; an event with
+    // no feature is unattributable and worse than not sending it.
+    const events = await page.evaluate(() =>
+      window.__fired.filter((e) => e.name === 'feature_used'));
+
+    expect(events.length).toBeGreaterThan(0);
+    for (const e of events) {
+      expect(typeof e.params.feature).toBe('string');
+      expect(e.params.feature.length).toBeGreaterThan(0);
+    }
+  });
+});

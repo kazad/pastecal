@@ -206,8 +206,9 @@ series = [
 ev = {dims[0]: mets for dims, mets in rows(d.get("events"))}
 rt = {dims[0]: mets for dims, mets in rows(d.get("realtime"))}
 CUSTOM = [
-    "slug_prompt_shown", "slug_claimed", "slug_autoassigned", "slug_claim_failed",
-    "event_added", "calendar_shared", "calendar_returned",
+    "calendar_created", "slug_prompt_shown", "slug_claimed", "slug_autoassigned",
+    "slug_claim_failed", "event_added", "calendar_shared", "calendar_returned",
+    "feature_used",
 ]
 rt_custom = {k: v for k, v in rt.items() if k in CUSTOM}
 has_events = bool(ev)
@@ -227,8 +228,8 @@ cal_rows.sort(key=lambda r: r[3], reverse=True)
 
 # Custom dimension coverage
 dims_list = d.get("dims")
-NEEDED = ["where", "source", "method", "visit_bucket", "slug_length",
-          "event_count_bucket", "has_custom_slug", "reason", "surface"]
+NEEDED = ["where", "source", "method", "feature", "named", "visit_bucket",
+          "slug_length", "event_count_bucket", "has_custom_slug", "reason", "surface"]
 missing = [p for p in NEEDED if not dims_list or p not in dims_list] if dims_list is not None else NEEDED
 
 # Reach: how many DIFFERENT people saw a calendar, vs the same few reloading.
@@ -696,7 +697,8 @@ if bd:
     A('<section><h2>Breakdowns</h2>'
       '<p class="lede">Available because the matching custom dimensions are registered.</p>')
     titles = {"sources": "Where events get created", "methods": "How calendars get shared",
-              "visits": "How deep people return", "surfaces": "Which surface named the calendar"}
+              "visits": "How deep people return", "surfaces": "Which surface named the calendar",
+              "features": "Which features get used"}
     for key, title in titles.items():
         if key in bd:
             items = [(dims[0] or "(none)", mets[0]) for dims, mets in rows(bd[key])]

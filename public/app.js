@@ -558,6 +558,9 @@ const CalendarVueApp = {
 
                     // Explicitly set the Type on the event data object
                     args.data.Type = parseInt(id);
+                    // Whether people categorise events at all decides if type
+                    // labels/colours are worth building on (see pro.md).
+                    track(a => a.featureUsed('event_type', 'popup'));
                     // console.log("Color set to:", id, "for event:", args.data);
                 }
 
@@ -1419,6 +1422,12 @@ const CalendarVueApp = {
                 // does not exist, proceed
                 this.isLoading = true;
                 CalendarDataService.createWithId(slug, this.calendar, () => {
+                    // The calendar now exists on the server. Fired separately from
+                    // the slug events below because those answer "did they choose a
+                    // name" and the read-only-link flow reuses their names for
+                    // something that is not a new calendar at all.
+                    track(a => a.calendarCreated(chosen, this.calendar));
+
                     // `where` matches the tag SlugManager puts on the read-only
                     // link flow, so the two never get conflated in reporting.
                     if (chosen) {
@@ -1866,6 +1875,13 @@ const CalendarVueApp = {
 
         toggleNotes() {
             if (this.showNotes) {
+                // Count notes as USED only when the panel closes with content in
+                // it. Firing on open would count anyone who clicked the icon once
+                // and immediately left, which is the opposite of what the question
+                // ("does anyone actually keep notes?") is asking.
+                if ((this.calendar?.options?.notes || '').trim()) {
+                    track(a => a.featureUsed('notes'));
+                }
                 this.showNotes = false;
             } else {
                 this.closeAllPanels();
@@ -2108,6 +2124,7 @@ const CalendarVueApp = {
         saveGlobalSettings() {
             try {
                 localStorage.setItem('pastecal_global_settings', JSON.stringify(this.globalSettings));
+                track(a => a.featureUsed('settings'));
                 console.log('Global settings saved to localStorage');
             } catch (error) {
                 console.warn('Failed to save settings to localStorage:', error);
@@ -2236,6 +2253,11 @@ const CalendarVueApp = {
 
         updateEventColor(index, color) {
             if (index >= 0 && index < this.COLORS.length) {
+                // Custom colours are a candidate paid feature (see pro.md's
+                // whitelabel tier), and nobody currently knows if anyone changes
+                // them from the defaults.
+                track(a => a.featureUsed('colors'));
+
                 // Update local settings
                 this.localSettings.colors[index] = color;
 

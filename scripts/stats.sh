@@ -144,7 +144,7 @@ dimension_warning() {
     echo "dimension yet. Run:  $0 setup"
 }
 
-CUSTOM="slug_prompt_shown,slug_claimed,slug_autoassigned,slug_claim_failed,event_added,calendar_shared,calendar_returned"
+CUSTOM="calendar_created,slug_prompt_shown,slug_claimed,slug_autoassigned,slug_claim_failed,event_added,calendar_shared,calendar_returned,feature_used"
 
 case "$CMD" in
 
@@ -317,7 +317,7 @@ setup)
     rm -f "$dims_raw"
 
     missing=0
-    for p in where source method visit_bucket slug_length event_count_bucket has_custom_slug reason surface; do
+    for p in where source method feature named visit_bucket slug_length event_count_bucket has_custom_slug reason surface; do
         if echo " $dims " | grep -q " $p "; then
             printf '  ok       %s\n' "$p"
         else
@@ -360,11 +360,13 @@ MSG
     echo
     created=0
     failed=0
-    for p in where source method visit_bucket slug_length event_count_bucket has_custom_slug reason surface; do
+    for p in where source method feature named visit_bucket slug_length event_count_bucket has_custom_slug reason surface; do
         echo " $dims " | grep -q " $p " && continue
 
         case "$p" in
             where)              label="Surface" ;;
+            feature)            label="Feature" ;;
+            named)              label="Named at creation" ;;
             source)             label="Event source" ;;
             method)             label="Share method" ;;
             visit_bucket)       label="Visit depth" ;;
