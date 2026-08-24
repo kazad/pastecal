@@ -49,9 +49,35 @@ for tool in curl jq gcloud; do
     command -v "$tool" >/dev/null 2>&1 || { echo "ERROR: $tool is required." >&2; exit 1; }
 done
 
-TOKEN="$(gcloud auth application-default print-access-token 2>/dev/null)" || {
-    echo "ERROR: could not get a token. Run:" >&2
-    echo "    gcloud auth login --update-adc" >&2
+# Prefer the service account: gcloud's ADC can no longer be granted
+# analytics.edit (Google blocks that scope on gcloud's client ID), so anything
+# that writes -- creating custom dimensions -- only works this way. Falls back to
+# gcloud for read-only use so the script still runs without the key.
+mint_token() {
+    local want="${1:-read}" node=""
+    for candidate in node "$HOME/.nvm/versions/node/v22"*/bin/node /opt/homebrew/opt/node@20/bin/node; do
+        if command -v "$candidate" >/dev/null 2>&1; then node="$candidate"; break; fi
+        [ -x "$candidate" ] && { node="$candidate"; break; }
+    done
+
+    if [ -n "$node" ] && [ -f "$(dirname "$0")/ga-token.js" ]; then
+        local args=""
+        [ "$want" = "edit" ] && args="--edit"
+        local t
+        if t="$("$node" "$(dirname "$0")/ga-token.js" $args 2>/dev/null)" && [ -n "$t" ]; then
+            printf '%s' "$t"
+            return 0
+        fi
+    fi
+
+    # Fallback: gcloud ADC. Fine for reading, cannot create dimensions.
+    gcloud auth application-default print-access-token 2>/dev/null
+}
+
+TOKEN="$(mint_token read)"
+[ -n "$TOKEN" ] || {
+    echo "ERROR: could not get a token. Either add the service account key to" >&2
+    echo "       internal/keys/, or run: gcloud auth login --update-adc" >&2
     exit 1
 }
 
@@ -342,10 +368,8 @@ than later.
 Create them all:
     ./scripts/stats.sh setup --create
 
-That needs a one-time scope grant, which it will tell you about if missing:
-    gcloud auth application-default login \
-        --scopes=openid,https://www.googleapis.com/auth/cloud-platform,\
-https://www.googleapis.com/auth/analytics.edit
+That uses the service account in internal/keys/, which must be an Editor on the
+GA4 property (Analytics UI -> Admin -> Property access management).
 
 Or by hand, once per parameter:
   analytics.google.com -> Admin -> Custom definitions -> Create custom dimension
@@ -356,6 +380,14 @@ MSG
 
     # --create: make each missing dimension. Names are chosen to read well in
     # GA4 reports, where the raw parameter name is not shown.
+    # Writing needs the edit scope, which only the service account can hold.
+    EDIT_TOKEN="$(mint_token edit)"
+    if [ -z "$EDIT_TOKEN" ]; then
+        echo "ERROR: could not mint an edit-scoped token." >&2
+        echo "       This needs the service account key in internal/keys/." >&2
+        exit 1
+    fi
+
     echo "Creating missing dimensions..."
     echo
     created=0
@@ -382,7 +414,7 @@ MSG
         out="$(mktemp)"
         http="$(curl -sS -o "$out" -w '%{http_code}' -X POST \
             "https://analyticsadmin.googleapis.com/v1beta/properties/${PROPERTY_ID}/customDimensions" \
-            -H "Authorization: Bearer ${TOKEN}" \
+            -H "Authorization: Bearer ${EDIT_TOKEN}" \
             -H 'Content-Type: application/json' -d "$body")"
 
         if [ "$http" = "200" ]; then
@@ -401,12 +433,15 @@ MSG
     if [ "$failed" -gt 0 ]; then
         cat <<'MSG'
 
-A 403 about scopes means the local credentials cannot edit Analytics. Grant it
-once, then re-run:
+A 403 means the service account is not an Editor on the GA4 property. That is
+granted in the Analytics UI, NOT in Google Cloud IAM:
 
-    gcloud auth application-default login \
-        --scopes=openid,https://www.googleapis.com/auth/cloud-platform,\
-https://www.googleapis.com/auth/analytics.edit
+    analytics.google.com -> Admin -> Property access management -> +
+    Add the client_email from internal/keys/*.json with role Editor
+    (untick "Notify new users by email" -- it is a service account)
+
+Note gcloud ADC cannot be used for this: Google blocks the analytics.edit scope
+on gcloud's own client ID.
 MSG
     fi
     ;;

@@ -41,9 +41,35 @@ for tool in curl jq gcloud python3; do
     command -v "$tool" >/dev/null 2>&1 || { echo "ERROR: $tool is required." >&2; exit 1; }
 done
 
-TOKEN="$(gcloud auth application-default print-access-token 2>/dev/null)" || {
-    echo "ERROR: could not get a token. Run:" >&2
-    echo "    gcloud auth login --update-adc" >&2
+# Prefer the service account: gcloud's ADC can no longer be granted
+# analytics.edit (Google blocks that scope on gcloud's client ID), so anything
+# that writes -- creating custom dimensions -- only works this way. Falls back to
+# gcloud for read-only use so the script still runs without the key.
+mint_token() {
+    local want="${1:-read}" node=""
+    for candidate in node "$HOME/.nvm/versions/node/v22"*/bin/node /opt/homebrew/opt/node@20/bin/node; do
+        if command -v "$candidate" >/dev/null 2>&1; then node="$candidate"; break; fi
+        [ -x "$candidate" ] && { node="$candidate"; break; }
+    done
+
+    if [ -n "$node" ] && [ -f "$(dirname "$0")/ga-token.js" ]; then
+        local args=""
+        [ "$want" = "edit" ] && args="--edit"
+        local t
+        if t="$("$node" "$(dirname "$0")/ga-token.js" $args 2>/dev/null)" && [ -n "$t" ]; then
+            printf '%s' "$t"
+            return 0
+        fi
+    fi
+
+    # Fallback: gcloud ADC. Fine for reading, cannot create dimensions.
+    gcloud auth application-default print-access-token 2>/dev/null
+}
+
+TOKEN="$(mint_token read)"
+[ -n "$TOKEN" ] || {
+    echo "ERROR: could not get a token. Either add the service account key to" >&2
+    echo "       internal/keys/, or run: gcloud auth login --update-adc" >&2
     exit 1
 }
 

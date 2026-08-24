@@ -699,11 +699,34 @@ if bd:
     titles = {"sources": "Where events get created", "methods": "How calendars get shared",
               "visits": "How deep people return", "surfaces": "Which surface named the calendar",
               "features": "Which features get used"}
+    unset_only = []
     for key, title in titles.items():
-        if key in bd:
-            items = [(dims[0] or "(none)", mets[0]) for dims, mets in rows(bd[key])]
-            if items:
-                A(f'<div class="card"><h3>{esc(title)}</h3>{bars(items)}</div>')
+        if key not in bd:
+            continue
+        items = [(dims[0] or "(not set)", mets[0]) for dims, mets in rows(bd[key])]
+        if not items:
+            continue
+        # A dimension registered today has no history: GA4 does not backfill, so
+        # every event recorded before it existed reports "(not set)" forever.
+        # Showing a full-width bar labelled "(not set)" looks like a broken chart
+        # rather than the expected consequence of when the dimension was created.
+        if all(label == "(not set)" for label, _ in items):
+            unset_only.append((title, sum(v for _, v in items)))
+            continue
+        A(f'<div class="card"><h3>{esc(title)}</h3>{bars(items)}</div>')
+
+    if unset_only:
+        rows_html = "".join(
+            f"<li><b>{esc(t)}</b> &mdash; {esc(num(n))} events</li>" for t, n in unset_only)
+        A(f'''<div class="note amber">
+<h3>Waiting on new data</h3>
+<p>These breakdowns have no values yet because their custom dimensions were
+registered <b>after</b> the events were recorded, and GA4 <b>never backfills</b>
+&mdash; historic events report <code>(not set)</code> permanently.</p>
+<ul style="font-size:14px;color:var(--muted);margin:0 0 9px;padding-left:20px">{rows_html}</ul>
+<p>Events collected from the registration date forward will segment normally.
+Check again tomorrow.</p>
+</div>''')
     A("</section>")
 
 # ---- reach
