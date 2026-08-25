@@ -1,6 +1,6 @@
 const functions = require('firebase-functions');
 const { onRequest, onCall } = require('firebase-functions/v2/https');
-const { onValueUpdated } = require("firebase-functions/v2/database");
+const { onValueUpdated, onValueWritten } = require("firebase-functions/v2/database");
 const admin = require('firebase-admin');
 const crypto = require('crypto');
 
@@ -265,70 +265,44 @@ const SlugService = {
             }
         }
 
-        // Cache miss - try an exact-key read on the caller's original casing before falling
-        // back to a full scan. Callers pass the raw, non-lowercased slug (see
-        // CalendarService.parseCalendarPath), which matches the stored key in the vast
-        // majority of cases, so this single-key read resolves most cache misses immediately.
+        // Cache miss. Try an exact-key read on the caller's original casing: callers pass the
+        // raw, non-lowercased slug (see CalendarService.parseCalendarPath), which matches the
+        // stored key in the vast majority of cases.
         //
-        // The full-tree scan below used to run on every cache miss regardless — a bounded read
-        // of one key ballooned into pulling the entire calendars (~15MB) and, on a second miss,
-        // calendars_readonly (~15MB+) tree into a 256MiB function instance. That repeatedly
-        // exceeded the memory limit and crashed the instance (OOM crashes starting 2026-07-20,
-        // 'Memory limit of 256 MiB exceeded'), and each crash-triggered instance restart's
-        // fresh Admin SDK connection is what was driving a sustained RTDB bandwidth spike —
-        // not any single popular calendar or external scraping, which the bandwidth
-        // investigation had otherwise ruled out.
-        const exactEditable = await admin.database().ref(DEFAULT_ROOT).child(requestedSlug).once('value');
+        // Read `id` rather than the calendar node itself. Existence is the only question here,
+        // and `.once('value')` on the node would pull the entire event list -- megabytes for a
+        // busy calendar -- to answer a yes/no. Every calendar record has an `id`.
+        const exactEditable = await admin.database().ref(DEFAULT_ROOT).child(requestedSlug).child('id').once('value');
         if (exactEditable.exists()) {
             const key = requestedSlug;
             await cacheRef.set({ actualSlug: key, isReadOnly: false });
             return { found: true, actualSlug: key, isReadOnly: false };
         }
 
-        const exactReadOnly = await admin.database().ref(READONLY_ROOT).child(requestedSlug).once('value');
+        const exactReadOnly = await admin.database().ref(READONLY_ROOT).child(requestedSlug).child('id').once('value');
         if (exactReadOnly.exists()) {
             const key = requestedSlug;
             await cacheRef.set({ actualSlug: key, isReadOnly: true });
             return { found: true, actualSlug: key, isReadOnly: true };
         }
 
-        // Still not found — the slug's casing must actually differ from the stored key (e.g.
-        // a URL typed in a different case than the calendar was created with). This is the
-        // rare path; fall back to the full case-insensitive scan to find it.
-
-        // First check editable calendars
-        const calendarsRef = admin.database().ref(`/${DEFAULT_ROOT}`);
-        const editableSnapshot = await calendarsRef.once('value');
-        const editableCalendars = editableSnapshot.val() || {};
-
-        // Find case-insensitive match in editable calendars
-        for (const key of Object.keys(editableCalendars)) {
-            if (this.normalizeSlug(key) === normalizedSlug) {
-                // Cache the mapping for future lookups
-                await cacheRef.set({ actualSlug: key, isReadOnly: false });
-                return { found: true, actualSlug: key, isReadOnly: false };
-            }
-        }
-
-        // Then check read-only calendars
-        const readOnlyRef = admin.database().ref(`/${READONLY_ROOT}`);
-        const readOnlySnapshot = await readOnlyRef.once('value');
-        const readOnlyCalendars = readOnlySnapshot.val() || {};
-
-        // Find case-insensitive match in read-only calendars
-        for (const key of Object.keys(readOnlyCalendars)) {
-            if (this.normalizeSlug(key) === normalizedSlug) {
-                // Cache the mapping for future lookups
-                await cacheRef.set({ actualSlug: key, isReadOnly: true });
-                return { found: true, actualSlug: key, isReadOnly: true };
-            }
-        }
-
-        // Genuinely not found. Without this, a request for a slug that never existed (a
-        // dead/expired subscription, a bot guessing IDs, a typo'd URL) is never cacheable —
-        // there's no key to write a positive cache entry under — so it pays the full
-        // ~30MB scan on every single request. That's the same OOM shape as the original bug,
-        // just gated behind "the calendar doesn't exist" instead of "the cache is cold."
+        // Not found under the caller's exact casing.
+        //
+        // There used to be a full case-insensitive scan here, reading /calendars and
+        // /calendars_readonly in their entirety to find a key that differed only in case.
+        // That is what a database index is for, and this one already exists: /slug_mappings,
+        // maintained by the indexSlug trigger below, holds normalized-slug -> actual-key for
+        // every calendar. Anything the scan could have found is in the index, so reaching
+        // this line means the slug genuinely does not exist.
+        //
+        // Removing it is the actual fix for the OOM crash loop: the scan pulled ~15MB
+        // (calendars) + ~15MB (calendars_readonly) into a 256MiB instance on every miss,
+        // died before reaching the negative-cache write below, and so re-ran on the next
+        // request forever. Because a nonexistent slug is exactly what a brand-new calendar
+        // looks like, creating a calendar by typing a URL was impossible on production
+        // (verified 2026-08-25: nonexistent slugs returned HTTP 500/503, existing ones 200).
+        // Paging or shallow-reading the scan would only have made an O(all-calendars)
+        // operation cheaper; the index makes it O(1).
         await cacheRef.set({ notFound: true, cachedAt: Date.now() });
         return { found: false };
     }
@@ -463,6 +437,52 @@ exports.createPublicLink = onCall(async (request) => {
     }
 });
 
+
+/**
+ * Keep /slug_mappings in step with the calendars themselves.
+ *
+ * lookupCalendar resolves a URL slug to the actual stored key, which can differ in casing.
+ * That used to be answered by scanning every calendar; it is now answered by this index, so
+ * the index has to exist for a calendar the moment the calendar does. The client writes
+ * straight to /calendars/<slug> and knows nothing about the index, so maintaining it here
+ * keeps that a server-side concern and works no matter which client did the write.
+ *
+ * onValueWritten (not onValueUpdated) so this fires on creation, not only on later edits --
+ * creation is the case that matters. Writes only the mapping, never the calendar, so there
+ * is no trigger loop.
+ */
+exports.indexSlug = onValueWritten(`/${DEFAULT_ROOT}/{calendarId}`, async (event) => {
+    const calendarId = event.params.calendarId;
+    const normalized = SlugService.normalizeSlug(calendarId);
+    const mappingRef = admin.database().ref(`/slug_mappings/${normalized}`);
+
+    if (!event.data.after.exists()) {
+        // Calendar deleted -- drop the mapping so the slug reads as free again.
+        return mappingRef.remove();
+    }
+
+    // Overwrites any negative-cache entry, so a slug that was looked up before it existed
+    // resolves immediately instead of waiting out NOT_FOUND_CACHE_MS.
+    return mappingRef.set({ actualSlug: calendarId, isReadOnly: false });
+});
+
+/** Same, for read-only calendars, which lookupCalendar also resolves. */
+exports.indexReadOnlySlug = onValueWritten(`/${READONLY_ROOT}/{calendarId}`, async (event) => {
+    const calendarId = event.params.calendarId;
+    const normalized = SlugService.normalizeSlug(calendarId);
+    const mappingRef = admin.database().ref(`/slug_mappings/${normalized}`);
+
+    if (!event.data.after.exists()) {
+        return mappingRef.remove();
+    }
+
+    // An editable calendar and a read-only view never share a slug, but if one somehow did,
+    // the editable mapping is the more useful one -- don't clobber it.
+    const existing = await mappingRef.once('value');
+    if (existing.exists() && existing.val()?.isReadOnly === false) return null;
+
+    return mappingRef.set({ actualSlug: calendarId, isReadOnly: true });
+});
 
 exports.syncPublicView = onValueUpdated(`/${DEFAULT_ROOT}/{calendarId}`, (event) => {
     const afterData = event.data.after.val();
