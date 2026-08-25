@@ -13,7 +13,8 @@
 #   ./scripts/stats.sh setup           # check GA4 is configured to answer all of the above
 #   ./scripts/stats.sh setup --create  # create the missing custom dimensions
 #
-# Options (before the subcommand):
+# Options (either side of the subcommand -- `stats.sh -d 7 adds` and
+# `stats.sh adds -d 7` both work):
 #   -d N        days back, default 30
 #   -j          print raw JSON instead of a table
 #
@@ -33,15 +34,28 @@ API="https://analyticsdata.googleapis.com/v1beta/properties/${PROPERTY_ID}:runRe
 DAYS=30
 JSON_ONLY=0
 
-while getopts "d:jh" opt; do
-    case "$opt" in
-        d) DAYS="$OPTARG" ;;
-        j) JSON_ONLY=1 ;;
-        h) sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-        *) echo "See: $0 -h" >&2; exit 1 ;;
+# Hand-rolled rather than getopts, which stops at the first non-flag argument.
+# That made `stats.sh adds -d 2` silently report 30 days -- the flag was never
+# parsed and there was no error, so the wrong number looked like a real one.
+# Non-flag arguments keep their order so `raw <json>` still gets its body.
+ARGS=()
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -d) [ $# -ge 2 ] || { echo "ERROR: -d needs a number of days." >&2; exit 1; }
+            DAYS="$2"; shift 2 ;;
+        -d*) DAYS="${1#-d}"; shift ;;
+        -j) JSON_ONLY=1; shift ;;
+        -h|--help) sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --) shift; ARGS+=("$@"); break ;;
+        -*) echo "ERROR: unknown option '$1'. See: $0 -h" >&2; exit 1 ;;
+        *) ARGS+=("$1"); shift ;;
     esac
 done
-shift $((OPTIND - 1))
+set -- ${ARGS+"${ARGS[@]}"}
+
+case "$DAYS" in
+    ''|*[!0-9]*) echo "ERROR: -d takes a whole number of days, got '$DAYS'." >&2; exit 1 ;;
+esac
 
 CMD="${1:-summary}"
 
