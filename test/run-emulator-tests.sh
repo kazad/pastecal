@@ -21,6 +21,50 @@ set -uo pipefail
 
 cd "$(dirname "$0")/.."
 
+# --- Java ------------------------------------------------------------------------------
+# The Database emulator is a Java program, and firebase-tools requires JDK 21+. When the
+# default `java` is older it refuses to start, and every test in this file silently never
+# runs -- which is exactly how the 2026-08-25 lookupCalendar OOM outage reached production
+# with a green-looking local suite: this machine's default java was 19, and the only signal
+# was a JDK message buried above a "no test results" line.
+#
+# So: find a new-enough JDK ourselves (Homebrew installs one but does not put it on PATH),
+# and if there genuinely isn't one, say so in those words rather than reporting it as a
+# test failure.
+java_major() {
+    "$1" -version 2>&1 | head -1 | sed -E 's/.*version "([0-9]+).*/\1/'
+}
+
+JAVA_OK=""
+default_java="none"
+command -v java >/dev/null 2>&1 && default_java="$(java_major java)"
+
+if [ "$default_java" != "none" ] && [ "$default_java" -ge 21 ] 2>/dev/null; then
+    JAVA_OK="system"
+else
+    for candidate in /opt/homebrew/opt/openjdk/bin/java /usr/local/opt/openjdk/bin/java \
+                     /Library/Java/JavaVirtualMachines/*/Contents/Home/bin/java; do
+        if [ -x "$candidate" ] && [ "$(java_major "$candidate")" -ge 21 ] 2>/dev/null; then
+            export JAVA_HOME="$(dirname "$(dirname "$candidate")")"
+            export PATH="$JAVA_HOME/bin:$PATH"
+            JAVA_OK="$JAVA_HOME"
+            echo "Using JDK $(java_major "$candidate") from $JAVA_HOME (default java is $default_java, too old)."
+            break
+        fi
+    done
+fi
+
+if [ -z "$JAVA_OK" ]; then
+    echo "ERROR: the Database emulator needs a JDK 21+ and none was found."
+    echo
+    echo "  These tests cover the Cloud Functions that talk to the database. Skipping them"
+    echo "  is how an OOM in lookupCalendar reached production once already, so this is a"
+    echo "  hard failure rather than a skip."
+    echo
+    echo "  Fix:  brew install openjdk"
+    exit 1
+fi
+
 LOG="$(mktemp)"
 trap 'rm -f "$LOG"' EXIT
 
