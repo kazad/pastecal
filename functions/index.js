@@ -451,35 +451,56 @@ exports.createPublicLink = onCall(async (request) => {
  * creation is the case that matters. Writes only the mapping, never the calendar, so there
  * is no trigger loop.
  */
-exports.indexSlug = onValueWritten(`/${DEFAULT_ROOT}/{calendarId}`, async (event) => {
+// Scoped to /id, not the calendar node. A trigger on the whole node would receive every
+// calendar's full before+after payload on every edit -- megabytes per keystroke-debounced
+// save on a busy calendar, which is the same mistake that OOMed lookupCalendar. `id` is
+// written once when the calendar is created and never changes, so watching it fires exactly
+// when the mapping needs to change (create and delete) and carries almost no data.
+exports.indexSlug = onValueWritten(`/${DEFAULT_ROOT}/{calendarId}/id`, async (event) => {
     const calendarId = event.params.calendarId;
     const normalized = SlugService.normalizeSlug(calendarId);
     const mappingRef = admin.database().ref(`/slug_mappings/${normalized}`);
 
     if (!event.data.after.exists()) {
-        // Calendar deleted -- drop the mapping so the slug reads as free again.
+        // Calendar deleted -- drop the mapping so the slug reads as free again, but only if
+        // it still points here. A case-twin may legitimately own the slug (see the backfill
+        // script's ambiguous list); deleting one must not strand the other.
+        const current = (await mappingRef.once('value')).val();
+        if (current && current.actualSlug !== calendarId) return null;
         return mappingRef.remove();
     }
+
+    // Skip a no-op rewrite so ordinary edits don't churn the index.
+    const current = (await mappingRef.once('value')).val();
+    if (current && current.actualSlug === calendarId && current.isReadOnly === false) return null;
 
     // Overwrites any negative-cache entry, so a slug that was looked up before it existed
     // resolves immediately instead of waiting out NOT_FOUND_CACHE_MS.
     return mappingRef.set({ actualSlug: calendarId, isReadOnly: false });
 });
 
-/** Same, for read-only calendars, which lookupCalendar also resolves. */
-exports.indexReadOnlySlug = onValueWritten(`/${READONLY_ROOT}/{calendarId}`, async (event) => {
+/** Same, for read-only calendars, which lookupCalendar also resolves. Scoped to /id for the
+ *  same reason: syncPublicView rewrites the whole read-only node on every edit of its parent
+ *  calendar, so a node-level trigger here would fire constantly with a full payload. */
+exports.indexReadOnlySlug = onValueWritten(`/${READONLY_ROOT}/{calendarId}/id`, async (event) => {
     const calendarId = event.params.calendarId;
     const normalized = SlugService.normalizeSlug(calendarId);
     const mappingRef = admin.database().ref(`/slug_mappings/${normalized}`);
 
+    const existing = (await mappingRef.once('value')).val();
+
     if (!event.data.after.exists()) {
+        // Only drop the mapping if it actually points at this view.
+        if (existing && existing.actualSlug !== calendarId) return null;
         return mappingRef.remove();
     }
 
     // An editable calendar and a read-only view never share a slug, but if one somehow did,
     // the editable mapping is the more useful one -- don't clobber it.
-    const existing = await mappingRef.once('value');
-    if (existing.exists() && existing.val()?.isReadOnly === false) return null;
+    if (existing && existing.isReadOnly === false) return null;
+
+    // Skip no-op rewrites.
+    if (existing && existing.actualSlug === calendarId && existing.isReadOnly === true) return null;
 
     return mappingRef.set({ actualSlug: calendarId, isReadOnly: true });
 });
