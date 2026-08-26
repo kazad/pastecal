@@ -44,7 +44,63 @@ const STATS_ROOT = "calendar_stats";
 // "Container terminated on signal 6" landed right after a served response, and the write
 // initiated alongside it never reached the database), so anything not awaited can be silently
 // dropped. A failure here is logged but swallowed — a stats write must never fail the request.
-async function recordIcsStat(id, { bytes, wasNotModified }) {
+// A per-process salt, regenerated every time an instance starts and never stored.
+// It makes the device hashes below un-reversible even by us: without the salt no
+// IP can be tested against a stored hash, and the salt does not outlive the
+// process. This is the difference between "an estimate of how many devices poll
+// this feed" and "a log of who reads this calendar."
+const DEVICE_SALT = crypto.randomBytes(32);
+
+/**
+ * A coarse, deliberately lossy device bucket for counting ICS subscribers.
+ *
+ * The ICS protocol has no client id -- polling is anonymous by design -- so the
+ * only available signal is user-agent plus IP. Both are personal data, so neither
+ * is stored: they are hashed together with a per-process salt and the UTC date,
+ * then truncated to 8 hex chars, and only the resulting bucket name is written.
+ *
+ * Consequences of that design, all intentional:
+ *   - the hash cannot be reversed or matched against a known IP
+ *   - it rotates daily, so nothing tracks a device across days
+ *   - 8 hex chars will collide occasionally at scale, which biases the estimate
+ *     DOWN. Undercounting is the right failure direction for a vanity metric.
+ *
+ * Returns null for aggregators (see AGGREGATOR_UA): Google fetches feeds
+ * server-side on behalf of every subscriber, so one Google IP may represent one
+ * person or five hundred. Counting those as one device would be a lie; they are
+ * tallied separately as "unknown reach" instead.
+ */
+const AGGREGATOR_UA = /Google-Calendar-Importer|WordPress|Microsoft Exchange|Outlook-iOS|feedburner|Yahoo/i;
+
+function deviceBucket(userAgent, ip) {
+    if (!userAgent || AGGREGATOR_UA.test(userAgent)) return null;
+    const day = new Date().toISOString().slice(0, 10);
+    return crypto.createHash('sha256')
+        .update(DEVICE_SALT)
+        .update(`${day}|${userAgent}|${ip || ''}`)
+        .digest('hex')
+        .slice(0, 8);
+}
+
+/** Which family of client this is, for a breakdown that needs no identity at all. */
+function clientFamily(userAgent) {
+    const ua = userAgent || '';
+    if (/dataaccessd/i.test(ua)) return /^iOS/i.test(ua) ? 'apple_ios' : 'apple_macos';
+    if (/Google-Calendar-Importer/i.test(ua)) return 'google';
+    if (/ICSx5|ical4j|Android/i.test(ua)) return 'android';
+    if (/Microsoft Exchange|Outlook/i.test(ua)) return 'outlook';
+    if (/WordPress/i.test(ua)) return 'wordpress';
+    if (/Thunderbird|Evolution|Lightning/i.test(ua)) return 'desktop_linux';
+    if (/Mozilla|Chrome|Safari|curl|wget/i.test(ua)) return 'browser_or_script';
+    return 'other';
+}
+
+// Buckets are kept for this long, then swept. Long enough for a weekly-unique
+// estimate and a month-over-month trend; short enough that the store does not
+// become a de-facto history of who reads what.
+const DEVICE_BUCKET_TTL_DAYS = 35;
+
+async function recordIcsStat(id, { bytes, wasNotModified, userAgent, ip }) {
     const update = {
         lastServedAt: admin.database.ServerValue.TIMESTAMP,
         icsRequestCount: admin.database.ServerValue.increment(1),
@@ -54,10 +110,65 @@ async function recordIcsStat(id, { bytes, wasNotModified }) {
     } else {
         update.bytesServedTotal = admin.database.ServerValue.increment(bytes);
     }
+
+    const day = new Date().toISOString().slice(0, 10);
+    const family = clientFamily(userAgent);
+    const bucket = deviceBucket(userAgent, ip);
+
+    // Client mix, which carries no identity -- just which apps subscribe.
+    update[`clients/${family}`] = admin.database.ServerValue.increment(1);
+
+    if (bucket) {
+        // Presence only. The value is the day, so a sweep can drop stale buckets
+        // without reading anything else, and repeated polls from the same device
+        // collapse into one key rather than accumulating.
+        update[`devices/${day}/${bucket}`] = true;
+    } else {
+        // An aggregator stands in for an unknown number of real people.
+        update[`aggregatorHits/${day}`] = admin.database.ServerValue.increment(1);
+    }
+
     try {
         await admin.database().ref(STATS_ROOT).child(id).update(update);
+        await sweepOldDeviceBuckets(id, day);
     } catch (err) {
         console.error(`Failed to record ICS stat for ${id}:`, err);
+    }
+}
+
+/**
+ * Drop device buckets older than the TTL.
+ *
+ * Opportunistic rather than scheduled: a busy feed is polled every few hours, so
+ * its own traffic keeps it swept, and a feed nobody polls has nothing arriving to
+ * expire. That avoids standing up Cloud Scheduler for a job with no deadline.
+ *
+ * Rate-limited to one sweep per calendar per day via a marker, so a feed polled
+ * 8,000 times does not pay for 8,000 range reads. Failure is swallowed: retention
+ * housekeeping must never break serving a calendar.
+ */
+async function sweepOldDeviceBuckets(id, today) {
+    try {
+        const ref = admin.database().ref(STATS_ROOT).child(id);
+        const marker = await ref.child('devicesSweptOn').once('value');
+        if (marker.val() === today) return;
+
+        const cutoff = new Date(Date.now() - DEVICE_BUCKET_TTL_DAYS * 86400000)
+            .toISOString().slice(0, 10);
+
+        // Keys are ISO dates, so lexical ordering is chronological -- endBefore
+        // gives exactly the expired days without reading the live ones.
+        const stale = await ref.child('devices').orderByKey().endBefore(cutoff).once('value');
+
+        const updates = { devicesSweptOn: today };
+        stale.forEach((child) => { updates[`devices/${child.key}`] = null; });
+
+        const aggStale = await ref.child('aggregatorHits').orderByKey().endBefore(cutoff).once('value');
+        aggStale.forEach((child) => { updates[`aggregatorHits/${child.key}`] = null; });
+
+        await ref.update(updates);
+    } catch (err) {
+        console.error(`Device bucket sweep failed for ${id}:`, err);
     }
 }
 
@@ -365,9 +476,13 @@ exports.generateICSV2 = onRequest({ cors: true }, async (req, res) => {
         const etag = '"' + crypto.createHash('sha1').update(JSON.stringify(calendarData?.events ?? null)).digest('hex') + '"';
         const userAgent = req.headers['user-agent'] || 'unknown';
 
+        // Only ever passed to deviceBucket(), which salts and hashes it. Never stored,
+        // never logged -- see the comment on DEVICE_SALT.
+        const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip || '';
+
         if (req.headers['if-none-match'] === etag) {
             console.log(`ICS 304: id=${cleanId} readonly=${isReadOnly} ua="${userAgent}"`);
-            await recordIcsStat(cleanId, { wasNotModified: true });
+            await recordIcsStat(cleanId, { wasNotModified: true, userAgent, ip: clientIp });
             res.set('ETag', etag).set('Cache-Control', 'public, max-age=300').status(304).end();
             return;
         }
@@ -375,7 +490,9 @@ exports.generateICSV2 = onRequest({ cors: true }, async (req, res) => {
         const icsData = ICSService.generateICS(calendarData, cleanId);
 
         console.log(`ICS served: id=${cleanId} readonly=${isReadOnly} bytes=${icsData.length} ua="${userAgent}"`);
-        await recordIcsStat(cleanId, { bytes: icsData.length, wasNotModified: false });
+        await recordIcsStat(cleanId, {
+            bytes: icsData.length, wasNotModified: false, userAgent, ip: clientIp,
+        });
 
         res.set('Content-Type', 'text/calendar')
             .set('ETag', etag)
@@ -555,7 +672,11 @@ exports.lookupCalendar = onCall(async (request) => {
 });
 
 // Exported for unit tests (test/unit/ics.test.js). Not used by deployed functions.
-exports._internal = { ICSService, CalendarService, SlugService };
+exports._internal = {
+    ICSService, CalendarService, SlugService,
+    recordIcsStat, deviceBucket, clientFamily, sweepOldDeviceBuckets,
+    DEVICE_BUCKET_TTL_DAYS,
+};
 
 /*
 // local cleanup task: Update eventIDs to be GUIDs

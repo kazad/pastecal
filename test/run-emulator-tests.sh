@@ -68,9 +68,19 @@ fi
 LOG="$(mktemp)"
 trap 'rm -f "$LOG"' EXIT
 
-# The teardown hang has run 3+ minutes with zero progress every time it's happened; the
-# tests themselves finish in well under 10s. 60s is generous headroom, not a tight cutoff.
-timeout 60 firebase emulators:exec --only database "node --test test/unit/*.emulator.test.js" \
+# The timeout covers emulator STARTUP (~30-60s, JVM boot) plus the tests plus the teardown
+# hang, not just the tests -- so a budget sized for the tests alone silently truncates the
+# run. Scale it with the number of files and leave generous room for startup.
+# Each file holds the RTDB connection open after its tests finish, so node's runner waits
+# out a per-file drain before moving on -- the wall time is dominated by that, not by the
+# assertions. 90s per file plus emulator startup is comfortable; anything tighter starts
+# truncating the run, which this script then (correctly) reports as a failure.
+FILE_COUNT="$(ls test/unit/*.emulator.test.js 2>/dev/null | wc -l | tr -d ' ')"
+TIMEOUT=$((120 + FILE_COUNT * 90))
+
+# One `node --test` for ALL files, not a loop over them: the Admin SDK holds an open RTDB
+# connection, so a per-file invocation never exits and the loop hangs on the first file.
+timeout "$TIMEOUT" firebase emulators:exec --only database "node --test test/unit/*.emulator.test.js" \
     > "$LOG" 2>&1
 emulators_exit=$?
 
@@ -78,6 +88,30 @@ cat "$LOG"
 
 ok_count="$(grep -cE '^ok [0-9]+ ' "$LOG")"
 not_ok_count="$(grep -cE '^not ok [0-9]+ ' "$LOG")"
+
+# Reporting PASSED on a partial run is how a silently-skipped suite lets a regression
+# through -- the lookupCalendar OOM shipped that way. Neither the exit code nor node's
+# "1..N" plan survives the teardown hang, so instead assert that at least one test from
+# EVERY file reported. Each file contributes a distinct, stable test name.
+MARKERS=(
+    "SlugService.lookupCalendar"      # lookup-calendar.emulator.test.js
+    "deviceBucket:"                   # ics-device-buckets.emulator.test.js
+)
+missing=()
+for m in "${MARKERS[@]}"; do
+    grep -qE "^(ok|not ok) [0-9]+ - .*${m}" "$LOG" || missing+=("$m")
+done
+
+if [ "${#missing[@]}" -gt 0 ]; then
+    echo
+    echo "ERROR: no results from ${#missing[@]} of ${#MARKERS[@]} emulator test group(s): ${missing[*]}"
+    echo "       (exit $emulators_exit, timeout ${TIMEOUT}s, $FILE_COUNT file(s) on disk)."
+    echo "       $ok_count test(s) passed before the run was cut short — treating as a"
+    echo "       failure, not a pass."
+    [ "$emulators_exit" = "124" ] && echo "       Exit 124 is the timeout: raise TIMEOUT in this script."
+    echo "       If you added a test file, add a marker for it to MARKERS above."
+    exit 1
+fi
 
 if [ "$not_ok_count" -gt 0 ]; then
     echo
