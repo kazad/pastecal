@@ -12,11 +12,17 @@
 #   ./scripts/stats.sh raw <json>      # any runReport body, printed as JSON
 #   ./scripts/stats.sh setup           # check GA4 is configured to answer all of the above
 #   ./scripts/stats.sh setup --create  # create the missing custom dimensions
+#   ./scripts/stats.sh --live          # what is firing right now (post-deploy check)
 #
 # Options (either side of the subcommand -- `stats.sh -d 7 adds` and
 # `stats.sh adds -d 7` both work):
 #   -d N        days back, default 30
 #   -j          print raw JSON instead of a table
+#   --today     include today, which GA4 is still processing. Off by default:
+#               a partial day makes every trend look like a collapse.
+#   --live      last 30 minutes, via the realtime API. Answers "did my deploy
+#               go out" in seconds, where the daily tables lag for hours.
+#               Ignores the subcommand; realtime has no custom dimensions.
 #
 # Auth uses the Application Default Credentials you already have from
 # `gcloud auth login --update-adc`. If a call 401s, run that again.
@@ -33,6 +39,12 @@ API="https://analyticsdata.googleapis.com/v1beta/properties/${PROPERTY_ID}:runRe
 
 DAYS=30
 JSON_ONLY=0
+# GA4's current day is still being processed, so the default range stops at
+# yesterday -- otherwise every report looks like traffic fell off a cliff. That
+# is right for trends and wrong for "did the thing I just shipped go live",
+# which is what --today and --live answer.
+INCLUDE_TODAY=0
+REALTIME=0
 
 # Hand-rolled rather than getopts, which stops at the first non-flag argument.
 # That made `stats.sh adds -d 2` silently report 30 days -- the flag was never
@@ -45,7 +57,9 @@ while [ $# -gt 0 ]; do
             DAYS="$2"; shift 2 ;;
         -d*) DAYS="${1#-d}"; shift ;;
         -j) JSON_ONLY=1; shift ;;
-        -h|--help) sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --today) INCLUDE_TODAY=1; shift ;;
+        --live|--realtime) REALTIME=1; shift ;;
+        -h|--help) sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         --) shift; ARGS+=("$@"); break ;;
         -*) echo "ERROR: unknown option '$1'. See: $0 -h" >&2; exit 1 ;;
         *) ARGS+=("$1"); shift ;;
@@ -115,7 +129,72 @@ report() {
     rm -f "$out"
 }
 
-range() { printf '{"startDate":"%ddaysAgo","endDate":"yesterday"}' "$DAYS"; }
+range() {
+    if [ "$INCLUDE_TODAY" = "1" ]; then
+        printf '{"startDate":"%ddaysAgo","endDate":"today"}' "$DAYS"
+    else
+        printf '{"startDate":"%ddaysAgo","endDate":"yesterday"}' "$DAYS"
+    fi
+}
+
+# Realtime is a different endpoint with a different (much smaller) dimension set:
+# customEvent:* does not exist there, so the breakdown subcommands cannot use it.
+# It answers one question well -- is this event firing right now -- which is the
+# one the daily tables cannot answer for hours.
+RT_API="https://analyticsdata.googleapis.com/v1beta/properties/${PROPERTY_ID}:runRealtimeReport"
+
+realtime_report() {
+    local body="$1" out http
+    out="$(mktemp)"
+    http="$(curl -sS -o "$out" -w '%{http_code}' -X POST "$RT_API" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -H 'Content-Type: application/json' \
+        -d "$body")"
+    if [ "$http" != "200" ]; then
+        echo "ERROR: GA4 realtime API returned HTTP $http" >&2
+        jq -r '.error.message // .' < "$out" >&2 2>/dev/null || cat "$out" >&2
+        rm -f "$out"; exit 1
+    fi
+    cat "$out"; rm -f "$out"
+}
+
+# --live: what is happening in the last 30 minutes. Deliberately terse -- this is
+# a smoke test after a deploy, not a report.
+show_realtime() {
+    local events
+    events="$(realtime_report '{"dimensions":[{"name":"eventName"}],"metrics":[{"name":"eventCount"}],"limit":30}')"
+
+    # -j must emit JSON and nothing else, so the banner comes after this check --
+    # otherwise `--live -j | jq` chokes on the header line.
+    if [ "$JSON_ONLY" = "1" ]; then echo "$events" | jq '.'; return 0; fi
+
+    echo "pastecal — right now (last 30 min)"
+    echo
+
+    local active
+    active="$(realtime_report '{"metrics":[{"name":"activeUsers"}]}' \
+        | jq -r '(.rows // [])[0].metricValues[0].value // "0"')"
+    echo "ACTIVE USERS  $active"
+    echo
+    echo "EVENTS"
+    echo "$events" | table "event,count"
+
+    # A deploy usually means "is my new event firing yet", so call out the
+    # product events explicitly -- absence is the answer you are looking for,
+    # and an absent row is easy to miss in a list.
+    echo
+    echo "PRODUCT EVENTS SEEN"
+    local seen
+    seen="$(echo "$events" | jq -r '[(.rows // [])[].dimensionValues[0].value] | join(" ")')"
+    local any=0
+    for e in $(echo "$CUSTOM" | tr ',' ' '); do
+        case " $seen " in
+            *" $e "*) printf '  %-20s yes\n' "$e"; any=1 ;;
+            *)        printf '  %-20s  -\n'  "$e" ;;
+        esac
+    done
+    [ "$any" = "1" ] || echo "  (none yet — normal on a quiet site; try again in a few minutes)"
+}
 
 # Build a runReport body: dimensions, metrics, optional filter, optional limit.
 mk() {
@@ -184,7 +263,25 @@ dimension_warning() {
     echo "dimension yet. Run:  $0 setup"
 }
 
+# Every header should say where the window ENDS, not just how long it is --
+# "last 30 days" silently meaning "ending yesterday" is what made a post-deploy
+# check look like nothing had happened.
+window_label() {
+    if [ "$INCLUDE_TODAY" = "1" ]; then
+        printf 'last %s days (incl. today, still being processed)' "$DAYS"
+    else
+        printf 'last %s days (to yesterday)' "$DAYS"
+    fi
+}
+
 CUSTOM="calendar_created,slug_prompt_shown,slug_claimed,slug_autoassigned,slug_claim_failed,event_added,calendar_shared,calendar_returned,feature_used"
+
+# --live short-circuits the subcommand: it is a different endpoint answering a
+# different question, and the breakdowns it cannot serve would fail confusingly.
+if [ "$REALTIME" = "1" ]; then
+    show_realtime
+    exit 0
+fi
 
 case "$CMD" in
 
@@ -199,7 +296,7 @@ summary)
         exit 0
     fi
 
-    echo "pastecal — last ${DAYS} days"
+    echo "pastecal — $(window_label)"
     echo
     echo "VISITORS"
     echo "$overview" | table "type,sessions,users,avg secs"
@@ -234,7 +331,7 @@ funnel)
     auto="$(get slug_autoassigned)"
     failed="$(get slug_claim_failed)"
 
-    echo "Claim funnel — last ${DAYS} days"
+    echo "Claim funnel — $(window_label)"
     echo
     printf '  offered a name      %8s\n' "$shown"
     printf '  chose their own     %8s' "$claimed"
@@ -258,7 +355,7 @@ calendars)
     json="$(report "$(mk 'landingPage' 'sessions,totalUsers' '' 25)")"
     if [ "$JSON_ONLY" = "1" ]; then echo "$json" | jq '.'; exit 0; fi
 
-    echo "Busiest calendars — last ${DAYS} days"
+    echo "Busiest calendars — $(window_label)"
     echo
     echo "$json" | jq -r '
         ["calendar","sessions","users","visits each"],
@@ -308,7 +405,7 @@ reach)
     json="$(report "$(mk 'pagePath' 'screenPageViews,totalUsers,newUsers' '' 40)")"
     if [ "$JSON_ONLY" = "1" ]; then echo "$json" | jq '.'; exit 0; fi
 
-    echo "Reach per calendar - last ${DAYS} days"
+    echo "Reach per calendar — $(window_label)"
     echo
     echo "$json" | jq -r '
         def n: (tonumber? // 0);
