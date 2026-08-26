@@ -89,7 +89,7 @@ Copyright (c) 2025 Kalid Azad
     <link id="syncfusion-base-theme" href="https://cdn.syncfusion.com/ej2/ej2-base/styles/material.css" rel="stylesheet" type="text/css" />
     <link id="syncfusion-theme" href="https://cdn.syncfusion.com/ej2/material.css" rel="stylesheet" type="text/css" />
     <link id="syncfusion-schedule-theme" href="https://cdn.syncfusion.com/ej2/ej2-schedule/styles/material.css" rel="stylesheet" type="text/css" />
-    <link rel="stylesheet" href="/style.css?v=1787354164">
+    <link rel="stylesheet" href="/style.css?v=1787677684">
 
     <!-- Third-party libraries -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
@@ -145,22 +145,22 @@ Copyright (c) 2025 Kalid Azad
     </script>
 
     <!-- App scripts (order matters: Utils → models/services → directives → components) -->
-    <script src="/utils/analytics.js?v=1787354164"></script>
-    <script src="/utils/utils.js?v=1787354164"></script>
-    <script src="/models/Event.js?v=1787354164"></script>
-    <script src="/services/SlugManager.js?v=1787354164"></script>
-    <script src="/services/CalendarDataService.js?v=1787354164"></script>
-    <script src="/models/Calendar.js?v=1787354164"></script>
-    <script src="/directives/clickOutside.js?v=1787354164"></script>
+    <script src="/utils/analytics.js?v=1787677684"></script>
+    <script src="/utils/utils.js?v=1787677684"></script>
+    <script src="/models/Event.js?v=1787677684"></script>
+    <script src="/services/SlugManager.js?v=1787677684"></script>
+    <script src="/services/CalendarDataService.js?v=1787677684"></script>
+    <script src="/models/Calendar.js?v=1787677684"></script>
+    <script src="/directives/clickOutside.js?v=1787677684"></script>
     <!-- Components -->
-    <script src="/components/icons.js?v=1787354164"></script>
-    <script src="/components/ToastNotification.js?v=1787354164"></script>
-    <script src="/components/QuickAddButton.js?v=1787354164"></script>
-    <script src="/components/Tooltip.js?v=1787354164"></script>
-    <script src="/components/QuickAddDialog.js?v=1787354164"></script>
-    <script src="/components/CalendarTitle.js?v=1787354164"></script>
-    <script src="/components/NavigationDropdown.js?v=1787354164"></script>
-    <script src="/components/WelcomeDock.js?v=1787354164"></script>
+    <script src="/components/icons.js?v=1787677684"></script>
+    <script src="/components/ToastNotification.js?v=1787677684"></script>
+    <script src="/components/QuickAddButton.js?v=1787677684"></script>
+    <script src="/components/Tooltip.js?v=1787677684"></script>
+    <script src="/components/QuickAddDialog.js?v=1787677684"></script>
+    <script src="/components/CalendarTitle.js?v=1787677684"></script>
+    <script src="/components/NavigationDropdown.js?v=1787677684"></script>
+    <script src="/components/WelcomeDock.js?v=1787677684"></script>
 
     <script>
         // Load-order guard for critical globals
@@ -191,7 +191,7 @@ Copyright (c) 2025 Kalid Azad
     <script>
         if (window.location.hostname.match(/^(localhost|127\.0\.0\.1|::1)$/)) {
             const script = document.createElement('script');
-            script.src = '/selftest.js?v=1787354164';
+            script.src = '/selftest.js?v=1787677684';
             document.head.appendChild(script);
         }
     </script>
@@ -491,20 +491,48 @@ Copyright (c) 2025 Kalid Azad
                     <div v-show="isExisting">
                         <custom-tooltip align="right">
                             <template #trigger>
+                                <!-- Copying the link is the common case and used to be four
+                                     clicks deep, behind a panel that opens with an Edit-vs-View
+                                     permissions question. The pill now copies on click; the
+                                     chevron still opens that panel for everything else. -->
                                 <div class="relative flex items-center bg-1 border border-color-default rounded-full p-1 pl-3 pr-3 shadow-sm hover:border-blue-500 hover:bg-[var(--bg-interactive-hover)] cursor-pointer transition-all group select-none"
-                                    @click="toggleShare"
+                                    @click="copyShareLink"
+                                    role="button" tabindex="0"
+                                    @keyup.enter="copyShareLink" @keyup.space="copyShareLink"
+                                    :aria-label="shareCopied ? 'Link copied' : 'Copy link to this calendar'"
                                     data-testid="share-pill-existing">
 
-                                    <!-- Icon -->
+                                    <!-- This pill is desktop-only; phones get the separate
+                                         share button in the mobile header (share-button-mobile),
+                                         which still opens the full panel. So a copy glyph is
+                                         unambiguous here -- the URL is right beside it. -->
                                     <div
-                                        class="text-color-1 group-hover:text-blue-500 transition-colors flex-shrink-0 p-1 rounded-full mr-1">
-                                        <icon name="share" class="w-5 h-5"></icon>
+                                        class="transition-colors flex-shrink-0 p-1 rounded-full mr-1"
+                                        :class="shareCopied ? 'text-green-600' : 'text-color-1 group-hover:text-blue-500'">
+                                        <icon v-if="shareCopied" name="check" class="w-5 h-5"></icon>
+                                        <icon v-else name="copy" class="w-5 h-5"></icon>
                                     </div>
 
                                     <!-- URL Text -->
-                                    <div class="text-color-1 text-xs truncate max-w-[150px] md:max-w-xs">
+                                    <div v-if="shareCopied"
+                                        class="text-green-600 text-xs font-bold whitespace-nowrap"
+                                        data-testid="share-pill-copied">Link copied</div>
+                                    <div v-else class="text-color-1 text-xs truncate max-w-[150px] md:max-w-xs">
                                         pastecal.com/<span class="font-bold text-color-2" v-text="calendar.id"></span>
                                     </div>
+
+                                    <!-- Everything else (edit link, subscribe, feed URLs) still
+                                         lives in the full sharing panel, one click away. -->
+                                    <button type="button"
+                                        class="flex items-center flex-shrink-0 ml-2 pl-2 border-l border-color-default text-color-1 hover:text-blue-500 transition-colors"
+                                        @click.stop="toggleShare"
+                                        aria-label="More sharing options"
+                                        data-testid="share-pill-more">
+                                        <!-- chevronDown is a filled path, not a stroked one,
+                                             so it needs fill="currentColor" to be visible. -->
+                                        <icon name="chevronDown" viewBox="0 0 16 16" fill="currentColor"
+                                            class="w-3.5 h-3.5"></icon>
+                                    </button>
                                 </div>
                             </template>
                             <template #content>
@@ -1208,7 +1236,7 @@ Copyright (c) 2025 Kalid Azad
     </div>
 
     
-    <script src="/app.js?v=1787354164"></script>
+    <script src="/app.js?v=1787677684"></script>
 
 </body>
 

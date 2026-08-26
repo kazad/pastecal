@@ -102,6 +102,11 @@ const CalendarVueApp = {
 
             showRecents: false,
             hoverTimeout: null,
+            // Drives the share pill's "Link copied" state. Reactive rather than a
+            // DOM mutation so Vue owns the markup -- the older copyToClipboard()
+            // rewrites innerHTML, which fights the template on a v-if'd element.
+            shareCopied: false,
+            shareCopiedTimer: null,
             showWelcome: false,
             showHelp: false,
             showNotes: false,
@@ -1896,6 +1901,64 @@ const CalendarVueApp = {
             } else {
                 this.closeAllPanels();
                 this.showSearch = true;
+            }
+        },
+
+        /**
+         * Copy this calendar's link straight from the header pill.
+         *
+         * Defaults to the READ-ONLY url: someone sharing casually is far more likely
+         * to want "look at this" than "you can edit this," and handing out edit rights
+         * by accident is the one mistake here that cannot be taken back. Falls back to
+         * the editable url only when no read-only link exists yet, which is rarer than
+         * it looks (all of the busiest calendars have one) but must not copy null.
+         *
+         * Tagged `pill` rather than `copy` so it stays distinguishable from the share
+         * panel's own copy buttons -- the whole point is to learn whether this path
+         * gets used, and lumping them together would hide the answer.
+         */
+        copyShareLink() {
+            const url = this.getReadOnlyURL() || this.getEditableURL();
+            if (!url) return;
+
+            const settle = () => {
+                this.shareCopied = true;
+                clearTimeout(this.shareCopiedTimer);
+                this.shareCopiedTimer = setTimeout(() => { this.shareCopied = false; }, 1600);
+            };
+
+            track(a => a.calendarShared('pill'));
+
+            // clipboard API is https-only and absent in some in-app browsers; the
+            // execCommand path is the fallback, and a failure must still tell the
+            // user something rather than silently doing nothing.
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(url).then(settle).catch(() => {
+                    if (!this.legacyCopy(url)) this.showToast('Could not copy the link', 'error');
+                    else settle();
+                });
+            } else if (this.legacyCopy(url)) {
+                settle();
+            } else {
+                this.showToast('Could not copy the link', 'error');
+            }
+        },
+
+        /** execCommand fallback for browsers without the async clipboard API. */
+        legacyCopy(text) {
+            try {
+                const el = document.createElement('textarea');
+                el.value = text;
+                // Keep it off-screen but focusable; display:none would make select() a no-op.
+                el.setAttribute('readonly', '');
+                el.style.cssText = 'position:absolute;left:-9999px;top:0';
+                document.body.appendChild(el);
+                el.select();
+                const ok = document.execCommand('copy');
+                document.body.removeChild(el);
+                return ok;
+            } catch (err) {
+                return false;
             }
         },
 

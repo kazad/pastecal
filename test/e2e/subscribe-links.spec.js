@@ -7,7 +7,9 @@ const { test, expect } = require('./fixtures');
 // behavior that makes subscribing a single tap, and the safety rule that it
 // never hands out edit access.
 
-const PANEL = '[data-testid="share-pill-existing"]';
+// The pill itself now copies the link (that was the whole point of making
+// sharing one click), so the panel opens from the chevron beside it.
+const PANEL = '[data-testid="share-pill-more"]';
 
 async function openShare(page, slug) {
   await page.goto(`/${slug}`);

@@ -111,8 +111,9 @@ test.describe('Analytics call sites', () => {
     await page.waitForTimeout(2500);
 
     // The [aria-label="Share calendar"] button is the mobile one and is hidden at
-    // desktop width; the desktop affordance is this pill.
-    await page.locator('[data-testid="share-pill-existing"]').click();
+    // desktop width. On desktop the pill itself now copies the link, so the panel
+    // opens from the chevron beside it (see share-pill-copy.spec.js).
+    await page.locator('[data-testid="share-pill-more"]').click();
     await page.waitForTimeout(800);
 
     const copyButtons = page.locator('button:has-text("Copy")');
