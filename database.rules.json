@@ -17,6 +17,22 @@
     "slug_mappings": {
       ".read": false,
       ".write": false
+    },
+    "calendar_authors": {
+      "$calendarId": {
+        "$uid": {
+          ".write": "auth != null && auth.uid === $uid",
+          ".read": false,
+          "firstSeen": { ".validate": "newData.isNumber() && (!data.exists() || data.val() === newData.val())" },
+          "lastSeen": { ".validate": "newData.isNumber()" },
+          "editCount": { ".validate": "newData.isNumber()" },
+          "createdHere": { ".validate": "newData.isBoolean()" },
+          "days": {
+            "$day": { ".validate": "newData.isBoolean()" }
+          },
+          "$other": { ".validate": false }
+        }
+      }
     }
   }
 }

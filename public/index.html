@@ -137,6 +137,22 @@ Copyright (c) 2025 Kalid Azad
             measurementId: "G-4J99GY9KE6"
         };
         firebase.initializeApp(firebaseConfig);
+
+        // Anonymous sign-in. NOT a login and not a permission check -- calendars stay
+        // open read/write to everyone, which is the product. This only gives each browser
+        // a stable id that the SERVER asserts, so "who most likely created this calendar"
+        // has an answer if a slug is ever leaked or taken over.
+        //
+        // A localStorage id would be simpler and useless: the client would be claiming its
+        // own identity, so anyone could send someone else's. auth.uid cannot be forged.
+        //
+        // Deliberately fire-and-forget: sign-in must never gate rendering a calendar. If it
+        // fails (blocked third-party storage, offline, quota) the app behaves exactly as it
+        // did before -- writes still work, they just carry no author signal.
+        firebase.auth().signInAnonymously().catch(function (err) {
+            console.warn('[auth] anonymous sign-in unavailable:', err && err.code);
+        });
+
         ej.base.registerLicense('Ngo9BigBOggjHTQxAR8/V1NHaF1cW2hIfEx1RHxQdld5ZFRHallYTnNWUj0eQnxTdEZiW39fcXJXR2JUV0NyWg==');
 
         if (location.href.includes("localhost") && location.href.includes("?local")) {
@@ -149,6 +165,8 @@ Copyright (c) 2025 Kalid Azad
     <script src="/utils/utils.js?v=1787723862"></script>
     <script src="/models/Event.js?v=1787723862"></script>
     <script src="/services/SlugManager.js?v=1787723862"></script>
+    <!-- Before CalendarDataService, which calls into it on every write. -->
+    <script src="/services/AuthorSignal.js?v=1787723862"></script>
     <script src="/services/CalendarDataService.js?v=1787723862"></script>
     <script src="/models/Calendar.js?v=1787723862"></script>
     <script src="/directives/clickOutside.js?v=1787723862"></script>

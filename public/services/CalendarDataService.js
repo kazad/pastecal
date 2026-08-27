@@ -180,6 +180,13 @@ class CalendarDataService {
             // console.log("CalendarDataService.sync()", calendar);
             const safe = this._dropIncompleteEvents(calendar);
             this.db.child(calendar.id).set(this._sanitizeForFirebase(safe));
+
+            // Recorded here rather than at the call sites so no future write path can
+            // forget it. Note this CANNOT live inside the calendar node: sync() .set()s
+            // the whole node from client state, so anything stored there would be wiped
+            // by the next write from any browser.
+            if (typeof AuthorSignal !== 'undefined') AuthorSignal.touch(calendar.id);
+
             console.log('CalendarDataService.sync()');
         }
     }
@@ -206,6 +213,12 @@ class CalendarDataService {
             if (error) {
                 console.log("error creating calendar", error, key, value);
             } else {
+                // The strongest ownership signal there is: whoever was present when the
+                // calendar first existed. Flagged separately from ordinary edits so a
+                // later prolific editor can never outrank the creator by volume alone.
+                if (typeof AuthorSignal !== 'undefined') {
+                    AuthorSignal.touch(key, { created: true });
+                }
                 success();
             }
         });
