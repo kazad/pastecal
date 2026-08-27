@@ -9,6 +9,7 @@
 #   ./scripts/stats.sh returns         # how deep people come back
 #   ./scripts/stats.sh adds            # where events get created
 #   ./scripts/stats.sh shares          # how calendars get shared
+#   ./scripts/stats.sh cohorts         # per birth week: reached a 2nd person? alive 4 weeks on?
 #   ./scripts/stats.sh raw <json>      # any runReport body, printed as JSON
 #   ./scripts/stats.sh setup           # check GA4 is configured to answer all of the above
 #   ./scripts/stats.sh setup --create  # create the missing custom dimensions
@@ -38,6 +39,7 @@ PROPERTY_ID="298180842"   # GA4 property "pastecal-web"
 API="https://analyticsdata.googleapis.com/v1beta/properties/${PROPERTY_ID}:runReport"
 
 DAYS=30
+DAYS_SET=0
 JSON_ONLY=0
 # GA4's current day is still being processed, so the default range stops at
 # yesterday -- otherwise every report looks like traffic fell off a cliff. That
@@ -54,12 +56,12 @@ ARGS=()
 while [ $# -gt 0 ]; do
     case "$1" in
         -d) [ $# -ge 2 ] || { echo "ERROR: -d needs a number of days." >&2; exit 1; }
-            DAYS="$2"; shift 2 ;;
-        -d*) DAYS="${1#-d}"; shift ;;
+            DAYS="$2"; DAYS_SET=1; shift 2 ;;
+        -d*) DAYS="${1#-d}"; DAYS_SET=1; shift ;;
         -j) JSON_ONLY=1; shift ;;
         --today) INCLUDE_TODAY=1; shift ;;
         --live|--realtime) REALTIME=1; shift ;;
-        -h|--help) sed -n '2,33p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,34p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         --) shift; ARGS+=("$@"); break ;;
         -*) echo "ERROR: unknown option '$1'. See: $0 -h" >&2; exit 1 ;;
         *) ARGS+=("$1"); shift ;;
@@ -384,6 +386,79 @@ shares)
     emit "$(report "$(mk 'customEvent:method' 'eventCount' \
         "$(only_events 'calendar_shared')")")" "method,count"
     dimension_warning method
+    ;;
+
+cohorts)
+    # The leak behind a flat north star: new users keep arriving, but the
+    # weekly-active-shared-calendar count doesn't rise, so new calendars must be
+    # dying as fast as they form. This answers where: of the calendars FIRST
+    # SEEN each week, how many ever reached a second person, and how many still
+    # had any traffic 4+ weeks later.
+    #
+    # GA4 has no calendar id on events, so a calendar is its pagePath, /edit/slug
+    # folded into /slug, and its birth is the first week that path shows up. Two
+    # blind spots to read the numbers with:
+    #   - "birth" is first traffic in an 8-week lookback, so a calendar dormant
+    #     longer than that reads as newborn when it wakes up (overcounts births);
+    #   - "2nd person" means 2+ distinct browsers in the SAME week -- GA4 cannot
+    #     de-duplicate people across weeks -- and view-only /view/ links can't be
+    #     tied back to their calendar, so shared% is a floor, not a ceiling.
+    [ "$DAYS_SET" = "1" ] || DAYS=84   # cohorts need runway; default 12 weeks
+    LOOKBACK=8
+
+    json="$(report "$(printf '{"dateRanges":[{"startDate":"%ddaysAgo","endDate":"yesterday"}],"dimensions":[{"name":"isoYearIsoWeek"},{"name":"pagePath"}],"metrics":[{"name":"totalUsers"}],"limit":250000}' \
+        $(( DAYS + LOOKBACK * 7 )))")"
+
+    if [ "$JSON_ONLY" = "1" ]; then echo "$json" | jq '.'; exit 0; fi
+
+    echo "Calendar cohorts — born in the last $DAYS days (plus ${LOOKBACK}wk lookback to tell new from old)"
+    echo
+    # The current ISO week is excluded outright: it is partial, so it can neither
+    # host a birth nor prove a calendar dead.
+    echo "$json" | jq -r --arg cur "$(date +%G%V)" --argjson lb "$LOOKBACK" '
+        [ (.rows // [])[]
+          | {week: .dimensionValues[0].value,
+             path: .dimensionValues[1].value,
+             users: (.metricValues[0].value | tonumber)}
+          | select(.week != $cur)
+          | select(.path != "/"
+              and (.path | contains(".") | not)
+              and (.path | test("^/(nativecal|view|demo|components|directives|img|js-old-components|models|services|utils|zz-|test-)") | not))
+          | .cal = (.path | ascii_downcase | sub("^/edit/"; "/") | sub("/+$"; ""))
+          | select(.cal != "")
+        ] as $rows
+        | ([$rows[].week] | unique | sort) as $weeks
+        | (($weeks | length) - 1) as $last
+        | [ $rows
+            | group_by(.cal + " " + .week)[]
+            | {cal: .[0].cal, week: .[0].week, users: (map(.users) | add)}
+          ]
+        | group_by(.cal)
+        | map(
+            (map(.week as $w | ($weeks | index($w)))) as $idx
+            | {birth: ($idx | min),
+               maxu: (map(.users) | max),
+               alive4: ([$idx[] | select(. >= ($idx | min) + 4)] | length > 0)})
+        | map(select(.birth >= $lb))
+        | group_by(.birth)
+        | (["born week","calendars","reached 2nd person","alive 4wk on"],
+           (.[]
+            | .[0].birth as $b
+            | length as $n
+            | ([.[] | select(.maxu >= 2)] | length) as $s
+            | [$weeks[$b],
+               ($n | tostring),
+               "\($s)  (\(100 * $s / $n | round)%)",
+               (if $b + 4 <= $last
+                then ([.[] | select(.alive4)] | length) as $a
+                     | "\($a)  (\(100 * $a / $n | round)%)"
+                else "too young" end)]))
+        | @tsv' | column -t -s "$(printf '\t')"
+
+    echo
+    echo "  reached 2nd person   2+ browsers in one week; /view/-link visitors not attributable, so a floor"
+    echo "  alive 4wk on         any traffic in week birth+4 or later"
+    echo "  A healthy loop needs both: shared calendars that then keep coming back."
     ;;
 
 raw)
