@@ -181,11 +181,15 @@ class CalendarDataService {
             const safe = this._dropIncompleteEvents(calendar);
             this.db.child(calendar.id).set(this._sanitizeForFirebase(safe));
 
-            // Recorded here rather than at the call sites so no future write path can
-            // forget it. Note this CANNOT live inside the calendar node: sync() .set()s
-            // the whole node from client state, so anything stored there would be wiped
-            // by the next write from any browser.
-            if (typeof AuthorSignal !== 'undefined') AuthorSignal.touch(calendar.id);
+            // NOT recorded here. sync() runs from a deep Vue watcher on `calendar`, and
+            // that watcher also fires when the live subscription imports data from the
+            // server -- so every VIEWER echoed the calendar back and looked like an
+            // editor. Observed in production: 27 of 31 browsers on /rldispatch had
+            // exactly editCount=1, the signature of a write on load rather than a real
+            // edit. (The same hazard is documented for visitCount in app.js.)
+            //
+            // Authorship is recorded from the user-initiated paths instead, via
+            // AuthorSignal.touch() at the call sites that represent a real edit.
 
             console.log('CalendarDataService.sync()');
         }

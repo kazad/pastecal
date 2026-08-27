@@ -83,4 +83,72 @@ test.describe('Author signal', () => {
     }
     expect(await page.locator('.e-appointment').count()).toBeGreaterThan(before);
   });
+
+  test('a viewer who never edits is not recorded as an author', async ({ page }) => {
+    // THE regression this file exists for. sync() runs from a deep Vue watcher on
+    // `calendar`, and that watcher also fires when the live subscription imports data
+    // FROM the server -- so recording authorship there made every viewer echo the
+    // calendar back and look like an editor. Observed in production before this was
+    // fixed: 27 of 31 browsers on /rldispatch had exactly editCount=1, which is the
+    // signature of a write on page load rather than a real edit.
+    //
+    // Asserts on touch() calls rather than on database writes, because the signal
+    // captures firebase.database() internally and an outer db.ref hook never sees it.
+    await page.addInitScript(() => {
+      window.__touches = [];
+      const install = () => {
+        if (typeof AuthorSignal === 'undefined') return setTimeout(install, 20);
+        const real = AuthorSignal.touch.bind(AuthorSignal);
+        AuthorSignal.touch = function (id, opts) {
+          window.__touches.push(id);
+          return real(id, opts);
+        };
+      };
+      install();
+    });
+
+    await page.goto('/rldispatch');
+    await expect(page.locator('.e-schedule')).toBeVisible({ timeout: 20_000 });
+    // Long enough for the subscription to deliver, the watcher to fire, and the
+    // 500ms debounce on sync() to elapse several times over.
+    await page.waitForTimeout(4000);
+
+    // Passive interaction only: change views, never touch an event.
+    await page.locator('text=MONTH').first().click().catch(() => {});
+    await page.waitForTimeout(1500);
+
+    expect(await page.evaluate(() => window.__touches)).toEqual([]);
+  });
+
+  test('a real edit IS recorded', async ({ page }) => {
+    // The other half: proving the viewer test above is not passing simply because the
+    // signal never fires at all.
+    await page.addInitScript(() => {
+      window.__touches = [];
+      const install = () => {
+        if (typeof AuthorSignal === 'undefined') return setTimeout(install, 20);
+        const real = AuthorSignal.touch.bind(AuthorSignal);
+        AuthorSignal.touch = function (id, opts) {
+          window.__touches.push(id);
+          return real(id, opts);
+        };
+      };
+      install();
+    });
+
+    await page.goto('/');
+    await expect(page.locator('.e-schedule')).toBeVisible({ timeout: 20_000 });
+    await page.waitForTimeout(1500);
+
+    await page.locator('.e-work-cells').nth(30).click();
+    await page.waitForTimeout(600);
+    const input = page.locator('input[placeholder="Add title"]');
+    if (await input.count()) {
+      await input.fill('a genuine edit');
+      await page.locator('button.e-event-create').click();
+      await page.waitForTimeout(1500);
+    }
+
+    expect((await page.evaluate(() => window.__touches)).length).toBeGreaterThan(0);
+  });
 });

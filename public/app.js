@@ -504,6 +504,13 @@ const CalendarVueApp = {
                     console.log(` - syncFusionEvents ${this.syncFusionEvents.length}`, this.syncFusionEvents);
                     console.log(` - eventsData ${scheduleObj.eventsData.length}`, scheduleObj.eventsData);
                     this.calendar.setEvents(this.syncFusionEvents);
+                    // A real, user-initiated change to this calendar. Recorded here
+                    // rather than in CalendarDataService.sync(), because sync() also
+                    // runs when the live subscription echoes back someone else's edit --
+                    // which made every viewer look like an editor.
+                    if (typeof AuthorSignal !== 'undefined') {
+                        AuthorSignal.touch(this.calendar.id);
+                    }
                     if (ev.requestType === 'eventCreated') {
                         // Everything the scheduler itself creates: grid drag, the
                         // built-in editor, and the cell popup all land here.
@@ -2042,6 +2049,10 @@ const CalendarVueApp = {
             });
             this.calendar.events.push(newEvent);
             this.calendar.setEvents(this.calendar.events);
+            // Quick-add bypasses the scheduler, so it needs its own signal.
+            if (typeof AuthorSignal !== 'undefined') {
+                AuthorSignal.touch(this.calendar.id);
+            }
             track(a => a.eventAdded('quick_add', this.calendar));
         },
 
