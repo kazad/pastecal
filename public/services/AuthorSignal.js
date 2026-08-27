@@ -52,6 +52,13 @@ const AuthorSignal = {
     touch(calendarId, { created = false } = {}) {
         try {
             if (!calendarId) return;
+
+            // The e2e suite creates and edits throwaway calendars on every run. Recording
+            // those would fill the ownership data with browsers that are not people --
+            // and this data exists to be read by a human during an incident, so noise in
+            // it is worse than a gap. Same gate analytics.js already uses.
+            if (typeof window !== 'undefined' && window.__TEST__) return;
+
             const uid = this.uid();
             if (!uid) return; // not signed in yet; the next edit will catch it
 
