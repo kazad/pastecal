@@ -142,6 +142,14 @@ prev_reach="$(post "$API" "$(printf '{"dateRanges":[%s],"dimensions":[{"name":"p
 # a year in which both actually grew 6x. Trend beats delta; show both.
 monthly="$(post "$API" '{"dateRanges":[{"startDate":"365daysAgo","endDate":"yesterday"}],"dimensions":[{"name":"yearMonth"}],"metrics":[{"name":"totalUsers"},{"name":"newUsers"},{"name":"sessions"}],"limit":24,"orderBys":[{"dimension":{"dimensionName":"yearMonth"}}]}')"
 
+# A full year of week x calendar x people, one query serving two views: the
+# north-star series (calendars with 2+ people in a week) and cohort survival
+# (born which week; ever shared; alive 4 weeks on). Weekly rather than daily
+# because "2+ people" needs GA4 to de-duplicate users within the bucket, and a
+# year rather than the report window because the north star is only readable
+# against its own history.
+weekly="$(post "$API" '{"dateRanges":[{"startDate":"364daysAgo","endDate":"yesterday"}],"dimensions":[{"name":"isoYearIsoWeek"},{"name":"pagePath"}],"metrics":[{"name":"totalUsers"}],"limit":250000}')"
+
 # Realtime has no processing delay, so it shows whether instrumentation is live
 # right now even when the daily tables have not caught up yet.
 realtime="$(post "$RT_API" '{"dimensions":[{"name":"eventName"}],"metrics":[{"name":"eventCount"}],"limit":30}')"
@@ -178,6 +186,12 @@ if [ "$dims" != "null" ]; then
     add_bd features feature feature_used
 fi
 
+# The weekly payload is a year of week x calendar rows -- far past ARG_MAX as a
+# --argjson literal -- so it goes through a file. --slurpfile wraps the file's
+# JSON in an array, hence $w[0].
+weekly_tmp="$(mktemp)"
+printf '%s' "$weekly" > "$weekly_tmp"
+
 DATA="$(jq -n \
     --argjson overview "$overview" --argjson daily "$daily" \
     --argjson devices "$devices" --argjson channels "$channels" \
@@ -187,11 +201,14 @@ DATA="$(jq -n \
     --argjson monthly "$monthly" \
     --argjson countries "$countries" --argjson realtime "$realtime" \
     --argjson dims "$dims" --argjson breakdowns "$breakdowns" \
+    --slurpfile w "$weekly_tmp" --arg curweek "$(date +%G%V)" \
     --arg days "$DAYS" --arg generated "$(date '+%Y-%m-%d %H:%M')" \
     '{overview:$overview, daily:$daily, devices:$devices, channels:$channels,
       pages:$pages, reach:$reach, events:$events, countries:$countries, realtime:$realtime,
       prevOverview:$prevOverview, prevReach:$prevReach, monthly:$monthly,
+      weekly:$w[0], curweek:$curweek,
       dims:$dims, breakdowns:$breakdowns, days:($days|tonumber), generated:$generated}')"
+rm -f "$weekly_tmp"
 
 echo "Rendering..." >&2
 printf '%s' "$DATA" | python3 scripts/render_report.py > "$OUT"

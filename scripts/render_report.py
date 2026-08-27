@@ -11,6 +11,7 @@ unescaped user data in an attribute. Every value here goes through esc().
 
 import html
 import json
+import re
 import sys
 
 
@@ -250,9 +251,97 @@ for dims, mets in rows(d.get("reach")):
         "per": views / users,
     })
 
+# ---------------------------------------------------------------- north star
+#
+# Weekly active shared calendars: calendars that reached 2+ distinct browsers
+# inside one week. This is the number the product exists to grow -- a calendar
+# a GROUP is using -- and the base every Pro-tier projection stands on. Weekly,
+# because GA4 can only de-duplicate people within one bucket; "2+ people ever,
+# summed across weeks" would double-count the same person returning.
+#
+# Alongside it, cohort survival: of the calendars first seen each week, how
+# many ever reached a second person, and how many still had traffic 4+ weeks
+# on. When the north star is flat while new users keep arriving, these two
+# rates say WHERE the loop leaks -- at the share step, or at week-2-to-4
+# retention (in Aug 2026 it was retention: ~50% shared, only ~25% survived).
+
+# Not calendars: app pages, static files, and the test/probe paths that once
+# put 314 phantom "users" into a single week.
+_NOT_CAL = re.compile(
+    r"^/(nativecal|demo|components|directives|img|js-old-components"
+    r"|models|services|utils|zz-|test-)")
+
+
+def norm_cal(path):
+    """A calendar's identity, or None for non-calendar paths. /edit/slug folds
+    into /slug (same calendar, different door); /view/IDs stay separate rows
+    because the view id cannot be mapped back to its slug from GA4 alone."""
+    if not path or path == "/" or "." in path or _NOT_CAL.match(path):
+        return None
+    p = path.lower()
+    if p.startswith("/edit/"):
+        p = "/" + p[len("/edit/"):]
+    p = p.rstrip("/")
+    return p or None
+
+
+# (week, calendar) -> people, current partial ISO week dropped: it can neither
+# host a birth nor prove a calendar dead, and it makes every trend look like a
+# collapse.
+curweek = d.get("curweek") or ""
+wk_cal = {}
+for dims_, mets_ in rows(d.get("weekly")):
+    wk, cal = dims_[0], norm_cal(dims_[1])
+    if wk == curweek or cal is None:
+        continue
+    wk_cal[(wk, cal)] = wk_cal.get((wk, cal), 0) + mets_[0]
+
+ns_weeks = sorted({wk for wk, _ in wk_cal})
+_by_week = {}
+for (wk, cal), u in wk_cal.items():
+    _by_week.setdefault(wk, []).append(u)
+
+# The first week of a 364-day window almost never starts on a Monday, so it is
+# partial too. Drop it rather than let the series open with a fake dip.
+if ns_weeks:
+    ns_weeks = ns_weeks[1:]
+
+wasc = [{
+    "week": wk,
+    "active": len(_by_week.get(wk, [])),
+    "shared": sum(1 for u in _by_week.get(wk, []) if u >= 2),
+    "strong": sum(1 for u in _by_week.get(wk, []) if u >= 3),
+} for wk in ns_weeks]
+
+# Cohort survival. /view/ rows are excluded here (their first appearance marks
+# a share, not a birth), and births only count after an 8-week lookback so an
+# established calendar is not mistaken for a newborn.
+_LOOKBACK = 8
+_widx = {wk: i for i, wk in enumerate(ns_weeks)}
+_cal_weeks = {}
+for (wk, cal), u in wk_cal.items():
+    if cal.startswith("/view/") or wk not in _widx:
+        continue
+    _m = _cal_weeks.setdefault(cal, {})
+    _m[_widx[wk]] = _m.get(_widx[wk], 0) + u
+
+_last_idx = len(ns_weeks) - 1
+cohorts = {}
+for cal, wks in _cal_weeks.items():
+    birth = min(wks)
+    if birth < _LOOKBACK:
+        continue
+    c = cohorts.setdefault(birth, {"born": 0, "shared": 0, "alive": 0})
+    c["born"] += 1
+    if max(wks.values()) >= 2:
+        c["shared"] += 1
+    if any(i >= birth + 4 for i in wks):
+        c["alive"] += 1
+
 # ---------------------------------------------------------------- KPIs
 #
-# Three numbers, chosen against the business model in internal/specs/pro.md:
+# Three diagnostic numbers under the north star, chosen against the business
+# model in internal/specs/pro.md:
 # MAU -> conversion -> MRR, with the free tier as the growth engine. Each answers
 # a question that would change what gets built next.
 #
@@ -532,7 +621,112 @@ footer{{border-top:1px solid var(--rule);padding-top:20px;margin-top:14px;
      <code>pastecal-web</code>. This file is local; nothing is published.</p>
 </header>''')
 
-# ---- growth (leads the report: direction before detail)
+# ---- north star (leads the report: the one number, then the diagnostics)
+if len(wasc) >= 6:
+    def wlab(wk):
+        return f"W{int(wk[4:])} '{wk[2:4]}"
+
+    shared_series = [(wlab(w["week"]), w["shared"]) for w in wasc]
+    latest = wasc[-1]
+    cur4 = sum(w["shared"] for w in wasc[-4:]) / 4
+    base4 = sum(w["shared"] for w in wasc[:4]) / 4
+    yoy = (cur4 / base4) if base4 else None
+    roll = [sum(w["shared"] for w in wasc[i:i + 4]) / 4 for i in range(len(wasc) - 3)]
+    peak4 = max(roll)
+    peak_wk = wlab(wasc[roll.index(peak4) + 3]["week"])
+
+    # Trend, judged against the best 4-week stretch rather than last window:
+    # this series plateaued for 14 weeks in summer 2026 while every short delta
+    # read "flat, fine". Distance from peak is the honest question.
+    off = (cur4 / peak4) if peak4 else 1.0
+    if off >= 0.97:
+        trend_note = f'''<div class="note good">
+<h3>At the high-water mark</h3>
+<p>The current 4-week average (<b>{num(cur4, 1)}</b>) is at or above the best
+4-week stretch on record. Growth is compounding; keep feeding it.</p></div>'''
+    elif off >= 0.88:
+        trend_note = f'''<div class="note amber">
+<h3>Plateaued below the peak</h3>
+<p>The current 4-week average (<b>{num(cur4, 1)}</b>) sits {num((1 - off) * 100, 0)}%
+under the best stretch (<b>{num(peak4, 1)}</b>, ending {esc(peak_wk)}). A few
+weeks of this is noise or season; a quarter of it means the growth loop has
+found its ceiling and needs a new input &mdash; check the cohort table below
+for which stage is leaking.</p></div>'''
+    else:
+        trend_note = f'''<div class="note warn">
+<h3>Well off the peak</h3>
+<p>The current 4-week average (<b>{num(cur4, 1)}</b>) is {num((1 - off) * 100, 0)}%
+below the best stretch (<b>{num(peak4, 1)}</b>, ending {esc(peak_wk)}). That is
+past plateau territory &mdash; something changed. Compare the cohort table's
+birth counts (acquisition) against its survival rates (retention) to see which
+side fell.</p></div>'''
+
+    coh_rows = []
+    for b in sorted(cohorts)[-12:]:
+        c = cohorts[b]
+        alive_cell = (f'{num(c["alive"])} ({pct(c["alive"], c["born"]):.0f}%)'
+                      if b + 4 <= _last_idx else '<span class="empty">too young</span>')
+        coh_rows.append([
+            esc(wlab(ns_weeks[b])),
+            num(c["born"]),
+            f'{num(c["shared"])} ({pct(c["shared"], c["born"]):.0f}%)',
+            alive_cell,
+        ])
+
+    mature = [c for b, c in cohorts.items() if b + 4 <= _last_idx and c["born"]]
+    leak_note = ""
+    if mature:
+        born_t = sum(c["born"] for c in mature)
+        sh_rate = pct(sum(c["shared"] for c in mature), born_t)
+        al_rate = pct(sum(c["alive"] for c in mature), born_t)
+        leak_note = f'''<div class="note">
+<h3>Where the loop leaks</h3>
+<p>Across cohorts old enough to judge, <b>{sh_rate:.0f}%</b> of new calendars
+reached a second person but only <b>{al_rate:.0f}%</b> still had any traffic
+four weeks on. Read the pair together: a healthy share rate with low survival
+means the leak is week-2&ndash;4 <b>retention</b>, not the share step &mdash;
+groups try it, share it, then drift. Survivors per week is the inflow that has
+to beat churn of the existing stock for the north star to rise.</p>
+<p>Floors, not ceilings: "2nd person" means 2+ browsers in a single week (GA4
+cannot de-duplicate people across weeks), <code>/view/</code>-link visitors
+cannot be attributed to their calendar, and ICS subscribers never hit GA4 at
+all. A calendar dormant 8+ weeks reads as newborn when it wakes.</p></div>'''
+
+    A(f'''<section>
+<h2>North star: weekly active shared calendars</h2>
+<p class="lede">Calendars that reached <b>2+ people inside one week</b> &mdash;
+a group actually coordinating through pastecal, not a link opened once. This is
+the number the product exists to grow: it is the unit of word-of-mouth (every
+shared calendar advertises to its viewers) and the base under every Pro-tier
+projection. "People" means distinct browsers, so one person on two devices
+counts &mdash; the 3+ tile is the conservative floor.</p>
+<div class="tiles">
+  <div class="tile hi"><div class="v">{num(latest["shared"])}</div>
+    <div class="k">Shared calendars, {esc(wlab(latest["week"]))} (last complete week)</div></div>
+  <div class="tile"><div class="v">{num(cur4, 1)}</div>
+    <div class="k">4-week average</div></div>
+  <div class="tile good"><div class="v">{num(yoy, 1)}&times;</div>
+    <div class="k">vs the same 4 weeks a year ago</div></div>
+  <div class="tile"><div class="v">{num(latest["strong"])}</div>
+    <div class="k">With 3+ people, same week</div></div>
+</div>
+<div class="card">
+  <h3>Weekly active shared calendars, last 12 months</h3>
+  {sparkline(shared_series)}
+</div>
+{trend_note}
+<div class="card">
+  <h3>Cohort survival &mdash; the input that moves the number</h3>
+  <p class="lede">Of calendars first seen each week: how many ever reached a
+  second person, and how many were still alive 4+ weeks later. Terminal
+  version: <code>./scripts/stats.sh cohorts</code>.</p>
+  {table(["Born week", "Calendars", "Reached 2nd person", "Alive 4wk on"],
+         coh_rows, ["l", "r", "r", "r"])}
+</div>
+{leak_note}
+</section>''')
+
+# ---- growth (direction before detail)
 if len(complete) >= 3:
     mult_u = growth_multiple(complete, "users")
     mult_r = growth_multiple(complete, "returning")
@@ -542,7 +736,8 @@ if len(complete) >= 3:
     A(f'''<section>
 <h2>Growth</h2>
 <p class="lede">Twelve months of direction. A two-window comparison on a site
-this noisy can say the opposite of the trend, so this comes first.</p>
+this noisy can say the opposite of the trend, so direction comes before the
+short-window numbers below.</p>
 
 <div class="tiles">
   <div class="tile hi"><div class="v">{num(mult_u, 1)}&times;</div>

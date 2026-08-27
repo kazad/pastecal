@@ -9,6 +9,7 @@
 #   ./scripts/stats.sh returns         # how deep people come back
 #   ./scripts/stats.sh adds            # where events get created
 #   ./scripts/stats.sh shares          # how calendars get shared
+#   ./scripts/stats.sh northstar       # THE number: weekly active shared calendars (2+ people)
 #   ./scripts/stats.sh cohorts         # per birth week: reached a 2nd person? alive 4 weeks on?
 #   ./scripts/stats.sh raw <json>      # any runReport body, printed as JSON
 #   ./scripts/stats.sh setup           # check GA4 is configured to answer all of the above
@@ -61,7 +62,7 @@ while [ $# -gt 0 ]; do
         -j) JSON_ONLY=1; shift ;;
         --today) INCLUDE_TODAY=1; shift ;;
         --live|--realtime) REALTIME=1; shift ;;
-        -h|--help) sed -n '2,34p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         --) shift; ARGS+=("$@"); break ;;
         -*) echo "ERROR: unknown option '$1'. See: $0 -h" >&2; exit 1 ;;
         *) ARGS+=("$1"); shift ;;
@@ -386,6 +387,55 @@ shares)
     emit "$(report "$(mk 'customEvent:method' 'eventCount' \
         "$(only_events 'calendar_shared')")")" "method,count"
     dimension_warning method
+    ;;
+
+northstar)
+    # THE number: calendars reaching 2+ distinct browsers inside one week -- a
+    # group coordinating, not a link opened once. Weekly, because GA4 can only
+    # de-duplicate people within one bucket. Same path rules as the HTML
+    # report's north-star section (render_report.py): /edit/slug folds into
+    # /slug, app/static/test paths are dropped, /view/ mirrors count as their
+    # own row since the view id cannot be mapped back to its slug.
+    [ "$DAYS_SET" = "1" ] || DAYS=84   # a trend needs runway; default 12 weeks
+
+    json="$(report "$(printf '{"dateRanges":[{"startDate":"%ddaysAgo","endDate":"yesterday"}],"dimensions":[{"name":"isoYearIsoWeek"},{"name":"pagePath"}],"metrics":[{"name":"totalUsers"}],"limit":250000}' "$DAYS")")"
+
+    if [ "$JSON_ONLY" = "1" ]; then echo "$json" | jq '.'; exit 0; fi
+
+    echo "North star: weekly active shared calendars — last $DAYS days"
+    echo
+    echo "$json" | jq -r --arg cur "$(date +%G%V)" '
+        [ (.rows // [])[]
+          | {week: .dimensionValues[0].value,
+             path: .dimensionValues[1].value,
+             users: (.metricValues[0].value | tonumber)}
+          | select(.week != $cur)
+          | select(.path != "/"
+              and (.path | contains(".") | not)
+              and (.path | test("^/(nativecal|demo|components|directives|img|js-old-components|models|services|utils|zz-|test-)") | not))
+          | .cal = (.path | ascii_downcase | sub("^/edit/"; "/") | sub("/+$"; ""))
+          | select(.cal != "")
+        ]
+        | group_by(.week)
+        | map(.[0].week as $w
+              | (group_by(.cal) | map(map(.users) | add)) as $cals
+              | [$w,
+                 ($cals | length),
+                 ([$cals[] | select(. >= 2)] | length),
+                 ([$cals[] | select(. >= 3)] | length)])
+        | sort_by(.[0])
+        # First week of the window rarely starts on a Monday, and the current
+        # week is excluded above -- so both partial edges are gone and every
+        # row is a full Mon-Sun week.
+        | .[1:]
+        | (["week","active cals","SHARED (2+ people)","strong (3+)"], .[])
+        | @tsv' | column -t -s "$(printf '\t')"
+
+    echo
+    echo "  people = distinct browsers, so one person on two devices counts as 2;"
+    echo "  ICS subscribers never hit GA4. Both make these floors, not ceilings."
+    echo "  Flat here while new users grow means calendars churn as fast as they"
+    echo "  form -- run:  $0 cohorts  to see where."
     ;;
 
 cohorts)
