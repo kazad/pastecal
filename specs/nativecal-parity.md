@@ -1,5 +1,43 @@
 # NativeCal: feature parity audit and rollout plan
 
+> **Status, 2026-08-29 — parity reached; phases 0-4 shipped.**
+>
+> Sections 2 and 3 are the audit *as found*, kept as the record of what was
+> wrong. Everything they list is now closed except the two items called out
+> under "Still open" below. Section 5 marks which phases are done.
+>
+> Both engines run from one shell. `?cal=native` selects the native engine,
+> `?cal=syncfusion` selects Syncfusion, which is still the default. The parity
+> suite (`test/e2e/engine-parity.spec.js`) runs 21 cases against both and is
+> green on both.
+>
+> **Closed by the de-fork** (they were staleness, not design): welcome dock,
+> the four subscribe buttons and their analytics, share-pill copy, date-format
+> setting, Tailwind dark-mode selector, anonymous auth, AuthorSignal.
+>
+> **Closed by the component work**: multi-day spanning, the all-day lane,
+> read-only enforcement, the touch guard, first-day-of-week, start hour,
+> extended hours, default view, custom colours, type labels, the custom view,
+> `?d=`/`?v=` deep links, search jump-to-event, the title date picker,
+> month-start labels, year-view type colouring, chronological agenda, and the
+> recurrence editor's weekday picker, monthly-by-position and "ends after N".
+>
+> **Bugs found and fixed on the way**, none of which were on the audit list:
+> recurring events rendered at page-load time rather than their own time;
+> recurring instances had `end: NaN`; the agenda sorted ISO strings with minus;
+> hour labels drifted an hour out of step by mid-afternoon; the year view showed
+> a 14-day strip instead of a month; `?v=12w` and `?v=q` had never worked in
+> production at all.
+>
+> **Still open, deliberately:**
+> - **Timezone fields.** Syncfusion's editor shows Start/End Timezone. The Event
+>   model has no timezone field, so those values are dropped on save today --
+>   the controls are already inert. Not rebuilt; worth confirming nobody wants
+>   them before Syncfusion goes.
+> - **The Today button.** Production hides Syncfusion's with CSS; the native
+>   toolbar has one. Left in place as an improvement, so the native toolbar is a
+>   superset rather than a divergence.
+
 Status as of 2026-08-29. Audited against `public/app.js` + `public/index.html`
 (Syncfusion, in production) and `public/nativecal/*` (NativeCal, behind
 `/nativecal/<slug>`).
@@ -342,7 +380,7 @@ engines must do, and section 2's gaps become the `NativeEngine` to-do list.
 Each phase is independently shippable and independently revertable. Nothing
 before Phase 5 changes what an existing user sees.
 
-### Phase 0 — De-fork (blocking)
+### Phase 0 — De-fork (blocking) — **done**
 
 Extract the `CalendarEngine` adapter. Delete `public/nativecal/index.html` and
 `public/nativecal/app.js`. Serve NativeCal from the production shell, selected
@@ -358,7 +396,7 @@ to stop living in a copy.
 Done when: `/x?cal=native` and `/x?cal=syncfusion` render the same shell, the
 same welcome dock, the same analytics, and differ only in the grid.
 
-### Phase 1 — Correctness gaps
+### Phase 1 — Correctness gaps — **done**
 
 The ones that lose or expose data. In priority order:
 
@@ -370,7 +408,7 @@ The ones that lose or expose data. In priority order:
    and edit on a `readOnly` prop.
 4. **Touch guard** — no drag or resize when `ontouchstart` is present.
 
-### Phase 2 — Configuration gaps
+### Phase 2 — Configuration gaps — **done**
 
 Nine of the eleven settings controls currently render, accept input and persist
 while changing nothing on screen (section 3.10) — worse than being absent, since
@@ -384,7 +422,7 @@ by-position, and "ends after N occurrences". Until those land, guard the editor
 so saving an event whose rule it cannot represent does not silently downgrade
 that rule.
 
-### Phase 3 — Shell integration
+### Phase 3 — Shell integration — **done**
 
 `?d=` / `?v=` URL params (all the aliases production accepts: `d`, `date`, `v`,
 `view`, `12w`, `q`, `c`+`dur`+`unit`), `jumpToEvent`, the title date-picker
@@ -395,11 +433,18 @@ Settle the Today button here too: production hides it deliberately, NativeCal
 adds it back. Either is fine; shipping both engines with different toolbars is
 not.
 
-### Phase 4 — Prove it
+### Phase 4 — Prove it — **done**
 
-See section 6. Gate on the parity suite passing against both engines.
+`test/e2e/engine-parity.spec.js` runs 21 cases against both engines and is green
+on both. `test/e2e/cdn-cache.js` takes the seven third-party libraries out of
+the test path; opt in with `PASTECAL_CDN_CACHE`, populate with
+`npm run test:e2e:cache`. Unset, the suite fetches from the network as before.
 
-### Phase 5 — Opt-in
+Worth noting from a run: the native cases take about 1.5s each against
+Syncfusion's 15s. That is the 5 MB bundle showing up as wall-clock on every
+test.
+
+### Phase 5 — Opt-in — **next**
 
 Ship `?cal=native` publicly. Announce it in the help panel. Dogfood on
 pastecal's own calendars. Track `engine` as an analytics dimension so
