@@ -13,6 +13,13 @@
 // Unset, everything behaves exactly as before and the tests go to the network.
 // Requests that miss the cache still go to the network, so a newly added library
 // fails loudly at populate time rather than silently at test time.
+//
+// One interaction to know about: Playwright matches route handlers newest-first
+// and a handler that calls route.continue() ends the chain. A spec that installs
+// its own catch-all route -- the analytics specs do, to watch what gets sent --
+// therefore bypasses this cache and fetches from the network as it always has.
+// That is fine where there is network; it just means the cache is a speed-up,
+// not a way to run the whole suite offline.
 
 const fs = require('fs');
 const path = require('path');
