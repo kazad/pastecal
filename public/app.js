@@ -34,7 +34,13 @@ const COMPONENT_REGISTRY = {
     'custom-tooltip': Tooltip,                 // Tooltip wrapper
     'toast-notification': ToastNotification,   // Toast messages
     'quick-add-button': QuickAddButton,        // Quick Add trigger component (button/FAB)
-    'quick-add-dialog': QuickAddDialog,        // Quick Add dialog (parsing & create)
+    'quick-add-dialog': QuickAddDialog,
+    // Native engine UI. Registered unconditionally -- they are a few KB and the
+    // template v-ifs them out under Syncfusion.
+    'native-calendar': NativeCalendar,
+    'event-editor': EventEditor,
+    'event-popover': EventPopover,
+    'quick-create-popover': QuickCreatePopover,        // Quick Add dialog (parsing & create)
     'icon': Icon,                              // Generic Icon component
     'copy-icon': CopyIcon,                     // Copy icon SVG
     'settings-icon': SettingsIcon,             // Settings icon SVG
@@ -98,6 +104,26 @@ const CalendarVueApp = {
             recentCalendars: [],
             syncFusionEvents: [],     // local copy, not synced
             urlslug: urlslug,
+
+            // Which calendar engine renders the grid. Syncfusion is the default;
+            // ?cal=native opts in, ?cal=syncfusion opts back out, and the choice
+            // sticks so dogfooding survives navigation. See engines/.
+            engineName: window.CAL_ENGINE || 'syncfusion',
+            engine: null,
+            // The native engine's reactive options, bound onto <native-calendar>.
+            // Null under Syncfusion, which renders into #Schedule instead.
+            engineState: null,
+
+            // Popovers and dialogs the native engine drives. Syncfusion has its
+            // own built-in equivalents, so these stay closed under that engine.
+            showQuickCreate: false,
+            quickCreateEvent: null,
+            quickCreatePosition: { top: 0, left: 0 },
+            showPopover: false,
+            popoverEvent: null,
+            popoverPosition: { top: 0, left: 0 },
+            showEditor: false,
+            editorEvent: null,
             debug: false,
 
             showRecents: false,
@@ -361,537 +387,22 @@ const CalendarVueApp = {
             track(a => a.slugPromptShown('homepage_bar', this.calendar));
         }
 
-        const scheduleObj = window.scheduleObj = new ej.schedule.Schedule();
-        const scheduleInitTimestamp = performance.now();
-        console.log('[schedule-init] Schedule constructed at', scheduleInitTimestamp.toFixed(1), 'ms');
-        scheduleObj.on('actionComplete', (args) => {
-            if (args?.requestType === 'toolBarRendered') {
-                console.log('[schedule-init] toolBarRendered at', (performance.now() - scheduleInitTimestamp).toFixed(1), 'ms since init');
-            }
-        });
-        scheduleObj.addEventListener('dataBound', () => {
-            console.log('[schedule-init] dataBound at', (performance.now() - scheduleInitTimestamp).toFixed(1), 'ms since init');
-        });
-        scheduleObj.on('eventsLoaded', () => {
-            console.log('[schedule-init] eventsLoaded at', (performance.now() - scheduleInitTimestamp).toFixed(1), 'ms since init');
-        });
-
-        // Apply globalSettings BEFORE appendTo — these properties bake into Syncfusion's
-        // first render and won't reactively update if set later. (See applyGlobalSettings
-        // for the post-render path used when settings change at runtime.)
-        scheduleObj.startHour = this.calendar?.options?.extended ? "00:00" : (this.globalSettings.startHour || "05:00");
-        scheduleObj.timeFormat = this.globalSettings.timeFormat === '24' ? 'HH:mm' : 'hh:mm a';
-        scheduleObj.firstDayOfWeek = parseInt(this.globalSettings.firstDayOfWeek) || 0;
-
-        // Build custom view configuration dynamically
-        const customViewDuration = this.calendar?.options?.customViewDuration || this.globalSettings.customViewDuration;
-        const customViewUnit = this.calendar?.options?.customViewUnit || this.globalSettings.customViewUnit;
-        const customViewConfig = this.buildCustomViewConfig(customViewDuration, customViewUnit);
-
-        scheduleObj.views = [
-            'Day',
-            'Week',
-            'Month',
-            customViewConfig,
-            'Year',
-            'Agenda'
-        ];
-        scheduleObj.enableAdaptiveUI = false;
-
-        scheduleObj.readonly = this.isReadOnly;
-
-
-        // Set up scheduler first, then apply settings after initialization
-        // set params from URL
-        let sanitizedUrl = Utils.sanitizeUrl(window.location.href.toLowerCase());
-        let url = new URL(sanitizedUrl);
-        let date_param = url.searchParams.get("d") || url.searchParams.get("date");
-        let view_param = url.searchParams.get("v") || url.searchParams.get("view");
-
-        let d;
-        if (d = Utils.parseDate(date_param)) {
-            scheduleObj.selectedDate = d;
-        }
-
-        if (view_param) {
-            switch (view_param.toLowerCase()) {
-                case "d":
-                case "day":
-                    scheduleObj.currentView = "Day"; break;
-                case "w":
-                case "week":
-                    scheduleObj.currentView = "Week"; break;
-                case "12w":
-                case "12weeks":
-                    // Map to custom 12 weeks view
-                    const twelveWeeksView = this.buildCustomViewConfig(12, 'Weeks');
-                    const twelveWeeksIndex = scheduleObj.views.findIndex(v =>
-                        typeof v === 'object' && (v === customViewConfig)
-                    );
-                    if (twelveWeeksIndex !== -1) {
-                        scheduleObj.views[twelveWeeksIndex] = twelveWeeksView;
-                    }
-                    scheduleObj.currentView = twelveWeeksView.displayName;
-                    break;
-                case "m":
-                case "month":
-                    scheduleObj.currentView = "Month"; break;
-                case "c":
-                case "custom":
-                    // Check for URL parameter overrides for custom view
-                    const durParam = url.searchParams.get("dur") || url.searchParams.get("duration");
-                    const unitParam = url.searchParams.get("unit");
-
-                    let customViewToUse = customViewConfig;
-
-                    if (durParam && unitParam) {
-                        // Temporarily override custom view config from URL
-                        const duration = parseInt(durParam);
-                        const unit = unitParam.charAt(0).toUpperCase() + unitParam.slice(1).toLowerCase();
-
-                        if (this.validateCustomView(duration, unit)) {
-                            // Rebuild the custom view with URL parameters
-                            customViewToUse = this.buildCustomViewConfig(duration, unit);
-                            // Replace the custom view in the views array
-                            const customViewIndex = scheduleObj.views.findIndex(v =>
-                                typeof v === 'object' && (v === customViewConfig)
-                            );
-                            if (customViewIndex !== -1) {
-                                scheduleObj.views[customViewIndex] = customViewToUse;
-                            }
-                        }
-                    }
-
-                    // Set currentView to the display name
-                    scheduleObj.currentView = customViewToUse.displayName;
-                    break;
-                case "q":
-                case "quarter":
-                    // Map to custom 3 months view
-                    const quarterView = this.buildCustomViewConfig(3, 'Months');
-                    const quarterIndex = scheduleObj.views.findIndex(v =>
-                        typeof v === 'object' && (v === customViewConfig)
-                    );
-                    if (quarterIndex !== -1) {
-                        scheduleObj.views[quarterIndex] = quarterView;
-                    }
-                    scheduleObj.currentView = quarterView.displayName;
-                    break;
-                case "y":
-                case "year":
-                    scheduleObj.currentView = "Year"; break;
-                case "a":
-                case "agenda":
-                    scheduleObj.currentView = "Agenda"; break;
-                default:
-                    break;
-            }
-        }
-
-        // disable drag and drop / resizing for touch devices
-        let touchDevice = ('ontouchstart' in document.documentElement);
-        scheduleObj.allowDragAndDrop = !touchDevice;
-        scheduleObj.allowResizing = !touchDevice;
-
-        // live binding to events
-        scheduleObj.eventSettings.dataSource = this.syncFusionEvents;
-        scheduleObj.actionComplete = (ev) => {
-            switch (ev.requestType) {
-                case 'eventChanged':
-                case 'eventCreated':
-                case 'eventRemoved':
-                    console.log("[app] actionComplete()", "event", ev);
-                    console.log(` - syncFusionEvents ${this.syncFusionEvents.length}`, this.syncFusionEvents);
-                    console.log(` - eventsData ${scheduleObj.eventsData.length}`, scheduleObj.eventsData);
-                    this.calendar.setEvents(this.syncFusionEvents);
-                    // A real, user-initiated change to this calendar. Recorded here
-                    // rather than in CalendarDataService.sync(), because sync() also
-                    // runs when the live subscription echoes back someone else's edit --
-                    // which made every viewer look like an editor.
-                    if (typeof AuthorSignal !== 'undefined') {
-                        AuthorSignal.touch(this.calendar.id);
-                    }
-                    if (ev.requestType === 'eventCreated') {
-                        // Everything the scheduler itself creates: grid drag, the
-                        // built-in editor, and the cell popup all land here.
-                        track(a => a.eventAdded('grid', this.calendar));
-                    }
-                    break;
-            }
-            // console.log(ev);
-        };
-
-        // color events based on type
-        scheduleObj.eventRendered = (args) => {
-            // change color as needed
-            categoryColor = app.COLORS[args.data.Type - 1] || app.COLORS[0];
-            if (scheduleObj.currentView === 'Agenda') {
-                args.element.firstChild.style.borderLeftColor = categoryColor;
-            } else {
-                args.element.style.backgroundColor = categoryColor;
-            }
-        }
-
-        // custom display for types
-        scheduleObj.popupOpen = (args) => {
-
-            if (args.type === 'Editor') {
-                // console.log("Editor call");
-
-                // Configure datetime pickers with strictMode and the user's chosen date format.
-                // Syncfusion's default is en-US (M/d/yy) which is ambiguous internationally
-                // (1/7/26 = Jan 7 in US, July 1 elsewhere). resolveDateFormat() picks a
-                // pattern from globalSettings.dateFormat, falling back to navigator.language.
-                const startElement = args.element.querySelector('[name="StartTime"]');
-                const endElement = args.element.querySelector('[name="EndTime"]');
-                const dateFmt = this.resolveDateFormat();
-                const timeFmt = this.globalSettings.timeFormat === '24' ? 'HH:mm' : 'hh:mm a';
-                const dateTimeFmt = `${dateFmt} ${timeFmt}`;
-
-                if (startElement && startElement.ej2_instances && startElement.ej2_instances[0]) {
-                    const startPicker = startElement.ej2_instances[0];
-                    startPicker.strictMode = true;
-                    startPicker.format = dateTimeFmt;
-                }
-
-                if (endElement && endElement.ej2_instances && endElement.ej2_instances[0]) {
-                    const endPicker = endElement.ej2_instances[0];
-                    endPicker.strictMode = true;
-                    endPicker.format = dateTimeFmt;
-                }
-
-                function setColor(id) {
-                    if (!window.btnObj) {
-                        return;
-                    }
-
-                    window.btnObj.element.style.background = app.COLORS[id - 1];
-                    window.inputEle.setAttribute('value', id);
-
-                    // Explicitly set the Type on the event data object
-                    args.data.Type = parseInt(id);
-                    // Whether people categorise events at all decides if type
-                    // labels/colours are worth building on (see pro.md).
-                    track(a => a.featureUsed('event_type', 'popup'));
-                    // console.log("Color set to:", id, "for event:", args.data);
-                }
-
-                // Initial setup
-                if (!args.element.querySelector('.custom-field-row-color')) {
-
-                    // console.log("Initial args", args);
-
-                    // button dropdown
-                    // TODO: allow live edit (vs reload for types)
-                    let items = app.getTypes();
-
-                    window.btnObj = new ej.splitbuttons.DropDownButton({
-                        items: items,
-                        iconCss: 'e-type',
-                        select: (button_args) => {
-                            // console.log("select type args", button_args);
-                            let type = button_args.item.value;
-                            inputEle.value = type;
-                            args.data.Type = type;
-                            setColor(type);
-                        },
-                        open: () => {
-                            app.dropdownOpen = true;
-                            updateTooltipVisibility();
-                        },
-                        close: () => {
-                            app.dropdownOpen = false;
-                            updateTooltipVisibility();
-                        }
-                    });
-
-                    var createElement = ej.base.createElement;
-                    let row = createElement('div', { className: 'custom-field-row-color group' });
-                    let formElement = args.element.querySelector('.e-schedule-form');
-                    formElement.firstChild.insertBefore(row, args.element.querySelector('.e-description-row'));
-                    let container = createElement('div', { className: 'custom-field-container', attrs: { name: 'Type' } });
-
-                    window.inputEle = createElement('input', {
-                        className: 'e-type e-field', attrs: { name: 'Type' }
-                    });
-                    container.appendChild(window.inputEle);
-                    row.appendChild(container);
-
-                    btnObj.appendTo(container);
-                    window.inputEle.setAttribute('name', 'Type');
-                    window.inputEle.style.display = "none";
-                    window.inputEle.setAttribute('value', args.data.Type);
-
-                    // Add tooltip for customizing labels (shown in dropdown when opened)
-                    let tooltip = createElement('div', {
-                        id: 'type-label-hint',
-                        className: 'w-full px-4 py-2 text-xs text-center italic hidden flex items-center justify-center gap-1',
-                        innerHTML: `Customize labels in Settings`
-                    });
-                    tooltip.style.background = 'var(--panel-bg)';
-                    tooltip.style.color = 'var(--text-color-1)';
-                    tooltip.style.borderTop = '1px solid var(--border-color)';
-                    // Will be appended to dropdown after it's rendered
-                    window.typeTooltip = tooltip;
-                }
-
-                // Function to update tooltip visibility based on dropdown state
-                window.updateTooltipVisibility = () => {
-                    const isDefaultLabels = app.localSettings.typeLabels.every((label, i) => label === `Type ${i + 1}`);
-                    const shouldShow = app.dropdownOpen && isDefaultLabels && window.innerWidth >= 768;
-
-                    if (window.typeTooltip) {
-                        // Append tooltip to dropdown popup if not already there
-                        if (app.dropdownOpen && !window.typeTooltip.parentElement) {
-                            const dropdownPopup = document.querySelector('.e-dropdown-popup.e-popup-open ul');
-                            if (dropdownPopup) {
-                                dropdownPopup.parentElement.appendChild(window.typeTooltip);
-                            }
-                        }
-
-                        window.typeTooltip.classList.toggle('hidden', !shouldShow);
-                    }
-                };
-
-                // Initialize dropdown state
-                app.dropdownOpen = false;
-                updateTooltipVisibility();
-
-                // Initialize with existing type or default to Type 1
-                const initialType = args.data.Type || 1;
-                setColor(initialType);
-
-                // Make sure the event has a Type property even if not selected
-                if (!args.data.Type) {
-                    args.data.Type = 1; // Default to first type if not set
-                }
-
-                //setColor(args.data.Type);
-            }
-
-            // Syncfusion positions the popup (top/left) based on its natural,
-            // pre-clamp height -- our CSS max-height on .e-quick-popup-wrapper then
-            // shrinks a long-description popup without updating that position, so a
-            // popup meant to be vertically centered near the click target can end up
-            // with its top or bottom pushed outside the viewport, with no way to scroll
-            // back to the clipped part.
-            //
-            // A JS fix that rewrites style.top after the fact was tried and reverted: it
-            // reliably broke the header icon buttons' icon-font glyph paint (edit/delete/
-            // close rendered blank) even though DOM and computed styles were identical to
-            // the working case -- a genuine paint bug from mutating position mid-transition,
-            // not a layout bug. The .pc-clamp-top class (see style.css) instead forces
-            // position: fixed + vertical centering via pure CSS, which sidesteps that
-            // entirely since it participates in Syncfusion's own layout/paint pass instead
-            // of fighting it after the fact.
-            //
-            // The class must only apply when the popup actually overflows -- applying it
-            // unconditionally force-centers every popup regardless of size, dragging a
-            // short popup (e.g. a one-line description) away from the event it belongs to
-            // even when it would have fit fine at Syncfusion's own position.
-            const wrapper = args.element.closest('.e-quick-popup-wrapper');
-            if (wrapper) {
-                // Widen the popup for long descriptions -- narrow-column wrapping makes a
-                // multi-paragraph description feel cramped. 480px was chosen (not something
-                // wider, like 700px) specifically to keep collision risk low: on a month view
-                // packed with events, a much wider popup routinely covers a neighboring day's
-                // event, and clicking what looks like that event actually lands on the
-                // popup's own content -- Syncfusion doesn't see it as an event click at all,
-                // so the popup silently keeps showing the wrong title/content at the wrong
-                // position. Rather than chase that with active collision-avoidance (tried:
-                // pushing the popup down until clear doesn't converge on a busy grid, and
-                // shrinking-until-it-fits makes width inconsistent/unpredictable), the fix is
-                // to stay narrow enough that overlap is rare in the first place -- matching
-                // how other calendar apps (e.g. Google Calendar) handle this same tension.
-                // Must run before the overflow clamp below, since widening changes how the
-                // text wraps and therefore how tall (and whether it overflows) the popup ends up.
-                const LONG_DESCRIPTION_THRESHOLD = 140;
-                wrapper.classList.toggle('pc-wide', (args.data.Description || '').length > LONG_DESCRIPTION_THRESHOLD);
-
-                const applyClampIfOverflowing = () => {
-                    const margin = 10;
-
-                    // Syncfusion's own horizontal centering can be wildly wrong -- confirmed
-                    // 1000px+ off on a wide viewport, worse right after a different popup was
-                    // open and closed (its clamped/offset state seems to leak into the next
-                    // centering calculation), but present even on a cold click. Rather than
-                    // chase Syncfusion's internal math, anchor to args.target -- the actual
-                    // clicked .e-appointment element -- which is ground truth for where the
-                    // popup should visually appear, regardless of what Syncfusion computed.
-                    if (args.target) {
-                        const targetRect = args.target.getBoundingClientRect();
-                        const wrapperRect = wrapper.getBoundingClientRect();
-                        const offsetParentRect = wrapper.offsetParent
-                            ? wrapper.offsetParent.getBoundingClientRect()
-                            : { left: 0, top: 0 };
-
-                        let desiredLeft = targetRect.left - offsetParentRect.left;
-                        let desiredTop = targetRect.bottom - offsetParentRect.top + margin;
-
-                        // Keep it on-screen: clamp horizontally, and flip above the target if
-                        // there's no room below.
-                        const viewportLeft = desiredLeft + offsetParentRect.left;
-                        if (viewportLeft + wrapperRect.width > window.innerWidth - margin) {
-                            desiredLeft -= (viewportLeft + wrapperRect.width) - (window.innerWidth - margin);
-                        }
-                        if (desiredLeft + offsetParentRect.left < margin) {
-                            desiredLeft = margin - offsetParentRect.left;
-                        }
-                        const viewportTop = desiredTop + offsetParentRect.top;
-                        if (viewportTop + wrapperRect.height > window.innerHeight - margin) {
-                            desiredTop = (targetRect.top - offsetParentRect.top) - wrapperRect.height - margin;
-                        }
-
-                        wrapper.style.left = `${desiredLeft}px`;
-                        wrapper.style.top = `${desiredTop}px`;
-                    }
-
-                    const rect = wrapper.getBoundingClientRect();
-                    const overflowsVertically = rect.top < margin || rect.bottom > window.innerHeight - margin;
-                    wrapper.classList.toggle('pc-clamp-top', overflowsVertically);
-                };
-
-                // popupOpen fires while the wrapper still carries its closed-state class
-                // (e-popup-close) and pre-open position -- Syncfusion applies its final
-                // position asynchronously as part of the open transition. Wait for the
-                // class to flip to e-popup-open before measuring for overflow.
-                if (wrapper.classList.contains('e-popup-open')) {
-                    applyClampIfOverflowing();
-                } else {
-                    const classObserver = new MutationObserver(() => {
-                        if (wrapper.classList.contains('e-popup-open')) {
-                            classObserver.disconnect();
-                            requestAnimationFrame(applyClampIfOverflowing);
-                        }
-                    });
-                    classObserver.observe(wrapper, { attributes: true, attributeFilter: ['class'] });
-                }
-            }
-        }
-
-        scheduleObj.appendTo('#Schedule');
-
-        // Add event listener to mark month-start dates and colorize year view dots
-        scheduleObj.dataBound = function () {
-            // Find all date headers and mark ones with month names (contain space)
-            const dateHeaders = document.querySelectorAll('.e-schedule .e-month-view .e-date-header.e-navigate');
-            dateHeaders.forEach(header => {
-                const text = header.textContent.trim();
-                // If the text contains a space, it's a month-start date like "Jul 1", "Aug 1"
-                if (text.includes(' ')) {
-                    header.classList.add('month-start');
-                } else {
-                    header.classList.remove('month-start');
-                }
-            });
-
-            // Colorize year view dots based on event types
-            if (scheduleObj.currentView === 'Year') {
-                const cells = document.querySelectorAll('.e-year-view td.e-cell[data-date]');
-                const allEvents = scheduleObj.eventsData || [];
-
-                // Helper to check if a recurring event occurs on a given date
-                const eventOccursOnDate = (event, targetDate) => {
-                    const eventStart = new Date(event.StartTime);
-                    const eventEnd = new Date(event.EndTime);
-                    const targetStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
-                    const targetEnd = new Date(targetStart.getTime() + 24 * 60 * 60 * 1000);
-
-                    // Event must have started on or before target date
-                    const eventStartDay = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate());
-                    if (eventStartDay > targetStart) return false;
-
-                    // For non-recurring events, check if date overlaps
-                    if (!event.RecurrenceRule) {
-                        return eventStart < targetEnd && eventEnd > targetStart;
-                    }
-
-                    // For recurring events, parse the RecurrenceRule
-                    const rule = event.RecurrenceRule;
-                    const dayNames = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
-                    const targetDayName = dayNames[targetDate.getDay()];
-
-                    // Check BYDAY constraint
-                    const bydayMatch = rule.match(/BYDAY=([^;]+)/);
-                    if (bydayMatch) {
-                        const allowedDays = bydayMatch[1].split(',');
-                        if (!allowedDays.includes(targetDayName)) return false;
-                    }
-
-                    // Check FREQ and INTERVAL
-                    const freqMatch = rule.match(/FREQ=(\w+)/);
-                    const intervalMatch = rule.match(/INTERVAL=(\d+)/);
-                    const freq = freqMatch ? freqMatch[1] : 'DAILY';
-                    const interval = intervalMatch ? parseInt(intervalMatch[1]) : 1;
-
-                    // Calculate if target date matches the recurrence pattern
-                    const daysDiff = Math.floor((targetStart - eventStartDay) / (24 * 60 * 60 * 1000));
-
-                    if (freq === 'DAILY') {
-                        return daysDiff % interval === 0;
-                    } else if (freq === 'WEEKLY') {
-                        // For weekly with BYDAY, just check if day is in BYDAY (already done above)
-                        // and target is at least interval weeks from a valid occurrence
-                        const weeksDiff = Math.floor(daysDiff / 7);
-                        return weeksDiff % interval === 0 || bydayMatch; // BYDAY takes precedence
-                    } else if (freq === 'MONTHLY') {
-                        // Check if same day of month
-                        return eventStart.getDate() === targetDate.getDate();
-                    } else if (freq === 'YEARLY') {
-                        // Check if same month and day
-                        return eventStart.getMonth() === targetDate.getMonth() &&
-                               eventStart.getDate() === targetDate.getDate();
-                    }
-
-                    return true; // Default: assume it occurs
-                };
-
-                cells.forEach(cell => {
-                    const appointmentDiv = cell.querySelector('.e-appointment');
-                    if (!appointmentDiv) return;
-
-                    // Get the date for this cell
-                    const dateMs = parseInt(cell.getAttribute('data-date'));
-                    const cellDate = new Date(dateMs);
-
-                    // Find all events that occur on this date
-                    const eventsOnDate = allEvents.filter(event => eventOccursOnDate(event, cellDate));
-
-                    if (eventsOnDate.length > 0) {
-                        // Get unique event types for this day
-                        const types = [...new Set(eventsOnDate.map(e => e.Type || 1))];
-
-                        if (types.length === 1) {
-                            // Single type: color the dot with that type's color
-                            const color = app.COLORS[types[0] - 1] || app.COLORS[0];
-                            appointmentDiv.style.backgroundColor = color;
-                        } else {
-                            // Multiple types: show multiple dots
-                            appointmentDiv.style.display = 'none';
-
-                            // Remove any existing color dots
-                            cell.querySelectorAll('.color-dot').forEach(d => d.remove());
-
-                            // Create a container for multiple dots
-                            const dotsContainer = document.createElement('div');
-                            dotsContainer.className = 'color-dots-container';
-                            dotsContainer.style.cssText = 'display: flex; gap: 2px; justify-content: center; margin-top: 2px;';
-
-                            // Add a dot for each type (max 3 to avoid overflow)
-                            types.slice(0, 3).forEach(type => {
-                                const dot = document.createElement('div');
-                                dot.className = 'color-dot';
-                                const color = app.COLORS[type - 1] || app.COLORS[0];
-                                dot.style.cssText = `width: 4px; height: 4px; border-radius: 50%; background-color: ${color};`;
-                                dotsContainer.appendChild(dot);
-                            });
-
-                            cell.appendChild(dotsContainer);
-                        }
-                    }
-                });
-            }
-        };
+        // Pick the calendar engine. Syncfusion is still the default; ?cal=native
+        // opts into the one we own, and ?cal=syncfusion is the way back. Both read
+        // and write the same calendar records through the same models, so the two
+        // can be swapped on an existing calendar with no migration.
+        //
+        // Everything below this point is engine-agnostic: the shell talks to
+        // this.engine, never to a scheduler directly. The Syncfusion code that used
+        // to live inline here now lives in engines/SyncfusionEngine.js, unchanged.
+        const EngineClass = this.engineName === 'native' ? NativeEngine : SyncfusionEngine;
+        const engine = Vue.markRaw(new EngineClass(this));
+        this.engine = engine;
+        // The native engine renders through <native-calendar>, which binds this
+        // reactive options object. Syncfusion has no such object and stays null.
+        this.engineState = engine.state || null;
+
+        engine.mount('#Schedule', this.parseUrlViewParams());
 
         // Settings were already loaded at the top of mounted() and applied to scheduleObj
         // pre-appendTo. Call applyGlobalSettings again here as a safety net for settings that
@@ -1002,8 +513,8 @@ const CalendarVueApp = {
             // No need to call CalendarDataService.sync here as the calendar watcher will handle that
             console.log("calendar.options.extended changed", val);
             // Apply extended hour setting immediately
-            if (window.scheduleObj) {
-                scheduleObj.startHour = val ? "00:00" : this.globalSettings.startHour;
+            if (this.engine) {
+                this.engine.setOptions({ startHour: val ? "00:00" : this.globalSettings.startHour });
             }
         },
 
@@ -1112,74 +623,111 @@ const CalendarVueApp = {
 
         // Apply default view to schedule (if no URL override)
         applyDefaultView() {
-            if (!window.location.search.includes('view=') && !window.location.search.includes('v=')) {
-                const defaultView = this.calendar?.options?.defaultView || this.globalSettings.defaultView || 'Month';
-                const actualViewName = this.getActualViewName(defaultView);
+            if (window.location.search.includes('view=') || window.location.search.includes('v=')) return;
+            if (!this.engine) return;
 
-                const viewIndex = scheduleObj.views.findIndex(v => {
-                    if (typeof v === 'string') {
-                        return v === actualViewName;
-                    } else if (typeof v === 'object' && v.displayName) {
-                        return v.displayName === actualViewName;
-                    }
-                    return false;
-                });
+            const defaultView = this.calendar?.options?.defaultView || this.globalSettings.defaultView || 'Month';
+            const actualViewName = this.getActualViewName(defaultView);
 
-                if (viewIndex === -1) {
-                    console.warn('[applyDefaultView] View not found in schedule:', actualViewName);
-                    return;
-                }
+            if (!this.engine.getViewNames().includes(actualViewName)) {
+                console.warn('[applyDefaultView] View not found in engine:', actualViewName);
+                return;
+            }
 
-                const activateViewIfReady = () => {
-                    const viewButtons = document.querySelectorAll('.e-toolbar-item.e-views button');
-                    const targetButton = viewButtons[viewIndex];
-                    if (!targetButton) {
-                        return false;
-                    }
-                    const buttonLabel = (targetButton.getAttribute('aria-label') || targetButton.textContent || '').trim();
-                    if (buttonLabel && buttonLabel.toLowerCase().includes(actualViewName.toLowerCase())) {
-                        targetButton.click();
-                        return true;
-                    }
-                    return false;
-                };
+            // The native engine switches immediately. Syncfusion cannot switch view
+            // until its toolbar has rendered, so activateView reports false and we
+            // retry each time a view finishes binding -- with a ceiling, so a view
+            // name that never appears does not leave a listener attached forever.
+            if (this.engine.activateView(actualViewName)) return;
 
-                if (activateViewIfReady()) {
-                    return;
-                }
+            if (this._pendingViewActivation) {
+                this._pendingViewActivation();
+                this._pendingViewActivation = null;
+            }
+            if (this._pendingViewActivationTimeout) {
+                clearTimeout(this._pendingViewActivationTimeout);
+                this._pendingViewActivationTimeout = null;
+            }
 
-                if (this._pendingViewActivationHandler) {
-                    scheduleObj.removeEventListener('dataBound', this._pendingViewActivationHandler);
-                    this._pendingViewActivationHandler = null;
-                }
+            const stop = () => {
+                if (this._pendingViewActivation) { this._pendingViewActivation(); this._pendingViewActivation = null; }
                 if (this._pendingViewActivationTimeout) {
                     clearTimeout(this._pendingViewActivationTimeout);
                     this._pendingViewActivationTimeout = null;
                 }
+            };
 
-                const dataBoundHandler = () => {
-                    if (activateViewIfReady()) {
-                        scheduleObj.removeEventListener('dataBound', dataBoundHandler);
-                        this._pendingViewActivationHandler = null;
-                        if (this._pendingViewActivationTimeout) {
-                            clearTimeout(this._pendingViewActivationTimeout);
-                            this._pendingViewActivationTimeout = null;
+            this._pendingViewActivation = this.engine.onViewBound(() => {
+                if (this.engine.activateView(actualViewName)) stop();
+            });
+
+            this._pendingViewActivationTimeout = setTimeout(() => {
+                const activated = this.engine.activateView(actualViewName);
+                stop();
+                if (!activated) {
+                    console.error('[applyDefaultView] Unable to activate view:', actualViewName);
+                }
+            }, 10000);
+        },
+
+        // Read ?d= / ?v= (and their aliases) into the engine-independent shape both
+        // engines mount with. This used to sit inline in the Syncfusion setup,
+        // which is why deep links did nothing at all under the native engine.
+        //
+        // Views accept short and long forms: d/day, w/week, m/month, y/year,
+        // a/agenda, plus three ways to ask for the custom view -- 12w (12 weeks),
+        // q (a quarter, i.e. 3 months), and c/custom with optional dur= and unit=.
+        parseUrlViewParams() {
+            const result = {};
+            let url;
+            try {
+                url = new URL(Utils.sanitizeUrl(window.location.href.toLowerCase()));
+            } catch (e) {
+                return result;
+            }
+
+            const dateParam = url.searchParams.get('d') || url.searchParams.get('date');
+            const parsed = Utils.parseDate(dateParam);
+            if (parsed) result.selectedDate = parsed;
+
+            const viewParam = url.searchParams.get('v') || url.searchParams.get('view');
+            if (!viewParam) return result;
+
+            const useCustom = (duration, unit) => {
+                const config = this.buildCustomViewConfig(duration, unit);
+                result.customView = config;
+                result.currentView = config.displayName;
+            };
+
+            switch (viewParam.toLowerCase()) {
+                case 'd': case 'day': result.currentView = 'Day'; break;
+                case 'w': case 'week': result.currentView = 'Week'; break;
+                case 'm': case 'month': result.currentView = 'Month'; break;
+                case 'y': case 'year': result.currentView = 'Year'; break;
+                case 'a': case 'agenda': result.currentView = 'Agenda'; break;
+                case '12w': case '12weeks': useCustom(12, 'Weeks'); break;
+                case 'q': case 'quarter': useCustom(3, 'Months'); break;
+                case 'c': case 'custom': {
+                    const durParam = url.searchParams.get('dur') || url.searchParams.get('duration');
+                    const unitParam = url.searchParams.get('unit');
+                    if (durParam && unitParam) {
+                        const duration = parseInt(durParam);
+                        const unit = unitParam.charAt(0).toUpperCase() + unitParam.slice(1).toLowerCase();
+                        if (this.validateCustomView(duration, unit)) {
+                            useCustom(duration, unit);
+                            break;
                         }
                     }
-                };
-
-                this._pendingViewActivationHandler = dataBoundHandler;
-                scheduleObj.addEventListener('dataBound', dataBoundHandler);
-
-                this._pendingViewActivationTimeout = setTimeout(() => {
-                    scheduleObj.removeEventListener('dataBound', dataBoundHandler);
-                    this._pendingViewActivationHandler = null;
-                    this._pendingViewActivationTimeout = null;
-                    if (!activateViewIfReady()) {
-                        console.error('[applyDefaultView] Unable to activate view after waiting for dataBound events:', actualViewName);
-                    }
-                }, 10000);
+                    // No usable override: fall back to the configured custom view.
+                    useCustom(
+                        this.calendar?.options?.customViewDuration ?? this.globalSettings.customViewDuration,
+                        this.calendar?.options?.customViewUnit ?? this.globalSettings.customViewUnit,
+                    );
+                    break;
+                }
+                default: break;
             }
+            return result;
         },
 
         // Apply theme based on user preference and system settings
@@ -1197,16 +745,11 @@ const CalendarVueApp = {
             document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
             this.swapSyncfusionTheme(isDark);
         },
+        // Syncfusion ships separate light and dark CSS bundles, so its theme is a
+        // stylesheet swap; the native engine is themed by the CSS variables that
+        // data-theme already drives, and does nothing here.
         swapSyncfusionTheme(dark) {
-            document.getElementById('syncfusion-base-theme').href = dark
-                ? 'https://cdn.syncfusion.com/ej2/ej2-base/styles/material-dark.css'
-                : 'https://cdn.syncfusion.com/ej2/ej2-base/styles/material.css';
-            document.getElementById('syncfusion-theme').href = dark
-                ? 'https://cdn.syncfusion.com/ej2/material-dark.css'
-                : 'https://cdn.syncfusion.com/ej2/material.css';
-            document.getElementById('syncfusion-schedule-theme').href = dark
-                ? 'https://cdn.syncfusion.com/ej2/ej2-schedule/styles/material-dark.css'
-                : 'https://cdn.syncfusion.com/ej2/ej2-schedule/styles/material.css';
+            if (this.engine) this.engine.setTheme(dark);
         },
 
         // Validate custom view configuration
@@ -1246,64 +789,28 @@ const CalendarVueApp = {
 
         // Update the custom view in the schedule when duration/unit changes
         updateCustomViewInSchedule(shouldRefresh = false) {
-            if (!window.scheduleObj || !window.scheduleObj.views) {
-                return;
-            }
-
-            // Get the current custom view configuration
-            const customViewDuration = this.calendar?.options?.customViewDuration || this.globalSettings.customViewDuration;
-            const customViewUnit = this.calendar?.options?.customViewUnit || this.globalSettings.customViewUnit;
-            const newCustomViewConfig = this.buildCustomViewConfig(customViewDuration, customViewUnit);
-
-            // Find the custom view index (it's the object with interval property)
-            const customViewIndex = scheduleObj.views.findIndex(v =>
-                typeof v === 'object' && v.interval !== undefined
-            );
-
-            if (customViewIndex !== -1) {
-                const oldDisplayName = scheduleObj.views[customViewIndex].displayName;
-                const currentView = scheduleObj.currentView;
-
-                // Replace the custom view
-                scheduleObj.views[customViewIndex] = newCustomViewConfig;
-
-                // If we're currently viewing the custom view, update the currentView
-                if (currentView === oldDisplayName) {
-                    scheduleObj.currentView = newCustomViewConfig.displayName;
-                }
-
-                // Refresh the schedule to update the header (only if user actively changed settings)
-                if (shouldRefresh) {
-                    scheduleObj.refresh();
-                }
-            } else {
-            }
+            if (!this.engine) return;
+            const duration = this.calendar?.options?.customViewDuration || this.globalSettings.customViewDuration;
+            const unit = this.calendar?.options?.customViewUnit || this.globalSettings.customViewUnit;
+            this.engine.setOptions({
+                customView: this.buildCustomViewConfig(duration, unit),
+                refreshCustomView: shouldRefresh,
+            });
         },
 
         // Get the actual Syncfusion view name for a given default view setting
         // Converts "Custom" to the actual display name like "3 Months"
+        // "Custom" is a setting value, not a view name -- on the toolbar the custom
+        // view is called "3 Months" or "12 Weeks". Resolve it to whatever the engine
+        // is actually showing, falling back to computing it from settings.
         getActualViewName(viewSetting) {
-            // Handle null/undefined viewSetting - default to Month
-            if (!viewSetting) {
-                return 'Month';
-            }
+            if (!viewSetting) return 'Month';
+            if (viewSetting !== 'Custom') return viewSetting;
 
-            if (viewSetting !== 'Custom') {
-                return viewSetting;
-            }
+            const builtIn = ['Day', 'Week', 'Month', 'Year', 'Agenda'];
+            const custom = this.engine && this.engine.getViewNames().find(v => !builtIn.includes(v));
+            if (custom) return custom;
 
-            // For Custom view, we need to find the custom view in the scheduleObj.views array
-            if (typeof window.scheduleObj !== 'undefined' && window.scheduleObj && window.scheduleObj.views) {
-                // Find the custom view (it's the one with interval property and not a string)
-                const customView = window.scheduleObj.views.find(v =>
-                    typeof v === 'object' && v.interval !== undefined && v.displayName
-                );
-                if (customView) {
-                    return customView.displayName;
-                }
-            }
-
-            // Fallback: compute it from settings
             const duration = this.calendar?.options?.customViewDuration || this.globalSettings.customViewDuration || 3;
             const unit = this.calendar?.options?.customViewUnit || this.globalSettings.customViewUnit || 'Months';
             const unitLabel = duration === 1 ? unit.slice(0, -1) : unit;
@@ -1352,29 +859,17 @@ const CalendarVueApp = {
         },
 
         updateCalendarView() {
-            // Step 1: Ensure this.syncFusionEvents is up-to-date from the master store (this.calendar.events).
-            // This creates a new array instance for this.syncFusionEvents if this.calendar.events has changed.
+            // this.calendar.events is the master store. syncFusionEvents is the
+            // renamed copy Syncfusion's field mapping wants (Subject/StartTime/...);
+            // the native engine reads the app's own Event model, so it takes
+            // this.calendar.events directly and no renaming happens at all.
             this.syncFusionEvents = this.calendar.getSyncFusionEvents();
-
-            // Step 2: Create a DataManager with the current, complete set of events.
-            const eventDataManager = new ej.data.DataManager(this.syncFusionEvents);
-
-            // Step 3: Prepare the query based on current filters.
-            let query = this.getFilteredEventsQuery();
-
-            // Step 4: Update the Scheduler's eventSettings with the new DataManager and Query.
-            // This tells the Scheduler to use the 'eventDataManager' as its source and apply the 'query'.
-            scheduleObj.setProperties({
-                eventSettings: {
-                    dataSource: eventDataManager,
-                    query: query
-                }
-            });
-
-            // Step 5: Re-bind the data to ensure the Scheduler reflects the changes.
-            // While setProperties might sometimes trigger a refresh, explicitly calling dataBind is safer
-            // when dataSource or query changes significantly.
-            scheduleObj.dataBind();
+            if (!this.engine) return;
+            if (this.engineName === 'native') {
+                this.engine.setEvents(this.calendar.events);
+            } else {
+                this.engine.setEvents(this.syncFusionEvents, this.getFilteredEventsQuery());
+            }
         },
 
         // ============================================================
@@ -1552,8 +1047,11 @@ const CalendarVueApp = {
         },
 
         updateCurrentViewURL() {
-            const currentView = scheduleObj.currentView;
-            const currentDate = scheduleObj.selectedDate.toISOString().slice(0, 10);
+            if (!this.engine) return;
+            const currentView = this.engine.getView();
+            const engineDate = this.engine.getDate();
+            if (!currentView || !engineDate) return;
+            const currentDate = new Date(engineDate).toISOString().slice(0, 10);
 
             // Map display name to URL parameter
             let viewParam;
@@ -1788,9 +1286,9 @@ const CalendarVueApp = {
         },
 
         jumpToEvent(event) {
-            let startDate = new Date(event.start);
-            scheduleObj.selectedDate = startDate;
-            scheduleObj.currentView = 'Week';
+            if (!this.engine) return;
+            this.engine.setDate(new Date(event.start));
+            this.engine.setView('Week');
         },
 
         toggleRecents() {
@@ -2086,6 +1584,196 @@ const CalendarVueApp = {
         },
 
         // ============================================================
+        // REGION: Native engine interactions
+        // ============================================================
+        //
+        // The native engine has no built-in popups, so the shell owns them: a
+        // quick-create popover on an empty cell, a read popover on an event, and
+        // the full editor behind "more details" / Edit. Under Syncfusion these
+        // stay closed and its own dialogs do the work.
+        //
+        // Writes go through the same Calendar/Event models as every other path,
+        // which is what makes running both engines against one calendar safe.
+
+        handleEventCreate({ start, end, isAllDay, event }) {
+            this.quickCreateEvent = { start, end, isAllDay };
+            
+            // Position logic
+            let top = 0, left = 0;
+            if (event) {
+                // Prefer mouse coordinates for creation
+                if (event.clientX && event.clientY) {
+                    top = event.clientY - 60; // Slightly above cursor to align with event
+                    left = event.clientX + 20; // To the right
+                } else if (event.target) {
+                    const rect = event.target.getBoundingClientRect();
+                    top = rect.top;
+                    left = rect.right + 10;
+                }
+                
+                // Flip if too far right
+                if (left + 340 > window.innerWidth) {
+                    left = (event.clientX || left) - 340;
+                }
+                // Flip up if near bottom
+                if (top + 250 > window.innerHeight) {
+                     top = window.innerHeight - 260;
+                }
+                // Clamp top
+                if (top < 10) top = 10;
+            } else {
+                // Center screen fallback
+                top = window.innerHeight / 2 - 100;
+                left = window.innerWidth / 2 - 160;
+            }
+
+            this.quickCreatePosition = { top, left };
+            this.showQuickCreate = true;
+            this.closePopover();
+            this.closeEditor();
+        },
+
+        closeQuickCreate() {
+            this.showQuickCreate = false;
+            this.quickCreateEvent = null;
+        },
+
+        handleQuickCreateSave(title) {
+            if (!this.quickCreateEvent) return;
+            
+            const newEventData = {
+                start: this.quickCreateEvent.start,
+                end: this.quickCreateEvent.end,
+                title: title || '(No Title)',
+                isAllDay: this.quickCreateEvent.isAllDay,
+                type: 1
+            };
+            
+            this.handleSaveEvent(newEventData, 'grid');
+            this.closeQuickCreate();
+        },
+
+        handleQuickCreateMoreDetails(title) {
+             if (!this.quickCreateEvent) return;
+             
+             this.editorEvent = {
+                start: this.quickCreateEvent.start,
+                end: this.quickCreateEvent.end,
+                title: title || '',
+                isAllDay: this.quickCreateEvent.isAllDay,
+                type: 1
+            };
+            this.showEditor = true;
+            this.closeQuickCreate();
+        },
+
+        handleEventClick({ event, jsEvent }) {
+            // Close other popups
+            this.closeQuickCreate();
+            this.closeEditor();
+
+            this.popoverEvent = event;
+            
+            // EventPopover.js widens itself past the default 320px for long descriptions
+            // (see LONG_DESCRIPTION_THRESHOLD there) -- this positioning math has to use
+            // the same width the popover will actually render at, or a wide popover for a
+            // long description can get centered/bounds-checked as if it were still 320px
+            // and end up pushed off the right edge of the viewport. The popover also caps
+            // itself at 100vw - 20px on narrow viewports (see max-w- there), so mirror that
+            // clamp here too.
+            const LONG_DESCRIPTION_THRESHOLD = 140;
+            const isLong = (event?.description?.length || 0) > LONG_DESCRIPTION_THRESHOLD;
+            const popoverWidth = isLong ? Math.min(480, window.innerWidth - 20) : 320;
+
+            // Position logic
+            let top = 0, left = 0;
+            if (jsEvent && jsEvent.currentTarget) {
+                const rect = jsEvent.currentTarget.getBoundingClientRect();
+                top = rect.bottom + 10;
+                left = rect.left + (rect.width / 2) - (popoverWidth / 2); // Center
+
+                // Bounds check
+                if (left < 10) left = 10;
+                if (left + popoverWidth > window.innerWidth) left = window.innerWidth - popoverWidth - 10;
+                if (top + 200 > window.innerHeight) top = rect.top - 210; // Flip up if no space
+            } else {
+                // Center screen
+                top = window.innerHeight / 2 - 100;
+                left = window.innerWidth / 2 - (popoverWidth / 2);
+            }
+
+            this.popoverPosition = { top, left };
+            this.showPopover = true;
+        },
+
+        openEditorForEvent(event) {
+            this.editorEvent = { ...event };
+            this.showEditor = true;
+            this.closePopover();
+        },
+
+        closePopover() {
+            this.showPopover = false;
+            this.popoverEvent = null;
+        },
+
+        closeEditor() {
+            this.showEditor = false;
+            this.editorEvent = null;
+        },
+
+        handleSaveEvent(eventData, where) {
+            // Clone existing events
+            const events = [...this.calendar.events];
+            
+            if (eventData.id) {
+                // Update existing
+                const index = events.findIndex(e => e.id === eventData.id);
+                if (index !== -1) {
+                    // Update fields
+                    events[index] = new Event({ ...events[index], ...eventData });
+                }
+            } else {
+                // Create new
+                const newEvent = new Event(eventData);
+                events.push(newEvent);
+            }
+            
+            // Trigger update
+            this.calendar.setEvents(events);
+            this.recordNativeEdit(eventData.id ? 'changed' : 'created', where || 'editor');
+            this.closeEditor();
+        },
+
+        handleDeleteEvent(id) {
+            const events = this.calendar.events.filter(e => e.id !== id);
+            this.calendar.setEvents(events);
+            this.recordNativeEdit('removed');
+            this.closePopover();
+            this.closeEditor();
+        },
+
+        // Every native-engine write lands here, so this is where the analytics and
+        // ownership signal go -- the same two things Syncfusion's actionComplete
+        // does for its own edits. Kept out of CalendarDataService.sync() on
+        // purpose: sync() also runs when the live subscription echoes back someone
+        // else's edit, which made every viewer look like an editor.
+        recordNativeEdit(kind, where) {
+            if (typeof AuthorSignal !== 'undefined') {
+                AuthorSignal.touch(this.calendar.id);
+            }
+            if (kind === 'created') {
+                track(a => a.eventAdded(where || 'grid', this.calendar));
+            }
+        },
+
+        // Drag and resize mutate the event in place and hand back the whole list.
+        handleEventsUpdated(events) {
+            this.calendar.setEvents(events);
+            this.recordNativeEdit('changed');
+        },
+
+        // ============================================================
         // REGION: Settings & Preferences Management
         // ============================================================
 
@@ -2217,8 +1905,8 @@ const CalendarVueApp = {
 
         // settings which are stored in the remote calendar object
         applyGlobalSettingsAfterRemote() {
-            if (typeof window.scheduleObj === 'undefined' || !window.scheduleObj) {
-                console.log('[applyGlobalSettingsAfterRemote] Scheduler not initialized yet, skipping settings application');
+            if (!this.engine) {
+                console.log('[applyGlobalSettingsAfterRemote] Engine not initialized yet, skipping settings application');
                 return;
             }
 
@@ -2226,59 +1914,20 @@ const CalendarVueApp = {
         },
 
         applyGlobalSettings() {
-            console.log('[applyGlobalSettings] Called');
-            if (typeof window.scheduleObj === 'undefined' || !window.scheduleObj) {
-                return;
-            }
-
-            // console.log("[app] cal data", this.calendar);
-
+            if (!this.engine) return;
             try {
-                // Apply first day of week
-                scheduleObj.firstDayOfWeek = parseInt(this.globalSettings.firstDayOfWeek);
-
-                // Apply time format
-                const timeFormat = this.globalSettings.timeFormat === '24' ? 'HH:mm' : 'hh:mm a';
-                scheduleObj.timeFormat = timeFormat;
-
-                // Apply default view if not already set via URL
-                this.applyDefaultView();
-
-                // Apply start hour if not overridden by extended setting
-                if (!this.calendar?.options?.extended) {
-                    scheduleObj.startHour = this.globalSettings.startHour;
-                }
-
-                console.log('Global settings applied successfully:', {
-                    firstDayOfWeek: scheduleObj.firstDayOfWeek,
-                    timeFormat: scheduleObj.timeFormat,
-                    currentView: scheduleObj.currentView,
-                    startHour: scheduleObj.startHour
+                this.engine.setOptions({
+                    firstDayOfWeek: this.globalSettings.firstDayOfWeek,
+                    timeFormat: this.globalSettings.timeFormat,
+                    // The per-calendar "extended" flag wins over the personal
+                    // start-hour preference: it exists to show the full 24 hours.
+                    startHour: this.calendar?.options?.extended ? '00:00' : this.globalSettings.startHour,
+                    readOnly: this.isReadOnly,
+                    colors: this.COLORS,
                 });
+                this.applyDefaultView();
             } catch (error) {
                 console.error('Error applying global settings:', error);
-                // Try to recover by applying settings individually
-                try {
-                    scheduleObj.firstDayOfWeek = parseInt(this.globalSettings.firstDayOfWeek);
-                    console.log('Applied first day of week setting');
-                } catch (e) { console.warn('Failed to apply first day of week setting:', e); }
-
-                try {
-                    scheduleObj.timeFormat = this.globalSettings.timeFormat === '24' ? 'HH:mm' : 'hh:mm a';
-                    console.log('Applied time format setting');
-                } catch (e) { console.warn('Failed to apply time format setting:', e); }
-
-                try {
-                    this.applyDefaultView();
-                    console.log('Applied default view setting');
-                } catch (e) { console.warn('Failed to apply default view setting:', e); }
-
-                try {
-                    if (!this.calendar?.options?.extended) {
-                        scheduleObj.startHour = this.globalSettings.startHour;
-                        console.log('Applied start hour setting');
-                    }
-                } catch (e) { console.warn('Failed to apply start hour setting:', e); }
             }
         },
 
@@ -2375,8 +2024,9 @@ const CalendarVueApp = {
 
             // The calendar watcher will handle syncing to Firebase or localStorage
             // Refresh the schedule to update the UI
-            if (window.scheduleObj) {
-                scheduleObj.refresh();
+            if (this.engine) {
+                this.engine.setOptions({ colors: this.COLORS });
+                this.engine.refresh();
             }
         },
 
@@ -2432,9 +2082,7 @@ const CalendarVueApp = {
 
             // The calendar watcher will handle syncing to Firebase or localStorage
             // Refresh the schedule to update the UI
-            if (window.scheduleObj) {
-                scheduleObj.refresh();
-            }
+            if (this.engine) this.engine.refresh();
         },
 
         // One-time migration from notes format to calendar.options format

@@ -85,10 +85,48 @@ Copyright (c) 2025 Kalid Azad
         })();
     </script>
 
+    <!-- Which calendar engine renders the grid.
+         ?cal=native opts into the one we build ourselves; ?cal=syncfusion is the
+         way back, and is the escape hatch for the whole rollout. The choice is
+         remembered so dogfooding survives navigation between calendars.
+         Decided here, at the top of <head>, because it decides which of the two
+         asset sets below is even requested -- the point of the exercise is that a
+         native page never downloads Syncfusion's 5 MB bundle. -->
+    <script>
+        window.CAL_ENGINE = (function () {
+            var VALID = ['syncfusion', 'native'];
+            var requested = null;
+            try {
+                requested = new URLSearchParams(window.location.search).get('cal');
+            } catch (e) { /* very old browser: fall through to the default */ }
+
+            if (VALID.indexOf(requested) !== -1) {
+                try { localStorage.setItem('pc_engine', requested); } catch (e) {}
+                return requested;
+            }
+            try {
+                var saved = localStorage.getItem('pc_engine');
+                if (VALID.indexOf(saved) !== -1) return saved;
+            } catch (e) {}
+            return 'syncfusion';
+        })();
+    </script>
+
     <!-- Core styles -->
-    <link id="syncfusion-base-theme" href="https://cdn.syncfusion.com/ej2/ej2-base/styles/material.css" rel="stylesheet" type="text/css" />
-    <link id="syncfusion-theme" href="https://cdn.syncfusion.com/ej2/material.css" rel="stylesheet" type="text/css" />
-    <link id="syncfusion-schedule-theme" href="https://cdn.syncfusion.com/ej2/ej2-schedule/styles/material.css" rel="stylesheet" type="text/css" />
+    <script>
+        // document.write, deliberately: these have to land in the parser stream in
+        // order, before app.js runs, and the engine is only known at runtime. A
+        // dynamically appended <script> would not preserve that ordering.
+        if (window.CAL_ENGINE === 'syncfusion') {
+            document.write(
+                '<link id="syncfusion-base-theme" href="https://cdn.syncfusion.com/ej2/ej2-base/styles/material.css" rel="stylesheet" type="text/css" />' +
+                '<link id="syncfusion-theme" href="https://cdn.syncfusion.com/ej2/material.css" rel="stylesheet" type="text/css" />' +
+                '<link id="syncfusion-schedule-theme" href="https://cdn.syncfusion.com/ej2/ej2-schedule/styles/material.css" rel="stylesheet" type="text/css" />'
+            );
+        } else {
+            document.write('<link rel="stylesheet" href="/engines/native/native.css?v=1787723862" />');
+        }
+    </script>
     <link rel="stylesheet" href="/style.css?v=1787723862">
 
     <!-- Third-party libraries -->
@@ -120,7 +158,17 @@ Copyright (c) 2025 Kalid Azad
             },
         };
     </script>
-    <script src="https://cdn.syncfusion.com/ej2/23.2.6/dist/ej2.min.js" type="text/javascript"></script>
+    <script>
+        // Engine libraries. Syncfusion is ~5 MB gzipped; date-fns + rrule are ~36 KB.
+        if (window.CAL_ENGINE === 'syncfusion') {
+            document.write('<script src="https://cdn.syncfusion.com/ej2/23.2.6/dist/ej2.min.js" type="text/javascript"><\/script>');
+        } else {
+            document.write(
+                '<script src="https://cdn.jsdelivr.net/npm/date-fns@3.6.0/cdn.min.js"><\/script>' +
+                '<script src="https://cdn.jsdelivr.net/npm/rrule@2.8.1/dist/es5/rrule.min.js"><\/script>'
+            );
+        }
+    </script>
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-compat.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js"></script>
 
@@ -153,7 +201,9 @@ Copyright (c) 2025 Kalid Azad
             console.warn('[auth] anonymous sign-in unavailable:', err && err.code);
         });
 
-        ej.base.registerLicense('Ngo9BigBOggjHTQxAR8/V1NHaF1cW2hIfEx1RHxQdld5ZFRHallYTnNWUj0eQnxTdEZiW39fcXJXR2JUV0NyWg==');
+        if (window.CAL_ENGINE === 'syncfusion') {
+            ej.base.registerLicense('Ngo9BigBOggjHTQxAR8/V1NHaF1cW2hIfEx1RHxQdld5ZFRHallYTnNWUj0eQnxTdEZiW39fcXJXR2JUV0NyWg==');
+        }
 
         if (location.href.includes("localhost") && location.href.includes("?local")) {
             firebase.functions().useEmulator("localhost", 5001);
@@ -178,6 +228,14 @@ Copyright (c) 2025 Kalid Azad
     <script src="/components/QuickAddDialog.js?v=1787723862"></script>
     <script src="/components/CalendarTitle.js?v=1787723862"></script>
     <script src="/components/NavigationDropdown.js?v=1787723862"></script>
+    <!-- Calendar engines. Both are declared before app.js picks one; only the
+         chosen engine's third-party libraries were loaded above. -->
+    <script src="/engines/SyncfusionEngine.js?v=1787723862"></script>
+    <script src="/engines/NativeEngine.js?v=1787723862"></script>
+    <script src="/engines/native/NativeCalendar.js?v=1787723862"></script>
+    <script src="/engines/native/EventEditor.js?v=1787723862"></script>
+    <script src="/engines/native/EventPopover.js?v=1787723862"></script>
+    <script src="/engines/native/QuickCreatePopover.js?v=1787723862"></script>
     <script src="/components/WelcomeDock.js?v=1787723862"></script>
 
     <script>
@@ -1197,7 +1255,58 @@ Copyright (c) 2025 Kalid Azad
         </panel>
 
         <div id="cal2_wrap" style="width: 100%; height: 100%;">
-            <div id="Schedule" data-testid="schedule-container"></div>
+            <!-- Syncfusion renders into this host; the native engine renders as a
+                 Vue component instead. Only one exists at a time. -->
+            <div v-if="engineName === 'syncfusion'" id="Schedule" data-testid="schedule-container"></div>
+
+            <div v-else class="native-host" data-testid="native-container">
+                <native-calendar v-if="engineState"
+                    v-bind="engineState"
+                    :creating-event="quickCreateEvent"
+                    @update:events="handleEventsUpdated"
+                    @update:current-view="engine.setView($event)"
+                    @update:selected-date="engine.setDate($event)"
+                    @event-create="handleEventCreate"
+                    @event-click="handleEventClick"
+                ></native-calendar>
+
+                <quick-create-popover
+                    v-if="showQuickCreate"
+                    :visible="showQuickCreate"
+                    :start="quickCreateEvent?.start"
+                    :end="quickCreateEvent?.end"
+                    :is-all-day="quickCreateEvent?.isAllDay"
+                    :top="quickCreatePosition.top"
+                    :left="quickCreatePosition.left"
+                    :time-format="globalSettings.timeFormat"
+                    @save="handleQuickCreateSave"
+                    @more-details="handleQuickCreateMoreDetails"
+                    @close="closeQuickCreate"
+                ></quick-create-popover>
+
+                <event-popover
+                    v-if="showPopover"
+                    :visible="showPopover"
+                    :event="popoverEvent"
+                    :top="popoverPosition.top"
+                    :left="popoverPosition.left"
+                    :time-format="globalSettings.timeFormat"
+                    :read-only="isReadOnly"
+                    @edit="openEditorForEvent"
+                    @delete="handleDeleteEvent"
+                    @close="closePopover"
+                ></event-popover>
+
+                <event-editor
+                    v-if="showEditor"
+                    v-model:visible="showEditor"
+                    :event="editorEvent"
+                    :colors="COLORS"
+                    :type-labels="localSettings.typeLabels"
+                    @save="handleSaveEvent"
+                    @delete="handleDeleteEvent"
+                ></event-editor>
+            </div>
         </div>
 
         <!-- Claim Intervention Modal -->

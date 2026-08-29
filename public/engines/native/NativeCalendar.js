@@ -34,6 +34,15 @@ const CalendarToolbar = {
     emits: ['prev', 'next', 'today', 'change-view']
 };
 
+// Month (and the custom "N Months" / "N Weeks" view, which is the same grid over
+// a longer range).
+//
+// Laid out as week rows rather than 42 independent cells, because an event that
+// spans days has to be able to draw across them. Each row stacks two layers: the
+// day cells, which take the clicks, and a bars layer on top positioned with
+// `grid-column: start / span n`. The previous per-cell version filtered events
+// with isSameDay(event.start, date), so a four-day event appeared only on its
+// first day and was invisible on the other three.
 const MonthView = {
     template: /* html */ `
         <div class="h-full flex flex-col overflow-y-auto bg-1">
@@ -43,45 +52,56 @@ const MonthView = {
                 </div>
             </div>
             <div class="calendar-grid flex-1" data-testid="month-view-grid">
-                <div v-for="(cell, idx) in cells" :key="idx" 
-                     class="calendar-cell relative group hover:bg-gray-50 dark:hover:bg-gray-800 flex flex-col gap-1 cursor-pointer"
-                     :class="{'bg-disabled opacity-50': !cell.isCurrentMonth, 'bg-blue-50 dark:bg-blue-900': isToday(cell.date)}"
-                     :data-date="cell.date.toISOString()"
-                     :data-testid="'month-cell-' + idx"
-                     @click="$emit('create-event', cell.date, $event)">
-                    
-                    <span class="text-xs font-medium p-1 ml-auto rounded-full w-7 h-7 flex items-center justify-center"
-                          :class="isToday(cell.date) ? 'bg-blue-600 text-white' : 'text-color-2'">
-                        {{ cell.dayNumber }}
-                    </span>
-                    
-                    <!-- Ghost Event for Month View -->
-                    <div v-if="creatingEvent && creatingEvent.isAllDay && isSameDay(cell.date, new Date(creatingEvent.start))"
-                         class="px-1.5 py-0.5 text-xs rounded border-2 border-dashed border-gray-400 bg-2 text-color-1 font-medium select-none mb-1">
-                         New Event
+                <div v-for="row in rows" :key="row.key" class="month-row">
+                    <div class="month-row-cells">
+                        <div v-for="(cell, idx) in row.days" :key="idx"
+                             class="calendar-cell"
+                             :class="{'is-outside': !cell.inRange, 'is-today': isToday(cell.date)}"
+                             :data-date="cell.date.toISOString()"
+                             :data-testid="'month-cell-' + cell.index"
+                             @click="$emit('create-event', cell.date, $event)">
+                            <span class="day-number"
+                                  :class="[isToday(cell.date) ? 'is-today-number' : '', cell.isMonthStart ? 'month-start' : '']">
+                                {{ cell.label }}
+                            </span>
+                            <button v-if="cell.hiddenCount" type="button" class="month-more"
+                                    :data-testid="'month-more-' + cell.index"
+                                    @click.stop="$emit('show-day', cell.date)">
+                                +{{ cell.hiddenCount }} more
+                            </button>
+                        </div>
                     </div>
 
-                    <div v-for="event in getEventsForDate(cell.date)" :key="event.id"
-                         class="px-1.5 py-0.5 text-xs rounded truncate cursor-pointer shadow-sm border-l-2 hover:brightness-95 transition-all select-none"
-                         :class="{'is-dragging': dragState.eventId === event.id}"
-                         :style="getEventStyle(event)"
-                         :data-testid="'event-' + event.id"
-                         @mousedown.stop="$emit('start-drag', event, $event, 'month-move')"
-                         @click.stop="$emit('select-event', event, $event)">
-                         <span v-if="event.isRecurringInstance">↻ </span>
-                        {{ event.title }}
+                    <div class="month-row-bars">
+                        <!-- Ghost bar while a quick-create popover is open on this day -->
+                        <div v-if="row.ghost"
+                             class="month-bar is-ghost"
+                             :style="{ gridColumn: (row.ghost.startCol + 1) + ' / span ' + row.ghost.span, gridRow: row.ghost.lane + 1 }">
+                            New Event
+                        </div>
+                        <div v-for="bar in row.bars" :key="bar.key"
+                             class="month-bar"
+                             :class="{
+                                 'is-dragging': dragState.eventId === bar.event.id,
+                                 'continues-left': bar.continuesLeft,
+                                 'continues-right': bar.continuesRight
+                             }"
+                             :style="[getEventStyle(bar.event), { gridColumn: (bar.startCol + 1) + ' / span ' + bar.span, gridRow: bar.lane + 1 }]"
+                             :data-testid="'event-' + bar.event.id"
+                             :title="bar.event.title"
+                             @mousedown.stop="$emit('start-drag', bar.event, $event, 'month-move')"
+                             @click.stop="$emit('select-event', bar.event, $event)">
+                            <span v-if="bar.event.isRecurringInstance">&#8635; </span>
+                            <span v-if="bar.showTime" class="month-bar-time">{{ bar.timeLabel }}</span>
+                            {{ bar.event.title }}
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
     `,
-    props: ['cells', 'weekDays', 'dragState', 'getEventsForDate', 'getEventStyle', 'isToday', 'creatingEvent'],
-    emits: ['create-event', 'start-drag', 'select-event'],
-    setup() {
-        const df = window.dateFns;
-        const isSameDay = (d1, d2) => df.isSameDay(d1, d2);
-        return { isSameDay };
-    }
+    props: ['rows', 'weekDays', 'dragState', 'getEventStyle', 'isToday'],
+    emits: ['create-event', 'start-drag', 'select-event', 'show-day']
 };
 
 const TimeGridView = {
@@ -92,10 +112,33 @@ const TimeGridView = {
                 <div class="border-r border-color-default p-2"></div>
                 <div v-for="(date, idx) in visibleDates" :key="idx" 
                      class="p-2 text-center border-r border-color-default">
-                    <div class="text-xs font-semibold text-color-1 uppercase">{{ weekDays[date.getDay()] }}</div>
+                    <div class="text-xs font-semibold text-color-1 uppercase">{{ dayNames[date.getDay()] }}</div>
                     <div class="text-xl font-light w-8 h-8 mx-auto rounded-full flex items-center justify-center text-color-2" 
                          :class="{'bg-blue-600 text-white font-bold': isToday(date)}">
                         {{ date.getDate() }}
+                    </div>
+                </div>
+            </div>
+
+            <!-- All-day lane. Anything that covers a whole day, or more than one,
+                 belongs here rather than as a midnight-to-midnight block in the
+                 grid below. -->
+            <div class="all-day-lane border-b border-color-default bg-1 flex-shrink-0 grid"
+                 data-testid="all-day-lane"
+                 :style="{ gridTemplateColumns: '60px repeat(' + visibleDates.length + ', 1fr)' }">
+                <div class="all-day-label border-r border-color-default">All day</div>
+                <div class="all-day-bars"
+                     :style="{ gridColumn: '2 / span ' + visibleDates.length,
+                               gridTemplateColumns: 'repeat(' + visibleDates.length + ', 1fr)',
+                               minHeight: (Math.max(allDay.lanes, 1) * 22) + 'px' }">
+                    <div v-for="bar in allDay.bars" :key="bar.key"
+                         class="month-bar"
+                         :class="{ 'continues-left': bar.continuesLeft, 'continues-right': bar.continuesRight }"
+                         :style="[getEventStyle(bar.event), { gridColumn: (bar.startCol + 1) + ' / span ' + bar.span, gridRow: bar.lane + 1 }]"
+                         :data-testid="'event-' + bar.event.id"
+                         :title="bar.event.title"
+                         @click.stop="$emit('select-event', bar.event, $event)">
+                        {{ bar.event.title }}
                     </div>
                 </div>
             </div>
@@ -104,9 +147,13 @@ const TimeGridView = {
                 <div class="time-grid relative"
                      :style="{ gridTemplateColumns: '60px repeat(' + visibleDates.length + ', 1fr)' }">
                     
-                    <div class="flex flex-col text-xs text-color-1 text-right pr-2 pt-[-0.5rem] bg-1 sticky left-0 z-10 border-r border-color-default">
-                        <div v-for="h in 24" :key="h" class="h-[50px] -mt-2.5 bg-1 select-none">
-                            {{ formatTimeLabel(h-1) }}
+                    <!-- Hour labels. The negative offset belongs to the column, not
+                         to each label: applied per-label it also shortens the stride
+                         to 40px, so the labels drifted an hour out of step with the
+                         50px rows they name after a dozen hours. -->
+                    <div class="time-labels flex flex-col text-xs text-color-1 text-right pr-2 bg-1 sticky left-0 z-10 border-r border-color-default">
+                        <div v-for="h in hours" :key="h" class="h-[50px] bg-1 select-none">
+                            {{ formatTimeLabel(h) }}
                         </div>
                     </div>
                     
@@ -115,7 +162,7 @@ const TimeGridView = {
                          :data-date="date.toISOString()"
                          @click="$emit('create-time-event', date, $event)">
                         
-                        <div v-for="h in 24" :key="h" class="hour-row pointer-events-none"></div>
+                        <div v-for="h in hours" :key="h" class="hour-row pointer-events-none"></div>
                         
                         <div v-if="isToday(date)" class="absolute w-full h-0.5 bg-red-500 z-30 pointer-events-none flex items-center"
                              :style="{ top: currentTimeTop + 'px' }">
@@ -158,10 +205,10 @@ const TimeGridView = {
         </div>
     `,
     props: [
-        'currentView', 'visibleDates', 'weekDays', 'isToday', 
+        'currentView', 'visibleDates', 'dayNames', 'isToday',
         'currentTimeTop', 'dragState', 'selectedEventId', 'eventCursor',
         'getEventsWithLayout', 'getEventStyle', 'getWeekEventPosition', 'getGhostStyle', 'formatTime', 'isSameDay', 'timeFormat',
-        'creatingEvent'
+        'creatingEvent', 'hours', 'startHourNum', 'allDay'
     ],
     emits: ['create-time-event', 'start-drag', 'select-event'],
     methods: {
@@ -176,9 +223,10 @@ const TimeGridView = {
             const startMinutes = start.getHours() * 60 + start.getMinutes();
             const endMinutes = end.getHours() * 60 + end.getMinutes();
             // Ensure ghost has at least minimal height
-            const diffMinutes = Math.max(endMinutes - startMinutes, 30); 
-            
-            const top = (startMinutes / 60) * 50;
+            const diffMinutes = Math.max(endMinutes - startMinutes, 30);
+
+            // Offset by the grid's first hour, the same as real events.
+            const top = (startMinutes / 60 - this.startHourNum) * 50;
             const height = (diffMinutes / 60) * 50;
             return { top: top + 'px', height: height + 'px' };
         }
@@ -275,23 +323,25 @@ var NativeCalendar = {
             </calendar-toolbar>
 
             <div class="flex-1 overflow-hidden relative">
-                <month-view v-if="currentView === 'Month'"
-                    :cells="monthCells"
+                <month-view v-if="isGridView"
+                    :rows="monthRows"
                     :week-days="weekDays"
                     :drag-state="dragState"
-                    :get-events-for-date="getEventsForDate"
                     :get-event-style="getEventStyle"
                     :is-today="isToday"
-                    :creating-event="creatingEvent"
                     @create-event="createMonthEvent"
                     @start-drag="startDrag"
-                    @select-event="selectEvent">
+                    @select-event="selectEvent"
+                    @show-day="showDay">
                 </month-view>
 
                 <time-grid-view v-if="currentView === 'Week' || currentView === 'Day'"
                     :current-view="currentView"
                     :visible-dates="visibleDates"
-                    :week-days="weekDays"
+                    :day-names="dayNames"
+                    :hours="hours"
+                    :start-hour-num="startHourNum"
+                    :all-day="allDayRows"
                     :is-today="isToday"
                     :current-time-top="currentTimeTop"
                     :drag-state="dragState"
@@ -328,8 +378,21 @@ var NativeCalendar = {
             </div>
         </div>
     `,
-    props: ['events', 'timeFormat', 'creatingEvent'],
-    emits: ['update:events', 'event-click', 'event-create'],
+    props: [
+        'events', 'timeFormat', 'creatingEvent',
+        // Controlled state. The shell owns the view and the date so that URL
+        // params, the search panel's jump-to-event, and the saved default view
+        // all have something to drive; the component asks for changes by
+        // emitting rather than mutating its own copy.
+        'currentView', 'selectedDate', 'views',
+        // Settings. Every one of these used to be hardcoded here, which is why
+        // the settings panel accepted input and changed nothing on screen.
+        'startHour', 'firstDayOfWeek', 'colors', 'readOnly', 'allowDrag', 'allowResize',
+    ],
+    emits: [
+        'update:events', 'event-click', 'event-create',
+        'update:currentView', 'update:selectedDate',
+    ],
     /**
      * @param {NativeCalendarProps} props
      * @param {Object} context
@@ -338,13 +401,70 @@ var NativeCalendar = {
     setup(props, { emit }) {
         const { ref, computed, onMounted, onUnmounted, watch } = Vue;
         
-        const currentView = ref('Month');
-        const views = ['Day', 'Week', 'Month', 'Year', 'Agenda']; 
-        const currentDate = ref(new Date());
-        const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        // View and date are props, not local refs: writing to either asks the
+        // shell to change it and the new value arrives back as a prop. Keeping
+        // a private copy here is what made ?d= / ?v= and jumpToEvent impossible.
+        const currentView = computed({
+            get: () => props.currentView || 'Month',
+            set: (v) => emit('update:currentView', v),
+        });
+        const currentDate = computed({
+            get: () => (props.selectedDate ? new Date(props.selectedDate) : new Date()),
+            set: (d) => emit('update:selectedDate', d),
+        });
+        const views = computed(() => (props.views && props.views.length)
+            ? props.views
+            : ['Day', 'Week', 'Month', 'Year', 'Agenda']);
+
+        const BUILT_IN_VIEWS = ['Day', 'Week', 'Month', 'Year', 'Agenda'];
+        // Views drawn as a month-style grid of week rows.
         const selectedEventId = ref(null);
-        
-        const colors = ["#3f51b5", "#e3165b", "#ff6652", "#4caf50", "#ff9800", "#03a9f4", "#9e9e9e", "#27282f"];
+
+        const DEFAULT_COLORS = ["#3f51b5", "#e3165b", "#ff6652", "#4caf50", "#ff9800", "#03a9f4", "#9e9e9e", "#27282f"];
+        // The palette is per-calendar and editable in settings, so it has to come
+        // from the shell rather than being frozen into the component.
+        const colors = computed(() => (props.colors && props.colors.length) ? props.colors : DEFAULT_COLORS);
+
+        // 0 = Sunday. date-fns takes this as weekStartsOn, and every grid that
+        // slices a week has to agree with it.
+        const weekStartsOn = computed(() => {
+            const n = parseInt(props.firstDayOfWeek);
+            return Number.isFinite(n) && n >= 0 && n <= 6 ? n : 0;
+        });
+        const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        // Column headers, rotated to start on the configured day.
+        const weekDays = computed(() =>
+            Array.from({ length: 7 }, (_, i) => DAY_NAMES[(i + weekStartsOn.value) % 7]));
+        // Unrotated, for anywhere that indexes by Date#getDay().
+        const dayNames = DAY_NAMES;
+
+        // First hour shown in the vertical views. "Extended" calendars pass
+        // '00:00'; the default is the 5am start the product has always had.
+        const startHourNum = computed(() => {
+            const raw = props.startHour;
+            if (typeof raw !== 'string' || !raw.includes(':')) return 0;
+            const h = parseInt(raw.split(':')[0]);
+            return Number.isFinite(h) && h >= 0 && h <= 23 ? h : 0;
+        });
+        const hours = computed(() =>
+            Array.from({ length: 24 - startHourNum.value }, (_, i) => startHourNum.value + i));
+        const HOUR_PX = 50;
+        // Pixel offset of a timestamp within the vertical grid, measured from the
+        // top of the first rendered hour rather than from midnight.
+        const minutesToTop = (date) => {
+            const d = new Date(date);
+            return ((d.getHours() * 60 + d.getMinutes()) / 60 - startHourNum.value) * HOUR_PX;
+        };
+
+        // A read-only calendar must not be editable through the grid either. The
+        // shell hides the chrome; without this the cells, drags and resize handles
+        // stayed live and a view-only link was fully writable.
+        const canEdit = computed(() => !props.readOnly);
+        // Touch devices get no drag or resize: on a phone, scrolling the grid was
+        // landing as an accidental move.
+        const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+        const dragEnabled = computed(() => canEdit.value && props.allowDrag !== false && !isTouch);
+        const resizeEnabled = computed(() => canEdit.value && props.allowResize !== false && !isTouch);
 
         // Drag State
         const dragState = ref({
@@ -371,12 +491,12 @@ var NativeCalendar = {
         const currentTitle = computed(() => {
             if (currentView.value === 'Day') return df.format(currentDate.value, 'MMMM d, yyyy');
             if (currentView.value === 'Week') {
-                const start = df.startOfWeek(currentDate.value);
-                const end = df.endOfWeek(currentDate.value);
+                const start = df.startOfWeek(currentDate.value, { weekStartsOn: weekStartsOn.value });
+                const end = df.endOfWeek(currentDate.value, { weekStartsOn: weekStartsOn.value });
                 return df.format(start, 'MMM d') + ' - ' + df.format(end, 'MMM d');
             }
             if (currentView.value === 'Agenda') {
-                const start = df.startOfWeek(currentDate.value);
+                const start = df.startOfWeek(currentDate.value, { weekStartsOn: weekStartsOn.value });
                 const end = df.addDays(start, 13);
                 return 'Agenda: ' + df.format(start, 'MMM d') + ' - ' + df.format(end, 'MMM d');
             }
@@ -391,67 +511,194 @@ var NativeCalendar = {
         const changeView = (view) => {
             currentView.value = view;
             if (view === 'Week' || view === 'Agenda') {
-                currentDate.value = df.startOfWeek(currentDate.value);
+                currentDate.value = df.startOfWeek(currentDate.value, { weekStartsOn: weekStartsOn.value });
             } else if (view === 'Year') {
                 currentDate.value = df.startOfYear(currentDate.value);
             }
         };
-        const prev = () => {
-            if (currentView.value === 'Month') currentDate.value = df.subMonths(currentDate.value, 1);
-            else if (currentView.value === 'Week') currentDate.value = df.subWeeks(currentDate.value, 1);
-            else if (currentView.value === 'Year') currentDate.value = df.subYears(currentDate.value, 1);
-            else if (currentView.value === 'Agenda') currentDate.value = df.subWeeks(currentDate.value, 2);
-            else currentDate.value = df.subDays(currentDate.value, 1);
+        // Step size for prev/next in the custom view ("3 Months", "12 Weeks").
+        const customStep = computed(() => {
+            const v = views.value.find(name => name === currentView.value && !BUILT_IN_VIEWS.includes(name));
+            if (!v) return null;
+            const match = /^(\d+)\s+(Week|Weeks|Month|Months)$/i.exec(v);
+            if (!match) return null;
+            return { count: parseInt(match[1]), unit: /week/i.test(match[2]) ? 'weeks' : 'months' };
+        });
+        const step = (direction) => {
+            const custom = customStep.value;
+            if (custom) {
+                currentDate.value = custom.unit === 'weeks'
+                    ? df.addWeeks(currentDate.value, direction * custom.count)
+                    : df.addMonths(currentDate.value, direction * custom.count);
+                return;
+            }
+            if (currentView.value === 'Month') currentDate.value = df.addMonths(currentDate.value, direction);
+            else if (currentView.value === 'Week') currentDate.value = df.addWeeks(currentDate.value, direction);
+            else if (currentView.value === 'Year') currentDate.value = df.addYears(currentDate.value, direction);
+            else if (currentView.value === 'Agenda') currentDate.value = df.addWeeks(currentDate.value, direction * 2);
+            else currentDate.value = df.addDays(currentDate.value, direction);
         };
-        const next = () => {
-            if (currentView.value === 'Month') currentDate.value = df.addMonths(currentDate.value, 1);
-            else if (currentView.value === 'Week') currentDate.value = df.addWeeks(currentDate.value, 1);
-            else if (currentView.value === 'Year') currentDate.value = df.addYears(currentDate.value, 1);
-            else if (currentView.value === 'Agenda') currentDate.value = df.addWeeks(currentDate.value, 2);
-            else currentDate.value = df.addDays(currentDate.value, 1);
-        };
+        const prev = () => step(-1);
+        const next = () => step(1);
+
+        // Month and the custom view share the week-row grid; a custom view
+        // measured in weeks or months is just a longer span of the same thing.
+        const isGridView = computed(() =>
+            currentView.value === 'Month' || customStep.value !== null);
         const today = () => currentDate.value = new Date();
+        // "+N more" jumps to the day so the hidden events are actually reachable.
+        const showDay = (date) => {
+            currentDate.value = df.startOfDay(date);
+            currentView.value = 'Day';
+        };
         const goToMonth = (date) => {
             currentDate.value = df.startOfMonth(date);
             currentView.value = 'Month';
         };
 
         // Grid Logic
-        const monthCells = computed(() => {
-            const start = df.startOfMonth(currentDate.value);
-            const end = df.endOfMonth(currentDate.value);
-            const days = df.eachDayOfInterval({ start, end });
-            const startDay = df.getDay(start);
-            const prevMonthDays = [];
-            for(let i = 0; i < startDay; i++) {
-                prevMonthDays.unshift({
-                    date: df.subDays(start, i + 1),
-                    dayNumber: df.getDate(df.subDays(start, i + 1)),
-                    isCurrentMonth: false
-                });
+        //
+        // The month grid is built as week rows so that multi-day events can draw
+        // across day boundaries. MAX_LANES caps how many bars a row shows before
+        // the rest collapse into a "+N more" link, the same way Syncfusion does.
+        const MAX_LANES = 3;
+
+        // A day is "in range" (not greyed out) when it belongs to the period the
+        // view is showing -- the current month, or the whole custom range.
+        const gridRange = computed(() => {
+            const custom = customStep.value;
+            if (custom && custom.unit === 'weeks') {
+                const start = df.startOfWeek(currentDate.value, { weekStartsOn: weekStartsOn.value });
+                return { start, end: df.endOfDay(df.addDays(start, custom.count * 7 - 1)) };
             }
-            const currentMonthDays = days.map(d => ({ date: d, dayNumber: df.getDate(d), isCurrentMonth: true }));
-            const totalCells = 42; 
-            const remaining = totalCells - (prevMonthDays.length + currentMonthDays.length);
-            const nextMonthDays = [];
-            for(let i = 1; i <= remaining; i++) {
-                nextMonthDays.push({
-                    date: df.addDays(end, i),
-                    dayNumber: df.getDate(df.addDays(end, i)),
-                    isCurrentMonth: false
-                });
+            if (custom) {
+                const start = df.startOfMonth(currentDate.value);
+                return { start, end: df.endOfMonth(df.addMonths(start, custom.count - 1)) };
             }
-            return [...prevMonthDays, ...currentMonthDays, ...nextMonthDays];
+            return {
+                start: df.startOfMonth(currentDate.value),
+                end: df.endOfMonth(currentDate.value),
+            };
+        });
+
+        // The last calendar day an event touches. An end that lands exactly on
+        // midnight belongs to the day before -- otherwise every 5pm-to-midnight
+        // event would draw a second, empty day.
+        const lastDayOf = (event) => {
+            const end = new Date(event.end);
+            const startOfEnd = df.startOfDay(end);
+            if (end.getTime() === startOfEnd.getTime() && end > new Date(event.start)) {
+                return df.subDays(startOfEnd, 1);
+            }
+            return startOfEnd;
+        };
+
+        // Greedy lane packing: put each bar in the topmost lane where nothing it
+        // overlaps already sits.
+        const assignLanes = (segments) => {
+            const lanes = [];
+            segments.forEach(seg => {
+                let lane = 0;
+                while (true) {
+                    const occupants = lanes[lane] || (lanes[lane] = []);
+                    const clash = occupants.some(o =>
+                        seg.startCol <= o.startCol + o.span - 1 && o.startCol <= seg.startCol + seg.span - 1);
+                    if (!clash) { occupants.push(seg); seg.lane = lane; break; }
+                    lane++;
+                }
+            });
+        };
+
+        // Clip one event to one week row, returning null when it does not reach
+        // this row at all.
+        const segmentFor = (event, rowStart, rowEnd, columns = 7) => {
+            const first = df.startOfDay(new Date(event.start));
+            const last = lastDayOf(event);
+            if (last < rowStart || first > rowEnd) return null;
+            const from = first < rowStart ? rowStart : first;
+            const to = last > rowEnd ? rowEnd : last;
+            const startCol = df.differenceInCalendarDays(from, rowStart);
+            const span = df.differenceInCalendarDays(to, from) + 1;
+            return {
+                key: event.id + '@' + rowStart.getTime(),
+                event,
+                startCol,
+                span: Math.max(1, Math.min(span, columns - startCol)),
+                continuesLeft: first < rowStart,
+                continuesRight: last > rowEnd,
+                showTime: !event.isAllDay && span === 1,
+                timeLabel: event.isAllDay ? '' : formatTime(event.start),
+                lane: 0,
+            };
+        };
+
+        const monthRows = computed(() => {
+            const range = gridRange.value;
+            const gridStart = df.startOfWeek(range.start, { weekStartsOn: weekStartsOn.value });
+            const gridEnd = df.endOfWeek(range.end, { weekStartsOn: weekStartsOn.value });
+            const events = processedEvents.value;
+            const ghost = props.creatingEvent && props.creatingEvent.isAllDay ? props.creatingEvent : null;
+
+            const rows = [];
+            let cursor = gridStart;
+            let index = 0;
+            while (cursor <= gridEnd) {
+                const rowStart = df.startOfDay(cursor);
+                const rowEnd = df.startOfDay(df.addDays(cursor, 6));
+
+                const segments = events
+                    .map(e => segmentFor(e, rowStart, rowEnd))
+                    .filter(Boolean)
+                    .sort((a, b) => a.startCol - b.startCol || b.span - a.span
+                        || new Date(a.event.start) - new Date(b.event.start));
+                assignLanes(segments);
+
+                // Anything past the cap becomes a per-day "+N more" count.
+                const hidden = new Array(7).fill(0);
+                segments.forEach(seg => {
+                    if (seg.lane < MAX_LANES) return;
+                    for (let c = seg.startCol; c < seg.startCol + seg.span; c++) hidden[c]++;
+                });
+
+                const days = Array.from({ length: 7 }, (_, i) => {
+                    const date = df.addDays(rowStart, i);
+                    const isMonthStart = df.getDate(date) === 1;
+                    return {
+                        date,
+                        index: index++,
+                        dayNumber: df.getDate(date),
+                        // Syncfusion labels the 1st of a month "Aug 1" so month
+                        // boundaries stay findable in a long scroll.
+                        label: isMonthStart ? df.format(date, 'MMM d') : String(df.getDate(date)),
+                        isMonthStart,
+                        inRange: date >= df.startOfDay(range.start) && date <= range.end,
+                        hiddenCount: hidden[i],
+                    };
+                });
+
+                rows.push({
+                    key: rowStart.toISOString(),
+                    days,
+                    bars: segments.filter(seg => seg.lane < MAX_LANES),
+                    ghost: ghost ? (() => {
+                        const seg = segmentFor({ id: '__ghost', start: ghost.start, end: ghost.end, isAllDay: true }, rowStart, rowEnd);
+                        if (seg) seg.lane = Math.min(MAX_LANES - 1, segments.length ? Math.max(...segments.map(x => x.lane)) + 1 : 0);
+                        return seg;
+                    })() : null,
+                });
+                cursor = df.addDays(cursor, 7);
+            }
+            return rows;
         });
 
         const visibleDates = computed(() => {
             if (currentView.value === 'Day') return [currentDate.value];
             if (currentView.value === 'Week') {
-                const start = df.startOfWeek(currentDate.value);
+                const start = df.startOfWeek(currentDate.value, { weekStartsOn: weekStartsOn.value });
                 return Array.from({ length: 7 }, (_, i) => df.addDays(start, i));
             }
             if (currentView.value === 'Agenda') {
-                const start = df.startOfWeek(currentDate.value);
+                const start = df.startOfWeek(currentDate.value, { weekStartsOn: weekStartsOn.value });
                 return Array.from({ length: 14 }, (_, i) => df.addDays(start, i));
             }
             return [];
@@ -463,10 +710,11 @@ var NativeCalendar = {
             
             // 1. Determine range (generous padding to avoid edge cases)
             let rangeStart, rangeEnd;
-            if (currentView.value === 'Month') {
-                 const start = df.startOfMonth(currentDate.value);
-                 rangeStart = df.subWeeks(start, 1);
-                 rangeEnd = df.addWeeks(df.endOfMonth(currentDate.value), 1);
+            if (isGridView.value) {
+                 // Covers Month and the custom "N Months" / "N Weeks" view, which
+                 // draw the same grid over a longer span.
+                 rangeStart = df.subWeeks(gridRange.value.start, 1);
+                 rangeEnd = df.addWeeks(gridRange.value.end, 1);
             } else if (currentView.value === 'Year') {
                  const start = df.startOfYear(currentDate.value);
                  rangeStart = df.subMonths(start, 1);
@@ -551,12 +799,45 @@ var NativeCalendar = {
         });
 
         // Event Logic
-        const getEventsForDate = (date) => {
-            return processedEvents.value.filter(e => df.isSameDay(new Date(e.start), date));
+        //
+        // Overlap, not start-day equality: an event that runs 10-13 Aug belongs to
+        // all four days, not just the 10th.
+        const occursOn = (event, date) => {
+            const day = df.startOfDay(date);
+            return df.startOfDay(new Date(event.start)) <= day && lastDayOf(event) >= day;
         };
+        const getEventsForDate = (date) => processedEvents.value.filter(e => occursOn(e, date));
+
+        // The vertical views split their events in two: all-day and multi-day
+        // events go in the lane above the grid, timed ones are positioned in it.
+        // Without the split, an all-day event was drawn as a midnight-to-midnight
+        // block that buried a whole day's real appointments.
+        const spansWholeDay = (event) => {
+            if (event.isAllDay) return true;
+            return !df.isSameDay(new Date(event.start), lastDayOf(event));
+        };
+        const getTimedEventsForDate = (date) =>
+            getEventsForDate(date).filter(e => !spansWholeDay(e));
+
+        // All-day lane for the visible range, laid out with the same clipping and
+        // lane packing the month rows use.
+        const allDayRows = computed(() => {
+            const dates = visibleDates.value;
+            if (!dates.length) return { lanes: 0, bars: [] };
+            const rowStart = df.startOfDay(dates[0]);
+            const rowEnd = df.startOfDay(dates[dates.length - 1]);
+            const segments = processedEvents.value
+                .filter(spansWholeDay)
+                .map(e => segmentFor(e, rowStart, rowEnd, dates.length))
+                .filter(Boolean)
+                .sort((a, b) => a.startCol - b.startCol || b.span - a.span);
+            assignLanes(segments);
+            const lanes = segments.reduce((max, seg) => Math.max(max, seg.lane + 1), 0);
+            return { lanes, bars: segments };
+        });
 
         const getEventsWithLayout = (date) => {
-            const dayEvents = getEventsForDate(date).map(e => ({...e}));
+            const dayEvents = getTimedEventsForDate(date).map(e => ({...e}));
             if (dayEvents.length === 0) return [];
             dayEvents.sort((a, b) => a.start - b.start || b.end - a.end);
             const columns = [];
@@ -607,7 +888,7 @@ var NativeCalendar = {
                     };
                 });
                 const monthEvents = processedEvents.value.filter(ev => df.isSameMonth(new Date(ev.start), monthDate));
-                const topColors = monthEvents.slice(0, 4).map(ev => colors[((ev.type || 1) - 1) % colors.length]);
+                const topColors = monthEvents.slice(0, 4).map(ev => colorFor(ev));
                 return {
                     key: df.format(monthDate, 'yyyy-MM'),
                     date: start,
@@ -624,14 +905,14 @@ var NativeCalendar = {
 
         const agendaSections = computed(() => {
             const dates = visibleDates.value;
-            const start = dates.length ? dates[0] : df.startOfWeek(currentDate.value);
+            const start = dates.length ? dates[0] : df.startOfWeek(currentDate.value, { weekStartsOn: weekStartsOn.value });
             const end = dates.length ? dates[dates.length - 1] : df.addDays(start, 13);
             const items = processedEvents.value
                 .filter(ev => df.isWithinInterval(new Date(ev.start), { start: df.startOfDay(start), end: df.endOfDay(end) }))
                 .sort((a, b) => a.start - b.start)
                 .map(ev => ({
                     ...ev,
-                    color: colors[((ev.type || 1) - 1) % colors.length],
+                    color: colorFor(ev),
                     timeLabel: ev.isAllDay ? 'All day' : `${formatTime(ev.start)} - ${formatTime(ev.end)}`,
                     dateObj: new Date(ev.start)
                 }));
@@ -655,40 +936,44 @@ var NativeCalendar = {
             return grouped;
         });
 
+        // colors is a computed, so it has to be unwrapped -- doing it in one
+        // helper keeps every caller from having to remember .value.
+        const colorFor = (event) => {
+            const palette = colors.value;
+            return palette[((event.type || 1) - 1) % palette.length];
+        };
+
         const getEventStyle = (event, isWeekView = false) => {
-            const color = colors[((event.type || 1) - 1) % colors.length];
+            const color = colorFor(event);
             if (isWeekView) return { borderLeftColor: color, backgroundColor: color + '20', color: color, ...event.style };
             return { backgroundColor: color, color: 'white' };
         };
 
-        const getWeekEventPosition = (event) => {
-            const start = new Date(event.start);
-            const end = new Date(event.end);
-            const startMinutes = start.getHours() * 60 + start.getMinutes();
-            const endMinutes = end.getHours() * 60 + end.getMinutes();
-            const top = (startMinutes / 60) * 50;
-            const height = Math.max(((endMinutes - startMinutes) / 60) * 50, 20);
-            return { top: top + 'px', height: height + 'px' };
+        // Heights are measured from the first rendered hour, so a grid that starts
+        // at 05:00 does not push every event 250px too low.
+        const spanStyle = (startMs, endMs) => {
+            const top = minutesToTop(startMs);
+            const bottom = minutesToTop(endMs);
+            return { top: top + 'px', height: Math.max(bottom - top, 20) + 'px' };
         };
 
-        const getGhostStyle = () => {
-            const start = new Date(dragState.value.originalStart);
-            const end = new Date(dragState.value.originalEnd);
-            const startMinutes = start.getHours() * 60 + start.getMinutes();
-            const endMinutes = end.getHours() * 60 + end.getMinutes();
-            const top = (startMinutes / 60) * 50;
-            const height = Math.max(((endMinutes - startMinutes) / 60) * 50, 20);
-            return { top: top + 'px', height: height + 'px', width: '80%', left: '0%' };
-        };
+        const getWeekEventPosition = (event) => spanStyle(event.start, event.end);
+
+        const getGhostStyle = () => ({
+            ...spanStyle(dragState.value.originalStart, dragState.value.originalEnd),
+            width: '80%', left: '0%',
+        });
 
         // Interaction Emitters
         const createMonthEvent = (date, evt) => {
+            if (!canEdit.value) return;
             const start = df.startOfDay(date);
             const end = df.endOfDay(date);
             emit('event-create', { start: start.getTime(), end: end.getTime(), isAllDay: true, event: evt });
         };
 
         const createTimeEvent = (date, event) => {
+            if (!canEdit.value) return;
             if (dragState.value.isDragging || dragState.value.wasDragging) return;
             if (event.target.closest('.event-card')) return;
             
@@ -722,6 +1007,7 @@ var NativeCalendar = {
         // In a real app, we might emit 'event-update' here
         const startDrag = (event, e, action) => {
             if (e.button !== 0) return;
+            if (action === 'resize' ? !resizeEnabled.value : !dragEnabled.value) return;
             
             if (event.isRecurringInstance) {
                 // Disable drag for recurring for now
@@ -786,8 +1072,7 @@ var NativeCalendar = {
         // Time Indicator
         const currentTimeTop = ref(0);
         const updateTimeIndicator = () => {
-            const now = new Date();
-            currentTimeTop.value = ((now.getHours() * 60 + now.getMinutes()) / 60) * 50;
+            currentTimeTop.value = minutesToTop(new Date());
         };
         
         onMounted(() => {
@@ -802,9 +1087,9 @@ var NativeCalendar = {
         });
 
         return {
-            currentView, views, currentTitle, weekDays, monthCells, visibleDates,
-            yearMonths, agendaSections,
-            prev, next, today, changeView, goToMonth,
+            currentView, views, currentTitle, weekDays, dayNames, monthRows, visibleDates,
+            yearMonths, agendaSections, isGridView, hours, startHourNum, allDayRows,
+            prev, next, today, changeView, goToMonth, showDay,
             getEventsForDate, getEventsWithLayout, getEventStyle, getWeekEventPosition, getGhostStyle, formatTime,
             createMonthEvent, createTimeEvent, startDrag, selectEvent,
             dragState, eventCursor, currentTimeTop, selectedEventId, isToday, isSameDay

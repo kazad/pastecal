@@ -12,14 +12,22 @@
       "**/.*",
       "**/node_modules/**"
     ],
+    "redirects": [
+      {
+        "source": "/nativecal",
+        "destination": "/?cal=native",
+        "type": 302
+      },
+      {
+        "source": "/nativecal/:slug",
+        "destination": "/:slug?cal=native",
+        "type": 302
+      }
+    ],
     "rewrites": [
       {
         "source": "/**/*.ics",
         "function": "generateICSV2"
-      },
-      {
-        "source": "/nativecal/**",
-        "destination": "/nativecal/index.html"
       },
       {
         "source": "**",

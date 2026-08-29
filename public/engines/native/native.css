@@ -1,0 +1,249 @@
+/* NativeCal specific styles */
+
+/* The host has no definite height of its own -- #cal2_wrap's height:100% resolves
+   against an auto-height parent -- so the grid needs a floor to fill, the same way
+   style.css gives #Schedule min-height: 80vh under Syncfusion. */
+.native-host {
+    width: 100%;
+    height: 100%;
+    min-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+.native-host > * {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+/* Month grid.
+   Built as week rows rather than 42 loose cells: an event that spans days has to
+   draw across them, which means a bars layer that can use grid-column spans. Each
+   row is two stacked layers -- the cells take the clicks, the bars sit on top. */
+.calendar-grid {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--border-color);
+    border-left: 1px solid var(--border-color);
+    flex: 1 1 auto;
+    min-height: 0;
+}
+.month-row {
+    position: relative;
+    flex: 1 1 0;
+    min-height: 100px;
+}
+.month-row-cells {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    position: absolute;
+    inset: 0;
+}
+.calendar-cell {
+    border-right: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+    padding: 0.25rem;
+    background: var(--bg);
+    color: var(--fg);
+    display: flex;
+    flex-direction: column;
+    cursor: pointer;
+    min-width: 0;
+}
+.calendar-cell:hover {
+    background: var(--bg-interactive-hover);
+}
+.calendar-cell.is-outside {
+    background: var(--bg-disabled);
+}
+.calendar-cell.is-outside .day-number {
+    opacity: 0.45;
+}
+.calendar-cell.is-today {
+    background: color-mix(in srgb, var(--bg-interactive-hover) 60%, transparent);
+}
+
+.day-number {
+    font-size: 0.75rem;
+    font-weight: 500;
+    margin-left: auto;
+    height: 1.55rem;
+    min-width: 1.55rem;
+    padding: 0 0.35rem;
+    border-radius: 999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-color-2);
+    flex: none;
+}
+.day-number.is-today-number {
+    background: #2563eb;
+    color: #fff;
+}
+/* The 1st of a month reads "Aug 1" so month boundaries stay findable. */
+.day-number.month-start {
+    font-weight: 700;
+}
+
+/* Bars layer. Pointer events are off on the container so the empty space between
+   bars still opens the create popover on the cell underneath. */
+.month-row-bars {
+    position: absolute;
+    top: 1.9rem;
+    left: 0;
+    right: 0;
+    bottom: 0.15rem;
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    grid-auto-rows: 20px;
+    gap: 2px 0;
+    pointer-events: none;
+    padding: 0 2px;
+}
+.month-bar {
+    pointer-events: auto;
+    margin: 0 2px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 0.75rem;
+    line-height: 18px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    user-select: none;
+}
+.month-bar:hover {
+    filter: brightness(0.93);
+}
+/* Square off the edge where a bar is clipped by the week boundary, so it reads
+   as continuing into the next row rather than ending there. */
+.month-bar.continues-left {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    margin-left: 0;
+}
+.month-bar.continues-right {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    margin-right: 0;
+}
+.month-bar.is-dragging {
+    opacity: 0.5;
+}
+.month-bar.is-ghost {
+    background: var(--panel-bg) !important;
+    color: var(--text-color-1) !important;
+    border: 1px dashed var(--border-color);
+}
+.month-bar-time {
+    opacity: 0.8;
+    margin-right: 0.25rem;
+}
+
+.month-more {
+    margin-top: auto;
+    font-size: 0.7rem;
+    color: var(--text-color-1);
+    text-align: left;
+    padding: 0 0.25rem;
+    z-index: 1;
+}
+.month-more:hover {
+    text-decoration: underline;
+}
+
+/* All-day lane in the Day and Week views. */
+.all-day-lane {
+    max-height: 6rem;
+    overflow-y: auto;
+}
+.all-day-label {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-color-1);
+    padding: 0.35rem 0.5rem;
+    text-align: right;
+}
+.all-day-bars {
+    display: grid;
+    grid-auto-rows: 20px;
+    gap: 2px 0;
+    padding: 0.25rem 2px;
+}
+
+/* Hour labels sit on the line that starts their hour, so the whole column is
+   nudged up by half a line -- once, not per label. */
+.time-labels {
+    margin-top: -0.6rem;
+}
+/* The first label names the top edge of the grid, where the pull-up would clip it
+   anyway and where there is no line above it to name. */
+.time-labels > div:first-child {
+    visibility: hidden;
+}
+
+/* Time grid (Week/Day) */
+.time-grid {
+    display: grid;
+    /* Grid template columns set dynamically via inline style */
+}
+.time-col {
+    border-right: 1px solid var(--border-color);
+    min-width: 0; 
+    position: relative;
+    background: var(--bg);
+}
+.hour-row {
+    height: 50px; /* 50px per hour */
+    border-bottom: 1px solid var(--bg-interactive-hover);
+    box-sizing: border-box;
+}
+
+.event-card {
+    transition: box-shadow 0.1s, transform 0.1s, width 0.2s ease-out, left 0.2s ease-out;
+    z-index: 10;
+}
+
+.event-card:hover {
+    z-index: 50 !important;
+}
+
+.event-card.is-dragging {
+    opacity: 0.5;
+    z-index: 60 !important;
+}
+
+/* Active Drag State */
+.event-card.dragging-active {
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    z-index: 100 !important;
+    opacity: 0.9;
+}
+
+.event-card.dragging-move-active {
+    transform: rotate(3deg) scale(1.02);
+}
+
+.resize-handle {
+    cursor: ns-resize;
+}
+.resize-handle:hover {
+    background-color: rgba(0,0,0,0.1);
+}
+
+/* Drag Ghost */
+.drag-ghost {
+    position: fixed;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.9;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    transform: translate(-50%, -50%) rotate(3deg) scale(1.05);
+}
+
+/* Scrollbar utility */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
