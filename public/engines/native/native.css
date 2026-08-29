@@ -11,7 +11,12 @@
     flex-direction: column;
     overflow: hidden;
 }
-.native-host > * {
+/* Height comes from flex all the way down. The chain used to be percentage
+   heights (h-full), which silently resolve to auto wherever an ancestor has no
+   definite height -- the grid then sat at its 100px-per-row minimum with dead
+   space beneath it. */
+.native-host > *,
+.native-fill {
     flex: 1 1 auto;
     min-height: 0;
 }
@@ -247,3 +252,66 @@
 /* Scrollbar utility */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+
+/* Year view: a real mini-month per card, with up to three type-coloured dots on
+   any day that has something on it. */
+.year-day {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    padding: 2px 0 3px;
+    line-height: 1.1;
+    border-radius: 3px;
+}
+.year-day:hover {
+    background: var(--bg-interactive-hover);
+}
+.year-dots {
+    display: flex;
+    gap: 2px;
+    height: 4px;
+    align-items: center;
+}
+.year-dots i {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    display: block;
+}
+
+/* Toolbar title acts as a date picker trigger. */
+.toolbar-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.1rem 0.35rem;
+    border-radius: 4px;
+}
+.toolbar-title:hover {
+    background: var(--bg-interactive-hover);
+}
+.toolbar-caret {
+    font-size: 0.7em;
+    opacity: 0.6;
+}
+.toolbar-picker {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 60;
+    background: var(--panel-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 0.5rem;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16);
+}
+.toolbar-picker input {
+    background: var(--bg);
+    color: var(--text-color-2);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 0.3rem 0.4rem;
+    font-size: 0.85rem;
+}

@@ -14,8 +14,23 @@ const CalendarToolbar = {
                     <button @click="$emit('today')" data-testid="nav-today" class="px-3 text-xs font-bold hover:bg-1 rounded-md h-7 text-color-2 uppercase tracking-wide">Today</button>
                     <button @click="$emit('next')" data-testid="nav-next" class="px-2 hover:bg-1 rounded-md h-7 flex items-center text-color-1 text-lg leading-none mb-0.5">&rsaquo;</button>
                 </div>
-                <!-- Date Range -->
-                <div class="text-xl font-medium text-color-2" data-testid="current-date-range">{{ currentTitle }}</div>
+                <!-- Date Range. Clicking it opens a date picker, the way Syncfusion's
+                     title caret does -- without it there was no way to reach a distant
+                     month except by paging one step at a time. -->
+                <div class="relative">
+                    <button type="button" class="toolbar-title text-xl font-medium text-color-2"
+                            data-testid="current-date-range"
+                            :aria-expanded="pickerOpen ? 'true' : 'false'"
+                            @click="pickerOpen = !pickerOpen">
+                        {{ currentTitle }}
+                        <span class="toolbar-caret" aria-hidden="true">&#9662;</span>
+                    </button>
+                    <div v-if="pickerOpen" class="toolbar-picker" v-click-outside="closePicker">
+                        <input type="date" ref="picker" :value="pickerValue"
+                               data-testid="toolbar-date-picker"
+                               @change="pickDate($event.target.value)">
+                    </div>
+                </div>
             </div>
 
             <!-- View Switcher -->
@@ -30,8 +45,30 @@ const CalendarToolbar = {
             </div>
         </div>
     `,
-    props: ['currentTitle', 'currentView', 'views'],
-    emits: ['prev', 'next', 'today', 'change-view']
+    props: ['currentTitle', 'currentView', 'views', 'selectedDate'],
+    emits: ['prev', 'next', 'today', 'change-view', 'pick-date'],
+    data() {
+        return { pickerOpen: false };
+    },
+    computed: {
+        pickerValue() {
+            const d = this.selectedDate ? new Date(this.selectedDate) : new Date();
+            if (isNaN(d.getTime())) return '';
+            const pad = n => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+        }
+    },
+    methods: {
+        closePicker() { this.pickerOpen = false; },
+        pickDate(value) {
+            if (!value) return;
+            // Parse as local midnight; `new Date('2026-03-15')` is UTC and lands on
+            // the previous day for anyone west of Greenwich.
+            const [y, m, d] = value.split('-').map(Number);
+            this.$emit('pick-date', new Date(y, m - 1, d));
+            this.pickerOpen = false;
+        }
+    }
 };
 
 // Month (and the custom "N Months" / "N Weeks" view, which is the same grid over
@@ -45,7 +82,7 @@ const CalendarToolbar = {
 // first day and was invisible on the other three.
 const MonthView = {
     template: /* html */ `
-        <div class="h-full flex flex-col overflow-y-auto bg-1">
+        <div class="native-fill flex flex-col overflow-y-auto bg-1">
             <div class="grid grid-cols-7 border-b border-color-default bg-2">
                 <div v-for="day in weekDays" :key="day" class="py-2 text-center text-sm font-semibold text-color-1 uppercase tracking-wide">
                     {{ day }}
@@ -106,7 +143,7 @@ const MonthView = {
 
 const TimeGridView = {
     template: /* html */ `
-        <div class="h-full flex flex-col bg-1">
+        <div class="native-fill flex flex-col bg-1">
             <div class="border-b border-color-default bg-1 flex-shrink-0 grid"
                  :style="{ gridTemplateColumns: '60px repeat(' + visibleDates.length + ', 1fr)' }">
                 <div class="border-r border-color-default p-2"></div>
@@ -262,12 +299,17 @@ var NativeCalendar = {
                             <div class="grid grid-cols-7 gap-1 text-[10px] text-color-1 mb-2">
                                 <span v-for="day in month.weekLabels" :key="day" class="text-center uppercase tracking-wide">{{ day }}</span>
                             </div>
-                            <div class="grid grid-cols-7 gap-1 text-[10px] leading-5">
-                                <span v-for="day in month.previewDays" :key="day.key"
-                                      class="rounded px-1 text-center"
-                                      :class="day.isToday ? 'bg-blue-600 text-white font-bold' : (day.isCurrentMonth ? 'bg-1 text-color-2' : 'text-color-1 bg-transparent')">
-                                    {{ day.label }}
-                                </span>
+                            <div class="grid grid-cols-7 gap-1 text-[10px]">
+                                <button v-for="day in month.previewDays" :key="day.key" type="button"
+                                      class="year-day rounded text-center"
+                                      :class="day.isToday ? 'bg-blue-600 text-white font-bold' : (day.isCurrentMonth ? 'text-color-2' : 'text-color-1 opacity-40')"
+                                      :data-testid="'year-day-' + day.key"
+                                      @click.stop="$emit('jump-to-day', day.date)">
+                                    <span>{{ day.label }}</span>
+                                    <span class="year-dots">
+                                        <i v-for="(c, ci) in day.dotColors" :key="ci" :style="{ backgroundColor: c }"></i>
+                                    </span>
+                                </button>
                             </div>
                             <div class="flex gap-1 mt-3">
                                 <span v-for="(color, idx) in month.topColors" :key="idx" class="w-2.5 h-2.5 rounded-full" :style="{ backgroundColor: color }"></span>
@@ -278,7 +320,7 @@ var NativeCalendar = {
                 </div>
             `,
             props: ['months'],
-            emits: ['jump-to-month']
+            emits: ['jump-to-month', 'jump-to-day']
         },
         'agenda-view': {
             template: /* html */ `
@@ -311,18 +353,20 @@ var NativeCalendar = {
         }
     },
     template: /* html */ `
-        <div class="flex flex-col h-full w-full bg-1">
+        <div class="native-fill flex flex-col w-full bg-1">
             <calendar-toolbar
                 :current-title="currentTitle"
                 :current-view="currentView"
                 :views="views"
+                :selected-date="selectedDate"
                 @prev="prev"
                 @next="next"
                 @today="today"
+                @pick-date="goToDate"
                 @change-view="changeView">
             </calendar-toolbar>
 
-            <div class="flex-1 overflow-hidden relative">
+            <div class="flex-1 min-h-0 overflow-hidden relative flex flex-col">
                 <month-view v-if="isGridView"
                     :rows="monthRows"
                     :week-days="weekDays"
@@ -362,7 +406,8 @@ var NativeCalendar = {
                 
                 <year-view v-if="currentView === 'Year'"
                     :months="yearMonths"
-                    @jump-to-month="goToMonth">
+                    @jump-to-month="goToMonth"
+                    @jump-to-day="showDay">
                 </year-view>
 
                 <agenda-view v-if="currentView === 'Agenda'"
@@ -547,6 +592,8 @@ var NativeCalendar = {
             currentView.value === 'Month' || customStep.value !== null);
         const today = () => currentDate.value = new Date();
         // "+N more" jumps to the day so the hidden events are actually reachable.
+        // Jump to a date from the toolbar picker, staying in the current view.
+        const goToDate = (date) => { currentDate.value = date; };
         const showDay = (date) => {
             currentDate.value = df.startOfDay(date);
             currentView.value = 'Day';
@@ -766,17 +813,33 @@ var NativeCalendar = {
                             
                         const options = rrulestr(ruleString).options;
                         options.dtstart = new Date(event.start);
+
+                        // A rule string with no DTSTART makes rrule fill byhour/
+                        // byminute/bysecond from the current clock, and those survive
+                        // replacing dtstart -- so every occurrence rendered at whatever
+                        // time the page happened to load rather than the event's own
+                        // time. Clearing them lets rrule re-derive the time of day from
+                        // dtstart, which is what we actually want. Anything the rule
+                        // asked for explicitly is left alone.
+                        if (!/BYHOUR=/i.test(ruleString)) options.byhour = null;
+                        if (!/BYMINUTE=/i.test(ruleString)) options.byminute = null;
+                        if (!/BYSECOND=/i.test(ruleString)) options.bysecond = null;
+
                         
                         const rule = new RRule(options);
                         
                         const dates = rule.between(rangeStart, rangeEnd, true);
                         
-                        const duration = event.end - event.start;
+                        // start/end are ISO strings on the stored model (and numbers
+                        // once a drag has touched them), so subtracting them raw gave
+                        // NaN -- every expanded instance got end: NaN, which made its
+                        // month bar span NaN columns and its week block have no height.
+                        const duration = new Date(event.end).getTime() - new Date(event.start).getTime();
                         
                         dates.forEach(date => {
                              // Virtual event
                              const start = date.getTime();
-                             const end = start + duration;
+                             const end = start + (Number.isFinite(duration) && duration > 0 ? duration : 60 * 60 * 1000);
                              results.push({
                                  ...event,
                                  start,
@@ -878,17 +941,35 @@ var NativeCalendar = {
             return Array.from({ length: 12 }, (_, i) => {
                 const monthDate = df.addMonths(startOfYear, i);
                 const start = df.startOfMonth(monthDate);
-                const previewDays = Array.from({ length: 14 }, (_, idx) => {
-                    const dayDate = df.addDays(start, idx);
+                const monthEnd = df.endOfMonth(monthDate);
+                const monthEvents = processedEvents.value.filter(ev =>
+                    new Date(ev.start) <= df.endOfDay(monthEnd) && lastDayOf(ev) >= start);
+
+                // A whole month, aligned to the configured first day of the week --
+                // the old version showed a fixed 14-day strip from the 1st, which is
+                // not a calendar and hid the second half of every month.
+                const gridStart = df.startOfWeek(start, { weekStartsOn: weekStartsOn.value });
+                const gridEnd = df.endOfWeek(monthEnd, { weekStartsOn: weekStartsOn.value });
+                const dayCount = df.differenceInCalendarDays(gridEnd, gridStart) + 1;
+                const previewDays = Array.from({ length: dayCount }, (_, idx) => {
+                    const dayDate = df.addDays(gridStart, idx);
+                    const onDay = monthEvents.filter(ev => occursOn(ev, dayDate));
+                    // Up to three dots, one per distinct type, as Syncfusion does.
+                    const dotColors = [...new Set(onDay.map(ev => ev.type || 1))]
+                        .slice(0, 3)
+                        .map(type => colorFor({ type }));
                     return {
                         key: df.format(dayDate, 'yyyy-MM-dd'),
+                        date: dayDate,
                         label: df.getDate(dayDate),
                         isCurrentMonth: df.isSameMonth(dayDate, monthDate),
-                        isToday: df.isSameDay(dayDate, today)
+                        isToday: df.isSameDay(dayDate, today),
+                        dotColors,
                     };
                 });
-                const monthEvents = processedEvents.value.filter(ev => df.isSameMonth(new Date(ev.start), monthDate));
-                const topColors = monthEvents.slice(0, 4).map(ev => colorFor(ev));
+                const topColors = [...new Set(monthEvents.map(ev => ev.type || 1))]
+                    .slice(0, 4)
+                    .map(type => colorFor({ type }));
                 return {
                     key: df.format(monthDate, 'yyyy-MM'),
                     date: start,
@@ -896,7 +977,7 @@ var NativeCalendar = {
                     year: df.format(monthDate, 'yyyy'),
                     previewDays,
                     topColors,
-                    weekLabels: ['S', 'M', 'T', 'W', 'T', 'F', 'S'],
+                    weekLabels: weekDays.value.map(d => d.charAt(0)),
                     count: monthEvents.length,
                     isCurrent: df.isSameMonth(monthDate, today)
                 };
@@ -907,9 +988,16 @@ var NativeCalendar = {
             const dates = visibleDates.value;
             const start = dates.length ? dates[0] : df.startOfWeek(currentDate.value, { weekStartsOn: weekStartsOn.value });
             const end = dates.length ? dates[dates.length - 1] : df.addDays(start, 13);
+            const rangeStart = df.startOfDay(start);
+            const rangeEnd = df.endOfDay(end);
             const items = processedEvents.value
-                .filter(ev => df.isWithinInterval(new Date(ev.start), { start: df.startOfDay(start), end: df.endOfDay(end) }))
-                .sort((a, b) => a.start - b.start)
+                // Overlap, so a multi-day event still appears while it is running
+                // rather than only on the day it began.
+                .filter(ev => new Date(ev.start) <= rangeEnd && lastDayOf(ev) >= rangeStart)
+                // start is an ISO string on the stored model, so subtracting the raw
+                // values gave NaN and left the list in insertion order -- the agenda
+                // was not chronological at all.
+                .sort((a, b) => new Date(a.start) - new Date(b.start))
                 .map(ev => ({
                     ...ev,
                     color: colorFor(ev),
@@ -1089,7 +1177,8 @@ var NativeCalendar = {
         return {
             currentView, views, currentTitle, weekDays, dayNames, monthRows, visibleDates,
             yearMonths, agendaSections, isGridView, hours, startHourNum, allDayRows,
-            prev, next, today, changeView, goToMonth, showDay,
+            prev, next, today, changeView, goToMonth, showDay, goToDate,
+            selectedDate: computed(() => currentDate.value),
             getEventsForDate, getEventsWithLayout, getEventStyle, getWeekEventPosition, getGhostStyle, formatTime,
             createMonthEvent, createTimeEvent, startDrag, selectEvent,
             dragState, eventCursor, currentTimeTop, selectedEventId, isToday, isSameDay

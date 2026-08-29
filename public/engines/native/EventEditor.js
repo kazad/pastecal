@@ -46,7 +46,7 @@ const EventEditor = {
                          <div class="flex gap-4 mb-2">
                             <div class="flex-1">
                                 <label class="block text-xs font-medium text-color-1 uppercase mb-1">Repeat</label>
-                                <select v-model="recurrenceFreq" data-testid="editor-repeat" class="w-full p-2 border border-color-default rounded text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-1 text-color-2">
+                                <select v-model="recurrenceFreq" @change="touchRecurrence" data-testid="editor-repeat" class="w-full p-2 border border-color-default rounded text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-1 text-color-2">
                                     <option value="">Does not repeat</option>
                                     <option value="DAILY">Daily</option>
                                     <option value="WEEKLY">Weekly</option>
@@ -55,27 +55,103 @@ const EventEditor = {
                                 </select>
                             </div>
                         </div>
-                        <div class="flex gap-4" v-if="recurrenceFreq">
+                        <div v-if="recurrenceFreq" class="space-y-3">
                             <div class="w-1/3">
                                 <label class="block text-xs font-medium text-color-1 uppercase mb-1">Every</label>
                                 <div class="flex items-center">
-                                    <input type="number" v-model="recurrenceInterval" min="1" class="w-16 p-2 border border-color-default rounded text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-1 text-color-2 mr-2">
+                                    <input type="number" v-model="recurrenceInterval" min="1" @change="touchRecurrence"
+                                           data-testid="editor-repeat-interval"
+                                           class="w-16 p-2 border border-color-default rounded text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-1 text-color-2 mr-2">
                                     <span class="text-sm text-color-2 lowercase">{{ getFreqLabel() }}</span>
                                 </div>
                             </div>
-                            <div class="flex-1">
-                                <label class="block text-xs font-medium text-color-1 uppercase mb-1">Until (Optional)</label>
-                                <input type="date" v-model="recurrenceUntil" class="w-full p-2 border border-color-default rounded text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-1 text-color-2">
+
+                            <!-- Which days a weekly rule fires on -->
+                            <div v-if="recurrenceFreq === 'WEEKLY'">
+                                <label class="block text-xs font-medium text-color-1 uppercase mb-1">On</label>
+                                <div class="flex gap-1" data-testid="editor-repeat-byday">
+                                    <button v-for="day in weekdays" :key="day.code" type="button"
+                                            @click="toggleByDay(day.code)"
+                                            :aria-pressed="recurrenceByDay.includes(day.code) ? 'true' : 'false'"
+                                            :data-testid="'editor-byday-' + day.code"
+                                            class="w-8 h-8 rounded-full text-xs font-semibold border border-color-default transition-colors"
+                                            :class="recurrenceByDay.includes(day.code) ? 'bg-blue-600 text-white border-blue-600' : 'bg-1 text-color-2 hover:bg-2'">
+                                        {{ day.label }}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Monthly rules repeat on a date or on a weekday position -->
+                            <div v-if="recurrenceFreq === 'MONTHLY'">
+                                <label class="block text-xs font-medium text-color-1 uppercase mb-1">Repeats on</label>
+                                <div class="flex flex-col gap-1 text-sm text-color-2">
+                                    <label class="flex items-center gap-2">
+                                        <input type="radio" value="date" v-model="monthlyMode" @change="touchRecurrence"
+                                               data-testid="editor-monthly-date" class="accent-blue-600">
+                                        day {{ monthlyDayOfMonth }} of the month
+                                    </label>
+                                    <label class="flex items-center gap-2">
+                                        <input type="radio" value="weekday" v-model="monthlyMode" @change="touchRecurrence"
+                                               data-testid="editor-monthly-weekday" class="accent-blue-600">
+                                        the {{ monthlyPosition.label }}
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Ends -->
+                            <div>
+                                <label class="block text-xs font-medium text-color-1 uppercase mb-1">Ends</label>
+                                <div class="flex flex-col gap-1 text-sm text-color-2">
+                                    <label class="flex items-center gap-2">
+                                        <input type="radio" value="never" v-model="recurrenceEnd" @change="touchRecurrence"
+                                               data-testid="editor-ends-never" class="accent-blue-600">
+                                        Never
+                                    </label>
+                                    <label class="flex items-center gap-2">
+                                        <input type="radio" value="until" v-model="recurrenceEnd" @change="touchRecurrence"
+                                               data-testid="editor-ends-until" class="accent-blue-600">
+                                        On
+                                        <input type="date" v-model="recurrenceUntil" @change="touchRecurrence"
+                                               :disabled="recurrenceEnd !== 'until'"
+                                               data-testid="editor-repeat-until"
+                                               class="flex-1 p-1 border border-color-default rounded text-sm bg-1 text-color-2 disabled:opacity-50">
+                                    </label>
+                                    <label class="flex items-center gap-2">
+                                        <input type="radio" value="count" v-model="recurrenceEnd" @change="touchRecurrence"
+                                               data-testid="editor-ends-count" class="accent-blue-600">
+                                        After
+                                        <input type="number" min="1" v-model.number="recurrenceCount" @change="touchRecurrence"
+                                               :disabled="recurrenceEnd !== 'count'"
+                                               data-testid="editor-repeat-count"
+                                               class="w-20 p-1 border border-color-default rounded text-sm bg-1 text-color-2 disabled:opacity-50">
+                                        occurrences
+                                    </label>
+                                </div>
                             </div>
                         </div>
+
+                        <!-- A rule using parts this editor cannot show. Saving keeps it
+                             as-is unless a recurrence control is actually touched. -->
+                        <p v-if="unsupportedRule" data-testid="editor-repeat-advanced"
+                           class="mt-2 text-xs text-color-1 italic">
+                            This event uses an advanced repeat rule. It is kept as-is unless you change something here.
+                        </p>
                     </div>
 
                     <div class="mb-4">
-                        <label class="block text-xs font-medium text-color-1 uppercase mb-1">Color</label>
+                        <label class="block text-xs font-medium text-color-1 uppercase mb-1">
+                            Type
+                            <span class="normal-case font-normal text-color-2" data-testid="editor-type-label">
+                                &middot; {{ typeLabelFor((localEvent.type || 1) - 1) }}
+                            </span>
+                        </label>
                         <div class="flex gap-2 flex-wrap">
                             <button v-for="(color, idx) in colors" :key="idx"
                                     type="button"
                                     @click="localEvent.type = idx + 1"
+                                    :title="typeLabelFor(idx)"
+                                    :aria-label="typeLabelFor(idx)"
+                                    :data-testid="'editor-type-' + (idx + 1)"
                                     class="w-6 h-6 rounded-full transition-transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-gray-400"
                                     :class="{'ring-2 ring-offset-1 ring-black': localEvent.type === idx + 1}"
                                     :style="{ backgroundColor: color }">
@@ -112,6 +188,12 @@ const EventEditor = {
         colors: {
             type: Array,
             default: () => ["#3f51b5", "#e3165b", "#ff6652", "#4caf50", "#ff9800", "#03a9f4", "#9e9e9e", "#27282f"]
+        },
+        // The user's own names for the eight types. Syncfusion's editor shows these
+        // in its dropdown; unlabelled swatches lose them exactly where they matter.
+        typeLabels: {
+            type: Array,
+            default: () => []
         }
     },
     emits: ['update:visible', 'save', 'delete'],
@@ -129,6 +211,73 @@ const EventEditor = {
         const recurrenceFreq = ref('');
         const recurrenceInterval = ref(1);
         const recurrenceUntil = ref('');
+        // Which weekdays a weekly rule fires on (BYDAY).
+        const recurrenceByDay = ref([]);
+        // Monthly rules repeat either on a date ("the 14th") or on a weekday
+        // position ("the third Tuesday", BYDAY + BYSETPOS).
+        const monthlyMode = ref('date');
+        // How the rule ends: never, on a date (UNTIL), or after N (COUNT).
+        const recurrenceEnd = ref('never');
+        const recurrenceCount = ref(10);
+
+        const WEEKDAYS = [
+            { code: 'SU', label: 'S' }, { code: 'MO', label: 'M' }, { code: 'TU', label: 'T' },
+            { code: 'WE', label: 'W' }, { code: 'TH', label: 'T' }, { code: 'FR', label: 'F' },
+            { code: 'SA', label: 'S' },
+        ];
+
+        // The rule exactly as it arrived. If the user never touches a recurrence
+        // control, this is what gets saved back -- see the note on recurrenceDirty.
+        const originalRule = ref('');
+        const recurrenceDirty = ref(false);
+        const touchRecurrence = () => { recurrenceDirty.value = true; };
+
+        // Parts of RRULE this editor can represent. A rule using anything else
+        // (BYMONTHDAY lists, BYWEEKNO, BYYEARDAY...) would be silently rewritten
+        // into something simpler on save, so instead we keep it untouched and say
+        // so. Syncfusion's editor writes BYDAY, BYSETPOS and COUNT, so rules
+        // created there round-trip; rules from an imported ICS may not.
+        const SUPPORTED_PARTS = ['FREQ', 'INTERVAL', 'BYDAY', 'BYSETPOS', 'COUNT', 'UNTIL', 'WKST'];
+        const unsupportedRule = computed(() => {
+            const rule = originalRule.value;
+            if (!rule) return false;
+            return rule.split(';').some(part => {
+                const key = part.split('=')[0].trim().toUpperCase().replace(/^RRULE:/, '');
+                return key && !SUPPORTED_PARTS.includes(key);
+            });
+        });
+
+        const toggleByDay = (code) => {
+            touchRecurrence();
+            const list = recurrenceByDay.value;
+            recurrenceByDay.value = list.includes(code)
+                ? list.filter(d => d !== code)
+                : [...list, code];
+        };
+
+        // "the third Tuesday" for whatever day the event starts on. -1 is the last
+        // such weekday of the month, which is how a 5th-week start reads.
+        const monthlyDayOfMonth = computed(() => {
+            const start = new Date(localEvent.value.start || Date.now());
+            return isNaN(start.getTime()) ? 1 : start.getDate();
+        });
+
+        // Falls back to "Type N" when the calendar has not renamed its types.
+        const typeLabelFor = (index) => {
+            const labels = props.typeLabels || [];
+            return labels[index] || `Type ${index + 1}`;
+        };
+
+        const monthlyPosition = computed(() => {
+            const start = new Date(localEvent.value.start || Date.now());
+            if (isNaN(start.getTime())) return { day: 'MO', pos: 1, label: '' };
+            const day = WEEKDAYS[start.getDay()].code;
+            const nth = Math.ceil(start.getDate() / 7);
+            const pos = nth > 4 ? -1 : nth;
+            const names = ['first', 'second', 'third', 'fourth'];
+            const dayName = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][start.getDay()];
+            return { day, pos, label: `${pos === -1 ? 'last' : names[pos - 1]} ${dayName}` };
+        });
 
         const isNew = computed(() => !props.event?.id || props.event.id.toString().startsWith('temp_'));
 
@@ -176,6 +325,15 @@ const EventEditor = {
         };
 
         const parseRecurrence = (rule) => {
+            originalRule.value = rule || '';
+            recurrenceDirty.value = false;
+            recurrenceFreq.value = '';
+            recurrenceInterval.value = 1;
+            recurrenceUntil.value = '';
+            recurrenceByDay.value = [];
+            recurrenceCount.value = 10;
+            recurrenceEnd.value = 'never';
+            monthlyMode.value = 'date';
             recurrenceFreq.value = '';
             recurrenceUntil.value = '';
             recurrenceInterval.value = 1;
@@ -209,6 +367,21 @@ const EventEditor = {
 
                     if (options.until) {
                         recurrenceUntil.value = toDateStr(options.until.getTime());
+                        recurrenceEnd.value = 'until';
+                    }
+                    if (options.count) {
+                        recurrenceCount.value = options.count;
+                        recurrenceEnd.value = 'count';
+                    }
+                    if (options.byweekday && options.byweekday.length) {
+                        // rrule reports weekdays as 0=Monday; RRULE codes start at Sunday.
+                        const CODES = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU'];
+                        recurrenceByDay.value = options.byweekday
+                            .map(d => CODES[typeof d === 'number' ? d : d.weekday])
+                            .filter(Boolean);
+                    }
+                    if (options.bysetpos && options.bysetpos.length) {
+                        monthlyMode.value = 'weekday';
                     }
                 } else {
                     // Fallback regex parsing
@@ -218,8 +391,27 @@ const EventEditor = {
                     const intervalMatch = rule.match(/INTERVAL=([0-9]+)/);
                     if (intervalMatch) recurrenceInterval.value = parseInt(intervalMatch[1]);
 
+                    const byDayMatch = rule.match(/BYDAY=([A-Z0-9,+-]+)/);
+                    if (byDayMatch) {
+                        const entries = byDayMatch[1].split(',');
+                        // "3TU" is the other way to write "third Tuesday", without a
+                        // separate BYSETPOS -- the digits are the position.
+                        if (entries.some(d => /\d/.test(d))) monthlyMode.value = 'weekday';
+                        recurrenceByDay.value = entries
+                            .map(d => d.replace(/[^A-Z]/g, ''))
+                            .filter(Boolean);
+                    }
+                    if (/BYSETPOS=/.test(rule)) monthlyMode.value = 'weekday';
+
+                    const countMatch = rule.match(/COUNT=([0-9]+)/);
+                    if (countMatch) {
+                        recurrenceCount.value = parseInt(countMatch[1]);
+                        recurrenceEnd.value = 'count';
+                    }
+
                     const untilMatch = rule.match(/UNTIL=([0-9TZ]+)/);
                     if (untilMatch) {
+                        recurrenceEnd.value = 'until';
                         // Parse basic ISO basic format 20250501T000000Z or 20250501
                         const u = untilMatch[1];
                         const y = u.substring(0,4), m = u.substring(4,6), d = u.substring(6,8);
@@ -299,7 +491,21 @@ const EventEditor = {
                     rruleStr += `;INTERVAL=${recurrenceInterval.value}`;
                 }
 
-                if (recurrenceUntil.value) {
+                if (recurrenceFreq.value === 'WEEKLY' && recurrenceByDay.value.length) {
+                    rruleStr += `;BYDAY=${recurrenceByDay.value.join(',')}`;
+                }
+
+                // "the third Tuesday" -- written the way Syncfusion writes it, so
+                // rules survive a round trip between the two editors.
+                if (recurrenceFreq.value === 'MONTHLY' && monthlyMode.value === 'weekday') {
+                    rruleStr += `;BYDAY=${monthlyPosition.value.day};BYSETPOS=${monthlyPosition.value.pos}`;
+                }
+
+                if (recurrenceEnd.value === 'count' && recurrenceCount.value > 0) {
+                    rruleStr += `;COUNT=${recurrenceCount.value}`;
+                }
+
+                if (recurrenceEnd.value === 'until' && recurrenceUntil.value) {
                     // Format to YYYYMMDDTHHMMSSZ or local
                     // Since we use local dates for start/end, let's use floating UNTIL (no Z)
                     // matching the start time.
@@ -310,6 +516,13 @@ const EventEditor = {
                     // T235959 to include the whole day
                     rruleStr += `;UNTIL=${y}${m}${d}T235959`; 
                 }
+            }
+
+            // A rule this editor cannot fully represent must not be rewritten just
+            // because the event was opened and saved. Only replace it when a
+            // recurrence control was actually used.
+            if (!recurrenceDirty.value && originalRule.value) {
+                rruleStr = originalRule.value;
             }
 
             emit('save', {
@@ -340,6 +553,17 @@ const EventEditor = {
             recurrenceFreq,
             recurrenceInterval,
             recurrenceUntil,
+            recurrenceByDay,
+            recurrenceEnd,
+            recurrenceCount,
+            monthlyMode,
+            monthlyPosition,
+            monthlyDayOfMonth,
+            weekdays: WEEKDAYS,
+            toggleByDay,
+            touchRecurrence,
+            unsupportedRule,
+            typeLabelFor,
             getFreqLabel,
             save,
             close,

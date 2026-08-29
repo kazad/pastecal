@@ -121,7 +121,11 @@ class SyncfusionEngine {
         // color events based on type
         self.obj.eventRendered = (args) => {
             // change color as needed
-            categoryColor = self.app.COLORS[args.data.Type - 1] || self.app.COLORS[0];
+            // Declared, not implied. In app.js this was an accidental global, which
+            // sloppy-mode script scope tolerated; a class body is strict mode, so the
+            // same line threw ReferenceError and Syncfusion silently rendered no
+            // appointments at all.
+            const categoryColor = self.app.COLORS[args.data.Type - 1] || self.app.COLORS[0];
             if (self.obj.currentView === 'Agenda') {
                 args.element.firstChild.style.borderLeftColor = categoryColor;
             } else {
