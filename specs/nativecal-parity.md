@@ -94,7 +94,7 @@ Largely at parity and in places better.
 | Start / end | OK, and **better**: native `datetime-local` / `date` inputs render in the browser's own locale, which removes the entire class of bug that `strictMode` + `resolveDateFormat()` exists to patch. |
 | All-day toggle | OK — switches the inputs between `date` and `datetime-local`. |
 | Type / colour | PARTIAL — colour swatches, but **no type labels**. Production shows the user's custom labels ("Type 1"… or renamed) in a dropdown, plus a "Customize labels in Settings" hint. |
-| Recurrence | OK — Daily/Weekly/Monthly + UNTIL, comparable to what production exposes. |
+| Recurrence | PARTIAL — Daily/Weekly/Monthly + interval + UNTIL. Missing the weekday picker, monthly by-position, and "ends after N". See 3.5. |
 
 ### 2.5 Configuration and shell integration
 
@@ -120,7 +120,175 @@ same way. A calendar can be opened in either UI without migration.
 
 ---
 
-## 3. The structural problem: it is a fork, not a component
+## 3. UI control inventory
+
+Every interactive control in the app, region by region. Compiled by diffing the
+markup of both shells (`@click`, `v-model`, `data-testid`) and confirmed by
+enumerating the rendered, visible controls in a real browser against both
+engines.
+
+**Score: 78 controls at parity, 12 missing, 3 partial, 2 deliberate divergences.**
+
+### 3.1 Top bar
+
+| Control | Production | NativeCal | |
+| --- | --- | --- | --- |
+| Logo / home | yes | yes | OK |
+| Calendar title (inline rename) | yes | yes | OK |
+| Recent calendars dropdown | yes | yes | OK |
+| Pin / remove a recent | yes | yes | OK |
+| Help | yes | yes | OK |
+| Search | yes | yes | OK |
+| Settings | yes | yes | OK |
+| `+Event` (with `⌘E` hint) | yes | yes | OK |
+| Notes toggle | yes | yes | OK |
+| Claim URL pill + Claim button | yes | yes | OK |
+| Mobile menu | yes | yes | OK |
+| **Share pill: one-click copy** | `share-pill-copied`, `share-pill-more` | absent | **GAP** |
+
+### 3.2 Calendar toolbar
+
+| Control | Production | NativeCal | |
+| --- | --- | --- | --- |
+| Previous / Next | yes | yes | OK |
+| Current range title | `August 2026` | `August 2026` | OK |
+| **Title opens a date picker** | yes — the title is a button with a caret | inert text | **GAP** |
+| **Today button** | **hidden on purpose** (`.e-toolbar-item.e-today { display:none !important }`) | **present** | **DIVERGENCE** |
+| Day / Week / Month / Year / Agenda | yes | yes | OK |
+| **Custom view (`3 Months`)** | 6th toolbar button | absent | **GAP** |
+
+Two divergences in one toolbar, in opposite directions. The Today button was
+deliberately suppressed in production; NativeCal reintroduces it. Keeping "the
+same general UX" means picking one on purpose — bringing Today back is a
+defensible evolution, but it should be a decision, not an accident.
+
+### 3.3 Grid interactions
+
+| Control | Production | NativeCal | |
+| --- | --- | --- | --- |
+| Click empty cell to create | opens editor | quick-create popover | OK (better) |
+| Click event | quick popup | popover | OK |
+| Drag to move | yes | yes | OK |
+| Resize from bottom edge | yes | yes | OK |
+| Drag/resize disabled on touch | yes | **no guard** | **GAP** |
+| Any edit blocked when read-only | yes | **not enforced** | **GAP** |
+
+### 3.4 Event popup (click an event)
+
+| Control | Production | NativeCal | |
+| --- | --- | --- | --- |
+| Title, time, description | yes | yes | OK |
+| Edit | yes | `popover-edit` | OK |
+| Delete | yes | `popover-delete` | OK |
+| Close | yes | `popover-close` | OK |
+| Widens for long descriptions | 480px threshold | same threshold, reimplemented | OK |
+
+### 3.5 Event editor
+
+Field lists captured from both editors open in a browser.
+
+| Field | Production (Syncfusion) | NativeCal | |
+| --- | --- | --- | --- |
+| Title | yes | `editor-title` | OK |
+| Location | rendered but **CSS-hidden** | omitted | OK — matches effective UX |
+| Start / End | Syncfusion datetime pickers, patched with `strictMode` + a resolved date format | native `datetime-local` / `date` | OK (better) |
+| All day | yes | yes | OK |
+| **Timezone (start + end)** | three controls | absent | **GAP — confirm intent** |
+| Repeat: frequency | Daily/Weekly/Monthly/Yearly | Daily/Weekly/Monthly | PARTIAL |
+| Repeat: interval ("every N") | yes | yes | OK |
+| **Repeat: weekday picker (S M T W T F S)** | yes | absent | **GAP** |
+| **Repeat: monthly by date vs by weekday** | radio pair | absent | **GAP** |
+| Repeat: ends on a date | yes | yes | OK |
+| **Repeat: ends after N occurrences** | yes | absent | **GAP** |
+| Type / colour | dropdown showing the user's **type labels** | colour swatches, **unlabelled** | PARTIAL |
+| Description | yes | `editor-description` | OK |
+| Save / Cancel / Delete / Close | yes | yes | OK |
+
+This corrects the earlier read of recurrence as being at parity. NativeCal
+covers simple repeats; Syncfusion's editor also writes `BYDAY`, monthly
+by-position, and `COUNT`. Any of those rules already stored on a calendar will
+still *expand* correctly in NativeCal — rrule.js handles them — but the editor
+cannot represent them, so opening such an event and saving it silently
+downgrades the rule. Worth a guard: refuse to overwrite a rule the editor
+cannot round-trip.
+
+### 3.6 Quick add dialog
+
+| Control | Production | NativeCal | |
+| --- | --- | --- | --- |
+| Natural-language input (chrono) | yes | yes | OK |
+| Parsed preview, submit, close | yes | yes | OK |
+| `⌘E` / `Ctrl+E` shortcut | yes | yes | OK |
+
+### 3.7 Search panel
+
+| Control | Production | NativeCal | |
+| --- | --- | --- | --- |
+| Query box, `/` to focus | yes | yes | OK |
+| Colour filter chips, reset | yes | yes | OK |
+| Result list | yes | yes | OK |
+| **Click a result to jump** | moves the calendar to that week | `jumpToEvent` is a stub that logs "Stubbed" | **GAP** |
+
+### 3.8 Share panel
+
+| Control | Production | NativeCal | |
+| --- | --- | --- | --- |
+| Editable URL + copy + native share | yes | yes | OK |
+| Read-only URL + copy + native share | yes | yes | OK |
+| Current-view URL + copy + share | yes | yes | OK |
+| Create / customise the read-only link | yes | yes | OK |
+| ICS URLs (editable + read-only) + copy | yes | yes | OK |
+| **Subscribe (webcal)** | `subscribe-webcal` | absent | **GAP** |
+| **Subscribe: Google** | `subscribe-google` | absent | **GAP** |
+| **Subscribe: Outlook** | `subscribe-outlook` | absent | **GAP** |
+| **Subscribe: Apple** | `subscribe-apple` | absent | **GAP** |
+| `trackSubscribe()` analytics | 4 call sites | absent | **GAP** |
+
+The whole one-tap subscribe row is missing. It shipped on 2026-08-21 — after
+the fork — and is a good illustration of section 4: this is not a NativeCal
+design decision, it is drift.
+
+### 3.9 Notes and Help panels
+
+| Control | Production | NativeCal | |
+| --- | --- | --- | --- |
+| Notes textarea, autosave, toggle | yes | yes | OK |
+| Type definitions imported from notes | yes | yes | OK |
+| Help panel + "see how it works" | yes | yes | OK |
+
+### 3.10 Settings
+
+| Control | Production | NativeCal | Applied to the grid? |
+| --- | --- | --- | --- |
+| Dark mode (auto / light / dark) | yes | yes | partial — see 2.5 |
+| Time format 12/24 | yes | yes | **yes** |
+| **Date format** | yes | **absent** | — **GAP** |
+| First day of week | yes | yes | **no** |
+| Start hour | yes | yes | **no** |
+| Default view | yes | yes | **no** |
+| Custom view duration + unit (global) | yes | yes | **no** |
+| Custom view duration + unit (per calendar) | yes | yes | **no** |
+| Extended / 24-hour mode (per calendar) | yes | yes | **no** |
+| Type labels (8) | yes | yes | editor ignores them |
+| Event colours (8) + reset all | yes | yes | **no** — grid hardcodes the palette |
+
+The settings *panel* is almost at parity. The problem is the right-hand column:
+nine of eleven controls render, accept input, and persist, but change nothing
+on screen. A user who sets "start the week on Monday" gets a Sunday grid and no
+error. That is worse than the control being absent.
+
+### 3.11 Onboarding and misc
+
+| Control | Production | NativeCal | |
+| --- | --- | --- | --- |
+| Claim dialog (confirm / randomise slug) | yes | yes | OK |
+| Read-only slug input | yes | yes | OK |
+| Toasts | yes | yes | OK |
+| Tooltips | yes | yes | OK |
+| **Welcome dock** ("Got it" / "See how it works" / dismiss) | yes | **component not even registered** | **GAP** |
+
+
+## 4. The structural problem: it is a fork, not a component
 
 `public/nativecal/index.html` and `public/nativecal/app.js` are **copies** of
 the production shell, taken at cache-bust `v=1763769217` while production is
@@ -169,7 +337,7 @@ engines must do, and section 2's gaps become the `NativeEngine` to-do list.
 
 ---
 
-## 4. Rollout plan
+## 5. Rollout plan
 
 Each phase is independently shippable and independently revertable. Nothing
 before Phase 5 changes what an existing user sees.
@@ -180,6 +348,12 @@ Extract the `CalendarEngine` adapter. Delete `public/nativecal/index.html` and
 `public/nativecal/app.js`. Serve NativeCal from the production shell, selected
 by `?cal=native`. Keep `/nativecal/<slug>` working as a redirect so existing
 bookmarks and the two existing e2e specs survive.
+
+This alone closes seven of the control gaps in section 3, because they are drift
+rather than design: the one-tap subscribe row (webcal, Google, Outlook, Apple)
+with its `trackSubscribe` analytics, the share pill's one-click copy, the welcome
+dock, and the date-format setting. None of them need to be rebuilt — they need
+to stop living in a copy.
 
 Done when: `/x?cal=native` and `/x?cal=syncfusion` render the same shell, the
 same welcome dock, the same analytics, and differ only in the grid.
@@ -198,10 +372,17 @@ The ones that lose or expose data. In priority order:
 
 ### Phase 2 — Configuration gaps
 
-Turn the dead settings into live props: `startHour`, `extended`,
-`firstDayOfWeek`, `defaultView`, custom colours, type labels in the editor.
+Nine of the eleven settings controls currently render, accept input and persist
+while changing nothing on screen (section 3.10) — worse than being absent, since
+there is no error to notice. Turn them into live props: `startHour`, `extended`,
+`firstDayOfWeek`, `defaultView`, custom colours, and type labels in the editor.
 Then the Custom view (N weeks / N months), which is the last missing toolbar
 button.
+
+Also in this phase, the recurrence editor: the weekday picker, monthly
+by-position, and "ends after N occurrences". Until those land, guard the editor
+so saving an event whose rule it cannot represent does not silently downgrade
+that rule.
 
 ### Phase 3 — Shell integration
 
@@ -210,9 +391,13 @@ button.
 dropdown, month-start labels, year-view type colouring, and the `tailwind.config`
 darkMode selector.
 
+Settle the Today button here too: production hides it deliberately, NativeCal
+adds it back. Either is fine; shipping both engines with different toolbars is
+not.
+
 ### Phase 4 — Prove it
 
-See section 5. Gate on the parity suite passing against both engines.
+See section 6. Gate on the parity suite passing against both engines.
 
 ### Phase 5 — Opt-in
 
@@ -238,7 +423,7 @@ Cancel the licence.
 
 ---
 
-## 5. How we prove it works
+## 6. How we prove it works
 
 **A parity suite, not a NativeCal suite.** The existing e2e specs
 (`basic`, `all-day-events`, `date-format`, `settings-apply`, `mobile-popup`,
@@ -265,7 +450,7 @@ removes a real source of CI flake. Worth doing as part of Phase 4.
 
 ---
 
-## 6. Where NativeCal should go beyond parity
+## 7. Where NativeCal should go beyond parity
 
 Parity is the bar, not the goal. Things Syncfusion made hard that we get cheaply
 once we own the component:
