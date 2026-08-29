@@ -402,7 +402,11 @@ const CalendarVueApp = {
         // reactive options object. Syncfusion has no such object and stays null.
         this.engineState = engine.state || null;
 
-        engine.mount('#Schedule', this.parseUrlViewParams());
+        const urlView = this.parseUrlViewParams();
+        engine.mount('#Schedule', urlView);
+        // mount() sets currentView directly, which is enough for the native engine
+        // and for Syncfusion's built-in views. A custom view name needs the retry.
+        if (urlView.currentView) this.activateView(urlView.currentView);
 
         // Settings were already loaded at the top of mounted() and applied to scheduleObj
         // pre-appendTo. Call applyGlobalSettings again here as a safety net for settings that
@@ -624,30 +628,26 @@ const CalendarVueApp = {
         // Apply default view to schedule (if no URL override)
         applyDefaultView() {
             if (window.location.search.includes('view=') || window.location.search.includes('v=')) return;
-            if (!this.engine) return;
-
             const defaultView = this.calendar?.options?.defaultView || this.globalSettings.defaultView || 'Month';
-            const actualViewName = this.getActualViewName(defaultView);
+            this.activateView(this.getActualViewName(defaultView));
+        },
 
-            if (!this.engine.getViewNames().includes(actualViewName)) {
-                console.warn('[applyDefaultView] View not found in engine:', actualViewName);
+        // Switch to a view, retrying until the engine can actually do it.
+        //
+        // Syncfusion cannot select a view before its toolbar has rendered, and it
+        // silently refuses a custom view's display name ("12 Weeks") assigned to
+        // currentView -- it falls back to Day. Clicking the toolbar button once it
+        // exists is the only reliable route, which is why ?v=12w and ?v=q have
+        // never actually worked. The native engine succeeds on the first call and
+        // never reaches the retry.
+        activateView(name) {
+            if (!this.engine || !name) return;
+
+            if (!this.engine.getViewNames().includes(name)) {
+                console.warn('[activateView] View not offered by this engine:', name);
                 return;
             }
-
-            // The native engine switches immediately. Syncfusion cannot switch view
-            // until its toolbar has rendered, so activateView reports false and we
-            // retry each time a view finishes binding -- with a ceiling, so a view
-            // name that never appears does not leave a listener attached forever.
-            if (this.engine.activateView(actualViewName)) return;
-
-            if (this._pendingViewActivation) {
-                this._pendingViewActivation();
-                this._pendingViewActivation = null;
-            }
-            if (this._pendingViewActivationTimeout) {
-                clearTimeout(this._pendingViewActivationTimeout);
-                this._pendingViewActivationTimeout = null;
-            }
+            if (this.engine.activateView(name)) return;
 
             const stop = () => {
                 if (this._pendingViewActivation) { this._pendingViewActivation(); this._pendingViewActivation = null; }
@@ -656,17 +656,16 @@ const CalendarVueApp = {
                     this._pendingViewActivationTimeout = null;
                 }
             };
+            stop();
 
             this._pendingViewActivation = this.engine.onViewBound(() => {
-                if (this.engine.activateView(actualViewName)) stop();
+                if (this.engine.activateView(name)) stop();
             });
 
             this._pendingViewActivationTimeout = setTimeout(() => {
-                const activated = this.engine.activateView(actualViewName);
+                const activated = this.engine.activateView(name);
                 stop();
-                if (!activated) {
-                    console.error('[applyDefaultView] Unable to activate view:', actualViewName);
-                }
+                if (!activated) console.error('[activateView] Unable to activate view:', name);
             }, 10000);
         },
 

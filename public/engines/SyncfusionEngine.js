@@ -511,7 +511,21 @@ class SyncfusionEngine {
         this.obj.dataBind();
     }
 
-    getView() { return this.obj ? this.obj.currentView : null; }
+    // Syncfusion reports a custom view by its underlying option ("Week" for a
+    // 12-week view), not by the name on its button. The shell needs the name --
+    // updateCurrentViewURL matches "12 Weeks" to rebuild ?v= -- so resolve it from
+    // whichever toolbar button is active and fall back to currentView.
+    getView() {
+        if (!this.obj) return null;
+        const buttons = [...document.querySelectorAll('.e-toolbar-item.e-views button')];
+        const active = buttons.findIndex(b =>
+            b.classList.contains('e-active') || b.closest('.e-active-view'));
+        if (active !== -1) {
+            const name = this.getViewNames()[active];
+            if (name) return name;
+        }
+        return this.obj.currentView;
+    }
 
     setView(name) { if (this.obj) this.obj.currentView = name; }
 

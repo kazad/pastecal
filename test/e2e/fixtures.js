@@ -11,12 +11,16 @@
 // which a query param on baseURL would miss.
 
 const base = require('@playwright/test');
+const { useCdnCache } = require('./cdn-cache');
 
 const test = base.test.extend({
   page: async ({ page }, use) => {
     await page.addInitScript(() => {
       window.__TEST__ = true;
     });
+    // Opt-in, via PASTECAL_CDN_CACHE. Unset, this is a no-op and the page fetches
+    // its libraries from the network exactly as before. See cdn-cache.js.
+    await useCdnCache(page);
     await use(page);
   },
 });
