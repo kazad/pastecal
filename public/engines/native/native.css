@@ -58,11 +58,8 @@
 .calendar-cell:hover {
     background: var(--bg-interactive-hover);
 }
-.calendar-cell.is-outside {
-    background: var(--bg-disabled);
-}
 .calendar-cell.is-outside .day-number {
-    opacity: 0.45;
+    opacity: 0.4;
 }
 .calendar-cell.is-today {
     background: color-mix(in srgb, var(--bg-interactive-hover) 60%, transparent);
@@ -147,6 +144,11 @@
     margin-right: 0.25rem;
 }
 
+/* The bars layer gives up its bottom strip on any row that has a "+N more", so
+   the two never overlap. */
+.month-row.has-more .month-row-bars {
+    bottom: 1.3rem;
+}
 .month-more {
     margin-top: auto;
     font-size: 0.7rem;

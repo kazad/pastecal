@@ -89,7 +89,7 @@ const MonthView = {
                 </div>
             </div>
             <div class="calendar-grid flex-1" data-testid="month-view-grid">
-                <div v-for="row in rows" :key="row.key" class="month-row">
+                <div v-for="row in rows" :key="row.key" class="month-row" :class="{ 'has-more': row.hasMore }">
                     <div class="month-row-cells">
                         <div v-for="(cell, idx) in row.days" :key="idx"
                              class="calendar-cell"
@@ -231,7 +231,9 @@ const TimeGridView = {
                              @click.stop="$emit('select-event', event, $event)">
                             <div class="event-text-content">
                                 <div class="font-bold leading-tight pointer-events-none"><span v-if="event.isRecurringInstance">↻ </span>{{ event.title }}</div>
-                                <div class="opacity-75 text-[10px] pointer-events-none">{{ formatTime(event.start) }} - {{ formatTime(event.end) }}</div>
+                                <!-- Only when the block is tall enough for a second line; a
+                                     30-minute event was rendering its time half-clipped. -->
+                                <div v-if="isTall(event)" class="opacity-75 text-[10px] pointer-events-none">{{ formatTime(event.start) }} - {{ formatTime(event.end) }}</div>
                             </div>
                             <div class="resize-handle absolute bottom-0 inset-x-0 h-2 z-20"
                                  @mousedown.stop="$emit('start-drag', event, $event, 'resize')"></div>
@@ -249,6 +251,10 @@ const TimeGridView = {
     ],
     emits: ['create-time-event', 'start-drag', 'select-event'],
     methods: {
+        isTall(event) {
+            const style = this.getWeekEventPosition(event);
+            return parseFloat(style.height) >= 34;
+        },
         formatTimeLabel(hours) {
             const date = new Date();
             date.setHours(hours, 0, 0, 0);
@@ -536,18 +542,39 @@ var NativeCalendar = {
         const currentTitle = computed(() => {
             if (currentView.value === 'Day') return df.format(currentDate.value, 'MMMM d, yyyy');
             if (currentView.value === 'Week') {
-                const start = df.startOfWeek(currentDate.value, { weekStartsOn: weekStartsOn.value });
-                const end = df.endOfWeek(currentDate.value, { weekStartsOn: weekStartsOn.value });
-                return df.format(start, 'MMM d') + ' - ' + df.format(end, 'MMM d');
+                return rangeTitle(
+                    df.startOfWeek(currentDate.value, { weekStartsOn: weekStartsOn.value }),
+                    df.endOfWeek(currentDate.value, { weekStartsOn: weekStartsOn.value }));
             }
             if (currentView.value === 'Agenda') {
                 const start = df.startOfWeek(currentDate.value, { weekStartsOn: weekStartsOn.value });
-                const end = df.addDays(start, 13);
-                return 'Agenda: ' + df.format(start, 'MMM d') + ' - ' + df.format(end, 'MMM d');
+                return rangeTitle(start, df.addDays(start, 13));
             }
             if (currentView.value === 'Year') return df.format(currentDate.value, 'yyyy');
+            // The custom view covers a range, so name the range -- "August 2026"
+            // on a three-month grid says nothing about the other two.
+            if (customStep.value) {
+                const { start, end } = gridRange.value;
+                const sameYear = df.getYear(start) === df.getYear(end);
+                return sameYear
+                    ? `${df.format(start, 'MMMM')} \u2013 ${df.format(end, 'MMMM yyyy')}`
+                    : `${df.format(start, 'MMM yyyy')} \u2013 ${df.format(end, 'MMM yyyy')}`;
+            }
             return df.format(currentDate.value, 'MMMM yyyy');
         });
+
+        // "August 16 - 22, 2026", collapsing the month and year where they repeat,
+        // which is how the Syncfusion toolbar has always phrased a range.
+        const rangeTitle = (start, end) => {
+            const year = df.format(end, 'yyyy');
+            if (df.isSameMonth(start, end)) {
+                return `${df.format(start, 'MMMM d')} - ${df.format(end, 'd')}, ${year}`;
+            }
+            if (df.getYear(start) === df.getYear(end)) {
+                return `${df.format(start, 'MMMM d')} - ${df.format(end, 'MMMM d')}, ${year}`;
+            }
+            return `${df.format(start, 'MMMM d, yyyy')} - ${df.format(end, 'MMMM d, yyyy')}`;
+        };
 
         const isToday = (date) => df.isSameDay(date, new Date());
         const isSameDay = (d1, d2) => df.isSameDay(d1, d2);
@@ -700,10 +727,14 @@ var NativeCalendar = {
                         || new Date(a.event.start) - new Date(b.event.start));
                 assignLanes(segments);
 
-                // Anything past the cap becomes a per-day "+N more" count.
+                // Anything past the cap becomes a per-day "+N more" count. When
+                // there is an overflow the last lane is given up to make room for
+                // that line, so it never lands on top of a bar.
+                const overflows = segments.some(seg => seg.lane >= MAX_LANES);
+                const visibleLanes = overflows ? MAX_LANES - 1 : MAX_LANES;
                 const hidden = new Array(7).fill(0);
                 segments.forEach(seg => {
-                    if (seg.lane < MAX_LANES) return;
+                    if (seg.lane < visibleLanes) return;
                     for (let c = seg.startCol; c < seg.startCol + seg.span; c++) hidden[c]++;
                 });
 
@@ -726,10 +757,11 @@ var NativeCalendar = {
                 rows.push({
                     key: rowStart.toISOString(),
                     days,
-                    bars: segments.filter(seg => seg.lane < MAX_LANES),
+                    bars: segments.filter(seg => seg.lane < visibleLanes),
+                    hasMore: overflows,
                     ghost: ghost ? (() => {
                         const seg = segmentFor({ id: '__ghost', start: ghost.start, end: ghost.end, isAllDay: true }, rowStart, rowEnd);
-                        if (seg) seg.lane = Math.min(MAX_LANES - 1, segments.length ? Math.max(...segments.map(x => x.lane)) + 1 : 0);
+                        if (seg) seg.lane = Math.min(visibleLanes - 1, segments.length ? Math.max(...segments.map(x => x.lane)) + 1 : 0);
                         return seg;
                     })() : null,
                 });

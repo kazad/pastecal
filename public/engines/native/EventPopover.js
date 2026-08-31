@@ -13,13 +13,14 @@ const EventPopover = {
              </button>
 
              <!-- Header -->
-             <div class="bg-blue-600 px-4 py-3 flex justify-between items-start text-white shrink-0 rounded-t-lg">
+             <div class="px-4 py-3 flex justify-between items-start text-white shrink-0 rounded-t-lg"
+                  :style="{ backgroundColor: headerColor }">
                 <h3 class="font-bold text-lg truncate flex-1 mr-2" data-testid="popover-title">{{ event.title || '(No Title)' }}</h3>
                 <div class="flex items-center gap-1">
-                    <button @click="$emit('edit', event)" data-testid="popover-edit" class="p-1 hover:bg-blue-700 rounded transition-colors" title="Edit">
+                    <button @click="$emit('edit', event)" data-testid="popover-edit" class="p-1 rounded transition-colors hover:brightness-90" title="Edit">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                     </button>
-                    <button @click="$emit('delete', event.id)" data-testid="popover-delete" class="p-1 hover:bg-blue-700 rounded transition-colors" title="Delete">
+                    <button @click="$emit('delete', event.id)" data-testid="popover-delete" class="p-1 rounded transition-colors hover:brightness-90" title="Delete">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                     </button>
                 </div>
@@ -30,10 +31,8 @@ const EventPopover = {
                  <div class="flex items-start gap-3 mb-2">
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-color-1 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
                     <div class="text-sm text-color-2">
-                        <div class="font-medium">{{ formatDate(event.start) }}</div>
-                        <div class="text-color-1">
-                            {{ formatTime(event.start) }} - {{ formatTime(event.end) }}
-                        </div>
+                        <div class="font-medium" data-testid="popover-date">{{ dateLabel }}</div>
+                        <div v-if="timeLabel" class="text-color-1" data-testid="popover-time">{{ timeLabel }}</div>
                     </div>
                  </div>
 
@@ -54,7 +53,11 @@ const EventPopover = {
         visible: Boolean,
         top: Number,
         left: Number,
-        timeFormat: { type: String, default: '12' }
+        timeFormat: { type: String, default: '12' },
+        colors: {
+            type: Array,
+            default: () => ["#3f51b5", "#e3165b", "#ff6652", "#4caf50", "#ff9800", "#03a9f4", "#9e9e9e", "#27282f"]
+        }
     },
     emits: ['close', 'edit', 'delete'],
     setup(props) {
@@ -62,6 +65,37 @@ const EventPopover = {
         const df = window.dateFns;
 
         const formatDate = (ts) => df.format(new Date(ts), 'MMMM d, yyyy');
+
+        const headerColor = computed(() => {
+            const palette = props.colors || [];
+            return palette[((props.event?.type || 1) - 1) % palette.length] || '#3f51b5';
+        });
+
+        // The last day an event touches; an end exactly on midnight belongs to the
+        // day before, so a 9pm-to-midnight event is not described as two days.
+        const lastDay = computed(() => {
+            const end = new Date(props.event?.end);
+            const startOfEnd = df.startOfDay(end);
+            return (end.getTime() === startOfEnd.getTime() && end > new Date(props.event?.start))
+                ? df.subDays(startOfEnd, 1)
+                : startOfEnd;
+        });
+        const isMultiDay = computed(() =>
+            !df.isSameDay(new Date(props.event?.start), lastDay.value));
+
+        const dateLabel = computed(() => {
+            if (!props.event) return '';
+            const start = formatDate(props.event.start);
+            if (isMultiDay.value) return `${start} \u2013 ${formatDate(lastDay.value)}`;
+            return props.event.isAllDay ? `${start} (All day)` : start;
+        });
+
+        // Nothing useful to say for an all-day event, and "12:00 AM - 11:59 PM" is
+        // actively misleading -- Syncfusion writes "(All day)" and no times.
+        const timeLabel = computed(() => {
+            if (!props.event || props.event.isAllDay) return '';
+            return `${formatTime(props.event.start)} - ${formatTime(props.event.end)}`;
+        });
         const formatTime = (ts) => {
             const d = new Date(ts);
             if (isNaN(d.getTime())) return '';
@@ -95,6 +129,7 @@ const EventPopover = {
             });
         });
 
-        return { formatDate, formatTime, linkifiedDescription, isLongDescription };
+        return { formatDate, formatTime, linkifiedDescription, isLongDescription,
+                 dateLabel, timeLabel, headerColor };
     }
 };
