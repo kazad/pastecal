@@ -1,129 +1,157 @@
 /**
- * Unit tests for the colour filter (public/app.js).
+ * Behavioural tests for the colour filter, run against the REAL functions in public/app.js.
  *
- * Issue #41 was reported as "editing the time of an event makes it disappear, but search
- * still finds it and it can't be deleted". The event had not been touched: the search
- * panel's colour filter was hiding it, and the calendar it happened on had exactly ONE
- * event of the hidden type, so filtering that colour did not thin out a group -- it
- * erased the only member.
+ * Issue #41: a user reported an event vanishing from the calendar after they edited its
+ * time, while search still found it and it could not be clicked or deleted. The event was
+ * untouched -- the search panel's colour filter was hiding it, and that calendar had
+ * exactly ONE event of the hidden type, so filtering the colour erased the only member.
  *
- * The fix took four rounds, and every round failed the same way: there were TWO
- * definitions of "is this event visible" -- the predicate feeding the grid, and the
- * predicate counting hidden events -- with nothing forcing them to agree.
+ * The fix took several rounds, and every round failed the same way: there were TWO
+ * definitions of "is this event visible" -- the one feeding the grid and the one counting
+ * hidden events -- with nothing forcing them to agree.
  *
- *   round 1: they disagreed about whether the search panel was open
- *   round 2: they disagreed about event types with no colour slot
- *   round 3: they disagreed about the length of the colorFilters array
- *   round 4: they disagreed about how `type: 0` normalises (`??` vs `||`)
+ *   the search panel being open was a hidden input to one of them
+ *   types with no colour slot were classified differently by each
+ *   the colorFilters array could drift out of length with COLORS
+ *   `type: 0` normalised as 0 in one and 1 in the other
  *
- * The grid is now filtered with isEventVisible() directly, so there is only one
- * definition and the class of bug is unrepresentable. These tests pin that down: the
- * shared predicate, the normalisation it must match, and the slot bookkeeping.
+ * An earlier version of this file re-declared the functions under test, which meant it
+ * could pass while the shipped code was broken. These tests extract the real method bodies
+ * from public/app.js and execute them, so sabotaging the source fails the suite.
  *
  * Run: npm run test:unit
  */
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 
-// The filter logic lives on a Vue options object that cannot be instantiated headlessly,
-// so these mirror the methods exactly as written in public/app.js. filter-parity.test.js
-// guards against that mirror drifting from the real source.
-function makeApp(colors = 8, filters = null) {
+const SRC = fs.readFileSync(path.join(__dirname, '../../public/app.js'), 'utf8');
+
+// Pull one method/computed out of app.js by name and turn it into a callable function.
+// Brace-matching from the opening `{` keeps nested blocks and object literals intact.
+function extract(name) {
+  const sig = new RegExp(`\\n\\s{8}${name}\\(([^)]*)\\)\\s*\\{`);
+  const m = sig.exec(SRC);
+  assert.ok(m, `could not find ${name}() in public/app.js — has it been renamed?`);
+
+  const open = SRC.indexOf('{', m.index + m[0].length - 1);
+  let depth = 0, i = open;
+  for (; i < SRC.length; i++) {
+    if (SRC[i] === '{') depth++;
+    else if (SRC[i] === '}') { depth--; if (depth === 0) break; }
+  }
+  const body = SRC.slice(open + 1, i);
+  // eslint-disable-next-line no-new-func
+  return new Function('ej', `return function(${m[1]}) {${body}}`)(stubEj());
+}
+
+// Minimal stand-in for the one Syncfusion helper the extracted code touches.
+function stubEj() {
   return {
-    COLORS: Array.from({ length: colors }, (_, i) => `#00000${i}`),
-    colorFilters: filters || Array.from({ length: colors }, () => true),
-    calendar: { events: [], options: {} },
-
-    filterSlotFor(event) {
-      const type = parseInt(event.type || event.Type || 1);
-      if (!Number.isFinite(type) || type < 1 || type > this.COLORS.length) return 0;
-      return type - 1;
-    },
-
-    isEventVisible(event) {
-      return this.colorFilters[this.filterSlotFor(event)] === true;
-    },
-
-    syncColorFiltersLength() {
-      const want = this.COLORS.length;
-      if (this.colorFilters.length === want) return;
-      const next = [];
-      for (let i = 0; i < want; i++) next.push(this.colorFilters[i] !== false);
-      this.colorFilters = next;
+    schedule: {
+      getDateFromRecurrenceDateString(s) {
+        const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z?$/.exec(String(s));
+        if (!m) return new Date(NaN);
+        return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]));
+      },
     },
   };
 }
 
-// --- The invariant: what the grid shows and what the count reports never disagree -------
+const filterSlotFor = extract('filterSlotFor');
+const isEventVisible = extract('isEventVisible');
+const syncColorFiltersLength = extract('syncColorFiltersLength');
+const isColorFilterActive = extract('isColorFilterActive');
+const hiddenEventCount = extract('hiddenEventCount');
+const recurrenceOccursInRange = extract('recurrenceOccursInRange');
 
-test('grid and hidden-count are derived from the same predicate', () => {
-  const app = makeApp();
-  app.calendar.events = [
-    { title: 'a', type: 1 }, { title: 'b', type: 4 },
-    { title: 'c', type: 4 }, { title: 'd', type: 7 },
-  ];
-  app.colorFilters[3] = false; // hide type 4
+// A stand-in for the Vue component instance the methods run against.
+function ctx(overrides = {}) {
+  const colors = overrides.colors || 8;
+  const self = {
+    COLORS: Array.from({ length: colors }, (_, i) => `#00000${i}`),
+    colorFilters: overrides.colorFilters || Array.from({ length: colors }, () => true),
+    calendar: { events: overrides.events || [], options: overrides.options || {} },
+    viewTick: 0,
+    filterSlotFor, isEventVisible, syncColorFiltersLength,
+    isColorFilterActive, hiddenEventCount, recurrenceOccursInRange,
+    visibleDateRange: overrides.visibleDateRange || (() => null),
+  };
+  // Rebind so `this` inside each extracted body is this context.
+  for (const k of ['filterSlotFor', 'isEventVisible', 'syncColorFiltersLength',
+                   'isColorFilterActive', 'hiddenEventCount', 'recurrenceOccursInRange']) {
+    self[k] = self[k].bind(self);
+  }
+  return self;
+}
+
+// --- The invariant: grid and count are the same predicate -------------------------------
+
+test('every event is either shown or counted as hidden, never neither', () => {
+  const app = ctx({ events: [{ type: 1 }, { type: 4 }, { type: 4 }, { type: 7 }] });
+  app.colorFilters[3] = false;
 
   const shown = app.calendar.events.filter(e => app.isEventVisible(e));
   const hidden = app.calendar.events.filter(e => !app.isEventVisible(e));
 
   assert.equal(shown.length, 2);
-  assert.equal(hidden.length, 2, 'both type-4 events are hidden');
-  assert.equal(shown.length + hidden.length, app.calendar.events.length,
-    'every event is either shown or counted as hidden -- never neither, never both');
+  assert.equal(hidden.length, 2);
+  assert.equal(shown.length + hidden.length, app.calendar.events.length);
 });
 
-test('the single-member category from #41: hiding one colour erases the only event', () => {
-  const app = makeApp();
-  app.calendar.events = [{ title: 'Movie Night', type: 4 }];
+test('the single-member category from #41 is reported, not silently dropped', () => {
+  const app = ctx({ events: [{ title: 'Movie Night', type: 4 }] });
   app.colorFilters[3] = false;
 
   assert.equal(app.isEventVisible(app.calendar.events[0]), false);
-  assert.equal(app.calendar.events.filter(e => !app.isEventVisible(e)).length, 1,
-    'the count must report it -- this is the whole point of the indicator');
+  assert.equal(app.hiddenEventCount(), 1, 'the count is the only thing standing between the user and #41');
 });
 
-// --- Normalisation must match the grid's (round 4) --------------------------------------
+// --- Normalisation must match the grid's ------------------------------------------------
 
-test('type is normalised with || 1, matching Calendar.getSyncFusionEvents', () => {
-  // Calendar.getSyncFusionEvents does `parseInt(e.type || 1)`, so 0/""/null are all
-  // type 1 by the time Syncfusion sees them. Using `??` here instead made this file
-  // classify them as 0/NaN while the grid had already made them 1.
-  const app = makeApp();
+test('falsy types normalise to slot 0, as Calendar.getSyncFusionEvents does', () => {
+  const app = ctx();
   for (const falsy of [0, '', null, undefined]) {
     assert.equal(app.filterSlotFor({ type: falsy }), 0,
-      `type ${JSON.stringify(falsy)} must land in slot 0, as it does on the grid`);
+      `type ${JSON.stringify(falsy)} must land where the grid puts it`);
   }
 });
 
-test('a hidden type 1 also hides the events that normalise to type 1', () => {
-  const app = makeApp();
+test('hiding type 1 also hides everything that normalises to type 1', () => {
+  const app = ctx();
   app.colorFilters[0] = false;
   for (const falsy of [0, '', null, undefined, 'garbage']) {
-    assert.equal(app.isEventVisible({ type: falsy }), false,
-      `type ${JSON.stringify(falsy)} follows the type 1 dot`);
+    assert.equal(app.isEventVisible({ type: falsy }), false);
   }
 });
 
 test('both event shapes are accepted', () => {
-  // App model uses lowercase `type`; Syncfusion's internal objects use `Type`.
-  const app = makeApp();
-  assert.equal(app.filterSlotFor({ type: 3 }), 2);
-  assert.equal(app.filterSlotFor({ Type: 3 }), 2);
+  const app = ctx();
+  assert.equal(app.filterSlotFor({ type: 3 }), 2, 'app model uses lowercase type');
+  assert.equal(app.filterSlotFor({ Type: 3 }), 2, 'Syncfusion objects use Type');
 });
 
-// --- Types with no colour slot (round 2) ------------------------------------------------
+test('normalisation falls through a falsy lowercase type to Type, as || does', () => {
+  // Calendar.getSyncFusionEvents uses `e.type || 1`, so a falsy `type` must fall through
+  // rather than win. This is the one input where `??` and `||` actually disagree: with
+  // `??`, {type: 0, Type: 5} stops at 0 and lands in slot 0 while the grid has it in
+  // slot 4. Every other falsy value is masked by the out-of-range clamp.
+  const app = ctx();
+  assert.equal(app.filterSlotFor({ type: 0, Type: 5 }), 4,
+    'a falsy lowercase type must not shadow the Syncfusion Type the grid rendered from');
+});
 
-test('a type beyond the palette follows the type 1 dot, because that is how it is painted', () => {
-  // eventRendered and getTypeColor both fall back to COLORS[0], so an out-of-range event
-  // renders in type 1's colour. The dot the user would click to hide it is therefore the
-  // type 1 dot, and the filter has to agree with what they see.
-  const app = makeApp();
+// --- Types with no colour slot ----------------------------------------------------------
+
+test('a type beyond the palette follows the type 1 dot, matching how it is painted', () => {
+  // eventRendered and getTypeColor both fall back to COLORS[0].
+  const app = ctx();
   assert.equal(app.filterSlotFor({ type: 99 }), 0);
 
   app.colorFilters[0] = false;
-  assert.equal(app.isEventVisible({ type: 99 }), false, 'hidden with type 1');
+  assert.equal(app.isEventVisible({ type: 99 }), false);
 
   app.colorFilters[0] = true;
   app.colorFilters[3] = false;
@@ -131,53 +159,141 @@ test('a type beyond the palette follows the type 1 dot, because that is how it i
     'an unrelated colour must not drag it off the grid');
 });
 
-test('negative and fractional types are handled without throwing', () => {
-  const app = makeApp();
+test('negative and fractional types do not throw', () => {
+  const app = ctx();
   assert.equal(app.filterSlotFor({ type: -5 }), 0);
-  assert.equal(app.filterSlotFor({ type: 2.7 }), 1, 'parseInt truncates to 2');
+  assert.equal(app.filterSlotFor({ type: 2.7 }), 1);
 });
 
-// --- Slot bookkeeping when the palette changes (round 3) --------------------------------
+// --- Slot bookkeeping -------------------------------------------------------------------
 
-test('colorFilters follows COLORS when a custom palette changes its length', () => {
-  // calendar.options.colors comes from Firebase and is never length-checked. If the flags
-  // and the dots fall out of step, a dot toggles the wrong type.
-  const app = makeApp(8);
+test('colorFilters follows COLORS when a custom palette changes length', () => {
+  const app = ctx();
   app.colorFilters[3] = false;
 
   app.COLORS = Array.from({ length: 4 }, (_, i) => `#f0000${i}`);
   app.syncColorFiltersLength();
-  assert.equal(app.colorFilters.length, 4, 'shrinks to match');
-  assert.equal(app.colorFilters[3], false, 'surviving choices are preserved');
+  assert.equal(app.colorFilters.length, 4);
+  assert.equal(app.colorFilters[3], false, 'surviving choices are kept');
 
   app.COLORS = Array.from({ length: 10 }, (_, i) => `#0f000${i}`);
   app.syncColorFiltersLength();
-  assert.equal(app.colorFilters.length, 10, 'grows to match');
-  assert.deepEqual(app.colorFilters.slice(4), [true, true, true, true, true, true],
-    'new slots default to shown, never to hidden');
+  assert.equal(app.colorFilters.length, 10);
+  assert.deepEqual(app.colorFilters.slice(4), Array(6).fill(true),
+    'new slots default to shown, never hidden');
 });
 
-test('a type whose slot fell off a shrinking palette is still reachable', () => {
-  const app = makeApp(10);
-  app.colorFilters[8] = false;          // hide type 9
-  app.COLORS = app.COLORS.slice(0, 6);  // palette shrinks; slot 8 is gone
-  app.syncColorFiltersLength();
+// --- The banner's own condition ---------------------------------------------------------
 
-  // Type 9 is now out of range, so it follows type 1 -- which is on, so it is visible.
-  // The event must not be stranded hidden with no dot able to bring it back.
-  assert.equal(app.isEventVisible({ type: 9 }), true);
+test('isColorFilterActive reports a switched-off colour even with nothing hidden in view', () => {
+  // Filters persist past closing the panel, so the banner cannot key off the count alone:
+  // paging to a week with none of the hidden type would drop it to 0 and hide the warning
+  // while the filter was still on.
+  const app = ctx({ events: [] });
+  assert.equal(app.isColorFilterActive(), false);
+
+  app.colorFilters[3] = false;
+  assert.equal(app.isColorFilterActive(), true);
+  assert.equal(app.hiddenEventCount(), 0, 'no events at all, so nothing to count');
 });
 
-// --- All on / all off -------------------------------------------------------------------
-
-test('all colours on shows everything; all off hides everything', () => {
-  const app = makeApp();
-  const events = [{ type: 1 }, { type: 4 }, { type: 8 }, { type: 99 }];
-
-  assert.equal(events.every(e => app.isEventVisible(e)), true);
+test('all colours off hides everything and counts all of it', () => {
+  const app = ctx({ events: [{ type: 1 }, { type: 4 }, { type: 8 }, { type: 99 }] });
+  assert.equal(app.calendar.events.every(e => app.isEventVisible(e)), true);
 
   app.colorFilters = app.colorFilters.map(() => false);
-  assert.equal(events.some(e => app.isEventVisible(e)), false);
-  assert.equal(events.filter(e => !app.isEventVisible(e)).length, events.length,
-    'and every one of them is counted');
+  assert.equal(app.calendar.events.some(e => app.isEventVisible(e)), false);
+  assert.equal(app.hiddenEventCount(), 4);
+});
+
+// --- Date scoping -----------------------------------------------------------------------
+
+test('the count covers the visible range, not every event ever stored', () => {
+  // One real calendar holds 2380 events of a single type; counting them all announced
+  // "2380 events hidden" while 66 disappeared from the week on screen.
+  const week = {
+    start: Date.parse('2026-09-13T00:00:00Z'),
+    end: Date.parse('2026-09-20T00:00:00Z'),
+  };
+  const app = ctx({
+    events: [
+      { title: 'in view', type: 4, start: '2026-09-17T22:00:00.000Z', end: '2026-09-18T01:00:00.000Z' },
+      { title: 'long past', type: 4, start: '2025-01-15T18:00:00.000Z', end: '2025-01-15T19:00:00.000Z' },
+    ],
+    visibleDateRange: () => week,
+  });
+  app.colorFilters[3] = false;
+
+  assert.equal(app.hiddenEventCount(), 1, 'only the event the user could have seen');
+});
+
+test('a recurring series that already finished is not counted as hidden here', () => {
+  // The stored start only says when the series began. A weekly standup with COUNT=6 that
+  // ended in early 2025 starts before every later window but belongs in none of them;
+  // counting it produced a banner reporting an event the user could never find.
+  const week = {
+    start: Date.parse('2026-11-09T00:00:00Z'),
+    end: Date.parse('2026-11-16T00:00:00Z'),
+  };
+  const app = ctx({
+    events: [{
+      title: 'Standup', type: 4,
+      start: '2025-01-06T17:00:00.000Z', end: '2025-01-06T17:30:00.000Z',
+      recurrencerule: 'FREQ=WEEKLY;INTERVAL=1;COUNT=6',
+    }],
+    visibleDateRange: () => week,
+  });
+  app.colorFilters[3] = false;
+
+  assert.equal(app.hiddenEventCount(), 0, 'the series put no occurrence in this week');
+});
+
+test('a recurring series with UNTIL in the past is not counted either', () => {
+  const week = {
+    start: Date.parse('2026-11-09T00:00:00Z'),
+    end: Date.parse('2026-11-16T00:00:00Z'),
+  };
+  const app = ctx({
+    events: [{
+      title: 'Old series', type: 4,
+      start: '2025-01-06T17:00:00.000Z', end: '2025-01-06T17:30:00.000Z',
+      recurrencerule: 'FREQ=WEEKLY;INTERVAL=1;UNTIL=20250301T000000Z',
+    }],
+    visibleDateRange: () => week,
+  });
+  app.colorFilters[3] = false;
+
+  assert.equal(app.hiddenEventCount(), 0);
+});
+
+test('an open-ended recurring series IS counted in a later window', () => {
+  const week = {
+    start: Date.parse('2026-11-09T00:00:00Z'),
+    end: Date.parse('2026-11-16T00:00:00Z'),
+  };
+  const app = ctx({
+    events: [{
+      title: 'Forever standup', type: 4,
+      start: '2025-01-06T17:00:00.000Z', end: '2025-01-06T17:30:00.000Z',
+      recurrencerule: 'FREQ=WEEKLY;INTERVAL=1',
+    }],
+    visibleDateRange: () => week,
+  });
+  app.colorFilters[3] = false;
+
+  assert.equal(app.hiddenEventCount(), 1, 'it still occurs, so it still counts');
+});
+
+test('an event with an unreadable date is counted rather than quietly ignored', () => {
+  const week = {
+    start: Date.parse('2026-09-13T00:00:00Z'),
+    end: Date.parse('2026-09-20T00:00:00Z'),
+  };
+  const app = ctx({
+    events: [{ title: 'broken', type: 4, start: 'not-a-date', end: 'nope' }],
+    visibleDateRange: () => week,
+  });
+  app.colorFilters[3] = false;
+
+  assert.equal(app.hiddenEventCount(), 1);
 });

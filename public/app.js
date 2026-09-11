@@ -189,6 +189,86 @@ const CalendarVueApp = {
         // has 2380 events of a single type, so hiding it announced "2380 events hidden"
         // while 66 disappeared from the week in front of them. The count has to answer
         // "where did the thing I was just looking at go".
+        // What the banner says. Names the hidden category where there is one to name --
+        // "Book/Movie Day events are hidden" tells someone who did not realise they
+        // filtered both what happened and what to look for, which "a colour filter is on"
+        // does not. Falls back to the count, then to the bare fact that a filter is on,
+        // because this must still say something true when the current view happens to
+        // contain none of the hidden types.
+        hiddenEventsMessage() {
+            const hiddenLabels = [];
+            for (let i = 0; i < this.COLORS.length; i++) {
+                if (this.colorFilters[i] === false) hiddenLabels.push(this.typeLabelFor(i));
+            }
+            const n = this.hiddenEventCount;
+            const named = hiddenLabels.length === 1 ? hiddenLabels[0] : null;
+
+            if (n > 0) {
+                return named
+                    ? `${n} ${named} ${n === 1 ? 'event is' : 'events are'} hidden.`
+                    : `${n} ${n === 1 ? 'event is' : 'events are'} hidden by a filter.`;
+            }
+            return named
+                ? `${named} events are hidden — none in this view.`
+                : 'Some event types are hidden — none in this view.';
+        },
+
+        // Does this series actually put an occurrence inside the window? The stored start
+        // only says when the series began, so COUNT/UNTIL have to be honoured -- a weekly
+        // standup that finished last year starts before every future window but belongs in
+        // none of them. Syncfusion's own expansion is the authority; if it is unavailable
+        // we fall back to the old "starts before the window" guess, which over-reports
+        // rather than hiding something.
+        recurrenceOccursInRange(event, range) {
+            // The live scheduler cannot answer this: hidden events are filtered out of its
+            // dataSource, so it would report "no occurrences" for precisely the events
+            // being counted. Expand the rule in isolation instead.
+            const start = new Date(event.start).getTime();
+            if (isNaN(start)) return true;
+
+            try {
+                const rule = String(event.recurrencerule || '');
+                const until = /UNTIL=([0-9TZ]+)/.exec(rule);
+                if (until) {
+                    const u = ej.schedule.getDateFromRecurrenceDateString(until[1]);
+                    if (u && !isNaN(u.getTime()) && u.getTime() < range.start) return false;
+                }
+                const count = /COUNT=(\d+)/.exec(rule);
+                if (count) {
+                    // Walk the rule's own interval forward COUNT times and see whether the
+                    // last occurrence lands before the window opens.
+                    const n = parseInt(count[1], 10);
+                    const every = parseInt((/INTERVAL=(\d+)/.exec(rule) || [, '1'])[1], 10) || 1;
+                    const freq = (/FREQ=(\w+)/.exec(rule) || [, ''])[1];
+                    const stepMs = { DAILY: 864e5, WEEKLY: 6048e5 }[freq];
+                    if (stepMs && n > 0) {
+                        const lastStart = start + stepMs * every * (n - 1);
+                        if (lastStart < range.start) return false;
+                    } else if (freq === 'MONTHLY' || freq === 'YEARLY') {
+                        const last = new Date(start);
+                        const add = every * (n - 1);
+                        if (freq === 'MONTHLY') last.setMonth(last.getMonth() + add);
+                        else last.setFullYear(last.getFullYear() + add);
+                        if (last.getTime() < range.start) return false;
+                    }
+                }
+            } catch (err) {
+                // Fall through: over-reporting is safer than silently not counting.
+            }
+
+            return start < range.end;
+        },
+
+        // Is any colour switched off? Distinct from hiddenEventCount, which is 0 whenever
+        // the current view happens to contain none of the hidden types. Now that filters
+        // persist past closing the panel, that state is reachable by simply paging to
+        // another week -- and a filter that is on while nothing says so is exactly the
+        // condition behind #41. The banner keys off this, so it is shown for as long as
+        // the filter is on, and reports the count only when it has one to report.
+        isColorFilterActive() {
+            return this.colorFilters.slice(0, this.COLORS.length).some(on => on === false);
+        },
+
         hiddenEventCount() {
             this.viewTick; // dependency: recompute when the scheduler re-renders a new range
             const range = this.visibleDateRange();
@@ -197,9 +277,13 @@ const CalendarVueApp = {
                 if (!range) return true;
                 const start = new Date(e.start).getTime();
                 if (isNaN(start)) return true; // undateable: count it rather than hide the fact
-                // A recurring event is one stored record but many occurrences; if its series
-                // starts before the window it may still occur inside it, so keep it.
-                if (e.recurrencerule) return start < range.end;
+                // A recurring event is one stored record but many occurrences, so the
+                // stored start says only when the series began. Ask the scheduler which
+                // occurrences actually fall in the window instead of guessing: a series
+                // that finished last year starts before the window but puts nothing in it,
+                // and counting it produced a banner reporting a hidden event the user
+                // could never find.
+                if (e.recurrencerule) return this.recurrenceOccursInRange(e, range);
                 const end = new Date(e.end).getTime();
                 return start < range.end && (isNaN(end) ? start : end) >= range.start;
             }).length;
@@ -1597,9 +1681,40 @@ const CalendarVueApp = {
         // Human name for one colour slot, for the filter dots' labels. The dots are
         // otherwise distinguishable only by hue, which fails for colourblind users and for
         // the near-identical colours a custom palette can contain.
+        //
+        // Most calendars never rename their types, and the stored default labels are
+        // literally "Type 1".."Type 8" -- a slot index with no referent, which read aloud
+        // sounds like information while conveying none. Fall back to the dot's own colour
+        // instead, which is at least something the user can see on screen.
         typeLabelFor(index) {
             const custom = this.calendar?.options?.typeLabels;
-            return (custom && custom[index]) || `Type ${index + 1}`;
+            const label = custom && custom[index];
+            if (label && !/^Type \d+$/.test(label)) return label;
+            return this.colorNameFor(index);
+        },
+
+        // Nearest plain-English name for a palette colour, so a dot has a spoken label
+        // even when its type was never given one.
+        colorNameFor(index) {
+            const hex = (this.COLORS[index] || '').replace('#', '');
+            if (hex.length !== 6) return `Type ${index + 1}`;
+            const r = parseInt(hex.slice(0, 2), 16);
+            const g = parseInt(hex.slice(2, 4), 16);
+            const b = parseInt(hex.slice(4, 6), 16);
+            const max = Math.max(r, g, b), min = Math.min(r, g, b);
+            if (max - min < 30) return max > 160 ? 'Light grey' : (max < 80 ? 'Black' : 'Grey');
+
+            let hue;
+            const d = max - min;
+            if (max === r) hue = ((g - b) / d + (g < b ? 6 : 0)) * 60;
+            else if (max === g) hue = ((b - r) / d + 2) * 60;
+            else hue = ((r - g) / d + 4) * 60;
+
+            const names = [
+                [15, 'Red'], [45, 'Orange'], [70, 'Yellow'], [160, 'Green'],
+                [200, 'Teal'], [250, 'Blue'], [290, 'Purple'], [340, 'Pink'], [360, 'Red'],
+            ];
+            return (names.find(([limit]) => hue <= limit) || [0, 'Red'])[1];
         },
 
         updateCurrentViewURL() {
