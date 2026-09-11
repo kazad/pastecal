@@ -135,6 +135,16 @@ const QuickAddDialog = {
         },
         isValidEvent() {
             return !!(this.fields.subject.trim() && this.startDateTime && !this.endBeforeStart);
+        },
+        // What actually gets saved. The parser returns a null end for anything without a
+        // duration ("standup tomorrow 9am"), and an event with no end is discarded at the
+        // write boundary -- it would sit on the grid looking saved until the next reload
+        // and then be gone. Default to an hour rather than letting that happen.
+        effectiveEndDateTime() {
+            if (this.endDateTime) return this.endDateTime;
+            if (!this.startDateTime) return null;
+            const ms = new Date(this.startDateTime).getTime();
+            return isNaN(ms) ? null : new Date(ms + 3600000).toISOString();
         }
     },
     watch: {
@@ -222,7 +232,7 @@ const QuickAddDialog = {
             this.$emit('event-created', {
                 subject: this.fields.subject.trim(),
                 startDateTime: this.startDateTime,
-                endDateTime: this.endDateTime
+                endDateTime: this.effectiveEndDateTime
             });
             this.hideDialog();
         },

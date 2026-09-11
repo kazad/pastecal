@@ -71,6 +71,8 @@ class CalendarDataService {
             var calendar = data.val();
             if (calendar && calendar.id) {
                 this.connected = slug;
+                this._rememberSnapshot(calendar);
+
                 this.validateCalendarData(calendar);
                 callback(calendar);
             } else {
@@ -110,6 +112,8 @@ class CalendarDataService {
                 var calendar = data.val();
                 if (calendar && calendar.id) {
                     this.connected = slug;
+                    this._rememberSnapshot(calendar);
+
                     this.validateCalendarData(calendar);
                     callback(calendar);
                 } else {
@@ -189,12 +193,98 @@ class CalendarDataService {
     }
 
 
+    // The server state as of the last snapshot we received, keyed by calendar id. sync()
+    // diffs against this to work out what THIS client actually changed, so a write carries
+    // one person's edit instead of their entire view of the calendar.
+    static _lastSeen = {};
+
+    // Remember what the server just told us. Called from every subscription callback.
+    static _rememberSnapshot(calendar) {
+        if (!calendar || !calendar.id) return;
+        this._lastSeen[calendar.id] = JSON.parse(JSON.stringify(calendar.events || []));
+    }
+
+    // Merge local events over the server's current events, instead of overwriting them.
+    //
+    // sync() used to `set()` the whole calendar. Two people editing at once -- the entire
+    // point of a link-shared calendar -- then raced: whoever wrote last replaced the other's
+    // array wholesale, so an event someone created seconds earlier simply stopped existing.
+    // The same happened with one person in two tabs, or one flaky connection landing a
+    // queued write late.
+    //
+    // The fix is to write a merge rather than a snapshot. We know three sets: what the
+    // server had when we last heard from it (base), what we hold now (local), and what the
+    // server holds at write time (remote). Anything we added or changed since base is ours
+    // to apply; anything we deleted since base we remove by id; everything else in remote
+    // is somebody else's work and is left exactly as it is.
+    static _mergeEvents(base, local, remote) {
+        const byId = (list) => {
+            const m = new Map();
+            for (const e of list || []) if (e && e.id) m.set(e.id, e);
+            return m;
+        };
+        const baseM = byId(base), localM = byId(local), remoteM = byId(remote);
+        const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+        const merged = new Map(remoteM);
+
+        // Ours: added or edited since the last snapshot.
+        for (const [id, ev] of localM) {
+            const wasInBase = baseM.has(id);
+            if (!wasInBase || !same(baseM.get(id), ev)) merged.set(id, ev);
+        }
+        // Ours: deleted since the last snapshot -- but only if nobody else has since
+        // changed it, in which case their edit is newer information than our delete.
+        for (const [id, baseEv] of baseM) {
+            if (localM.has(id)) continue;
+            const remoteEv = remoteM.get(id);
+            if (!remoteEv || same(remoteEv, baseEv)) merged.delete(id);
+        }
+
+        // Keep the server's ordering, then append anything new from this client.
+        const out = [];
+        const seen = new Set();
+        for (const e of remote || []) {
+            if (e && e.id && merged.has(e.id)) { out.push(merged.get(e.id)); seen.add(e.id); }
+        }
+        for (const [id, ev] of merged) if (!seen.has(id)) out.push(ev);
+        return out;
+    }
+
     // only sync if we have existed
     static sync(calendar) {
         if (calendar && calendar.id && this.connected) {
             // console.log("CalendarDataService.sync()", calendar);
             const safe = this._dropIncompleteEvents(calendar);
-            this.db.child(calendar.id).set(this._sanitizeForFirebase(safe));
+
+            // Merge the events under a transaction so a concurrent write cannot be lost
+            // between the read and the write. Everything else on the calendar (title,
+            // options, notes) stays last-write-wins: those are single fields where the
+            // later edit is genuinely the intended one, unlike an events array where two
+            // people are editing different rows.
+            const base = this._lastSeen[calendar.id] || [];
+            const localEvents = this._sanitizeForFirebase(safe.events || []);
+            const rest = this._sanitizeForFirebase({ ...safe, events: undefined });
+            delete rest.events;
+
+            this.db.child(calendar.id).transaction((current) => {
+                if (current === null) return this._sanitizeForFirebase(safe);
+                const remoteEvents = Array.isArray(current.events)
+                    ? current.events
+                    : Object.values(current.events || {});
+                return {
+                    ...current,
+                    ...rest,
+                    events: this._mergeEvents(base, localEvents, remoteEvents),
+                };
+            }, (error, committed, snapshot) => {
+                if (error) {
+                    console.error('[CalendarDataService] sync transaction failed', error);
+                } else if (committed && snapshot) {
+                    // Our write is now the baseline for the next diff.
+                    this._rememberSnapshot({ id: calendar.id, events: snapshot.val()?.events });
+                }
+            });
 
             // NOT recorded here. sync() runs from a deep Vue watcher on `calendar`, and
             // that watcher also fires when the live subscription imports data from the

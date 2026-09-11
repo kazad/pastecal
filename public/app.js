@@ -146,6 +146,14 @@ const CalendarVueApp = {
             // Bumped on every scheduler dataBound so hiddenEventCount, which reads the
             // visible date range off scheduleObj, recomputes when the view moves.
             viewTick: 0,
+            // True while a server snapshot is being applied, so the calendar watcher can
+            // tell "someone else changed this" from "the person here changed this" and
+            // not publish the former back as if it were the latter.
+            isApplyingRemote: false,
+            // The event the Syncfusion editor dialog is currently showing. The dialog's DOM
+            // and its type dropdown are reused across opens, so handlers built on the first
+            // open read this rather than their own stale closure.
+            activeEditorData: null,
 
             // Store browser locale for display
             browserLocale: navigator.language || navigator.userLanguage || 'en-US',
@@ -374,7 +382,7 @@ const CalendarVueApp = {
                         console.log('Found read-only calendar with slug:', actualSlug);
 
                         CalendarDataService.subscribe_readonly(actualSlug, (c) => {
-                            this.calendar.import(c);
+                            this.applyRemoteCalendar(c);
                             this.ensureCalendarOptionsDefaults();
                             // Update custom view in schedule with calendar's settings
                             this.updateCustomViewInSchedule();
@@ -416,7 +424,7 @@ const CalendarVueApp = {
                     // Calendar found
                     console.log('[CalendarDataService] Calendar loaded from Firebase');
                     this.isExisting = true;
-                    this.calendar.import(c);
+                    this.applyRemoteCalendar(c);
                     console.log('[CalendarDataService] Calendar imported, defaultView:', this.calendar?.options?.defaultView);
                     this.ensureCalendarOptionsDefaults();
                     // Update custom view in schedule with calendar's settings
@@ -615,7 +623,13 @@ const CalendarVueApp = {
                     console.log("[app] actionComplete()", "event", ev);
                     console.log(` - syncFusionEvents ${this.syncFusionEvents.length}`, this.syncFusionEvents);
                     console.log(` - eventsData ${scheduleObj.eventsData.length}`, scheduleObj.eventsData);
-                    this.calendar.setEvents(this.syncFusionEvents);
+                    // Persist the scheduler's own post-change store, not this component's
+                    // cached array. syncFusionEvents is rebuilt by updateCalendarView and
+                    // is only as fresh as the last render, so using it here could write
+                    // back a pre-delete or pre-create snapshot and silently undo the very
+                    // action that triggered this callback. eventsData is what Syncfusion
+                    // just finished mutating.
+                    this.calendar.setEvents(scheduleObj.eventsData || this.syncFusionEvents);
                     // A real, user-initiated change to this calendar. Recorded here
                     // rather than in CalendarDataService.sync(), because sync() also
                     // runs when the live subscription echoes back someone else's edit --
@@ -650,6 +664,11 @@ const CalendarVueApp = {
             if (args.type === 'Editor') {
                 // console.log("Editor call");
 
+                // Which event the editor is showing. The type dropdown is built once and
+                // reused across every open, so its handlers cannot rely on their own
+                // captured `args` -- they read this instead.
+                app.activeEditorData = args.data;
+
                 // Configure datetime pickers with strictMode and the user's chosen date format.
                 // Syncfusion's default is en-US (M/d/yy) which is ambiguous internationally
                 // (1/7/26 = Jan 7 in US, July 1 elsewhere). resolveDateFormat() picks a
@@ -680,8 +699,11 @@ const CalendarVueApp = {
                     window.btnObj.element.style.background = app.COLORS[id - 1];
                     window.inputEle.setAttribute('value', id);
 
-                    // Explicitly set the Type on the event data object
-                    args.data.Type = parseInt(id);
+                    // Explicitly set the Type on the event data object. Uses the dialog's
+                    // current event rather than this closure's `args`, because the select
+                    // handler that calls this was built on the first open and never rebuilt.
+                    const target = app.activeEditorData || args.data;
+                    target.Type = parseInt(id);
                     // Whether people categorise events at all decides if type
                     // labels/colours are worth building on (see pro.md).
                     track(a => a.featureUsed('event_type', 'popup'));
@@ -704,7 +726,16 @@ const CalendarVueApp = {
                             // console.log("select type args", button_args);
                             let type = button_args.item.value;
                             inputEle.value = type;
-                            args.data.Type = type;
+                            // Write to the event the dialog is showing RIGHT NOW, not the
+                            // one that happened to be open when this dropdown was built.
+                            // Syncfusion reuses the dialog element, and this handler is
+                            // created only on the first open (the guard above), so the
+                            // captured `args` goes stale immediately -- choosing a type on
+                            // the second event edited would set it on the first one, which
+                            // is invisible until that event turns the wrong colour or gets
+                            // filtered out from under the user.
+                            const live = app.activeEditorData || args.data;
+                            live.Type = type;
                             setColor(type);
                         },
                         open: () => {
@@ -1113,6 +1144,17 @@ const CalendarVueApp = {
             // sync changes to local storage or firebase
             handler: function (newVal, oldVal) {
                 // console.log("Vue:watch:calendar", newVal, oldVal);
+
+                // A remote snapshot lands here too: import() mutates `calendar`, which
+                // fires this watcher, which used to write the server's own data straight
+                // back. That turned every open tab into an amplifier -- one stale write
+                // was re-committed by everyone watching, so a deleted event could come
+                // back and a fresh edit could be reverted by a bystander's echo. Applying
+                // a remote change is not a local edit and must not be published as one.
+                if (this.isApplyingRemote) {
+                    this.updateCalendarView();
+                    return;
+                }
 
                 if (!this.isExisting) {
                     this.saveLocalStorage();
@@ -1676,6 +1718,19 @@ const CalendarVueApp = {
                 let id = i + 1;
                 return { text: `Type ${id}`, value: id, iconCss: `e-color-${id}` };
             });
+        },
+
+        // Apply a snapshot from the server without the calendar watcher mistaking it for a
+        // local edit and writing it back. The flag is cleared after the watcher queue has
+        // drained -- a deep watcher fires asynchronously, so clearing it synchronously
+        // would let the echo through anyway.
+        applyRemoteCalendar(c) {
+            this.isApplyingRemote = true;
+            try {
+                this.calendar.import(c);
+            } finally {
+                this.$nextTick(() => { this.isApplyingRemote = false; });
+            }
         },
 
         // Human name for one colour slot, for the filter dots' labels. The dots are
