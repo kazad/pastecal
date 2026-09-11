@@ -180,11 +180,15 @@ const CalendarVueApp = {
         // panel because a switched-off colour is otherwise signalled only by a dimmed dot:
         // in #41 a calendar had exactly one event of its hidden type, so filtering it read
         // as the event being deleted rather than hidden.
+        //
+        // This must mirror getFilteredEventsQuery() exactly, not approximate it. That query
+        // builds an ALLOW-list (Type == 1 OR Type == 3 ...), so an event whose type falls
+        // outside 1..COLORS.length matches nothing and is dropped even though the user never
+        // switched its colour off. Counting only `colorFilters[type-1] === false` missed
+        // those and reported "0 hidden" while the grid was hiding them -- the same
+        // silently-vanishing event that #41 was about.
         hiddenEventCount() {
-            return this.calendar.events.filter(e => {
-                const type = parseInt(e.type || 1);
-                return this.colorFilters[type - 1] === false;
-            }).length;
+            return this.calendar.events.filter(e => !this.isEventVisible(e)).length;
         },
         calendarAutoViewLabel() {
             return 'Month'; // Could be dynamic based on screen size etc.
@@ -1741,7 +1745,46 @@ const CalendarVueApp = {
         },
 
         resetColorFilters() {
-            this.colorFilters = this.colorFilters.map(() => true);
+            this.colorFilters = this.COLORS.map(() => true);
+        },
+
+        // Keep one filter flag per colour, preserving existing choices. Called whenever
+        // COLORS is replaced, so the filter array can never be a different length than
+        // the palette it describes.
+        syncColorFiltersLength() {
+            const want = this.COLORS.length;
+            if (this.colorFilters.length === want) return;
+            const next = [];
+            for (let i = 0; i < want; i++) {
+                next.push(this.colorFilters[i] !== false); // default new slots to shown
+            }
+            this.colorFilters = next;
+        },
+
+        // Would the colour filter let this event through? The single definition of
+        // "visible", used both to count hidden events and to reason about the grid.
+        // Matches getFilteredEventsQuery()'s allow-list semantics, including the case where
+        // an event's type has no colour slot at all -- such an event is filtered out by the
+        // grid, so it must count as hidden here too.
+        isEventVisible(event) {
+            // Count against COLORS.length, the same bound getFilteredEventsQuery() compares
+            // to, so the two can never disagree about "all colours are on".
+            const slots = this.COLORS.length;
+            const activeCount = this.colorFilters.slice(0, slots).filter(Boolean).length;
+            if (activeCount === slots) return true;  // no predicate applied
+            if (activeCount === 0) return false;     // everything excluded
+
+            return this.colorFilters[this.filterSlotFor(event)] === true;
+        },
+
+        // Which colour dot governs this event. Both paint paths (eventRendered and
+        // getTypeColor) fall back to COLORS[0] for a type with no slot, so such an event
+        // reads on screen as type 1 -- the type 1 dot is the one the user would click to
+        // hide it, and the filter has to agree with what they see.
+        filterSlotFor(event) {
+            const type = parseInt(event.type ?? event.Type ?? 1);
+            if (!Number.isFinite(type) || type < 1 || type > this.COLORS.length) return 0;
+            return type - 1;
         },
 
         // The grid shows exactly what colorFilters says, and nothing else decides it.
@@ -1754,18 +1797,37 @@ const CalendarVueApp = {
         getFilteredEventsQuery() {
             let query = new ej.data.Query();
 
-            // Apply color filters from this.colorFilters
+            // Apply color filters from this.colorFilters. Bounded by COLORS.length -- the
+            // same value the branch below compares against -- so a colorFilters array that
+            // has drifted out of step can never push activeColorTypes past that bound and
+            // skip filtering entirely. syncColorFiltersLength() keeps them equal; this
+            // bound means a lapse there degrades safely instead of silently.
+            const slots = this.COLORS.length;
             const activeColorTypes = [];
-            for (let i = 0; i < this.colorFilters.length; i++) {
+            for (let i = 0; i < slots; i++) {
                 if (this.colorFilters[i]) {
                     activeColorTypes.push(i + 1); // Event types are 1-based
                 }
             }
 
-            if (activeColorTypes.length > 0 && activeColorTypes.length < this.COLORS.length) {
-                // If some, but not all, colors are selected, build a predicate.
+            if (activeColorTypes.length > 0 && activeColorTypes.length < slots) {
+                // Some but not all colours are on. The predicate is an allow-list of exact
+                // type ids, so it must also name the types that have no colour slot of their
+                // own: the grid paints those with COLORS[0], which makes them read as type 1
+                // on screen, so they follow the type 1 dot. Without this they match nothing
+                // and vanish while every dot the user can see is still lit -- #41 again, one
+                // level down. matchedTypes is built from the events actually present, which
+                // keeps the predicate finite.
+                const matchedTypes = new Set(activeColorTypes);
+                if (this.colorFilters[0]) {
+                    for (const e of this.calendar.events) {
+                        const t = parseInt(e.type ?? 1);
+                        if (!Number.isFinite(t) || t < 1 || t > slots) matchedTypes.add(t);
+                    }
+                }
+
                 let colorPredicate = null;
-                for (const typeId of activeColorTypes) {
+                for (const typeId of matchedTypes) {
                     if (colorPredicate === null) {
                         colorPredicate = new ej.data.Predicate('Type', 'equal', typeId);
                     } else {
@@ -1773,13 +1835,12 @@ const CalendarVueApp = {
                     }
                 }
                 query = query.where(colorPredicate);
-            } else if (activeColorTypes.length === 0 && this.COLORS.length > 0) {
+            } else if (activeColorTypes.length === 0 && slots > 0) {
                 // If no colors are selected (and there are colors to select from), filter out all events.
                 // Use a predicate that will never be true. Assuming 'Type' is always positive.
                 query = query.where('Type', 'equal', -1);
             }
-            // If all colors are selected (activeColorTypes.length === this.COLORS.length),
-            // no 'Type' predicate is added, effectively showing all events (respecting other query parts).
+            // All colours on: no predicate, every event shows.
 
             return query;
         },
@@ -2374,6 +2435,7 @@ const CalendarVueApp = {
         resetAllColors() {
             this.localSettings.colors = [...this.DEFAULT_COLORS];
             this.COLORS = [...this.DEFAULT_COLORS];
+            this.syncColorFiltersLength();
 
             this.storeColorsInCalendarOptions();
             this.updateColorCSS();
@@ -2425,6 +2487,17 @@ const CalendarVueApp = {
 
                 // Update the component COLORS array
                 this.COLORS = [...this.calendar.options.colors];
+
+                // colorFilters is one flag per colour, so it has to follow COLORS in
+                // length. It is sized once at init from the default palette, while
+                // COLORS is replaced here with whatever the calendar stored -- a value
+                // that came from Firebase and is not length-checked anywhere. When the
+                // two drift, the colour filter breaks in both directions: a shorter
+                // palette leaves activeColorTypes.length above COLORS.length so
+                // getFilteredEventsQuery()'s `<` test never fires and switching a colour
+                // off silently does nothing, and a longer one lets a single dot hide
+                // events of types that have no dot at all.
+                this.syncColorFiltersLength();
 
                 // Update CSS to reflect custom colors
                 this.updateColorCSS();
