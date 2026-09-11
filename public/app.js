@@ -176,6 +176,16 @@ const CalendarVueApp = {
         hasCustomColors() {
             return this.COLORS.some((color, index) => color !== this.DEFAULT_COLORS[index]);
         },
+        // How many events the colour filter is currently hiding. Surfaced in the search
+        // panel because a switched-off colour is otherwise signalled only by a dimmed dot:
+        // in #41 a calendar had exactly one event of its hidden type, so filtering it read
+        // as the event being deleted rather than hidden.
+        hiddenEventCount() {
+            return this.calendar.events.filter(e => {
+                const type = parseInt(e.type || 1);
+                return this.colorFilters[type - 1] === false;
+            }).length;
+        },
         calendarAutoViewLabel() {
             return 'Month'; // Could be dynamic based on screen size etc.
         },
@@ -1734,37 +1744,42 @@ const CalendarVueApp = {
             this.colorFilters = this.colorFilters.map(() => true);
         },
 
+        // The grid shows exactly what colorFilters says, and nothing else decides it.
+        //
+        // This used to be wrapped in `if (this.showSearch)`, which made panel visibility a
+        // hidden input to the query: closing the panel was supposed to un-filter the grid,
+        // but nothing re-ran the query, so the filter stayed applied invisibly. Keeping the
+        // filter honest here means there is no state where the grid hides an event but the
+        // UI shows every dot lit -- the condition behind #41.
         getFilteredEventsQuery() {
             let query = new ej.data.Query();
 
-            if (this.showSearch) {
-                // Apply color filters from this.colorFilters
-                const activeColorTypes = [];
-                for (let i = 0; i < this.colorFilters.length; i++) {
-                    if (this.colorFilters[i]) {
-                        activeColorTypes.push(i + 1); // Event types are 1-based
-                    }
+            // Apply color filters from this.colorFilters
+            const activeColorTypes = [];
+            for (let i = 0; i < this.colorFilters.length; i++) {
+                if (this.colorFilters[i]) {
+                    activeColorTypes.push(i + 1); // Event types are 1-based
                 }
-
-                if (activeColorTypes.length > 0 && activeColorTypes.length < this.COLORS.length) {
-                    // If some, but not all, colors are selected, build a predicate.
-                    let colorPredicate = null;
-                    for (const typeId of activeColorTypes) {
-                        if (colorPredicate === null) {
-                            colorPredicate = new ej.data.Predicate('Type', 'equal', typeId);
-                        } else {
-                            colorPredicate = colorPredicate.or('Type', 'equal', typeId);
-                        }
-                    }
-                    query = query.where(colorPredicate);
-                } else if (activeColorTypes.length === 0 && this.COLORS.length > 0) {
-                    // If no colors are selected (and there are colors to select from), filter out all events.
-                    // Use a predicate that will never be true. Assuming 'Type' is always positive.
-                    query = query.where('Type', 'equal', -1);
-                }
-                // If all colors are selected (activeColorTypes.length === this.COLORS.length),
-                // no 'Type' predicate is added, effectively showing all events (respecting other query parts).
             }
+
+            if (activeColorTypes.length > 0 && activeColorTypes.length < this.COLORS.length) {
+                // If some, but not all, colors are selected, build a predicate.
+                let colorPredicate = null;
+                for (const typeId of activeColorTypes) {
+                    if (colorPredicate === null) {
+                        colorPredicate = new ej.data.Predicate('Type', 'equal', typeId);
+                    } else {
+                        colorPredicate = colorPredicate.or('Type', 'equal', typeId);
+                    }
+                }
+                query = query.where(colorPredicate);
+            } else if (activeColorTypes.length === 0 && this.COLORS.length > 0) {
+                // If no colors are selected (and there are colors to select from), filter out all events.
+                // Use a predicate that will never be true. Assuming 'Type' is always positive.
+                query = query.where('Type', 'equal', -1);
+            }
+            // If all colors are selected (activeColorTypes.length === this.COLORS.length),
+            // no 'Type' predicate is added, effectively showing all events (respecting other query parts).
 
             return query;
         },
