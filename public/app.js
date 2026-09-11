@@ -946,6 +946,15 @@ const CalendarVueApp = {
             mql.addEventListener ? mql.addEventListener('change', onSystemThemeChange) : mql.addListener(onSystemThemeChange);
         }
 
+        // Tell the user when the write path had to drop an event, rather than leaving the
+        // screen showing something Firebase does not have.
+        CalendarDataService.onIncompleteEvents = (dropped) => {
+            const named = dropped.map(e => e && e.title).filter(Boolean);
+            const what = named.length === 1 ? `"${named[0]}"`
+                : `${dropped.length} event${dropped.length === 1 ? '' : 's'}`;
+            this.showToast(`${what} needs a start and end time — not saved`, 'error');
+        };
+
         // Apply custom colors CSS if any
         this.updateColorCSS();
 
@@ -1585,6 +1594,14 @@ const CalendarVueApp = {
             });
         },
 
+        // Human name for one colour slot, for the filter dots' labels. The dots are
+        // otherwise distinguishable only by hue, which fails for colourblind users and for
+        // the near-identical colours a custom palette can contain.
+        typeLabelFor(index) {
+            const custom = this.calendar?.options?.typeLabels;
+            return (custom && custom[index]) || `Type ${index + 1}`;
+        },
+
         updateCurrentViewURL() {
             const currentView = scheduleObj.currentView;
             const currentDate = scheduleObj.selectedDate.toISOString().slice(0, 10);
@@ -1927,10 +1944,16 @@ const CalendarVueApp = {
             }
         },
 
+        // Closing the panel no longer clears the colour filter. It used to, because the
+        // filter was otherwise invisible once the dots were off screen -- the reset was the
+        // only thing standing between a user and #41. The banner above the calendar now
+        // reports a filter wherever the user is, so the filter can behave like a filter and
+        // survive until it is switched off. It still lives only in memory: never persisted,
+        // never shared, so a reload clears it and one person's filter never changes what
+        // anyone else sees on a link-shared calendar.
         toggleSearch() {
             if (this.showSearch) {
                 this.showSearch = false;
-                this.resetColorFilters();
             } else {
                 this.closeAllPanels();
                 this.showSearch = true;
@@ -2068,10 +2091,24 @@ const CalendarVueApp = {
         },
 
         handleQuickAddEvent(event) {
+            // Quick-add can produce a start with no end ("standup tomorrow 9am" parses a
+            // time but no duration), and the dialog's own validation only requires a start.
+            // An event with a null end is dropped at the write boundary by
+            // CalendarDataService._dropIncompleteEvents, so it would sit on the grid until
+            // the next reload and then be gone for good -- exactly the "my event vanished"
+            // report this app keeps getting. Give it the same one-hour default the rest of
+            // the app uses instead of letting it reach that boundary incomplete.
+            const start = event.startDateTime;
+            let end = event.endDateTime;
+            if (start && !end) {
+                const startMs = new Date(start).getTime();
+                if (!isNaN(startMs)) end = new Date(startMs + 3600000).toISOString();
+            }
+
             const newEvent = new Event({
                 title: event.subject,
-                start: event.startDateTime,
-                end: event.endDateTime
+                start: start,
+                end: end
             });
             this.calendar.events.push(newEvent);
             this.calendar.setEvents(this.calendar.events);
@@ -2438,15 +2475,11 @@ const CalendarVueApp = {
                 // Update the component COLORS array
                 this.COLORS = [...this.calendar.options.colors];
 
-                // colorFilters is one flag per colour, so it has to follow COLORS in
-                // length. It is sized once at init from the default palette, while
-                // COLORS is replaced here with whatever the calendar stored -- a value
-                // that came from Firebase and is not length-checked anywhere. When the
-                // two drift, the colour filter breaks in both directions: a shorter
-                // palette leaves activeColorTypes.length above COLORS.length so
-                // getFilteredEventsQuery()'s `<` test never fires and switching a colour
-                // off silently does nothing, and a longer one lets a single dot hide
-                // events of types that have no dot at all.
+                // One filter flag per colour. colorFilters is sized once at init from the
+                // default palette; COLORS is replaced here with whatever the calendar
+                // stored, a Firebase value of unchecked length. Without this a palette of
+                // a different size leaves dots and flags misaligned, so a dot would toggle
+                // the wrong type -- or a type would have no dot at all.
                 this.syncColorFiltersLength();
 
                 // Update CSS to reflect custom colors

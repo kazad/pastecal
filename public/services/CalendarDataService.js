@@ -31,7 +31,14 @@ class CalendarDataService {
     //
     // Dropping rather than rejecting the write: sync() persists the ENTIRE calendar on a
     // debounced watcher, so refusing the whole payload over one bad event would throw away
-    // the user's other edits. The event is logged loudly so this is never silent.
+    // the user's other edits.
+    //
+    // The drop is reported to the user via onIncompleteEvents, not just the console. It
+    // leaves local memory holding an event that Firebase does not have, so the screen says
+    // saved while the next reload says gone -- indistinguishable, from the user's side, from
+    // the app losing their data. Whoever is watching deserves to know which event and why.
+    static onIncompleteEvents = null;
+
     static _dropIncompleteEvents(calendar) {
         if (!calendar || !Array.isArray(calendar.events)) return calendar;
 
@@ -43,6 +50,14 @@ class CalendarDataService {
             `[CalendarDataService] Refusing to save ${dropped.length} event(s) with a ` +
             `missing/invalid start or end — they would break this calendar's ICS feed.`,
             dropped);
+
+        if (typeof this.onIncompleteEvents === 'function') {
+            try {
+                this.onIncompleteEvents(dropped);
+            } catch (err) {
+                console.error('[CalendarDataService] onIncompleteEvents handler failed', err);
+            }
+        }
 
         return { ...calendar, events: complete };
     }
