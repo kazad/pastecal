@@ -143,6 +143,9 @@ const CalendarVueApp = {
             COLORS: COLORS,
             DEFAULT_COLORS: DEFAULT_COLORS,
             colorFilters: COLORS.map(() => true), // allow all color types by default
+            // Bumped on every scheduler dataBound so hiddenEventCount, which reads the
+            // visible date range off scheduleObj, recomputes when the view moves.
+            viewTick: 0,
 
             // Store browser locale for display
             browserLocale: navigator.language || navigator.userLanguage || 'en-US',
@@ -176,19 +179,30 @@ const CalendarVueApp = {
         hasCustomColors() {
             return this.COLORS.some((color, index) => color !== this.DEFAULT_COLORS[index]);
         },
-        // How many events the colour filter is currently hiding. Surfaced in the search
-        // panel because a switched-off colour is otherwise signalled only by a dimmed dot:
-        // in #41 a calendar had exactly one event of its hidden type, so filtering it read
-        // as the event being deleted rather than hidden.
+        // How many events the colour filter is hiding from the view on screen. Surfaced
+        // next to the dots because a switched-off colour is otherwise signalled only by a
+        // dimmed dot: in #41 a calendar had exactly one event of its hidden type, so
+        // filtering it read as the event being deleted rather than hidden.
         //
-        // This must mirror getFilteredEventsQuery() exactly, not approximate it. That query
-        // builds an ALLOW-list (Type == 1 OR Type == 3 ...), so an event whose type falls
-        // outside 1..COLORS.length matches nothing and is dropped even though the user never
-        // switched its colour off. Counting only `colorFilters[type-1] === false` missed
-        // those and reported "0 hidden" while the grid was hiding them -- the same
-        // silently-vanishing event that #41 was about.
+        // Scoped to the visible date range, not the whole calendar. Counting every stored
+        // event made the number describe something the user cannot see -- one real calendar
+        // has 2380 events of a single type, so hiding it announced "2380 events hidden"
+        // while 66 disappeared from the week in front of them. The count has to answer
+        // "where did the thing I was just looking at go".
         hiddenEventCount() {
-            return this.calendar.events.filter(e => !this.isEventVisible(e)).length;
+            this.viewTick; // dependency: recompute when the scheduler re-renders a new range
+            const range = this.visibleDateRange();
+            return this.calendar.events.filter(e => {
+                if (this.isEventVisible(e)) return false;
+                if (!range) return true;
+                const start = new Date(e.start).getTime();
+                if (isNaN(start)) return true; // undateable: count it rather than hide the fact
+                // A recurring event is one stored record but many occurrences; if its series
+                // starts before the window it may still occur inside it, so keep it.
+                if (e.recurrencerule) return start < range.end;
+                const end = new Date(e.end).getTime();
+                return start < range.end && (isNaN(end) ? start : end) >= range.start;
+            }).length;
         },
         calendarAutoViewLabel() {
             return 'Month'; // Could be dynamic based on screen size etc.
@@ -787,6 +801,11 @@ const CalendarVueApp = {
 
         // Add event listener to mark month-start dates and colorize year view dots
         scheduleObj.dataBound = function () {
+            // hiddenEventCount is scoped to the dates on screen, and the scheduler's view
+            // is not a Vue dependency -- without this the count would go stale the moment
+            // the user changed week or switched view.
+            app.viewTick++;
+
             // Find all date headers and mark ones with month names (contain space)
             const dateHeaders = document.querySelectorAll('.e-schedule .e-month-view .e-date-header.e-navigate');
             dateHeaders.forEach(header => {
@@ -1370,24 +1389,25 @@ const CalendarVueApp = {
             // This creates a new array instance for this.syncFusionEvents if this.calendar.events has changed.
             this.syncFusionEvents = this.calendar.getSyncFusionEvents();
 
-            // Step 2: Create a DataManager with the current, complete set of events.
-            const eventDataManager = new ej.data.DataManager(this.syncFusionEvents);
-
-            // Step 3: Prepare the query based on current filters.
-            let query = this.getFilteredEventsQuery();
-
-            // Step 4: Update the Scheduler's eventSettings with the new DataManager and Query.
-            // This tells the Scheduler to use the 'eventDataManager' as its source and apply the 'query'.
+            // Step 2: Hand the scheduler only the events the colour filter admits.
+            //
+            // This filters the array rather than passing a DataManager plus an ej.data.Query
+            // predicate. The query built an allow-list of `Type == n` clauses, which is a
+            // second, separate definition of "visible" alongside isEventVisible() -- and
+            // every round of issue #41 was those two definitions disagreeing (first about
+            // whether the search panel was open, then about types with no colour slot, then
+            // about how `type` is normalised). One predicate, used here and by
+            // hiddenEventCount, makes that whole class of bug unrepresentable.
             scheduleObj.setProperties({
                 eventSettings: {
-                    dataSource: eventDataManager,
-                    query: query
+                    dataSource: this.syncFusionEvents.filter(e => this.isEventVisible(e)),
+                    query: new ej.data.Query()
                 }
             });
 
-            // Step 5: Re-bind the data to ensure the Scheduler reflects the changes.
+            // Step 3: Re-bind the data to ensure the Scheduler reflects the changes.
             // While setProperties might sometimes trigger a refresh, explicitly calling dataBind is safer
-            // when dataSource or query changes significantly.
+            // when dataSource changes significantly.
             scheduleObj.dataBind();
         },
 
@@ -1761,107 +1781,37 @@ const CalendarVueApp = {
             this.colorFilters = next;
         },
 
-        // Would the colour filter let this event through? The single definition of
-        // "visible", used both to count hidden events and to reason about the grid.
-        // Matches getFilteredEventsQuery()'s allow-list semantics, including the case where
-        // an event's type has no colour slot at all -- such an event is filtered out by the
-        // grid, so it must count as hidden here too.
-        isEventVisible(event) {
-            // Count against COLORS.length, the same bound getFilteredEventsQuery() compares
-            // to, so the two can never disagree about "all colours are on".
-            const slots = this.COLORS.length;
-            const activeCount = this.colorFilters.slice(0, slots).filter(Boolean).length;
-            if (activeCount === slots) return true;  // no predicate applied
-            if (activeCount === 0) return false;     // everything excluded
+        // The date window the grid is currently showing, or null if it can't be read.
+        // Syncfusion exposes it as getCurrentViewDates(); falling back to null means the
+        // count degrades to "all events" rather than throwing.
+        visibleDateRange() {
+            if (typeof scheduleObj === 'undefined' || !scheduleObj) return null;
+            const dates = typeof scheduleObj.getCurrentViewDates === 'function'
+                ? scheduleObj.getCurrentViewDates() : null;
+            if (!dates || !dates.length) return null;
+            const first = new Date(dates[0]).getTime();
+            const last = new Date(dates[dates.length - 1]).getTime();
+            if (isNaN(first) || isNaN(last)) return null;
+            return { start: first, end: last + 86400000 }; // through the end of the last day
+        },
 
+        // The only definition of "visible". updateCalendarView() filters the grid with
+        // this, and hiddenEventCount counts with it, so the two cannot disagree.
+        isEventVisible(event) {
             return this.colorFilters[this.filterSlotFor(event)] === true;
         },
 
         // Which colour dot governs this event. Both paint paths (eventRendered and
         // getTypeColor) fall back to COLORS[0] for a type with no slot, so such an event
-        // reads on screen as type 1 -- the type 1 dot is the one the user would click to
-        // hide it, and the filter has to agree with what they see.
+        // reads on screen as type 1 and follows the type 1 dot. Normalised with `|| 1`,
+        // matching Calendar.getSyncFusionEvents() and Event.js, so a type of 0 or ""
+        // lands in the same slot here as it does on the grid.
         filterSlotFor(event) {
-            const type = parseInt(event.type ?? event.Type ?? 1);
+            const type = parseInt(event.type || event.Type || 1);
             if (!Number.isFinite(type) || type < 1 || type > this.COLORS.length) return 0;
             return type - 1;
         },
 
-        // The grid shows exactly what colorFilters says, and nothing else decides it.
-        //
-        // This used to be wrapped in `if (this.showSearch)`, which made panel visibility a
-        // hidden input to the query: closing the panel was supposed to un-filter the grid,
-        // but nothing re-ran the query, so the filter stayed applied invisibly. Keeping the
-        // filter honest here means there is no state where the grid hides an event but the
-        // UI shows every dot lit -- the condition behind #41.
-        getFilteredEventsQuery() {
-            let query = new ej.data.Query();
-
-            // Apply color filters from this.colorFilters. Bounded by COLORS.length -- the
-            // same value the branch below compares against -- so a colorFilters array that
-            // has drifted out of step can never push activeColorTypes past that bound and
-            // skip filtering entirely. syncColorFiltersLength() keeps them equal; this
-            // bound means a lapse there degrades safely instead of silently.
-            const slots = this.COLORS.length;
-            const activeColorTypes = [];
-            for (let i = 0; i < slots; i++) {
-                if (this.colorFilters[i]) {
-                    activeColorTypes.push(i + 1); // Event types are 1-based
-                }
-            }
-
-            if (activeColorTypes.length > 0 && activeColorTypes.length < slots) {
-                // Some but not all colours are on. The predicate is an allow-list of exact
-                // type ids, so it must also name the types that have no colour slot of their
-                // own: the grid paints those with COLORS[0], which makes them read as type 1
-                // on screen, so they follow the type 1 dot. Without this they match nothing
-                // and vanish while every dot the user can see is still lit -- #41 again, one
-                // level down. matchedTypes is built from the events actually present, which
-                // keeps the predicate finite.
-                const matchedTypes = new Set(activeColorTypes);
-                if (this.colorFilters[0]) {
-                    for (const e of this.calendar.events) {
-                        const t = parseInt(e.type ?? 1);
-                        if (!Number.isFinite(t) || t < 1 || t > slots) matchedTypes.add(t);
-                    }
-                }
-
-                let colorPredicate = null;
-                for (const typeId of matchedTypes) {
-                    if (colorPredicate === null) {
-                        colorPredicate = new ej.data.Predicate('Type', 'equal', typeId);
-                    } else {
-                        colorPredicate = colorPredicate.or('Type', 'equal', typeId);
-                    }
-                }
-                query = query.where(colorPredicate);
-            } else if (activeColorTypes.length === 0 && slots > 0) {
-                // If no colors are selected (and there are colors to select from), filter out all events.
-                // Use a predicate that will never be true. Assuming 'Type' is always positive.
-                query = query.where('Type', 'equal', -1);
-            }
-            // All colours on: no predicate, every event shows.
-
-            return query;
-        },
-
-        getFilteredEvents() {
-            if (!this.showSearch) {
-                return this.syncFusionEvents;
-            }
-
-            return this.syncFusionEvents;
-
-            return this.syncFusionEvents.filter(event => {
-                return true;
-
-                const eventType = parseInt(event.Type || event.type);
-                // If eventType is not a valid number, just keep the event.
-                if (isNaN(eventType)) return true;
-                // If the color filter for the event type is explicitly false, remove it.
-                return this.colorFilters[eventType - 1] === true;
-            });
-        },
 
         jumpToEvent(event) {
             let startDate = new Date(event.start);
