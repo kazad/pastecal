@@ -315,6 +315,62 @@ const Analytics = {
         });
     },
 
+    // ---- reliability ---------------------------------------------------------
+    //
+    // Everything above answers "is this used". Nothing answered "is it working",
+    // and for a shared calendar that is the more important question: the product
+    // promise is that what you type stays typed and what you share stays shared.
+    //
+    // Every bug found in the #41 investigation was silent in production -- events
+    // destroyed by concurrent writes, events dropped at the write boundary, a feed
+    // serving wrong recurrence to subscribers who are not even on the site. The
+    // only detection channel was one user filing a GitHub issue. These events give
+    // the failures a voice, and are deliberately counts rather than payloads: they
+    // say "this is happening, go look", never what anyone's calendar contains.
+
+    /**
+     * A write had to reconcile someone else's concurrent change. Not an error --
+     * merging is the intended behaviour -- but the rate is the only visibility into
+     * how often real editing collides, and a sudden jump means the merge is
+     * thrashing rather than settling.
+     */
+    syncMerged(counts) {
+        this.track('sync_merged', {
+            added_by_others: counts?.addedByOthers ?? 0,
+            removed_by_us: counts?.removedByUs ?? 0,
+        });
+    },
+
+    /**
+     * The write path refused an event because it had no usable start/end. The user
+     * sees a toast, but this is the count that says whether the entry paths are
+     * still producing unsaveable events at all.
+     */
+    eventsDropped(count, reason) {
+        this.track('events_dropped', { count: count || 0, reason: reason || 'incomplete' });
+    },
+
+    /**
+     * A calendar's ICS feed failed to generate. Subscribers experience this as a
+     * feed that silently stops updating, and they have no way to report it -- they
+     * are not on the site to notice.
+     */
+    icsFailed(reason) {
+        this.track('ics_failed', { reason: reason || 'unknown' });
+    },
+
+    /**
+     * An uncaught error or rejected promise reached the top of the stack. Names the
+     * failure and where it came from, never the user's data.
+     */
+    jsError(kind, message, where) {
+        this.track('js_error', {
+            kind,                                   // 'error' | 'unhandledrejection'
+            message: String(message || '').slice(0, 200),
+            where: String(where || '').slice(0, 120),
+        });
+    },
+
     // Generated ids come from IDService.generateNanoId(5): 5 alphanumeric chars.
     // Human slugs are lowercased at claim time and usually longer.
     looksGenerated(id) {

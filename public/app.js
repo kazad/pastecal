@@ -20,6 +20,44 @@ function track(fn) {
     }
 }
 
+// Report uncaught errors and rejected promises.
+//
+// Until now nothing did. A JS error that broke saving, rendering, or the editor was
+// visible only in the user's own devtools, so the app could be failing for a whole
+// class of browser and the first signal would be someone filing an issue -- which is
+// exactly how #41 was found, months after it started.
+//
+// Registered at load rather than in mounted(), so an error thrown while the app is
+// still starting up is caught too. Only the message and origin are sent; never a
+// calendar's contents. Deliberately passive: these listeners do not preventDefault,
+// so the browser still logs everything it would have.
+(function installErrorReporting() {
+    if (typeof window === 'undefined') return;
+
+    const seen = new Set();   // one report per distinct failure, not one per repaint
+    const report = (kind, message, where) => {
+        try {
+            const key = kind + '|' + message + '|' + where;
+            if (seen.has(key)) return;
+            if (seen.size > 20) return;   // a storm is one signal, not a thousand hits
+            seen.add(key);
+            track(a => a.jsError(kind, message, where));
+        } catch (err) { /* reporting must never become the failure */ }
+    };
+
+    window.addEventListener('error', (e) => {
+        const where = e.filename
+            ? `${String(e.filename).split('/').pop()}:${e.lineno || 0}`
+            : 'unknown';
+        report('error', (e.error && e.error.message) || e.message, where);
+    });
+
+    window.addEventListener('unhandledrejection', (e) => {
+        const r = e.reason;
+        report('unhandledrejection', (r && (r.message || r.code)) || String(r), 'promise');
+    });
+})();
+
 // ============================================================
 // COMPONENT REGISTRY
 // ============================================================
@@ -1078,6 +1116,24 @@ const CalendarVueApp = {
             const what = named.length === 1 ? `"${named[0]}"`
                 : `${dropped.length} event${dropped.length === 1 ? '' : 's'}`;
             this.showToast(`${what} needs a start and end time — not saved`, 'error');
+            // The count, not the events: this is how we find out whether an entry path
+            // is still producing unsaveable events without waiting for a bug report.
+            track(a => a.eventsDropped(dropped.length, 'incomplete'));
+        };
+
+        // How often real editing actually collides. Merging is the intended behaviour, so
+        // this is not an error -- but the rate is the only visibility into whether the
+        // merge is settling or thrashing, and it was completely dark before.
+        CalendarDataService.onSyncMerged = (counts) => {
+            track(a => a.syncMerged(counts));
+        };
+
+        // A write that never landed. The user is told, because silently keeping an edit
+        // that exists only on their screen is the failure mode this whole investigation
+        // was about.
+        CalendarDataService.onSyncFailed = () => {
+            this.showToast('Could not save — check your connection', 'error');
+            track(a => a.jsError('sync_failed', 'transaction did not commit', 'sync'));
         };
 
         // Apply custom colors CSS if any

@@ -614,6 +614,19 @@ exports.generateICSV2 = onRequest({ cors: true }, async (req, res) => {
         const status = err?.httpErrorCode?.status ?? 500;
 
         if (status >= 500) {
+            // Structured so this is queryable and alertable in Cloud Logging, not just
+            // readable. Subscribers experience an ICS failure as a feed that quietly stops
+            // updating -- they are not on the site and cannot report it, so the log is the
+            // only place this failure can ever be noticed.
+            // req.path, not the resolved slug: that is declared inside the try and is out
+            // of scope here, and a ReferenceError raised while reporting a failure would
+            // replace the real error with a worse one.
+            console.error(JSON.stringify({
+                severity: 'ERROR',
+                event: 'ics_failed',
+                path: String(req.path || '').slice(0, 120),
+                reason: err?.message || 'unknown',
+            }));
             console.error('Error generating ICS:', err);
             res.status(status).send('Server error generating ICS');
         } else {

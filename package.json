@@ -5,7 +5,7 @@
   "scripts": {
     "test:smoke": "bash test/smoke-llm.sh",
     "test:unit": "npm run test:unit:fast && npm run test:unit:emulator",
-    "test:unit:fast": "node test/check-node-version.js && node --test test/unit/event-model.test.js test/unit/ics.test.js test/unit/stress.test.js test/unit/recent-calendars.test.js test/unit/design-system.test.js test/unit/color-filter.test.js test/unit/filter-parity.test.js test/unit/concurrent-merge.test.js test/unit/ics-recurrence.test.js",
+    "test:unit:fast": "node test/check-node-version.js && node --test test/unit/event-model.test.js test/unit/ics.test.js test/unit/stress.test.js test/unit/recent-calendars.test.js test/unit/design-system.test.js test/unit/color-filter.test.js test/unit/filter-parity.test.js test/unit/concurrent-merge.test.js test/unit/ics-recurrence.test.js test/unit/observability.test.js",
     "test:unit:emulator": "bash test/run-emulator-tests.sh",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",

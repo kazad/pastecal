@@ -39,6 +39,12 @@ class CalendarDataService {
     // the app losing their data. Whoever is watching deserves to know which event and why.
     static onIncompleteEvents = null;
 
+    // Observers for the write path, set by the app. Kept as hooks rather than direct
+    // Analytics calls so this service stays free of a dependency it does not otherwise
+    // have, and so tests can assert on them without a analytics stub.
+    static onSyncMerged = null;    // a write reconciled with someone else's concurrent change
+    static onSyncFailed = null;    // a write did not land at all
+
     static _dropIncompleteEvents(calendar) {
         if (!calendar || !Array.isArray(calendar.events)) return calendar;
 
@@ -309,6 +315,10 @@ class CalendarDataService {
             const rest = this._sanitizeForFirebase({ ...safe, events: undefined });
             delete rest.events;
 
+            // Filled by the transaction body, read once it commits. The body can run more
+            // than once under contention, so only the committed run's value is reported.
+            let pendingMerge = null;
+
             this.db.child(calendar.id).transaction((current) => {
                 // Firebase may run this with a null `current` speculatively, before the
                 // node's real value is available, and runs it again on contention. Writing
@@ -330,6 +340,16 @@ class CalendarDataService {
                     ? { ...(current.options || {}), ...(rest.options || {}) }
                     : undefined;
 
+                // Did this write actually have to reconcile with somebody else? Compared
+                // against what we hold, not against base, so it counts real collisions
+                // rather than our own edits. Reported after the transaction commits.
+                const localIds = new Set(localEvents.map(e => e && e.id).filter(Boolean));
+                const remoteIds = new Set(remoteEvents.map(e => e && e.id).filter(Boolean));
+                pendingMerge = {
+                    addedByOthers: [...remoteIds].filter(id => !localIds.has(id)).length,
+                    removedByUs: [...localIds].filter(id => !remoteIds.has(id)).length,
+                };
+
                 const next = {
                     ...current,
                     ...rest,
@@ -339,10 +359,21 @@ class CalendarDataService {
                 return next;
             }, (error, committed, snapshot) => {
                 if (error) {
+                    // A failed write is the one thing a user must never discover later.
+                    // Surfaced to them, and counted, because the console is not a channel
+                    // anybody watches.
                     console.error('[CalendarDataService] sync transaction failed', error);
+                    if (typeof this.onSyncFailed === 'function') {
+                        try { this.onSyncFailed(error); } catch (e) { /* never rethrow */ }
+                    }
                 } else if (committed && snapshot) {
                     // Our write is now the baseline for the next diff.
                     this._rememberSnapshot({ id: calendar.id, events: snapshot.val()?.events });
+
+                    if (pendingMerge && (pendingMerge.addedByOthers || pendingMerge.removedByUs)
+                        && typeof this.onSyncMerged === 'function') {
+                        try { this.onSyncMerged(pendingMerge); } catch (e) { /* never rethrow */ }
+                    }
                 }
             });
 
