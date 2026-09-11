@@ -142,6 +142,34 @@ test('a moved occurrence with no usable exception stays a standalone event', () 
   assert.doesNotMatch(block, /RECURRENCE-ID/, 'and claims no instance');
 });
 
+test('a moved occurrence is overridden, not excluded', () => {
+  // The app records a move in the parent's exception list exactly as it records a
+  // deletion. EXDATE'ing that slot removes the instance the RECURRENCE-ID override was
+  // meant to fill, so the moved event vanishes from the feed entirely.
+  //
+  // Verified against ical.js (Thunderbird's parser): with the EXDATE present, expanding
+  // the series yields no occurrence on that date at all -- the move is simply lost. With
+  // it removed, the occurrence resolves at its new time carrying its own summary. So
+  // EXDATE must list only genuinely deleted dates.
+  const ics = ICSService.generateICS({
+    title: 'Mixed',
+    events: [
+      series({ recurrencerule: 'FREQ=WEEKLY;INTERVAL=1;COUNT=8',
+        recurrenceException: '20260914T170000Z,20260921T170000Z' }),
+      { id: 'c1', title: 'Weekly Standup (moved)', description: '',
+        start: '2026-09-21T21:00:00.000Z', end: '2026-09-21T21:30:00.000Z',
+        recurrencerule: 'FREQ=WEEKLY;INTERVAL=1;COUNT=8',
+        recurrenceID: 'parent-1', recurrenceException: '20260921T170000Z' },
+    ],
+  }, 'mixed');
+
+  const exdate = (/^EXDATE.*?:(\S+)$/m.exec(ics) || [])[1];
+  assert.equal(exdate, '20260914T170000Z',
+    'only the deleted date belongs in EXDATE; the moved one is claimed by RECURRENCE-ID');
+  assert.match(ics, /^RECURRENCE-ID:20260921T170000Z$/m,
+    'and the moved occurrence still claims its slot');
+});
+
 // --- All-day events ---------------------------------------------------------------------
 
 test('an all-day series uses DATE values so its exclusions actually match', () => {
@@ -194,9 +222,11 @@ test('a series and its moved occurrence agree with each other in one feed', () =
     ],
   }, 'solidarity_calendar');
 
-  // The parent excludes the original slot; the child fills it via RECURRENCE-ID. A
-  // subscriber therefore sees exactly one standup that week, at the new time.
-  assert.match(ics, /^EXDATE:20260921T170000Z$/m);
+  // The child claims the slot via RECURRENCE-ID, and the parent must NOT also EXDATE it:
+  // excluding an overridden slot deletes the instance the override exists to replace, so
+  // the moved occurrence disappears (confirmed by expanding the feed in a real parser).
+  assert.doesNotMatch(ics, /^EXDATE/m,
+    'the only exception here is a move, which is an override rather than a deletion');
   assert.match(ics, /^RECURRENCE-ID:20260921T170000Z$/m);
   assert.equal((ics.match(/^RRULE:/gm) || []).length, 1,
     'exactly one series in the feed, not two');

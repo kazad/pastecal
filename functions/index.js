@@ -299,7 +299,7 @@ const ICSService = {
         return best;
     },
 
-    createEventBlock(event, dtstamp) {
+    createEventBlock(event, dtstamp, overriddenSlots) {
         // An edited occurrence is stored as its own record pointing at its parent through
         // recurrenceID, and it inherits the parent's RecurrenceRule in the process. Emitting
         // that rule would turn one moved occurrence into a second full series.
@@ -336,9 +336,13 @@ const ICSService = {
             eventLines.push(`RRULE:${event.recurrencerule}`);
 
             // Without EXDATE, an occurrence the user deleted in the app is still generated
-            // by the rule, so every subscriber keeps seeing a meeting that was cancelled --
-            // and a moved occurrence shows up twice, at both times.
-            const exdates = this.exceptionDates(event).map(asValue);
+            // by the rule, so every subscriber keeps seeing a meeting that was cancelled.
+            // Slots that a moved occurrence overrides are excluded from this list: those
+            // instances are replaced, not removed, and EXDATE'ing one deletes the slot its
+            // override was meant to fill.
+            const exdates = this.exceptionDates(event)
+                .filter(stamp => !(overriddenSlots && overriddenSlots.has(stamp)))
+                .map(asValue);
             if (exdates.length) eventLines.push(`EXDATE${dateParam}:${exdates.join(",")}`);
         }
 
@@ -364,7 +368,26 @@ const ICSService = {
         // DTSTAMP is "when this representation of the calendar was generated," not an
         // event property in our data model, so every VEVENT in a given export shares one.
         const dtstamp = this.formatDateTime(new Date());
-        const events = renderable.map(event => this.createEventBlock(event, dtstamp));
+
+        // Which instances of each series are replaced by a moved occurrence rather than
+        // deleted. A moved occurrence is expressed as an override (same UID, a
+        // RECURRENCE-ID naming the slot it replaces) -- but the app records the move in the
+        // parent's exception list too, exactly as it records a deletion. EXDATE'ing that
+        // slot removes the instance the override was meant to fill, so the moved event
+        // disappears from the feed entirely. Verified against a real iCalendar parser:
+        // with the EXDATE present the occurrence is gone; without it, it resolves at its
+        // new time. So EXDATE must carry only the genuinely deleted dates.
+        const overridden = new Map();
+        for (const event of renderable) {
+            if (!event.recurrenceID) continue;
+            const slot = this.occurrenceOriginal(event);
+            if (!slot) continue;
+            if (!overridden.has(event.recurrenceID)) overridden.set(event.recurrenceID, new Set());
+            overridden.get(event.recurrenceID).add(slot);
+        }
+
+        const events = renderable.map(event =>
+            this.createEventBlock(event, dtstamp, overridden.get(event.id)));
 
         // Without X-WR-CALNAME a subscription shows up in the user's calendar list
         // as the raw feed URL, or as "Untitled" -- so a shared roster is unlabelled
