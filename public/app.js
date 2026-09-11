@@ -150,6 +150,9 @@ const CalendarVueApp = {
             // tell "someone else changed this" from "the person here changed this" and
             // not publish the former back as if it were the latter.
             isApplyingRemote: false,
+            // The events array as the last remote snapshot left it, so the watcher can tell
+            // an untouched echo from an echo plus a real local edit.
+            remoteAppliedSignature: null,
             // The event the Syncfusion editor dialog is currently showing. The dialog's DOM
             // and its type dropdown are reused across opens, so handlers built on the first
             // open read this rather than their own stale closure.
@@ -661,6 +664,13 @@ const CalendarVueApp = {
         // custom display for types
         scheduleObj.popupOpen = (args) => {
 
+            // Cleared on every popup, not just the Editor. Left set, it stays pointing at
+            // the last event edited, so a colour chosen from any other popup would land on
+            // that stale event -- the same wrong-event write this field exists to prevent,
+            // moved from a stale closure to a stale field. Clearing first also makes the
+            // `|| args.data` fallback in those handlers reachable again.
+            app.activeEditorData = null;
+
             if (args.type === 'Editor') {
                 // console.log("Editor call");
 
@@ -1151,7 +1161,12 @@ const CalendarVueApp = {
                 // was re-committed by everyone watching, so a deleted event could come
                 // back and a fresh edit could be reverted by a bystander's echo. Applying
                 // a remote change is not a local edit and must not be published as one.
-                if (this.isApplyingRemote) {
+                // Skip the write only if the calendar still looks exactly as the remote
+                // snapshot left it. If the user changed something in the same batch, that
+                // edit is real and must be published -- suppressing it would trade the
+                // echo bug for a silent lost edit.
+                if (this.isApplyingRemote
+                    && JSON.stringify(this.calendar.events || []) === this.remoteAppliedSignature) {
                     this.updateCalendarView();
                     return;
                 }
@@ -1727,8 +1742,32 @@ const CalendarVueApp = {
         applyRemoteCalendar(c) {
             this.isApplyingRemote = true;
             try {
+                // import() is a bare Object.assign, so it replaces events wholesale. A
+                // local edit made inside the 500ms debounce window has not reached the
+                // server yet, and would simply be overwritten by the snapshot -- the user
+                // watches their change undo itself. Merge the incoming events over the
+                // local ones the same way the write path does, so unsent work survives
+                // until its sync lands.
+                const incoming = Array.isArray(c?.events)
+                    ? c.events
+                    : Object.values(c?.events || {});
+                // The baseline from BEFORE this snapshot. _lastSeen has already been
+                // advanced to the incoming data by the time we get here, and diffing
+                // against that would mark every local row as an edit and reinstate our
+                // stale copies over the change that just arrived.
+                const base = CalendarDataService._previousSeen[this.calendar.id];
+                if (base && this.calendar.events && this.calendar.events.length) {
+                    c = { ...c, events: CalendarDataService._mergeEvents(
+                        base, this.calendar.events, incoming) };
+                }
                 this.calendar.import(c);
             } finally {
+                // Record what the calendar looks like immediately after the import. The
+                // watcher compares against this rather than simply trusting the flag: a
+                // local edit landing in the same batch as a remote snapshot would
+                // otherwise be skipped along with it and never reach the server -- a new
+                // data-loss bug in the fix for the old one.
+                this.remoteAppliedSignature = JSON.stringify(this.calendar.events || []);
                 this.$nextTick(() => { this.isApplyingRemote = false; });
             }
         },

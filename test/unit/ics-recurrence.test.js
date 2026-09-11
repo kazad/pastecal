@@ -104,6 +104,80 @@ test('a normal one-off event is unaffected', () => {
   assert.doesNotMatch(block, /RRULE|EXDATE|RECURRENCE-ID/);
 });
 
+test('a second moved occurrence gets its OWN slot, not the first one\'s', () => {
+  // Syncfusion accumulates the parent's whole exception list onto every child, so taking
+  // exceptionDates()[0] gave both children the same RECURRENCE-ID. A duplicate
+  // (UID, RECURRENCE-ID) pair is invalid: clients keep one VEVENT and discard the other,
+  // so the second meeting disappears entirely -- worse than the duplication it replaced.
+  const both = '20260921T170000Z,20261005T170000Z';
+  const first = ICSService.createEventBlock({
+    id: 'c1', title: 'Standup', description: '',
+    start: '2026-09-21T21:00:00.000Z', end: '2026-09-21T21:30:00.000Z',
+    recurrenceID: 'parent-1', recurrenceException: both,
+  }, DTSTAMP);
+  const second = ICSService.createEventBlock({
+    id: 'c2', title: 'Standup', description: '',
+    start: '2026-10-05T21:00:00.000Z', end: '2026-10-05T21:30:00.000Z',
+    recurrenceID: 'parent-1', recurrenceException: both,
+  }, DTSTAMP);
+
+  const idOf = (b) => (/^RECURRENCE-ID.*:(\S+)$/m.exec(b) || [])[1];
+  assert.equal(idOf(first), '20260921T170000Z');
+  assert.equal(idOf(second), '20261005T170000Z');
+  assert.notEqual(idOf(first), idOf(second),
+    'two occurrences of one series must not claim the same instance');
+});
+
+test('a moved occurrence with no usable exception stays a standalone event', () => {
+  // Sharing the parent UID is only valid alongside a RECURRENCE-ID. Emitting the parent's
+  // UID without one makes clients read the VEVENT as a redefinition of the whole series,
+  // collapsing every other occurrence.
+  const block = ICSService.createEventBlock({
+    id: 'orphan-1', title: 'Standup', description: '',
+    start: '2026-09-21T21:00:00.000Z', end: '2026-09-21T21:30:00.000Z',
+    recurrenceID: 'parent-1', recurrenceException: 'garbage',
+  }, DTSTAMP);
+
+  assert.match(block, /^UID:orphan-1$/m, 'falls back to its own UID');
+  assert.doesNotMatch(block, /RECURRENCE-ID/, 'and claims no instance');
+});
+
+// --- All-day events ---------------------------------------------------------------------
+
+test('an all-day series uses DATE values so its exclusions actually match', () => {
+  // RFC 5545 requires EXDATE to use DTSTART's value type. A DATE-TIME EXDATE against a
+  // DATE-valued series matches no instance, so the deleted day keeps appearing.
+  const block = ICSService.createEventBlock({
+    id: 'holiday-1', title: 'Office closed', description: '', isAllDay: true,
+    start: '2026-09-07T00:00:00.000Z', end: '2026-09-08T00:00:00.000Z',
+    recurrencerule: 'FREQ=WEEKLY;INTERVAL=1',
+    recurrenceException: '20260914T000000Z',
+  }, DTSTAMP);
+
+  assert.match(block, /^DTSTART;VALUE=DATE:20260907$/m);
+  assert.match(block, /^EXDATE;VALUE=DATE:20260914$/m);
+});
+
+// --- Date formatting --------------------------------------------------------------------
+
+test('offset and naive timestamps normalise to UTC instead of corrupting the feed', () => {
+  // The old string fast-path stripped separators without converting the zone, so an offset
+  // stamp became "20260907T1700000400" -- an invalid DTSTART that a strict client rejects,
+  // taking the whole calendar with it.
+  assert.equal(ICSService.formatDateTime('2026-09-07T17:00:00-04:00'), '20260907T210000Z');
+  assert.equal(ICSService.formatDateTime('2026-09-07T17:00:00.000Z'), '20260907T170000Z');
+  assert.equal(ICSService.formatDateTime(new Date('2026-09-07T17:00:00Z')), '20260907T170000Z');
+
+  for (const bad of ['nonsense', '', null, undefined]) {
+    assert.equal(ICSService.formatDateTime(bad), null, `${JSON.stringify(bad)} is unusable`);
+  }
+});
+
+test('every emitted timestamp is a well-formed UTC stamp', () => {
+  const out = ICSService.formatDateTime('2026-09-07T17:00:00-04:00');
+  assert.match(out, /^\d{8}T\d{6}Z$/);
+});
+
 // --- The whole feed ---------------------------------------------------------------------
 
 test('a series and its moved occurrence agree with each other in one feed', () => {
@@ -128,4 +202,31 @@ test('a series and its moved occurrence agree with each other in one feed', () =
     'exactly one series in the feed, not two');
   assert.equal((ics.match(/^UID:parent-1$/gm) || []).length, 2,
     'parent and its modified occurrence share a UID');
+});
+
+test('no two components in a feed claim the same instance', () => {
+  // Counting UIDs cannot tell a correct shared-UID pair from a collision. The identity of
+  // a component is (UID, RECURRENCE-ID); duplicates there mean a client silently drops one.
+  const both = '20260921T170000Z,20261005T170000Z';
+  const ics = ICSService.generateICS({
+    title: 'Series with two moved occurrences',
+    events: [
+      series({ recurrenceException: both }),
+      { id: 'c1', title: 'Standup', description: '',
+        start: '2026-09-21T21:00:00.000Z', end: '2026-09-21T21:30:00.000Z',
+        recurrenceID: 'parent-1', recurrenceException: both },
+      { id: 'c2', title: 'Standup', description: '',
+        start: '2026-10-05T21:00:00.000Z', end: '2026-10-05T21:30:00.000Z',
+        recurrenceID: 'parent-1', recurrenceException: both },
+    ],
+  }, 'two-moves');
+
+  const keys = ics.split('BEGIN:VEVENT').slice(1).map(block => {
+    const uid = (/^UID:(\S+)$/m.exec(block) || [])[1];
+    const rid = (/^RECURRENCE-ID.*?:(\S+)$/m.exec(block) || [])[1] || '';
+    return `${uid}|${rid}`;
+  });
+
+  assert.equal(new Set(keys).size, keys.length,
+    `duplicate component identity in feed: ${keys.join(' , ')}`);
 });

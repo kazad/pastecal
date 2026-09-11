@@ -218,15 +218,32 @@ const ICSService = {
     formatDateTime(dateTime) {
         if (dateTime === null || dateTime === undefined || dateTime === '') return null;
 
-        if (typeof dateTime === 'string') {
-            const parsed = new Date(dateTime);
-            if (isNaN(parsed.getTime())) return null;
-            return dateTime.replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
-        }
-
+        // Always normalise through Date rather than string-editing the input. The old fast
+        // path stripped separators without converting the zone, so an offset stamp like
+        // "2026-09-07T17:00:00-04:00" became "20260907T1700000400" and a naive
+        // "2026-09-07T17:00:00" kept a local wall time as though it were UTC. Both are
+        // invalid DTSTART values, and a strict subscriber rejects the WHOLE calendar over
+        // one of them -- the same blast radius as the malformed-event incident that
+        // isRenderable was added for.
         const d = dateTime instanceof Date ? dateTime : new Date(dateTime);
         if (isNaN(d.getTime())) return null;
-        return d.toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+
+        const out = d.toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+        // Emit only a well-formed UTC stamp; anything else is treated as unusable so the
+        // event is skipped individually instead of corrupting the feed.
+        return /^\d{8}T\d{6}Z$/.test(out) ? out : null;
+    },
+
+    // Date-only form (YYYYMMDD) for all-day events. RFC 5545 3.8.2.4 requires DTSTART to be
+    // a DATE for an all-day event, and 3.8.5.1 requires EXDATE to use the same value type;
+    // emitting a DATE-TIME instead means a deleted all-day occurrence never matches its
+    // EXDATE and keeps appearing for subscribers.
+    formatDate(dateTime) {
+        if (dateTime === null || dateTime === undefined || dateTime === '') return null;
+        const d = dateTime instanceof Date ? dateTime : new Date(dateTime);
+        if (isNaN(d.getTime())) return null;
+        const out = d.toISOString().slice(0, 10).replace(/-/g, '');
+        return /^\d{8}$/.test(out) ? out : null;
     },
 
     // An event is only renderable if BOTH endpoints normalize to a real date. A truthiness
@@ -253,40 +270,76 @@ const ICSService = {
             .map(s => (s.endsWith("Z") ? s : `${s}Z`));
     },
 
+    // Which instance a moved occurrence replaces. Syncfusion accumulates the parent's whole
+    // exception list onto each child, so the first entry is not necessarily this child's own
+    // original slot -- using it made every child after the first emit the SAME
+    // RECURRENCE-ID, and a duplicate (UID, RECURRENCE-ID) pair makes clients keep one and
+    // discard the rest. That deletes meetings, which is worse than the duplication it
+    // replaced. Pick the exception whose time-of-day matches this occurrence, falling back
+    // to the one nearest its start.
+    occurrenceOriginal(event) {
+        const candidates = this.exceptionDates(event);
+        if (!candidates.length) return null;
+        if (candidates.length === 1) return candidates[0];
+
+        const startMs = new Date(event.start).getTime();
+        if (isNaN(startMs)) return candidates[0];
+
+        const toMs = (stamp) => Date.parse(
+            `${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)}T` +
+            `${stamp.slice(9, 11)}:${stamp.slice(11, 13)}:${stamp.slice(13, 15)}Z`);
+
+        let best = candidates[0], bestDelta = Infinity;
+        for (const c of candidates) {
+            const ms = toMs(c);
+            if (isNaN(ms)) continue;
+            const delta = Math.abs(ms - startMs);
+            if (delta < bestDelta) { bestDelta = delta; best = c; }
+        }
+        return best;
+    },
+
     createEventBlock(event, dtstamp) {
         // An edited occurrence is stored as its own record pointing at its parent through
         // recurrenceID, and it inherits the parent's RecurrenceRule in the process. Emitting
         // that rule would turn one moved occurrence into a second full series.
-        const isOccurrence = !!event.recurrenceID;
+        //
+        // Sharing the parent's UID is only valid when RECURRENCE-ID identifies which
+        // instance this replaces. Without one, two VEVENTs share a UID and a client treats
+        // the second as a redefinition of the series -- collapsing every other occurrence.
+        // So a child with no usable exception date falls back to being a standalone event.
+        const original = event.recurrenceID ? this.occurrenceOriginal(event) : null;
+        const isOccurrence = !!event.recurrenceID && !!original;
+
+        const allDay = !!event.isAllDay;
+        const start = allDay ? this.formatDate(event.start) : this.formatDateTime(event.start);
+        const end = allDay ? this.formatDate(event.end) : this.formatDateTime(event.end);
+        const dateParam = allDay ? ";VALUE=DATE" : "";
 
         const eventLines = [
             "BEGIN:VEVENT",
-            // A modified occurrence must share its parent's UID and be distinguished by
-            // RECURRENCE-ID; a distinct UID makes subscribers show it as an extra event
-            // alongside the original rather than in place of it.
             `UID:${isOccurrence ? event.recurrenceID : event.id}`,
             `DTSTAMP:${dtstamp}`,
-            `DTSTART:${this.formatDateTime(event.start)}`,
-            `DTEND:${this.formatDateTime(event.end)}`,
+            `DTSTART${dateParam}:${start}`,
+            `DTEND${dateParam}:${end}`,
             `SUMMARY:${this.escapeText(event.title)}`,
             `DESCRIPTION:${this.escapeText(event.description)}`
         ];
 
-        if (isOccurrence) {
-            // Which instance of the series this record replaces. The stored exception is
-            // the original start of the occurrence that was moved.
-            const [original] = this.exceptionDates(event);
-            if (original) eventLines.push(`RECURRENCE-ID:${original}`);
-        } else {
-            if (event.recurrencerule) {
-                eventLines.push(`RRULE:${event.recurrencerule}`);
+        // EXDATE must use the same value type as DTSTART, or it matches no instance and the
+        // exclusion is silently ignored.
+        const asValue = (stamp) => allDay ? stamp.slice(0, 8) : stamp;
 
-                // Without EXDATE, an occurrence the user deleted in the app is still
-                // generated by the rule, so every subscriber keeps seeing a meeting that
-                // was cancelled -- and a moved occurrence shows up twice, at both times.
-                const exdates = this.exceptionDates(event);
-                if (exdates.length) eventLines.push(`EXDATE:${exdates.join(",")}`);
-            }
+        if (isOccurrence) {
+            eventLines.push(`RECURRENCE-ID${dateParam}:${asValue(original)}`);
+        } else if (event.recurrencerule) {
+            eventLines.push(`RRULE:${event.recurrencerule}`);
+
+            // Without EXDATE, an occurrence the user deleted in the app is still generated
+            // by the rule, so every subscriber keeps seeing a meeting that was cancelled --
+            // and a moved occurrence shows up twice, at both times.
+            const exdates = this.exceptionDates(event).map(asValue);
+            if (exdates.length) eventLines.push(`EXDATE${dateParam}:${exdates.join(",")}`);
         }
 
         eventLines.push("END:VEVENT");
