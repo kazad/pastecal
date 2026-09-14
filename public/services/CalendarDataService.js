@@ -233,10 +233,21 @@ class CalendarDataService {
     // server holds at write time (remote). Anything we added or changed since base is ours
     // to apply; anything we deleted since base we remove by id; everything else in remote
     // is somebody else's work and is left exactly as it is.
+    // Identity of a row, for every map and comparison below.
+    //
+    // NOT `e.id` alone. Editing one occurrence of a recurring event stores two rows that
+    // deliberately share an id: the series master (recurrenceID null) and the exception
+    // for that occurrence (recurrenceID pointing back at the master). Keyed on id alone
+    // the two collapse into one -- the second row silently evicts the first -- so a user
+    // who edits a single occurrence loses either that occurrence or the whole series.
+    static _eventKey(e) {
+        return `${e.id}|${e.recurrenceID ?? ''}`;
+    }
+
     static _mergeEvents(base, local, remote) {
         const byId = (list) => {
             const m = new Map();
-            for (const e of list || []) if (e && e.id) m.set(e.id, e);
+            for (const e of list || []) if (e && e.id) m.set(this._eventKey(e), e);
             return m;
         };
         const baseM = byId(base), localM = byId(local), remoteM = byId(remote);
@@ -282,12 +293,17 @@ class CalendarDataService {
         }
 
         // Keep the server's ordering, then append anything new from this client.
+        // Keyed the same way as the maps above: on id alone, a recurring master and its
+        // occurrence exception share a key, so the second one would be treated as already
+        // emitted and dropped from the write.
         const out = [];
         const seen = new Set();
         for (const e of remote || []) {
-            if (e && e.id && merged.has(e.id)) { out.push(merged.get(e.id)); seen.add(e.id); }
+            if (!e || !e.id) continue;
+            const k = this._eventKey(e);
+            if (merged.has(k)) { out.push(merged.get(k)); seen.add(k); }
         }
-        for (const [id, ev] of merged) if (!seen.has(id)) out.push(ev);
+        for (const [k, ev] of merged) if (!seen.has(k)) out.push(ev);
         return out;
     }
 

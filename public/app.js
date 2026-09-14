@@ -664,13 +664,29 @@ const CalendarVueApp = {
                     console.log("[app] actionComplete()", "event", ev);
                     console.log(` - syncFusionEvents ${this.syncFusionEvents.length}`, this.syncFusionEvents);
                     console.log(` - eventsData ${scheduleObj.eventsData.length}`, scheduleObj.eventsData);
-                    // Persist the scheduler's own post-change store, not this component's
-                    // cached array. syncFusionEvents is rebuilt by updateCalendarView and
-                    // is only as fresh as the last render, so using it here could write
-                    // back a pre-delete or pre-create snapshot and silently undo the very
-                    // action that triggered this callback. eventsData is what Syncfusion
-                    // just finished mutating.
-                    this.calendar.setEvents(scheduleObj.eventsData || this.syncFusionEvents);
+                    // Apply the records this action actually touched on top of our own
+                    // store, rather than trusting any whole-array snapshot.
+                    //
+                    // Two whole-array snapshots were tried here and both lose data:
+                    //   - this.syncFusionEvents is rebuilt by updateCalendarView, so it is
+                    //     only as fresh as the last render and can write back a pre-create
+                    //     or pre-delete state.
+                    //   - scheduleObj.eventsData is NOT the post-change store this callback
+                    //     needs. Measured at the moment actionComplete fires, it is exactly
+                    //     one change BEHIND: on eventCreated it does not yet contain the new
+                    //     event, and on eventChanged it still holds the event's old field
+                    //     values. Saving it therefore persists the calendar as it was before
+                    //     the user's action -- and on a calendar whose only event is the one
+                    //     being created, that snapshot is [], so `eventsData ||
+                    //     syncFusionEvents` cannot even fall back: an empty array is truthy.
+                    //     Grid create/edit silently did nothing while Quick Add (which
+                    //     pushes onto calendar.events directly) still worked. Issues #42/#43.
+                    //
+                    // added/changed/deletedRecords are per-action and always carry the
+                    // post-change values, so merging them by id is correct regardless of
+                    // what the grid is currently filtered to show -- a filtered-out event is
+                    // left untouched instead of being dropped from the save.
+                    this.calendar.setEvents(this.mergeScheduleRecords(ev));
                     // A real, user-initiated change to this calendar. Recorded here
                     // rather than in CalendarDataService.sync(), because sync() also
                     // runs when the live subscription echoes back someone else's edit --
@@ -1615,6 +1631,32 @@ const CalendarVueApp = {
             // While setProperties might sometimes trigger a refresh, explicitly calling dataBind is safer
             // when dataSource changes significantly.
             scheduleObj.dataBind();
+        },
+
+        // Fold one scheduler action's records into the full event list.
+        //
+        // The scheduler only ever sees the events the colour filter admits (see
+        // updateCalendarView), so no array it exposes is a safe thing to save wholesale --
+        // doing that deletes whatever is currently filtered out. The action's own
+        // added/changed/deletedRecords are the only authoritative statement of what the
+        // user just did, so they are applied over this calendar's complete list.
+        //
+        // Keyed on Id AND RecurrenceID, not Id alone. Editing a single occurrence of a
+        // recurring event emits, in one action, an added record for the exception and a
+        // changed record for the master -- and Syncfusion gives both the SAME Id, telling
+        // them apart only by RecurrenceID (set on the exception, null on the master).
+        // Keyed on Id alone the two collide and the second write wins, so the occurrence
+        // the user just edited is silently dropped from the save.
+        mergeScheduleRecords(ev) {
+            const key = (r) => `${r.Id}|${r.RecurrenceID ?? ''}`;
+            const byKey = new Map(
+                this.calendar.getSyncFusionEvents().map(e => [key(e), e]));
+
+            for (const r of (ev.deletedRecords || [])) byKey.delete(key(r));
+            for (const r of (ev.addedRecords || [])) byKey.set(key(r), r);
+            for (const r of (ev.changedRecords || [])) byKey.set(key(r), r);
+
+            return [...byKey.values()];
         },
 
         // ============================================================

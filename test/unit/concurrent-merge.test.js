@@ -27,10 +27,10 @@ const path = require('node:path');
 const SRC = fs.readFileSync(
   path.join(__dirname, '../../public/services/CalendarDataService.js'), 'utf8');
 
-// Extract the real static method so a drift between test and source shows up as a failure.
-function extractMerge() {
-  const sig = /static _mergeEvents\(([^)]*)\)\s*\{/.exec(SRC);
-  assert.ok(sig, '_mergeEvents not found in CalendarDataService.js — renamed?');
+// Extract a real static method so a drift between test and source shows up as a failure.
+function extractStatic(name) {
+  const sig = new RegExp(`static ${name}\\(([^)]*)\\)\\s*\\{`).exec(SRC);
+  assert.ok(sig, `${name} not found in CalendarDataService.js — renamed?`);
   const open = SRC.indexOf('{', sig.index + sig[0].length - 1);
   let depth = 0, i = open;
   for (; i < SRC.length; i++) {
@@ -41,7 +41,12 @@ function extractMerge() {
   return new Function(`return function(${sig[1]}) {${SRC.slice(open + 1, i)}}`)();
 }
 
-const mergeEvents = extractMerge();
+// _mergeEvents calls this._eventKey, so it needs a host carrying the real helper --
+// also extracted from source, so a change to how rows are identified is exercised here
+// rather than silently diverging from what ships.
+const host = { _eventKey: extractStatic('_eventKey') };
+const rawMerge = extractStatic('_mergeEvents');
+const mergeEvents = (...args) => rawMerge.apply(host, args);
 const ev = (id, title, extra = {}) => ({ id, title, start: '2026-09-17T10:00:00.000Z',
   end: '2026-09-17T11:00:00.000Z', ...extra });
 const ids = (list) => list.map(e => e.id).sort();
@@ -221,4 +226,53 @@ test('an unchanged calendar merges to exactly what the server already had', () =
   const base = [ev('A', 'A'), ev('B', 'B')];
   const merged = mergeEvents(base, base, base);
   assert.deepEqual(merged.map(e => e.id), ['A', 'B']);
+});
+
+// --- Recurring series and their occurrence exceptions -----------------------------------
+
+// Editing one occurrence of a recurring event stores TWO rows that deliberately share an
+// id: the series master (recurrenceID null) and an exception for the edited occurrence
+// (recurrenceID pointing back at the master). Every map in the merge used to key on
+// `e.id` alone, so the two collapsed into a single entry -- whichever came second evicted
+// the first. The user's edited occurrence, or their entire series, vanished on the next
+// write. Identity is (id, recurrenceID); these tests pin that down.
+
+const rec = (id, title, recurrenceID, extra = {}) => ev(id, title, {
+  recurrencerule: 'FREQ=WEEKLY;INTERVAL=1;COUNT=5',
+  recurrenceID: recurrenceID ?? null,
+  ...extra,
+});
+
+test('a recurring master and its occurrence exception both survive a write', () => {
+  const master = rec('REC1', 'Weekly standup', null, { recurrenceException: '20260917T100000Z' });
+  const exception = rec('REC1', 'Standup (moved)', 'REC1', { start: '2026-09-17T15:00:00.000Z' });
+
+  const merged = mergeEvents([], [master, exception], []);
+
+  assert.equal(merged.length, 2, 'master and exception are distinct rows, not one');
+  assert.deepEqual(merged.map(e => e.title).sort(),
+    ['Standup (moved)', 'Weekly standup']);
+});
+
+test("editing an occurrence does not delete another person's concurrent event", () => {
+  const master = rec('REC1', 'Weekly standup', null);
+  const exception = rec('REC1', 'Standup (moved)', 'REC1');
+  const theirs = ev('THEIRS', 'Their event');
+
+  // We loaded just the master, then edited one occurrence. Meanwhile someone added THEIRS.
+  const merged = mergeEvents([master], [master, exception], [master, theirs]);
+
+  assert.deepEqual(merged.map(e => e.id).sort(), ['REC1', 'REC1', 'THEIRS']);
+  assert.ok(merged.some(e => e.recurrenceID === 'REC1'), 'our exception uploads');
+  assert.ok(merged.some(e => e.id === 'THEIRS'), 'their event survives');
+});
+
+test('deleting a recurring series removes the master and its exceptions', () => {
+  const master = rec('REC1', 'Weekly standup', null);
+  const exception = rec('REC1', 'Standup (moved)', 'REC1');
+
+  // Base and remote hold both rows; locally the user deleted the whole series.
+  const merged = mergeEvents([master, exception], [], [master, exception]);
+
+  assert.deepEqual(merged, [], 'both rows go, not just one of them');
 });
