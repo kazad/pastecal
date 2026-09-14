@@ -151,6 +151,8 @@ const CalendarVueApp = {
             showShare: false,
             showSearch: false,
             showSettings: false,
+            undoEntries: [],   // changes this calendar can undo (read from /history)
+            showRecentChanges: false,   // the recent-changes dialog
 
 
             currentViewURL: '',
@@ -2552,7 +2554,134 @@ const CalendarVueApp = {
 
                 // One-time import of type labels from notes when settings panel is opened
                 this.importTypeLabelsFromNotes();
+                this.loadUndoEntries();
             }
+        },
+
+        // Read the changes this calendar can undo. /history is written by a Cloud Function
+        // on any write that removed or edited events, and is read-only to clients -- so
+        // this is a plain read with nothing to keep in sync.
+        async loadUndoEntries() {
+            this.undoEntries = [];
+            if (!this.isExisting || !this.calendar.id) return;
+            try {
+                const snap = await firebase.database()
+                    .ref('/history/' + this.calendar.id).once('value');
+                const rows = [];
+                snap.forEach(c => { rows.push({ key: c.key, ...c.val() }); });
+                rows.sort((a, b) => b.savedAt - a.savedAt);
+
+                // Each entry stores the calendar as it was BEFORE that change. What the
+                // change actually cost is therefore the difference between this snapshot
+                // and whatever came next -- the next newer snapshot, or for the most recent
+                // change, the calendar as it stands now.
+                const keyOf = (e) => `${e.id}|${e.recurrenceID ?? ''}`;
+                const live = this.calendar.getSyncFusionEvents()
+                    .map(e => ({ id: e.Id, recurrenceID: e.RecurrenceID }));
+
+                this.undoEntries = rows.slice(0, 10).map((r, i) => {
+                    const before = r.events || [];
+                    // `before` is the calendar as it stood before this change. What the
+                    // change removed is whatever is in it but NOT in the state that
+                    // followed -- the next NEWER snapshot (rows are newest-first, so that
+                    // is rows[i-1]), or the live calendar for the most recent change.
+                    const after = i === 0 ? live : (rows[i - 1].events || []);
+                    const stillThere = new Set(after.map(keyOf));
+                    let lost = before.filter(e => !stillThere.has(keyOf(e)));
+
+                    // The server counted a removal but the neighbouring snapshots hold the
+                    // same events -- that happens when an intervening change put them back,
+                    // so the pair differs only in order. Fall back to comparing against the
+                    // calendar as it is NOW, which is what the user is actually looking at,
+                    // so a row is never left saying "1 event deleted" with nothing named.
+                    if (!lost.length && (r.removed || 0) > 0) {
+                        const liveKeys = new Set(live.map(keyOf));
+                        lost = before.filter(e => !liveKeys.has(keyOf(e)));
+                    }
+
+                    return {
+                        key: r.key,
+                        events: before,
+                        what: this.describeChange(r, lost),
+                        when: this.describeWhen(r.savedAt),
+                        lost: lost.map(e => ({
+                            title: e.title && e.title.trim() ? e.title : 'Untitled event',
+                            when: this.describeEventTime(e),
+                        })),
+                        // "Restore" is the word people expect for this, and naming the
+                        // unit keeps a count from reading as a bare number ("Put back 2").
+                        restoreLabel: lost.length === 1 ? 'Restore event'
+                            : lost.length > 1 ? `Restore ${lost.length} events`
+                                : 'Restore this version',
+                    };
+                });
+            } catch (err) {
+                // Never let a failed read break the settings panel.
+                console.warn('[app] could not load undo history', err);
+            }
+        },
+
+        /**
+         * Plain language for what a change cost. Names the event wherever we know it: a row
+         * reading "1 event deleted" with nothing named tells the user nothing they can act
+         * on, which is the whole point of the list.
+         */
+        describeChange(entry, lost) {
+            const named = (lost || []).map(e => (e.title && e.title.trim()) ? e.title : 'Untitled event');
+            if (entry.kind === 'wiped' || entry.kind === 'deleted') {
+                return named.length ? `All events deleted (${named.length})` : 'All events deleted';
+            }
+            if (named.length === 1) return `Deleted "${named[0]}"`;
+            if (named.length === 2) return `Deleted "${named[0]}" and "${named[1]}"`;
+            if (named.length > 2) return `Deleted "${named[0]}" and ${named.length - 1} more`;
+
+            const n = entry.removed || 0;
+            if (n > 0) return n === 1 ? '1 event deleted' : `${n} events deleted`;
+            const c = entry.changed || 0;
+            return c === 1 ? '1 event edited' : `${c} events edited`;
+        },
+
+        /** When an event was scheduled, for the expanded detail list. */
+        describeEventTime(e) {
+            const d = new Date(e.start);
+            if (isNaN(d.getTime())) return '';
+            const date = d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
+            if (e.isAllDay) return `${date}, all day`;
+            return `${date}, ${d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+        },
+
+        describeWhen(ts) {
+            if (!ts) return '';
+            const d = new Date(ts);
+            const mins = Math.round((Date.now() - ts) / 60000);
+            if (mins < 1) return 'just now';
+            if (mins < 60) return `${mins} min ago`;
+            const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+            const today = new Date();
+            if (d.toDateString() === today.toDateString()) return `today ${time}`;
+            return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })} ${time}`;
+        },
+
+        /**
+         * Put back the events as they were before that change.
+         *
+         * declareIntent covers the case where undoing legitimately removes events (an undo
+         * can shrink the calendar if events were added after the change), so the write gate
+         * does not mistake a deliberate restore for a buggy save path.
+         */
+        undoChange(entry) {
+            const events = (entry.events || []).map(e => new Event(e));
+            const removing = Math.max(0, this.calendar.events.length - events.length);
+            if (removing > 0) CalendarDataService.declareIntent(removing);
+            this.calendar.setEvents(events);
+            const back = (entry.lost || []).length;
+            this.showToast(
+                back === 1 ? `Restored "${entry.lost[0].title || 'event'}"`
+                    : back > 1 ? `Restored ${back} events`
+                        : `Restored ${events.length} event${events.length === 1 ? '' : 's'}`,
+                'success');
+            // The restore is itself a change, so the list it came from is now stale.
+            setTimeout(() => this.loadUndoEntries(), 1500);
         },
 
         // ============================================================
