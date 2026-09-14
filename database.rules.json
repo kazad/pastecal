@@ -29,14 +29,26 @@
         "$uid": {
           ".write": "auth != null && auth.uid === $uid",
           ".read": false,
-          "firstSeen": { ".validate": "newData.isNumber() && (!data.exists() || data.val() === newData.val())" },
-          "lastSeen": { ".validate": "newData.isNumber()" },
-          "editCount": { ".validate": "newData.isNumber()" },
-          "createdHere": { ".validate": "newData.isBoolean()" },
-          "days": {
-            "$day": { ".validate": "newData.isBoolean()" }
+          "firstSeen": {
+            ".validate": "newData.isNumber() && (!data.exists() || data.val() === newData.val())"
           },
-          "$other": { ".validate": false }
+          "lastSeen": {
+            ".validate": "newData.isNumber()"
+          },
+          "editCount": {
+            ".validate": "newData.isNumber()"
+          },
+          "createdHere": {
+            ".validate": "newData.isBoolean()"
+          },
+          "days": {
+            "$day": {
+              ".validate": "newData.isBoolean()"
+            }
+          },
+          "$other": {
+            ".validate": false
+          }
         }
       }
     }
