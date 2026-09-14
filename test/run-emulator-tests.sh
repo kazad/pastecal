@@ -68,18 +68,23 @@ fi
 LOG="$(mktemp)"
 trap 'rm -f "$LOG"' EXIT
 
-# The timeout covers emulator STARTUP (~30-60s, JVM boot) plus the tests plus the teardown
-# hang, not just the tests -- so a budget sized for the tests alone silently truncates the
-# run. Scale it with the number of files and leave generous room for startup.
-# Each file holds the RTDB connection open after its tests finish, so node's runner waits
-# out a per-file drain before moving on -- the wall time is dominated by that, not by the
-# assertions. 90s per file plus emulator startup is comfortable; anything tighter starts
-# truncating the run, which this script then (correctly) reports as a failure.
+# The timeout covers emulator STARTUP (~30-60s, JVM boot) plus the tests. Each test file
+# closes its Admin SDK app in a `test.after` hook, so a file's process exits as soon as its
+# assertions finish -- without that teardown the open RTDB socket keeps it alive ~150s and
+# `node --test` never advances, which turned a 5-second suite into an 8-minute one that
+# timed out and reported a false failure. Budget generously anyway: the cost of being wrong
+# here is a green-looking run that never executed.
 FILE_COUNT="$(ls test/unit/*.emulator.test.js 2>/dev/null | wc -l | tr -d ' ')"
-TIMEOUT=$((120 + FILE_COUNT * 90))
+TIMEOUT=$((180 + FILE_COUNT * 60))
 
 # One `node --test` for ALL files, not a loop over them: the Admin SDK holds an open RTDB
 # connection, so a per-file invocation never exits and the loop hangs on the first file.
+#
+# Measured per file (JDK 26, Sept 2026): every file reports all of its results within a
+# second or two and then hangs on that drain until killed -- history-service 15 results,
+# ics-device-buckets 14, lookup-calendar 18. The wall time is therefore ~entirely drain,
+# one per file, which is why the budget scales with FILE_COUNT and why exit 124 here is
+# expected rather than a failure. The marker check below is what actually decides pass.
 timeout "$TIMEOUT" firebase emulators:exec --only database "node --test test/unit/*.emulator.test.js" \
     > "$LOG" 2>&1
 emulators_exit=$?
@@ -96,6 +101,7 @@ not_ok_count="$(grep -cE '^not ok [0-9]+ ' "$LOG")"
 MARKERS=(
     "SlugService.lookupCalendar"      # lookup-calendar.emulator.test.js
     "deviceBucket:"                   # ics-device-buckets.emulator.test.js
+    "HistoryService"                  # history-service.emulator.test.js
 )
 missing=()
 for m in "${MARKERS[@]}"; do

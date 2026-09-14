@@ -686,6 +686,17 @@ const CalendarVueApp = {
                     // post-change values, so merging them by id is correct regardless of
                     // what the grid is currently filtered to show -- a filtered-out event is
                     // left untouched instead of being dropped from the save.
+                    // A user-initiated removal, declared before the watcher fires so the
+                    // write gate in sync() knows this shrink was asked for -- and how big
+                    // it should be, so deleting one event cannot authorise a wipe.
+                    // Deleting a recurring series removes the master and every stored
+                    // occurrence exception, so the count is what the merge actually drops,
+                    // not deletedRecords.length.
+                    if (ev.requestType === 'eventRemoved') {
+                        const before = this.calendar.events.length;
+                        const after = this.mergeScheduleRecords(ev).length;
+                        CalendarDataService.declareIntent(Math.max(1, before - after));
+                    }
                     this.calendar.setEvents(this.mergeScheduleRecords(ev));
                     // A real, user-initiated change to this calendar. Recorded here
                     // rather than in CalendarDataService.sync(), because sync() also
@@ -1152,6 +1163,34 @@ const CalendarVueApp = {
             track(a => a.jsError('sync_failed', 'transaction did not commit', 'sync'));
         };
 
+        // The write gate refused a removal nobody asked for. The screen is now missing
+        // events the server still has, so put the server's copy straight back rather than
+        // leaving the user staring at a calendar that has lost data. Restoring through
+        // applyRemoteCalendar marks it as a remote apply, so the watcher does not treat
+        // the restoration as a fresh local edit and bounce it back at the server.
+        CalendarDataService.onSyncRefused = ({ before, removing, events }) => {
+            this.showToast(`Recovered ${removing} event${removing === 1 ? '' : 's'} that were about to be lost`, 'error');
+            track(a => a.syncRefused({ before, removing }));
+            if (Array.isArray(events)) {
+                this.applyRemoteCalendar({ ...this.calendar, events: JSON.parse(JSON.stringify(events)) });
+            }
+        };
+
+        // Every write's shape. The counter-signal the incident lacked: grid saves going
+        // to zero looked like nobody using the grid, because zero of something uncounted
+        // is invisible.
+        CalendarDataService.onSyncShape = (shape) => {
+            track(a => a.syncShape(shape));
+        };
+
+        // Send any pending debounced write before the page goes away. pagehide covers
+        // navigation and close; visibilitychange covers a backgrounded mobile tab, which
+        // is where the process is most likely to be killed before a timer fires.
+        window.addEventListener('pagehide', () => CalendarDataService.flush());
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') CalendarDataService.flush();
+        });
+
         // Apply custom colors CSS if any
         this.updateColorCSS();
 
@@ -1246,6 +1285,7 @@ const CalendarVueApp = {
                 if (!this.isExisting) {
                     this.saveLocalStorage();
                 } else {
+                    this.saveLocalBackup();
                     // because calendar.options.notes may be noisy
                     CalendarDataService.debounce_sync(this.calendar);
                 }
@@ -1606,6 +1646,45 @@ const CalendarVueApp = {
             }
         },
 
+        // A per-browser copy of the last good state of a NAMED calendar. Until now a
+        // named calendar had no local copy at all -- saveLocalStorage() is homepage-only
+        // -- so an edit that never reached the server (offline, closed tab, or the Sept
+        // 2026 save bug) existed nowhere once the tab was gone.
+        //
+        // This is a net for the person who did the editing, not a guarantee: it is
+        // per-device, cleared with site data, and can be stale if someone else edited
+        // since. It is never auto-applied; the server-side /history node is the durable
+        // record. Kept for the last three calendars visited so it stays bounded.
+        //
+        // Never overwrites a copy that has events with one that has none: the failure this
+        // exists for is precisely "the events just vanished", and recording that state
+        // would destroy the one copy worth keeping.
+        saveLocalBackup() {
+            if (!this.calendar || !this.calendar.id || !this.isExisting) return;
+            try {
+                const key = 'pastecal_backup_' + this.calendar.id;
+                const events = this.calendar.events || [];
+                if (events.length === 0) {
+                    const existing = JSON.parse(localStorage.getItem(key) || 'null');
+                    if (existing && existing.events && existing.events.length > 0) return;
+                }
+                localStorage.setItem(key, JSON.stringify({
+                    savedAt: Date.now(),
+                    id: this.calendar.id,
+                    title: this.calendar.title,
+                    options: this.calendar.options,
+                    events,
+                }));
+                const index = JSON.parse(localStorage.getItem('pastecal_backup_index') || '[]')
+                    .filter(k => k !== key);
+                index.push(key);
+                while (index.length > 3) localStorage.removeItem(index.shift());
+                localStorage.setItem('pastecal_backup_index', JSON.stringify(index));
+            } catch (e) {
+                // Quota or private mode. The server is the store; this is only a net.
+            }
+        },
+
         updateCalendarView() {
             // Step 1: Ensure this.syncFusionEvents is up-to-date from the master store (this.calendar.events).
             // This creates a new array instance for this.syncFusionEvents if this.calendar.events has changed.
@@ -1653,10 +1732,31 @@ const CalendarVueApp = {
                 this.calendar.getSyncFusionEvents().map(e => [key(e), e]));
 
             for (const r of (ev.deletedRecords || [])) byKey.delete(key(r));
-            for (const r of (ev.addedRecords || [])) byKey.set(key(r), r);
+            for (const r of (ev.addedRecords || [])) byKey.set(key(this.withStableId(r)), this.withStableId(r));
             for (const r of (ev.changedRecords || [])) byKey.set(key(r), r);
 
             return [...byKey.values()];
+        },
+
+        // Give a scheduler-created record a real id before it becomes our data.
+        //
+        // Syncfusion's built-in editor does not preserve the Id it was handed: for a new
+        // event it calls its own getEventMaxID() and assigns a sequential NUMBER (1, 2, 3)
+        // regardless of eventSettings.fields.id. Those ids are per-scheduler-instance, so
+        // they are not unique across calendars, they collide with each other after a
+        // reload, and they are the reason an edit to a grid-created event could hit an
+        // event the scheduler could not resolve -- the "Cannot read properties of
+        // undefined (reading 'RecurrenceRule')" crash inside processCrudActions.
+        //
+        // Every event this app stores must carry the same kind of id Event's constructor
+        // produces (a uuid), so a numeric or missing id is replaced before the record is
+        // merged into calendar.events.
+        withStableId(record) {
+            const id = record && record.Id;
+            const looksGenerated = id === undefined || id === null || id === ''
+                || typeof id === 'number' || /^\d+$/.test(String(id));
+            if (!looksGenerated) return record;
+            return { ...record, Id: Utils.uuidv4() };
         },
 
         // ============================================================

@@ -44,6 +44,35 @@ class CalendarDataService {
     // have, and so tests can assert on them without a analytics stub.
     static onSyncMerged = null;    // a write reconciled with someone else's concurrent change
     static onSyncFailed = null;    // a write did not land at all
+    static onSyncRefused = null;   // a write was refused by the gate below before reaching the network
+    static onSyncShape = null;     // every write: how many events it carried vs the last snapshot
+
+    // A user action that legitimately removes events says so here before the watcher
+    // fires. The gate in sync() treats an undeclared removal as a bug, because every user
+    // path that removes an event goes through the scheduler and declares itself.
+    //
+    // The declaration carries HOW MANY events the action removed, and is consumed by the
+    // first write that follows. A bare time window was wrong: deleting one event opened a
+    // 5s hole through which a buggy path could wipe the whole calendar unchallenged
+    // (measured -- the server went to zero). Authorising a removal of exactly N means a
+    // one-event delete cannot license a 40-event wipe. The short deadline remains only so
+    // a declaration cannot sit around indefinitely waiting for an unrelated write.
+    // Declarations ACCUMULATE until a write consumes them. The debounce coalesces every
+    // edit inside a rolling 500ms window into one sync, so several deletions in quick
+    // succession arrive as a single write removing N -- and a declaration that merely
+    // overwrote would authorise only the last one and refuse the user's own deletions.
+    static _intent = null;
+    static declareIntent(removing = 1) {
+        const now = Date.now();
+        this._intent = (this._intent && now - this._intent.at < 5000)
+            ? { removing: this._intent.removing + removing, at: now }
+            : { removing, at: now };
+    }
+    static _takeIntent() {
+        const i = this._intent;
+        this._intent = null;
+        return (i && Date.now() - i.at < 5000) ? i : null;
+    }
 
     static _dropIncompleteEvents(calendar) {
         if (!calendar || !Array.isArray(calendar.events)) return calendar;
@@ -331,6 +360,49 @@ class CalendarDataService {
             const rest = this._sanitizeForFirebase({ ...safe, events: undefined });
             delete rest.events;
 
+            // Report the shape of every write, and refuse any removal the user did not
+            // ask for. Every path that legitimately removes an event runs through the
+            // scheduler and declares how many it is removing, so an undeclared shrink --
+            // or one larger than was declared -- is a bug in a save path, which is exactly
+            // what issues #42-#44 were.
+            //
+            // The refusal is deliberately not silent: it leaves the screen showing fewer
+            // events than the server holds, so the caller is handed the server's copy to
+            // put back (see onSyncRefused) rather than the user being stranded looking at
+            // an empty calendar.
+            const prevEvents = known ? (this._lastSeen[calendar.id] || []) : [];
+            const prevCount = prevEvents.length;
+            const nextCount = localEvents.length;
+            const removing = prevCount - nextCount;
+            const intent = removing > 0 ? this._takeIntent() : null;
+            if (typeof this.onSyncShape === 'function') {
+                try {
+                    this.onSyncShape({ before: prevCount, after: nextCount, intent: !!intent });
+                } catch (e) { /* never rethrow */ }
+            }
+            if (known && removing > 0 && (!intent || removing > intent.removing)) {
+                console.error(`[CalendarDataService] refused to save: this write removes ${removing} of ${prevCount} events` +
+                    (intent ? ` but only ${intent.removing} were deleted by the user` : ' and no deletion was made'));
+                if (typeof this.onSyncRefused === 'function') {
+                    // The known-good events, so the app can restore what it was about to
+                    // lose instead of leaving the user to discover it on their next reload.
+                    //
+                    // Minus anything the user really did delete: the baseline is the last
+                    // SERVER snapshot, so when a legitimate delete is still in flight and a
+                    // buggy write arrives behind it, restoring the baseline verbatim would
+                    // resurrect the event they just removed. Events still present locally
+                    // are the ones that were never deleted on purpose.
+                    const localIds = new Set(localEvents.map(e => e && this._eventKey(e)));
+                    const deliberatelyGone = intent
+                        ? new Set(prevEvents.filter(e => !localIds.has(this._eventKey(e)))
+                            .slice(0, intent.removing).map(e => this._eventKey(e)))
+                        : new Set();
+                    const restore = prevEvents.filter(e => !deliberatelyGone.has(this._eventKey(e)));
+                    try { this.onSyncRefused({ before: prevCount, removing, events: restore }); } catch (e) { /* never rethrow */ }
+                }
+                return;
+            }
+
             // Filled by the transaction body, read once it commits. The body can run more
             // than once under contention, so only the committed run's value is reported.
             let pendingMerge = null;
@@ -408,7 +480,26 @@ class CalendarDataService {
     }
 
 
-    static debounce_sync = Utils.debounce((cal) => (CalendarDataService.sync(cal)), 500);
+    // The 500ms debounce is a real data-loss window: an edit followed by a reload or a
+    // backgrounded mobile tab inside it never reaches the server (measured: a create
+    // followed by reload 50ms later is lost). flush() lets the page send the pending write
+    // immediately on pagehide/visibilitychange. _pending is cleared by whichever runs
+    // first so the other becomes a no-op rather than a duplicate write.
+    static _pending = null;
+    static debounce_sync = (() => {
+        const debounced = Utils.debounce((cal) => {
+            if (CalendarDataService._pending !== cal) return;   // already flushed
+            CalendarDataService._pending = null;
+            CalendarDataService.sync(cal);
+        }, 500);
+        return (cal) => { CalendarDataService._pending = cal; debounced(cal); };
+    })();
+    static flush() {
+        const cal = this._pending;
+        if (!cal) return;
+        this._pending = null;
+        this.sync(cal);
+    }
 
     static create(item) {
         return this.db.push(this._sanitizeForFirebase(item));

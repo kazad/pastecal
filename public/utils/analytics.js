@@ -371,6 +371,28 @@ const Analytics = {
         });
     },
 
+    /**
+     * The shape of every calendar write: events carried vs events in the last server
+     * snapshot. Success-with-wrong-content is invisible to error hooks -- the Sept 2026
+     * save bug committed cleanly for three days -- so this is the signal that catches it:
+     * a negative delta with no declared intent is the fingerprint of a buggy save path.
+     */
+    syncShape(shape) {
+        const before = shape?.before ?? 0, after = shape?.after ?? 0;
+        this.track('sync_shape', {
+            before, after, delta: after - before,
+            intent: shape?.intent ? 'declared' : 'none',
+        });
+    },
+
+    /**
+     * The write gate refused to empty a calendar. Should be ~zero; any rate at all means
+     * a save path is producing empty arrays again.
+     */
+    syncRefused(shape) {
+        this.track('sync_refused', { before: shape?.before ?? 0, removing: shape?.removing ?? 0 });
+    },
+
     // Generated ids come from IDService.generateNanoId(5): 5 alphanumeric chars.
     // Human slugs are lowercased at claim time and usually longer.
     looksGenerated(id) {

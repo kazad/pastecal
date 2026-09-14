@@ -559,6 +559,124 @@ const IDService = {
 };
 
 // Cloud Functions
+// ---------------------------------------------------------------------------------------
+// History: a server-written record of what every calendar looked like BEFORE any write
+// that removed or changed events.
+//
+// Why this exists, and why it is a trigger rather than client code: in Sept 2026 a bug in
+// the app's save path wrote a calendar's pre-edit state back over its post-edit state, and
+// in the worst case wrote [] over a user's entire history (issues #42-#44). Every defence
+// that lived in the client -- merge logic, gates, local copies -- shares one weakness: it
+// only works when the client is correct, and the client is exactly the thing that was
+// wrong. Anyone with a link can also write anything with the SDK directly.
+//
+// So the recovery data is produced here, by the Admin SDK, into /history -- a node the
+// security rules make unwritable by clients. No client, buggy or hostile, can prevent its
+// own destructive write from being recorded, and none can erase the record afterwards.
+// That is the property that makes data loss recoverable rather than merely unlikely.
+//
+// Only writes that could have LOST something are recorded (an event removed or changed,
+// a title cleared, the calendar deleted). Adds and notes edits are not: nothing was lost,
+// and recording them would bury the entries that matter.
+// ---------------------------------------------------------------------------------------
+const HISTORY_ROOT = "history";
+const HISTORY_KEEP = 20;   // per calendar; older entries are trimmed
+
+const HistoryService = {
+    eventsOf(cal) {
+        const e = cal && cal.events;
+        if (Array.isArray(e)) return e.filter(Boolean);
+        return (e && typeof e === 'object') ? Object.values(e) : [];
+    },
+
+    // Same identity as the client's merge: a recurring master and its occurrence
+    // exception share an id and differ only by recurrenceID.
+    key(e) { return `${e.id}|${e.recurrenceID ?? ''}`; },
+
+    // Compare on meaning, not on JSON text -- the same rule CalendarDataService._mergeEvents
+    // applies, and for the same reason. Firebase does not store null- or ''-valued keys, so
+    // an event written by an older client comes back without description/repeat/
+    // recurrencerule/isAllDay, while the current client rebuilds it through Event's
+    // constructor with those set to ''/false. JSON.stringify calls that a change, so a
+    // notes-only edit on a legacy calendar would record every event as "edited" and push a
+    // full snapshot -- on the largest real calendar, ~743KB of history for a write that
+    // lost nothing.
+    FIELDS: ['title', 'description', 'start', 'end', 'type', 'isAllDay',
+        'repeat', 'recurrencerule', 'recurrenceID', 'recurrenceException'],
+
+    sameEvent(a, b) {
+        const norm = (v) => (v === undefined || v === null || v === '') ? null : v;
+        return this.FIELDS.every(f => {
+            const x = norm(a[f]), y = norm(b[f]);
+            if (f === 'type') return String(x === null ? 1 : x) === String(y === null ? 1 : y);
+            if (f === 'isAllDay') return !!x === !!y;
+            return x === y;
+        });
+    },
+
+    // What this write cost, or null if it cost nothing. Pure, so it is unit-testable
+    // without a database.
+    changeKind(before, after) {
+        if (!before) return null;                                   // creation: nothing to lose
+        const b = this.eventsOf(before);
+        if (!after) return { kind: 'deleted', removed: b.length, changed: 0 };
+
+        const a = new Map(this.eventsOf(after).map(e => [this.key(e), e]));
+        let removed = 0, changed = 0;
+        for (const e of b) {
+            const x = a.get(this.key(e));
+            if (!x) removed++;
+            else if (!this.sameEvent(x, e)) changed++;
+        }
+        const titleLost = !!before.title && !after.title;
+        if (!removed && !changed && !titleLost) return null;
+
+        const kind = (b.length > 0 && removed === b.length) ? 'wiped'
+            : removed ? 'shrunk'
+                : changed ? 'edited' : 'title-cleared';
+        return { kind, removed, changed };
+    },
+
+    async record(db, calendarId, before, after) {
+        const why = this.changeKind(before, after);
+        if (!why) return null;
+
+        const ref = db.ref(`/${HISTORY_ROOT}/${calendarId}`);
+        const pushed = await ref.push({
+            savedAt: Date.now(),
+            kind: why.kind,
+            removed: why.removed,
+            changed: why.changed,
+            eventCount: this.eventsOf(before).length,
+            title: before.title ?? null,
+            options: before.options ?? null,
+            events: this.eventsOf(before),
+        });
+
+        // Trim to the newest HISTORY_KEEP. Push ids are time-ordered, so key order is
+        // savedAt order without needing an index.
+        //
+        // Ask only for the OLDEST few keys rather than the whole node. Reading every
+        // retained entry just to count them would pull ~14.5MB into the function on the
+        // largest real calendar, on every recorded write -- the payloads are full event
+        // arrays. limitToFirst caps that at the handful that might need deleting.
+        //
+        // Only the keys are used, so a concurrent trigger trimming at the same time is
+        // harmless: deletes are by explicit push key and idempotent, and the newest
+        // entries are never in this window. The window is wider than one write's growth,
+        // so any backlog drains over the next few writes rather than persisting.
+        const oldest = await ref.orderByKey().limitToFirst(HISTORY_KEEP * 2).once('value');
+        const keys = [];
+        oldest.forEach(c => { keys.push(c.key); });
+        if (keys.length > HISTORY_KEEP) {
+            const del = {};
+            for (const k of keys.slice(0, keys.length - HISTORY_KEEP)) del[k] = null;
+            await ref.update(del);
+        }
+        return pushed.key;
+    },
+};
+
 exports.generateICSV2 = onRequest({ cors: true }, async (req, res) => {
     try {
         const pathWithoutICS = req.path.replace(/[.]ICS.*/i, '');
@@ -755,6 +873,17 @@ exports.syncPublicView = onValueUpdated(`/${DEFAULT_ROOT}/{calendarId}`, (event)
     return admin.database().ref(`/${READONLY_ROOT}/${publicViewId}`).update(updatedData);
 });
 
+// Record the prior state of any calendar write that removed or changed events. Fires on
+// the whole calendar node so a cleared title is caught too, and so a single trigger sees
+// both the events and the settings that were lost together in issue #44.
+exports.recordHistory = onValueWritten(`/${DEFAULT_ROOT}/{calendarId}`, (event) =>
+    HistoryService.record(
+        admin.database(),
+        event.params.calendarId,
+        event.data.before.val(),
+        event.data.after.val(),
+    ));
+
 // Case-insensitive calendar lookup function
 exports.lookupCalendar = onCall(async (request) => {
     try {
@@ -796,9 +925,9 @@ exports.lookupCalendar = onCall(async (request) => {
 
 // Exported for unit tests (test/unit/ics.test.js). Not used by deployed functions.
 exports._internal = {
-    ICSService, CalendarService, SlugService,
+    ICSService, CalendarService, SlugService, HistoryService,
     recordIcsStat, deviceBucket, clientFamily, sweepOldDeviceBuckets,
-    DEVICE_BUCKET_TTL_DAYS,
+    DEVICE_BUCKET_TTL_DAYS, HISTORY_ROOT, HISTORY_KEEP,
 };
 
 /*

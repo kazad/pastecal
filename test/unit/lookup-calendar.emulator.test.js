@@ -446,3 +446,11 @@ test('lookupCalendar: a read-only view resolves through the index too', async ()
         await cleanup('ReadOnlyIndexProbe');
     }
 });
+
+// The Admin SDK holds its RTDB socket open, so without this the process lingers ~150s
+// after the last assertion and `node --test` never advances to the next file. Three files
+// without it turned a 3-second suite into an 8-minute one that then timed out and reported
+// a false failure. See the same teardown in ics-device-buckets.emulator.test.js.
+test.after(async () => {
+    await admin.app().delete();
+});

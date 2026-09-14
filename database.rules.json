@@ -14,6 +14,12 @@
         ".write": false
       }
     },
+    "history": {
+      "$calendarId": {
+        ".read": true,
+        ".write": false
+      }
+    },
     "slug_mappings": {
       ".read": false,
       ".write": false
