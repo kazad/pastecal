@@ -461,25 +461,26 @@ Copyright (c) 2025 Kalid Azad
                     </template>
                 </custom-tooltip>
 
-                <!-- When this calendar last changed. Doubles as the way into the change
-                     history, the way Docs' "Last edit was N minutes ago" does: it says
-                     something useful on a shared calendar even if nobody clicks it. -->
-                <custom-tooltip width="w-auto" align="center" v-if="!editTitle && lastEditLabel">
-                    <template #trigger>
-                        <button @click="openRecentChanges" data-testid="last-edit-link"
-                            class="text-color-1 hover:text-blue-500 text-xs whitespace-nowrap px-1.5 h-8
-                                   transition-colors hidden md:inline-flex items-center">
-                            {{ lastEditLabel }}
-                        </button>
-                    </template>
-                    <template #content>
-                        <span class="whitespace-nowrap">See recent changes</span>
-                    </template>
-                </custom-tooltip>
             </section>
 
             <!-- Right section -->
             <section class="flex-1 flex items-center justify-end text-xs min-w-0 h-8" v-cloak>
+
+                <!-- When the CALENDAR last changed, and the way into its history. Kept out
+                     of the title cluster: sitting beside "Notes" it read as the notes'
+                     timestamp rather than the calendar's. -->
+                <custom-tooltip width="w-auto" align="center" v-if="!isLoading && lastEditLabel">
+                    <template #trigger>
+                        <button @click="openRecentChanges" data-testid="last-edit-link"
+                            class="text-color-1 hover:text-blue-500 text-xs whitespace-nowrap mr-3
+                                   transition-colors hidden lg:inline-flex items-center">
+                            {{ lastEditLabel }}
+                        </button>
+                    </template>
+                    <template #content>
+                        <span class="whitespace-nowrap">See recent changes to this calendar</span>
+                    </template>
+                </custom-tooltip>
 
                 <!-- Loading state -->
                 <div v-if="isLoading">
