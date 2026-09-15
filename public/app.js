@@ -2673,9 +2673,22 @@ const CalendarVueApp = {
                 // Always relative and always short -- "Edited 2d ago" is scannable at a
                 // glance where an absolute date is not. The exact timestamp is one hover
                 // away, so nothing is lost by keeping the label terse.
+                //
+                // Read from history_meta, not from the snapshot log: /history only records
+                // writes that LOST something, so a calendar someone has only added events
+                // to would show a stale time -- or none at all. The stamp covers every
+                // change, which is what "Edited" claims to mean.
+                let stampedAt = null;
+                try {
+                    const stamp = await firebase.database()
+                        .ref('/history_meta/' + this.calendar.id + '/lastEditedAt').once('value');
+                    stampedAt = stamp.val();
+                } catch (err) { /* fall back to the snapshot log below */ }
+
                 const newest = this.undoEntries[0];
-                this.lastEditLabel = newest ? `Edited ${this.describeAgo(newest.savedAt)}` : '';
-                this.lastEditExact = newest ? this.describeExact(newest.savedAt) : '';
+                const editedAt = Math.max(stampedAt || 0, newest ? newest.savedAt : 0) || null;
+                this.lastEditLabel = editedAt ? `Edited ${this.describeAgo(editedAt)}` : '';
+                this.lastEditExact = editedAt ? this.describeExact(editedAt) : '';
             } catch (err) {
                 // Never let a failed read break the settings panel.
                 console.warn('[app] could not load undo history', err);

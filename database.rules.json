@@ -51,6 +51,12 @@
           }
         }
       }
+    },
+    "history_meta": {
+      "$calendarId": {
+        ".read": true,
+        ".write": false
+      }
     }
   }
 }

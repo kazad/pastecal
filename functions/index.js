@@ -637,6 +637,30 @@ const HistoryService = {
         return { kind, removed, changed };
     },
 
+    /**
+     * Stamp when the calendar last changed at all -- including pure additions.
+     *
+     * Separate from the snapshot log below because the two answer different questions.
+     * /history exists to RESTORE, so it only records writes that lost something; recording
+     * every add would bloat it with full event arrays and bury the entries worth
+     * recovering. But "Edited N ago" is asking whether anything happened, and adding an
+     * event is plainly editing the calendar -- a user who adds two events and sees the
+     * label unchanged has been told something false.
+     *
+     * One number per calendar, overwritten in place, so it costs nothing to keep current.
+     */
+    async stampLastEdit(db, calendarId, before, after) {
+        if (!after) return null;                       // deletion: nothing left to stamp
+        const b = this.eventsOf(before), a = this.eventsOf(after);
+        const changed = !before
+            || b.length !== a.length
+            || (before.title ?? '') !== (after.title ?? '')
+            || JSON.stringify(before.options ?? null) !== JSON.stringify(after.options ?? null)
+            || a.some((e, i) => !this.sameEvent(e, b[i] ?? {}));
+        if (!changed) return null;
+        return db.ref(`/${HISTORY_ROOT}_meta/${calendarId}/lastEditedAt`).set(Date.now());
+    },
+
     async record(db, calendarId, before, after) {
         const why = this.changeKind(before, after);
         if (!why) return null;
@@ -898,13 +922,15 @@ exports.syncPublicView = onValueUpdated(`/${DEFAULT_ROOT}/{calendarId}`, (event)
 // Record the prior state of any calendar write that removed or changed events. Fires on
 // the whole calendar node so a cleared title is caught too, and so a single trigger sees
 // both the events and the settings that were lost together in issue #44.
-exports.recordHistory = onValueWritten(`/${DEFAULT_ROOT}/{calendarId}`, (event) =>
-    HistoryService.record(
-        admin.database(),
-        event.params.calendarId,
-        event.data.before.val(),
-        event.data.after.val(),
-    ));
+exports.recordHistory = onValueWritten(`/${DEFAULT_ROOT}/{calendarId}`, async (event) => {
+    const db = admin.database();
+    const id = event.params.calendarId;
+    const before = event.data.before.val();
+    const after = event.data.after.val();
+    // Stamped for every change, snapshotted only for the destructive ones.
+    await HistoryService.stampLastEdit(db, id, before, after);
+    return HistoryService.record(db, id, before, after);
+});
 
 // Case-insensitive calendar lookup function
 exports.lookupCalendar = onCall(async (request) => {

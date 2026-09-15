@@ -103,6 +103,7 @@ MARKERS=(
     "deviceBucket:"                   # ics-device-buckets.emulator.test.js
     "HistoryService"                  # history-service.emulator.test.js
     "slug ownership:"                 # slug-case-twins.emulator.test.js
+    "lastEdit stamp:"                 # last-edit-stamp.emulator.test.js
 )
 missing=()
 for m in "${MARKERS[@]}"; do
