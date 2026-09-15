@@ -2607,7 +2607,7 @@ const CalendarVueApp = {
                 // Full events, not just ids: detecting an EDIT means comparing values.
                 const live = this.calendar.events.map(e => JSON.parse(JSON.stringify(e)));
 
-                this.undoEntries = rows.slice(0, 10).map((r, i) => {
+                const detailed = rows.slice(0, 20).map((r, i) => {
                     const before = r.events || [];
                     // `before` is the calendar as it stood before this change. What the
                     // change removed is whatever is in it but NOT in the state that
@@ -2687,6 +2687,8 @@ const CalendarVueApp = {
                                         : 'Restore this version',
                     };
                 });
+
+                this.undoEntries = this.collapseSessions(detailed).slice(0, 10);
                 // Always relative and always short -- "Edited 2d ago" is scannable at a
                 // glance where an absolute date is not. The exact timestamp is one hover
                 // away, so nothing is lost by keeping the label terse.
@@ -2765,6 +2767,81 @@ const CalendarVueApp = {
             if (!!from.isAllDay !== !!to.isAllDay) parts.push(to.isAllDay ? 'made all-day' : 'given a time');
             if (norm(from.recurrencerule) !== norm(to.recurrencerule)) parts.push('repeat changed');
             return parts.length ? parts.join(', ') : null;
+        },
+
+        /**
+         * Fold a burst of writes into one row per thing the user actually did.
+         *
+         * The 500ms debounce writes repeatedly while somebody drags an event, so one
+         * gesture lands as several history entries -- measured on /kalid: 14 entries from
+         * about 4 real actions, with gaps of 1, 3, 5, 6 and 8 seconds. Listing them raw
+         * gives five near-identical "Edited 'test' -- moved to..." rows for a single drag,
+         * which buries the changes that matter. Google Docs collapses the same way, and
+         * hides the individual versions behind a toggle.
+         *
+         * Two entries merge when they are close in time AND touch the same events, so
+         * distinct edits made back to back stay separate. The OLDEST entry in a run is
+         * kept as the restore target: undoing a drag means going back to where it started,
+         * not to an intermediate frame.
+         */
+        collapseSessions(entries) {
+            const SESSION_GAP_MS = 2 * 60 * 1000;
+            const namesOf = (e) => [
+                ...e.lost.map(x => x.title),
+                ...(e.edited || []).map(x => x.title),
+                ...(e.added || []).map(x => x.title),
+            ].sort().join('|');
+
+            const out = [];
+            for (const entry of entries) {           // newest first
+                // Only merge writes of the same KIND. A deletion and the restore that
+                // follows it touch the same event within seconds, but they are opposite
+                // actions -- merging them made the deletion disappear from the list
+                // entirely, so there was nothing left to undo.
+                const kindOf = (e) => e.lost.length ? 'del'
+                    : (e.edited || []).length ? 'edit'
+                        : (e.added || []).length ? 'add' : 'other';
+
+                const prev = out[out.length - 1];
+                const sameThing = prev
+                    && prev.savedAt - entry.savedAt < SESSION_GAP_MS
+                    && kindOf(prev) === kindOf(entry)
+                    && namesOf(prev) === namesOf(entry)
+                    && namesOf(entry) !== '';
+                if (!sameThing) {
+                    out.push({ ...entry, mergedCount: 1 });
+                    continue;
+                }
+                // Same burst: keep the newest row's wording, but restore to the OLDEST
+                // state in the run, which is where the gesture began.
+                prev.mergedCount += 1;
+                prev.events = entry.events;
+                prev.key = entry.key;
+                prev.oldestAt = entry.savedAt;
+            }
+
+            return out.map(e => e.mergedCount > 1
+                ? { ...e, what: this.describeSession(e) }
+                : e);
+        },
+
+        /**
+         * Wording for a collapsed run, which describes the gesture rather than one write.
+         *
+         * The verb comes from what the run ENDED in -- a drag that finishes in a deletion
+         * reads as a deletion, not as "Deleted X (4 changes)", which invites the reader to
+         * wonder what the other three were.
+         */
+        describeSession(entry) {
+            const n = entry.mergedCount;
+            const lost = entry.lost || [];
+            const edited = entry.edited || [];
+
+            // A run that ends in a deletion is a deletion; the edits before it are noise.
+            if (lost.length) return entry.what;
+            if (edited.length === 1) return `Edited "${edited[0].title}" ${n} times`;
+            if (edited.length > 1) return `${entry.what}, ${n} changes`;
+            return entry.what;
         },
 
         /** Terse relative age: "just now", "5m ago", "3h ago", "2d ago", "6w ago". */

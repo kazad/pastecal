@@ -322,3 +322,57 @@ test('deletes, edits and adds all appear together', async ({ page }) => {
   expect(whats.some(w => /^Edited /.test(w)), `no edit row: ${JSON.stringify(whats)}`).toBe(true);
   expect(whats.some(w => /^Added /.test(w)), `no add row: ${JSON.stringify(whats)}`).toBe(true);
 });
+
+test('a burst of edits to one event collapses into a single row', async ({ page }) => {
+  // The 500ms debounce writes repeatedly while somebody drags an event, so one gesture
+  // lands as several history entries. Measured on a real calendar: 14 entries from about
+  // 4 actions, five of them near-identical "Edited 'test' -- moved to..." rows for a
+  // single drag. Listing them raw buries the changes that matter.
+  await freshCalendar(page);
+  await seed(page, ['Draggable']);
+
+  // Four quick edits to the same event, as a drag produces.
+  for (const hour of [9, 10, 11, 12]) {
+    await page.evaluate(`(() => {
+      const s = window.scheduleObj;
+      const ev = s.eventsData.find(e => e.Subject === 'Draggable');
+      if (!ev) return;
+      const d = new Date(ev.StartTime); d.setHours(${hour}, 0, 0, 0);
+      const d2 = new Date(d); d2.setHours(${hour + 1});
+      ev.StartTime = d; ev.EndTime = d2;
+      s.saveEvent(ev);
+    })()`);
+    await page.waitForTimeout(900);
+  }
+  await page.waitForTimeout(3_000);
+  await page.evaluate(`document.querySelector('#app')._vnode.component.proxy.$refs.toast.hide()`);
+
+  await openRecentChanges(page);
+  const rows = await page.evaluate(`${VM}.undoEntries.map(e => ({ what: e.what, merged: e.mergedCount }))`);
+
+  // The creation is its own row; this is about the four EDITS that followed.
+  const editRows = rows.filter(r => /^Edited .*Draggable/.test(r.what));
+  expect(editRows.length, `one gesture should be one row, got ${JSON.stringify(rows)}`).toBe(1);
+  expect(editRows[0].merged).toBeGreaterThan(1);
+  expect(editRows[0].what).toMatch(/\d+ times/);
+});
+
+test('a deletion is not swallowed by the restore that follows it', async ({ page }) => {
+  // Both touch the same event seconds apart, but they are opposite actions. Merging them
+  // made the deletion vanish from the list, leaving nothing to undo.
+  await freshCalendar(page);
+  await seed(page, ['Standup', 'Design review']);
+  await deleteEvent(page, 'Design review');
+
+  await openRecentChanges(page);
+  await page.locator('button:has-text("Restore event")').first().click();
+  await expect.poll(() => titlesOnServer(page), { timeout: 10_000 }).toContain('Design review');
+
+  // The dialog stays open after a restore; reopen it to pick up the refreshed list.
+  await page.locator('.pc-modal button[aria-label="Close"]').click();
+  await page.waitForTimeout(2_000);
+  await page.locator('button:has-text("Recent changes")').click();
+  const whats = await page.evaluate(`${VM}.undoEntries.map(e => e.what)`);
+  expect(whats.some(w => /^Deleted .*Design review/.test(w)),
+    `the deletion must still be listed: ${JSON.stringify(whats)}`).toBe(true);
+});
