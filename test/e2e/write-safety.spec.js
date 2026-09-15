@@ -40,7 +40,10 @@ function seed(page, titles) {
 }
 
 const serverTitles = (page) => page.evaluate(`(async () => {
-  const id = ${VM}.calendar.id;
+  // May be called while a reload is in flight, when #app is momentarily absent.
+  const vm = document.querySelector('#app')?._vnode?.component?.proxy;
+  if (!vm) return null;
+  const id = vm.calendar.id;
   const snap = await firebase.database().ref('/calendars/' + id + '/events').once('value');
   const v = snap.val();
   return v ? (Array.isArray(v) ? v : Object.values(v)).map(e => e.title).sort() : [];
@@ -150,6 +153,10 @@ test('a write pending in the debounce is flushed when the page is hidden', async
     vm.calendar.events.push(new Event({ id: 'TICK', title: 'FLUSHED', start: s.toISOString(), end: e.toISOString(), type: 1 }));
     setTimeout(() => location.reload(), 50);
   })()`).catch(() => {});
-  await page.waitForFunction(`${VM}.isExisting === true`, null, { timeout: 15_000 });
+  // The reload is in flight, so #app is briefly absent -- poll defensively rather than
+  // dereferencing it, which throws instead of retrying.
+  await page.waitForFunction(
+    `!!document.querySelector('#app')?._vnode?.component?.proxy?.isExisting`,
+    null, { timeout: 15_000 });
   await expect.poll(() => serverTitles(page), { timeout: 8_000 }).toContain('FLUSHED');
 });

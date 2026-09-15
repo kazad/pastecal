@@ -699,6 +699,8 @@ const CalendarVueApp = {
                         const after = this.mergeScheduleRecords(ev).length;
                         CalendarDataService.declareIntent(Math.max(1, before - after));
                         this.offerUndoForDelete(ev, before - after);
+                    } else if (ev.requestType === 'eventChanged') {
+                        this.offerUndoForEdit(ev);
                     }
                     this.calendar.setEvents(this.mergeScheduleRecords(ev));
                     // A real, user-initiated change to this calendar. Recorded here
@@ -2590,8 +2592,8 @@ const CalendarVueApp = {
                 // and whatever came next -- the next newer snapshot, or for the most recent
                 // change, the calendar as it stands now.
                 const keyOf = (e) => `${e.id}|${e.recurrenceID ?? ''}`;
-                const live = this.calendar.getSyncFusionEvents()
-                    .map(e => ({ id: e.Id, recurrenceID: e.RecurrenceID }));
+                // Full events, not just ids: detecting an EDIT means comparing values.
+                const live = this.calendar.events.map(e => JSON.parse(JSON.stringify(e)));
 
                 this.undoEntries = rows.slice(0, 10).map((r, i) => {
                     const before = r.events || [];
@@ -2622,10 +2624,25 @@ const CalendarVueApp = {
                         lost = candidates.length ? candidates : before.slice(-(r.removed || 1));
                     }
 
+                    // Events that survived but came out different: a rename, a moved
+                    // time, a changed colour. Without this an edit shows as "1 event
+                    // edited" with nothing named -- the same dead end a nameless delete
+                    // row was, and edits are the more common mistake.
+                    const afterByKey = new Map(after.map(e => [keyOf(e), e]));
+                    const edited = before
+                        .filter(e => afterByKey.has(keyOf(e)))
+                        .map(e => ({ from: e, to: afterByKey.get(keyOf(e)) }))
+                        .filter(pair => this.describeEventDiff(pair.from, pair.to))
+                        .map(pair => ({
+                            title: pair.from.title && pair.from.title.trim() ? pair.from.title : 'Untitled event',
+                            change: this.describeEventDiff(pair.from, pair.to),
+                        }));
+
                     return {
                         key: r.key,
                         events: before,
-                        what: this.describeChange(r, lost),
+                        edited,
+                        what: this.describeChange(r, lost, edited),
                         when: this.describeWhen(r.savedAt),
                         lost: lost.map(e => ({
                             title: e.title && e.title.trim() ? e.title : 'Untitled event',
@@ -2635,7 +2652,9 @@ const CalendarVueApp = {
                         // unit keeps a count from reading as a bare number ("Put back 2").
                         restoreLabel: lost.length === 1 ? 'Restore event'
                             : lost.length > 1 ? `Restore ${lost.length} events`
-                                : 'Restore this version',
+                                : edited.length === 1 ? 'Undo this edit'
+                                    : edited.length > 1 ? `Undo ${edited.length} edits`
+                                        : 'Restore this version',
                     };
                 });
             } catch (err) {
@@ -2649,7 +2668,7 @@ const CalendarVueApp = {
          * reading "1 event deleted" with nothing named tells the user nothing they can act
          * on, which is the whole point of the list.
          */
-        describeChange(entry, lost) {
+        describeChange(entry, lost, edited) {
             const named = (lost || []).map(e => (e.title && e.title.trim()) ? e.title : 'Untitled event');
             if (entry.kind === 'wiped' || entry.kind === 'deleted') {
                 return named.length ? `All events deleted (${named.length})` : 'All events deleted';
@@ -2658,10 +2677,35 @@ const CalendarVueApp = {
             if (named.length === 2) return `Deleted "${named[0]}" and "${named[1]}"`;
             if (named.length > 2) return `Deleted "${named[0]}" and ${named.length - 1} more`;
 
+            const e = edited || [];
+            if (e.length === 1) return `Edited "${e[0].title}"`;
+            if (e.length > 1) return `Edited "${e[0].title}" and ${e.length - 1} more`;
+
             const n = entry.removed || 0;
             if (n > 0) return n === 1 ? '1 event deleted' : `${n} events deleted`;
             const c = entry.changed || 0;
             return c === 1 ? '1 event edited' : `${c} events edited`;
+        },
+
+        /**
+         * What actually changed between two versions of the same event, in the words a
+         * person would use -- "renamed", "moved to Thu, Sep 17" -- or null if nothing
+         * meaningful differs. Firebase drops empty values, so compare normalised.
+         */
+        describeEventDiff(from, to) {
+            const norm = (v) => (v === undefined || v === null || v === '') ? null : v;
+            const parts = [];
+            if (norm(from.title) !== norm(to.title)) {
+                parts.push(to.title && to.title.trim() ? `renamed to "${to.title}"` : 'title cleared');
+            }
+            if (norm(from.start) !== norm(to.start) || norm(from.end) !== norm(to.end)) {
+                parts.push(`moved to ${this.describeEventTime(to)}`);
+            }
+            if (norm(from.description) !== norm(to.description)) parts.push('notes changed');
+            if (String(from.type ?? 1) !== String(to.type ?? 1)) parts.push('colour changed');
+            if (!!from.isAllDay !== !!to.isAllDay) parts.push(to.isAllDay ? 'made all-day' : 'given a time');
+            if (norm(from.recurrencerule) !== norm(to.recurrencerule)) parts.push('repeat changed');
+            return parts.length ? parts.join(', ') : null;
         },
 
         /** When an event was scheduled, for the expanded detail list. */
@@ -3215,6 +3259,43 @@ const CalendarVueApp = {
                     this.calendar.setEvents(restoreTo);
                     this.showToast(
                         removed.length === 1 ? `Restored ${name}` : `Restored ${removed.length} events`,
+                        'success');
+                },
+            });
+        },
+
+        /**
+         * Offer to undo an edit, the same way a delete is offered.
+         *
+         * Edits are the likelier mistake -- a dragged event lands on the wrong day, a time
+         * is typed wrong -- and until now they were the only destructive action with no
+         * visible way back: no toast, and a history row reading "1 event edited" that named
+         * nothing. Cmd+Z covered it, but only for someone who thinks to press it.
+         */
+        offerUndoForEdit(ev) {
+            const changed = ev.changedRecords || [];
+            if (!changed.length) return;
+
+            // The pre-edit values, captured before setEvents overwrites them.
+            const key = (r) => `${r.Id}|${r.RecurrenceID ?? ''}`;
+            const previous = new Map(
+                this.calendar.getSyncFusionEvents().map(e => [key(e), new Event(e)]));
+            const restoreTo = this.calendar.getSyncFusionEvents().map(e => new Event(e));
+
+            const first = changed[0];
+            const was = previous.get(key(first));
+            const name = was && was.title && was.title.trim()
+                ? `"${was.title.trim()}"` : 'event';
+            const message = changed.length === 1
+                ? `Edited ${name}`
+                : `Edited ${changed.length} events`;
+
+            this.showToast(message, 'info', {
+                actionLabel: 'Undo',
+                action: () => {
+                    this.calendar.setEvents(restoreTo);
+                    this.showToast(
+                        changed.length === 1 ? `Reverted ${name}` : `Reverted ${changed.length} events`,
                         'success');
                 },
             });

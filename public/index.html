@@ -1273,6 +1273,14 @@ Copyright (c) 2025 Kalid Azad
                                         <span class="opacity-70">— {{ ev.when }}</span>
                                     </li>
                                 </ul>
+
+                                <!-- What changed, for an edit rather than a deletion. -->
+                                <ul v-if="!entry.lost.length && entry.edited && entry.edited.length"
+                                    class="mt-1 space-y-0.5">
+                                    <li v-for="(ev, i) in entry.edited" :key="i" class="text-xs text-color-1">
+                                        <span v-if="entry.edited.length > 1">{{ ev.title }} — </span>{{ ev.change }}
+                                    </li>
+                                </ul>
                             </div>
 
                             <button @click="undoChange(entry)"

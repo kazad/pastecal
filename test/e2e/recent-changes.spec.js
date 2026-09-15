@@ -177,3 +177,81 @@ test('a change stays named after Cmd+Z puts its events back', async ({ page }) =
   expect(deleteRow, `no row named the deleted event: ${JSON.stringify(list)}`).toBeTruthy();
   expect(deleteRow.lost).toContain('Design review');
 });
+
+// --- edits ------------------------------------------------------------------------------
+//
+// Edits were the gap: deleting offered a toast and a named history row, while editing --
+// the likelier mistake, since a dragged event lands on the wrong day silently -- offered
+// no toast at all and a row reading "1 event edited" that named nothing.
+
+/** Rename through the scheduler, the way the built-in editor does. */
+async function renameEvent(page, from, to) {
+  await page.waitForFunction(
+    `window.scheduleObj.eventsData.some(e => e.Subject === ${JSON.stringify(from)})`,
+    null, { timeout: 10_000 });
+  await page.evaluate(`(() => {
+    const s = window.scheduleObj;
+    const ev = s.eventsData.find(e => e.Subject === ${JSON.stringify(from)});
+    ev.Subject = ${JSON.stringify(to)};
+    s.saveEvent(ev);
+  })()`);
+  await expect.poll(() => titlesOnServer(page), { timeout: 10_000 }).toContain(to);
+}
+
+test('an edit offers Undo in the toast, and reverts', async ({ page }) => {
+  await freshCalendar(page);
+  await seed(page, ['Budget meeting', 'Retro']);
+  await renameEvent(page, 'Budget meeting', 'Budget meeting (moved)');
+
+  await expect(page.getByText('Edited "Budget meeting"')).toBeVisible();
+  await page.locator('button', { hasText: /^Undo$/ }).click();
+
+  await expect.poll(() => titlesOnServer(page), { timeout: 10_000 }).toContain('Budget meeting');
+  expect(await titlesOnServer(page)).not.toContain('Budget meeting (moved)');
+});
+
+test('an edited event is named, and says what changed', async ({ page }) => {
+  await freshCalendar(page);
+  await seed(page, ['Budget meeting', 'Retro']);
+  await renameEvent(page, 'Budget meeting', 'Budget meeting (moved)');
+  await page.evaluate(`document.querySelector('#app')._vnode.component.proxy.$refs.toast.hide()`);
+
+  await openRecentChanges(page);
+  const list = await page.evaluate(`${VM}.undoEntries.map(e => ({
+    what: e.what, label: e.restoreLabel, edited: (e.edited || []).map(x => x.change),
+  }))`);
+
+  const row = list.find(r => /Budget meeting/.test(r.what));
+  expect(row, `no row named the edited event: ${JSON.stringify(list)}`).toBeTruthy();
+  expect(row.what).toBe('Edited "Budget meeting"');
+  expect(row.label).toBe('Undo this edit');
+  expect(row.edited.join(' ')).toContain('renamed to');
+});
+
+test('a moved event says where it went, in plain language', async ({ page }) => {
+  await freshCalendar(page);
+  await seed(page, ['Retro']);
+
+  await page.waitForFunction(
+    `window.scheduleObj.eventsData.some(e => e.Subject === 'Retro')`, null, { timeout: 10_000 });
+  await page.evaluate(`(() => {
+    const s = window.scheduleObj;
+    const ev = s.eventsData.find(e => e.Subject === 'Retro');
+    const d = new Date(ev.StartTime); d.setDate(d.getDate() + 5); d.setHours(16, 0, 0, 0);
+    const d2 = new Date(d); d2.setHours(17);
+    ev.StartTime = d; ev.EndTime = d2;
+    s.saveEvent(ev);
+  })()`);
+  await page.waitForTimeout(3_000);
+  await page.evaluate(`document.querySelector('#app')._vnode.component.proxy.$refs.toast.hide()`);
+
+  await openRecentChanges(page);
+  const list = await page.evaluate(`${VM}.undoEntries.map(e => ({
+    what: e.what, edited: (e.edited || []).map(x => x.change),
+  }))`);
+
+  const row = list.find(r => /Retro/.test(r.what));
+  expect(row, `no row named the moved event: ${JSON.stringify(list)}`).toBeTruthy();
+  // "moved to Mon, Sep 21, 4:00 PM" -- a date a person can check against their calendar.
+  expect(row.edited.join(' ')).toMatch(/moved to \w{3}, \w{3} \d+/);
+});
