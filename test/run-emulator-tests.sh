@@ -102,6 +102,7 @@ MARKERS=(
     "SlugService.lookupCalendar"      # lookup-calendar.emulator.test.js
     "deviceBucket:"                   # ics-device-buckets.emulator.test.js
     "HistoryService"                  # history-service.emulator.test.js
+    "slug ownership:"                 # slug-case-twins.emulator.test.js
 )
 missing=()
 for m in "${MARKERS[@]}"; do

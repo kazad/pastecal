@@ -832,6 +832,28 @@ exports.indexSlug = onValueWritten(`/${DEFAULT_ROOT}/{calendarId}/id`, async (ev
     const current = (await mappingRef.once('value')).val();
     if (current && current.actualSlug === calendarId && current.isReadOnly === false) return null;
 
+    // Do not take a slug away from a case-twin that holds data.
+    //
+    // Firebase keys are case-sensitive but slugs are resolved case-insensitively, so
+    // `N2U5H6CH` and `n2u5h6ch` are two calendars competing for one mapping. This write
+    // used to be last-wins: whoever was created most recently owned the slug. That is how
+    // a user with a full calendar ended up looking at a blank one -- somebody opened the
+    // other casing, an empty calendar was created there, and the mapping followed it.
+    //
+    // Ownership belongs to whoever has the events, not whoever wrote last. An empty
+    // incumbent is still replaced, so a genuinely abandoned placeholder does not hold a
+    // slug hostage. The delete branch above already reasons this way; this is the same
+    // rule applied to creation.
+    if (current && current.actualSlug && current.actualSlug !== calendarId) {
+        const incumbent = await admin.database()
+            .ref(`/${DEFAULT_ROOT}/${current.actualSlug}/events`).once('value');
+        if (incumbent.exists() && incumbent.numChildren() > 0) {
+            console.log(`indexSlug: ${calendarId} not taking /${normalized} from ` +
+                `${current.actualSlug}, which has ${incumbent.numChildren()} event(s)`);
+            return null;
+        }
+    }
+
     // Overwrites any negative-cache entry, so a slug that was looked up before it existed
     // resolves immediately instead of waiting out NOT_FOUND_CACHE_MS.
     return mappingRef.set({ actualSlug: calendarId, isReadOnly: false });

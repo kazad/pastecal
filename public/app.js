@@ -2668,10 +2668,10 @@ const CalendarVueApp = {
                                         : 'Restore this version',
                     };
                 });
-                // Names its subject: a bare "Edited 5:41 PM" beside other header items
-                // reads as a timestamp for whatever sits next to it.
+                // Sits in the right section, away from Notes, so it needs no subject --
+                // "Edited 3 min ago" reads cleanly there and stays short.
                 const newest = this.undoEntries[0];
-                this.lastEditLabel = newest ? `Calendar edited ${newest.when}` : '';
+                this.lastEditLabel = newest ? `Edited ${newest.when}` : '';
             } catch (err) {
                 // Never let a failed read break the settings panel.
                 console.warn('[app] could not load undo history', err);

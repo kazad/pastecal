@@ -505,13 +505,28 @@ class CalendarDataService {
         return this.db.push(this._sanitizeForFirebase(item));
     }
 
+    /**
+     * Is this slug taken? Answered case-INSENSITIVELY, because that is how slugs resolve.
+     *
+     * Reading db.child(id) alone only sees the exact key, so claiming "n2u5h6ch" could not
+     * see that "N2U5H6CH" already existed -- and the claim then created a second, empty
+     * calendar whose id trigger took the shared mapping, leaving the original owner
+     * looking at a blank calendar. lookupCalendar resolves the slug the same way the rest
+     * of the app does, so it sees a twin under any casing.
+     */
     static checkExists(id, callback_yes, callback_no) {
-        this.db.child(id).once('value', data => {
-            if (data.val()) {
-                callback_yes();
-            } else {
-                callback_no();
+        this.db.child(id).once('value', async data => {
+            if (data.val()) { callback_yes(); return; }
+            try {
+                const lookupCalendar = firebase.functions().httpsCallable('lookupCalendar');
+                const result = await lookupCalendar({ slug: id });
+                if (result?.data?.found) { callback_yes(); return; }
+            } catch (err) {
+                // A lookup failure must not block a legitimate claim: fall through to the
+                // exact-key answer, which is what this method did before.
+                console.warn('[CalendarDataService] case-insensitive existence check failed', err);
             }
+            callback_no();
         });
     }
 
