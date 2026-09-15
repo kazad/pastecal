@@ -460,6 +460,22 @@ Copyright (c) 2025 Kalid Azad
                         <span class="whitespace-nowrap">Toggle Notes</span>
                     </template>
                 </custom-tooltip>
+
+                <!-- When this calendar last changed. Doubles as the way into the change
+                     history, the way Docs' "Last edit was N minutes ago" does: it says
+                     something useful on a shared calendar even if nobody clicks it. -->
+                <custom-tooltip width="w-auto" align="center" v-if="!editTitle && lastEditLabel">
+                    <template #trigger>
+                        <button @click="openRecentChanges" data-testid="last-edit-link"
+                            class="text-color-1 hover:text-blue-500 text-xs whitespace-nowrap px-1.5 h-8
+                                   transition-colors hidden md:inline-flex items-center">
+                            {{ lastEditLabel }}
+                        </button>
+                    </template>
+                    <template #content>
+                        <span class="whitespace-nowrap">See recent changes</span>
+                    </template>
+                </custom-tooltip>
             </section>
 
             <!-- Right section -->

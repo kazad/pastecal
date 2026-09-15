@@ -153,6 +153,7 @@ const CalendarVueApp = {
             showSettings: false,
             undoEntries: [],   // changes this calendar can undo (read from /history)
             showRecentChanges: false,   // the recent-changes dialog
+            lastEditLabel: '',          // "Edited 3 min ago" in the header, or '' when unknown
 
 
             currentViewURL: '',
@@ -468,6 +469,16 @@ const CalendarVueApp = {
                     console.log('[CalendarDataService] Calendar loaded from Firebase');
                     this.isExisting = true;
                     this.applyRemoteCalendar(c);
+                    // Refresh "Edited N ago" in the header. This subscription re-fires on
+                    // every remote change, so the label updates both for our own edits and
+                    // when somebody else changes the calendar while it is open -- which is
+                    // the question it exists to answer on a link-shared calendar.
+                    //
+                    // Deferred: the history entry is written by a Cloud Function reacting
+                    // to this same write, so reading immediately would race it and miss
+                    // the change that just happened.
+                    clearTimeout(this._undoRefreshTimer);
+                    this._undoRefreshTimer = setTimeout(() => this.loadUndoEntries(), 1200);
                     console.log('[CalendarDataService] Calendar imported, defaultView:', this.calendar?.options?.defaultView);
                     this.ensureCalendarOptionsDefaults();
                     // Update custom view in schedule with calendar's settings
@@ -2657,6 +2668,8 @@ const CalendarVueApp = {
                                         : 'Restore this version',
                     };
                 });
+                const newest = this.undoEntries[0];
+                this.lastEditLabel = newest ? `Edited ${newest.when}` : '';
             } catch (err) {
                 // Never let a failed read break the settings panel.
                 console.warn('[app] could not load undo history', err);
@@ -3227,6 +3240,12 @@ const CalendarVueApp = {
 
         showToast(message, type = 'info', options = {}) {
             this.$refs.toast.display(message, type, options);
+        },
+
+        /** Open the change history, refreshing it first so the list is never stale. */
+        async openRecentChanges() {
+            await this.loadUndoEntries();
+            this.showRecentChanges = true;
         },
 
         /**

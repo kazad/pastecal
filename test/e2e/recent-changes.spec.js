@@ -255,3 +255,25 @@ test('a moved event says where it went, in plain language', async ({ page }) => 
   // "moved to Mon, Sep 21, 4:00 PM" -- a date a person can check against their calendar.
   expect(row.edited.join(' ')).toMatch(/moved to \w{3}, \w{3} \d+/);
 });
+
+test('the header says when the calendar was last edited, and opens the history', async ({ page }) => {
+  // Modelled on Docs' "Last edit was N minutes ago": on a link-shared calendar the useful
+  // question is not only "can I undo" but "has anyone changed this since I looked". The
+  // label answers that without being clicked, and is the way in when it is.
+  await freshCalendar(page);
+  const link = page.locator('[data-testid="last-edit-link"]');
+
+  // Nothing has changed yet, so there is nothing to say.
+  await expect(link).toHaveCount(0);
+
+  await seed(page, ['Budget meeting', 'Retro']);
+  await deleteEvent(page, 'Retro');
+  await page.evaluate(`document.querySelector('#app')._vnode.component.proxy.$refs.toast.hide()`);
+
+  await expect(link).toBeVisible({ timeout: 10_000 });
+  await expect(link).toHaveText(/^Edited /);
+
+  await link.click();
+  await expect(page.getByText('Restore events that were deleted or edited.')).toBeVisible();
+  await expect(page.locator('.pc-modal').getByText('Deleted "Retro"')).toBeVisible();
+});
