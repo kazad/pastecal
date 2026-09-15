@@ -153,7 +153,8 @@ const CalendarVueApp = {
             showSettings: false,
             undoEntries: [],   // changes this calendar can undo (read from /history)
             showRecentChanges: false,   // the recent-changes dialog
-            lastEditLabel: '',          // "Edited 3 min ago" in the header, or '' when unknown
+            lastEditLabel: '',          // "Edited 2d ago" in the header, or '' when unknown
+            lastEditExact: '',          // the full timestamp, shown on hover
 
 
             currentViewURL: '',
@@ -2655,6 +2656,7 @@ const CalendarVueApp = {
                         edited,
                         what: this.describeChange(r, lost, edited),
                         when: this.describeWhen(r.savedAt),
+                        savedAt: r.savedAt,
                         lost: lost.map(e => ({
                             title: e.title && e.title.trim() ? e.title : 'Untitled event',
                             when: this.describeEventTime(e),
@@ -2668,10 +2670,12 @@ const CalendarVueApp = {
                                         : 'Restore this version',
                     };
                 });
-                // Sits in the right section, away from Notes, so it needs no subject --
-                // "Edited 3 min ago" reads cleanly there and stays short.
+                // Always relative and always short -- "Edited 2d ago" is scannable at a
+                // glance where an absolute date is not. The exact timestamp is one hover
+                // away, so nothing is lost by keeping the label terse.
                 const newest = this.undoEntries[0];
-                this.lastEditLabel = newest ? `Edited ${newest.when}` : '';
+                this.lastEditLabel = newest ? `Edited ${this.describeAgo(newest.savedAt)}` : '';
+                this.lastEditExact = newest ? this.describeExact(newest.savedAt) : '';
             } catch (err) {
                 // Never let a failed read break the settings panel.
                 console.warn('[app] could not load undo history', err);
@@ -2721,6 +2725,32 @@ const CalendarVueApp = {
             if (!!from.isAllDay !== !!to.isAllDay) parts.push(to.isAllDay ? 'made all-day' : 'given a time');
             if (norm(from.recurrencerule) !== norm(to.recurrencerule)) parts.push('repeat changed');
             return parts.length ? parts.join(', ') : null;
+        },
+
+        /** Terse relative age: "just now", "5m ago", "3h ago", "2d ago", "6w ago". */
+        describeAgo(ts) {
+            if (!ts) return '';
+            const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+            if (s < 60) return 'just now';
+            const m = Math.round(s / 60);
+            if (m < 60) return `${m}m ago`;
+            const h = Math.round(m / 60);
+            if (h < 24) return `${h}h ago`;
+            const d = Math.round(h / 24);
+            if (d < 7) return `${d}d ago`;
+            const w = Math.round(d / 7);
+            if (w < 5) return `${w}w ago`;
+            const mo = Math.round(d / 30);
+            return mo < 12 ? `${mo}mo ago` : `${Math.round(d / 365)}y ago`;
+        },
+
+        /** The precise moment, for the tooltip. */
+        describeExact(ts) {
+            if (!ts) return '';
+            return new Date(ts).toLocaleString([], {
+                weekday: 'short', month: 'short', day: 'numeric',
+                hour: 'numeric', minute: '2-digit',
+            });
         },
 
         /** When an event was scheduled, for the expanded detail list. */

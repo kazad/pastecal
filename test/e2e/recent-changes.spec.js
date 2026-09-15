@@ -271,7 +271,7 @@ test('the header says when the calendar was last edited, and opens the history',
   await page.evaluate(`document.querySelector('#app')._vnode.component.proxy.$refs.toast.hide()`);
 
   await expect(link).toBeVisible({ timeout: 10_000 });
-  await expect(link).toHaveText(/^Edited /);
+  await expect(link).toHaveText(/^Edited (just now|\d+[mhdwy]o? ago)$/);
 
   await link.click();
   await expect(page.getByText('Restore events that were deleted or edited.')).toBeVisible();
