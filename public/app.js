@@ -2650,11 +2650,28 @@ const CalendarVueApp = {
                             change: this.describeEventDiff(pair.from, pair.to),
                         }));
 
+                    // Events that ARRIVED in this change. The server names them directly,
+                    // since the stored snapshot is the state before and cannot answer it.
+                    // Older entries predate that field, so fall back to diffing.
+                    const beforeKeys = new Set(before.map(keyOf));
+                    const addedRaw = (r.addedEvents && r.addedEvents.length)
+                        ? r.addedEvents
+                        : after.filter(e => !beforeKeys.has(keyOf(e)));
+                    const added = addedRaw.map(e => ({
+                        title: e.title && e.title.trim() ? e.title : 'Untitled event',
+                        when: this.describeEventTime(e),
+                    }));
+
                     return {
                         key: r.key,
                         events: before,
                         edited,
-                        what: this.describeChange(r, lost, edited),
+                        added,
+                        // An addition has nothing to put back -- the event is already
+                        // there. Listing it without a button is honest; offering a
+                        // "Restore" that silently does nothing is not.
+                        canRestore: lost.length > 0 || edited.length > 0,
+                        what: this.describeChange(r, lost, edited, added),
                         when: this.describeWhen(r.savedAt),
                         savedAt: r.savedAt,
                         lost: lost.map(e => ({
@@ -2700,23 +2717,33 @@ const CalendarVueApp = {
          * reading "1 event deleted" with nothing named tells the user nothing they can act
          * on, which is the whole point of the list.
          */
-        describeChange(entry, lost, edited) {
-            const named = (lost || []).map(e => (e.title && e.title.trim()) ? e.title : 'Untitled event');
+        describeChange(entry, lost, edited, added) {
+            const name = (list, verb) => {
+                if (list.length === 1) return `${verb} "${list[0].title}"`;
+                if (list.length === 2) return `${verb} "${list[0].title}" and "${list[1].title}"`;
+                return `${verb} "${list[0].title}" and ${list.length - 1} more`;
+            };
+
+            const gone = (lost || []).map(e => ({
+                title: (e.title && e.title.trim()) ? e.title : 'Untitled event',
+            }));
             if (entry.kind === 'wiped' || entry.kind === 'deleted') {
-                return named.length ? `All events deleted (${named.length})` : 'All events deleted';
+                return gone.length ? `All events deleted (${gone.length})` : 'All events deleted';
             }
-            if (named.length === 1) return `Deleted "${named[0]}"`;
-            if (named.length === 2) return `Deleted "${named[0]}" and "${named[1]}"`;
-            if (named.length > 2) return `Deleted "${named[0]}" and ${named.length - 1} more`;
+            if (gone.length) return name(gone, 'Deleted');
 
             const e = edited || [];
-            if (e.length === 1) return `Edited "${e[0].title}"`;
-            if (e.length > 1) return `Edited "${e[0].title}" and ${e.length - 1} more`;
+            if (e.length) return name(e, 'Edited');
+
+            const a = added || [];
+            if (a.length) return name(a, 'Added');
 
             const n = entry.removed || 0;
             if (n > 0) return n === 1 ? '1 event deleted' : `${n} events deleted`;
             const c = entry.changed || 0;
-            return c === 1 ? '1 event edited' : `${c} events edited`;
+            if (c > 0) return c === 1 ? '1 event edited' : `${c} events edited`;
+            const ad = entry.added || 0;
+            return ad === 1 ? '1 event added' : `${ad} events added`;
         },
 
         /**

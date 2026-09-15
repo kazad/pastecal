@@ -614,27 +614,38 @@ const HistoryService = {
         });
     },
 
-    // What this write cost, or null if it cost nothing. Pure, so it is unit-testable
+    // What this write did, or null if it did nothing. Pure, so it is unit-testable
     // without a database.
+    //
+    // Additions are recorded too, even though there is nothing to restore from them: the
+    // panel is a list of recent CHANGES, and a user who adds an event and then sees no
+    // trace of it reasonably concludes the list is broken. They are marked `added` so the
+    // UI can list them without offering a Restore button that would do nothing.
     changeKind(before, after) {
-        if (!before) return null;                                   // creation: nothing to lose
+        if (!before) return null;                                   // brand-new calendar
         const b = this.eventsOf(before);
-        if (!after) return { kind: 'deleted', removed: b.length, changed: 0 };
+        if (!after) return { kind: 'deleted', removed: b.length, changed: 0, added: 0 };
 
-        const a = new Map(this.eventsOf(after).map(e => [this.key(e), e]));
+        const beforeKeys = new Map(b.map(e => [this.key(e), e]));
+        const afterEvents = this.eventsOf(after);
+        const a = new Map(afterEvents.map(e => [this.key(e), e]));
+
         let removed = 0, changed = 0;
         for (const e of b) {
             const x = a.get(this.key(e));
             if (!x) removed++;
             else if (!this.sameEvent(x, e)) changed++;
         }
+        const added = afterEvents.filter(e => !beforeKeys.has(this.key(e))).length;
+
         const titleLost = !!before.title && !after.title;
-        if (!removed && !changed && !titleLost) return null;
+        if (!removed && !changed && !added && !titleLost) return null;
 
         const kind = (b.length > 0 && removed === b.length) ? 'wiped'
             : removed ? 'shrunk'
-                : changed ? 'edited' : 'title-cleared';
-        return { kind, removed, changed };
+                : changed ? 'edited'
+                    : added ? 'added' : 'title-cleared';
+        return { kind, removed, changed, added };
     },
 
     /**
@@ -666,11 +677,20 @@ const HistoryService = {
         if (!why) return null;
 
         const ref = db.ref(`/${HISTORY_ROOT}/${calendarId}`);
+        // For an addition, name what arrived -- the snapshot in `events` is the state
+        // BEFORE, so it cannot answer "what was added" on its own.
+        const beforeKeys = new Set(this.eventsOf(before).map(e => this.key(e)));
+        const addedEvents = after
+            ? this.eventsOf(after).filter(e => !beforeKeys.has(this.key(e)))
+            : [];
+
         const pushed = await ref.push({
             savedAt: Date.now(),
             kind: why.kind,
             removed: why.removed,
             changed: why.changed,
+            added: why.added || 0,
+            addedEvents,
             eventCount: this.eventsOf(before).length,
             title: before.title ?? null,
             options: before.options ?? null,

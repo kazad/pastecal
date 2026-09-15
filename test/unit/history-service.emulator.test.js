@@ -55,10 +55,17 @@ test('HistoryService.changeKind: a create records nothing', () => {
     assert.equal(HistoryService.changeKind(null, cal('x', [ev('A', 'a')])), null);
 });
 
-test('HistoryService.changeKind: an add-only write records nothing', () => {
+test('HistoryService.changeKind: an add-only write is recorded as "added"', () => {
+    // Additions used to record nothing, on the grounds that there is nothing to restore.
+    // But the panel is a list of recent CHANGES: a user who adds an event and sees no
+    // trace of it concludes the list is broken, which is what happened in production.
     const before = cal('x', [ev('A', 'a')]);
     const after = cal('x', [ev('A', 'a'), ev('B', 'b')]);
-    assert.equal(HistoryService.changeKind(before, after), null);
+    const r = HistoryService.changeKind(before, after);
+    assert.equal(r.kind, 'added');
+    assert.equal(r.added, 1);
+    assert.equal(r.removed, 0);
+    assert.equal(r.changed, 0);
 });
 
 test('HistoryService.changeKind: a notes-only edit records nothing', () => {
@@ -69,7 +76,7 @@ test('HistoryService.changeKind: a notes-only edit records nothing', () => {
 
 test('HistoryService.changeKind: removing every event is "wiped"', () => {
     const r = HistoryService.changeKind(cal('x', [ev('A', 'a'), ev('B', 'b')]), cal('x', []));
-    assert.deepEqual(r, { kind: 'wiped', removed: 2, changed: 0 });
+    assert.deepEqual(r, { kind: 'wiped', removed: 2, changed: 0, added: 0 });
 });
 
 test('HistoryService.changeKind: removing some is "shrunk", editing is "edited"', () => {
@@ -84,7 +91,7 @@ test('HistoryService.changeKind: a recurring master and its exception are distin
     // Dropping only the exception must count as one removal, not zero (id-only keying
     // would see "R" still present and record nothing).
     const r = HistoryService.changeKind(cal('x', [master, exception]), cal('x', [master]));
-    assert.deepEqual(r, { kind: 'shrunk', removed: 1, changed: 0 });
+    assert.deepEqual(r, { kind: 'shrunk', removed: 1, changed: 0, added: 0 });
 });
 
 // --- record: the durable write ---------------------------------------------------------
@@ -122,11 +129,28 @@ test('HistoryService.record: deleting the whole calendar node is recorded too', 
     }
 });
 
-test('HistoryService.record: an add-only write leaves history untouched', async () => {
+test('HistoryService.record: an addition is recorded, and names what arrived', async () => {
+    const id = 'hist-add-' + Date.now();
+    await cleanup(id);
+    try {
+        await HistoryService.record(db, id, cal(id, [ev('A', 'a')]), cal(id, [ev('A', 'a'), ev('B', 'New thing')]));
+        const [entry] = await historyOf(id);
+        assert.equal(entry.kind, 'added');
+        assert.equal(entry.added, 1);
+        // The stored snapshot is the state BEFORE, so the added event is named separately
+        // -- otherwise the row could say "1 event added" and nothing more.
+        assert.deepEqual((entry.addedEvents || []).map(e => e.title), ['New thing']);
+    } finally {
+        await cleanup(id);
+    }
+});
+
+test('HistoryService.record: a genuine no-op still records nothing', async () => {
     const id = 'hist-noop-' + Date.now();
     await cleanup(id);
     try {
-        const r = await HistoryService.record(db, id, cal(id, [ev('A', 'a')]), cal(id, [ev('A', 'a'), ev('B', 'b')]));
+        const same = cal(id, [ev('A', 'a')]);
+        const r = await HistoryService.record(db, id, same, JSON.parse(JSON.stringify(same)));
         assert.equal(r, null);
         assert.deepEqual(await historyOf(id), []);
     } finally {

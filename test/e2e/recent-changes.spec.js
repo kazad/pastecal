@@ -65,7 +65,7 @@ async function deleteEvent(page, title) {
 async function openRecentChanges(page) {
   await page.locator('button[aria-label="Settings"]').click();
   await page.locator('button:has-text("Recent changes")').click();
-  await expect(page.getByText('Restore events that were deleted or edited.')).toBeVisible();
+  await expect(page.getByText('Everything that happened to this calendar.', { exact: false })).toBeVisible();
 }
 
 const rows = (page) => page.evaluate(`${VM}.undoEntries.map(e => ({
@@ -147,13 +147,20 @@ test('Restore puts the event back on the server', async ({ page }) => {
   expect(await titlesOnServer(page)).toContain('Standup');
 });
 
-test('the Recent changes link is hidden when there is nothing to restore', async ({ page }) => {
+test('the Recent changes link is hidden only on a calendar nothing has happened to', async ({ page }) => {
   await freshCalendar(page);
-  await seed(page, ['Standup']);
 
+  // Nothing has been added, edited or deleted yet.
   await page.locator('button[aria-label="Settings"]').click();
   await page.waitForTimeout(1_500);
   await expect(page.locator('button:has-text("Recent changes")')).toHaveCount(0);
+
+  // Adding an event is a change, so the link appears -- it used to stay hidden, which is
+  // how a calendar somebody had only added to looked like nothing had happened.
+  await page.locator('button[aria-label="Settings"]').click();   // close
+  await seed(page, ['Standup']);
+  await page.locator('button[aria-label="Settings"]').click();
+  await expect(page.locator('button:has-text("Recent changes")')).toBeVisible({ timeout: 10_000 });
 });
 
 test('a change stays named after Cmd+Z puts its events back', async ({ page }) => {
@@ -173,7 +180,9 @@ test('a change stays named after Cmd+Z puts its events back', async ({ page }) =
   await openRecentChanges(page);
   const list = await rows(page);
 
-  const deleteRow = list.find(r => /Design review/.test(r.what));
+  // Restoring adds the event back, which is itself an "Added" row -- so match the
+  // deletion explicitly rather than on the title alone.
+  const deleteRow = list.find(r => /^Deleted .*Design review/.test(r.what));
   expect(deleteRow, `no row named the deleted event: ${JSON.stringify(list)}`).toBeTruthy();
   expect(deleteRow.lost).toContain('Design review');
 });
@@ -274,6 +283,42 @@ test('the header says when the calendar was last edited, and opens the history',
   await expect(link).toHaveText(/^Edited (just now|\d+[mhdwy]o? ago)$/);
 
   await link.click();
-  await expect(page.getByText('Restore events that were deleted or edited.')).toBeVisible();
+  await expect(page.getByText('Everything that happened to this calendar.', { exact: false })).toBeVisible();
   await expect(page.locator('.pc-modal').getByText('Deleted "Retro"')).toBeVisible();
+});
+
+test('a created event appears in the list, without a Restore button', async ({ page }) => {
+  // Reported from production: the dialog showed deletes and edits but no sign of events
+  // that had been CREATED, so a calendar someone had only added to looked like nothing
+  // had happened. A list called "Recent changes" has to show every change.
+  await freshCalendar(page);
+  await seed(page, ['Budget meeting']);
+
+  await openRecentChanges(page);
+  const list = await page.evaluate(`${VM}.undoEntries.map(e => ({
+    what: e.what, canRestore: e.canRestore, added: (e.added || []).map(a => a.title),
+  }))`);
+
+  const row = list.find(r => /Budget meeting/.test(r.what));
+  expect(row, `no row for the created event: ${JSON.stringify(list)}`).toBeTruthy();
+  expect(row.what).toContain('Added');
+  expect(row.added).toContain('Budget meeting');
+  // Nothing to put back -- the event is already there.
+  expect(row.canRestore).toBe(false);
+  await expect(page.locator('.pc-modal').getByText(/^Added "Budget meeting"$/)).toBeVisible();
+});
+
+test('deletes, edits and adds all appear together', async ({ page }) => {
+  await freshCalendar(page);
+  await seed(page, ['Keeper', 'Doomed']);
+  await deleteEvent(page, 'Doomed');
+  await renameEvent(page, 'Keeper', 'Keeper renamed');
+  await page.evaluate(`document.querySelector('#app')._vnode.component.proxy.$refs.toast.hide()`);
+
+  await openRecentChanges(page);
+  const whats = await page.evaluate(`${VM}.undoEntries.map(e => e.what)`);
+
+  expect(whats.some(w => /^Deleted /.test(w)), `no delete row: ${JSON.stringify(whats)}`).toBe(true);
+  expect(whats.some(w => /^Edited /.test(w)), `no edit row: ${JSON.stringify(whats)}`).toBe(true);
+  expect(whats.some(w => /^Added /.test(w)), `no add row: ${JSON.stringify(whats)}`).toBe(true);
 });

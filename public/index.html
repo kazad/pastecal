@@ -89,7 +89,7 @@ Copyright (c) 2025 Kalid Azad
     <link id="syncfusion-base-theme" href="https://cdn.syncfusion.com/ej2/ej2-base/styles/material.css" rel="stylesheet" type="text/css" />
     <link id="syncfusion-theme" href="https://cdn.syncfusion.com/ej2/material.css" rel="stylesheet" type="text/css" />
     <link id="syncfusion-schedule-theme" href="https://cdn.syncfusion.com/ej2/ej2-schedule/styles/material.css" rel="stylesheet" type="text/css" />
-    <link rel="stylesheet" href="/style.css?v=1789496704">
+    <link rel="stylesheet" href="/style.css?v=1789497510">
 
     <!-- Third-party libraries -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
@@ -161,24 +161,24 @@ Copyright (c) 2025 Kalid Azad
     </script>
 
     <!-- App scripts (order matters: Utils → models/services → directives → components) -->
-    <script src="/utils/analytics.js?v=1789496704"></script>
-    <script src="/utils/utils.js?v=1789496704"></script>
-    <script src="/models/Event.js?v=1789496704"></script>
-    <script src="/services/SlugManager.js?v=1789496704"></script>
+    <script src="/utils/analytics.js?v=1789497510"></script>
+    <script src="/utils/utils.js?v=1789497510"></script>
+    <script src="/models/Event.js?v=1789497510"></script>
+    <script src="/services/SlugManager.js?v=1789497510"></script>
     <!-- Before CalendarDataService, which calls into it on every write. -->
-    <script src="/services/AuthorSignal.js?v=1789496704"></script>
-    <script src="/services/CalendarDataService.js?v=1789496704"></script>
-    <script src="/models/Calendar.js?v=1789496704"></script>
-    <script src="/directives/clickOutside.js?v=1789496704"></script>
+    <script src="/services/AuthorSignal.js?v=1789497510"></script>
+    <script src="/services/CalendarDataService.js?v=1789497510"></script>
+    <script src="/models/Calendar.js?v=1789497510"></script>
+    <script src="/directives/clickOutside.js?v=1789497510"></script>
     <!-- Components -->
-    <script src="/components/icons.js?v=1789496704"></script>
-    <script src="/components/ToastNotification.js?v=1789496704"></script>
-    <script src="/components/QuickAddButton.js?v=1789496704"></script>
-    <script src="/components/Tooltip.js?v=1789496704"></script>
-    <script src="/components/QuickAddDialog.js?v=1789496704"></script>
-    <script src="/components/CalendarTitle.js?v=1789496704"></script>
-    <script src="/components/NavigationDropdown.js?v=1789496704"></script>
-    <script src="/components/WelcomeDock.js?v=1789496704"></script>
+    <script src="/components/icons.js?v=1789497510"></script>
+    <script src="/components/ToastNotification.js?v=1789497510"></script>
+    <script src="/components/QuickAddButton.js?v=1789497510"></script>
+    <script src="/components/Tooltip.js?v=1789497510"></script>
+    <script src="/components/QuickAddDialog.js?v=1789497510"></script>
+    <script src="/components/CalendarTitle.js?v=1789497510"></script>
+    <script src="/components/NavigationDropdown.js?v=1789497510"></script>
+    <script src="/components/WelcomeDock.js?v=1789497510"></script>
 
     <script>
         // Load-order guard for critical globals
@@ -209,7 +209,7 @@ Copyright (c) 2025 Kalid Azad
     <script>
         if (window.location.hostname.match(/^(localhost|127\.0\.0\.1|::1)$/)) {
             const script = document.createElement('script');
-            script.src = '/selftest.js?v=1789496704';
+            script.src = '/selftest.js?v=1789497510';
             document.head.appendChild(script);
         }
     </script>
@@ -1202,9 +1202,9 @@ Copyright (c) 2025 Kalid Azad
 
                             <!-- One line in Settings; the detail lives in a dialog. -->
                             <div v-if="isExisting && undoEntries.length" class="pt-4 border-t border-color-default">
-                                <label class="block mb-1 font-medium">Deleted events</label>
-                                <p class="text-xs text-color-1 mb-2 italic">Events removed in the last few changes can
-                                    be restored.</p>
+                                <label class="block mb-1 font-medium">Recent changes</label>
+                                <p class="text-xs text-color-1 mb-2 italic">Everything added, edited or deleted
+                                    lately. Deletions and edits can be restored.</p>
                                 <button @click="showRecentChanges = true" class="text-xs text-link hover:underline">
                                     Recent changes ({{ undoEntries.length }})
                                 </button>
@@ -1270,7 +1270,7 @@ Copyright (c) 2025 Kalid Azad
                 </button>
 
                 <h3 class="text-lg font-bold text-color-2 mb-1">Recent changes</h3>
-                <p class="text-sm text-color-1 mb-4">Restore events that were deleted or edited.</p>
+                <p class="text-sm text-color-1 mb-4">Everything that happened to this calendar. Deleted and edited events can be restored.</p>
 
                 <div class="divide-y divide-color-default -mx-1">
                     <div v-for="entry in undoEntries" :key="entry.key" class="py-3 px-1">
@@ -1298,9 +1298,25 @@ Copyright (c) 2025 Kalid Azad
                                         <span v-if="entry.edited.length > 1">{{ ev.title }} — </span>{{ ev.change }}
                                     </li>
                                 </ul>
+
+                                <!-- When the event was scheduled, for an addition. -->
+                                <div v-if="!entry.lost.length && !(entry.edited || []).length
+                                           && entry.added && entry.added.length === 1"
+                                    class="text-xs text-color-1 mt-0.5">
+                                    {{ entry.added[0].when }}
+                                </div>
+                                <ul v-else-if="!entry.lost.length && !(entry.edited || []).length
+                                               && entry.added && entry.added.length"
+                                    class="mt-1.5 space-y-0.5">
+                                    <li v-for="(ev, i) in entry.added" :key="i" class="text-xs text-color-1">
+                                        {{ ev.title }} <span class="opacity-70">— {{ ev.when }}</span>
+                                    </li>
+                                </ul>
                             </div>
 
-                            <button @click="undoChange(entry)"
+                            <!-- An addition has nothing to put back, so it is listed
+                                 without a button rather than offered a no-op Restore. -->
+                            <button v-if="entry.canRestore" @click="undoChange(entry)"
                                 class="px-3 py-1 border border-color-default rounded text-xs whitespace-nowrap hover:bg-2 transition-colors">
                                 {{ entry.restoreLabel }}
                             </button>
@@ -1367,7 +1383,7 @@ Copyright (c) 2025 Kalid Azad
     </div>
 
     
-    <script src="/app.js?v=1789496704"></script>
+    <script src="/app.js?v=1789497510"></script>
 
 </body>
 

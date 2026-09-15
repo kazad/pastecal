@@ -35,15 +35,15 @@ const cleanup = (id) => Promise.all([
     db.ref('history_meta').child(id).remove(),
 ]);
 
-test('lastEdit stamp: ADDING an event updates the time, though history records nothing', async () => {
+test('lastEdit stamp: ADDING an event updates the time', async () => {
     const id = 'stamp-add-' + Date.now();
     await cleanup(id);
     try {
         const before = cal(id, [ev('a', 'One')]);
         const after = cal(id, [ev('a', 'One'), ev('b', 'Two')]);
 
-        // The snapshot log ignores a pure addition -- by design.
-        assert.equal(HistoryService.changeKind(before, after), null);
+        // The snapshot log now records the addition too, as kind 'added'.
+        assert.equal(HistoryService.changeKind(before, after).kind, 'added');
 
         await HistoryService.stampLastEdit(db, id, before, after);
         const stamp = await stampOf(id);
