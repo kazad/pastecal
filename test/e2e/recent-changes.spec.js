@@ -155,3 +155,25 @@ test('the Recent changes link is hidden when there is nothing to restore', async
   await page.waitForTimeout(1_500);
   await expect(page.locator('button:has-text("Recent changes")')).toHaveCount(0);
 });
+
+test('a change stays named after Cmd+Z puts its events back', async ({ page }) => {
+  // Found by hand while recording a demo: delete an event, undo it, then open Recent
+  // changes. The events are on the calendar again, so diffing the snapshot against the
+  // live state finds nothing removed and the row fell back to a bare "1 event deleted" --
+  // the exact unlabeled row this list exists to avoid.
+  await freshCalendar(page);
+  await seed(page, ['Team standup', 'Design review']);
+  await deleteEvent(page, 'Design review');
+
+  await page.evaluate(`document.querySelector('#app')._vnode.component.proxy.$refs.toast.hide()`);
+  await page.evaluate(
+    `window.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', metaKey: true, bubbles: true, cancelable: true }))`);
+  await expect.poll(() => titlesOnServer(page), { timeout: 15_000 }).toContain('Design review');
+
+  await openRecentChanges(page);
+  const list = await rows(page);
+
+  const deleteRow = list.find(r => /Design review/.test(r.what));
+  expect(deleteRow, `no row named the deleted event: ${JSON.stringify(list)}`).toBeTruthy();
+  expect(deleteRow.lost).toContain('Design review');
+});

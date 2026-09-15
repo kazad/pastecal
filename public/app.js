@@ -2603,14 +2603,23 @@ const CalendarVueApp = {
                     const stillThere = new Set(after.map(keyOf));
                     let lost = before.filter(e => !stillThere.has(keyOf(e)));
 
-                    // The server counted a removal but the neighbouring snapshots hold the
-                    // same events -- that happens when an intervening change put them back,
-                    // so the pair differs only in order. Fall back to comparing against the
-                    // calendar as it is NOW, which is what the user is actually looking at,
-                    // so a row is never left saying "1 event deleted" with nothing named.
+                    // The server counted a removal but the comparison found none. That
+                    // happens when a later change put the events back -- after an undo, the
+                    // calendar holds them again, so diffing against the live state finds
+                    // nothing and the row would read "1 event deleted" with nothing named.
+                    //
+                    // Fall back to the events the server itself says were lost: this
+                    // snapshot minus the one written immediately after it. Only when this
+                    // is the newest entry is there nothing newer to compare with, and then
+                    // the live calendar is the right comparison.
                     if (!lost.length && (r.removed || 0) > 0) {
-                        const liveKeys = new Set(live.map(keyOf));
-                        lost = before.filter(e => !liveKeys.has(keyOf(e)));
+                        const older = rows[i + 1];
+                        const reference = older ? (older.events || []) : live;
+                        const refKeys = new Set(reference.map(keyOf));
+                        // Events present before this change but absent from the reference
+                        // are the ones this change is responsible for.
+                        const candidates = before.filter(e => !refKeys.has(keyOf(e)));
+                        lost = candidates.length ? candidates : before.slice(-(r.removed || 1));
                     }
 
                     return {
