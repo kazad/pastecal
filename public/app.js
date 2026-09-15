@@ -698,6 +698,7 @@ const CalendarVueApp = {
                         const before = this.calendar.events.length;
                         const after = this.mergeScheduleRecords(ev).length;
                         CalendarDataService.declareIntent(Math.max(1, before - after));
+                        this.offerUndoForDelete(ev, before - after);
                     }
                     this.calendar.setEvents(this.mergeScheduleRecords(ev));
                     // A real, user-initiated change to this calendar. Recorded here
@@ -1218,6 +1219,19 @@ const CalendarVueApp = {
         }
 
         // Global keyboard shortcut for quick-add (Cmd/Ctrl+E)
+        // Cmd/Ctrl+Z is the reflex when something disappears -- people reach for it before
+        // they look at any UI. Ignored while typing, so it still means "undo my text" in
+        // an input, and skipped on a calendar with no server history to read.
+        this._undoShortcutHandler = (e) => {
+            if (!((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z') || e.shiftKey) return;
+            const el = document.activeElement;
+            const typing = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+            if (typing || !this.isExisting) return;
+            e.preventDefault();
+            this.undoLastChange();
+        };
+        window.addEventListener('keydown', this._undoShortcutHandler);
+
         this._quickAddShortcutHandler = (e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
                 e.preventDefault();
@@ -3158,8 +3172,61 @@ const CalendarVueApp = {
             this.isReadOnly = this.normalizeBoolean(val);
         },
 
-        showToast(message, type = 'info') {
-            this.$refs.toast.display(message, type);
+        showToast(message, type = 'info', options = {}) {
+            this.$refs.toast.display(message, type, options);
+        },
+
+        /**
+         * Offer to undo a deletion at the moment it happens -- the pattern Drive, Gmail and
+         * Notion all use, and the one place a person is guaranteed to be looking. Waiting
+         * for them to find Settings afterwards is how a deletion becomes a support issue.
+         *
+         * The events come from the action itself rather than from /history, so the offer
+         * appears immediately instead of after the debounced write and the trigger have
+         * both landed.
+         */
+        offerUndoForDelete(ev, removedCount) {
+            const removed = (ev.deletedRecords || []).map(r => new Event(r));
+            if (!removed.length) return;
+
+            const name = removed[0].title && removed[0].title.trim()
+                ? `"${removed[0].title.trim()}"` : 'event';
+            const message = removed.length === 1
+                ? `Deleted ${name}`
+                : `Deleted ${removed.length} events`;
+
+            // Snapshot the list as it was BEFORE this delete, so undo restores exactly
+            // that -- not whatever the calendar looks like by the time they press it.
+            const restoreTo = this.calendar.getSyncFusionEvents().map(e => new Event(e));
+
+            this.showToast(message, 'info', {
+                actionLabel: 'Undo',
+                action: () => {
+                    CalendarDataService.declareIntent(Math.max(1, removedCount));
+                    this.calendar.setEvents(restoreTo);
+                    this.showToast(
+                        removed.length === 1 ? `Restored ${name}` : `Restored ${removed.length} events`,
+                        'success');
+                },
+            });
+        },
+
+        /**
+         * Undo the most recent change, for Cmd/Ctrl+Z and the toast's Undo button.
+         *
+         * Reads the same /history the Recent changes dialog does, so there is one source
+         * of truth for "what was the last change" rather than a second local stack that
+         * could disagree with the server -- and so an undo works even after a reload, or
+         * when the change came from somebody else's browser.
+         */
+        async undoLastChange() {
+            await this.loadUndoEntries();
+            const latest = this.undoEntries[0];
+            if (!latest) {
+                this.showToast('Nothing to undo', 'info');
+                return;
+            }
+            this.undoChange(latest);
         },
     }
 };

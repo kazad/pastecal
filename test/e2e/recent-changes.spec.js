@@ -84,7 +84,8 @@ test('a deleted event is named in the list, not just counted', async ({ page }) 
   expect(list[0].what).toContain('Design review');
   expect(list[0].lost).toEqual(['Design review']);
   expect(list[0].label).toBe('Restore event');
-  await expect(page.getByText('Deleted "Design review"')).toBeVisible();
+  // Scoped to the dialog: the delete toast legitimately carries the same wording.
+  await expect(page.locator('.pc-modal').getByText('Deleted "Design review"')).toBeVisible();
 });
 
 test('several events deleted at once are all named', async ({ page }) => {

@@ -32,6 +32,11 @@ const ToastNotification = {
                                 <p class="text-sm font-medium text-color-2">
                                     {{ message }}
                                 </p>
+                                <!-- Optional action, e.g. "Undo" right after a delete. -->
+                                <button v-if="actionLabel" @click="runAction"
+                                    class="mt-1 text-sm font-semibold text-link hover:underline focus:outline-none focus:ring-2 focus:ring-blue-500 rounded">
+                                    {{ actionLabel }}
+                                </button>
                             </div>
                             <div class="ml-4 flex-shrink-0 flex">
                                 <button @click="hide" class="bg-transparent rounded-md inline-flex text-color-1 hover:text-theme-strong focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
@@ -52,22 +57,40 @@ const ToastNotification = {
             show: false,
             message: '',
             type: 'info',
-            timer: null
+            timer: null,
+            actionLabel: '',
+            action: null
         }
     },
     methods: {
-        display(message, type = 'info') {
+        /**
+         * @param options.actionLabel  text for an inline action button, e.g. "Undo"
+         * @param options.action       called when it is pressed
+         * @param options.duration     ms before auto-hide; an actionable toast stays
+         *                             longer, since 3s is not enough to read a message
+         *                             AND decide to act on it.
+         */
+        display(message, type = 'info', options = {}) {
             this.message = message;
             this.type = type;
+            this.actionLabel = options.actionLabel || '';
+            this.action = options.action || null;
             this.show = true;
 
             if (this.timer) clearTimeout(this.timer);
             this.timer = setTimeout(() => {
                 this.hide();
-            }, 3000);
+            }, options.duration || (this.actionLabel ? 8000 : 3000));
+        },
+        runAction() {
+            const fn = this.action;
+            this.hide();
+            if (typeof fn === 'function') fn();
         },
         hide() {
             this.show = false;
+            this.actionLabel = '';
+            this.action = null;
         }
     }
 };
