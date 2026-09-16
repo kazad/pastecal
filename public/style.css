@@ -769,7 +769,7 @@ div#Schedule,
     .welcome-dock__progress { animation: none; width: 100%; }
 }
 
-/* Colour filter dots.
+/* Color filter dots.
    Tailwind's ring utilities resolve to a transparent shadow in this build, so a
    focus-visible:ring-* class produced no visible focus at all -- worse than the
    plain spans these replaced, which were never focusable. Use a real outline. */

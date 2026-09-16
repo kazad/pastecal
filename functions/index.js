@@ -218,7 +218,7 @@ const ICSService = {
     formatDateTime(dateTime) {
         if (dateTime === null || dateTime === undefined || dateTime === '') return null;
 
-        // Always normalise through Date rather than string-editing the input. The old fast
+        // Always normalize through Date rather than string-editing the input. The old fast
         // path stripped separators without converting the zone, so an offset stamp like
         // "2026-09-07T17:00:00-04:00" became "20260907T1700000400" and a naive
         // "2026-09-07T17:00:00" kept a local wall time as though it were UTC. Both are
@@ -257,7 +257,7 @@ const ICSService = {
             && this.formatDateTime(event.end) !== null;
     },
 
-    // Normalise one stored exception date to the iCalendar form. The app writes them as
+    // Normalize one stored exception date to the iCalendar form. The app writes them as
     // comma-separated UTC stamps (20260424T160000Z); anything unparseable is dropped
     // rather than emitted, since a malformed EXDATE can invalidate the whole calendar for
     // a strict client.
@@ -336,7 +336,7 @@ const ICSService = {
             eventLines.push(`RRULE:${event.recurrencerule}`);
 
             // Without EXDATE, an occurrence the user deleted in the app is still generated
-            // by the rule, so every subscriber keeps seeing a meeting that was cancelled.
+            // by the rule, so every subscriber keeps seeing a meeting that was canceled.
             // Slots that a moved occurrence overrides are excluded from this list: those
             // instances are replaced, not removed, and EXDATE'ing one deletes the slot its
             // override was meant to fill.

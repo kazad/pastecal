@@ -140,7 +140,7 @@ const Analytics = {
 
     /**
      * Send everything queued. `beacon` must be true when the page may be going
-     * away -- fetch() is cancelled on unload, sendBeacon() survives it, and most
+     * away -- fetch() is canceled on unload, sendBeacon() survives it, and most
      * calendar sessions end with a tab close right after the interesting action.
      */
     flush(beacon) {
@@ -330,7 +330,7 @@ const Analytics = {
 
     /**
      * A write had to reconcile someone else's concurrent change. Not an error --
-     * merging is the intended behaviour -- but the rate is the only visibility into
+     * merging is the intended behavior -- but the rate is the only visibility into
      * how often real editing collides, and a sudden jump means the merge is
      * thrashing rather than settling.
      */

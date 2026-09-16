@@ -1,5 +1,5 @@
 /**
- * Structural guards for the colour filter, for the few properties a behavioural test
+ * Structural guards for the color filter, for the few properties a behavioral test
  * cannot reach.
  *
  * color-filter.test.js executes the real functions from public/app.js and is where the
@@ -9,7 +9,7 @@
  * user will see it.
  *
  * These are source-text assertions, which makes them weak: they pass if the spelling is
- * right and the behaviour is wrong. Keep them few, keep them about wiring, and put
+ * right and the behavior is wrong. Keep them few, keep them about wiring, and put
  * anything that can be executed in color-filter.test.js instead.
  *
  * Run: npm run test:unit
@@ -54,7 +54,7 @@ test('visibility does not depend on whether the search panel is open', () => {
 });
 
 test('every assignment to COLORS keeps colorFilters the same length', () => {
-  // colorFilters is one flag per colour; if they drift, a dot toggles the wrong type.
+  // colorFilters is one flag per color; if they drift, a dot toggles the wrong type.
   const assignments = [...APP.matchAll(/this\.COLORS\s*=\s*\[/g)];
   assert.ok(assignments.length >= 2, 'expected the palette to be assigned in more than one place');
   for (const m of assignments) {
@@ -76,21 +76,21 @@ test('the filter warning lives with the calendar, not inside the search panel', 
   // filters persist past closing the panel, so paging to a week with none of the hidden
   // type would otherwise drop the warning while the filter was still applied.
   assert.match(INDEX.slice(banner - 200, banner + 60), /v-if="isColorFilterActive"/,
-    'the banner must show whenever a colour is switched off');
+    'the banner must show whenever a color is switched off');
 });
 
-test('the colour dots are real, labelled toggle controls', () => {
+test('the color dots are real, labeled toggle controls', () => {
   // They were <span>s: no name, no pressed state, no keyboard focus, and opacity as the
-  // only "off" signal — which fails for colourblind users and near-identical palettes.
+  // only "off" signal — which fails for colorblind users and near-identical palettes.
   const at = INDEX.indexOf('toggleColorFilter(idx)');
-  assert.ok(at !== -1, 'expected the colour dots in the template');
+  assert.ok(at !== -1, 'expected the color dots in the template');
   const dots = INDEX.slice(at - 900, at + 1200);
 
   assert.match(dots, /role="switch"/, 'dots should expose a switch role');
   assert.match(dots, /:aria-checked=/, 'dots should expose their on/off state');
-  assert.match(dots, /:aria-label="typeLabelFor\(idx\)"/, 'dots should be named, not colour-only');
+  assert.match(dots, /:aria-label="typeLabelFor\(idx\)"/, 'dots should be named, not color-only');
   assert.match(dots, /backgroundColor: 'transparent'/,
-    'the off state needs a non-colour signal (hollow dot), not just opacity');
+    'the off state needs a non-color signal (hollow dot), not just opacity');
   // A focusable control needs a visible focus indicator. Tailwind's ring utilities
   // resolve to a transparent shadow in this build, so the dots carry a real outline
   // from style.css instead.

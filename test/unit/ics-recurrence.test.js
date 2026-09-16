@@ -6,7 +6,7 @@
  *
  *   - Delete one occurrence. The app removed it and recorded the date in
  *     recurrenceException, but the feed still emitted the bare RRULE, so Google/Apple/
- *     Outlook kept generating the cancelled meeting forever.
+ *     Outlook kept generating the canceled meeting forever.
  *   - Move one occurrence. The app stores a child event carrying recurrenceID (and, from
  *     Syncfusion, the parent's RecurrenceRule). The feed emitted the parent's unmodified
  *     rule AND the child as a standalone event, so subscribers saw the occurrence twice,
@@ -44,7 +44,7 @@ test('a deleted occurrence is excluded from the feed', () => {
 
   assert.match(block, /^RRULE:FREQ=WEEKLY;INTERVAL=1$/m, 'the series still recurs');
   assert.match(block, /^EXDATE:20260921T170000Z$/m,
-    'without EXDATE subscribers keep seeing a meeting that was cancelled');
+    'without EXDATE subscribers keep seeing a meeting that was canceled');
 });
 
 test('several deleted occurrences are all excluded', () => {
@@ -188,7 +188,7 @@ test('an all-day series uses DATE values so its exclusions actually match', () =
 
 // --- Date formatting --------------------------------------------------------------------
 
-test('offset and naive timestamps normalise to UTC instead of corrupting the feed', () => {
+test('offset and naive timestamps normalize to UTC instead of corrupting the feed', () => {
   // The old string fast-path stripped separators without converting the zone, so an offset
   // stamp became "20260907T1700000400" -- an invalid DTSTART that a strict client rejects,
   // taking the whole calendar with it.

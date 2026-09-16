@@ -2,7 +2,7 @@
 const { test, expect } = require('./fixtures');
 
 // The ICS feed always worked; it was just offered as one of four identical
-// "Copy" boxes labelled "ICS link for other apps", which describes the file
+// "Copy" boxes labeled "ICS link for other apps", which describes the file
 // format rather than what a person gets out of it. These tests lock in the
 // behavior that makes subscribing a single tap, and the safety rule that it
 // never hands out edit access.

@@ -1,19 +1,19 @@
 /**
- * Behavioural tests for the colour filter, run against the REAL functions in public/app.js.
+ * Behavioral tests for the color filter, run against the REAL functions in public/app.js.
  *
  * Issue #41: a user reported an event vanishing from the calendar after they edited its
  * time, while search still found it and it could not be clicked or deleted. The event was
- * untouched -- the search panel's colour filter was hiding it, and that calendar had
- * exactly ONE event of the hidden type, so filtering the colour erased the only member.
+ * untouched -- the search panel's color filter was hiding it, and that calendar had
+ * exactly ONE event of the hidden type, so filtering the color erased the only member.
  *
  * The fix took several rounds, and every round failed the same way: there were TWO
  * definitions of "is this event visible" -- the one feeding the grid and the one counting
  * hidden events -- with nothing forcing them to agree.
  *
  *   the search panel being open was a hidden input to one of them
- *   types with no colour slot were classified differently by each
+ *   types with no color slot were classified differently by each
  *   the colorFilters array could drift out of length with COLORS
- *   `type: 0` normalised as 0 in one and 1 in the other
+ *   `type: 0` normalized as 0 in one and 1 in the other
  *
  * An earlier version of this file re-declared the functions under test, which meant it
  * could pass while the shipped code was broken. These tests extract the real method bodies
@@ -109,9 +109,9 @@ test('the single-member category from #41 is reported, not silently dropped', ()
   assert.equal(app.hiddenEventCount(), 1, 'the count is the only thing standing between the user and #41');
 });
 
-// --- Normalisation must match the grid's ------------------------------------------------
+// --- Normalization must match the grid's ------------------------------------------------
 
-test('falsy types normalise to slot 0, as Calendar.getSyncFusionEvents does', () => {
+test('falsy types normalize to slot 0, as Calendar.getSyncFusionEvents does', () => {
   const app = ctx();
   for (const falsy of [0, '', null, undefined]) {
     assert.equal(app.filterSlotFor({ type: falsy }), 0,
@@ -119,7 +119,7 @@ test('falsy types normalise to slot 0, as Calendar.getSyncFusionEvents does', ()
   }
 });
 
-test('hiding type 1 also hides everything that normalises to type 1', () => {
+test('hiding type 1 also hides everything that normalizes to type 1', () => {
   const app = ctx();
   app.colorFilters[0] = false;
   for (const falsy of [0, '', null, undefined, 'garbage']) {
@@ -133,7 +133,7 @@ test('both event shapes are accepted', () => {
   assert.equal(app.filterSlotFor({ Type: 3 }), 2, 'Syncfusion objects use Type');
 });
 
-test('normalisation falls through a falsy lowercase type to Type, as || does', () => {
+test('normalization falls through a falsy lowercase type to Type, as || does', () => {
   // Calendar.getSyncFusionEvents uses `e.type || 1`, so a falsy `type` must fall through
   // rather than win. This is the one input where `??` and `||` actually disagree: with
   // `??`, {type: 0, Type: 5} stops at 0 and lands in slot 0 while the grid has it in
@@ -143,7 +143,7 @@ test('normalisation falls through a falsy lowercase type to Type, as || does', (
     'a falsy lowercase type must not shadow the Syncfusion Type the grid rendered from');
 });
 
-// --- Types with no colour slot ----------------------------------------------------------
+// --- Types with no color slot ----------------------------------------------------------
 
 test('a type beyond the palette follows the type 1 dot, matching how it is painted', () => {
   // eventRendered and getTypeColor both fall back to COLORS[0].
@@ -156,7 +156,7 @@ test('a type beyond the palette follows the type 1 dot, matching how it is paint
   app.colorFilters[0] = true;
   app.colorFilters[3] = false;
   assert.equal(app.isEventVisible({ type: 99 }), true,
-    'an unrelated colour must not drag it off the grid');
+    'an unrelated color must not drag it off the grid');
 });
 
 test('negative and fractional types do not throw', () => {
@@ -185,7 +185,7 @@ test('colorFilters follows COLORS when a custom palette changes length', () => {
 
 // --- The banner's own condition ---------------------------------------------------------
 
-test('isColorFilterActive reports a switched-off colour even with nothing hidden in view', () => {
+test('isColorFilterActive reports a switched-off color even with nothing hidden in view', () => {
   // Filters persist past closing the panel, so the banner cannot key off the count alone:
   // paging to a week with none of the hidden type would drop it to 0 and hide the warning
   // while the filter was still on.
@@ -197,7 +197,7 @@ test('isColorFilterActive reports a switched-off colour even with nothing hidden
   assert.equal(app.hiddenEventCount(), 0, 'no events at all, so nothing to count');
 });
 
-test('all colours off hides everything and counts all of it', () => {
+test('all colors off hides everything and counts all of it', () => {
   const app = ctx({ events: [{ type: 1 }, { type: 4 }, { type: 8 }, { type: 99 }] });
   assert.equal(app.calendar.events.every(e => app.isEventVisible(e)), true);
 

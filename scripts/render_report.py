@@ -149,7 +149,7 @@ def monthly_chart(items, partial_item=None):
 
 
 def bars(items, unit=""):
-    """Ranked horizontal bars. Magnitude by length; value direct-labelled."""
+    """Ranked horizontal bars. Magnitude by length; value direct-labeled."""
     if not items:
         return '<p class="empty">No data in this window.</p>'
     hi = max(v for _, v in items) or 1
@@ -903,7 +903,7 @@ if bd:
             continue
         # A dimension registered today has no history: GA4 does not backfill, so
         # every event recorded before it existed reports "(not set)" forever.
-        # Showing a full-width bar labelled "(not set)" looks like a broken chart
+        # Showing a full-width bar labeled "(not set)" looks like a broken chart
         # rather than the expected consequence of when the dimension was created.
         if all(label == "(not set)" for label, _ in items):
             unset_only.append((title, sum(v for _, v in items)))

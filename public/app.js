@@ -232,8 +232,8 @@ const CalendarVueApp = {
         hasCustomColors() {
             return this.COLORS.some((color, index) => color !== this.DEFAULT_COLORS[index]);
         },
-        // How many events the colour filter is hiding from the view on screen. Surfaced
-        // next to the dots because a switched-off colour is otherwise signalled only by a
+        // How many events the color filter is hiding from the view on screen. Surfaced
+        // next to the dots because a switched-off color is otherwise signalled only by a
         // dimmed dot: in #41 a calendar had exactly one event of its hidden type, so
         // filtering it read as the event being deleted rather than hidden.
         //
@@ -244,7 +244,7 @@ const CalendarVueApp = {
         // "where did the thing I was just looking at go".
         // What the banner says. Names the hidden category where there is one to name --
         // "Book/Movie Day events are hidden" tells someone who did not realise they
-        // filtered both what happened and what to look for, which "a colour filter is on"
+        // filtered both what happened and what to look for, which "a color filter is on"
         // does not. Falls back to the count, then to the bare fact that a filter is on,
         // because this must still say something true when the current view happens to
         // contain none of the hidden types.
@@ -312,7 +312,7 @@ const CalendarVueApp = {
             return start < range.end;
         },
 
-        // Is any colour switched off? Distinct from hiddenEventCount, which is 0 whenever
+        // Is any color switched off? Distinct from hiddenEventCount, which is 0 whenever
         // the current view happens to contain none of the hidden types. Now that filters
         // persist past closing the panel, that state is reachable by simply paging to
         // another week -- and a filter that is on while nothing says so is exactly the
@@ -747,7 +747,7 @@ const CalendarVueApp = {
         scheduleObj.popupOpen = (args) => {
 
             // Cleared on every popup, not just the Editor. Left set, it stays pointing at
-            // the last event edited, so a colour chosen from any other popup would land on
+            // the last event edited, so a color chosen from any other popup would land on
             // that stale event -- the same wrong-event write this field exists to prevent,
             // moved from a stale closure to a stale field. Clearing first also makes the
             // `|| args.data` fallback in those handlers reachable again.
@@ -797,7 +797,7 @@ const CalendarVueApp = {
                     const target = app.activeEditorData || args.data;
                     target.Type = parseInt(id);
                     // Whether people categorise events at all decides if type
-                    // labels/colours are worth building on (see pro.md).
+                    // labels/colors are worth building on (see pro.md).
                     track(a => a.featureUsed('event_type', 'popup'));
                     // console.log("Color set to:", id, "for event:", args.data);
                 }
@@ -824,7 +824,7 @@ const CalendarVueApp = {
                             // created only on the first open (the guard above), so the
                             // captured `args` goes stale immediately -- choosing a type on
                             // the second event edited would set it on the first one, which
-                            // is invisible until that event turns the wrong colour or gets
+                            // is invisible until that event turns the wrong color or gets
                             // filtered out from under the user.
                             const live = app.activeEditorData || args.data;
                             live.Type = type;
@@ -1165,7 +1165,7 @@ const CalendarVueApp = {
             track(a => a.eventsDropped(dropped.length, 'incomplete'));
         };
 
-        // How often real editing actually collides. Merging is the intended behaviour, so
+        // How often real editing actually collides. Merging is the intended behavior, so
         // this is not an error -- but the rate is the only visibility into whether the
         // merge is settling or thrashing, and it was completely dark before.
         CalendarDataService.onSyncMerged = (counts) => {
@@ -1720,14 +1720,14 @@ const CalendarVueApp = {
             // This creates a new array instance for this.syncFusionEvents if this.calendar.events has changed.
             this.syncFusionEvents = this.calendar.getSyncFusionEvents();
 
-            // Step 2: Hand the scheduler only the events the colour filter admits.
+            // Step 2: Hand the scheduler only the events the color filter admits.
             //
             // This filters the array rather than passing a DataManager plus an ej.data.Query
             // predicate. The query built an allow-list of `Type == n` clauses, which is a
             // second, separate definition of "visible" alongside isEventVisible() -- and
             // every round of issue #41 was those two definitions disagreeing (first about
-            // whether the search panel was open, then about types with no colour slot, then
-            // about how `type` is normalised). One predicate, used here and by
+            // whether the search panel was open, then about types with no color slot, then
+            // about how `type` is normalized). One predicate, used here and by
             // hiddenEventCount, makes that whole class of bug unrepresentable.
             scheduleObj.setProperties({
                 eventSettings: {
@@ -1744,7 +1744,7 @@ const CalendarVueApp = {
 
         // Fold one scheduler action's records into the full event list.
         //
-        // The scheduler only ever sees the events the colour filter admits (see
+        // The scheduler only ever sees the events the color filter admits (see
         // updateCalendarView), so no array it exposes is a safe thing to save wholesale --
         // doing that deletes whatever is currently filtered out. The action's own
         // added/changed/deletedRecords are the only authoritative statement of what the
@@ -2000,13 +2000,13 @@ const CalendarVueApp = {
             }
         },
 
-        // Human name for one colour slot, for the filter dots' labels. The dots are
-        // otherwise distinguishable only by hue, which fails for colourblind users and for
-        // the near-identical colours a custom palette can contain.
+        // Human name for one color slot, for the filter dots' labels. The dots are
+        // otherwise distinguishable only by hue, which fails for colorblind users and for
+        // the near-identical colors a custom palette can contain.
         //
         // Most calendars never rename their types, and the stored default labels are
         // literally "Type 1".."Type 8" -- a slot index with no referent, which read aloud
-        // sounds like information while conveying none. Fall back to the dot's own colour
+        // sounds like information while conveying none. Fall back to the dot's own color
         // instead, which is at least something the user can see on screen.
         typeLabelFor(index) {
             const custom = this.calendar?.options?.typeLabels;
@@ -2015,7 +2015,7 @@ const CalendarVueApp = {
             return this.colorNameFor(index);
         },
 
-        // Nearest plain-English name for a palette colour, so a dot has a spoken label
+        // Nearest plain-English name for a palette color, so a dot has a spoken label
         // even when its type was never given one.
         colorNameFor(index) {
             const hex = (this.COLORS[index] || '').replace('#', '');
@@ -2024,7 +2024,7 @@ const CalendarVueApp = {
             const g = parseInt(hex.slice(2, 4), 16);
             const b = parseInt(hex.slice(4, 6), 16);
             const max = Math.max(r, g, b), min = Math.min(r, g, b);
-            if (max - min < 30) return max > 160 ? 'Light grey' : (max < 80 ? 'Black' : 'Grey');
+            if (max - min < 30) return max > 160 ? 'Light gray' : (max < 80 ? 'Black' : 'Gray');
 
             let hue;
             const d = max - min;
@@ -2222,7 +2222,7 @@ const CalendarVueApp = {
             this.colorFilters = this.COLORS.map(() => true);
         },
 
-        // Keep one filter flag per colour, preserving existing choices. Called whenever
+        // Keep one filter flag per color, preserving existing choices. Called whenever
         // COLORS is replaced, so the filter array can never be a different length than
         // the palette it describes.
         syncColorFiltersLength() {
@@ -2255,9 +2255,9 @@ const CalendarVueApp = {
             return this.colorFilters[this.filterSlotFor(event)] === true;
         },
 
-        // Which colour dot governs this event. Both paint paths (eventRendered and
+        // Which color dot governs this event. Both paint paths (eventRendered and
         // getTypeColor) fall back to COLORS[0] for a type with no slot, so such an event
-        // reads on screen as type 1 and follows the type 1 dot. Normalised with `|| 1`,
+        // reads on screen as type 1 and follows the type 1 dot. Normalized with `|| 1`,
         // matching Calendar.getSyncFusionEvents() and Event.js, so a type of 0 or ""
         // lands in the same slot here as it does on the grid.
         filterSlotFor(event) {
@@ -2381,7 +2381,7 @@ const CalendarVueApp = {
             }
         },
 
-        // Closing the panel no longer clears the colour filter. It used to, because the
+        // Closing the panel no longer clears the color filter. It used to, because the
         // filter was otherwise invisible once the dots were off screen -- the reset was the
         // only thing standing between a user and #41. The banner above the calendar now
         // reports a filter wherever the user is, so the filter can behave like a filter and
@@ -2637,7 +2637,7 @@ const CalendarVueApp = {
                     }
 
                     // Events that survived but came out different: a rename, a moved
-                    // time, a changed colour. Without this an edit shows as "1 event
+                    // time, a changed color. Without this an edit shows as "1 event
                     // edited" with nothing named -- the same dead end a nameless delete
                     // row was, and edits are the more common mistake.
                     const afterByKey = new Map(after.map(e => [keyOf(e), e]));
@@ -2755,7 +2755,7 @@ const CalendarVueApp = {
         /**
          * What actually changed between two versions of the same event, in the words a
          * person would use -- "renamed", "moved to Thu, Sep 17" -- or null if nothing
-         * meaningful differs. Firebase drops empty values, so compare normalised.
+         * meaningful differs. Firebase drops empty values, so compare normalized.
          */
         describeEventDiff(from, to) {
             const norm = (v) => (v === undefined || v === null || v === '') ? null : v;
@@ -2767,7 +2767,7 @@ const CalendarVueApp = {
                 parts.push(`moved to ${this.describeEventTime(to)}`);
             }
             if (norm(from.description) !== norm(to.description)) parts.push('notes changed');
-            if (String(from.type ?? 1) !== String(to.type ?? 1)) parts.push('colour changed');
+            if (String(from.type ?? 1) !== String(to.type ?? 1)) parts.push('color changed');
             if (!!from.isAllDay !== !!to.isAllDay) parts.push(to.isAllDay ? 'made all-day' : 'given a time');
             if (norm(from.recurrencerule) !== norm(to.recurrencerule)) parts.push('repeat changed');
             return parts.length ? parts.join(', ') : null;
@@ -3159,7 +3159,7 @@ const CalendarVueApp = {
 
         updateEventColor(index, color) {
             if (index >= 0 && index < this.COLORS.length) {
-                // Custom colours are a candidate paid feature (see pro.md's
+                // Custom colors are a candidate paid feature (see pro.md's
                 // whitelabel tier), and nobody currently knows if anyone changes
                 // them from the defaults.
                 track(a => a.featureUsed('colors'));
@@ -3244,7 +3244,7 @@ const CalendarVueApp = {
                 // Update the component COLORS array
                 this.COLORS = [...this.calendar.options.colors];
 
-                // One filter flag per colour. colorFilters is sized once at init from the
+                // One filter flag per color. colorFilters is sized once at init from the
                 // default palette; COLORS is replaced here with whatever the calendar
                 // stored, a Firebase value of unchecked length. Without this a palette of
                 // a different size leaves dots and flags misaligned, so a dot would toggle

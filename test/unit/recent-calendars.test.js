@@ -177,7 +177,7 @@ test('missing or corrupt storage falls back to an empty list', () => {
   assert.deepEqual(manager.getVisited(), []);
 });
 
-// --- 5. Existing pin/remove behaviour still holds -----------------------------------------
+// --- 5. Existing pin/remove behavior still holds -----------------------------------------
 
 test('a created calendar can still be pinned and removed by the user', () => {
   const { manager, store } = makeManager();

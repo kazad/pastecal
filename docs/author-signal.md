@@ -35,7 +35,7 @@ someone else's and the records would be worthless as evidence exactly when they 
 
 `auth.uid` is asserted by Firebase, and the rule `auth.uid === $uid` means a browser can
 only ever write under its own id. Forgery is prevented at the database layer rather than by
-client good behaviour.
+client good behavior.
 
 Firebase anonymous auth was already enabled on this project and `firebase-compat.js`
 already ships the auth SDK, so this cost one function call.
