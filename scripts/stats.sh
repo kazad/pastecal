@@ -9,6 +9,7 @@
 #   ./scripts/stats.sh returns         # how deep people come back
 #   ./scripts/stats.sh adds            # where events get created
 #   ./scripts/stats.sh shares          # how calendars get shared
+#   ./scripts/stats.sh weekly          # THE Monday read: survivors, retention, creators, owners
 #   ./scripts/stats.sh northstar       # THE number: weekly active shared calendars (2+ people)
 #   ./scripts/stats.sh cohorts         # per birth week: reached a 2nd person? alive 4 weeks on?
 #   ./scripts/stats.sh raw <json>      # any runReport body, printed as JSON
@@ -64,6 +65,9 @@ while [ $# -gt 0 ]; do
         --live|--realtime) REALTIME=1; shift ;;
         -h|--help) sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         --) shift; ARGS+=("$@"); break ;;
+        # `setup --create` is documented, so --create must survive option
+        # parsing and reach the subcommand rather than being rejected here.
+        --create) ARGS+=("$1"); shift ;;
         -*) echo "ERROR: unknown option '$1'. See: $0 -h" >&2; exit 1 ;;
         *) ARGS+=("$1"); shift ;;
     esac
@@ -438,6 +442,185 @@ northstar)
     echo "  form -- run:  $0 cohorts  to see where."
     ;;
 
+weekly)
+    # The Monday-morning read for a one-person SaaS. Five numbers, in the order
+    # that revenue actually depends on:
+    #
+    #   1. SURVIVORS   calendars born 4+ weeks ago and still alive. Only these
+    #                  can ever pay, so this is the number a price is multiplied
+    #                  against -- not total users, not sessions.
+    #   2. RETENTION   week-4 survival by cohort. The trend behind (1).
+    #   3. CREATORS    what share of new users create a calendar. Half of K.
+    #   4. OWNERS      how many browsers run 2+ calendars (needs owned_bucket;
+    #                  see analytics.js calendarsOwned). Sizes a bundled plan.
+    #   5. SERIOUS     calendars with 3+ returning people -- the org-shaped ones.
+    #
+    # Everything here is deliberately a FLOOR: GA4 counts browsers not people,
+    # ICS subscribers never load the page, and /view/ links can't be mapped back
+    # to their calendar. Read these as "at least this many".
+    [ "$DAYS_SET" = "1" ] || DAYS=84
+    LOOKBACK=8
+
+    paths="$(report "$(printf '{"dateRanges":[{"startDate":"%ddaysAgo","endDate":"yesterday"}],"dimensions":[{"name":"isoYearIsoWeek"},{"name":"pagePath"}],"metrics":[{"name":"totalUsers"}],"limit":250000}' \
+        $(( DAYS + LOOKBACK * 7 )))")"
+    users="$(report "$(printf '{"dateRanges":[{"startDate":"%ddaysAgo","endDate":"yesterday"}],"dimensions":[{"name":"isoYearIsoWeek"}],"metrics":[{"name":"newUsers"},{"name":"totalUsers"}]}' "$DAYS")")"
+    creates="$(report "$(printf '{"dateRanges":[{"startDate":"%ddaysAgo","endDate":"yesterday"}],"dimensions":[{"name":"isoYearIsoWeek"},{"name":"eventName"}],"metrics":[{"name":"eventCount"}],"dimensionFilter":{"filter":{"fieldName":"eventName","inListFilter":{"values":["calendar_created","calendar_shared"]}}}}' "$DAYS")")"
+    # owned_bucket may not be registered yet -- GA4 400s on an unknown custom
+    # dimension, and under set -e that would kill the whole report. Tolerate it
+    # and let section 4 explain how to turn it on.
+    owned="{}"
+    if od="$(report "$(printf '{"dateRanges":[{"startDate":"%ddaysAgo","endDate":"yesterday"}],"dimensions":[{"name":"customEvent:owned_bucket"}],"metrics":[{"name":"totalUsers"}]}' "$DAYS")" 2>/dev/null)"; then owned="$od"; fi
+
+    if [ "$JSON_ONLY" = "1" ]; then
+        jq -n --argjson p "$paths" --argjson u "$users" --argjson c "$creates" --argjson o "$owned" \
+            '{paths:$p, users:$u, creates:$c, owned:$o}'
+        exit 0
+    fi
+
+    CUR="$(date +%G%V)"
+
+    echo "pastecal weekly — $(date +%Y-%m-%d)"
+    echo "================================================"
+    echo
+
+    echo "1. SURVIVORS — born 4+ wks ago, still active (the number that can pay)"
+    echo
+    echo "$paths" | jq -r --arg cur "$CUR" '
+        [ (.rows // [])[]
+          | {week: .dimensionValues[0].value,
+             path: .dimensionValues[1].value,
+             users: (.metricValues[0].value | tonumber)}
+          | select(.week != $cur)
+          | select(.path != "/"
+              and (.path | contains(".") | not)
+              and (.path | test("^/(nativecal|demo|components|directives|img|js-old-components|models|services|utils|zz-|test-)") | not))
+          | .cal = (.path | ascii_downcase | sub("^/edit/"; "/") | sub("/+$"; ""))
+          | select(.cal != "")
+        ]
+        | group_by(.cal)
+        | map({cal: .[0].cal,
+               born: ([.[].week] | min),
+               last: ([.[].week] | max),
+               weeks: ([.[].week] | unique | length)})
+        | ([.[] | select(.weeks >= 4)] | length) as $surv
+        | ([.[]] | length) as $all
+        | "  \($surv) surviving of \($all) seen  (\((100 * $surv / (if $all == 0 then 1 else $all end)) | floor)%)"'
+    echo
+
+    echo "2. RETENTION — of calendars born each week, % alive 4+ weeks on"
+    echo
+    echo "$paths" | jq -r --arg cur "$CUR" --argjson lb 8 '
+        [ (.rows // [])[]
+          | {week: .dimensionValues[0].value,
+             path: .dimensionValues[1].value}
+          | select(.week != $cur)
+          | select(.path != "/"
+              and (.path | contains(".") | not)
+              and (.path | test("^/(nativecal|demo|components|directives|img|js-old-components|models|services|utils|zz-|test-)") | not))
+          | .cal = (.path | ascii_downcase | sub("^/edit/"; "/") | sub("/+$"; ""))
+          | select(.cal != "")
+        ]
+        | group_by(.cal)
+        | map({cal: .[0].cal, born: ([.[].week] | min), weeks: ([.[].week] | unique | sort)})
+        | ([.[].born] | min) as $first
+        | [ .[] | select(.born > $first) ]
+        | group_by(.born)
+        | map(.[0].born as $b
+              | [ $b,
+                  length,
+                  ([ .[] | select([.weeks[] | select(. > $b)] | length >= 3) ] | length) ])
+        | sort_by(.[0])
+        | .[:-3]
+        | (["born wk","calendars","alive 4wk on"], (.[] | [.[0], .[1], "\(.[2]) (\((100 * .[2] / (if .[1] == 0 then 1 else .[1] end)) | floor)%)"]))
+        | @tsv' | column -t -s "$(printf '\t')" | sed 's/^/  /'
+    echo
+
+    echo "3. CREATORS — new users who made a calendar (half of the K equation)"
+    echo
+    # Joined on the week KEY, not on line order: the two GA4 responses come back
+    # in different orders, and a positional paste silently pairs the wrong rows
+    # -- which read as "creates fell to zero" when they had not.
+    jq -rn --argjson u "$users" --argjson c "$creates" --arg cur "$CUR" '
+        ([ ($u.rows // [])[]
+           | select(.dimensionValues[0].value != $cur)
+           | {w: .dimensionValues[0].value, n: (.metricValues[0].value|tonumber)} ]
+         | INDEX(.w) | map_values(.n)) as $nu
+        | ([ ($c.rows // [])[]
+             | select(.dimensionValues[0].value != $cur)
+             | select(.dimensionValues[1].value == "calendar_created")
+             | {w: .dimensionValues[0].value, n: (.metricValues[0].value|tonumber)} ]
+           | INDEX(.w) | map_values(.n)) as $cc
+        # calendar_created was added mid-flight, so weeks before its first
+        # sighting have no denominator-matching numerator. Showing them as 0%
+        # reads as a collapse in creation; they are simply not instrumented.
+        | (($cc | keys | sort | first) // "999999") as $since
+        | ([$nu | keys[] | select(. >= $since)] | sort) as $weeks
+        | (["week","new users","created","rate"],
+           ($weeks[] | [., ($nu[.] // 0), ($cc[.] // 0),
+             (if ($nu[.] // 0) > 0
+              then (((1000 * ($cc[.] // 0) / $nu[.]) | floor) / 10 | tostring) + "%"
+              else "-" end)]))
+        | @tsv' | column -t -s "$(printf '\t')" | sed 's/^/  /'
+    echo
+    jq -rn --argjson u "$users" --argjson c "$creates" --arg cur "$CUR" '
+        (([ ($c.rows // [])[] | select(.dimensionValues[1].value == "calendar_created")
+            | .dimensionValues[0].value ] | sort | first) // "999999") as $since
+        | (([ ($u.rows // [])[] | select(.dimensionValues[0].value != $cur)
+            | select(.dimensionValues[0].value >= $since)
+            | (.metricValues[0].value|tonumber) ] | add) // 0) as $tn
+        | (([ ($c.rows // [])[] | select(.dimensionValues[0].value != $cur)
+              | select(.dimensionValues[1].value == "calendar_created")
+              | (.metricValues[0].value|tonumber) ] | add) // 0) as $tc
+        | if $tn > 0
+          then "  overall creator rate: " + (((1000 * $tc / $tn) | floor) / 10 | tostring)
+               + "%  (" + ($tc|tostring) + " created / " + ($tn|tostring) + " new users)"
+          else "  (no data)" end'
+    echo
+    echo "4. OWNERS — browsers running more than one calendar (sizes a bundle)"
+    echo
+    if echo "$owned" | jq -e '(.rows // []) | length > 0' >/dev/null 2>&1; then
+        echo "$owned" | jq -r '
+            [ (.rows // [])[] | {b: .dimensionValues[0].value, u: (.metricValues[0].value|tonumber)} ]
+            | (map(.u) | add) as $tot
+            | (["owned","browsers","share"],
+               (sort_by(.b)[] | [.b, .u, "\((100 * .u / (if $tot == 0 then 1 else $tot end)) | floor)%"]))
+            | @tsv' | column -t -s "$(printf '\t')" | sed 's/^/  /'
+    else
+        echo "  no data yet — owned_bucket ships with calendars_owned (analytics.js)."
+        echo "  Register it:  $0 setup --create     GA4 does not backfill."
+    fi
+    echo
+
+    echo "5. SERIOUS — calendars with 3+ people returning (the org-shaped ones)"
+    echo
+    echo "$paths" | jq -r --arg cur "$CUR" '
+        [ (.rows // [])[]
+          | {week: .dimensionValues[0].value,
+             path: .dimensionValues[1].value,
+             users: (.metricValues[0].value | tonumber)}
+          | select(.week != $cur)
+          | select(.path != "/"
+              and (.path | contains(".") | not)
+              and (.path | test("^/(nativecal|demo|components|directives|img|js-old-components|models|services|utils|zz-|test-)") | not))
+          | .cal = (.path | ascii_downcase | sub("^/edit/"; "/") | sub("/+$"; ""))
+          | select(.cal != "")
+        ]
+        | group_by(.cal)
+        | map({cal: .[0].cal,
+               peak: ([.[].users] | max),
+               weeks: ([.[].week] | unique | length)})
+        | [ .[] | select(.peak >= 3 and .weeks >= 4) ]
+        | sort_by(-.peak)
+        | ("  " + (length | tostring) + " calendars with 3+ people AND 4+ active weeks"),
+          "",
+          "  top 12:",
+          (.[:12][] | "    \(.cal)  —  \(.peak) people, \(.weeks) wks")'
+    echo
+    echo "------------------------------------------------"
+    echo "Numbers are floors: browsers != people, ICS subscribers are invisible,"
+    echo "and /view/ links cannot be mapped back to their calendar."
+    ;;
+
 cohorts)
     # The leak behind a flat north star: new users keep arriving, but the
     # weekly-active-shared-calendar count doesn't rise, so new calendars must be
@@ -579,7 +762,7 @@ setup)
     rm -f "$dims_raw"
 
     missing=0
-    for p in where source method feature named visit_bucket slug_length event_count_bucket has_custom_slug reason surface; do
+    for p in where source method feature named visit_bucket slug_length event_count_bucket has_custom_slug reason surface owned_bucket kind intent removing; do
         if echo " $dims " | grep -q " $p "; then
             printf '  ok       %s\n' "$p"
         else
@@ -628,7 +811,7 @@ MSG
     echo
     created=0
     failed=0
-    for p in where source method feature named visit_bucket slug_length event_count_bucket has_custom_slug reason surface; do
+    for p in where source method feature named visit_bucket slug_length event_count_bucket has_custom_slug reason surface owned_bucket kind intent removing; do
         echo " $dims " | grep -q " $p " && continue
 
         case "$p" in
@@ -643,6 +826,10 @@ MSG
             has_custom_slug)    label="Has custom slug" ;;
             reason)             label="Failure reason" ;;
             surface)            label="Platform" ;;
+            owned_bucket)       label="Calendars owned" ;;
+            kind)               label="Change kind" ;;
+            intent)             label="Write intent" ;;
+            removing)           label="Removing events" ;;
         esac
 
         body="$(jq -n --arg p "$p" --arg l "$label" \

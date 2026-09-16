@@ -218,6 +218,18 @@ const Analytics = {
         return '11+';
     },
 
+    // How many calendars this browser has CREATED. Bucketed around the pricing
+    // question rather than evenly: the only boundaries that matter are 1 vs 2+
+    // (does anyone run more than one calendar at all) and 10 (the point a
+    // bundled plan would stop covering them).
+    bucketOwned(n) {
+        if (!n) return '0';
+        if (n === 1) return '1';
+        if (n <= 3) return '2-3';
+        if (n <= 10) return '4-10';
+        return '11+';
+    },
+
     // ---- the events ----------------------------------------------------------
     // Named helpers rather than raw track() calls, so the schema lives in one
     // place and call sites can't drift on param names.
@@ -268,6 +280,27 @@ const Analytics = {
             has_custom_slug: !!calendar?.options?.publicViewId
                 && !this.looksGenerated(calendar.options.publicViewId),
             event_count_bucket: this.bucketEvents(calendar?.events?.length),
+        });
+    },
+
+    /**
+     * How many calendars this browser has created, reported once per session.
+     *
+     * Everything else here counts calendars; this counts PEOPLE who run more
+     * than one. That distinction is the whole question behind a bundled plan:
+     * if almost nobody owns a second calendar, a "10 calendars for $99" tier is
+     * priced for a customer who doesn't exist, and per-calendar is the honest
+     * model. Read off localStorage's `myCalendars`, which is never evicted, so
+     * this is a true lifetime count for the browser rather than a 30-day window.
+     *
+     * Session-scoped deliberately: firing per page load would weight the number
+     * toward whoever browses most, which is the opposite of what it measures.
+     */
+    calendarsOwned(count) {
+        if (this._ownedReported) return;
+        this._ownedReported = true;
+        this.track('calendars_owned', {
+            owned_bucket: this.bucketOwned(count),
         });
     },
 

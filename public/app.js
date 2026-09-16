@@ -512,6 +512,9 @@ const CalendarVueApp = {
                         if (visited && visited.visitCount > 1) {
                             track(a => a.calendarReturned(this.calendar, visited.visitCount));
                         }
+                        // Sizes the "one plan, N calendars" question. Fires at most
+                        // once per session -- see calendarsOwned().
+                        track(a => a.calendarsOwned(this.recentManager.getMine().length));
                     }
 
                     if (!this.remoteSettingsApplied) {
