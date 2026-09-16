@@ -1274,20 +1274,36 @@ Copyright (c) 2025 Kalid Azad
 
                 <div class="divide-y divide-color-default -mx-1">
                     <div v-for="entry in undoEntries" :key="entry.key" class="py-3 px-1">
+                        <!-- Two different times live in this row: WHEN THE CHANGE HAPPENED
+                             and WHEN THE EVENT IS SCHEDULED. Stacked as two bare lines they
+                             were indistinguishable ("today 4:31 PM" above "Wed, Sep 16,
+                             10:00 AM" reads as one nonsense range). The change time is
+                             metadata, so it sits apart on the right; the event's own time
+                             stays with the event it belongs to, in a calendar-shaped line. -->
                         <div class="flex items-start justify-between gap-3">
                             <div class="min-w-0">
                                 <div class="text-sm text-color-2">{{ entry.what }}</div>
-                                <div class="text-xs text-color-1">{{ entry.when }}</div>
 
                                 <!-- One deleted event is already named in the heading, so
                                      only its time is added; several get the full list. -->
-                                <div v-if="entry.lost.length === 1" class="text-xs text-color-1 mt-0.5">
+                                <div v-if="entry.lost.length === 1"
+                                    class="text-xs text-color-1 mt-1 flex items-center gap-1">
+                                    <svg class="w-3 h-3 flex-shrink-0 opacity-60" fill="none" viewBox="0 0 24 24"
+                                        stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                        <rect x="3" y="5" width="18" height="16" rx="2" />
+                                        <path d="M3 10h18M8 3v4M16 3v4" stroke-linecap="round" />
+                                    </svg>
                                     {{ entry.lost[0].when }}
                                 </div>
-                                <ul v-else-if="entry.lost.length" class="mt-1.5 space-y-0.5">
-                                    <li v-for="(ev, i) in entry.lost" :key="i" class="text-xs text-color-1">
-                                        {{ ev.title }}
-                                        <span class="opacity-70">— {{ ev.when }}</span>
+                                <ul v-else-if="entry.lost.length" class="mt-1 space-y-0.5">
+                                    <li v-for="(ev, i) in entry.lost" :key="i"
+                                        class="text-xs text-color-1 flex items-center gap-1">
+                                        <svg class="w-3 h-3 flex-shrink-0 opacity-60" fill="none" viewBox="0 0 24 24"
+                                            stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                            <rect x="3" y="5" width="18" height="16" rx="2" />
+                                            <path d="M3 10h18M8 3v4M16 3v4" stroke-linecap="round" />
+                                        </svg>
+                                        <span class="truncate">{{ ev.title }} <span class="opacity-70">· {{ ev.when }}</span></span>
                                     </li>
                                 </ul>
 
@@ -1302,24 +1318,43 @@ Copyright (c) 2025 Kalid Azad
                                 <!-- When the event was scheduled, for an addition. -->
                                 <div v-if="!entry.lost.length && !(entry.edited || []).length
                                            && entry.added && entry.added.length === 1"
-                                    class="text-xs text-color-1 mt-0.5">
+                                    class="text-xs text-color-1 mt-1 flex items-center gap-1">
+                                    <svg class="w-3 h-3 flex-shrink-0 opacity-60" fill="none" viewBox="0 0 24 24"
+                                        stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                        <rect x="3" y="5" width="18" height="16" rx="2" />
+                                        <path d="M3 10h18M8 3v4M16 3v4" stroke-linecap="round" />
+                                    </svg>
                                     {{ entry.added[0].when }}
                                 </div>
                                 <ul v-else-if="!entry.lost.length && !(entry.edited || []).length
                                                && entry.added && entry.added.length"
-                                    class="mt-1.5 space-y-0.5">
-                                    <li v-for="(ev, i) in entry.added" :key="i" class="text-xs text-color-1">
-                                        {{ ev.title }} <span class="opacity-70">— {{ ev.when }}</span>
+                                    class="mt-1 space-y-0.5">
+                                    <li v-for="(ev, i) in entry.added" :key="i"
+                                        class="text-xs text-color-1 flex items-center gap-1">
+                                        <svg class="w-3 h-3 flex-shrink-0 opacity-60" fill="none" viewBox="0 0 24 24"
+                                            stroke="currentColor" stroke-width="2" aria-hidden="true">
+                                            <rect x="3" y="5" width="18" height="16" rx="2" />
+                                            <path d="M3 10h18M8 3v4M16 3v4" stroke-linecap="round" />
+                                        </svg>
+                                        <span class="truncate">{{ ev.title }} <span class="opacity-70">· {{ ev.when }}</span></span>
                                     </li>
                                 </ul>
                             </div>
 
-                            <!-- An addition has nothing to put back, so it is listed
+                            <!-- When the CHANGE happened, kept away from the event's own
+                                 time so the two are never read as one range. Hover gives
+                                 the full timestamp.
+                                 An addition has nothing to put back, so it is listed
                                  without a button rather than offered a no-op Restore. -->
-                            <button v-if="entry.canRestore" @click="undoChange(entry)"
-                                class="px-3 py-1 border border-color-default rounded text-xs whitespace-nowrap hover:bg-2 transition-colors">
-                                {{ entry.restoreLabel }}
-                            </button>
+                            <div class="flex flex-col items-end gap-1 flex-shrink-0">
+                                <span class="text-xs text-color-1 whitespace-nowrap" :title="entry.whenExact">
+                                    {{ entry.ago }}
+                                </span>
+                                <button v-if="entry.canRestore" @click="undoChange(entry)"
+                                    class="px-3 py-1 border border-color-default rounded text-xs whitespace-nowrap hover:bg-2 transition-colors">
+                                    {{ entry.restoreLabel }}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

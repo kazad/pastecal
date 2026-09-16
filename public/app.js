@@ -2673,6 +2673,10 @@ const CalendarVueApp = {
                         canRestore: lost.length > 0 || edited.length > 0,
                         what: this.describeChange(r, lost, edited, added),
                         when: this.describeWhen(r.savedAt),
+                        // Terse for the row's right-hand column; the full timestamp rides
+                        // along for the tooltip, so nothing is lost by keeping it short.
+                        ago: this.describeAgo(r.savedAt),
+                        whenExact: this.describeExact(r.savedAt),
                         savedAt: r.savedAt,
                         lost: lost.map(e => ({
                             title: e.title && e.title.trim() ? e.title : 'Untitled event',
