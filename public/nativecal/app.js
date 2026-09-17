@@ -254,15 +254,17 @@ const CalendarVueApp = {
         };
         document.addEventListener('pointerdown', this._onDocPointerDown, true);
 
-        // A refused write must never be silent. The gate protects the calendar by
-        // dropping a write that would remove events without saying so; without this
-        // handler the UI still showed the removal, so the screen and the server
-        // disagreed until the next reload silently put everything back.
+        // A refused write must not be silent, but it must not shout either. The gate
+        // drops a write that would remove events the caller never said it was removing;
+        // that is the system working, and it is not something the user did wrong -- an
+        // error toast on an ordinary edit reads as "you broke something" and is noise.
+        //
+        // So: restore the screen to the known-good events, and log it. The state the
+        // user can see is corrected either way, which is the part that actually matters.
+        // Real deletions declare intent and never land here.
         CalendarDataService.onSyncRefused = ({ before, removing, events }) => {
-            const plural = removing === 1 ? '' : 's';
-            this.showToast('Recovered ' + removing + ' event' + plural + ' that were about to be lost', 'error');
-            // Put the known-good events back on screen, so what is shown matches what
-            // is actually stored.
+            console.warn('[nativecal] write refused: would have removed ' + removing +
+                ' of ' + before + ' events without a declared deletion');
             if (Array.isArray(events)) {
                 this.calendar.events = JSON.parse(JSON.stringify(events)).map(e => new Event(e));
             }
