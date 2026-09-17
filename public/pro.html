@@ -117,6 +117,43 @@ and is switched on by PRO_CHECKOUT_LIVE once that answer is yes.
         .free h3 { margin: 0 0 6px; font-size: 15px; color: var(--text-color-2); }
         .free p { margin: 0; font-size: 14px; color: var(--text-color-1); }
 
+        /* The comparison grid. Free is listed FIRST and its column is full of
+           ticks on purpose: the honest message is that free stays genuinely
+           useful, and a grid that makes free look crippled would be both a lie
+           and bad for the funnel, since shared links are the whole acquisition
+           story. Pro adds control, it does not un-break a hobbled free tier. */
+        .cmp { width: 100%; border-collapse: collapse; margin-top: 4px; }
+        .cmp th, .cmp td { padding: 11px 8px; text-align: left; font-size: 14.5px; }
+        .cmp thead th {
+            font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+            color: var(--text-color-1); font-weight: 600;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .cmp thead th.col, .cmp td.col { text-align: center; width: 84px; }
+        .cmp thead th.pro { color: var(--link); }
+        .cmp tbody tr { border-bottom: 1px solid var(--border-color); }
+        .cmp tbody td:first-child { color: var(--text-color-2); }
+        .cmp td.col { color: var(--text-color-1); }
+        .cmp .yes { color: var(--link); font-weight: 700; }
+        .cmp .no { color: var(--text-color-1); opacity: .45; }
+        .cmp .grp td {
+            padding-top: 20px; font-size: 11.5px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: .07em;
+            color: var(--text-color-1); border-bottom: 0;
+        }
+        .cmp .soon {
+            font-size: 10px; font-weight: 700; text-transform: uppercase;
+            letter-spacing: .05em; color: var(--link);
+            background: var(--panel-bg); padding: 2px 5px; border-radius: 99px;
+            margin-left: 6px; white-space: nowrap;
+        }
+        .cmp td small { display: block; color: var(--text-color-1); font-size: 12.5px; margin-top: 2px; }
+
+        @media (max-width: 560px) {
+            .cmp th, .cmp td { padding: 10px 4px; font-size: 13.5px; }
+            .cmp thead th.col, .cmp td.col { width: 58px; }
+        }
+
         .faq { padding: 46px 0 10px; }
         .faq h2 {
             font-size: 13px; text-transform: uppercase; letter-spacing: .08em;
@@ -172,88 +209,110 @@ and is switched on by PRO_CHECKOUT_LIVE once that answer is yes.
         </section>
 
         <section class="features">
-            <h2>What you get</h2>
+            <h2>Free vs Pro</h2>
 
-            <div class="f">
-                <div class="ico" aria-hidden="true">
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="4" y="11" width="16" height="9" rx="2" />
-                        <path d="M8 11V8a4 4 0 0 1 8 0v3" stroke-linecap="round" />
-                    </svg>
-                </div>
-                <div>
-                    <h3>Locked calendars</h3>
-                    <p>Anyone can read it. Only editors can change it. The link
-                       still works exactly the same for everyone you send it to.</p>
-                </div>
-            </div>
+            <table class="cmp">
+                <thead>
+                    <tr>
+                        <th scope="col"></th>
+                        <th scope="col" class="col">Free</th>
+                        <th scope="col" class="col pro">Pro</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="grp"><td colspan="3">The calendar itself</td></tr>
+                    <tr>
+                        <td>Paste a schedule, get a calendar</td>
+                        <td class="col"><span class="yes">✓</span></td>
+                        <td class="col"><span class="yes">✓</span></td>
+                    </tr>
+                    <tr>
+                        <td>Share a link — no signup for anyone</td>
+                        <td class="col"><span class="yes">✓</span></td>
+                        <td class="col"><span class="yes">✓</span></td>
+                    </tr>
+                    <tr>
+                        <td>Subscribe in Google, Apple or Outlook</td>
+                        <td class="col"><span class="yes">✓</span></td>
+                        <td class="col"><span class="yes">✓</span></td>
+                    </tr>
+                    <tr>
+                        <td>Events, colors, notes, recurring events</td>
+                        <td class="col"><span class="yes">✓</span></td>
+                        <td class="col"><span class="yes">✓</span></td>
+                    </tr>
+                    <tr>
+                        <td>Read-only view link</td>
+                        <td class="col"><span class="yes">✓</span></td>
+                        <td class="col"><span class="yes">✓</span></td>
+                    </tr>
+                    <tr>
+                        <td>Number of calendars</td>
+                        <td class="col">Unlimited</td>
+                        <td class="col">Unlimited</td>
+                    </tr>
 
-            <div class="f">
-                <div class="ico" aria-hidden="true">
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="8" r="3.2" />
-                        <path d="M5.5 19a6.5 6.5 0 0 1 13 0" stroke-linecap="round" />
-                    </svg>
-                </div>
-                <div>
-                    <h3>Named editors</h3>
-                    <p>Changes say who made them, so "who moved practice to Thursday"
-                       has an answer instead of an argument.</p>
-                </div>
-            </div>
+                    <tr class="grp"><td colspan="3">Control</td></tr>
+                    <tr>
+                        <td>Who can edit
+                            <small>Free: anyone with the link. Pro: only your editors.</small></td>
+                        <td class="col">Anyone</td>
+                        <td class="col"><span class="yes">Editors</span></td>
+                    </tr>
+                    <tr>
+                        <td>Named editors
+                            <small>Changes say who made them.</small></td>
+                        <td class="col"><span class="no">—</span></td>
+                        <td class="col"><span class="yes">✓</span></td>
+                    </tr>
+                    <tr>
+                        <td>Proposed events <span class="soon">Planned</span>
+                            <small>Members suggest, you approve with one tap.</small></td>
+                        <td class="col"><span class="no">—</span></td>
+                        <td class="col"><span class="yes">✓</span></td>
+                    </tr>
+                    <tr>
+                        <td>Who's coming <span class="soon">Planned</span>
+                            <small>A yes/no on any event.</small></td>
+                        <td class="col"><span class="no">—</span></td>
+                        <td class="col"><span class="yes">✓</span></td>
+                    </tr>
 
-            <div class="f">
-                <div class="ico" aria-hidden="true">
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M12 7v5l3 2" stroke-linecap="round" />
-                        <circle cx="12" cy="12" r="8.5" />
-                    </svg>
-                </div>
-                <div>
-                    <h3>Full history</h3>
-                    <p>Every change kept and reversible, not just the last few.
-                       Restore anything, from any day.</p>
-                </div>
-            </div>
+                    <tr class="grp"><td colspan="3">Safety net</td></tr>
+                    <tr>
+                        <td>Undo a change</td>
+                        <td class="col"><span class="yes">✓</span></td>
+                        <td class="col"><span class="yes">✓</span></td>
+                    </tr>
+                    <tr>
+                        <td>Change history</td>
+                        <td class="col">Recent</td>
+                        <td class="col"><span class="yes">Everything</span></td>
+                    </tr>
+                    <tr>
+                        <td>Restore anything, from any day</td>
+                        <td class="col"><span class="no">—</span></td>
+                        <td class="col"><span class="yes">✓</span></td>
+                    </tr>
 
-            <div class="f">
-                <div class="ico" aria-hidden="true">
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M12 5v14M5 12h14" stroke-linecap="round" />
-                    </svg>
-                </div>
-                <div>
-                    <h3>Proposed events <span class="soon">Planned</span></h3>
-                    <p>Members suggest an event or a change; you approve it with one tap.
-                       Everyone contributes, nobody breaks the schedule.</p>
-                </div>
-            </div>
-
-            <div class="f">
-                <div class="ico" aria-hidden="true">
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M20 6 9 17l-5-5" stroke-linecap="round" stroke-linejoin="round" />
-                    </svg>
-                </div>
-                <div>
-                    <h3>Who's coming <span class="soon">Planned</span></h3>
-                    <p>A yes/no on any event, so you know how many to expect
-                       without a separate group chat.</p>
-                </div>
-            </div>
-
-            <div class="f">
-                <div class="ico" aria-hidden="true">
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M4 6h16M4 12h16M4 18h10" stroke-linecap="round" />
-                    </svg>
-                </div>
-                <div>
-                    <h3>Invoices and POs</h3>
-                    <p>Schools, universities and nonprofits can pay the way their
-                       finance office needs. Ask and we'll send one.</p>
-                </div>
-            </div>
+                    <tr class="grp"><td colspan="3">Paying and support</td></tr>
+                    <tr>
+                        <td>Pay by invoice or PO</td>
+                        <td class="col"><span class="no">—</span></td>
+                        <td class="col"><span class="yes">✓</span></td>
+                    </tr>
+                    <tr>
+                        <td>Email support from a human</td>
+                        <td class="col"><span class="no">—</span></td>
+                        <td class="col"><span class="yes">✓</span></td>
+                    </tr>
+                    <tr>
+                        <td>Calendars covered by one price</td>
+                        <td class="col">—</td>
+                        <td class="col"><span class="yes">10</span></td>
+                    </tr>
+                </tbody>
+            </table>
 
             <div class="free">
                 <h3>Everything free stays free</h3>
