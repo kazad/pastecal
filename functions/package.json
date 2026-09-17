@@ -16,6 +16,7 @@
   "dependencies": {
     "firebase-admin": "^11.0.1",
     "firebase-functions": "^6.3.2",
+    "stripe": "^22.6.2",
     "uuid": "^10.0.0"
   },
   "devDependencies": {

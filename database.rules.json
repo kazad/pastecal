@@ -57,6 +57,34 @@
         ".read": true,
         ".write": false
       }
+    },
+    "pro_accounts": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": false
+      }
+    },
+    "pro_interest": {
+      ".read": false,
+      "$entry": {
+        ".write": "!data.exists()",
+        ".validate": "newData.hasChildren(['email', 'at'])",
+        "email": {
+          ".validate": "newData.isString() && newData.val().length <= 200 && newData.val().matches(/^[^@ ]+@[^@ ]+[.][^@ ]+$/)"
+        },
+        "at": {
+          ".validate": "newData.isNumber()"
+        },
+        "from": {
+          ".validate": "newData.isString() && newData.val().length <= 60"
+        },
+        "ua": {
+          ".validate": "newData.isString() && newData.val().length <= 200"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
     }
   }
 }

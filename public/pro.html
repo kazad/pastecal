@@ -1,0 +1,302 @@
+<!--
+Open sourced under the MIT License: https://opensource.org/licenses/MIT
+Copyright (c) 2025 Kalid Azad
+
+pastecal.com/pro -- the Pro landing page.
+
+Deliberately a standalone page rather than a view inside the app: it has no
+calendar, no Syncfusion, no Vue app state, and loading ~2MB of scheduler to
+render a price list would make the one page that has to feel fast feel slow.
+
+The primary call to action is an EMAIL CAPTURE, not a checkout. Nothing here
+charges anyone yet -- the point of this page is to find out whether the people
+running /rldispatch and /volunteer-schedule will raise a hand at $99, before
+accounts and billing get built. The Stripe path exists behind the same button
+and is switched on by PRO_CHECKOUT_LIVE once that answer is yes.
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>pastecal Pro — organize your group</title>
+    <meta name="description" content="Locked calendars, named editors and full history for groups that run on pastecal. $99/year.">
+
+    <meta property="og:title" content="pastecal Pro — organize your group">
+    <meta property="og:description" content="Locked calendars, named editors and full history for groups that run on pastecal.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://pastecal.com/pro">
+
+    <link rel="icon" href="/img/favicon.ico">
+    <link rel="stylesheet" href="/style.css">
+
+    <style>
+        /* Scoped to this page. The app's own stylesheet carries the theme
+           variables; everything here is layout on top of those tokens, so the
+           page follows light/dark with the rest of the product. */
+        body {
+            background: var(--bg);
+            color: var(--fg);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            line-height: 1.55;
+        }
+
+        .wrap { max-width: 720px; margin: 0 auto; padding: 0 20px; }
+
+        .nav {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 20px 0; border-bottom: 1px solid var(--border-color);
+        }
+        .brand { display: flex; align-items: baseline; gap: 8px; text-decoration: none; }
+        .brand b { font-size: 20px; color: var(--link); letter-spacing: -0.02em; }
+        .brand span { font-size: 12px; color: var(--text-color-1); }
+
+        .hero { padding: 64px 0 8px; text-align: center; }
+        .hero h1 {
+            font-size: 40px; line-height: 1.12; margin: 0 0 14px;
+            letter-spacing: -0.03em; color: var(--fg);
+        }
+        .hero p { font-size: 18px; color: var(--text-color-1); margin: 0 auto; max-width: 480px; }
+
+        .price {
+            text-align: center; padding: 34px 0 10px;
+        }
+        .price .amount { font-size: 46px; font-weight: 700; letter-spacing: -0.03em; }
+        .price .per { font-size: 16px; color: var(--text-color-1); }
+        .price .note { font-size: 13px; color: var(--text-color-1); margin-top: 6px; }
+
+        /* The capture form. Kept visually primary -- it is the whole point of
+           the page, and every other element is context for this one action. */
+        .cta { max-width: 420px; margin: 22px auto 0; }
+        .cta form { display: flex; gap: 8px; }
+        .cta input[type="email"] {
+            flex: 1; min-width: 0;
+            padding: 12px 14px; font-size: 15px;
+            border: 1px solid var(--border-color); border-radius: 8px;
+            background: var(--bg); color: var(--fg);
+        }
+        .cta input[type="email"]:focus { outline: 2px solid var(--link); outline-offset: -1px; }
+        .cta button {
+            padding: 12px 20px; font-size: 15px; font-weight: 600;
+            background: var(--link); color: #fff;
+            border: 0; border-radius: 8px; cursor: pointer; white-space: nowrap;
+        }
+        .cta button:hover { background: var(--link-hover); }
+        .cta button[disabled] { opacity: .6; cursor: default; }
+        .cta .sub { font-size: 12.5px; color: var(--text-color-1); text-align: center; margin-top: 10px; }
+        .cta .ok {
+            text-align: center; padding: 14px 16px; border-radius: 8px;
+            background: var(--panel-bg); border: 1px solid var(--border-color);
+            font-size: 15px;
+        }
+
+        .features { padding: 54px 0 10px; }
+        .features h2 {
+            font-size: 13px; text-transform: uppercase; letter-spacing: .08em;
+            color: var(--text-color-1); margin: 0 0 18px; font-weight: 600;
+        }
+        .f { display: flex; gap: 14px; padding: 16px 0; border-top: 1px solid var(--border-color); }
+        .f .ico {
+            flex: 0 0 34px; height: 34px; border-radius: 8px;
+            background: var(--panel-bg); display: flex; align-items: center; justify-content: center;
+            color: var(--link);
+        }
+        .f h3 { margin: 2px 0 4px; font-size: 16px; color: var(--text-color-2); }
+        .f p { margin: 0; font-size: 14.5px; color: var(--text-color-1); }
+        .f .soon {
+            display: inline-block; margin-left: 7px; font-size: 10.5px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: .05em;
+            color: var(--link); background: var(--panel-bg);
+            padding: 2px 6px; border-radius: 99px; vertical-align: middle;
+        }
+
+        .free { margin: 44px 0 0; padding: 18px 20px; background: var(--panel-bg); border-radius: 10px; }
+        .free h3 { margin: 0 0 6px; font-size: 15px; color: var(--text-color-2); }
+        .free p { margin: 0; font-size: 14px; color: var(--text-color-1); }
+
+        .faq { padding: 46px 0 10px; }
+        .faq h2 {
+            font-size: 13px; text-transform: uppercase; letter-spacing: .08em;
+            color: var(--text-color-1); margin: 0 0 6px; font-weight: 600;
+        }
+        .faq dt { font-size: 15px; color: var(--text-color-2); font-weight: 600; margin-top: 18px; }
+        .faq dd { margin: 5px 0 0; font-size: 14.5px; color: var(--text-color-1); }
+
+        footer {
+            margin-top: 54px; padding: 22px 0 40px;
+            border-top: 1px solid var(--border-color);
+            font-size: 13px; color: var(--text-color-1); text-align: center;
+        }
+        footer a { color: var(--link); text-decoration: none; }
+
+        @media (max-width: 560px) {
+            .hero { padding-top: 40px; }
+            .hero h1 { font-size: 31px; }
+            .cta form { flex-direction: column; }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrap">
+        <nav class="nav">
+            <a class="brand" href="/">
+                <b>pastecal</b><span>no-login shared calendar</span>
+            </a>
+            <a href="/" style="font-size:14px;color:var(--link);text-decoration:none">← Back</a>
+        </nav>
+
+        <section class="hero">
+            <h1>Organize your group.</h1>
+            <p>pastecal Pro adds the things a group needs once the calendar
+               actually matters: control over who can change it, and a record of who did.</p>
+        </section>
+
+        <section class="price">
+            <div><span class="amount">$99</span> <span class="per">/ year</span></div>
+            <div class="note">About $8 a month. Up to 10 calendars. Billed once a year.</div>
+
+            <div class="cta" id="cta">
+                <form id="waitlist" novalidate>
+                    <input type="email" id="email" placeholder="you@yourgroup.org"
+                           autocomplete="email" required aria-label="Email address">
+                    <button type="submit" id="submit">Get Pro</button>
+                </form>
+                <div class="sub" id="sub">
+                    Not quite ready — leave your email and we'll tell you the day it opens.
+                </div>
+            </div>
+        </section>
+
+        <section class="features">
+            <h2>What you get</h2>
+
+            <div class="f">
+                <div class="ico" aria-hidden="true">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="4" y="11" width="16" height="9" rx="2" />
+                        <path d="M8 11V8a4 4 0 0 1 8 0v3" stroke-linecap="round" />
+                    </svg>
+                </div>
+                <div>
+                    <h3>Locked calendars</h3>
+                    <p>Anyone can read it. Only editors can change it. The link
+                       still works exactly the same for everyone you send it to.</p>
+                </div>
+            </div>
+
+            <div class="f">
+                <div class="ico" aria-hidden="true">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="8" r="3.2" />
+                        <path d="M5.5 19a6.5 6.5 0 0 1 13 0" stroke-linecap="round" />
+                    </svg>
+                </div>
+                <div>
+                    <h3>Named editors</h3>
+                    <p>Changes say who made them, so "who moved practice to Thursday"
+                       has an answer instead of an argument.</p>
+                </div>
+            </div>
+
+            <div class="f">
+                <div class="ico" aria-hidden="true">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 7v5l3 2" stroke-linecap="round" />
+                        <circle cx="12" cy="12" r="8.5" />
+                    </svg>
+                </div>
+                <div>
+                    <h3>Full history</h3>
+                    <p>Every change kept and reversible, not just the last few.
+                       Restore anything, from any day.</p>
+                </div>
+            </div>
+
+            <div class="f">
+                <div class="ico" aria-hidden="true">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 5v14M5 12h14" stroke-linecap="round" />
+                    </svg>
+                </div>
+                <div>
+                    <h3>Proposed events <span class="soon">Planned</span></h3>
+                    <p>Members suggest an event or a change; you approve it with one tap.
+                       Everyone contributes, nobody breaks the schedule.</p>
+                </div>
+            </div>
+
+            <div class="f">
+                <div class="ico" aria-hidden="true">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20 6 9 17l-5-5" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                </div>
+                <div>
+                    <h3>Who's coming <span class="soon">Planned</span></h3>
+                    <p>A yes/no on any event, so you know how many to expect
+                       without a separate group chat.</p>
+                </div>
+            </div>
+
+            <div class="f">
+                <div class="ico" aria-hidden="true">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M4 6h16M4 12h16M4 18h10" stroke-linecap="round" />
+                    </svg>
+                </div>
+                <div>
+                    <h3>Invoices and POs</h3>
+                    <p>Schools, universities and nonprofits can pay the way their
+                       finance office needs. Ask and we'll send one.</p>
+                </div>
+            </div>
+
+            <div class="free">
+                <h3>Everything free stays free</h3>
+                <p>Pasting a schedule, sharing a link, subscribing in Google or Apple
+                   Calendar — none of that changes, and none of it is going behind a
+                   login. Pro is for groups who want control over a calendar that
+                   already matters.</p>
+            </div>
+        </section>
+
+        <section class="faq">
+            <h2>Questions</h2>
+            <dl>
+                <dt>Do people need an account to see the calendar?</dt>
+                <dd>No. Viewers never sign in — that is the whole point of pastecal.
+                    Only the person who manages the calendar has an account.</dd>
+
+                <dt>What happens if I stop paying?</dt>
+                <dd>Nothing is deleted or locked away. Your calendar stays exactly
+                    where it is and the link keeps working; the Pro features simply
+                    switch off. We are never holding your schedule hostage.</dd>
+
+                <dt>Why per year and not per month?</dt>
+                <dd>One payment a year, no card to re-enter, nothing to cancel by a
+                    deadline. It is also how we keep this cheap to run, which is how
+                    it stays cheap to buy.</dd>
+
+                <dt>Can I pay by invoice?</dt>
+                <dd>Yes. Leave your email and mention it — plenty of institutions
+                    cannot use a card, and that should not stop you.</dd>
+            </dl>
+        </section>
+
+        <footer>
+            <a href="/">pastecal</a> — a shared calendar without the signup.
+        </footer>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-functions.js"></script>
+    <script src="/pro.js"></script>
+</body>
+
+</html>

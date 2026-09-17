@@ -1047,3 +1047,156 @@ exports.updateEventIds = functions.https.onRequest(async (req, res) => {
     }
 });
 */
+// ---------------------------------------------------------------------------
+// Pro: checkout and entitlement
+//
+// Prototype. Nothing here runs until STRIPE_SECRET is set and pro.js flips
+// PRO_CHECKOUT_LIVE, so it can ship dark alongside the /pro landing page.
+//
+// The entitlement model is deliberately the smallest thing that works:
+// /pro_accounts/{uid} holds the subscription state, and a calendar points at an
+// owner rather than carrying its own billing. That keeps "is this calendar Pro"
+// a single read, and keeps the 10-calendar bundle from needing its own accounting
+// -- the owner's list of calendars IS the bundle.
+//
+// Stripe is the source of truth for whether money arrived. This mirror exists so
+// the client can answer "am I Pro" without calling Stripe on every page load,
+// and it is only ever written by the webhook below.
+// ---------------------------------------------------------------------------
+
+const PRO_ROOT = 'pro_accounts';
+const PRO_PRICE_YEARLY = process.env.STRIPE_PRICE_YEARLY || '';
+const PRO_MAX_CALENDARS = 10;
+
+const ProService = {
+    /** The entitlement as the client needs to see it: active or not, and until when. */
+    async status(uid) {
+        const snap = await admin.database().ref(`${PRO_ROOT}/${uid}`).once('value');
+        const v = snap.val();
+        if (!v) return { pro: false };
+        // A lapsed subscription is not an error and not a lockout -- Pro features
+        // switch off, the calendar keeps working. See the /pro FAQ, which promises
+        // exactly this.
+        const active = v.status === 'active' && (!v.currentPeriodEnd || v.currentPeriodEnd > Date.now());
+        return {
+            pro: active,
+            status: v.status || 'none',
+            renewsAt: v.currentPeriodEnd || null,
+            calendars: v.calendars ? Object.keys(v.calendars) : [],
+            maxCalendars: PRO_MAX_CALENDARS,
+        };
+    },
+};
+
+/**
+ * Start a Stripe Checkout session for the signed-in user.
+ *
+ * Requires auth: the uid is what the subscription gets attached to, so an
+ * anonymous caller has nothing to attach. The magic-link sign-in on /pro is what
+ * produces that uid.
+ */
+exports.createProCheckout = onCall({ secrets: ['STRIPE_SECRET'] }, async (request) => {
+    const uid = request.auth && request.auth.uid;
+    if (!uid) {
+        throw new functions.https.HttpsError('unauthenticated', 'Sign in first.');
+    }
+    if (!process.env.STRIPE_SECRET || !PRO_PRICE_YEARLY) {
+        throw new functions.https.HttpsError('failed-precondition', 'Billing is not configured yet.');
+    }
+
+    const email = (request.data && request.data.email) || (request.auth.token && request.auth.token.email);
+    const stripe = require('stripe')(process.env.STRIPE_SECRET);
+
+    // Reuse the customer if this uid has one, so a second purchase does not create
+    // a duplicate record in Stripe and a renewal keeps the same billing history.
+    const existing = (await admin.database().ref(`${PRO_ROOT}/${uid}/customerId`).once('value')).val();
+
+    const session = await stripe.checkout.sessions.create({
+        mode: 'subscription',
+        line_items: [{ price: PRO_PRICE_YEARLY, quantity: 1 }],
+        ...(existing ? { customer: existing } : { customer_email: email }),
+        // The uid is how the webhook knows who paid. Stripe echoes this back
+        // untouched, and it is the only link between a payment and an account.
+        client_reference_id: uid,
+        metadata: { uid: uid },
+        success_url: 'https://pastecal.com/pro?welcome=1',
+        cancel_url: 'https://pastecal.com/pro',
+        allow_promotion_codes: true,
+    });
+
+    return { url: session.url };
+});
+
+/** What the signed-in browser is entitled to. Safe to call on every page load. */
+exports.getProStatus = onCall(async (request) => {
+    const uid = request.auth && request.auth.uid;
+    if (!uid) return { pro: false };
+    return ProService.status(uid);
+});
+
+/**
+ * Stripe webhook: the only writer of /pro_accounts.
+ *
+ * Verified against the signing secret rather than trusted on arrival -- an
+ * unverified endpoint that grants entitlements is an endpoint that grants
+ * entitlements to anyone who finds it.
+ */
+exports.stripeWebhook = onRequest(
+    { secrets: ['STRIPE_SECRET', 'STRIPE_WEBHOOK_SECRET'] },
+    async (req, res) => {
+        if (!process.env.STRIPE_SECRET || !process.env.STRIPE_WEBHOOK_SECRET) {
+            res.status(503).send('billing not configured');
+            return;
+        }
+        const stripe = require('stripe')(process.env.STRIPE_SECRET);
+
+        let event;
+        try {
+            // rawBody, not the parsed body: the signature is over the exact bytes.
+            event = stripe.webhooks.constructEvent(
+                req.rawBody, req.headers['stripe-signature'], process.env.STRIPE_WEBHOOK_SECRET);
+        } catch (err) {
+            console.warn('[stripe] bad signature:', err.message);
+            res.status(400).send('bad signature');
+            return;
+        }
+
+        const write = async (uid, patch) => {
+            if (!uid) return;
+            await admin.database().ref(`${PRO_ROOT}/${uid}`).update(patch);
+        };
+
+        try {
+            switch (event.type) {
+                case 'checkout.session.completed': {
+                    const s = event.data.object;
+                    await write(s.client_reference_id || (s.metadata && s.metadata.uid), {
+                        status: 'active',
+                        customerId: s.customer,
+                        subscriptionId: s.subscription,
+                        email: s.customer_email || null,
+                        startedAt: admin.database.ServerValue.TIMESTAMP,
+                    });
+                    break;
+                }
+                case 'customer.subscription.updated':
+                case 'customer.subscription.deleted': {
+                    const sub = event.data.object;
+                    const uid = sub.metadata && sub.metadata.uid;
+                    await write(uid, {
+                        status: sub.status === 'active' || sub.status === 'trialing' ? 'active' : sub.status,
+                        currentPeriodEnd: sub.current_period_end ? sub.current_period_end * 1000 : null,
+                    });
+                    break;
+                }
+                default:
+                    break;   // everything else is noise for this product
+            }
+            res.json({ received: true });
+        } catch (err) {
+            console.error('[stripe] handler failed:', event.type, err);
+            // 500 so Stripe retries: dropping a payment event silently is the one
+            // failure that costs real money.
+            res.status(500).send('handler failed');
+        }
+    });
