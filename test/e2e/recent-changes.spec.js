@@ -65,7 +65,9 @@ async function deleteEvent(page, title) {
 async function openRecentChanges(page) {
   await page.locator('button[aria-label="Settings"]').click();
   await page.locator('button:has-text("Recent changes")').click();
-  await expect(page.getByText('Everything that happened to this calendar.', { exact: false })).toBeVisible();
+  // Key on the heading, not the subtitle: the subtitle is now conditional --
+  // a returning visitor gets "N changes since you were last here" instead.
+  await expect(page.locator('.pc-modal h3:has-text("Recent changes")')).toBeVisible();
 }
 
 const rows = (page) => page.evaluate(`${VM}.undoEntries.map(e => ({
@@ -283,7 +285,9 @@ test('the header says when the calendar was last edited, and opens the history',
   await expect(link).toHaveText(/^Edited (just now|\d+[mhdwy]o? ago)$/);
 
   await link.click();
-  await expect(page.getByText('Everything that happened to this calendar.', { exact: false })).toBeVisible();
+  // The heading, not the subtitle: the subtitle now depends on whether this browser
+  // has seen the calendar before.
+  await expect(page.locator('.pc-modal h3:has-text("Recent changes")')).toBeVisible();
   await expect(page.locator('.pc-modal').getByText('Deleted "Retro"')).toBeVisible();
 });
 
@@ -375,4 +379,54 @@ test('a deletion is not swallowed by the restore that follows it', async ({ page
   const whats = await page.evaluate(`${VM}.undoEntries.map(e => e.what)`);
   expect(whats.some(w => /^Deleted .*Design review/.test(w)),
     `the deletion must still be listed: ${JSON.stringify(whats)}`).toBe(true);
+});
+
+test('changes group by day, and a returning visitor is told what is new', async ({ page }) => {
+  // The list serves two readers: the owner asking "what did I just do", and someone
+  // following a shared calendar asking "what changed since I last looked". Day headings
+  // and an unseen count answer the second without a second view.
+  const slug = await freshCalendar(page);
+  await seed(page, ['Standup', 'Retro']);
+  await deleteEvent(page, 'Retro');
+
+  await openRecentChanges(page);
+  const groups = await page.evaluate(`${VM}.changesByDay.map(g => ({ label: g.label, n: g.entries.length }))`);
+  expect(groups.length, `changes should be grouped by day: ${JSON.stringify(groups)}`).toBeGreaterThan(0);
+  expect(groups[0].label).toBe('Today');
+  expect(groups.reduce((n, g) => n + g.n, 0)).toBe(
+    await page.evaluate(`${VM}.undoEntries.length`));
+
+  // Come back as someone whose last visit predates every change: now they are all new.
+  await page.evaluate(`(() => {
+    const old = new Date(Date.now() - 2 * 86400000).toISOString();
+    const visited = JSON.parse(localStorage.getItem('recentCalendars') || '[]');
+    const mine = JSON.parse(localStorage.getItem('myCalendars') || '[]');
+    for (const list of [visited, mine]) {
+      for (const item of list) if (item.id === '${slug}') item.lastVisited = old;
+    }
+    localStorage.setItem('recentCalendars', JSON.stringify(visited));
+    localStorage.setItem('myCalendars', JSON.stringify(mine));
+  })()`);
+  await page.reload();
+  await page.waitForFunction(`${VM}.isExisting === true`, null, { timeout: 15_000 });
+  await page.waitForFunction(`${VM}.undoEntries.length > 0`, null, { timeout: 15_000 });
+
+  const unseen = await page.evaluate(`${VM}.unseenChangeCount`);
+  expect(unseen, 'every change predating the last visit should count as new').toBeGreaterThan(0);
+  await openRecentChanges(page);
+  await expect(page.getByText(/changes? since you were last here/)).toBeVisible();
+
+  // A browser that has never opened this calendar has nothing to compare against,
+  // so nothing is flagged new and the generic subtitle comes back.
+  await page.evaluate(`(() => {
+    localStorage.removeItem('recentCalendars');
+    localStorage.removeItem('myCalendars');
+  })()`);
+  await page.reload();
+  await page.waitForFunction(`${VM}.isExisting === true`, null, { timeout: 15_000 });
+  await page.waitForFunction(`${VM}.undoEntries.length > 0`, null, { timeout: 15_000 });
+  expect(await page.evaluate(`${VM}.lastSeenAt`)).toBeNull();
+  expect(await page.evaluate(`${VM}.unseenChangeCount`)).toBe(0);
+  await openRecentChanges(page);
+  await expect(page.getByText('Everything that happened to this calendar.')).toBeVisible();
 });
