@@ -521,10 +521,19 @@ var NativeCalendar = {
                             ? ruleString 
                             : "RRULE:" + ruleString;
                             
-                        const options = rrulestr(ruleString).options;
-                        options.dtstart = new Date(event.start);
-                        
-                        const rule = new RRule(options);
+                        // parseString, NOT rrulestr().options. rrulestr on a rule with no
+                        // DTSTART defaults dtstart to NOW and then freezes byweekday,
+                        // bymonthday and byhour/byminute/bysecond derived from that moment.
+                        // Assigning options.dtstart afterwards moves the anchor but leaves
+                        // those derived fields pointing at the wrong weekday and time, so a
+                        // Monday 9am weekly event rendered on Wednesdays at whatever o'clock
+                        // the page happened to load -- and slid down the grid on every
+                        // reload. parseString returns only the fields the string actually
+                        // carries, so every by* value is recomputed from the real dtstart.
+                        const rule = new RRule({
+                            ...RRule.parseString(ruleString),
+                            dtstart: new Date(event.start),
+                        });
                         
                         const dates = rule.between(rangeStart, rangeEnd, true);
                         

@@ -254,6 +254,20 @@ const CalendarVueApp = {
         };
         document.addEventListener('pointerdown', this._onDocPointerDown, true);
 
+        // A refused write must never be silent. The gate protects the calendar by
+        // dropping a write that would remove events without saying so; without this
+        // handler the UI still showed the removal, so the screen and the server
+        // disagreed until the next reload silently put everything back.
+        CalendarDataService.onSyncRefused = ({ before, removing, events }) => {
+            const plural = removing === 1 ? '' : 's';
+            this.showToast('Recovered ' + removing + ' event' + plural + ' that were about to be lost', 'error');
+            // Put the known-good events back on screen, so what is shown matches what
+            // is actually stored.
+            if (Array.isArray(events)) {
+                this.calendar.events = JSON.parse(JSON.stringify(events)).map(e => new Event(e));
+            }
+        };
+
         // Initialize recents
         this.recentManager = new RecentCalendars();
         this.recentCalendars = this.recentManager.getAll();
@@ -849,7 +863,17 @@ const CalendarVueApp = {
         },
 
         handleDeleteEvent(id) {
+            const before = this.calendar.events.length;
             const events = this.calendar.events.filter(e => e.id !== id);
+            const removed = before - events.length;
+
+            // CalendarDataService refuses any write that shrinks the array unless the
+            // caller announced it first -- the gate that stops a bug from wiping a
+            // calendar. NativeCal never declared, so every delete was refused: the
+            // event vanished from the grid, the write never reached Firebase, and a
+            // reload brought it back. Silent, and indistinguishable from data loss.
+            if (removed > 0) CalendarDataService.declareIntent(removed);
+
             this.calendar.setEvents(events);
             this.closePopover();
             this.closeEditor();
