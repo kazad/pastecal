@@ -1,6 +1,6 @@
 const EventPopover = {
     template: /* html */ `
-        <div v-if="visible"
+        <div v-if="visible" data-testid="event-popover"
              class="fixed z-40 bg-1 rounded-lg shadow-xl border border-color-default flex flex-col"
              :class="isLongDescription ? 'w-[480px] max-w-[calc(100vw-20px)]' : 'w-80'"
              :style="{ top: top + 'px', left: left + 'px', maxHeight: 'calc(100vh - 20px)' }">
@@ -12,14 +12,17 @@ const EventPopover = {
                  <icon name="close" class="w-5 h-5" stroke-width="2"></icon>
              </button>
 
-             <!-- Header -->
-             <div class="bg-blue-600 px-4 py-3 flex justify-between items-start text-white shrink-0 rounded-t-lg">
+             <!-- Header. Takes the EVENT's color, not a fixed blue: the header used to
+                  be hardcoded bg-blue-600, so a crimson event opened a blue card and the
+                  popup looked like it belonged to something else. -->
+             <div class="px-4 py-3 flex justify-between items-start text-white shrink-0 rounded-t-lg"
+                  :style="{ backgroundColor: headerColor }" data-testid="popover-header">
                 <h3 class="font-bold text-lg truncate flex-1 mr-2" data-testid="popover-title">{{ event.title || '(No Title)' }}</h3>
                 <div class="flex items-center gap-1">
-                    <button @click="$emit('edit', event)" data-testid="popover-edit" class="p-1 hover:bg-blue-700 rounded transition-colors" title="Edit">
+                    <button @click="$emit('edit', event)" data-testid="popover-edit" class="p-1 rounded transition-colors hover:bg-black/20" title="Edit">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                     </button>
-                    <button @click="$emit('delete', event.id)" data-testid="popover-delete" class="p-1 hover:bg-blue-700 rounded transition-colors" title="Delete">
+                    <button @click="$emit('delete', event.id)" data-testid="popover-delete" class="p-1 rounded transition-colors hover:bg-black/20" title="Delete">
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                     </button>
                 </div>
@@ -54,12 +57,26 @@ const EventPopover = {
         visible: Boolean,
         top: Number,
         left: Number,
-        timeFormat: { type: String, default: '12' }
+        timeFormat: { type: String, default: '12' },
+        // The palette in use, so the header can resolve the same color the grid
+        // drew. Passed in rather than imported because the palette is per-calendar
+        // -- a calendar with custom colors must tint this popup with ITS colors.
+        colors: { type: Array, default: () => [] },
     },
     emits: ['close', 'edit', 'delete'],
     setup(props) {
         const { computed } = Vue;
         const df = window.dateFns;
+
+        // Same resolution the grid uses (see getEventStyle in NativeCalendar.js):
+        // type is 1-based and wraps. Computed, so editing an event's color while
+        // the popup is open re-tints it instead of leaving a stale header.
+        const FALLBACK = '#3f51b5';
+        const headerColor = computed(() => {
+            const palette = props.colors && props.colors.length ? props.colors : [FALLBACK];
+            const type = props.event?.type || 1;
+            return palette[(type - 1) % palette.length] || FALLBACK;
+        });
 
         const formatDate = (ts) => df.format(new Date(ts), 'MMMM d, yyyy');
         const formatTime = (ts) => {
@@ -95,6 +112,6 @@ const EventPopover = {
             });
         });
 
-        return { formatDate, formatTime, linkifiedDescription, isLongDescription };
+        return { formatDate, formatTime, linkifiedDescription, isLongDescription, headerColor };
     }
 };

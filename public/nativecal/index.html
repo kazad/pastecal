@@ -1059,6 +1059,7 @@ Copyright (c) 2025 Kalid Azad
             <native-calendar
                 :events="calendar.events"
                 :time-format="globalSettings.timeFormat"
+                :colors="COLORS"
                 :creating-event="quickCreateEvent"
                 @update:events="calendar.setEvents($event)"
                 @event-create="handleEventCreate"
@@ -1082,10 +1083,11 @@ Copyright (c) 2025 Kalid Azad
             <event-popover
                 v-if="showPopover"
                 :visible="showPopover"
-                :event="popoverEvent"
+                :event="livePopoverEvent"
                 :top="popoverPosition.top"
                 :left="popoverPosition.left"
                 :time-format="globalSettings.timeFormat"
+                :colors="COLORS"
                 @edit="openEditorForEvent"
                 @delete="handleDeleteEvent"
                 @close="closePopover"

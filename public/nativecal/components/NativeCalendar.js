@@ -328,7 +328,7 @@ var NativeCalendar = {
             </div>
         </div>
     `,
-    props: ['events', 'timeFormat', 'creatingEvent'],
+    props: ['events', 'timeFormat', 'creatingEvent', 'colors'],
     emits: ['update:events', 'event-click', 'event-create'],
     /**
      * @param {NativeCalendarProps} props
@@ -344,7 +344,12 @@ var NativeCalendar = {
         const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
         const selectedEventId = ref(null);
         
-        const colors = ["#3f51b5", "#e3165b", "#ff6652", "#4caf50", "#ff9800", "#03a9f4", "#9e9e9e", "#27282f"];
+        // The palette the grid draws with. Falls back to the stock set when the
+        // host does not pass one, but a calendar with custom colors MUST be able to
+        // override it -- this used to be a private const, so the grid, the popover
+        // and the editor could each disagree about what color an event is.
+        const DEFAULT_PALETTE = ["#3f51b5", "#e3165b", "#ff6652", "#4caf50", "#ff9800", "#03a9f4", "#9e9e9e", "#27282f"];
+        const colors = computed(() => (props.colors && props.colors.length) ? props.colors : DEFAULT_PALETTE);
 
         // Drag State
         const dragState = ref({
@@ -607,7 +612,7 @@ var NativeCalendar = {
                     };
                 });
                 const monthEvents = processedEvents.value.filter(ev => df.isSameMonth(new Date(ev.start), monthDate));
-                const topColors = monthEvents.slice(0, 4).map(ev => colors[((ev.type || 1) - 1) % colors.length]);
+                const topColors = monthEvents.slice(0, 4).map(ev => colors.value[((ev.type || 1) - 1) % colors.value.length]);
                 return {
                     key: df.format(monthDate, 'yyyy-MM'),
                     date: start,
@@ -631,7 +636,7 @@ var NativeCalendar = {
                 .sort((a, b) => a.start - b.start)
                 .map(ev => ({
                     ...ev,
-                    color: colors[((ev.type || 1) - 1) % colors.length],
+                    color: colors.value[((ev.type || 1) - 1) % colors.value.length],
                     timeLabel: ev.isAllDay ? 'All day' : `${formatTime(ev.start)} - ${formatTime(ev.end)}`,
                     dateObj: new Date(ev.start)
                 }));
@@ -656,7 +661,8 @@ var NativeCalendar = {
         });
 
         const getEventStyle = (event, isWeekView = false) => {
-            const color = colors[((event.type || 1) - 1) % colors.length];
+            const palette = colors.value;
+            const color = palette[((event.type || 1) - 1) % palette.length];
             if (isWeekView) return { borderLeftColor: color, backgroundColor: color + '20', color: color, ...event.style };
             return { backgroundColor: color, color: 'white' };
         };
