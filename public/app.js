@@ -782,9 +782,13 @@ const CalendarVueApp = {
                         const after = this.mergeScheduleRecords(ev).length;
                         CalendarDataService.declareIntent(Math.max(1, before - after));
                         this.offerUndoForDelete(ev, before - after);
-                    } else if (ev.requestType === 'eventChanged') {
-                        this.offerUndoForEdit(ev);
                     }
+                    // No toast on an edit. Moving or renaming an event is the ordinary
+                    // act of using a calendar, and a confirmation on every one of them is
+                    // noise -- no editor pops a message each time you type. Undo is still
+                    // there where people look for it: Cmd/Ctrl+Z, and Recent changes.
+                    // A DELETE still toasts, because that one is destructive and the undo
+                    // is genuinely hard to find otherwise.
                     this.calendar.setEvents(this.mergeScheduleRecords(ev));
                     // A real, user-initiated change to this calendar. Recorded here
                     // rather than in CalendarDataService.sync(), because sync() also
@@ -3521,35 +3525,6 @@ const CalendarVueApp = {
          * visible way back: no toast, and a history row reading "1 event edited" that named
          * nothing. Cmd+Z covered it, but only for someone who thinks to press it.
          */
-        offerUndoForEdit(ev) {
-            const changed = ev.changedRecords || [];
-            if (!changed.length) return;
-
-            // The pre-edit values, captured before setEvents overwrites them.
-            const key = (r) => `${r.Id}|${r.RecurrenceID ?? ''}`;
-            const previous = new Map(
-                this.calendar.getSyncFusionEvents().map(e => [key(e), new Event(e)]));
-            const restoreTo = this.calendar.getSyncFusionEvents().map(e => new Event(e));
-
-            const first = changed[0];
-            const was = previous.get(key(first));
-            const name = was && was.title && was.title.trim()
-                ? `"${was.title.trim()}"` : 'event';
-            const message = changed.length === 1
-                ? `Edited ${name}`
-                : `Edited ${changed.length} events`;
-
-            this.showToast(message, 'info', {
-                actionLabel: 'Undo',
-                action: () => {
-                    this.calendar.setEvents(restoreTo);
-                    this.showToast(
-                        changed.length === 1 ? `Reverted ${name}` : `Reverted ${changed.length} events`,
-                        'success');
-                },
-            });
-        },
-
         /**
          * Undo the most recent change, for Cmd/Ctrl+Z and the toast's Undo button.
          *
