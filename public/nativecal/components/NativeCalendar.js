@@ -537,7 +537,10 @@ var NativeCalendar = {
                         
                         const dates = rule.between(rangeStart, rangeEnd, true);
                         
-                        const duration = event.end - event.start;
+                        // Date-parse both ends: start/end are ISO strings (the stored
+                        // format shared with the main app), and "iso" - "iso" is NaN,
+                        // which would give every generated occurrence an invalid end.
+                        const duration = new Date(event.end) - new Date(event.start);
                         
                         dates.forEach(date => {
                              // Virtual event
@@ -572,7 +575,8 @@ var NativeCalendar = {
         const getEventsWithLayout = (date) => {
             const dayEvents = getEventsForDate(date).map(e => ({...e}));
             if (dayEvents.length === 0) return [];
-            dayEvents.sort((a, b) => a.start - b.start || b.end - a.end);
+            const ms = (v) => new Date(v).getTime();
+            dayEvents.sort((a, b) => ms(a.start) - ms(b.start) || ms(b.end) - ms(a.end));
             const columns = [];
             dayEvents.forEach(ev => {
                 let placed = false;
@@ -642,7 +646,7 @@ var NativeCalendar = {
             const end = dates.length ? dates[dates.length - 1] : df.addDays(start, 13);
             const items = processedEvents.value
                 .filter(ev => df.isWithinInterval(new Date(ev.start), { start: df.startOfDay(start), end: df.endOfDay(end) }))
-                .sort((a, b) => a.start - b.start)
+                .sort((a, b) => new Date(a.start) - new Date(b.start))
                 .map(ev => ({
                     ...ev,
                     color: colors.value[((ev.type || 1) - 1) % colors.value.length],
@@ -677,8 +681,13 @@ var NativeCalendar = {
         };
 
         const getWeekEventPosition = (event) => {
-            const start = new Date(event.start);
-            const end = new Date(event.end);
+            // While THIS event is being dragged, draw it where the pointer has put it.
+            // The drag no longer mutates the event itself (that fired a Firebase write
+            // per mousemove), so the live position has to come from dragState.
+            const d = dragState.value;
+            const dragging = d.isDragging && d.eventId === event.id && d.pendingStart;
+            const start = dragging ? d.pendingStart : new Date(event.start);
+            const end = dragging ? d.pendingEnd : new Date(event.end);
             const startMinutes = start.getHours() * 60 + start.getMinutes();
             const endMinutes = end.getHours() * 60 + end.getMinutes();
             const top = (startMinutes / 60) * 50;
@@ -698,9 +707,25 @@ var NativeCalendar = {
 
         // Interaction Emitters
         const createMonthEvent = (date, evt) => {
-            const start = df.startOfDay(date);
-            const end = df.endOfDay(date);
-            emit('event-create', { start: start.getTime(), end: end.getTime(), isAllDay: true, event: evt });
+            // All-day boundaries are UTC midnight, not LOCAL midnight.
+            //
+            // The ICS feed formats an all-day date by taking the UTC calendar day
+            // (ICSService.formatDate -> toISOString().slice(0,10)). Local midnight in
+            // any UTC-positive zone is the PREVIOUS day in UTC, so a user in Berlin
+            // creating an all-day event on the 21st published it to every subscriber
+            // as the 20th.
+            //
+            // DTEND is exclusive per RFC 5545 3.8.2.2, so the end is the NEXT day's
+            // midnight rather than 23:59:59.999 -- which only looked right in negative
+            // offsets by accident.
+            const startUTC = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+            const endUTC = startUTC + 86400000;
+            emit('event-create', {
+                start: new Date(startUTC).toISOString(),
+                end: new Date(endUTC).toISOString(),
+                isAllDay: true,
+                event: evt,
+            });
         };
 
         const createTimeEvent = (date, event) => {
@@ -773,24 +798,37 @@ var NativeCalendar = {
             // ...
             // Logic unchanged
             
-            const event = props.events.find(ev => ev.id === dragState.value.eventId);
-            if (event && dragState.value.action === 'time-move') {
-                 // ...
-                 const deltaPixels = e.clientY - dragState.value.startY;
-                 const deltaMinutes = Math.round((deltaPixels / 50) * 60 / 30) * 30;
-                 const duration = dragState.value.originalEnd - dragState.value.originalStart;
-                 const newStartTime = df.addMinutes(dragState.value.originalStart, deltaMinutes);
-                 
-                 event.start = newStartTime.getTime();
-                 event.end = new Date(newStartTime.getTime() + duration).getTime();
+            // The pending position lives in dragState, NOT on the event.
+            //
+            // This used to assign straight into props.events, which is the parent's
+            // calendar.events: it mutated a prop in place, tripped the parent's deep
+            // watcher on every mousemove (a debounced Firebase write per pixel), left
+            // no way to abandon a drag, and wrote epoch-ms numbers into a field the
+            // rest of the app stores as ISO. Committing once, in stopDrag, fixes all
+            // four.
+            if (dragState.value.action === 'time-move') {
+                const deltaPixels = e.clientY - dragState.value.startY;
+                const deltaMinutes = Math.round((deltaPixels / 50) * 60 / 30) * 30;
+                const duration = dragState.value.originalEnd - dragState.value.originalStart;
+                const newStartTime = df.addMinutes(dragState.value.originalStart, deltaMinutes);
+                dragState.value.pendingStart = newStartTime;
+                dragState.value.pendingEnd = new Date(newStartTime.getTime() + duration);
             }
         };
 
         const stopDrag = (e) => {
             if (!dragState.value.eventId) return;
             if (dragState.value.isDragging) {
-                const event = props.events.find(ev => ev.id === dragState.value.eventId);
-                if (event) emit('update:events', [...props.events]); 
+                const { eventId, pendingStart, pendingEnd } = dragState.value;
+                if (pendingStart && pendingEnd) {
+                    // Emit a NEW array with a NEW object for the moved event, in the
+                    // ISO shape the main app stores, so the merge sees one changed
+                    // event rather than a wholesale rewrite.
+                    const next = props.events.map(ev => ev.id === eventId
+                        ? { ...ev, start: pendingStart.toISOString(), end: pendingEnd.toISOString() }
+                        : ev);
+                    emit('update:events', next);
+                }
             }
             const wasDragging = dragState.value.isDragging;
             dragState.value = { eventId: null, isDragging: false, wasDragging, action: 'move' };

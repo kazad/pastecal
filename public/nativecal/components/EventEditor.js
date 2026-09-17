@@ -273,8 +273,15 @@ const EventEditor = {
             let startTs, endTs;
             
             if (localEvent.value.isAllDay) {
-                startTs = new Date(formattedStart.value + 'T00:00').getTime();
-                endTs = new Date(formattedEnd.value + 'T23:59:59.999').getTime();
+                // UTC midnight, and an EXCLUSIVE end (the day after the last day).
+                // The ICS feed reads the UTC calendar date, so local midnight publishes
+                // the previous day to every subscriber in a UTC-positive zone; and
+                // RFC 5545 makes all-day DTEND exclusive, which 23:59:59.999 only
+                // satisfied by accident in negative offsets.
+                const [sy, sm, sd] = formattedStart.value.split('-').map(Number);
+                const [ey, em, ed] = formattedEnd.value.split('-').map(Number);
+                startTs = Date.UTC(sy, sm - 1, sd);
+                endTs = Date.UTC(ey, em - 1, ed) + 86400000;
             } else {
                 startTs = new Date(formattedStart.value).getTime();
                 endTs = new Date(formattedEnd.value).getTime();

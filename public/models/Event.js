@@ -8,8 +8,22 @@ class Event {
         this.description = options.Description || options.description || "";
         this.repeat = options.Recurrence || options.repeat || "";
         this.recurrencerule = options.RecurrenceRule || options.recurrencerule || "";
-        this.start = options.start || null;
-        this.end = options.end || null;
+        // Normalized to ISO, never stored as whatever the caller happened to pass.
+        //
+        // These used to pass through verbatim, so the app that created an event decided
+        // its storage format: the Syncfusion app writes ISO strings, NativeCal wrote
+        // epoch-ms numbers. CalendarDataService._mergeEvents compares start/end RAW, so
+        // 1790006400000 !== "2026-09-21T16:00:00.000Z" even though they are the same
+        // instant -- after any NativeCal write, EVERY event read as "changed by me" and
+        // a concurrent edit from the other app was overwritten wholesale. That is
+        // precisely the last-write-wins data loss the merge exists to prevent.
+        //
+        // Normalizing here rather than at the call sites keeps the stored shape
+        // unchanged (ISO, exactly what is already in every calendar) and makes it
+        // impossible for a third writer to reintroduce the split. A value that is not a
+        // real date becomes null, same as toISOStringOrNull has always done.
+        this.start = Event.toISOStringOrNull(options.start);
+        this.end = Event.toISOStringOrNull(options.end);
         this.type = parseInt(options.Type || options.type || 1);
 
         this.recurrenceID = options.RecurrenceID || options.recurrenceID || null;
