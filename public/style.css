@@ -201,6 +201,29 @@ body {
     color: var(--fg);
     border: 1px solid var(--border-color);
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.25), 0 8px 10px -6px rgba(0, 0, 0, 0.25);
+
+    /* Never taller than the screen. A panel with enough content -- a busy day in
+       Recent changes, a long list anywhere -- grew past the viewport with nothing
+       to clip it, so the top and bottom were simply unreachable: the close button
+       scrolled off and the page behind does not scroll because .pc-modal is fixed.
+       The 2rem allows for .pc-modal's own 1rem padding on each edge. */
+    max-height: calc(100vh - 2rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;   /* don't chain the scroll to the page behind */
+}
+
+/* Keep the close button reachable once the panel scrolls.
+   It is positioned absolute inside the panel, so in a scrolling panel it would
+   ride away with the content and leave no way out but Escape -- worst exactly
+   when the dialog is longest. Sticky pins it to the top of the scroll area; the
+   zero-height row means it does not take space from the heading beside it. */
+.pc-modal-panel > button[aria-label="Close"] {
+    position: sticky;
+    top: 0;
+    float: right;
+    margin-top: -0.5rem;
+    margin-right: -0.5rem;
+    z-index: 2;
 }
 
 /* Inputs */

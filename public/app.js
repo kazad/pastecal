@@ -1330,6 +1330,21 @@ const CalendarVueApp = {
             }
         };
         window.addEventListener('keydown', this._quickAddShortcutHandler);
+
+        // Escape closes whatever dialog is open. Every modal has an X, but Escape is
+        // the reflex -- and in a long dialog the X can be a scroll away from where the
+        // reader's attention is. Closes the innermost thing first, so one key backs out
+        // in the order the user entered.
+        this._escapeHandler = (e) => {
+            if (e.key !== 'Escape') return;
+            if (this.showRecentChanges) { this.showRecentChanges = false; return; }
+            if (this.showClaimDialog) { this.showClaimDialog = false; return; }
+            if (this.showSettings) { this.showSettings = false; return; }
+            if (this.showSearch) { this.showSearch = false; return; }
+            if (this.showShare) { this.showShare = false; return; }
+            if (this.showHelp) { this.showHelp = false; }
+        };
+        window.addEventListener('keydown', this._escapeHandler);
     },
 
     watch: {

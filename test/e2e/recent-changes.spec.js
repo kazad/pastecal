@@ -209,13 +209,20 @@ async function renameEvent(page, from, to) {
   await expect.poll(() => titlesOnServer(page), { timeout: 10_000 }).toContain(to);
 }
 
-test('an edit offers Undo in the toast, and reverts', async ({ page }) => {
+test('an edit can be reverted from Recent changes', async ({ page }) => {
+  // There is deliberately no toast on an edit -- a confirmation on every drag and
+  // rename is noise. What matters is that the edit is still REVERTIBLE, so this
+  // covers the route that replaced it.
   await freshCalendar(page);
   await seed(page, ['Budget meeting', 'Retro']);
   await renameEvent(page, 'Budget meeting', 'Budget meeting (moved)');
 
-  await expect(page.getByText('Edited "Budget meeting"')).toBeVisible();
-  await page.locator('button', { hasText: /^Undo$/ }).click();
+  // No toast anywhere on the page -- not merely an empty container, which would
+  // also pass if the container had simply been renamed.
+  await expect(page.getByText('Edited "Budget meeting"', { exact: false })).toHaveCount(0);
+
+  await openRecentChanges(page);
+  await page.locator('button:has-text("Undo this edit")').first().click();
 
   await expect.poll(() => titlesOnServer(page), { timeout: 10_000 }).toContain('Budget meeting');
   expect(await titlesOnServer(page)).not.toContain('Budget meeting (moved)');
