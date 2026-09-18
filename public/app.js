@@ -124,6 +124,23 @@ const CalendarVueApp = {
             "#ff9800", "#03a9f4", "#9e9e9e", "#27282f"
         ];
 
+        // Colors offered for categories 9-16, in order. Picked to stay distinguishable
+        // from the first eight and from each other at event-pill size -- a random color
+        // for a new category would sooner or later land next to one already in use, and
+        // two events the same color is exactly the problem categories exist to solve.
+        // Chosen greedily to maximise the smallest perceptual gap against the first
+        // eight AND each other -- an eyeballed set put #13 crimson 22 units from #2
+        // crimson, close enough that two categories looked like one, which defeats the
+        // point of having them. The worst pair here is 130 apart.
+        const EXTRA_COLORS = [
+            "#827717", "#c0ca33", "#00897b", "#8e24aa",
+            "#880e4f", "#bf360c", "#455a64", "#00bfa5"
+        ];
+
+        // Past sixteen the swatches stop being tellable apart at the size an event
+        // renders, so the picker becomes the problem the categories were meant to fix.
+        const MAX_COLORS = 16;
+
         // COLORS will be updated based on custom colors if available
         let COLORS = [...DEFAULT_COLORS];
 
@@ -189,6 +206,8 @@ const CalendarVueApp = {
             // Store COLORS as a component property for consistent reference
             COLORS: COLORS,
             DEFAULT_COLORS: DEFAULT_COLORS,
+            EXTRA_COLORS: EXTRA_COLORS,
+            MAX_COLORS: MAX_COLORS,
             colorFilters: COLORS.map(() => true), // allow all color types by default
             // Bumped on every scheduler dataBound so hiddenEventCount, which reads the
             // visible date range off scheduleObj, recomputes when the view moves.
@@ -3238,6 +3257,61 @@ const CalendarVueApp = {
             this.loadCustomColors();
         },
 
+        /**
+         * Add one more event category.
+         *
+         * Everything downstream already derives its length from COLORS -- the resource
+         * list Syncfusion binds, the dynamic .e-color-N CSS, the filter dots, the ICS
+         * feed (which ignores type entirely) -- so growing the palette is genuinely just
+         * pushing a color and a label. The only thing that needs saying out loud is that
+         * colorFilters has to grow with it, which syncColorFiltersLength already does.
+         *
+         * No removal. Deleting a category orphans the events on it, and reassigning them
+         * silently is worse than not offering the button. Nobody has asked for it.
+         */
+        /**
+         * The stock color for a category slot, for any index -- not just the first eight.
+         *
+         * DEFAULT_COLORS covers 1-8 and EXTRA_COLORS covers 9-16, so a bare
+         * DEFAULT_COLORS[index] is undefined past the eighth and would write undefined
+         * into the palette. Both reset paths go through here.
+         */
+        defaultColorForIndex(index) {
+            if (index < this.DEFAULT_COLORS.length) return this.DEFAULT_COLORS[index];
+            const extra = index - this.DEFAULT_COLORS.length;
+            return this.EXTRA_COLORS[extra % this.EXTRA_COLORS.length];
+        },
+
+        addCategory() {
+            if (this.COLORS.length >= this.MAX_COLORS) return;
+
+            const index = this.COLORS.length;
+            // Walk the extension palette from where the defaults left off, then wrap.
+            // A color already in use is still better than a random one: it is at least
+            // a color chosen to be legible.
+            const next = this.EXTRA_COLORS[(index - this.DEFAULT_COLORS.length + this.EXTRA_COLORS.length) % this.EXTRA_COLORS.length]
+                || this.EXTRA_COLORS[0];
+
+            this.COLORS.push(next);
+            this.localSettings.colors.push(next);
+            this.localSettings.typeLabels.push(`Type ${index + 1}`);
+
+            // One filter flag per color, or a dot toggles the wrong type.
+            this.syncColorFiltersLength();
+
+            this.storeColorsInCalendarOptions();
+            this.storeTypeLabelsInCalendarOptions();
+            this.updateColorCSS();
+
+            track(a => a.featureUsed('category_added', String(this.COLORS.length)));
+
+            // Focus the new row's label so it can be named without hunting for it.
+            this.$nextTick(() => {
+                const el = document.querySelector(`[data-category-label="${index}"]`);
+                if (el) { el.focus(); el.select?.(); }
+            });
+        },
+
         updateTypeLabel(typeId, value) {
             const index = typeId - 1;
             if (index >= 0 && index < this.COLORS.length) {
@@ -3276,8 +3350,8 @@ const CalendarVueApp = {
 
         resetEventColor(index) {
             if (index >= 0 && index < this.COLORS.length) {
-                this.localSettings.colors[index] = this.DEFAULT_COLORS[index];
-                this.COLORS[index] = this.DEFAULT_COLORS[index];
+                this.localSettings.colors[index] = this.defaultColorForIndex(index);
+                this.COLORS[index] = this.defaultColorForIndex(index);
 
                 this.storeColorsInCalendarOptions();
                 this.updateColorCSS();
@@ -3285,8 +3359,18 @@ const CalendarVueApp = {
         },
 
         resetAllColors() {
-            this.localSettings.colors = [...this.DEFAULT_COLORS];
-            this.COLORS = [...this.DEFAULT_COLORS];
+            // Reset the COLORS, keep the COUNT. Someone with twelve categories who wants
+            // the default palette back is asking for default colors, not to lose four
+            // categories -- and dropping to eight left twelve labels pointing at eight
+            // slots, so types 9-12 rendered in the fallback color while still being
+            // listed and selectable.
+            const count = Math.max(this.localSettings.typeLabels.length, this.DEFAULT_COLORS.length);
+            const palette = [];
+            for (let i = 0; i < count; i++) {
+                palette.push(this.defaultColorForIndex(i));
+            }
+            this.localSettings.colors = palette;
+            this.COLORS = [...palette];
             this.syncColorFiltersLength();
 
             this.storeColorsInCalendarOptions();
