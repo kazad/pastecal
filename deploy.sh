@@ -109,8 +109,11 @@ if [ "$(node_major node)" != "$REQUIRED_NODE_MAJOR" ]; then
     fi
 fi
 
-# --- Cache-bust static assets (hosting only; skip when deploying just functions) -----------
+# --- Build CSS, then cache-bust static assets (hosting only) ------------------------------
 if [ -z "$TARGETS" ] || [[ "$TARGETS" == *hosting* ]]; then
+    # Tailwind is prebuilt (it used to compile in every visitor's browser). Rebuilding on
+    # every deploy means a class added to the markup can never ship unstyled.
+    ./scripts/build-css.sh
     ./bust_cache.sh
 else
     echo "Skipping cache-bust (not deploying hosting)."

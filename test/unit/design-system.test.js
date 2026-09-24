@@ -15,7 +15,7 @@
  *      style.css, not a Tailwind utility, so `disabled:bg-disabled` never applied
  *      (verified in-browser: the button stayed green). Variant-prefixed usages
  *      must reference a real Tailwind color — hence the `theme.*` colors wired
- *      into tailwind.config in index.html.
+ *      into tailwind.config.js (Tailwind is prebuilt by scripts/build-css.sh).
  *
  * These are static checks on the markup: cheap, and they fail loudly the next
  * time someone reaches for a raw gray in a themed surface.
@@ -27,6 +27,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const TAILWIND_CONFIG = fs.readFileSync(path.join(__dirname, '../../tailwind.config.js'), 'utf8');
+const TAILWIND_BUILT = fs.readFileSync(path.join(__dirname, '../../public/tailwind.css'), 'utf8');
 
 const root = path.join(__dirname, '../..');
 const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
@@ -121,13 +123,13 @@ test('tailwind is configured to read data-theme, or no dark: utilities are used'
   const usesDarkVariant = classTokens(INDEX).some((t) => t.startsWith('dark:'));
   if (!usesDarkVariant) return;
 
-  assert.match(INDEX, /darkMode:\s*\[\s*['"]selector['"]\s*,\s*['"]\[data-theme="dark"\]['"]\s*\]/,
+  assert.match(TAILWIND_CONFIG, /darkMode:\s*\[\s*['"]selector['"]\s*,\s*['"]\[data-theme="dark"\]['"]\s*\]/,
     'dark: utilities only apply if Tailwind is told dark mode is data-theme="dark"; ' +
     'the default is prefers-color-scheme, which this app does not use');
 });
 
 test('theme colors exposed to Tailwind map to the CSS variables in style.css', () => {
-  const configured = [...INDEX.matchAll(/'(?:theme-)?(\w[\w-]*)':\s*'var\((--[\w-]+)\)'/g)]
+  const configured = [...TAILWIND_CONFIG.matchAll(/['"]?(\w[\w-]*)['"]?:\s*'var\((--[\w-]+)\)'/g)]
     .map((m) => m[2]);
 
   assert.ok(configured.length >= 4, 'expected the theme token block in tailwind.config');
@@ -172,4 +174,15 @@ test('the claim dialog uses the shared modal, input and button classes', () => {
   assert.match(dialog, /class="pc-modal-panel"/, 'panel should use .pc-modal-panel');
   assert.match(dialog, /class="pc-input-group"/, 'slug field should use .pc-input-group');
   assert.match(dialog, /pc-btn pc-btn-primary/, 'submit should use .pc-btn .pc-btn-primary');
+});
+
+test('the prebuilt tailwind.css contains the theme and dark-mode rules the markup uses', () => {
+  // Tailwind used to compile in the browser, so a class could never be "missing".
+  // Prebuilt, a stale public/tailwind.css would silently leave new classes unstyled;
+  // deploy.sh rebuilds it, and this catches a build that lost the dark variant or the
+  // theme tokens.
+  assert.match(TAILWIND_BUILT, /\[data-theme="?dark"?\]/, 'dark: rules missing from public/tailwind.css');
+  for (const cls of ['bg-theme-panel', 'text-theme-strong', 'border-theme-border']) {
+    if (INDEX.includes(cls)) assert.ok(TAILWIND_BUILT.includes('.' + cls), `${cls} is used but not in public/tailwind.css`);
+  }
 });

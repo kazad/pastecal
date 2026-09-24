@@ -1682,15 +1682,11 @@ const CalendarVueApp = {
             this.swapSyncfusionTheme(isDark);
         },
         swapSyncfusionTheme(dark) {
-            document.getElementById('syncfusion-base-theme').href = dark
-                ? 'https://cdn.syncfusion.com/ej2/ej2-base/styles/material-dark.css'
-                : 'https://cdn.syncfusion.com/ej2/ej2-base/styles/material.css';
+            // One self-hosted stylesheet per theme (scripts/build-vendor.sh), pinned to the
+            // same Syncfusion version as the JS.
             document.getElementById('syncfusion-theme').href = dark
-                ? 'https://cdn.syncfusion.com/ej2/material-dark.css'
-                : 'https://cdn.syncfusion.com/ej2/material.css';
-            document.getElementById('syncfusion-schedule-theme').href = dark
-                ? 'https://cdn.syncfusion.com/ej2/ej2-schedule/styles/material-dark.css'
-                : 'https://cdn.syncfusion.com/ej2/ej2-schedule/styles/material.css';
+                ? '/vendor/syncfusion-23.2.6/material-dark.css'
+                : '/vendor/syncfusion-23.2.6/material.css';
         },
 
         // Validate custom view configuration

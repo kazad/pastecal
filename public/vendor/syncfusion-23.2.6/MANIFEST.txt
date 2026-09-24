@@ -1,0 +1,22 @@
+Syncfusion 23.2.6 -- calendar subset. Built by scripts/build-vendor.sh.
+Do not edit; rerun the script.
+
+a7745ea760f8a3ca  202119 bytes  https://cdn.syncfusion.com/ej2/23.2.6/ej2-base/dist/global/ej2-base.min.js
+867fa569b6853a81  84020 bytes  https://cdn.syncfusion.com/ej2/23.2.6/ej2-data/dist/global/ej2-data.min.js
+63f8c6c750144e1d  85612 bytes  https://cdn.syncfusion.com/ej2/23.2.6/ej2-buttons/dist/global/ej2-buttons.min.js
+92284956439d88f7  91259 bytes  https://cdn.syncfusion.com/ej2/23.2.6/ej2-lists/dist/global/ej2-lists.min.js
+81d3e11daaf1a448  106911 bytes  https://cdn.syncfusion.com/ej2/23.2.6/ej2-popups/dist/global/ej2-popups.min.js
+6d48f76abef8e94d  38326 bytes  https://cdn.syncfusion.com/ej2/23.2.6/ej2-splitbuttons/dist/global/ej2-splitbuttons.min.js
+fa6a755e4c75a713  358238 bytes  https://cdn.syncfusion.com/ej2/23.2.6/ej2-inputs/dist/global/ej2-inputs.min.js
+8df9e41eea6b983b  362300 bytes  https://cdn.syncfusion.com/ej2/23.2.6/ej2-calendars/dist/global/ej2-calendars.min.js
+f6e7dd18d30fde27  377623 bytes  https://cdn.syncfusion.com/ej2/23.2.6/ej2-navigations/dist/global/ej2-navigations.min.js
+ee5c207691b5dc60  31305 bytes  https://cdn.syncfusion.com/ej2/23.2.6/ej2-notifications/dist/global/ej2-notifications.min.js
+db8d5ca104c621e9  439204 bytes  https://cdn.syncfusion.com/ej2/23.2.6/ej2-dropdowns/dist/global/ej2-dropdowns.min.js
+378bc539fd279170  19096 bytes  https://cdn.syncfusion.com/ej2/23.2.6/ej2-file-utils/dist/global/ej2-file-utils.min.js
+5f60274adcd8d89c  43209 bytes  https://cdn.syncfusion.com/ej2/23.2.6/ej2-compression/dist/global/ej2-compression.min.js
+ba3cc3dcc9147f48  51127 bytes  https://cdn.syncfusion.com/ej2/23.2.6/ej2-excel-export/dist/global/ej2-excel-export.min.js
+9da08b15b4eea031  705628 bytes  https://cdn.syncfusion.com/ej2/23.2.6/ej2-schedule/dist/global/ej2-schedule.min.js
+
+ej2-calendar.min.js  2996539 bytes  sha256 52f3aec3598ace22
+material.css  2301207 bytes  sha256 323d7c357d710a9f
+material-dark.css  2282956 bytes  sha256 2bbdbb4c93b49299

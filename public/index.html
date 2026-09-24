@@ -38,7 +38,6 @@ Copyright (c) 2025 Kalid Azad
     <meta name="theme-color" content="#ffffff">
 
     <!-- Preconnects for faster third-party fetches -->
-    <link rel="preconnect" href="https://cdn.syncfusion.com">
     <link rel="preconnect" href="https://www.gstatic.com">
     <link rel="preconnect" href="https://unpkg.com">
     <link rel="preconnect" href="https://cdn.jsdelivr.net">
@@ -86,42 +85,23 @@ Copyright (c) 2025 Kalid Azad
     </script>
 
     <!-- Core styles -->
-    <link id="syncfusion-base-theme" href="https://cdn.syncfusion.com/ej2/ej2-base/styles/material.css" rel="stylesheet" type="text/css" />
-    <link id="syncfusion-theme" href="https://cdn.syncfusion.com/ej2/material.css" rel="stylesheet" type="text/css" />
-    <link id="syncfusion-schedule-theme" href="https://cdn.syncfusion.com/ej2/ej2-schedule/styles/material.css" rel="stylesheet" type="text/css" />
+    <!-- Syncfusion, calendar subset only, self-hosted and pinned (scripts/build-vendor.sh).
+         Replaced the full 50-package bundle (4.4 MB over the wire) and an UNVERSIONED
+         theme that tracked Syncfusion's latest release while the JS stayed on 23.2.6. -->
+    <link id="syncfusion-theme" href="/vendor/syncfusion-23.2.6/material.css" rel="stylesheet" type="text/css" />
     <link rel="stylesheet" href="/style.css?v=1790282296">
+    <!-- Tailwind, prebuilt by scripts/build-css.sh (was a 124 KB in-browser compiler). After style.css, as the compiler's output was. -->
+    <link rel="stylesheet" href="/tailwind.css">
 
     <!-- Third-party libraries -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        // Expose the theme tokens from style.css to Tailwind so they work with
-        // variants (disabled:, hover:, focus:). The plain .bg-1/.text-color-1
-        // classes in style.css have no variant support on their own.
-        tailwind.config = {
-            // Dark mode is driven by data-theme="dark" on <html> (see applyTheme in
-            // app.js), not the OS preference. Without this, every `dark:` utility in
-            // the markup silently never applies.
-            darkMode: ['selector', '[data-theme="dark"]'],
-            theme: {
-                extend: {
-                    colors: {
-                        'theme': {
-                            'bg': 'var(--bg)',
-                            'panel': 'var(--panel-bg)',
-                            'disabled': 'var(--bg-disabled)',
-                            'border': 'var(--border-color)',
-                            'muted': 'var(--text-color-1)',
-                            'strong': 'var(--text-color-2)',
-                            'hover': 'var(--bg-interactive-hover)',
-                        },
-                    },
-                },
-            },
-        };
-    </script>
-    <script src="https://cdn.syncfusion.com/ej2/23.2.6/dist/ej2.min.js" type="text/javascript"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-compat.js"></script>
+    <script src="/vendor/syncfusion-23.2.6/ej2-calendar.min.js" type="text/javascript"></script>
+    <!-- Only the Firebase services the app uses (92 KB), not firebase-compat.js, which
+         bundles every service (224 KB). Same version, same compat API; app must load first. -->
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-functions-compat.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js"></script>
 
     <!-- Firebase config -->
