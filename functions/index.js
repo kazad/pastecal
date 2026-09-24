@@ -1115,7 +1115,7 @@ const ProService = {
  * anonymous caller has nothing to attach. The magic-link sign-in on /pro is what
  * produces that uid.
  */
-exports.createProCheckout = onCall({ secrets: ['STRIPE_SECRET'] }, async (request) => {
+const createProCheckout = onCall({ secrets: ['STRIPE_SECRET'] }, async (request) => {
     const uid = request.auth && request.auth.uid;
     if (!uid) {
         throw new functions.https.HttpsError('unauthenticated', 'Sign in first.');
@@ -1148,7 +1148,7 @@ exports.createProCheckout = onCall({ secrets: ['STRIPE_SECRET'] }, async (reques
 });
 
 /** What the signed-in browser is entitled to. Safe to call on every page load. */
-exports.getProStatus = onCall(async (request) => {
+const getProStatus = onCall(async (request) => {
     const uid = request.auth && request.auth.uid;
     if (!uid) return { pro: false };
     return ProService.status(uid);
@@ -1161,7 +1161,7 @@ exports.getProStatus = onCall(async (request) => {
  * unverified endpoint that grants entitlements is an endpoint that grants
  * entitlements to anyone who finds it.
  */
-exports.stripeWebhook = onRequest(
+const stripeWebhook = onRequest(
     { secrets: ['STRIPE_SECRET', 'STRIPE_WEBHOOK_SECRET'] },
     async (req, res) => {
         if (!process.env.STRIPE_SECRET || !process.env.STRIPE_WEBHOOK_SECRET) {
@@ -1220,3 +1220,14 @@ exports.stripeWebhook = onRequest(
             res.status(500).send('handler failed');
         }
     });
+
+// Pro billing ships DARK. These functions declare Stripe secrets that do not exist until
+// billing is set up, and Firebase refuses to deploy ANY function while a declared secret
+// is missing -- on Sep 24 that blocked a production fix (the ICS all-day timezone bug)
+// from deploying at all. So they are exported only when billing is deliberately turned
+// on: create the secrets, then deploy with PRO_BILLING=on in functions/.env.
+if (process.env.PRO_BILLING === 'on') {
+    exports.createProCheckout = createProCheckout;
+    exports.getProStatus = getProStatus;
+    exports.stripeWebhook = stripeWebhook;
+}
