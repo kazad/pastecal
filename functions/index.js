@@ -238,12 +238,32 @@ const ICSService = {
     // a DATE for an all-day event, and 3.8.5.1 requires EXDATE to use the same value type;
     // emitting a DATE-TIME instead means a deleted all-day occurrence never matches its
     // EXDATE and keeps appearing for subscribers.
+    //
+    // The day is the NEAREST UTC midnight, not the UTC date of the instant. The app
+    // stores an all-day event as the user's LOCAL midnight, and this server does not know
+    // their timezone: in Paris, "18 September, all day" is stored as 17 Sep 22:00Z, whose
+    // UTC date is the 17th -- so every subscriber east of UTC (all of Europe, Asia and
+    // Australia) saw all-day events a day early. Local midnight in any zone from UTC-11
+    // to UTC+12 lies within 12 hours of the intended day's UTC midnight, so rounding
+    // recovers the day the user picked. (UTC+13/+14 -- Tonga, Samoa, NZ summer -- are
+    // still a day early; fixing those needs the calendar's timezone, which is not stored.)
+    // Values already at UTC midnight, as NativeCal writes them, round to themselves.
     formatDate(dateTime) {
         if (dateTime === null || dateTime === undefined || dateTime === '') return null;
         const d = dateTime instanceof Date ? dateTime : new Date(dateTime);
         if (isNaN(d.getTime())) return null;
-        const out = d.toISOString().slice(0, 10).replace(/-/g, '');
+        const nearest = new Date(d.getTime() + 12 * 60 * 60 * 1000);
+        const out = nearest.toISOString().slice(0, 10).replace(/-/g, '');
         return /^\d{8}$/.test(out) ? out : null;
+    },
+
+    // A stored UTC stamp (20260917T220000Z) as the all-day DATE it stands for. Exception
+    // dates for all-day series need the same rounding as DTSTART, or a deleted occurrence
+    // in a UTC-positive zone names the wrong day and never matches.
+    stampToDate(stamp) {
+        const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(stamp || '');
+        if (!m) return stamp ? stamp.slice(0, 8) : stamp;
+        return this.formatDate(new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6])));
     },
 
     // An event is only renderable if BOTH endpoints normalize to a real date. A truthiness
@@ -328,7 +348,7 @@ const ICSService = {
 
         // EXDATE must use the same value type as DTSTART, or it matches no instance and the
         // exclusion is silently ignored.
-        const asValue = (stamp) => allDay ? stamp.slice(0, 8) : stamp;
+        const asValue = (stamp) => allDay ? this.stampToDate(stamp) : stamp;
 
         if (isOccurrence) {
             eventLines.push(`RECURRENCE-ID${dateParam}:${asValue(original)}`);

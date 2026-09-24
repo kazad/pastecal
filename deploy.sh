@@ -6,6 +6,15 @@
 #   ./deploy.sh functions       # deploy only functions (fastest; use after a Cloud Function change)
 #   ./deploy.sh hosting         # deploy only static assets
 #   ./deploy.sh functions,hosting
+#   SKIP_GATE=1 ./deploy.sh hosting   # emergency only -- ships without the release gate
+#
+# RELEASE GATE: before hosting ships, this runs the unit tests and the user journeys
+# (test/journeys, in English desktop, French desktop and a French iPhone). If any fail,
+# nothing is deployed. Nine of pastecal's ~30 issues were "my event didn't save", and #32
+# shipped through a dialog every existing test called green; the journeys click and type
+# like a person and check what reaches the server, so that class of bug stops here
+# instead of in a user's inbox. Functions deploy BEFORE the gate, because the journeys
+# read the live ICS feed and must see the new code.
 #
 # Why the preflight check below: this repo lives in a Dropbox folder, and every JSON config
 # here carries a com.dropbox.attrs xattr. If Dropbox is mid-sync when firebase-tools reads
@@ -107,10 +116,56 @@ else
     echo "Skipping cache-bust (not deploying hosting)."
 fi
 
+# --- Release gate ---------------------------------------------------------------------------
+# Unit tests need Node 20/22 (the same SlowBuffer problem as above); find one.
+unit_node() {
+    for n in "$(command -v node)" /opt/homebrew/opt/node@22/bin/node /opt/homebrew/opt/node@20/bin/node \
+             "$HOME"/.nvm/versions/node/v22*/bin/node "$HOME"/.nvm/versions/node/v20*/bin/node; do
+        [ -x "$n" ] || continue
+        case "$(node_major "$n")" in 20|22) echo "$n"; return 0 ;; esac
+    done
+    return 1
+}
+
+run_gate() {
+    if [ "${SKIP_GATE:-}" = "1" ]; then
+        echo
+        echo "!!! SKIP_GATE=1: shipping WITHOUT the release gate. Use only to ship an emergency fix."
+        echo
+        return 0
+    fi
+    echo
+    echo "=== Release gate 1/2: unit tests ==="
+    local un; un="$(unit_node)" || { echo "ERROR: need Node 20 or 22 to run unit tests (brew install node@22)."; exit 1; }
+    # shellcheck disable=SC2046
+    "$un" --test $(ls test/unit/*.test.js | grep -v emulator) || {
+        echo; echo "RELEASE GATE FAILED: unit tests. Nothing was deployed to hosting."; exit 1; }
+
+    echo
+    echo "=== Release gate 2/2: user journeys (desktop-en, desktop-fr, iphone-fr) ==="
+    npx playwright test -c playwright.journeys.config.js --reporter=line || {
+        echo
+        echo "RELEASE GATE FAILED: a user journey broke. Nothing was deployed to hosting."
+        echo "  Screenshots and traces: test-results/   Report: npx playwright show-report"
+        exit 1
+    }
+    echo
+    echo "Release gate passed."
+}
+
 # --- Deploy -------------------------------------------------------------------------------
-if [ -n "$TARGETS" ]; then
-    echo "Deploying only: $TARGETS"
-    firebase deploy --only "$TARGETS"
-else
-    firebase deploy
+# Everything except hosting goes first, then the gate, then hosting -- so a failing gate
+# never leaves the site running new front-end code against old back-end code.
+ALL_TARGETS="${TARGETS:-database,functions,hosting,remoteconfig}"
+PRE_TARGETS="$(echo "$ALL_TARGETS" | tr ',' '\n' | grep -v '^hosting$' | paste -sd, - || true)"
+
+if [ -n "$PRE_TARGETS" ]; then
+    echo "Deploying: $PRE_TARGETS"
+    firebase deploy --only "$PRE_TARGETS"
+fi
+
+if [[ ",$ALL_TARGETS," == *,hosting,* ]]; then
+    run_gate
+    echo "Deploying: hosting"
+    firebase deploy --only hosting
 fi

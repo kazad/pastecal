@@ -847,6 +847,24 @@ const CalendarVueApp = {
             // `|| args.data` fallback in those handlers reachable again.
             app.activeEditorData = null;
 
+            // One popup at a time. A double-click on a day fires Syncfusion's quick
+            // popup twice and THEN the editor, and Syncfusion never closes that quick
+            // popup: it stays open behind the editor, and when its open animation
+            // finishes it focuses its own title box. Whatever the user was typing in
+            // the editor -- usually the description -- carries on into that invisible
+            // box, and the editor then saves with no title ("Add title"). That is the
+            // second half of #32: "no way to save once you've written a description".
+            //
+            // So a quick popup may not open over an editor, and opening the editor
+            // closes any quick popup already up.
+            if (args.type === 'QuickInfo' && document.querySelector('.e-schedule-dialog.e-popup-open')) {
+                args.cancel = true;
+                return;
+            }
+            if (args.type === 'Editor' && typeof scheduleObj.closeQuickInfoPopup === 'function') {
+                scheduleObj.closeQuickInfoPopup();
+            }
+
             if (args.type === 'Editor') {
                 // console.log("Editor call");
 
@@ -1097,6 +1115,24 @@ const CalendarVueApp = {
                 }
             }
         }
+
+        // Belt to the braces above. Syncfusion can leave a quick popup alive behind the
+        // editor (a double-click opens two of them before the editor), and that popup
+        // pulls focus into its own title box when the user clicks into the editor's
+        // Description -- measured at 3ms after the click. Closing it through the API is
+        // not reliable against its own timers, so enforce the rule at the only place
+        // that matters: while an editor is open, focus may not enter a quick popup. It
+        // goes straight back to the field the user was in, so no keystroke is lost.
+        document.addEventListener('focusin', (e) => {
+            const target = e.target;
+            if (!target || !target.closest || !target.closest('.e-quick-popup-wrapper')) return;
+            if (!document.querySelector('.e-schedule-dialog.e-popup-open')) return;
+            const back = e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('.e-schedule-dialog')
+                ? e.relatedTarget
+                : document.querySelector('.e-schedule-dialog.e-popup-open input[name="Subject"]');
+            if (back) back.focus();
+            if (typeof scheduleObj.closeQuickInfoPopup === 'function') scheduleObj.closeQuickInfoPopup();
+        }, true);
 
         scheduleObj.appendTo('#Schedule');
 

@@ -251,3 +251,38 @@ test('generateICS: metadata sits before the first event', () => {
   assert.ok(ics.indexOf('X-WR-CALNAME:') < ics.indexOf('BEGIN:VEVENT'));
   assert.ok(ics.indexOf('REFRESH-INTERVAL') < ics.indexOf('BEGIN:VEVENT'));
 });
+
+// All-day events are stored as the user's LOCAL midnight, and the feed does not know
+// their timezone. Taking the UTC date published every all-day event from Europe, Asia and
+// Australia a day early (found by the fr-FR release journey: "18 September, all day" in
+// Paris went out as 20260917). The feed now rounds to the nearest midnight.
+test('ICS: an all-day event keeps its day whatever timezone created it', () => {
+  const cases = [
+    ['Paris (UTC+2)', '2026-09-17T22:00:00.000Z', '2026-09-18T22:00:00.000Z'],
+    ['Los Angeles (UTC-7)', '2026-09-18T07:00:00.000Z', '2026-09-19T07:00:00.000Z'],
+    ['Tokyo (UTC+9)', '2026-09-17T15:00:00.000Z', '2026-09-18T15:00:00.000Z'],
+    ['Auckland winter (UTC+12)', '2026-09-17T12:00:00.000Z', '2026-09-18T12:00:00.000Z'],
+    ['Honolulu (UTC-10)', '2026-09-18T10:00:00.000Z', '2026-09-19T10:00:00.000Z'],
+    ['UTC midnight, as NativeCal stores it', '2026-09-18T00:00:00.000Z', '2026-09-19T00:00:00.000Z'],
+  ];
+  for (const [where, start, end] of cases) {
+    const ics = ICSService.generateICS({
+      id: 'tz', title: 'tz', events: [{ id: 'a', title: 'Day off', start, end, isAllDay: true }],
+    });
+    assert.match(ics, /DTSTART;VALUE=DATE:20260918\r?\n/, `${where}: start should be the 18th`);
+    assert.match(ics, /DTEND;VALUE=DATE:20260919\r?\n/, `${where}: exclusive end should be the 19th`);
+  }
+});
+
+test('ICS: a deleted occurrence of an all-day series names the same day as DTSTART', () => {
+  // Paris weekly all-day series; the 25th is deleted. Stored exception stamps are UTC,
+  // so the 25th in Paris is 20260924T220000Z -- it must be emitted as EXDATE 20260925.
+  const ics = ICSService.generateICS({
+    id: 'ex', title: 'ex', events: [{
+      id: 's', title: 'Weekly off', isAllDay: true,
+      start: '2026-09-17T22:00:00.000Z', end: '2026-09-18T22:00:00.000Z',
+      recurrencerule: 'FREQ=WEEKLY', recurrenceException: '20260924T220000Z',
+    }],
+  });
+  assert.match(ics, /EXDATE;VALUE=DATE:20260925/);
+});
