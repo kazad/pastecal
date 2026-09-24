@@ -1,6 +1,18 @@
 // @ts-check
 const { test, expect } = require('./fixtures');
 
+// The fixture events on test-popover-verify are dated July 2026. These tests used to
+// assume they were in the current month, so every one of them started failing on
+// August 1 -- the calendar rotted, not the app. Open the month the fixtures live in,
+// the way a person would: by paging the calendar there.
+const FIXTURE_MONTH = new Date(2026, 6, 15);
+async function showFixtureMonth(page) {
+  await page.waitForFunction(() => window.scheduleObj && window.scheduleObj.element, null, { timeout: 15000 });
+  await page.evaluate((iso) => { window.scheduleObj.selectedDate = new Date(iso); window.scheduleObj.currentView = 'Month'; },
+    FIXTURE_MONTH.toISOString());
+  await page.waitForTimeout(800);
+}
+
 // Regression test for the legacy (Syncfusion) app's read-only "View Only" popup
 // (public/app.js, shown at /view/{publicViewId}): URLs in an event's description must
 // render as clickable links there too, not just in the nativecal EventPopover.
@@ -16,6 +28,7 @@ const { test, expect } = require('./fixtures');
 test('URL in description renders as a clickable link in the legacy read-only quick-info popup', async ({ page }) => {
   await page.goto('/test-popover-verify');
   await page.waitForTimeout(1500);
+  await showFixtureMonth(page);
 
   const publicViewId = await page.evaluate(async () => {
     return new Promise((resolve) => {
@@ -28,6 +41,7 @@ test('URL in description renders as a clickable link in the legacy read-only qui
 
   await page.goto(`/view/${publicViewId}`);
   await page.waitForTimeout(1500);
+  await showFixtureMonth(page);
   const event = page.getByText('Conference Call').first();
   await expect(event).toBeVisible({ timeout: 10000 });
   await event.click({ force: true });
@@ -46,6 +60,7 @@ test('URL in description renders as a clickable link in the legacy read-only qui
 test('long description in the legacy popup stays within the viewport and scrolls', async ({ page }) => {
   await page.goto('/test-popover-verify');
   await page.waitForTimeout(1500);
+  await showFixtureMonth(page);
 
   const event = page.getByText('Long Description Test').first();
   await expect(event).toBeVisible({ timeout: 10000 });
@@ -78,6 +93,7 @@ test('long description in the legacy popup does not clip its top on a short view
   await page.setViewportSize({ width: 1000, height: 620 });
   await page.goto('/test-popover-verify');
   await page.waitForTimeout(1500);
+  await showFixtureMonth(page);
 
   const event = page.getByText('Long Description Test').first();
   await expect(event).toBeVisible({ timeout: 10000 });
@@ -105,6 +121,7 @@ test('short description popup stays anchored near its event, not force-centered'
   await page.setViewportSize({ width: 2000, height: 1250 });
   await page.goto('/test-popover-verify');
   await page.waitForTimeout(1500);
+  await showFixtureMonth(page);
 
   const event = page.getByText('Dentist Appointment').first();
   await expect(event).toBeVisible({ timeout: 10000 });
@@ -131,6 +148,7 @@ test('short description popup stays anchored near its event, not force-centered'
 test('description text in the legacy popup can be selected and copied', async ({ page }) => {
   await page.goto('/test-popover-verify');
   await page.waitForTimeout(1500);
+  await showFixtureMonth(page);
 
   const event = page.getByText('Conference Call').first();
   await expect(event).toBeVisible({ timeout: 10000 });
@@ -157,6 +175,7 @@ test('description text in the legacy popup can be selected and copied', async ({
 test('popup widens for a long description and stays compact for a short one', async ({ page }) => {
   await page.goto('/test-popover-verify');
   await page.waitForTimeout(1500);
+  await showFixtureMonth(page);
 
   await page.getByText('Long Description Test').first().click({ force: true });
   await page.waitForTimeout(500);
@@ -179,6 +198,7 @@ test('wide popup for a long description stays within the viewport horizontally',
   await page.setViewportSize({ width: 900, height: 900 });
   await page.goto('/test-popover-verify');
   await page.waitForTimeout(1500);
+  await showFixtureMonth(page);
 
   await page.getByText('Long Description Test').first().click({ force: true });
   await page.waitForTimeout(500);
@@ -199,6 +219,7 @@ test('wide popup for a long description stays within the viewport horizontally',
 test('clicking a different event while a wide popup is open opens the correct one', async ({ page }) => {
   await page.goto('/test-popover-verify');
   await page.waitForTimeout(1500);
+  await showFixtureMonth(page);
 
   const longEvent = page.getByText('Long Description Test').first();
   const longBox = await longEvent.boundingBox();
@@ -225,6 +246,7 @@ test('clicking a different event while a wide popup is open opens the correct on
 test('clicking an event covered by a tall clamped popup still opens the correct one', async ({ page }) => {
   await page.goto('/test-popover-verify');
   await page.waitForTimeout(1500);
+  await showFixtureMonth(page);
 
   const longEvent = page.getByText('Long Description Test').first();
   const longBox = await longEvent.boundingBox();
@@ -254,6 +276,7 @@ test('popup opens anchored to its own event on a wide viewport, even after anoth
   await page.setViewportSize({ width: 2560, height: 1000 });
   await page.goto('/test-popover-verify');
   await page.waitForTimeout(1500);
+  await showFixtureMonth(page);
 
   const longBox = await page.getByText('Long Description Test').first().boundingBox();
   await page.mouse.click(longBox.x + longBox.width / 2, longBox.y + longBox.height / 2);

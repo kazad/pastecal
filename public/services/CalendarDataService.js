@@ -107,6 +107,7 @@ class CalendarDataService {
             if (calendar && calendar.id) {
                 this.connected = slug;
                 this._rememberSnapshot(calendar);
+                this._replayJournal(calendar && calendar.id);
 
                 this.validateCalendarData(calendar);
                 callback(calendar);
@@ -148,6 +149,7 @@ class CalendarDataService {
                 if (calendar && calendar.id) {
                     this.connected = slug;
                     this._rememberSnapshot(calendar);
+                    this._replayJournal(calendar && calendar.id);
 
                     this.validateCalendarData(calendar);
                     callback(calendar);
@@ -273,7 +275,7 @@ class CalendarDataService {
         return `${e.id}|${e.recurrenceID ?? ''}`;
     }
 
-    static _mergeEvents(base, local, remote) {
+    static _mergeEvents(base, local, remote, { yieldOnConflict = false } = {}) {
         const byId = (list) => {
             const m = new Map();
             for (const e of list || []) if (e && e.id) m.set(this._eventKey(e), e);
@@ -311,7 +313,13 @@ class CalendarDataService {
         // if it was never in base -- i.e. we created it.
         for (const [id, ev] of localM) {
             if (!baseM.has(id)) { merged.set(id, ev); continue; }   // we created it
-            if (!same(baseM.get(id), ev)) merged.set(id, ev);       // we edited it
+            if (same(baseM.get(id), ev)) continue;                  // untouched by us
+            // We edited it. A REPLAYED write (see _replayJournal) can be hours or days
+            // old, so if anyone else has changed or deleted this event since, theirs is
+            // the newer intent and it stands. A live write is the newest thing that
+            // happened, so it applies as before.
+            if (yieldOnConflict && !same(remoteM.get(id), baseM.get(id))) continue;
+            merged.set(id, ev);
         }
         // Ours: deleted since the last snapshot -- but only if nobody else has since
         // changed it, in which case their edit is newer information than our delete.
@@ -337,7 +345,7 @@ class CalendarDataService {
     }
 
     // only sync if we have existed
-    static sync(calendar) {
+    static sync(calendar, opts = {}) {
         if (calendar && calendar.id && this.connected) {
             // console.log("CalendarDataService.sync()", calendar);
             const safe = this._dropIncompleteEvents(calendar);
@@ -354,9 +362,14 @@ class CalendarDataService {
             // detectable (correct -- we have no evidence anything was deleted). Deletes
             // start working as soon as the first snapshot lands, which is immediate in
             // practice since sync() only runs on a connected calendar.
-            const known = Object.prototype.hasOwnProperty.call(this._lastSeen, calendar.id);
+            // A replay (see _replayJournal) carries the baseline it was made against, so the
+            // merge applies only what THIS user changed, on top of whatever others did since.
+            const replay = Array.isArray(opts.base) || opts.base === null;
+            const known = replay
+                ? opts.base !== null
+                : Object.prototype.hasOwnProperty.call(this._lastSeen, calendar.id);
             const localEvents = this._sanitizeForFirebase(safe.events || []);
-            const base = known ? this._lastSeen[calendar.id] : [];
+            const base = replay ? (opts.base || []) : (known ? this._lastSeen[calendar.id] : []);
             const rest = this._sanitizeForFirebase({ ...safe, events: undefined });
             delete rest.events;
 
@@ -370,11 +383,13 @@ class CalendarDataService {
             // events than the server holds, so the caller is handed the server's copy to
             // put back (see onSyncRefused) rather than the user being stranded looking at
             // an empty calendar.
-            const prevEvents = known ? (this._lastSeen[calendar.id] || []) : [];
+            const prevEvents = known ? (replay ? base : (this._lastSeen[calendar.id] || [])) : [];
             const prevCount = prevEvents.length;
             const nextCount = localEvents.length;
             const removing = prevCount - nextCount;
-            const intent = removing > 0 ? this._takeIntent() : null;
+            const intent = removing > 0
+                ? (replay ? (opts.intentRemoving > 0 ? { removing: opts.intentRemoving } : null) : this._takeIntent())
+                : null;
             if (typeof this.onSyncShape === 'function') {
                 try {
                     this.onSyncShape({ before: prevCount, after: nextCount, intent: !!intent });
@@ -383,7 +398,11 @@ class CalendarDataService {
             if (known && removing > 0 && (!intent || removing > intent.removing)) {
                 console.error(`[CalendarDataService] refused to save: this write removes ${removing} of ${prevCount} events` +
                     (intent ? ` but only ${intent.removing} were deleted by the user` : ' and no deletion was made'));
-                if (typeof this.onSyncRefused === 'function') {
+                // A refused write will be refused every time; never replay it.
+                this._journalClear(calendar.id, opts.journalT);
+                // A replay runs on page load with the server's copy already on screen, so
+                // there is nothing to restore -- and handing back its OLD baseline would.
+                if (!replay && typeof this.onSyncRefused === 'function') {
                     // The known-good events, so the app can restore what it was about to
                     // lose instead of leaving the user to discover it on their next reload.
                     //
@@ -424,7 +443,7 @@ class CalendarDataService {
                 // is wrong: a client whose local options predate another client's
                 // autoCreateReadOnlyLink would erase publicViewId, and every /view/ link
                 // already shared would stop resolving. Merge the keys instead.
-                const mergedOptions = (current.options || rest.options)
+                const mergedOptions = (!replay) && (current.options || rest.options)
                     ? { ...(current.options || {}), ...(rest.options || {}) }
                     : undefined;
 
@@ -440,8 +459,10 @@ class CalendarDataService {
 
                 const next = {
                     ...current,
-                    ...rest,
-                    events: this._mergeEvents(base, localEvents, remoteEvents),
+                    // A replay restores lost EVENT changes only; the calendar's title,
+                    // notes and settings are single fields whose server copy is newer.
+                    ...(replay ? {} : rest),
+                    events: this._mergeEvents(base, localEvents, remoteEvents, { yieldOnConflict: replay }),
                 };
                 if (mergedOptions) next.options = mergedOptions;
                 return next;
@@ -457,6 +478,8 @@ class CalendarDataService {
                 } else if (committed && snapshot) {
                     // Our write is now the baseline for the next diff.
                     this._rememberSnapshot({ id: calendar.id, events: snapshot.val()?.events });
+                    // The server has it: the unsent-write record is no longer needed.
+                    this._journalClear(calendar.id, opts.journalT);
 
                     if (pendingMerge && (pendingMerge.addedByOthers || pendingMerge.removedByUs)
                         && typeof this.onSyncMerged === 'function') {
@@ -486,19 +509,94 @@ class CalendarDataService {
     // immediately on pagehide/visibilitychange. _pending is cleared by whichever runs
     // first so the other becomes a no-op rather than a duplicate write.
     static _pending = null;
+    static _pendingT = null;
     static debounce_sync = (() => {
         const debounced = Utils.debounce((cal) => {
             if (CalendarDataService._pending !== cal) return;   // already flushed
             CalendarDataService._pending = null;
-            CalendarDataService.sync(cal);
+            CalendarDataService.sync(cal, { journalT: CalendarDataService._pendingT });
         }, 500);
-        return (cal) => { CalendarDataService._pending = cal; debounced(cal); };
+        return (cal) => {
+            CalendarDataService._pending = cal;
+            // Record it locally FIRST. See _journalWrite.
+            CalendarDataService._pendingT = CalendarDataService._journalWrite(cal);
+            debounced(cal);
+        };
     })();
     static flush() {
         const cal = this._pending;
         if (!cal) return;
         this._pending = null;
-        this.sync(cal);
+        this.sync(cal, { journalT: this._pendingT });
+    }
+
+    // ---- Unsent-write journal ----------------------------------------------------------
+    //
+    // flush() on pagehide cannot save anything: sync() is a Firebase transaction, which
+    // needs a round trip, and the page is gone before the reply. Measured on live
+    // pastecal.com (Sep 24): an event created and then the tab closed within ~0.5s was
+    // LOST, every time -- flush or no flush. On a phone, switching apps does the same.
+    //
+    // So every pending write is first recorded in localStorage, which is synchronous and
+    // survives the tab closing. It is removed once the server confirms. The next time
+    // this calendar opens, anything still recorded is replayed through the same three-way
+    // merge, against the baseline it was made from -- so only this user's own changes are
+    // applied, on top of whatever others did in between. Replaying something that DID
+    // arrive is harmless: adds and edits land on the same rows, deletes find nothing.
+    static JOURNAL_PREFIX = 'pastecal_unsent:';
+    static JOURNAL_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+    static _replayed = {};
+
+    static _journalWrite(calendar) {
+        try {
+            if (!calendar || !calendar.id || typeof localStorage === 'undefined') return null;
+            const id = calendar.id;
+            if (!this.connected) return null;   // a homepage draft: nothing on the server yet
+            const known = Object.prototype.hasOwnProperty.call(this._lastSeen, id);
+            const pendingIntent = (this._intent && Date.now() - this._intent.at < 5000) ? this._intent.removing : 0;
+            const t = Date.now();
+            localStorage.setItem(this.JOURNAL_PREFIX + id, JSON.stringify({
+                v: 1, t,
+                base: known ? this._lastSeen[id] : null,
+                calendar: this._sanitizeForFirebase(calendar),
+                intentRemoving: pendingIntent,
+            }));
+            return t;
+        } catch (e) {
+            // Quota or disabled storage: the write still goes out normally, it just has
+            // no safety net if the tab closes in the next half second.
+            return null;
+        }
+    }
+
+    static _journalRead(id) {
+        try {
+            const raw = localStorage.getItem(this.JOURNAL_PREFIX + id);
+            return raw ? JSON.parse(raw) : null;
+        } catch (e) { return null; }
+    }
+
+    // Clear the record only if it is not NEWER than the write that just committed --
+    // otherwise an edit made while an earlier write was in flight would lose its net.
+    static _journalClear(id, t) {
+        try {
+            const entry = this._journalRead(id);
+            if (!entry) return;
+            if (t == null || entry.t <= t) localStorage.removeItem(this.JOURNAL_PREFIX + id);
+        } catch (e) { /* never rethrow */ }
+    }
+
+    static _replayJournal(id) {
+        if (!id || this._replayed[id]) return;
+        this._replayed[id] = true;
+        const entry = this._journalRead(id);
+        if (!entry || !entry.calendar) return;
+        if (Date.now() - entry.t > this.JOURNAL_MAX_AGE_MS) { this._journalClear(id, entry.t); return; }
+        console.log('[CalendarDataService] replaying a write that never reached the server, from', new Date(entry.t).toISOString());
+        if (typeof this.onJournalReplay === 'function') {
+            try { this.onJournalReplay({ ageMs: Date.now() - entry.t }); } catch (e) { /* never rethrow */ }
+        }
+        this.sync(entry.calendar, { base: entry.base, intentRemoving: entry.intentRemoving, journalT: entry.t });
     }
 
     static create(item) {

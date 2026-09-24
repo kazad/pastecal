@@ -307,18 +307,46 @@ Object.assign(Utils, {
         if (typeof chrono === 'undefined' || !entry) return null;
         const code = String(lang || (typeof navigator !== 'undefined' && navigator.language) || 'en')
             .toLowerCase().split('-')[0];
-        const local = code !== 'en' && chrono[code] && typeof chrono[code].parse === 'function'
-            ? chrono[code] : null;
+        // The reader's language first, then English, then the other European languages
+        // chrono knows: plenty of people write French in an English-language browser
+        // ("Réunion demain 14h" in an en-US browser landed at 03:12 -- the English parser
+        // again reading "14h" as fourteen hours from now).
+        const order = [code, 'en', 'fr', 'de', 'es', 'pt', 'nl']
+            .filter((c, i, a) => a.indexOf(c) === i)
+            .map(c => (c === 'en' ? chrono : chrono[c]))
+            .filter(p => p && typeof p.parse === 'function');
         const opts = { forwardDate: true };
         const now = new Date();
-        const candidates = [];
-        if (local) candidates.push(local.parse(entry, now, opts)[0]);
-        candidates.push(chrono.parse(entry, now, opts)[0]);
-        let best = null;
-        for (const r of candidates) {
-            if (r && (!best || r.text.length > best.text.length)) best = r;
+        const parseBest = (text) => {
+            let best = null;
+            for (const p of order) {
+                const r = p.parse(text, now, opts)[0];
+                if (r && (!best || r.text.length > best.text.length)) best = r;   // ties: earlier language wins
+            }
+            return best;
+        };
+
+        // A number glued to the word before it is usually part of the TITLE: "Shift 2",
+        // "Room 101", "Rapid 01". chrono reads it as a time -- "Shift 2 Friday at 3pm" was
+        // saved as "Shift at 3pm" at 02:00. If the best date phrase starts with such a
+        // number, hide that number and parse again; keep the retry when it still finds a
+        // date. Month and weekday names are not title words, so "October 1" is untouched.
+        const NOT_TITLE = /^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|janv|févr|fevr|mars|avr|mai|juin|juil|août|aout|sept|déc|mon|tue|wed|thu|fri|sat|sun|lun|mar|mer|jeu|ven|sam|dim|on|at|the|le|la|les|à|a|au|du|de|en|in|by|from|to|until|am|um|el)/i;
+        let text = entry;
+        let result = parseBest(text);
+        for (let guard = 0; result && guard < 3; guard++) {
+            const lead = /^(\d+)\b/.exec(result.text);
+            if (!lead) break;
+            const before = text.slice(0, result.index);
+            const word = /([A-Za-zÀ-ÿ]+)\s+$/.exec(before);
+            if (!word || NOT_TITLE.test(word[1])) break;
+            const masked = text.slice(0, result.index) + lead[1].replace(/\d/g, '\u2009') + text.slice(result.index + lead[1].length);
+            const retry = parseBest(masked);
+            if (!retry) break;
+            text = masked;
+            result = retry;
         }
-        return best;
+        return result;
     },
 
     parseHumanWrittenCalendar(entry, lang) {

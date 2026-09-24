@@ -37,8 +37,9 @@ test.describe('NativeCal Prototype', () => {
   test('should load and navigate views', async ({ page }) => {
     await page.goto('http://localhost:8000/nativecal/');
 
-    // Check Title
-    await expect(page.getByText('NativeCal', { exact: true })).toBeVisible();
+    // The prototype no longer shows a "NativeCal" heading -- it now looks like pastecal.
+    // What matters is that the calendar itself rendered.
+    await expect(page.locator('[data-testid="current-date-range"]')).toBeVisible({ timeout: 15000 });
 
     // Switch to Month View
     await page.getByRole('button', { name: 'Month' }).click();
@@ -72,18 +73,18 @@ test.describe('Add Event Icon Visibility', () => {
   });
 
   test('should hide add event button on mobile but show in menu', async ({ page }) => {
-    // Set mobile viewport
-    await page.setViewportSize({ width: 375, height: 667 });
-
-    // Create a test calendar
+    // Create the calendar at desktop size -- the claim box is hidden on phones -- then
+    // open it on a phone-sized screen, which is how a shared calendar reaches phones.
+    await page.setViewportSize({ width: 1280, height: 720 });
     const testSlug = `test-cal-${Date.now()}`;
     await page.goto('http://localhost:8000/');
     const slugInput = page.locator('input[placeholder="your-name"]');
     await slugInput.fill(testSlug);
     await slugInput.press('Enter');
-
-    // Wait for calendar to load
     await expect(page).toHaveURL(new RegExp(`/${testSlug}`));
+
+    await page.setViewportSize({ width: 375, height: 667 });
+    await page.goto(`http://localhost:8000/${testSlug}`);
     await expect(page.locator('.e-schedule')).toBeVisible({ timeout: 10000 });
 
     // Verify the add event button is NOT visible on mobile (direct button)

@@ -502,3 +502,59 @@ test(`edit one occurrence of a weekly event, then the whole series ("${answer}" 
   await expect(page.getByText(/Recovered \d+ events? that were about to be lost/)).toHaveCount(0);
 });
 }
+
+// ===========================================================================
+// SURVIVING A QUIT -- found by the Sep 24 stress run on live pastecal.com: an event
+// created and then the browser quit (or a phone killing the app) within ~0.5s was
+// LOST, every time. The save is a transaction that needs a server round trip, and
+// the page was gone first. Pending writes are now journaled in localStorage and
+// replayed when the calendar next opens.
+// ===========================================================================
+test('an event survives quitting the browser right after creating it', async ({ page, playwright }, info) => {
+  test.skip(info.project.name !== 'desktop-en', 'needs a real on-disk browser profile; one browser is enough');
+  const fs = require('fs'), os = require('os'), path = require('path');
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'pc-journey-'));
+  const baseURL = info.project.use.baseURL;
+  const launch = async () => {
+    const c = await playwright.chromium.launchPersistentContext(profile, { viewport: { width: 1280, height: 900 }, baseURL });
+    await c.addInitScript(() => { window.__TEST__ = true; });
+    return c;
+  };
+  try {
+    let ctx = await launch();
+    let p = ctx.pages()[0] || await ctx.newPage();
+    await p.goto('/');
+    const slug = `test-quit-${Date.now()}`;
+    await p.locator('input[placeholder="your-name"]').fill(slug);
+    await p.locator('button:has-text("Claim")').locator('visible=true').first().click();
+    await p.waitForFunction(`${VM} && ${VM}.isExisting === true`, null, { timeout: 20_000 });
+    await p.waitForTimeout(1500);
+
+    await p.locator('text=+Event').locator('visible=true').first().click();
+    await p.keyboard.type('Survives the quit tomorrow at 9:00', { delay: TYPE_DELAY_MS });
+    await p.keyboard.press('Enter');
+    await ctx.close();                                    // quit, immediately
+
+    ctx = await launch();                                 // come back later, same browser
+    p = ctx.pages()[0] || await ctx.newPage();
+    await p.goto('/' + slug);
+    await p.waitForFunction(`${VM} && ${VM}.isExisting === true`, null, { timeout: 20_000 });
+    await expect.poll(async () => (await onServer(p)).map(e => e.title), { timeout: 15_000 })
+      .toContain('Survives the quit');
+    await ctx.close();
+  } finally {
+    fs.rmSync(profile, { recursive: true, force: true });
+  }
+});
+
+test('+Event: a number that belongs to the title stays in the title', async ({ browser, page }) => {
+  // "Shift 2 Friday at 3pm" was saved as "Shift at 3pm" at 02:00 -- the parser took
+  // the 2 as the time. Found by the Sep 24 stress run.
+  test.skip(isPhone(page), 'same dialog on every device; covered on desktop');
+  await newCalendar(browser, page, 'numtitle');
+  await openQuickAdd(page);
+  await page.keyboard.type('Shift 2 tomorrow at 3pm', { delay: TYPE_DELAY_MS });
+  await tap(page, page.locator('button[type=submit]:has-text("Create")'));
+  await expect.poll(() => byTitle(page, 'Shift 2'), { timeout: 10_000 }).toBeTruthy();
+  expect(await localHM(page, (await byTitle(page, 'Shift 2')).start)).toBe('15:00');
+});

@@ -32,7 +32,17 @@ test('sync() drops events with a missing or invalid start/end', async ({ page })
     const written = [];
     const realDb = CalendarDataService.db;
     const realConnected = CalendarDataService.connected;
-    CalendarDataService.db = { child: () => ({ set: (v) => written.push(v) }) };
+    // sync() writes through a transaction (a merge against the server's current
+    // copy), not set(). Run the transaction body against an empty calendar and capture
+    // what it would commit.
+    CalendarDataService.db = { child: () => ({
+      set: (v) => written.push(v),
+      transaction: (fn, done) => {
+        const v = fn({ id: 'test-cal', events: [] });
+        if (v !== undefined) written.push(v);
+        if (done) done(null, v !== undefined, { val: () => v });
+      },
+    }) };
     CalendarDataService.connected = true;
 
     try {
@@ -67,7 +77,17 @@ test('sync() still writes a fully valid calendar untouched', async ({ page }) =>
     const written = [];
     const realDb = CalendarDataService.db;
     const realConnected = CalendarDataService.connected;
-    CalendarDataService.db = { child: () => ({ set: (v) => written.push(v) }) };
+    // sync() writes through a transaction (a merge against the server's current
+    // copy), not set(). Run the transaction body against an empty calendar and capture
+    // what it would commit.
+    CalendarDataService.db = { child: () => ({
+      set: (v) => written.push(v),
+      transaction: (fn, done) => {
+        const v = fn({ id: 'test-cal', events: [] });
+        if (v !== undefined) written.push(v);
+        if (done) done(null, v !== undefined, { val: () => v });
+      },
+    }) };
     CalendarDataService.connected = true;
 
     try {

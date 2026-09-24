@@ -143,7 +143,10 @@ run_gate() {
 
     echo
     echo "=== Release gate 2/2: user journeys (desktop-en, desktop-fr, iphone-fr) ==="
-    npx playwright test -c playwright.journeys.config.js --reporter=line || {
+    # The project's own Playwright, not `npx`: in some shells npx is a lazy-loading
+    # function that recurses ("maximum nested function level reached") and never runs.
+    [ -x ./node_modules/.bin/playwright ] || { echo "ERROR: run npm install first (no ./node_modules/.bin/playwright)."; exit 1; }
+    ./node_modules/.bin/playwright test -c playwright.journeys.config.js --reporter=line || {
         echo
         echo "RELEASE GATE FAILED: a user journey broke. Nothing was deployed to hosting."
         echo "  Screenshots and traces: test-results/   Report: npx playwright show-report"
