@@ -288,21 +288,59 @@ Object.assign(Utils, {
         }
     },
 
-    parseHumanWrittenCalendar(entry) {
-        const parsedResults = chrono.parse(entry, new Date(), { forwardDate: true });
+    /**
+     * Parse a date out of free text in the writer's own language, not just English.
+     *
+     * chrono.parse is English-only, and on other languages it does worse than find
+     * nothing: it finds the WRONG thing. "Réunion demain 14h" read "14h" as "14 hours
+     * from now", so at 17:30 the event was saved for 07:30 the next day -- presented
+     * as success, with the right title, at a time nobody typed. "Réunion avec Paul"
+     * found no date at all, which left the Create button disabled with no reason given.
+     *
+     * So parse with the reader's language AND English, and keep whichever understood
+     * more of the sentence (the longer matched text). "demain 14h" beats "14h";
+     * "tomorrow 2pm" beats "2pm". A tie goes to the reader's language. English stays in
+     * the running because plenty of non-English browsers type English, and the example
+     * chips in the dialog are English.
+     */
+    bestDateParse(entry, lang) {
+        if (typeof chrono === 'undefined' || !entry) return null;
+        const code = String(lang || (typeof navigator !== 'undefined' && navigator.language) || 'en')
+            .toLowerCase().split('-')[0];
+        const local = code !== 'en' && chrono[code] && typeof chrono[code].parse === 'function'
+            ? chrono[code] : null;
+        const opts = { forwardDate: true };
+        const now = new Date();
+        const candidates = [];
+        if (local) candidates.push(local.parse(entry, now, opts)[0]);
+        candidates.push(chrono.parse(entry, now, opts)[0]);
+        let best = null;
+        for (const r of candidates) {
+            if (r && (!best || r.text.length > best.text.length)) best = r;
+        }
+        return best;
+    },
 
-        if (parsedResults.length === 0) {
+    parseHumanWrittenCalendar(entry, lang) {
+        const result = Utils.bestDateParse(entry, lang);
+
+        if (!result) {
             return { subject: entry, startDateTime: null, endDateTime: null };
         }
 
-        const result = parsedResults[0];
         let startDate = result.start.date();
         let endDate = result.end ? result.end.date() : null;
 
         const parsedText = result.text;
         // Removing a mid-sentence date phrase leaves the spaces from both sides
         // behind, so collapse runs of whitespace rather than only trimming ends.
-        let remainingText = entry.replace(parsedText, '').replace(/\s+/g, ' ').trim();
+        let remainingText = entry.replace(parsedText, '').replace(/\s+/g, ' ').trim()
+            // The date phrase takes its words but leaves the little word that introduced
+            // it: "Réunion le 25 septembre" became a title of "Réunion le", "lunch on
+            // Friday" became "lunch on". Drop a dangling connector at the end -- only words that
+            // cannot plausibly end a real title, so "Plan A" and "Vitamin D" are left alone.
+            .replace(/\s+(?:le|la|les|l'|à|au|aux|du|des|pour|on|at|the|for|by|am|um)$/i, '')
+            .trim();
 
         const { subject, duration } = extractDuration(remainingText);
 

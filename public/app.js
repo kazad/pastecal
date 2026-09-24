@@ -2654,7 +2654,8 @@ const CalendarVueApp = {
             const newEvent = new Event({
                 title: event.subject,
                 start: start,
-                end: end
+                end: end,
+                type: event.type || 1
             });
             this.calendar.events.push(newEvent);
             this.calendar.setEvents(this.calendar.events);

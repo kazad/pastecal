@@ -67,7 +67,33 @@ const QuickAddDialog = {
                                        class="w-32 shrink-0 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                             </div>
 
+                            <!-- Color. This dialog used to have none, so an event made here
+                                 could only ever be the first color -- one of the two creation
+                                 paths reported in #32 as "impossible to change colors". -->
+                            <div v-if="colors.length" class="flex items-center gap-2">
+                                <span class="w-14 shrink-0 text-sm opacity-70">Color</span>
+                                <div class="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Event color">
+                                    <button v-for="(c, i) in colors" :key="i" type="button"
+                                            role="radio" :aria-checked="type === i + 1"
+                                            :aria-label="labels[i] || ('Type ' + (i + 1))"
+                                            :title="labels[i] || ('Type ' + (i + 1))"
+                                            :data-testid="'qa-color-' + (i + 1)"
+                                            @click="type = i + 1"
+                                            class="w-6 h-6 rounded-full transition-transform"
+                                            :class="type === i + 1 ? 'ring-2 ring-offset-2 ring-blue-500 scale-110' : 'hover:scale-110'"
+                                            :style="{ backgroundColor: c }"></button>
+                                </div>
+                            </div>
+
                             <p v-if="endBeforeStart" class="text-sm text-red-500">End is before start.</p>
+                            <!-- Say WHY Create is disabled. A greyed-out button with no reason
+                                 is what #32 reported as "no way to save once you've written a
+                                 description": the text had no date the parser could read, the
+                                 date fields stayed empty, and nothing on screen said so. -->
+                            <p v-else-if="fields.subject.trim() && !startDateTime"
+                               data-testid="qa-needs-date" class="text-sm text-amber-600">
+                                Add a date — type one (e.g. "tomorrow 2pm") or pick it under Start.
+                            </p>
                         </div>
 
                         <div class="mb-4 text-sm">
@@ -102,13 +128,18 @@ const QuickAddDialog = {
         mode: {
             type: String,
             default: 'desktop'
-        }
+        },
+        // The calendar's palette and labels, so the swatches match the grid and the
+        // categories a calendar has added (up to 16) are all offered.
+        colors: { type: Array, default: () => [] },
+        labels: { type: Array, default: () => [] }
     },
     data() {
         return {
             dialogVisible: false,
             description: '',
             fields: { subject: '', startDate: '', startTime: '', endDate: '', endTime: '' },
+            type: 1,
             // A field is pinned once the user edits it directly; re-parsing skips pinned fields.
             pinned: { subject: false, start: false, end: false },
             // Each shows off a distinct capability: duration, explicit range,
@@ -172,6 +203,7 @@ const QuickAddDialog = {
             this.description = '';
             this.fields = { subject: '', startDate: '', startTime: '', endDate: '', endTime: '' };
             this.pinned = { subject: false, start: false, end: false };
+            this.type = 1;
         },
         parseDescription() {
             const parsed = Utils.parseHumanWrittenCalendar(this.description) || {};
@@ -231,6 +263,7 @@ const QuickAddDialog = {
             // hideDialog() below and strand the dialog open with the event lost.
             this.$emit('event-created', {
                 subject: this.fields.subject.trim(),
+                type: this.type,
                 startDateTime: this.startDateTime,
                 endDateTime: this.effectiveEndDateTime
             });
