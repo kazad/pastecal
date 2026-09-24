@@ -801,6 +801,20 @@ const CalendarVueApp = {
                         const after = this.mergeScheduleRecords(ev).length;
                         CalendarDataService.declareIntent(Math.max(1, before - after));
                         this.offerUndoForDelete(ev, before - after);
+                    } else if ((ev.deletedRecords || []).length) {
+                        // Not a Delete, but the user's action still removes records -- and
+                        // the gate must hear about it, or it refuses the save as data loss.
+                        // The case found in production (sync_refused on /ahvolunteers,
+                        // /televedaschedule, /touchpointradio, Sep 14-24): edit a WHOLE
+                        // repeating series after changing one occurrence, answer "Yes" to
+                        // "match it to the whole series again?", and Syncfusion drops the
+                        // edited occurrence's record inside an eventChanged. Undeclared, the
+                        // gate reverted the edit and told the user events "were about to be
+                        // lost". The count is what the merge actually drops, as above, so
+                        // this cannot license removing anything the action did not remove.
+                        const before = this.calendar.events.length;
+                        const after = this.mergeScheduleRecords(ev).length;
+                        if (before > after) CalendarDataService.declareIntent(before - after);
                     }
                     // No toast on an edit. Moving or renaming an event is the ordinary
                     // act of using a calendar, and a confirmation on every one of them is

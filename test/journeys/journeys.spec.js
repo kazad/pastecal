@@ -448,3 +448,57 @@ test('the ICS feed serves a capitalized slug with correct all-day dates and text
   expect(body).not.toMatch(/\\u00e9/);                             // no escaped unicode: #5
   expect(body).toContain(`DTSTART;VALUE=DATE:${expectDay}`);       // the day the user picked: #31
 });
+
+// ===========================================================================
+// RECURRENCE, CONTINUED -- found in production analytics (sync_refused, Sep 14-24):
+// /ahvolunteers, /televedaschedule, /touchpointradio, /h0rch1-m3nz1 -- all calendars
+// of repeating events with individually edited occurrences. Editing the WHOLE series
+// after one occurrence was changed makes Syncfusion drop that occurrence's record; the
+// app never declared that removal, so the write gate refused the save, reverted the
+// user's edit and showed "Recovered N events that were about to be lost".
+// ===========================================================================
+for (const answer of ['Yes', 'No']) {
+test(`edit one occurrence of a weekly event, then the whole series ("${answer}" to resetting occurrences): it saves`, async ({ browser, page }) => {
+  test.skip(isPhone(page), 'repeat editor differs on phones; covered on desktop');
+  await newCalendar(browser, page, 'series');
+  const refused = [];
+  page.on('console', m => { if (/refused to save/.test(m.text())) refused.push(m.text()); });
+
+  // A weekly event.
+  await openNewEventEditor(page, 15);
+  await typeTitle(page, 'Rota');
+  await tap(page, dialog(page).locator('.e-repeat-element').locator('..'));
+  await tap(page, page.locator('.e-popup-open li', { hasText: /^Weekly$/ }).first());
+  await saveEditor(page);
+  await expect.poll(async () => (await byTitle(page, 'Rota'))?.recurrencerule || '', { timeout: 10_000 }).toMatch(/WEEKLY/);
+
+  // Change ONE occurrence (the second one on screen).
+  const occurrence = page.locator('.e-appointment', { hasText: 'Rota' }).nth(1);
+  await tap(page, occurrence);
+  await tap(page, page.locator('button.e-edit').locator('visible=true').first());
+  await tap(page, page.locator('.e-popup-open button', { hasText: /^Edit Event$|^This Event$/i }).first());
+  await expect(dialog(page)).toBeVisible();
+  await typeTitle(page, 'Rota (swapped)');
+  await saveEditor(page);
+  await expect.poll(() => titles(page), { timeout: 10_000 }).toContain('Rota (swapped)');
+
+  // Now edit the ENTIRE series from another occurrence.
+  await tap(page, page.locator('.e-appointment', { hasText: /^Rota$/ }).first());
+  await tap(page, page.locator('button.e-edit').locator('visible=true').first());
+  await tap(page, page.locator('.e-popup-open button', { hasText: /Entire Series/i }).first());
+  await expect(dialog(page)).toBeVisible();
+  await typeTitle(page, 'Weekly rota');
+  await tap(page, dialog(page).locator('.e-event-save').locator('visible=true').first());
+  // "Do you want to cancel the changes made to specific instances of this series and
+  // match it to the whole series again?" -- answered as a user would. "Yes" discards
+  // the edited occurrence: the removal the app never declared.
+  const reset = page.locator('.e-dialog.e-popup-open button', { hasText: new RegExp(`^${answer}$`, 'i') }).locator('visible=true');
+  await expect(reset.first()).toBeVisible();
+  await tap(page, reset.first());
+  await expect(page.locator('.e-schedule-dialog.e-popup-open')).toHaveCount(0);
+
+  await expect.poll(() => titles(page), { timeout: 10_000 }).toContain('Weekly rota');
+  expect(refused, 'the write gate refused an ordinary series edit').toEqual([]);
+  await expect(page.getByText(/Recovered \d+ events? that were about to be lost/)).toHaveCount(0);
+});
+}
