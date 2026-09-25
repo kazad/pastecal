@@ -229,7 +229,7 @@ cal_rows.sort(key=lambda r: r[3], reverse=True)
 
 # Custom dimension coverage
 dims_list = d.get("dims")
-NEEDED = ["where", "source", "method", "feature", "named", "visit_bucket",
+NEEDED = ["where", "message", "source", "method", "feature", "named", "visit_bucket",
           "slug_length", "event_count_bucket", "has_custom_slug", "reason", "surface"]
 missing = [p for p in NEEDED if not dims_list or p not in dims_list] if dims_list is not None else NEEDED
 

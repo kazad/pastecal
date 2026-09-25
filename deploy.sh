@@ -145,7 +145,7 @@ run_gate() {
         echo; echo "RELEASE GATE FAILED: unit tests. Nothing was deployed to hosting."; exit 1; }
 
     echo
-    echo "=== Release gate 2/2: user journeys (desktop-en, desktop-fr, iphone-fr) ==="
+    echo "=== Release gate 2/2: user journeys (desktop-en, desktop-fr, iphone-fr, firefox-fr) ==="
     # The project's own Playwright, not `npx`: in some shells npx is a lazy-loading
     # function that recurses ("maximum nested function level reached") and never runs.
     [ -x ./node_modules/.bin/playwright ] || { echo "ERROR: run npm install first (no ./node_modules/.bin/playwright)."; exit 1; }

@@ -963,6 +963,14 @@ const CalendarVueApp = {
                         },
                         close: () => {
                             app.dropdownOpen = false;
+                            // Take the hint out of the popup on every close. Syncfusion drops
+                            // its item list on close and, on the next open, renders the items
+                            // into the popup's FIRST CHILD -- which, with the list gone, was
+                            // this hint. On phones the hint is hidden, so the colors rendered
+                            // inside a hidden div: a 0x0 menu, and no way to change an event's
+                            // color after the first time per visit (#32: "impossible de
+                            // changer les couleurs"). open re-appends it after the list.
+                            if (window.typeTooltip && window.typeTooltip.parentElement) window.typeTooltip.remove();
                             updateTooltipVisibility();
                         }
                     });
@@ -1921,7 +1929,8 @@ const CalendarVueApp = {
             for (const r of (ev.addedRecords || [])) byKey.set(key(this.withStableId(r)), this.withStableId(r));
             for (const r of (ev.changedRecords || [])) byKey.set(key(r), r);
 
-            return [...byKey.values()];
+            // Syncfusion works on string ids (Calendar.sfId); store the ids exactly as they were.
+            return this.calendar.restoreIds([...byKey.values()]);
         },
 
         // Give a scheduler-created record a real id before it becomes our data.
@@ -3639,7 +3648,7 @@ const CalendarVueApp = {
          * both landed.
          */
         offerUndoForDelete(ev, removedCount) {
-            const removed = (ev.deletedRecords || []).map(r => new Event(r));
+            const removed = this.calendar.restoreIds(ev.deletedRecords || []).map(r => new Event(r));
             if (!removed.length) return;
 
             const name = removed[0].title && removed[0].title.trim()
@@ -3650,7 +3659,7 @@ const CalendarVueApp = {
 
             // Snapshot the list as it was BEFORE this delete, so undo restores exactly
             // that -- not whatever the calendar looks like by the time they press it.
-            const restoreTo = this.calendar.getSyncFusionEvents().map(e => new Event(e));
+            const restoreTo = this.calendar.restoreIds(this.calendar.getSyncFusionEvents()).map(e => new Event(e));
 
             this.showToast(message, 'info', {
                 actionLabel: 'Undo',

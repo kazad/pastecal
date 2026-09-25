@@ -238,6 +238,41 @@ test('+Event: several events added back to back are all kept (#2)', async ({ bro
 // ===========================================================================
 // EDITING -- #11 #41: "can't edit events", "editing the time makes it disappear"
 // ===========================================================================
+// #32 (Sep 25): "select a slot, can't press Save, so nothing can be written in the
+// description". Real calendars mix id kinds: events made on the grid years ago carry
+// Syncfusion's NUMBER ids, events from +Event or paste carry text uuids. Syncfusion picks
+// number-or-string from the FIRST event and then looks the edited event up with ===, so
+// in a calendar that starts with a number id every uuid event was uneditable (and the
+// reverse) -- "can't access property RecurrenceRule, o is undefined", the editor stuck
+// open. Seeded exactly as /ywxa56kc is: number ids first, then uuids.
+test('in a calendar mixing old number ids and new text ids, both kinds can be edited and saved (#32)', async ({ browser, page }) => {
+  await newCalendar(browser, page, 'mixedids');
+  await page.evaluate(`(() => { const a = ${VM}; const d = new Date(); const at = (day, h) => new Date(d.getFullYear(), d.getMonth(), day, h).toISOString();
+    CalendarDataService.declareIntent(100);
+    a.calendar.setEvents([
+      new Event({ id: 5, title: 'Old grid event', start: at(9, 9), end: at(9, 10), type: 1 }),
+      new Event({ id: 8, title: 'Old grid event 2', start: at(10, 9), end: at(10, 10), type: 1 }),
+      new Event({ id: '21552eaf-ac80-4d2b-9d8e-2b1c1f0e9a11', title: 'Added with Event', start: at(11, 9), end: at(11, 10), type: 2 }),
+    ]); })()`);
+  await expect.poll(async () => (await onServer(page)).length, { timeout: 10_000 }).toBe(3);
+  await page.reload();
+  await page.waitForFunction(`${VM_SAFE}?.isExisting === true`, null, { timeout: 20_000 });
+  await expect(page.locator('.e-appointment').first()).toBeVisible({ timeout: 15_000 });
+
+  for (const [title, n] of [['Added with Event', 4], ['Old grid event', 3]]) {
+    await openEditorFor(page, title);
+    await pickColor(page, n);
+    await typeDescription(page, `note for ${title}`);
+    await saveEditor(page);
+    await expect.poll(async () => (await byTitle(page, title))?.description, { timeout: 10_000 }).toBe(`note for ${title}`);
+    expect(Number((await byTitle(page, title)).type)).toBe(n);
+  }
+  // Stored ids keep their kind: nothing in the data changes shape.
+  const rows = await onServer(page);
+  expect(typeof rows.find((e) => e.title === 'Old grid event').id).toBe('number');
+  expect(typeof rows.find((e) => e.title === 'Added with Event').id).toBe('string');
+});
+
 test('edit an event: rename, recolor and change its time, and it stays (#41)', async ({ browser, page }) => {
   await newCalendar(browser, page, 'edit');
   await openNewEventEditor(page, 18);

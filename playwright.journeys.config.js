@@ -7,7 +7,7 @@ const { defineConfig, devices } = require('@playwright/test');
  *
  *   npx playwright test -c playwright.journeys.config.js
  *
- * English desktop is the baseline. French desktop and a French iPhone are there
+ * English desktop is the baseline. French desktop, a French iPhone and French Firefox are there
  * because #32 was invisible in English, and a phone because the editor, Save and
  * +Event all look and behave differently there.
  */
@@ -30,6 +30,12 @@ module.exports = defineConfig({
     { name: 'desktop-en', use: { ...devices['Desktop Chrome'], locale: 'en-US', timezoneId: 'America/Los_Angeles' } },
     { name: 'desktop-fr', use: { ...devices['Desktop Chrome'], locale: 'fr-FR', timezoneId: 'Europe/Paris' } },
     { name: 'iphone-fr', use: { ...devices['iPhone 13'], locale: 'fr-FR', timezoneId: 'Europe/Paris' } },
+    // Firefox: some of the busiest French calendars are edited in Firefox on Windows, and
+    // until #32 (Sep 25) no journey ever ran in it. The core create/edit journeys only,
+    // to keep the gate quick.
+    { name: 'firefox-fr', testMatch: /journeys\.spec\.js/,
+      grep: /create an event with title|edit an event: rename|mixing old number ids|delete an event|\+Event: typed text/,
+      use: { ...devices['Desktop Firefox'], locale: 'fr-FR', timezoneId: 'Europe/Paris' } },
   ],
   webServer: {
     command: 'firebase serve -p 8000',
