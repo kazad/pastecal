@@ -1,109 +1,54 @@
+/**
+ * Quick create, laid out like Syncfusion's cell popup: a large "Add title" field, the
+ * date line with its icon, and MORE DETAILS / SAVE. Enter saves; Escape closes.
+ */
 const QuickCreatePopover = {
-    template: /* html */ `
-        <div v-if="visible" 
-             class="fixed z-50 bg-1 rounded-lg shadow-xl border border-color-default w-80 overflow-hidden"
-             :style="{ top: top + 'px', left: left + 'px' }"
-             @click.stop>
-             
-             <!-- Close Button (positioned absolutely) -->
-             <button @click="$emit('close')" data-testid="quick-create-close" 
-                     class="absolute top-2 right-2 p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors z-10" 
-                     title="Close">
-                 <icon name="close" class="w-5 h-5" stroke-width="2"></icon>
-             </button>
-
-             <!-- Header -->
-             <div class="bg-blue-600 px-4 py-3 flex justify-between items-center text-white">
-                <h3 class="font-bold text-lg">New Event</h3>
-             </div>
-
-             <!-- Body -->
-             <div class="p-4 bg-1">
-                 <div class="mb-4">
-                    <input type="text" 
-                           ref="titleInput"
-                           v-model="localTitle"
-                           @keyup.enter="save"
-                           placeholder="Event title" 
-                           data-testid="quick-create-title"
-                           class="w-full px-3 py-2 border border-color-default rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-color-2 placeholder-gray-400 bg-1">
-                 </div>
-                 
-                 <div class="flex items-center gap-2 mb-4 text-sm text-color-1">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-color-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span>{{ formatTimeRange(start, end) }}</span>
-                 </div>
-
-                 <div class="flex justify-end gap-2">
-                    <button @click="$emit('more-details', localTitle)" data-testid="quick-create-more-details" class="px-3 py-1.5 text-sm font-medium text-color-2 hover:bg-2 rounded-md transition-colors">
-                        More Details
-                    </button>
-                    <button @click="save" data-testid="quick-create-save" class="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors shadow-sm">
-                        Save
-                    </button>
-                 </div>
-             </div>
-        </div>
-    `,
     props: {
         visible: Boolean,
-        start: Number,
-        end: Number,
+        start: [String, Number],
+        end: [String, Number],
         isAllDay: Boolean,
         top: Number,
         left: Number,
-        timeFormat: { type: String, default: '12' }
+        timeFormat: { type: String, default: '12' },
     },
-    emits: ['close', 'save', 'more-details'],
-    data() {
-        return {
-            localTitle: ''
-        }
-    },
+    emits: ['save', 'more-details', 'close'],
+    data() { return { localTitle: '' }; },
     watch: {
-        visible(val) {
-            if (val) {
-                this.localTitle = '';
-                this.$nextTick(() => {
-                    if (this.$refs.titleInput) this.$refs.titleInput.focus();
-                });
-            }
-        }
+        visible: {
+            handler(v) { if (v) { this.localTitle = ''; this.$nextTick(() => this.$refs.titleInput && this.$refs.titleInput.focus()); } },
+            immediate: true,
+        },
     },
-    setup(props, { emit }) {
-        const df = window.dateFns;
-
-        const formatTimeRange = (start, end) => {
-            const s = new Date(start);
-            const e = new Date(end);
-            
-            if (isNaN(s.getTime()) || isNaN(e.getTime())) return '';
-            
-            if (props.isAllDay) {
-                return df.format(s, 'MMMM d, yyyy') + ' (All Day)';
+    computed: {
+        when() {
+            const s = new Date(this.start), e = new Date(this.end);
+            if (isNaN(s) || isNaN(e)) return '';
+            const M = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+            const pad = (n) => String(n).padStart(2, '0');
+            const d = (x) => `${M[x.getMonth()]} ${x.getDate()}, ${x.getFullYear()}`;
+            const t = (x) => this.timeFormat === '24' ? `${pad(x.getHours())}:${pad(x.getMinutes())}`
+                : `${pad(x.getHours() % 12 || 12)}:${pad(x.getMinutes())} ${x.getHours() < 12 ? 'AM' : 'PM'}`;
+            if (this.isAllDay) {
+                const last = new Date(e.getTime() - 86400000);
+                return last.toDateString() !== s.toDateString() && last > s ? `${d(s)} - ${d(last)} (All day)` : `${d(s)} (All day)`;
             }
-            
-            const fmt = props.timeFormat === '12' ? 'h:mm a' : 'HH:mm';
-            
-            // If same day
-            if (df.isSameDay(s, e)) {
-                return `${df.format(s, 'MMM d, ' + fmt)} - ${df.format(e, fmt)}`;
-            }
-            return `${df.format(s, 'MMM d, ' + fmt)} - ${df.format(e, 'MMM d, ' + fmt)}`;
-        };
-
-        return { formatTimeRange };
+            return s.toDateString() === e.toDateString() ? `${d(s)} (${t(s)} - ${t(e)})` : `${d(s)} (${t(s)}) - ${d(e)} (${t(e)})`;
+        },
     },
     methods: {
-        save() {
-            if (!this.localTitle.trim()) {
-                this.localTitle = 'New Event'; // Default title if empty? Or block? 
-                // Original requirement: [shows details for the default event time:1 hour duration [more details][save]]
-                // Let's allow saving with default or empty title (which usually defaults to (No Title))
-            }
-            this.$emit('save', this.localTitle);
-        }
-    }
+        save() { this.$emit('save', this.localTitle.trim()); },
+    },
+    template: /* html */ `
+<div v-if="visible" class="nq" data-testid="quick-create" :style="{ top: top + 'px', left: left + 'px' }">
+  <button class="nq-x" aria-label="Close" data-testid="quick-create-close" @click="$emit('close')">✕</button>
+  <input ref="titleInput" v-model="localTitle" class="nq-title" placeholder="Add title" data-testid="quick-create-title"
+    @keydown.enter.prevent="save" @keydown.esc.prevent="$emit('close')">
+  <div class="nq-line"><svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7v-2H5V10h14v2h2V6a2 2 0 0 0-2-2zm-2 10a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm1.6 5.9-2.1-1.3V16h1v2.1l1.6.9-.5.9z"/></svg>{{ when }}</div>
+  <div class="nq-foot">
+    <button class="ne-btn" data-testid="quick-create-more" @click="$emit('more-details', localTitle.trim())">MORE DETAILS</button>
+    <button class="ne-btn primary" data-testid="quick-create-save" @click="save">SAVE</button>
+  </div>
+</div>`,
 };
+if (typeof window !== 'undefined') window.QuickCreatePopover = QuickCreatePopover;

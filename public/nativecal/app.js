@@ -77,6 +77,9 @@ const CalendarVueApp = {
         return {
             isReadOnly: false,
             isLoading: true, // set to false when calendar status is determined
+            shareCopied: false,
+            lastEditLabel: '',          // "Edited 2d ago" in the header, as in the main app
+            lastEditExact: '',
             isExisting: false, // set by callback
             editTitle: false,
             calendar: cal,
@@ -147,6 +150,8 @@ const CalendarVueApp = {
             showPopover: false,
             popoverEvent: null,
             popoverEventId: null,
+            popoverOccurrence: null,
+            confirmDialog: null,
             popoverPosition: { top: 0, left: 0 },
             
             // Quick Create
@@ -234,6 +239,7 @@ const CalendarVueApp = {
         // key backs out of a nested state in the order the user entered it.
         this._onKeydown = (e) => {
             if (e.key !== 'Escape') return;
+            if (this.confirmDialog) { this.confirmDialog = null; return; }
             if (this.showEditor) { this.closeEditor(); return; }
             if (this.showPopover) { this.closePopover(); return; }
             if (this.showQuickCreate) { this.closeQuickCreate?.(); }
@@ -244,8 +250,11 @@ const CalendarVueApp = {
         // click on the grid is also a "create an event here" gesture -- seeing it
         // first lets the popover close without swallowing the click.
         this._onDocPointerDown = (e) => {
+            // Quick create closes on a click anywhere else (a click on another day opens a
+            // new one there, as in Syncfusion).
+            if (this.showQuickCreate && !e.target.closest?.('[data-testid="quick-create"]')) this.closeQuickCreate();
             if (!this.showPopover) return;
-            if (e.target.closest?.('[data-testid="event-popover"]')) return;
+            if (e.target.closest?.('[data-testid="event-popover"], [data-testid="confirm-dialog"]')) return;
             // Clicking a DIFFERENT event should retarget the popup, not close it --
             // the select-event handler reopens it, and closing here first would make
             // that read as a flicker.
@@ -346,6 +355,10 @@ const CalendarVueApp = {
                     console.log('[CalendarDataService] Calendar loaded from Firebase');
                     this.isExisting = true;
                     this.calendar.import(c);
+                    // "Edited N ago" in the header. Deferred: the stamp is written by a
+                    // Cloud Function reacting to this same write.
+                    clearTimeout(this._editStampTimer);
+                    this._editStampTimer = setTimeout(() => this.loadLastEdit(), 1200);
                     console.log('[CalendarDataService] Calendar imported, defaultView:', this.calendar?.options?.defaultView);
                     this.ensureCalendarOptionsDefaults();
                     // Update custom view in schedule with calendar's settings
@@ -709,42 +722,47 @@ const CalendarVueApp = {
         // REGION: NativeCal Interactions
         // ============================================================
         
-        handleEventCreate({ start, end, isAllDay, event }) {
-            this.quickCreateEvent = { start, end, isAllDay };
-            
-            // Position logic
-            let top = 0, left = 0;
-            if (event) {
-                // Prefer mouse coordinates for creation
-                if (event.clientX && event.clientY) {
-                    top = event.clientY - 60; // Slightly above cursor to align with event
-                    left = event.clientX + 20; // To the right
-                } else if (event.target) {
-                    const rect = event.target.getBoundingClientRect();
-                    top = rect.top;
-                    left = rect.right + 10;
-                }
-                
-                // Flip if too far right
-                if (left + 340 > window.innerWidth) {
-                    left = (event.clientX || left) - 340;
-                }
-                // Flip up if near bottom
-                if (top + 250 > window.innerHeight) {
-                     top = window.innerHeight - 260;
-                }
-                // Clamp top
-                if (top < 10) top = 10;
-            } else {
-                // Center screen fallback
-                top = window.innerHeight / 2 - 100;
-                left = window.innerWidth / 2 - 160;
-            }
+        // ============================================================
+        // REGION: Calendar interactions -- behaves like the Syncfusion app
+        // ============================================================
+        //
+        // Click a day: quick create ("Add title", MORE DETAILS / SAVE). Double-click, or
+        // MORE DETAILS: the full editor. Click an event: the event popup. Edit or delete a
+        // repeating event: "Edit Event / Entire Series" or "Delete Event / Entire Series".
+        // Deleting anything asks first, as Syncfusion does -- the prototype deleted on one
+        // click with no confirmation.
+        //
+        // An edited occurrence is written exactly as Syncfusion writes it, so the two apps
+        // can edit the same calendar: a NEW row with its own id, recurrenceID = the series
+        // id, a copy of the series' rule, and recurrenceException = the replaced occurrence;
+        // the series gets that same stamp appended to its recurrenceException.
 
-            this.quickCreatePosition = { top, left };
-            this.showQuickCreate = true;
+        _popupPosition(jsEvent, width, height) {
+            let top, left;
+            const r = jsEvent && jsEvent.currentTarget && jsEvent.currentTarget.getBoundingClientRect
+                ? jsEvent.currentTarget.getBoundingClientRect() : null;
+            if (r && r.width < window.innerWidth * 0.6) { top = r.bottom + 6; left = r.left; }
+            else if (jsEvent && jsEvent.clientX) { top = jsEvent.clientY + 10; left = jsEvent.clientX - width / 2; }
+            else { top = window.innerHeight / 2 - height / 2; left = window.innerWidth / 2 - width / 2; }
+            if (left + width > window.innerWidth - 10) left = window.innerWidth - width - 10;
+            if (left < 10) left = 10;
+            if (top + height > window.innerHeight - 10) top = Math.max(10, (r ? r.top : top) - height - 6);
+            return { top, left };
+        },
+
+        handleEventCreate({ start, end, isAllDay, event, full }) {
+            if (!this.canEdit) return;
             this.closePopover();
+            if (full) {
+                this.closeQuickCreate();
+                this.editorEvent = { start, end, isAllDay, title: '', type: 1 };
+                this.showEditor = true;
+                return;
+            }
             this.closeEditor();
+            this.quickCreateEvent = { start, end, isAllDay };
+            this.quickCreatePosition = this._popupPosition(event, 364, 190);
+            this.showQuickCreate = true;
         },
 
         closeQuickCreate() {
@@ -754,75 +772,82 @@ const CalendarVueApp = {
 
         handleQuickCreateSave(title) {
             if (!this.quickCreateEvent) return;
-            
-            const newEventData = {
-                start: this.quickCreateEvent.start,
-                end: this.quickCreateEvent.end,
-                title: title || '(No Title)',
-                isAllDay: this.quickCreateEvent.isAllDay,
-                type: 1
-            };
-            
-            this.handleSaveEvent(newEventData);
+            this.handleSaveEvent({
+                start: this.quickCreateEvent.start, end: this.quickCreateEvent.end,
+                title: title || '(No title)', isAllDay: this.quickCreateEvent.isAllDay, type: 1,
+            });
             this.closeQuickCreate();
         },
 
         handleQuickCreateMoreDetails(title) {
-             if (!this.quickCreateEvent) return;
-             
-             this.editorEvent = {
-                start: this.quickCreateEvent.start,
-                end: this.quickCreateEvent.end,
-                title: title || '',
-                isAllDay: this.quickCreateEvent.isAllDay,
-                type: 1
-            };
+            if (!this.quickCreateEvent) return;
+            this.editorEvent = { ...this.quickCreateEvent, title: title || '', type: 1 };
             this.showEditor = true;
             this.closeQuickCreate();
         },
 
-        handleEventClick({ event, jsEvent }) {
-            // Close other popups
+        handleEventClick({ event, occurrence, jsEvent }) {
             this.closeQuickCreate();
             this.closeEditor();
-
             this.popoverEvent = event;
-            // Remember WHICH event, not just its values: the popover has to keep
-            // showing live data after an edit. Saving replaces the events array, so
-            // the snapshot above goes stale the moment anyone changes a color or a
-            // title -- which is exactly when the popup is still on screen.
             this.popoverEventId = event.id;
-            
-            // EventPopover.js widens itself past the default 320px for long descriptions
-            // (see LONG_DESCRIPTION_THRESHOLD there) -- this positioning math has to use
-            // the same width the popover will actually render at, or a wide popover for a
-            // long description can get centered/bounds-checked as if it were still 320px
-            // and end up pushed off the right edge of the viewport. The popover also caps
-            // itself at 100vw - 20px on narrow viewports (see max-w- there), so mirror that
-            // clamp here too.
-            const LONG_DESCRIPTION_THRESHOLD = 140;
-            const isLong = (event?.description?.length || 0) > LONG_DESCRIPTION_THRESHOLD;
-            const popoverWidth = isLong ? Math.min(480, window.innerWidth - 20) : 320;
-
-            // Position logic
-            let top = 0, left = 0;
-            if (jsEvent && jsEvent.currentTarget) {
-                const rect = jsEvent.currentTarget.getBoundingClientRect();
-                top = rect.bottom + 10;
-                left = rect.left + (rect.width / 2) - (popoverWidth / 2); // Center
-
-                // Bounds check
-                if (left < 10) left = 10;
-                if (left + popoverWidth > window.innerWidth) left = window.innerWidth - popoverWidth - 10;
-                if (top + 200 > window.innerHeight) top = rect.top - 210; // Flip up if no space
-            } else {
-                // Center screen
-                top = window.innerHeight / 2 - 100;
-                left = window.innerWidth / 2 - (popoverWidth / 2);
-            }
-
-            this.popoverPosition = { top, left };
+            this.popoverOccurrence = occurrence || null;
+            this.popoverPosition = this._popupPosition(jsEvent, 364, 220);
             this.showPopover = true;
+        },
+
+        _isSeries(event) { return !!(event && event.recurrencerule && !event.recurrenceID); },
+        _stamp(d) { return new Date(d).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, ''); },
+
+        // Popup / editor -> Edit
+        requestEdit(event) {
+            const occ = this.popoverOccurrence;
+            this.closePopover();
+            if (this._isSeries(event) && occ) {
+                this.confirmDialog = {
+                    title: 'Edit Event', message: 'How would you like to change the appointment in the series?',
+                    buttons: [
+                        { label: 'EDIT EVENT', primary: true, testid: 'confirm-edit-occurrence',
+                          action: () => this.openEditorForEvent({ ...event, start: new Date(occ.start).toISOString(), end: new Date(occ.end).toISOString(),
+                              _occurrenceOf: event.id, _occurrenceStart: new Date(occ.start).toISOString() }) },
+                        { label: 'ENTIRE SERIES', testid: 'confirm-edit-series', action: () => this.openEditorForEvent(event) },
+                    ],
+                };
+                return;
+            }
+            this.openEditorForEvent(event);
+        },
+
+        // Popup / editor -> Delete (always asks, like Syncfusion)
+        requestDelete(eventOrId) {
+            const id = typeof eventOrId === 'object' ? eventOrId.id : eventOrId;
+            const editing = this.editorEvent;
+            const event = (typeof eventOrId === 'object' ? eventOrId : null) || this.calendar.events.find(e => e.id === id) || editing;
+            const occStart = (editing && editing._occurrenceStart) || (this.popoverOccurrence && this.popoverOccurrence.start);
+            const series = this.calendar.events.find(e => e.id === ((editing && editing._occurrenceOf) || id));
+            this.closePopover();
+            if (this._isSeries(series) && occStart) {
+                this.confirmDialog = {
+                    title: 'Delete Event', message: 'How would you like to delete the appointment in the series?',
+                    buttons: [
+                        { label: 'DELETE EVENT', primary: true, testid: 'confirm-delete-occurrence', action: () => this.deleteOccurrence(series, occStart) },
+                        { label: 'ENTIRE SERIES', testid: 'confirm-delete-series', action: () => this.deleteSeries(series) },
+                    ],
+                };
+                return;
+            }
+            this.confirmDialog = {
+                title: 'Delete Event', message: 'Are you sure you want to delete this event?',
+                buttons: [
+                    { label: 'DELETE', primary: true, testid: 'confirm-delete', action: () => this.handleDeleteEvent(id) },
+                    { label: 'CANCEL', testid: 'confirm-cancel', action: () => {} },
+                ],
+            };
+        },
+
+        runConfirm(button) {
+            this.confirmDialog = null;
+            try { button.action(); } catch (e) { console.error('[nativecal] action failed', e); }
         },
 
         openEditorForEvent(event) {
@@ -835,6 +860,7 @@ const CalendarVueApp = {
             this.showPopover = false;
             this.popoverEvent = null;
             this.popoverEventId = null;
+            this.popoverOccurrence = null;
         },
 
         closeEditor() {
@@ -843,30 +869,64 @@ const CalendarVueApp = {
         },
 
         handleSaveEvent(eventData) {
-            // Clone existing events
             const events = [...this.calendar.events];
-            
-            if (eventData.id) {
-                // Update existing
-                const index = events.findIndex(e => e.id === eventData.id);
-                if (index !== -1) {
-                    // Update fields
-                    events[index] = new Event({ ...events[index], ...eventData });
+            const { _occurrenceOf, _occurrenceStart, ...data } = eventData;
+
+            if (_occurrenceOf) {
+                // "Edit Event" on one occurrence: an exception row plus a stamp on the series.
+                const i = events.findIndex(e => e.id === _occurrenceOf);
+                if (i !== -1) {
+                    const series = events[i];
+                    const stamp = this._stamp(_occurrenceStart);
+                    const list = String(series.recurrenceException || '').split(',').map(s => s.trim()).filter(Boolean);
+                    if (!list.includes(stamp)) list.push(stamp);
+                    events[i] = new Event({ ...series, recurrenceException: list.join(',') });
+                    events.push(new Event({ ...data, id: Utils.uuidv4(), recurrenceID: series.id,
+                        recurrencerule: series.recurrencerule, recurrenceException: stamp }));
+                }
+            } else if (data.id) {
+                const i = events.findIndex(e => e.id === data.id && !e.recurrenceID === !data.recurrenceID);
+                if (i !== -1) events[i] = new Event({ ...events[i], ...data });
+                else {
+                    // The row changed under the open editor (someone else saved it). Keep the
+                    // user's edit rather than dropping it silently.
+                    events.push(new Event(data));
                 }
             } else {
-                // Create new
-                const newEvent = new Event(eventData);
-                events.push(newEvent);
+                events.push(new Event(data));
             }
-            
-            // Trigger update
             this.calendar.setEvents(events);
+            if (typeof AuthorSignal !== 'undefined') AuthorSignal.touch(this.calendar.id);
+            this.closeEditor();
+        },
+
+        deleteOccurrence(series, occStart) {
+            const stamp = this._stamp(occStart);
+            const events = this.calendar.events.map(e => {
+                if (e.id !== series.id || e.recurrenceID) return e;
+                const list = String(e.recurrenceException || '').split(',').map(s => s.trim()).filter(Boolean);
+                if (!list.includes(stamp)) list.push(stamp);
+                return new Event({ ...e, recurrenceException: list.join(',') });
+            });
+            // An edited copy of this occurrence goes with it.
+            const kept = events.filter(e => !(e.recurrenceID === series.id && e.recurrenceException === stamp));
+            if (kept.length < events.length) CalendarDataService.declareIntent(events.length - kept.length);
+            this.calendar.setEvents(kept);
+            this.closeEditor();
+        },
+
+        deleteSeries(series) {
+            const kept = this.calendar.events.filter(e => e.id !== series.id && e.recurrenceID !== series.id);
+            const removed = this.calendar.events.length - kept.length;
+            if (removed > 0) CalendarDataService.declareIntent(removed);
+            this.calendar.setEvents(kept);
             this.closeEditor();
         },
 
         handleDeleteEvent(id) {
             const before = this.calendar.events.length;
-            const events = this.calendar.events.filter(e => e.id !== id);
+            // A series takes its edited occurrences with it; otherwise they linger as orphans.
+            const events = this.calendar.events.filter(e => e.id !== id && e.recurrenceID !== id);
             const removed = before - events.length;
 
             // CalendarDataService refuses any write that shrinks the array unless the
@@ -1716,6 +1776,31 @@ const CalendarVueApp = {
 
             // Update notes
             this.calendar.options.notes = newNotes;
+        },
+
+        /** Header "Edited 2d ago": the same stamp the main app reads (history_meta). */
+        async loadLastEdit() {
+            if (!this.calendar?.id) return;
+            try {
+                const at = (await firebase.database().ref('/history_meta/' + this.calendar.id + '/lastEditedAt').once('value')).val();
+                if (!at) { this.lastEditLabel = ''; return; }
+                const s = Math.max(0, Math.round((Date.now() - at) / 1000)), m = Math.round(s / 60), h = Math.round(m / 60), d = Math.round(h / 24);
+                const ago = s < 60 ? 'just now' : m < 60 ? `${m}m ago` : h < 24 ? `${h}h ago` : d < 7 ? `${d}d ago`
+                    : d < 35 ? `${Math.round(d / 7)}w ago` : d < 365 ? `${Math.round(d / 30)}mo ago` : `${Math.round(d / 365)}y ago`;
+                this.lastEditLabel = `Edited ${ago}`;
+                this.lastEditExact = new Date(at).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+            } catch (err) { /* the label is a nicety; never break the header over it */ }
+        },
+
+        /** The pill copies the VIEW-ONLY link (falling back to the edit link), as in the main app. */
+        copyShareLink() {
+            const url = this.getReadOnlyURL() || this.getEditableURL();
+            if (!url) return;
+            navigator.clipboard.writeText(url).then(() => {
+                this.shareCopied = true;
+                clearTimeout(this._shareCopiedTimer);
+                this._shareCopiedTimer = setTimeout(() => { this.shareCopied = false; }, 1600);
+            }).catch(() => this.showToast('Could not copy the link', 'error'));
         },
 
         copyToClipboard(textToCopy, buttonElement) {

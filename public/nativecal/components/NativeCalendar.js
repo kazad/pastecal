@@ -1,866 +1,548 @@
-const df = window.dateFns;
+/**
+ * NativeCalendar -- pastecal's own calendar, laid out like the Syncfusion Schedule it
+ * replaces, so people who use pastecal today find everything where they expect it:
+ * the same toolbar (‹ › title ▾ on the left, DAY WEEK MONTH 3 MONTHS YEAR AGENDA on
+ * the right), the same month grid (full weekday names, date top-left, "Sep 1" on the
+ * first, spanning bars, "+N more"), the same week/day time grid with an all-day row,
+ * and the same Year and Agenda views. Reference screenshots: sync-*.png from the
+ * NativeCal parity pass (Sep 2026).
+ *
+ * Data contract, unchanged from the prototype and shared with the Syncfusion app:
+ *   props.events   stored events: { id, title, description, start, end (ISO), type,
+ *                  isAllDay, recurrencerule, recurrenceID, recurrenceException }
+ *   emits          'event-click'  { event, occurrence, jsEvent }
+ *                  'event-create' { start, end, isAllDay, event: jsEvent, full }
+ *                  'update:events' (new array) -- after a drag or resize
+ *
+ * All-day events are read the way the ICS feed reads them: the stored instant is
+ * rounded to the NEAREST midnight, so both local-midnight values (what Syncfusion
+ * writes) and UTC-midnight values land on the day the user picked, in any zone from
+ * UTC-11 to UTC+12. The end is exclusive, as RFC 5545 and Syncfusion have it.
+ *
+ * Recurrence is expanded in "floating" local time (rrule sees local wall-clock fields
+ * as if they were UTC), so a 9:00 weekly event stays at 9:00 across a DST change.
+ * Deleted or edited occurrences are excluded via recurrenceException (EXDATE, UTC
+ * stamps, comma-separated); an edited occurrence is its own row with recurrenceID.
+ */
+const NativeCalendar = (() => {
+    const DAY_MS = 86400000;
+    const HOUR_PX = 48;                 // Syncfusion: two 24px slots per hour
+    const MONTH_ROW_PX = 100;           // fixed month row height, like Syncfusion
+    const BAR_PX = 20, BAR_GAP = 2, DATE_HEADER_PX = 26;
+    const VIEWS = ['Day', 'Week', 'Month', '3 Months', 'Year', 'Agenda'];
+    const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-// ----------------------------------------------------------------
-// Sub-Components
-// ----------------------------------------------------------------
+    // ---- dates -------------------------------------------------------------------------
+    const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n, d.getHours(), d.getMinutes());
+    const addMonths = (d, n) => new Date(d.getFullYear(), d.getMonth() + n, 1);
+    const sameDay = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+    const startOfWeek = (d, first) => { const s = startOfDay(d); return addDays(s, -((s.getDay() - first + 7) % 7)); };
+    const dayIndex = (d) => Math.round((startOfDay(d) - new Date(1970, 0, 1)) / DAY_MS); // DST-proof day number
+    const pad = (n) => String(n).padStart(2, '0');
+    const fmtTime = (d, fmt) => {
+        if (fmt === '24') return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        const h = d.getHours() % 12 || 12;
+        return `${pad(h)}:${pad(d.getMinutes())} ${d.getHours() < 12 ? 'AM' : 'PM'}`;
+    };
+    // The stored instant -> the calendar day it stands for (see header).
+    const allDayDate = (v) => { const r = new Date(new Date(v).getTime() + 12 * 3600000); return new Date(r.getUTCFullYear(), r.getUTCMonth(), r.getUTCDate()); };
+    const toFloating = (d) => new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds()));
+    const fromFloating = (u) => new Date(u.getUTCFullYear(), u.getUTCMonth(), u.getUTCDate(), u.getUTCHours(), u.getUTCMinutes(), u.getUTCSeconds());
+    const utcStamp = (d) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
 
-const CalendarToolbar = {
-    template: /* html */ `
-        <div class="flex justify-between items-center p-3 border-b border-color-default bg-1 flex-shrink-0">
-            <div class="flex items-center gap-4">
-                <!-- Date Nav -->
-                <div class="flex items-center bg-2 rounded-lg p-0.5">
-                    <button @click="$emit('prev')" data-testid="nav-prev" class="px-2 hover:bg-1 rounded-md h-7 flex items-center text-color-1 text-lg leading-none mb-0.5">&lsaquo;</button>
-                    <button @click="$emit('today')" data-testid="nav-today" class="px-3 text-xs font-bold hover:bg-1 rounded-md h-7 text-color-2 uppercase tracking-wide">Today</button>
-                    <button @click="$emit('next')" data-testid="nav-next" class="px-2 hover:bg-1 rounded-md h-7 flex items-center text-color-1 text-lg leading-none mb-0.5">&rsaquo;</button>
-                </div>
-                <!-- Date Range -->
-                <div class="text-xl font-medium text-color-2" data-testid="current-date-range">{{ currentTitle }}</div>
-            </div>
+    // ---- events -> occurrences ---------------------------------------------------------
+    function isLong(o) { return o.allDay || (o.end - o.start) >= DAY_MS; }
 
-            <!-- View Switcher -->
-            <div class="flex bg-2 rounded-lg p-0.5">
-                <button v-for="view in views" 
-                    :key="view"
-                    @click="$emit('change-view', view)"
-                    :data-testid="'view-' + view.toLowerCase()"
-                    :class="['px-3 py-1 rounded-md text-xs font-medium transition-all', currentView === view ? 'bg-1 text-blue-600 shadow-sm' : 'text-color-1 hover:text-color-2']">
-                    {{ view }}
-                </button>
-            </div>
-        </div>
-    `,
-    props: ['currentTitle', 'currentView', 'views'],
-    emits: ['prev', 'next', 'today', 'change-view']
-};
+    function occurrencesBetween(events, rangeStart, rangeEnd) {
+        const out = [];
+        const RR = window.rrule || {};
+        for (const ev of events || []) {
+            if (!ev || !ev.start || !ev.end) continue;
+            const allDay = !!ev.isAllDay;
+            let start = allDay ? allDayDate(ev.start) : new Date(ev.start);
+            let end = allDay ? allDayDate(ev.end) : new Date(ev.end);
+            if (isNaN(start) || isNaN(end)) continue;
+            if (allDay && end <= start) end = addDays(start, 1);
+            const duration = end - start;
+            const base = { event: ev, allDay, type: ev.type || 1, title: ev.title || '(No title)' };
 
-const MonthView = {
-    template: /* html */ `
-        <div class="h-full flex flex-col overflow-y-auto bg-1">
-            <div class="grid grid-cols-7 border-b border-color-default bg-2">
-                <div v-for="day in weekDays" :key="day" class="py-2 text-center text-sm font-semibold text-color-1 uppercase tracking-wide">
-                    {{ day }}
-                </div>
-            </div>
-            <div class="calendar-grid flex-1" data-testid="month-view-grid">
-                <div v-for="(cell, idx) in cells" :key="idx" 
-                     class="calendar-cell relative group hover:bg-gray-50 dark:hover:bg-gray-800 flex flex-col gap-1 cursor-pointer"
-                     :class="{'bg-disabled opacity-50': !cell.isCurrentMonth, 'bg-blue-50 dark:bg-blue-900': isToday(cell.date)}"
-                     :data-date="cell.date.toISOString()"
-                     :data-testid="'month-cell-' + idx"
-                     @click="$emit('create-event', cell.date, $event)">
-                    
-                    <span class="text-xs font-medium p-1 ml-auto rounded-full w-7 h-7 flex items-center justify-center"
-                          :class="isToday(cell.date) ? 'bg-blue-600 text-white' : 'text-color-2'">
-                        {{ cell.dayNumber }}
-                    </span>
-                    
-                    <!-- Ghost Event for Month View -->
-                    <div v-if="creatingEvent && creatingEvent.isAllDay && isSameDay(cell.date, new Date(creatingEvent.start))"
-                         class="px-1.5 py-0.5 text-xs rounded border-2 border-dashed border-gray-400 bg-2 text-color-1 font-medium select-none mb-1">
-                         New Event
-                    </div>
-
-                    <div v-for="event in getEventsForDate(cell.date)" :key="event.id"
-                         class="px-1.5 py-0.5 text-xs rounded truncate cursor-pointer shadow-sm border-l-2 hover:brightness-95 transition-all select-none"
-                         :class="{'is-dragging': dragState.eventId === event.id}"
-                         :style="getEventStyle(event)"
-                         :data-testid="'event-' + event.id"
-                         @mousedown.stop="$emit('start-drag', event, $event, 'month-move')"
-                         @click.stop="$emit('select-event', event, $event)">
-                         <span v-if="event.isRecurringInstance">↻ </span>
-                        {{ event.title }}
-                    </div>
-                </div>
-            </div>
-        </div>
-    `,
-    props: ['cells', 'weekDays', 'dragState', 'getEventsForDate', 'getEventStyle', 'isToday', 'creatingEvent'],
-    emits: ['create-event', 'start-drag', 'select-event'],
-    setup() {
-        const df = window.dateFns;
-        const isSameDay = (d1, d2) => df.isSameDay(d1, d2);
-        return { isSameDay };
-    }
-};
-
-const TimeGridView = {
-    template: /* html */ `
-        <div class="h-full flex flex-col bg-1">
-            <div class="border-b border-color-default bg-1 flex-shrink-0 grid"
-                 :style="{ gridTemplateColumns: '60px repeat(' + visibleDates.length + ', 1fr)' }">
-                <div class="border-r border-color-default p-2"></div>
-                <div v-for="(date, idx) in visibleDates" :key="idx" 
-                     class="p-2 text-center border-r border-color-default">
-                    <div class="text-xs font-semibold text-color-1 uppercase">{{ weekDays[date.getDay()] }}</div>
-                    <div class="text-xl font-light w-8 h-8 mx-auto rounded-full flex items-center justify-center text-color-2" 
-                         :class="{'bg-blue-600 text-white font-bold': isToday(date)}">
-                        {{ date.getDate() }}
-                    </div>
-                </div>
-            </div>
-
-            <div class="flex-1 overflow-y-auto relative bg-1" ref="timeScroll">
-                <div class="time-grid relative"
-                     :style="{ gridTemplateColumns: '60px repeat(' + visibleDates.length + ', 1fr)' }">
-                    
-                    <div class="flex flex-col text-xs text-color-1 text-right pr-2 pt-[-0.5rem] bg-1 sticky left-0 z-10 border-r border-color-default">
-                        <div v-for="h in 24" :key="h" class="h-[50px] -mt-2.5 bg-1 select-none">
-                            {{ formatTimeLabel(h-1) }}
-                        </div>
-                    </div>
-                    
-                    <div v-for="(date, idx) in visibleDates" :key="idx" 
-                         class="time-col relative"
-                         :data-date="date.toISOString()"
-                         @click="$emit('create-time-event', date, $event)">
-                        
-                        <div v-for="h in 24" :key="h" class="hour-row pointer-events-none"></div>
-                        
-                        <div v-if="isToday(date)" class="absolute w-full h-0.5 bg-red-500 z-30 pointer-events-none flex items-center"
-                             :style="{ top: currentTimeTop + 'px' }">
-                             <div class="w-2 h-2 bg-red-500 rounded-full -ml-1"></div>
-                        </div>
-
-                        <div v-if="dragState.isDragging && isSameDay(date, new Date(dragState.originalStart)) && dragState.action === 'time-move'"
-                             class="absolute inset-x-1 rounded border-2 border-gray-400 border-dashed bg-2 opacity-60 pointer-events-none z-0"
-                             :style="getGhostStyle()">
-                        </div>
-                        
-                        <!-- Ghost Event for Time View -->
-                        <div v-if="creatingEvent && !creatingEvent.isAllDay && isSameDay(date, new Date(creatingEvent.start))"
-                             class="absolute inset-x-1 rounded border-2 border-dashed border-gray-400 bg-2 opacity-70 pointer-events-none z-20 flex items-center justify-center"
-                             :style="getCreatingEventStyle(creatingEvent)">
-                             <div class="text-xs text-color-1 font-medium">New Event</div>
-                        </div>
-
-                        <div v-for="event in getEventsWithLayout(date)" :key="event.id" 
-                             class="event-card absolute p-1 text-xs inset-x-1 rounded overflow-hidden border-l-4"
-                             :class="{
-                                 'dragging-active': dragState.eventId === event.id && dragState.isDragging, 
-                                 'dragging-move-active': dragState.eventId === event.id && dragState.isDragging && dragState.action === 'time-move',
-                                 'ring-2 ring-offset-1 ring-black': selectedEventId === event.id
-                             }"
-                             :style="[getEventStyle(event, true), getWeekEventPosition(event), { cursor: eventCursor }]"
-                             :data-testid="'event-' + event.id"
-                             @mousedown.stop="$emit('start-drag', event, $event, 'time-move')"
-                             @click.stop="$emit('select-event', event, $event)">
-                            <div class="event-text-content">
-                                <div class="font-bold leading-tight pointer-events-none"><span v-if="event.isRecurringInstance">↻ </span>{{ event.title }}</div>
-                                <div class="opacity-75 text-[10px] pointer-events-none">{{ formatTime(event.start) }} - {{ formatTime(event.end) }}</div>
-                            </div>
-                            <div class="resize-handle absolute bottom-0 inset-x-0 h-2 z-20"
-                                 @mousedown.stop="$emit('start-drag', event, $event, 'resize')"></div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `,
-    props: [
-        'currentView', 'visibleDates', 'weekDays', 'isToday', 
-        'currentTimeTop', 'dragState', 'selectedEventId', 'eventCursor',
-        'getEventsWithLayout', 'getEventStyle', 'getWeekEventPosition', 'getGhostStyle', 'formatTime', 'isSameDay', 'timeFormat',
-        'creatingEvent'
-    ],
-    emits: ['create-time-event', 'start-drag', 'select-event'],
-    methods: {
-        formatTimeLabel(hours) {
-            const date = new Date();
-            date.setHours(hours, 0, 0, 0);
-            return this.formatTime(date.getTime());
-        },
-        getCreatingEventStyle(evt) {
-            const start = new Date(evt.start);
-            const end = new Date(evt.end);
-            const startMinutes = start.getHours() * 60 + start.getMinutes();
-            const endMinutes = end.getHours() * 60 + end.getMinutes();
-            // Ensure ghost has at least minimal height
-            const diffMinutes = Math.max(endMinutes - startMinutes, 30); 
-            
-            const top = (startMinutes / 60) * 50;
-            const height = (diffMinutes / 60) * 50;
-            return { top: top + 'px', height: height + 'px' };
-        }
-    }
-};
-
-// ----------------------------------------------------------------
-// Main NativeCalendar Component
-// ----------------------------------------------------------------
-
-var NativeCalendar = {
-    components: {
-        'calendar-toolbar': CalendarToolbar,
-        'month-view': MonthView,
-        'time-grid-view': TimeGridView,
-        'year-view': {
-            template: /* html */ `
-                <div class="h-full overflow-auto bg-1 p-4">
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                        <div v-for="month in months" :key="month.key"
-                             class="rounded-xl border border-color-default bg-2 shadow-sm hover:shadow-md transition-all cursor-pointer p-3"
-                             @click="$emit('jump-to-month', month.date)">
-                            <div class="flex items-center justify-between mb-2">
-                                <div>
-                                    <p class="text-[11px] uppercase tracking-wide text-color-1">{{ month.year }}</p>
-                                    <p class="text-lg font-bold text-color-2">{{ month.label }}</p>
-                                </div>
-                                <span class="px-2 py-0.5 rounded-full text-[11px] font-semibold"
-                                      :class="month.isCurrent ? 'bg-blue-600 text-white' : 'bg-1 text-color-1 border border-color-default'">
-                                    {{ month.count }} events
-                                </span>
-                            </div>
-                            <div class="grid grid-cols-7 gap-1 text-[10px] text-color-1 mb-2">
-                                <span v-for="day in month.weekLabels" :key="day" class="text-center uppercase tracking-wide">{{ day }}</span>
-                            </div>
-                            <div class="grid grid-cols-7 gap-1 text-[10px] leading-5">
-                                <span v-for="day in month.previewDays" :key="day.key"
-                                      class="rounded px-1 text-center"
-                                      :class="day.isToday ? 'bg-blue-600 text-white font-bold' : (day.isCurrentMonth ? 'bg-1 text-color-2' : 'text-color-1 bg-transparent')">
-                                    {{ day.label }}
-                                </span>
-                            </div>
-                            <div class="flex gap-1 mt-3">
-                                <span v-for="(color, idx) in month.topColors" :key="idx" class="w-2.5 h-2.5 rounded-full" :style="{ backgroundColor: color }"></span>
-                                <span v-if="!month.topColors.length" class="text-xs text-color-1">No events yet</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `,
-            props: ['months'],
-            emits: ['jump-to-month']
-        },
-        'agenda-view': {
-            template: /* html */ `
-                <div class="h-full overflow-auto bg-1 p-4 space-y-3">
-                    <div v-if="!agenda.length" class="rounded-xl border border-color-default bg-2 p-6 text-center text-color-1">
-                        No upcoming events in this window.
-                    </div>
-                    <div v-for="section in agenda" :key="section.key" class="rounded-xl border border-color-default bg-2 shadow-sm overflow-hidden">
-                        <div class="px-4 py-3 flex items-center justify-between border-b border-color-default">
-                            <div>
-                                <p class="text-[11px] uppercase tracking-wide text-color-1">{{ section.weekday }}</p>
-                                <p class="text-lg font-bold text-color-2">{{ section.label }}</p>
-                            </div>
-                            <span class="text-[11px] px-3 py-1 rounded-full bg-1 text-color-1 border border-color-default">{{ section.events.length }} items</span>
-                        </div>
-                        <div class="divide-y divide-color-default">
-                            <div v-for="evt in section.events" :key="evt.id" class="px-4 py-3 flex items-center gap-3">
-                                <span class="w-2 h-2 rounded-full" :style="{ backgroundColor: evt.color }"></span>
-                                <div class="flex-1">
-                                    <p class="text-sm font-semibold text-color-2">{{ evt.title }}</p>
-                                    <p class="text-xs text-color-1">{{ evt.timeLabel }}</p>
-                                </div>
-                                <span v-if="evt.isAllDay" class="text-[11px] px-2 py-1 rounded-full bg-1 border border-color-default text-color-1">All day</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `,
-            props: ['agenda']
-        }
-    },
-    template: /* html */ `
-        <div class="flex flex-col h-full w-full bg-1">
-            <calendar-toolbar
-                :current-title="currentTitle"
-                :current-view="currentView"
-                :views="views"
-                @prev="prev"
-                @next="next"
-                @today="today"
-                @change-view="changeView">
-            </calendar-toolbar>
-
-            <div class="flex-1 overflow-hidden relative">
-                <month-view v-if="currentView === 'Month'"
-                    :cells="monthCells"
-                    :week-days="weekDays"
-                    :drag-state="dragState"
-                    :get-events-for-date="getEventsForDate"
-                    :get-event-style="getEventStyle"
-                    :is-today="isToday"
-                    :creating-event="creatingEvent"
-                    @create-event="createMonthEvent"
-                    @start-drag="startDrag"
-                    @select-event="selectEvent">
-                </month-view>
-
-                <time-grid-view v-if="currentView === 'Week' || currentView === 'Day'"
-                    :current-view="currentView"
-                    :visible-dates="visibleDates"
-                    :week-days="weekDays"
-                    :is-today="isToday"
-                    :current-time-top="currentTimeTop"
-                    :drag-state="dragState"
-                    :selected-event-id="selectedEventId"
-                    :event-cursor="eventCursor"
-                    :get-events-with-layout="getEventsWithLayout"
-                    :get-event-style="getEventStyle"
-                    :get-week-event-position="getWeekEventPosition"
-                    :get-ghost-style="getGhostStyle"
-                    :format-time="formatTime"
-                    :is-same-day="isSameDay"
-                    :time-format="timeFormat"
-                    :creating-event="creatingEvent"
-                    @create-time-event="createTimeEvent"
-                    @start-drag="startDrag"
-                    @select-event="selectEvent">
-                </time-grid-view>
-                
-                <year-view v-if="currentView === 'Year'"
-                    :months="yearMonths"
-                    @jump-to-month="goToMonth">
-                </year-view>
-
-                <agenda-view v-if="currentView === 'Agenda'"
-                    :agenda="agendaSections">
-                </agenda-view>
-                
-                <!-- Drag Ghost -->
-                <div v-if="dragState.isDragging && dragState.action === 'month-move' && dragState.ghostEvent" 
-                     class="drag-ghost px-2 py-1 text-xs rounded text-white font-bold truncate w-32 pointer-events-none"
-                     :style="[getEventStyle(dragState.ghostEvent), { left: dragState.mouseX + 'px', top: dragState.mouseY + 'px' }]">
-                    {{ dragState.ghostEvent.title }}
-                </div>
-            </div>
-        </div>
-    `,
-    props: ['events', 'timeFormat', 'creatingEvent', 'colors'],
-    emits: ['update:events', 'event-click', 'event-create'],
-    /**
-     * @param {NativeCalendarProps} props
-     * @param {Object} context
-     * @param {(event: string, ...args: any[]) => void} context.emit
-     */
-    setup(props, { emit }) {
-        const { ref, computed, onMounted, onUnmounted, watch } = Vue;
-        
-        const currentView = ref('Month');
-        const views = ['Day', 'Week', 'Month', 'Year', 'Agenda']; 
-        const currentDate = ref(new Date());
-        const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-        const selectedEventId = ref(null);
-        
-        // The palette the grid draws with. Falls back to the stock set when the
-        // host does not pass one, but a calendar with custom colors MUST be able to
-        // override it -- this used to be a private const, so the grid, the popover
-        // and the editor could each disagree about what color an event is.
-        const DEFAULT_PALETTE = ["#3f51b5", "#e3165b", "#ff6652", "#4caf50", "#ff9800", "#03a9f4", "#9e9e9e", "#27282f"];
-        const colors = computed(() => (props.colors && props.colors.length) ? props.colors : DEFAULT_PALETTE);
-
-        // Drag State
-        const dragState = ref({
-            eventId: null,
-            isDragging: false,
-            wasDragging: false,
-            startY: 0,
-            originalStart: 0,
-            originalEnd: 0,
-            action: 'move',
-            ghostEvent: null,
-            mouseX: 0,
-            mouseY: 0
-        });
-
-        const eventCursor = computed(() => {
-            if (dragState.value.isDragging && dragState.value.eventId) {
-                return dragState.value.action === 'resize' ? 'ns-resize' : 'grabbing';
-            }
-            return 'pointer';
-        });
-
-        // Date Logic
-        const currentTitle = computed(() => {
-            if (currentView.value === 'Day') return df.format(currentDate.value, 'MMMM d, yyyy');
-            if (currentView.value === 'Week') {
-                const start = df.startOfWeek(currentDate.value);
-                const end = df.endOfWeek(currentDate.value);
-                return df.format(start, 'MMM d') + ' - ' + df.format(end, 'MMM d');
-            }
-            if (currentView.value === 'Agenda') {
-                const start = df.startOfWeek(currentDate.value);
-                const end = df.addDays(start, 13);
-                return 'Agenda: ' + df.format(start, 'MMM d') + ' - ' + df.format(end, 'MMM d');
-            }
-            if (currentView.value === 'Year') return df.format(currentDate.value, 'yyyy');
-            return df.format(currentDate.value, 'MMMM yyyy');
-        });
-
-        const isToday = (date) => df.isSameDay(date, new Date());
-        const isSameDay = (d1, d2) => df.isSameDay(d1, d2);
-
-        // Navigation
-        const changeView = (view) => {
-            currentView.value = view;
-            if (view === 'Week' || view === 'Agenda') {
-                currentDate.value = df.startOfWeek(currentDate.value);
-            } else if (view === 'Year') {
-                currentDate.value = df.startOfYear(currentDate.value);
-            }
-        };
-        const prev = () => {
-            if (currentView.value === 'Month') currentDate.value = df.subMonths(currentDate.value, 1);
-            else if (currentView.value === 'Week') currentDate.value = df.subWeeks(currentDate.value, 1);
-            else if (currentView.value === 'Year') currentDate.value = df.subYears(currentDate.value, 1);
-            else if (currentView.value === 'Agenda') currentDate.value = df.subWeeks(currentDate.value, 2);
-            else currentDate.value = df.subDays(currentDate.value, 1);
-        };
-        const next = () => {
-            if (currentView.value === 'Month') currentDate.value = df.addMonths(currentDate.value, 1);
-            else if (currentView.value === 'Week') currentDate.value = df.addWeeks(currentDate.value, 1);
-            else if (currentView.value === 'Year') currentDate.value = df.addYears(currentDate.value, 1);
-            else if (currentView.value === 'Agenda') currentDate.value = df.addWeeks(currentDate.value, 2);
-            else currentDate.value = df.addDays(currentDate.value, 1);
-        };
-        const today = () => currentDate.value = new Date();
-        const goToMonth = (date) => {
-            currentDate.value = df.startOfMonth(date);
-            currentView.value = 'Month';
-        };
-
-        // Grid Logic
-        const monthCells = computed(() => {
-            const start = df.startOfMonth(currentDate.value);
-            const end = df.endOfMonth(currentDate.value);
-            const days = df.eachDayOfInterval({ start, end });
-            const startDay = df.getDay(start);
-            const prevMonthDays = [];
-            for(let i = 0; i < startDay; i++) {
-                prevMonthDays.unshift({
-                    date: df.subDays(start, i + 1),
-                    dayNumber: df.getDate(df.subDays(start, i + 1)),
-                    isCurrentMonth: false
-                });
-            }
-            const currentMonthDays = days.map(d => ({ date: d, dayNumber: df.getDate(d), isCurrentMonth: true }));
-            const totalCells = 42; 
-            const remaining = totalCells - (prevMonthDays.length + currentMonthDays.length);
-            const nextMonthDays = [];
-            for(let i = 1; i <= remaining; i++) {
-                nextMonthDays.push({
-                    date: df.addDays(end, i),
-                    dayNumber: df.getDate(df.addDays(end, i)),
-                    isCurrentMonth: false
-                });
-            }
-            return [...prevMonthDays, ...currentMonthDays, ...nextMonthDays];
-        });
-
-        const visibleDates = computed(() => {
-            if (currentView.value === 'Day') return [currentDate.value];
-            if (currentView.value === 'Week') {
-                const start = df.startOfWeek(currentDate.value);
-                return Array.from({ length: 7 }, (_, i) => df.addDays(start, i));
-            }
-            if (currentView.value === 'Agenda') {
-                const start = df.startOfWeek(currentDate.value);
-                return Array.from({ length: 14 }, (_, i) => df.addDays(start, i));
-            }
-            return [];
-        });
-
-        // Recurrence Expansion Logic
-        const processedEvents = computed(() => {
-            const results = [];
-            
-            // 1. Determine range (generous padding to avoid edge cases)
-            let rangeStart, rangeEnd;
-            if (currentView.value === 'Month') {
-                 const start = df.startOfMonth(currentDate.value);
-                 rangeStart = df.subWeeks(start, 1);
-                 rangeEnd = df.addWeeks(df.endOfMonth(currentDate.value), 1);
-            } else if (currentView.value === 'Year') {
-                 const start = df.startOfYear(currentDate.value);
-                 rangeStart = df.subMonths(start, 1);
-                 rangeEnd = df.addMonths(df.endOfYear(currentDate.value), 1);
-            } else {
-                const visible = visibleDates.value;
-                if (visible.length) {
-                    rangeStart = df.subDays(visible[0], 1);
-                    rangeEnd = df.addDays(visible[visible.length - 1], 1);
-                } else {
-                    rangeStart = df.subMonths(currentDate.value, 1);
-                    rangeEnd = df.addMonths(currentDate.value, 1);
-                }
-            }
-            
-            // console.log('[NativeCalendar] processedEvents computing. Total events:', props.events?.length);
-
-            (props.events || []).forEach(event => {
-                if (!event.recurrencerule) {
-                    results.push(event);
-                    return;
-                }
-                
-                // console.log('[NativeCalendar] Found recurring event:', event.title, event.recurrencerule);
-
-                if (window.rrule) {
-                    try {
-                        // Ensure we're accessing the library correctly
-                        // rrule library exports might vary (rrule.RRule or just RRule global)
-                        const RRule = window.rrule.RRule || window.RRule;
-                        const rrulestr = window.rrule.rrulestr || window.rrulestr;
-                        
-                        if (!RRule || !rrulestr) {
-                            console.error('[NativeCalendar] RRule library not found correctly', { RRule: !!RRule, rrulestr: !!rrulestr });
-                            results.push(event);
-                            return;
-                        }
-
-                        // "FREQ=WEEKLY;UNTIL=..."
-                        // Handle cases where RRULE: might already be present or not
-                        let ruleString = event.recurrencerule;
-                        
-                        // Clean up potentially trailing semicolons or whitespace and empty segments
-                        ruleString = ruleString.split(';').filter(part => part.trim() !== '').join(';');
-                        
-                        ruleString = ruleString.startsWith("RRULE:") 
-                            ? ruleString 
-                            : "RRULE:" + ruleString;
-                            
-                        // parseString, NOT rrulestr().options. rrulestr on a rule with no
-                        // DTSTART defaults dtstart to NOW and then freezes byweekday,
-                        // bymonthday and byhour/byminute/bysecond derived from that moment.
-                        // Assigning options.dtstart afterwards moves the anchor but leaves
-                        // those derived fields pointing at the wrong weekday and time, so a
-                        // Monday 9am weekly event rendered on Wednesdays at whatever o'clock
-                        // the page happened to load -- and slid down the grid on every
-                        // reload. parseString returns only the fields the string actually
-                        // carries, so every by* value is recomputed from the real dtstart.
-                        const rule = new RRule({
-                            ...RRule.parseString(ruleString),
-                            dtstart: new Date(event.start),
-                        });
-                        
-                        const dates = rule.between(rangeStart, rangeEnd, true);
-                        
-                        // Date-parse both ends: start/end are ISO strings (the stored
-                        // format shared with the main app), and "iso" - "iso" is NaN,
-                        // which would give every generated occurrence an invalid end.
-                        const duration = new Date(event.end) - new Date(event.start);
-                        
-                        dates.forEach(date => {
-                             // Virtual event
-                             const start = date.getTime();
-                             const end = start + duration;
-                             results.push({
-                                 ...event,
-                                 start,
-                                 end,
-                                 id: event.id + '_' + start,
-                                 originalEventId: event.id,
-                                 isRecurringInstance: true
-                             });
-                        });
-                    } catch (e) {
-                        console.warn("[NativeCalendar] Recurrence error for event", event.title, e);
-                        results.push(event);
+            // An edited occurrence is its own row: recurrenceID points at the series and it
+            // CARRIES A COPY of the series' rule (that is how Syncfusion stores it). Expanding
+            // it would draw a second series; it is one event, at its own time.
+            if (ev.recurrencerule && !ev.recurrenceID && RR.RRule) {
+                const excluded = new Set(String(ev.recurrenceException || '').split(',').map(s => s.trim()).filter(Boolean)
+                    .map(s => s.replace(/(\d{8}T\d{4})\d{2}Z?$/, '$1')));  // compare to the minute
+                let rule;
+                try {
+                    const clean = String(ev.recurrencerule).replace(/^RRULE:/i, '').split(';').filter(p => p.includes('=')).join(';');
+                    rule = new RR.RRule({ ...RR.RRule.parseString(clean), dtstart: toFloating(start) });
+                } catch (e) { rule = null; }
+                if (rule) {
+                    const from = toFloating(new Date(rangeStart.getTime() - duration)), to = toFloating(rangeEnd);
+                    for (const f of rule.between(from, to, true)) {
+                        const s = fromFloating(f);
+                        const stamp = utcStamp(allDay ? s : s).replace(/(\d{8}T\d{4})\d{2}Z$/, '$1');
+                        if (excluded.has(stamp) || excluded.has(stamp.slice(0, 8))) continue;
+                        out.push({ ...base, start: s, end: new Date(s.getTime() + duration), recurring: true, key: `${ev.id}@${s.getTime()}` });
                     }
-                } else {
-                    results.push(event);
+                    continue;
                 }
-            });
-            
-            return results;
-        });
-
-        // Event Logic
-        const getEventsForDate = (date) => {
-            return processedEvents.value.filter(e => df.isSameDay(new Date(e.start), date));
-        };
-
-        const getEventsWithLayout = (date) => {
-            const dayEvents = getEventsForDate(date).map(e => ({...e}));
-            if (dayEvents.length === 0) return [];
-            const ms = (v) => new Date(v).getTime();
-            dayEvents.sort((a, b) => ms(a.start) - ms(b.start) || ms(b.end) - ms(a.end));
-            const columns = [];
-            dayEvents.forEach(ev => {
-                let placed = false;
-                for (let i = 0; i < columns.length; i++) {
-                    const col = columns[i];
-                    const hasOverlap = col.some(existing => Math.max(existing.start, ev.start) < Math.min(existing.end, ev.end));
-                    if (!hasOverlap) {
-                        col.push(ev);
-                        ev.colIndex = i;
-                        placed = true;
-                        break;
-                    }
-                }
-                if (!placed) {
-                    columns.push([ev]);
-                    ev.colIndex = columns.length - 1;
-                }
-            });
-            dayEvents.forEach(ev => {
-                const widthPercent = 100 / columns.length;
-                ev.style = { left: (ev.colIndex * widthPercent) + '%', width: (widthPercent * 0.8) + '%' };
-            });
-            return dayEvents;
-        };
-
-        const formatTime = (timestamp) => {
-            const d = new Date(timestamp);
-            if (isNaN(d.getTime())) return '';
-            if (props.timeFormat === '12') return df.format(d, 'h:mm a');
-            return df.format(d, 'HH:mm');
-        };
-
-        const yearMonths = computed(() => {
-            const startOfYear = df.startOfYear(currentDate.value);
-            const today = new Date();
-            return Array.from({ length: 12 }, (_, i) => {
-                const monthDate = df.addMonths(startOfYear, i);
-                const start = df.startOfMonth(monthDate);
-                const previewDays = Array.from({ length: 14 }, (_, idx) => {
-                    const dayDate = df.addDays(start, idx);
-                    return {
-                        key: df.format(dayDate, 'yyyy-MM-dd'),
-                        label: df.getDate(dayDate),
-                        isCurrentMonth: df.isSameMonth(dayDate, monthDate),
-                        isToday: df.isSameDay(dayDate, today)
-                    };
-                });
-                const monthEvents = processedEvents.value.filter(ev => df.isSameMonth(new Date(ev.start), monthDate));
-                const topColors = monthEvents.slice(0, 4).map(ev => colors.value[((ev.type || 1) - 1) % colors.value.length]);
-                return {
-                    key: df.format(monthDate, 'yyyy-MM'),
-                    date: start,
-                    label: df.format(monthDate, 'MMMM'),
-                    year: df.format(monthDate, 'yyyy'),
-                    previewDays,
-                    topColors,
-                    weekLabels: ['S', 'M', 'T', 'W', 'T', 'F', 'S'],
-                    count: monthEvents.length,
-                    isCurrent: df.isSameMonth(monthDate, today)
-                };
-            });
-        });
-
-        const agendaSections = computed(() => {
-            const dates = visibleDates.value;
-            const start = dates.length ? dates[0] : df.startOfWeek(currentDate.value);
-            const end = dates.length ? dates[dates.length - 1] : df.addDays(start, 13);
-            const items = processedEvents.value
-                .filter(ev => df.isWithinInterval(new Date(ev.start), { start: df.startOfDay(start), end: df.endOfDay(end) }))
-                .sort((a, b) => new Date(a.start) - new Date(b.start))
-                .map(ev => ({
-                    ...ev,
-                    color: colors.value[((ev.type || 1) - 1) % colors.value.length],
-                    timeLabel: ev.isAllDay ? 'All day' : `${formatTime(ev.start)} - ${formatTime(ev.end)}`,
-                    dateObj: new Date(ev.start)
-                }));
-
-            const grouped = [];
-            items.forEach(ev => {
-                const key = df.format(ev.dateObj, 'yyyy-MM-dd');
-                let bucket = grouped.find(g => g.key === key);
-                if (!bucket) {
-                    bucket = {
-                        key,
-                        label: df.format(ev.dateObj, 'MMMM d'),
-                        weekday: df.format(ev.dateObj, 'EEEE'),
-                        events: []
-                    };
-                    grouped.push(bucket);
-                }
-                bucket.events.push(ev);
-            });
-
-            return grouped;
-        });
-
-        const getEventStyle = (event, isWeekView = false) => {
-            const palette = colors.value;
-            const color = palette[((event.type || 1) - 1) % palette.length];
-            if (isWeekView) return { borderLeftColor: color, backgroundColor: color + '20', color: color, ...event.style };
-            return { backgroundColor: color, color: 'white' };
-        };
-
-        const getWeekEventPosition = (event) => {
-            // While THIS event is being dragged, draw it where the pointer has put it.
-            // The drag no longer mutates the event itself (that fired a Firebase write
-            // per mousemove), so the live position has to come from dragState.
-            const d = dragState.value;
-            const dragging = d.isDragging && d.eventId === event.id && d.pendingStart;
-            const start = dragging ? d.pendingStart : new Date(event.start);
-            const end = dragging ? d.pendingEnd : new Date(event.end);
-            const startMinutes = start.getHours() * 60 + start.getMinutes();
-            const endMinutes = end.getHours() * 60 + end.getMinutes();
-            const top = (startMinutes / 60) * 50;
-            const height = Math.max(((endMinutes - startMinutes) / 60) * 50, 20);
-            return { top: top + 'px', height: height + 'px' };
-        };
-
-        const getGhostStyle = () => {
-            const start = new Date(dragState.value.originalStart);
-            const end = new Date(dragState.value.originalEnd);
-            const startMinutes = start.getHours() * 60 + start.getMinutes();
-            const endMinutes = end.getHours() * 60 + end.getMinutes();
-            const top = (startMinutes / 60) * 50;
-            const height = Math.max(((endMinutes - startMinutes) / 60) * 50, 20);
-            return { top: top + 'px', height: height + 'px', width: '80%', left: '0%' };
-        };
-
-        // Interaction Emitters
-        const createMonthEvent = (date, evt) => {
-            // All-day boundaries are UTC midnight, not LOCAL midnight.
-            //
-            // The ICS feed formats an all-day date by taking the UTC calendar day
-            // (ICSService.formatDate -> toISOString().slice(0,10)). Local midnight in
-            // any UTC-positive zone is the PREVIOUS day in UTC, so a user in Berlin
-            // creating an all-day event on the 21st published it to every subscriber
-            // as the 20th.
-            //
-            // DTEND is exclusive per RFC 5545 3.8.2.2, so the end is the NEXT day's
-            // midnight rather than 23:59:59.999 -- which only looked right in negative
-            // offsets by accident.
-            const startUTC = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
-            const endUTC = startUTC + 86400000;
-            emit('event-create', {
-                start: new Date(startUTC).toISOString(),
-                end: new Date(endUTC).toISOString(),
-                isAllDay: true,
-                event: evt,
-            });
-        };
-
-        const createTimeEvent = (date, event) => {
-            if (dragState.value.isDragging || dragState.value.wasDragging) return;
-            if (event.target.closest('.event-card')) return;
-            
-            const rect = event.currentTarget.getBoundingClientRect();
-            const y = event.clientY - rect.top;
-            const hoursFloat = y / 50;
-            const hours = Math.floor(hoursFloat);
-            const start = df.set(date, { hours: hours, minutes: 0 });
-            const end = df.addMinutes(start, 60);
-            emit('event-create', { start: start.getTime(), end: end.getTime(), isAllDay: false, event: event });
-        };
-
-        const selectEvent = (event, e) => {
-            if (dragState.value.isDragging || dragState.value.wasDragging) return;
-            
-            // Logic to handle recurring instances selection
-            if (event.isRecurringInstance && event.originalEventId) {
-                 const original = props.events.find(ev => ev.id === event.originalEventId);
-                 if (original) {
-                     selectedEventId.value = original.id;
-                     emit('event-click', { event: original, jsEvent: e });
-                     return;
-                 }
             }
-            
-            selectedEventId.value = event.id;
-            emit('event-click', { event, jsEvent: e });
-        };
-
-        // Drag Logic (Simplified forwarding)
-        // In a real app, we might emit 'event-update' here
-        const startDrag = (event, e, action) => {
-            if (e.button !== 0) return;
-            
-            if (event.isRecurringInstance) {
-                // Disable drag for recurring for now
-                return;
+            if (end > rangeStart && start < rangeEnd) {
+                out.push({ ...base, start, end, recurring: !!ev.recurrenceID, key: `${ev.id}|${ev.recurrenceID || ''}` });
             }
-            
-            dragState.value = {
-                eventId: event.id,
-                isDragging: false,
-                wasDragging: false,
-                startY: e.clientY,
-                originalStart: event.start,
-                originalEnd: event.end,
-                action: action,
-                ghostEvent: event,
-                mouseX: e.clientX,
-                mouseY: e.clientY
+        }
+        return out.sort((a, b) => (a.start - b.start) || ((b.end - b.start) - (a.end - a.start)));
+    }
+
+    // Place bars for one week row: [{occ, col, span, lane}], lanes first-fit.
+    function layoutWeekBars(occs, weekStart, cols) {
+        const bars = []; const laneEnds = [];
+        const w0 = dayIndex(weekStart);
+        for (const o of occs) {
+            const lastDay = o.allDay ? dayIndex(o.end) - 1 : dayIndex(new Date(o.end.getTime() - 1));
+            const s = Math.max(0, dayIndex(o.start) - w0), e = Math.min(cols - 1, lastDay - w0);
+            if (e < 0 || s > cols - 1 || e < s) continue;
+            let lane = 0; while (laneEnds[lane] !== undefined && laneEnds[lane] >= s) lane++;
+            laneEnds[lane] = e;
+            bars.push({ occ: o, col: s, span: e - s + 1, lane, clippedLeft: dayIndex(o.start) - w0 < 0, clippedRight: lastDay - w0 > cols - 1 });
+        }
+        return bars;
+    }
+
+    // Side-by-side columns for overlapping timed events in one day.
+    function layoutDayColumns(items) {
+        const groups = []; let group = [], groupEnd = -Infinity;
+        for (const it of items.sort((a, b) => a.top - b.top || b.height - a.height)) {
+            if (it.top >= groupEnd && group.length) { groups.push(group); group = []; }
+            group.push(it); groupEnd = Math.max(groupEnd, it.top + it.height);
+        }
+        if (group.length) groups.push(group);
+        for (const g of groups) {
+            const colEnds = [];
+            for (const it of g) { let c = 0; while (colEnds[c] !== undefined && colEnds[c] > it.top) c++; colEnds[c] = it.top + it.height; it.col = c; }
+            for (const it of g) it.cols = colEnds.length;
+        }
+        return items;
+    }
+
+    return {
+        name: 'NativeCalendar',
+        props: {
+            events: { type: Array, default: () => [] },
+            timeFormat: { type: String, default: '12' },
+            creatingEvent: { type: Object, default: null },
+            colors: { type: Array, default: () => [] },
+            firstDayOfWeek: { type: [Number, String], default: 0 },
+            startHour: { type: String, default: '05:00' },
+            readOnly: { type: Boolean, default: false },
+            initialView: { type: String, default: 'Month' },
+        },
+        emits: ['update:events', 'event-click', 'event-create', 'view-change'],
+        data() {
+            return {
+                view: VIEWS.includes(this.initialView) ? this.initialView : 'Month',
+                date: startOfDay(new Date()),
+                now: new Date(),
+                pickerOpen: false, pickerYear: new Date().getFullYear(),
+                showEarlyHours: false,
+                viewMenu: false,
+                selectedCell: null,
+                drag: null,
+                isPhone: typeof window !== 'undefined' && window.innerWidth < 768,
             };
-        };
-
-        const onDrag = (e) => {
-            if (!dragState.value.eventId) return;
-            if (!dragState.value.isDragging) {
-                const deltaY = Math.abs(e.clientY - dragState.value.startY);
-                const deltaX = Math.abs(e.clientX - dragState.value.mouseX);
-                if (deltaY > 5 || deltaX > 5) {
-                    dragState.value.isDragging = true;
+        },
+        computed: {
+            palette() {
+                return (this.colors && this.colors.length) ? this.colors
+                    : ['#3f51b5', '#e3165b', '#ff6652', '#4caf50', '#ff9800', '#03a9f4', '#9e9e9e', '#27282f'];
+            },
+            first() { return Number(this.firstDayOfWeek) || 0; },
+            weekdayOrder() { return [0, 1, 2, 3, 4, 5, 6].map(i => (i + this.first) % 7); },
+            title() {
+                const d = this.date, M = MONTHS[d.getMonth()];
+                if (this.view === 'Day') return `${M} ${d.getDate()}, ${d.getFullYear()}`;
+                if (this.view === 'Week' || this.view === 'Agenda') {
+                    const s = this.view === 'Week' ? startOfWeek(d, this.first) : d; const e = addDays(s, 6);
+                    if (s.getFullYear() !== e.getFullYear()) return `${MONTHS[s.getMonth()]} ${s.getDate()}, ${s.getFullYear()} - ${MONTHS[e.getMonth()]} ${e.getDate()}, ${e.getFullYear()}`;
+                    if (s.getMonth() !== e.getMonth()) return `${MONTHS[s.getMonth()]} ${s.getDate()} - ${MONTHS[e.getMonth()]} ${e.getDate()}, ${e.getFullYear()}`;
+                    return `${MONTHS[s.getMonth()]} ${s.getDate()} - ${e.getDate()}, ${e.getFullYear()}`;
                 }
-                else return;
-            }
-            dragState.value.mouseX = e.clientX;
-            dragState.value.mouseY = e.clientY;
-            
-            // ...
-            // Logic unchanged
-            
-            // The pending position lives in dragState, NOT on the event.
-            //
-            // This used to assign straight into props.events, which is the parent's
-            // calendar.events: it mutated a prop in place, tripped the parent's deep
-            // watcher on every mousemove (a debounced Firebase write per pixel), left
-            // no way to abandon a drag, and wrote epoch-ms numbers into a field the
-            // rest of the app stores as ISO. Committing once, in stopDrag, fixes all
-            // four.
-            if (dragState.value.action === 'time-move') {
-                const deltaPixels = e.clientY - dragState.value.startY;
-                const deltaMinutes = Math.round((deltaPixels / 50) * 60 / 30) * 30;
-                const duration = dragState.value.originalEnd - dragState.value.originalStart;
-                const newStartTime = df.addMinutes(dragState.value.originalStart, deltaMinutes);
-                dragState.value.pendingStart = newStartTime;
-                dragState.value.pendingEnd = new Date(newStartTime.getTime() + duration);
-            }
-        };
-
-        const stopDrag = (e) => {
-            if (!dragState.value.eventId) return;
-            if (dragState.value.isDragging) {
-                const { eventId, pendingStart, pendingEnd } = dragState.value;
-                if (pendingStart && pendingEnd) {
-                    // Emit a NEW array with a NEW object for the moved event, in the
-                    // ISO shape the main app stores, so the merge sees one changed
-                    // event rather than a wholesale rewrite.
-                    const next = props.events.map(ev => ev.id === eventId
-                        ? { ...ev, start: pendingStart.toISOString(), end: pendingEnd.toISOString() }
-                        : ev);
-                    emit('update:events', next);
+                if (this.view === '3 Months') {
+                    const e = addMonths(d, 2);
+                    return e.getFullYear() === d.getFullYear() ? `${M} - ${MONTHS[e.getMonth()]} ${e.getFullYear()}` : `${M} ${d.getFullYear()} - ${MONTHS[e.getMonth()]} ${e.getFullYear()}`;
                 }
-            }
-            const wasDragging = dragState.value.isDragging;
-            dragState.value = { eventId: null, isDragging: false, wasDragging, action: 'move' };
-            // console.log('[NativeCalendar] stopDrag, wasDragging:', wasDragging);
-            setTimeout(() => dragState.value.wasDragging = false, 50);
-        };
+                if (this.view === 'Year') return String(d.getFullYear());
+                return `${M} ${d.getFullYear()}`;
+            },
+            // ---- month / 3 months --------------------------------------------------------
+            monthWeeks() {
+                if (this.view !== 'Month' && this.view !== '3 Months') return [];
+                const m0 = new Date(this.date.getFullYear(), this.date.getMonth(), 1);
+                const mEnd = addMonths(m0, this.view === 'Month' ? 1 : 3);
+                const weeks = [];
+                for (let ws = startOfWeek(m0, this.first); ws < mEnd; ws = addDays(ws, 7)) {
+                    const days = [0, 1, 2, 3, 4, 5, 6].map(i => addDays(ws, i));
+                    const occs = occurrencesBetween(this.events, ws, addDays(ws, 7));
+                    const bars = layoutWeekBars(occs, ws, 7);
+                    const maxLanes = Math.floor((MONTH_ROW_PX - DATE_HEADER_PX - 16) / (BAR_PX + BAR_GAP));
+                    const hidden = [0, 0, 0, 0, 0, 0, 0];
+                    for (const b of bars) if (b.lane >= maxLanes) for (let c = b.col; c < b.col + b.span; c++) hidden[c]++;
+                    weeks.push({ key: ws.getTime(), start: ws, days, bars: bars.filter(b => b.lane < maxLanes), hidden,
+                        inMonth: (d) => this.view === 'Month' ? d.getMonth() === this.date.getMonth() : (d >= m0 && d < mEnd) });
+                }
+                return weeks;
+            },
+            // ---- week / day --------------------------------------------------------------
+            gridDays() {
+                if (this.view === 'Day') return [this.date];
+                if (this.view === 'Week') { const s = startOfWeek(this.date, this.first); return [0, 1, 2, 3, 4, 5, 6].map(i => addDays(s, i)); }
+                return [];
+            },
+            firstHour() { const h = parseInt(this.startHour, 10); return this.showEarlyHours || isNaN(h) ? 0 : Math.max(0, Math.min(h, 12)); },
+            hours() { const r = []; for (let h = this.firstHour; h < 24; h++) r.push(h); return r; },
+            gridLayout() {
+                const days = this.gridDays; if (!days.length) return { allDay: [], timed: [], allDayLanes: 0 };
+                const s = days[0], e = addDays(days[days.length - 1], 1);
+                const occs = occurrencesBetween(this.events, s, e);
+                const allDayBars = layoutWeekBars(occs.filter(isLong), s, days.length);
+                const timed = days.map(day => {
+                    const dayEnd = addDays(day, 1); const items = [];
+                    for (const o of occs) {
+                        if (isLong(o) || o.end <= day || o.start >= dayEnd) continue;
+                        const a = Math.max(o.start, day), b = Math.min(o.end, dayEnd);
+                        const top = ((a - day) / 3600000 - this.firstHour) * HOUR_PX;
+                        const height = Math.max(((b - a) / 3600000) * HOUR_PX, 18);
+                        if (top + height <= 0) continue;
+                        items.push({ occ: o, top: Math.max(top, 0), height: top < 0 ? height + top : height });
+                    }
+                    return layoutDayColumns(items);
+                });
+                return { allDay: allDayBars, timed, allDayLanes: allDayBars.reduce((m, b) => Math.max(m, b.lane + 1), 0) };
+            },
+            nowTop() { return ((this.now - startOfDay(this.now)) / 3600000 - this.firstHour) * HOUR_PX; },
+            // ---- year --------------------------------------------------------------------
+            yearMonths() {
+                if (this.view !== 'Year') return [];
+                const y = this.date.getFullYear();
+                const occs = occurrencesBetween(this.events, new Date(y, 0, 1), new Date(y + 1, 0, 8));
+                const marks = new Map();
+                for (const o of occs) {
+                    const last = o.allDay ? addDays(o.end, -1) : new Date(o.end.getTime() - 1);
+                    for (let d = startOfDay(o.start); d <= last && marks.size < 5000; d = addDays(d, 1)) if (!marks.has(dayIndex(d))) marks.set(dayIndex(d), this.color(o.type));
+                }
+                return MONTHS.map((name, m) => {
+                    const first = new Date(y, m, 1); const ws = startOfWeek(first, this.first);
+                    const cells = []; for (let i = 0; i < 42; i++) { const d = addDays(ws, i); cells.push({ d, key: i, out: d.getMonth() !== m, mark: marks.get(dayIndex(d)) }); }
+                    return { name: `${name} ${y}`, cells };
+                });
+            },
+            // ---- agenda ------------------------------------------------------------------
+            agendaDays() {
+                if (this.view !== 'Agenda') return [];
+                const s = this.date, e = addDays(s, 7);
+                const occs = occurrencesBetween(this.events, s, e);
+                const days = [];
+                for (let d = s; d < e; d = addDays(d, 1)) {
+                    const next = addDays(d, 1);
+                    const items = occs.filter(o => {
+                        const last = o.allDay ? addDays(o.end, -1) : new Date(o.end.getTime() - 1);
+                        return startOfDay(o.start) <= d && d <= startOfDay(last);
+                    }).map(o => {
+                        const total = dayIndex(o.allDay ? addDays(o.end, -1) : new Date(o.end.getTime() - 1)) - dayIndex(o.start) + 1;
+                        const nth = dayIndex(d) - dayIndex(o.start) + 1;
+                        let when;
+                        if (o.allDay) when = total > 1 ? `All day (Day ${nth}/${total})` : 'All day';
+                        else if (total > 1) {
+                            const a = nth === 1 ? o.start : d, b = nth === total ? o.end : next;
+                            when = `${fmtTime(a, this.timeFormat)} - ${fmtTime(b, this.timeFormat)} (Day ${nth}/${total})`;
+                        } else when = `${fmtTime(o.start, this.timeFormat)} - ${fmtTime(o.end, this.timeFormat)}`;
+                        return { occ: o, when, key: o.key + '#' + d.getTime() };
+                    });
+                    if (items.length) days.push({ d, items, key: d.getTime() });
+                }
+                return days;
+            },
+        },
+        watch: {
+            view(v) { this.$emit('view-change', { view: v, date: this.date }); },
+        },
+        mounted() {
+            this._tick = setInterval(() => { this.now = new Date(); }, 60000);
+            this._onResize = () => { this.isPhone = window.innerWidth < 768; };
+            window.addEventListener('resize', this._onResize);
+            this._onMove = (e) => this.onDragMove(e);
+            this._onUp = (e) => this.onDragEnd(e);
+            window.addEventListener('mousemove', this._onMove);
+            window.addEventListener('mouseup', this._onUp);
+            this._onDocClick = (e) => { if (this.pickerOpen && !e.target.closest('.nc-picker, .nc-title')) this.pickerOpen = false; };
+            document.addEventListener('mousedown', this._onDocClick);
+            this.$nextTick(() => this.scrollToWorkHours());
+        },
+        beforeUnmount() {
+            clearInterval(this._tick);
+            window.removeEventListener('resize', this._onResize);
+            window.removeEventListener('mousemove', this._onMove);
+            window.removeEventListener('mouseup', this._onUp);
+            document.removeEventListener('mousedown', this._onDocClick);
+        },
+        methods: {
+            // ---- navigation --------------------------------------------------------------
+            setView(v) { this.view = v; this.pickerOpen = false; this.$nextTick(() => this.scrollToWorkHours()); },
+            step(dir) {
+                const d = this.date;
+                if (this.view === 'Day') this.date = addDays(d, dir);
+                else if (this.view === 'Week' || this.view === 'Agenda') this.date = addDays(d, 7 * dir);
+                else if (this.view === 'Month') this.date = new Date(d.getFullYear(), d.getMonth() + dir, Math.min(d.getDate(), 28));
+                else if (this.view === '3 Months') this.date = new Date(d.getFullYear(), d.getMonth() + 3 * dir, 1);
+                else if (this.view === 'Year') this.date = new Date(d.getFullYear() + dir, d.getMonth(), 1);
+            },
+            goToday() { this.date = startOfDay(new Date()); this.pickerOpen = false; },
+            togglePicker() { this.pickerOpen = !this.pickerOpen; this.pickerYear = this.date.getFullYear(); },
+            pickMonth(m) { this.date = new Date(this.pickerYear, m, 1); this.pickerOpen = false; },
+            openDay(d) { this.date = startOfDay(d); this.setView('Day'); },
+            scrollToWorkHours() {
+                const el = this.$refs.timeScroll; if (!el) return;
+                // Open at the configured start hour, as Syncfusion does.
+                el.scrollTop = 0;
+            },
+            // ---- rendering helpers -------------------------------------------------------
+            color(type) { const p = this.palette; return p[((Number(type) || 1) - 1) % p.length] || p[0]; },
+            isToday(d) { return sameDay(d, this.now); },
+            isWeekend(d) { return d.getDay() === 0 || d.getDay() === 6; },
+            dayLabel(d, inMonth) { return d.getDate() === 1 ? `${MONTHS[d.getMonth()].slice(0, 3)} 1` : String(d.getDate()); },
+            weekdayName(i, short) { const n = WEEKDAYS[i]; return short ? n.slice(0, 3) : n; },
+            time(d) { return fmtTime(d, this.timeFormat); },
+            hourLabel(h) { return fmtTime(new Date(2000, 0, 1, h), this.timeFormat); },
+            earlyLabel() { const h = parseInt(this.startHour, 10); return this.timeFormat === '24' ? `00-${pad(h - 1)}` : `12-${(h - 1) % 12 || 12} AM`; },
+            barStyle(b) {
+                return { left: `calc(${(b.col / 7) * 100}% + 2px)`, width: `calc(${(b.span / 7) * 100}% - 4px)`,
+                    top: `${DATE_HEADER_PX + b.lane * (BAR_PX + BAR_GAP)}px`, background: this.color(b.occ.type) };
+            },
+            gridBarStyle(b, cols) {
+                return { left: `calc(${(b.col / cols) * 100}% + 2px)`, width: `calc(${(b.span / cols) * 100}% - 4px)`,
+                    top: `${4 + b.lane * (BAR_PX + BAR_GAP)}px`, background: this.color(b.occ.type) };
+            },
+            timedStyle(it) {
+                const w = 100 / it.cols;
+                const dragging = this.drag && this.drag.moved && this.drag.key === it.occ.key;
+                return { top: `${dragging ? this.drag.top : it.top}px`, height: `${dragging ? this.drag.height : it.height}px`,
+                    left: `calc(${it.col * w}% + 1px)`, width: `calc(${w}% - 3px)`, background: this.color(it.occ.type),
+                    opacity: dragging ? 0.85 : 1, zIndex: dragging ? 5 : 1 };
+            },
+            // Crosses midnight at all -- Syncfusion draws even a 10pm-2am flight as a
+            // spanning bar with a time at each end.
+            isMultiDayTimed(o) { return !o.allDay && dayIndex(o.start) !== dayIndex(new Date(o.end.getTime() - 1)); },
+            // ---- clicks ------------------------------------------------------------------
+            clickEvent(occ, jsEvent) {
+                if (this.drag && this.drag.moved) return;
+                this.selectedCell = null;
+                this.$emit('event-click', { event: occ.event, occurrence: { start: occ.start, end: occ.end, recurring: occ.recurring }, jsEvent });
+            },
+            clickCell(day, jsEvent, hour, full) {
+                if (this.readOnly) return;
+                this.selectedCell = (hour === undefined ? 'd' : 'h' + hour) + day.getTime();
+                let start, end, isAllDay;
+                if (hour === undefined) { start = startOfDay(day); end = addDays(start, 1); isAllDay = true; }
+                else { start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), Math.floor(hour), (hour % 1) * 60); end = new Date(start.getTime() + 1800000); isAllDay = false; }
+                // Same storage as Syncfusion: all-day is LOCAL midnight, end exclusive.
+                this.$emit('event-create', { start: start.toISOString(), end: end.toISOString(), isAllDay, event: jsEvent, full: !!full });
+            },
+            clickSlot(day, jsEvent, full) {
+                const rect = jsEvent.currentTarget.getBoundingClientRect();
+                const hour = this.firstHour + Math.floor(((jsEvent.clientY - rect.top) / HOUR_PX) * 2) / 2;
+                this.clickCell(day, jsEvent, hour, full);
+            },
+            // ---- drag & resize (mouse; timed and month) ------------------------------------
+            startDrag(e, occ, mode, extra) {
+                if (this.readOnly || this.isPhone || e.button !== 0 || occ.recurring) return;
+                this.drag = { key: occ.key, occ, mode, x0: e.clientX, y0: e.clientY, moved: false, ...extra };
+            },
+            onDragMove(e) {
+                const d = this.drag; if (!d) return;
+                if (!d.moved && Math.abs(e.clientX - d.x0) + Math.abs(e.clientY - d.y0) < 5) return;
+                d.moved = true;
+                if (d.mode === 'month') {
+                    const cell = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-day]');
+                    if (cell) d.targetDay = new Date(Number(cell.dataset.day));
+                } else {
+                    const dy = Math.round((e.clientY - d.y0) / (HOUR_PX / 2)) * (HOUR_PX / 2);
+                    if (d.mode === 'move') {
+                        d.top = d.top0 + dy;
+                        const col = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-day]');
+                        if (col) d.targetDay = new Date(Number(col.dataset.day));
+                    } else d.height = Math.max(HOUR_PX / 2, d.height0 + dy);
+                }
+            },
+            onDragEnd() {
+                const d = this.drag; if (!d) return;
+                setTimeout(() => { this.drag = null; }, 0);
+                if (!d.moved) return;
+                const ev = d.occ.event; let start = new Date(d.occ.start), end = new Date(d.occ.end);
+                if (d.mode === 'month') {
+                    if (!d.targetDay) return;
+                    const shift = dayIndex(d.targetDay) - dayIndex(start); if (!shift) return;
+                    start = addDays(start, shift); end = addDays(end, shift);
+                } else if (d.mode === 'move') {
+                    const minutes = ((d.top - d.top0) / HOUR_PX) * 60;
+                    const shift = d.targetDay ? dayIndex(d.targetDay) - dayIndex(start) : 0;
+                    start = new Date(addDays(start, shift).getTime() + minutes * 60000); end = new Date(addDays(end, shift).getTime() + minutes * 60000);
+                } else {
+                    end = new Date(start.getTime() + (d.height / HOUR_PX) * 3600000);
+                }
+                if (start.getTime() === d.occ.start.getTime() && end.getTime() === d.occ.end.getTime()) return;
+                const next = this.events.map(x => x === ev ? { ...x, start: start.toISOString(), end: end.toISOString() } : x);
+                this.$emit('update:events', next);
+            },
+        },
+        template: /* html */ `
+<div class="nc" :class="{ 'nc-phone': isPhone }">
+  <!-- Toolbar: ‹ › title ▾ | DAY WEEK MONTH 3 MONTHS YEAR AGENDA -->
+  <div class="nc-toolbar">
+    <div class="nc-toolbar-left">
+      <button class="nc-icon-btn" data-testid="nav-prev" aria-label="Previous" @click="step(-1)">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
+      <button class="nc-icon-btn" data-testid="nav-next" aria-label="Next" @click="step(1)">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
+      <button class="nc-title" :class="{ open: pickerOpen }" data-testid="current-date-range" @click="togglePicker">
+        {{ title }} <span class="nc-caret"></span></button>
+      <div v-if="pickerOpen" class="nc-picker" data-testid="date-picker">
+        <div class="nc-picker-head"><span>{{ pickerYear }}</span>
+          <span><button class="nc-icon-btn" aria-label="Previous year" @click="pickerYear--">▲</button><button class="nc-icon-btn" aria-label="Next year" @click="pickerYear++">▼</button></span></div>
+        <div class="nc-picker-months">
+          <button v-for="(m, i) in ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']" :key="m"
+            :class="{ on: pickerYear === date.getFullYear() && i === date.getMonth() }" @click="pickMonth(i)">{{ m }}</button>
+        </div>
+        <div class="nc-picker-foot"><button class="nc-link" @click="goToday">TODAY</button></div>
+      </div>
+    </div>
+    <!-- Phone: the view buttons do not fit, so they live behind a ⋮ menu, as in Syncfusion. -->
+    <div v-if="isPhone" class="nc-phone-views">
+      <button class="nc-icon-btn" aria-label="Change view" data-testid="view-menu" @click="viewMenu = !viewMenu">
+        <svg viewBox="0 0 24 24" width="18" height="18"><circle cx="12" cy="5" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="19" r="1.8" fill="currentColor"/></svg></button>
+      <div v-if="viewMenu" class="nc-view-menu">
+        <button v-for="v in ['Day','Week','Month','3 Months','Year','Agenda']" :key="v" :class="{ on: view === v }"
+          :data-testid="'view-' + v.replace(' ', '')" @click="setView(v); viewMenu = false">{{ v }}</button>
+      </div>
+    </div>
+    <div class="nc-views" role="tablist">
+      <button v-for="v in ['Day','Week','Month','3 Months','Year','Agenda']" :key="v" role="tab" :aria-selected="view === v"
+        :class="{ on: view === v }" :data-testid="'view-' + v.replace(' ', '')" @click="setView(v)">{{ v.toUpperCase() }}</button>
+    </div>
+  </div>
 
-        // Time Indicator
-        const currentTimeTop = ref(0);
-        const updateTimeIndicator = () => {
-            const now = new Date();
-            currentTimeTop.value = ((now.getHours() * 60 + now.getMinutes()) / 60) * 50;
-        };
-        
-        onMounted(() => {
-            window.addEventListener('mousemove', onDrag);
-            window.addEventListener('mouseup', stopDrag);
-            setInterval(updateTimeIndicator, 60000);
-            updateTimeIndicator();
-        });
-        onUnmounted(() => {
-            window.removeEventListener('mousemove', onDrag);
-            window.removeEventListener('mouseup', stopDrag);
-        });
+  <!-- Month & 3 Months -->
+  <div v-if="view === 'Month' || view === '3 Months'" class="nc-month" data-testid="month-view-grid">
+    <div class="nc-month-head">
+      <div v-for="i in weekdayOrder" :key="i" class="nc-weekday"
+        :class="{ today: now.getDay() === i && monthWeeks.some(w => w.days.some(d => isToday(d))) }">{{ weekdayName(i, false) }}</div>
+    </div>
+    <div class="nc-month-body">
+      <div v-for="w in monthWeeks" :key="w.key" class="nc-week-row">
+        <div v-for="(d, c) in w.days" :key="c" class="nc-cell" :data-day="d.getTime()"
+          :class="{ out: !w.inMonth(d), weekend: isWeekend(d), selected: selectedCell === 'd' + d.getTime() }"
+          @click="clickCell(d, $event)" @dblclick="clickCell(d, $event, undefined, true)">
+          <span class="nc-date" :class="{ today: isToday(d), first: d.getDate() === 1 }" @click.stop="openDay(d)">{{ dayLabel(d) }}</span>
+          <button v-if="w.hidden[c]" class="nc-more" data-testid="more-events" @click.stop="openDay(d)">+{{ w.hidden[c] }} more</button>
+        </div>
+        <div v-for="b in w.bars" :key="b.occ.key + w.key" class="nc-bar" :style="barStyle(b)"
+          :class="{ long: b.occ.allDay || isMultiDayTimed(b.occ), 'clip-l': b.clippedLeft, 'clip-r': b.clippedRight }"
+          :data-testid="'event-' + b.occ.event.id" :title="b.occ.title"
+          @mousedown="startDrag($event, b.occ, 'month')" @click.stop="clickEvent(b.occ, $event)">
+          <template v-if="b.occ.allDay || isMultiDayTimed(b.occ)">
+            <span v-if="!b.occ.allDay && !b.clippedLeft" class="nc-bar-time">{{ time(b.occ.start) }}</span>
+            <span class="nc-bar-title center">{{ b.occ.title }}</span>
+            <span v-if="!b.occ.allDay && !b.clippedRight" class="nc-bar-time">{{ time(b.occ.end) }}</span>
+          </template>
+          <template v-else>
+            <span class="nc-bar-time">{{ time(b.occ.start) }}</span><span class="nc-bar-title">{{ b.occ.title }}</span>
+          </template>
+          <span v-if="b.occ.recurring" class="nc-recur" aria-label="Repeats">↻</span>
+        </div>
+      </div>
+    </div>
+  </div>
 
-        return {
-            currentView, views, currentTitle, weekDays, monthCells, visibleDates,
-            yearMonths, agendaSections,
-            prev, next, today, changeView, goToMonth,
-            getEventsForDate, getEventsWithLayout, getEventStyle, getWeekEventPosition, getGhostStyle, formatTime,
-            createMonthEvent, createTimeEvent, startDrag, selectEvent,
-            dragState, eventCursor, currentTimeTop, selectedEventId, isToday, isSameDay
-        };
-    }
-};
+  <!-- Week & Day -->
+  <div v-else-if="view === 'Week' || view === 'Day'" class="nc-grid" data-testid="time-grid" :style="{ '--cols': gridDays.length }">
+    <div class="nc-grid-head">
+      <div class="nc-gutter-head">
+        <button v-if="parseInt(startHour, 10) > 0" class="nc-early" data-testid="early-hours" @click="showEarlyHours = !showEarlyHours">{{ showEarlyHours ? 'Hide early' : earlyLabel() }}</button>
+      </div>
+      <div class="nc-grid-days">
+        <div class="nc-grid-dayheads">
+          <div v-for="d in gridDays" :key="d.getTime()" class="nc-dayhead" :class="{ today: isToday(d) }" @click="openDay(d)">
+            <div class="nc-dayhead-name">{{ weekdayName(d.getDay(), true) }}</div><div class="nc-dayhead-num">{{ d.getDate() }}</div>
+          </div>
+        </div>
+        <div class="nc-allday" :style="{ height: (8 + gridLayout.allDayLanes * (22)) + 'px' }">
+          <div v-for="d in gridDays" :key="d.getTime()" class="nc-allday-cell" :data-day="d.getTime()" @click="clickCell(d, $event)" @dblclick="clickCell(d, $event, undefined, true)"></div>
+          <div v-for="b in gridLayout.allDay" :key="b.occ.key" class="nc-bar long" :style="gridBarStyle(b, gridDays.length)"
+            :data-testid="'event-' + b.occ.event.id" @click.stop="clickEvent(b.occ, $event)">
+            <span v-if="!b.occ.allDay && !b.clippedLeft" class="nc-bar-time">{{ time(b.occ.start) }}</span>
+            <span class="nc-bar-title center">{{ b.occ.title }}</span>
+            <span v-if="!b.occ.allDay && !b.clippedRight" class="nc-bar-time">{{ time(b.occ.end) }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="nc-grid-scroll" ref="timeScroll">
+      <div class="nc-grid-body" :style="{ height: hours.length * 48 + 'px' }">
+        <div class="nc-gutter">
+          <div v-for="h in hours" :key="h" class="nc-hour-label">{{ hourLabel(h) }}</div>
+          <div v-if="gridDays.some(isToday) && nowTop >= 0" class="nc-now-label" :style="{ top: nowTop + 'px' }">{{ time(now) }}</div>
+        </div>
+        <div class="nc-grid-cols">
+          <div v-for="(d, i) in gridDays" :key="d.getTime()" class="nc-col" :data-day="d.getTime()"
+            :class="{ weekend: isWeekend(d) && gridDays.length > 1 }"
+            @click="clickSlot(d, $event)" @dblclick="clickSlot(d, $event, true)">
+            <div v-for="h in hours" :key="h" class="nc-slot"></div>
+            <div v-for="it in gridLayout.timed[i]" :key="it.occ.key" class="nc-timed" :style="timedStyle(it)"
+              :data-testid="'event-' + it.occ.event.id"
+              @mousedown="startDrag($event, it.occ, 'move', { top0: it.top, top: it.top, height: it.height })" @click.stop="clickEvent(it.occ, $event)">
+              <div class="nc-timed-title">{{ it.occ.title }} <span v-if="it.occ.recurring" class="nc-recur">↻</span></div>
+              <div v-if="it.height > 34" class="nc-timed-time">{{ time(it.occ.start) }} - {{ time(it.occ.end) }}</div>
+              <div class="nc-resize" @mousedown.stop="startDrag($event, it.occ, 'resize', { height0: it.height, height: it.height, top: it.top, top0: it.top })"></div>
+            </div>
+            <div v-if="isToday(d) && nowTop >= 0" class="nc-now-line" :style="{ top: nowTop + 'px' }"></div>
+          </div>
+          <div v-if="gridDays.length > 1 && gridDays.some(isToday) && nowTop >= 0" class="nc-now-dotted" :style="{ top: nowTop + 'px' }"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Year -->
+  <div v-else-if="view === 'Year'" class="nc-year" data-testid="year-view">
+    <div v-for="m in yearMonths" :key="m.name" class="nc-mini">
+      <div class="nc-mini-title">{{ m.name }}</div>
+      <div class="nc-mini-grid">
+        <div v-for="i in weekdayOrder" :key="'h' + i" class="nc-mini-wd">{{ weekdayName(i).charAt(0) }}</div>
+        <button v-for="c in m.cells" :key="c.key" class="nc-mini-day" :class="{ out: c.out, today: isToday(c.d) }" @click="openDay(c.d)">
+          {{ c.d.getDate() }}<span v-if="c.mark && !c.out" class="nc-mini-dot" :style="{ background: c.mark }"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Agenda -->
+  <div v-else-if="view === 'Agenda'" class="nc-agenda" data-testid="agenda-view">
+    <div v-if="!agendaDays.length" class="nc-agenda-empty">No events</div>
+    <div v-for="day in agendaDays" :key="day.key" class="nc-agenda-day">
+      <div class="nc-agenda-date" :class="{ today: isToday(day.d) }"><div class="n">{{ day.d.getDate() }}</div><div class="w">{{ weekdayName(day.d.getDay(), true) }}</div></div>
+      <div class="nc-agenda-items">
+        <div v-for="it in day.items" :key="it.key" class="nc-agenda-item" :style="{ borderLeftColor: color(it.occ.type) }"
+          :data-testid="'event-' + it.occ.event.id" @click="clickEvent(it.occ, $event)">
+          <div class="t">{{ it.occ.title }} <span v-if="it.occ.recurring" class="nc-recur dark">↻</span></div>
+          <div class="w">{{ it.when }}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>`,
+    };
+})();
+
+if (typeof window !== 'undefined') window.NativeCalendar = NativeCalendar;

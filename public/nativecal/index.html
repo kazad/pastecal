@@ -63,6 +63,7 @@ Copyright (c) 2025 Kalid Azad
 
     <!-- Core styles -->
     <link rel="stylesheet" href="/style.css?v=1763769217">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:400,500,700&display=swap">
     <link rel="stylesheet" href="/nativecal/native.css">
 
     <!-- Third-party libraries -->
@@ -396,6 +397,18 @@ Copyright (c) 2025 Kalid Azad
             <!-- Right section -->
             <section class="flex-1 flex items-center justify-end text-xs min-w-0 h-8" v-cloak>
 
+                <custom-tooltip width="w-auto" align="center" v-if="!isLoading && lastEditLabel">
+                    <template #trigger>
+                        <span data-testid="last-edit-link"
+                            class="text-color-1 text-xs whitespace-nowrap mr-3 hidden lg:inline-flex items-center">
+                            {{ lastEditLabel }}
+                        </span>
+                    </template>
+                    <template #content>
+                        <span class="whitespace-nowrap">Calendar edited {{ lastEditExact }}</span>
+                    </template>
+                </custom-tooltip>
+
                 <!-- Loading state -->
                 <div v-if="isLoading">
                     <div
@@ -441,19 +454,26 @@ Copyright (c) 2025 Kalid Azad
                         <custom-tooltip align="right">
                             <template #trigger>
                                 <div class="relative flex items-center bg-1 border border-color-default rounded-full p-1 pl-3 pr-3 shadow-sm hover:border-blue-500 hover:bg-[var(--bg-interactive-hover)] cursor-pointer transition-all group select-none"
-                                    @click="toggleShare"
+                                    @click="copyShareLink"
+                                    role="button" tabindex="0"
+                                    @keyup.enter="copyShareLink" @keyup.space="copyShareLink"
+                                    :aria-label="shareCopied ? 'Link copied' : 'Copy link to this calendar'"
                                     data-testid="share-pill-existing">
-
-                                    <!-- Icon -->
-                                    <div
-                                        class="text-color-1 group-hover:text-blue-500 transition-colors flex-shrink-0 p-1 rounded-full mr-1">
-                                        <icon name="share" class="w-5 h-5"></icon>
+                                    <div class="transition-colors flex-shrink-0 p-1 rounded-full mr-1"
+                                        :class="shareCopied ? 'text-green-600' : 'text-color-1 group-hover:text-blue-500'">
+                                        <icon v-if="shareCopied" name="check" class="w-5 h-5"></icon>
+                                        <icon v-else name="copy" class="w-5 h-5"></icon>
                                     </div>
-
-                                    <!-- URL Text -->
-                                    <div class="text-color-1 text-xs truncate max-w-[150px] md:max-w-xs">
+                                    <div v-if="shareCopied" class="text-green-600 text-xs font-bold whitespace-nowrap"
+                                        data-testid="share-pill-copied">Link copied</div>
+                                    <div v-else class="text-color-1 text-xs truncate max-w-[150px] md:max-w-xs">
                                         pastecal.com/<span class="font-bold text-color-2" v-text="calendar.id"></span>
                                     </div>
+                                    <button type="button"
+                                        class="flex items-center flex-shrink-0 ml-2 pl-2 border-l border-color-default text-color-1 hover:text-blue-500 transition-colors"
+                                        @click.stop="toggleShare" aria-label="More sharing options" data-testid="share-pill-more">
+                                        <icon name="chevronDown" viewBox="0 0 16 16" fill="currentColor" class="w-3.5 h-3.5"></icon>
+                                    </button>
                                 </div>
                             </template>
                             <template #content>
@@ -1061,6 +1081,9 @@ Copyright (c) 2025 Kalid Azad
                 :time-format="globalSettings.timeFormat"
                 :colors="COLORS"
                 :creating-event="quickCreateEvent"
+                :first-day-of-week="globalSettings.firstDayOfWeek"
+                :start-hour="globalSettings.startHour"
+                :read-only="!canEdit"
                 @update:events="calendar.setEvents($event)"
                 @event-create="handleEventCreate"
                 @event-click="handleEventClick"
@@ -1088,8 +1111,10 @@ Copyright (c) 2025 Kalid Azad
                 :left="popoverPosition.left"
                 :time-format="globalSettings.timeFormat"
                 :colors="COLORS"
-                @edit="openEditorForEvent"
-                @delete="handleDeleteEvent"
+                :occurrence="popoverOccurrence"
+                :read-only="!canEdit"
+                @edit="requestEdit"
+                @delete="requestDelete(livePopoverEvent)"
                 @close="closePopover"
             ></event-popover>
 
@@ -1098,9 +1123,25 @@ Copyright (c) 2025 Kalid Azad
                 v-model:visible="showEditor"
                 :event="editorEvent"
                 :colors="COLORS"
+                :labels="localSettings.typeLabels"
+                :time-format="globalSettings.timeFormat"
                 @save="handleSaveEvent"
-                @delete="handleDeleteEvent"
+                @delete="requestDelete"
             ></event-editor>
+
+            <!-- Delete / recurring prompts, worded and laid out like Syncfusion's. -->
+            <div v-if="confirmDialog" class="nd-overlay" @mousedown.self="confirmDialog = null">
+                <div class="nd" role="alertdialog" aria-modal="true" :aria-label="confirmDialog.title" data-testid="confirm-dialog">
+                    <div class="nd-head"><h2>{{ confirmDialog.title }}</h2>
+                        <button class="ne-x" aria-label="Close" @click="confirmDialog = null">✕</button></div>
+                    <p>{{ confirmDialog.message }}</p>
+                    <div class="nd-foot">
+                        <button v-for="b in confirmDialog.buttons" :key="b.label" class="ne-btn"
+                            :class="{ primary: b.primary, solid: b.primary }" :data-testid="b.testid"
+                            @click="runConfirm(b)">{{ b.label }}</button>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- Claim Intervention Modal -->

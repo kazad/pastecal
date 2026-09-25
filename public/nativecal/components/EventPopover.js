@@ -1,117 +1,77 @@
+/**
+ * The event popup, laid out like Syncfusion's quick-info popup: a header in the
+ * event's color with edit / delete / close icons top-right and the title below, then
+ * the date line and the description. Shows the OCCURRENCE that was clicked -- for a
+ * repeating event that is this week's date, not the date the series started.
+ */
 const EventPopover = {
-    template: /* html */ `
-        <div v-if="visible" data-testid="event-popover"
-             class="fixed z-40 bg-1 rounded-lg shadow-xl border border-color-default flex flex-col"
-             :class="isLongDescription ? 'w-[480px] max-w-[calc(100vw-20px)]' : 'w-80'"
-             :style="{ top: top + 'px', left: left + 'px', maxHeight: 'calc(100vh - 20px)' }">
-             
-             <!-- Close Button (positioned absolutely) -->
-             <button @click="$emit('close')" data-testid="popover-close" 
-                     class="absolute top-2 right-2 p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white transition-colors z-10" 
-                     title="Close">
-                 <icon name="close" class="w-5 h-5" stroke-width="2"></icon>
-             </button>
-
-             <!-- Header. Takes the EVENT's color, not a fixed blue: the header used to
-                  be hardcoded bg-blue-600, so a crimson event opened a blue card and the
-                  popup looked like it belonged to something else. -->
-             <div class="px-4 py-3 flex justify-between items-start text-white shrink-0 rounded-t-lg"
-                  :style="{ backgroundColor: headerColor }" data-testid="popover-header">
-                <h3 class="font-bold text-lg truncate flex-1 mr-2" data-testid="popover-title">{{ event.title || '(No Title)' }}</h3>
-                <div class="flex items-center gap-1">
-                    <button @click="$emit('edit', event)" data-testid="popover-edit" class="p-1 rounded transition-colors hover:bg-black/20" title="Edit">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                    </button>
-                    <button @click="$emit('delete', event.id)" data-testid="popover-delete" class="p-1 rounded transition-colors hover:bg-black/20" title="Delete">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                    </button>
-                </div>
-             </div>
-
-             <!-- Body -->
-             <div class="p-4 bg-1 overflow-y-auto">
-                 <div class="flex items-start gap-3 mb-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-color-1 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                    <div class="text-sm text-color-2">
-                        <div class="font-medium">{{ formatDate(event.start) }}</div>
-                        <div class="text-color-1">
-                            {{ formatTime(event.start) }} - {{ formatTime(event.end) }}
-                        </div>
-                    </div>
-                 </div>
-
-                 <div v-if="event.isRecurringInstance || event.recurrencerule" class="flex items-start gap-3 mb-2 text-sm text-blue-600 font-medium">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-                    <div>Recurring Event</div>
-                 </div>
-
-                 <div v-if="event.description" class="flex items-start gap-3 mt-3 pt-3 border-t border-color-default">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-color-1 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7" /></svg>
-                    <div data-testid="popover-description" class="text-sm text-color-1 whitespace-pre-wrap" v-html="linkifiedDescription"></div>
-                 </div>
-             </div>
-        </div>
-    `,
     props: {
         event: Object,
+        occurrence: { type: Object, default: null },
         visible: Boolean,
         top: Number,
         left: Number,
         timeFormat: { type: String, default: '12' },
-        // The palette in use, so the header can resolve the same color the grid
-        // drew. Passed in rather than imported because the palette is per-calendar
-        // -- a calendar with custom colors must tint this popup with ITS colors.
         colors: { type: Array, default: () => [] },
+        readOnly: { type: Boolean, default: false },
     },
     emits: ['close', 'edit', 'delete'],
-    setup(props) {
-        const { computed } = Vue;
-        const df = window.dateFns;
-
-        // Same resolution the grid uses (see getEventStyle in NativeCalendar.js):
-        // type is 1-based and wraps. Computed, so editing an event's color while
-        // the popup is open re-tints it instead of leaving a stale header.
-        const FALLBACK = '#3f51b5';
-        const headerColor = computed(() => {
-            const palette = props.colors && props.colors.length ? props.colors : [FALLBACK];
-            const type = props.event?.type || 1;
-            return palette[(type - 1) % palette.length] || FALLBACK;
-        });
-
-        const formatDate = (ts) => df.format(new Date(ts), 'MMMM d, yyyy');
-        const formatTime = (ts) => {
-            const d = new Date(ts);
-            if (isNaN(d.getTime())) return '';
-            return props.timeFormat === '12' ? df.format(d, 'h:mm a') : df.format(d, 'HH:mm');
-        };
-
-        // Widen the popup for long descriptions -- narrow-column wrapping makes a
-        // multi-paragraph description feel cramped. Short descriptions stay at the
-        // original compact width so a quick one-liner doesn't get an oversized card.
-        const LONG_DESCRIPTION_THRESHOLD = 140;
-        const isLongDescription = computed(() =>
-            (props.event?.description?.length || 0) > LONG_DESCRIPTION_THRESHOLD);
-
-        const escapeHtml = (str) => str
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
-
-        const URL_PATTERN = /(https?:\/\/[^\s<]+)/g;
-
-        const linkifiedDescription = computed(() => {
-            const text = props.event?.description || '';
-            return escapeHtml(text).replace(URL_PATTERN, (url) => {
-                // Trim trailing punctuation that's likely sentence formatting, not part of the URL.
-                const trailing = url.match(/[)\].,!?;:]+$/);
-                const cleanUrl = trailing ? url.slice(0, -trailing[0].length) : url;
-                const suffix = trailing ? trailing[0] : '';
-                return `<a href="${cleanUrl}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">${cleanUrl}</a>${suffix}`;
-            });
-        });
-
-        return { formatDate, formatTime, linkifiedDescription, isLongDescription, headerColor };
-    }
+    computed: {
+        headerColor() {
+            const p = this.colors.length ? this.colors : ['#3f51b5'];
+            return p[((Number(this.event?.type) || 1) - 1) % p.length] || p[0];
+        },
+        when() {
+            const e = this.event; if (!e) return '';
+            const M = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+            let s = new Date(this.occurrence?.start || e.start), en = new Date(this.occurrence?.end || e.end);
+            const fmtD = (d) => `${M[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+            const pad = (n) => String(n).padStart(2, '0');
+            const fmtT = (d) => this.timeFormat === '24' ? `${pad(d.getHours())}:${pad(d.getMinutes())}`
+                : `${pad(d.getHours() % 12 || 12)}:${pad(d.getMinutes())} ${d.getHours() < 12 ? 'AM' : 'PM'}`;
+            if (e.isAllDay) {
+                const day = (v) => { const r = new Date(new Date(v).getTime() + 43200000); return new Date(r.getUTCFullYear(), r.getUTCMonth(), r.getUTCDate()); };
+                s = this.occurrence ? new Date(this.occurrence.start) : day(e.start);
+                const last = new Date((this.occurrence ? new Date(this.occurrence.end) : day(e.end)).getTime() - 86400000);
+                return last > s ? `${fmtD(s)} - ${fmtD(last)} (All day)` : `${fmtD(s)} (All day)`;
+            }
+            const sameDay = s.toDateString() === en.toDateString();
+            return sameDay ? `${fmtD(s)} (${fmtT(s)} - ${fmtT(en)})` : `${fmtD(s)} (${fmtT(s)}) - ${fmtD(en)} (${fmtT(en)})`;
+        },
+        repeats() {
+            const r = this.event?.recurrencerule; if (!r || this.event.recurrenceID) return '';
+            const f = (r.match(/FREQ=(\w+)/) || [])[1], n = parseInt((r.match(/INTERVAL=(\d+)/) || [])[1] || '1', 10);
+            const days = (r.match(/BYDAY=([\w,]+)/) || [])[1];
+            const names = { SU: 'Sunday', MO: 'Monday', TU: 'Tuesday', WE: 'Wednesday', TH: 'Thursday', FR: 'Friday', SA: 'Saturday' };
+            const unit = { DAILY: 'day', WEEKLY: 'week', MONTHLY: 'month', YEARLY: 'year' }[f] || 'time';
+            let s = n > 1 ? `Repeats every ${n} ${unit}s` : `Repeats every ${unit}`;
+            if (f === 'WEEKLY' && days) s += ' on ' + days.split(',').map(d => names[d.replace(/^[+-]?\d+/, '')]).filter(Boolean).join(', ');
+            return s;
+        },
+        linkified() {
+            const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            return esc(this.event?.description || '').replace(/(https?:\/\/[^\s<]+?)([).,!?;:]*(?=\s|$))/g,
+                '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>$2');
+        },
+    },
+    template: /* html */ `
+<div v-if="visible && event" class="np" data-testid="event-popover" :style="{ top: top + 'px', left: left + 'px' }">
+  <div class="np-head" :style="{ background: headerColor }" data-testid="popover-header">
+    <div class="np-icons">
+      <button v-if="!readOnly" class="np-icon" title="Edit" aria-label="Edit" data-testid="popover-edit" @click="$emit('edit', event)">
+        <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></button>
+      <button v-if="!readOnly" class="np-icon" title="Delete" aria-label="Delete" data-testid="popover-delete" @click="$emit('delete', event.id)">
+        <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M6 19a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg></button>
+      <button class="np-icon" title="Close" aria-label="Close" data-testid="popover-close" @click="$emit('close')">
+        <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
+    </div>
+    <div class="np-title" data-testid="popover-title">{{ event.title || '(No title)' }}</div>
+  </div>
+  <div class="np-body">
+    <div class="np-line"><svg class="np-glyph" viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7v-2H5V10h14v2h2V6a2 2 0 0 0-2-2zm-2 10a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm1.6 5.9-2.1-1.3V16h1v2.1l1.6.9-.5.9z"/></svg><span>{{ when }}<span v-if="repeats" class="np-sub" data-testid="popover-repeats">{{ repeats }}</span></span></div>
+    <div v-if="event.description" class="np-line"><svg class="np-glyph" viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M19 3h-4.18A3 3 0 0 0 12 1a3 3 0 0 0-2.82 2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2zm-7 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+      <span class="np-desc" data-testid="popover-description" v-html="linkified"></span></div>
+  </div>
+</div>`,
 };
+if (typeof window !== 'undefined') window.EventPopover = EventPopover;
