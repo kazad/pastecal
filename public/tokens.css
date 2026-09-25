@@ -1,0 +1,121 @@
+/* =========================================================================================
+   pastecal design tokens -- the one source for color, type, space, shape and motion.
+
+   Loaded before style.css by the main app and NativeCal, and by /dev/design, which shows
+   every token and component live. Change a value here and every surface follows.
+
+   Rules:
+   - Components use tokens, never raw hex or px sizes (test/unit/design-system.test.js).
+   - Text meets WCAG AA: 4.5:1 for body text, 3:1 for large/bold. The numbers in the
+     comments are measured, and /dev/design recomputes them live.
+   - Dark mode redefines colors only, under [data-theme="dark"] -- which also works on
+     any subtree, so /dev/design can show both themes at once.
+   ========================================================================================= */
+:root {
+    /* ---- neutrals ----------------------------------------------------------------------- */
+    --pc-bg: #ffffff;            /* page and card background */
+    --pc-surface: #f9fafb;       /* panels, secondary buttons */
+    --pc-soft: #f5f6f8;          /* tinted wells: segmented control, repeat panel, selected row */
+    --pc-hover: #f3f4f6;         /* hover on neutral controls */
+    --pc-weekend: #fafafb;       /* weekend columns */
+    --pc-line: #ebecef;          /* dividers, grid lines */
+    --pc-field: #c9ccd2;         /* borders of inputs and outlined buttons (1.6:1; the label names the field) */
+    --pc-disabled: #eaeaea;
+    --pc-text: #1c1c1e;          /* primary text                      17.4:1 */
+    --pc-text-2: #374151;        /* secondary but strong               10.3:1 */
+    --pc-text-muted: #6b7280;    /* labels, meta, times                 4.8:1 */
+
+    /* ---- accent: one brand color for "do this" and "today" ----------------------------- */
+    --pc-accent: #d6124f;        /* white text on it: 5.2:1 */
+    --pc-accent-hover: #b80f44;
+    --pc-on-accent: #ffffff;
+    --pc-accent-soft: color-mix(in srgb, var(--pc-accent) 14%, var(--pc-bg));
+    --pc-focus-ring: 0 0 0 3px color-mix(in srgb, var(--pc-accent) 22%, transparent);
+
+    /* ---- links: blue, distinct from the accent ------------------------------------------ */
+    --pc-link: #0277bd;          /* 4.8:1 (was rgb(3,169,244): 2.6:1) */
+    --pc-link-hover: #01579b;
+
+    /* ---- semantic ----------------------------------------------------------------------- */
+    --pc-success: #1f7a4d;  --pc-success-soft: #e3f3ea;
+    --pc-warning: #8a5a00;  --pc-warning-soft: #fbefd4;
+    --pc-danger: #c62828;   --pc-danger-soft: #fdecea;
+    --pc-snackbar: #26272b; --pc-on-snackbar: #f4f4f6; --pc-snackbar-action: #ff8fb1;
+
+    /* ---- event palette: the defaults for categories 1-8, then 9-16 (app.js) ------------- */
+    --pc-event-1: #3f51b5;  --pc-event-2: #e3165b;  --pc-event-3: #ff6652;  --pc-event-4: #4caf50;
+    --pc-event-5: #ff9800;  --pc-event-6: #03a9f4;  --pc-event-7: #9e9e9e;  --pc-event-8: #27282f;
+    --pc-event-9: #827717;  --pc-event-10: #c0ca33; --pc-event-11: #00836f; --pc-event-12: #8e24aa;
+    --pc-event-13: #880e4f; --pc-event-14: #bf360c; --pc-event-15: #455a64; --pc-event-16: #00bfa5;
+    --pc-event-tint: 22%;        /* how much of the event color a timed block's fill takes */
+
+    /* ---- type --------------------------------------------------------------------------- */
+    --pc-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --pc-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --pc-fs-caption: 11px;       /* UPPERCASE labels: weekdays, section eyebrows (600, +.06em) */
+    --pc-fs-small: 12.5px;       /* events, field labels, meta */
+    --pc-fs-body: 14px;          /* body, buttons, inputs */
+    --pc-fs-lead: 16px;          /* phone title, emphasized body */
+    --pc-fs-title: 18px;         /* toolbar title, dialog titles on phones */
+    --pc-fs-heading: 20px;       /* dialog and popup titles */
+    --pc-fs-display: 22px;       /* day numbers in Week/Day */
+    --pc-fw-regular: 400; --pc-fw-medium: 500; --pc-fw-semibold: 600; --pc-fw-bold: 700;
+    --pc-lh-tight: 1.25; --pc-lh-body: 1.5;
+    --pc-tracking-caps: .06em; --pc-tracking-tight: -.01em;
+
+    /* ---- space: a 4px grid -------------------------------------------------------------- */
+    --pc-space-1: 4px;  --pc-space-2: 8px;  --pc-space-3: 12px; --pc-space-4: 16px;
+    --pc-space-5: 20px; --pc-space-6: 24px; --pc-space-8: 32px;
+
+    /* ---- shape -------------------------------------------------------------------------- */
+    --pc-radius-xs: 4px;         /* event bars, chips */
+    --pc-radius-sm: 6px;         /* event blocks, menu rows */
+    --pc-radius-md: 8px;         /* buttons, inputs */
+    --pc-radius-lg: 12px;        /* cards, menus, popovers */
+    --pc-radius-xl: 16px;        /* dialogs, bottom sheets */
+    --pc-radius-pill: 999px;
+
+    /* ---- elevation ---------------------------------------------------------------------- */
+    --pc-shadow-sm: 0 1px 2px rgba(0,0,0,.10);
+    --pc-shadow-md: 0 12px 32px rgba(0,0,0,.16);                           /* menus */
+    --pc-shadow-lg: 0 12px 36px rgba(0,0,0,.18), 0 2px 6px rgba(0,0,0,.08); /* popovers */
+    --pc-shadow-xl: 0 24px 60px rgba(0,0,0,.25);                           /* dialogs */
+    --pc-scrim: rgba(0,0,0,.40);
+
+    /* ---- motion ------------------------------------------------------------------------- */
+    --pc-dur-fast: 120ms; --pc-dur: 180ms; --pc-ease: cubic-bezier(.2,.8,.2,1);
+
+    /* ---- layers ------------------------------------------------------------------------- */
+    --pc-z-popover: 40; --pc-z-dialog: 60; --pc-z-snackbar: 70; --pc-z-menu: 80;
+}
+
+[data-theme="dark"] {
+    --pc-bg: #1e1e1e;
+    --pc-surface: #2a2a2a;
+    --pc-soft: #26272c;
+    --pc-hover: #333333;
+    --pc-weekend: #232326;
+    --pc-line: #373737;
+    --pc-field: #55575e;
+    --pc-disabled: #333333;
+    --pc-text: #ececf0;          /* 13.9:1 */
+    --pc-text-2: #c4c6cc;        /* 10.0:1 */
+    --pc-text-muted: #999999;    /*  5.9:1 */
+
+    --pc-accent: #ff5c8d;        /* dark text on it: 5.8:1 (white would be 2.9:1) */
+    --pc-accent-hover: #ff7aa3;
+    --pc-on-accent: #1c1c1e;
+
+    --pc-link: #4aaaff;          /* 6.7:1 */
+    --pc-link-hover: #6ec2ff;
+
+    --pc-success: #6fd49c;  --pc-success-soft: #17372a;
+    --pc-warning: #f0c46a;  --pc-warning-soft: #3a2e14;
+    --pc-danger: #ff8a80;   --pc-danger-soft: #3a1c1a;
+    --pc-snackbar: #3a3b41;
+
+    --pc-shadow-md: 0 12px 32px rgba(0,0,0,.5);
+    --pc-shadow-lg: 0 12px 36px rgba(0,0,0,.55), 0 2px 6px rgba(0,0,0,.3);
+    --pc-shadow-xl: 0 24px 60px rgba(0,0,0,.6);
+    --pc-scrim: rgba(0,0,0,.55);
+}

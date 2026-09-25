@@ -18,6 +18,10 @@
         "function": "generateICSV2"
       },
       {
+        "source": "/dev/design",
+        "destination": "/dev/design.html"
+      },
+      {
         "source": "/nativecal/**",
         "destination": "/nativecal/index.html"
       },

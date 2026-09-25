@@ -32,7 +32,7 @@
     display: flex; flex-direction: column; min-height: 0;
     user-select: none;
 }
-.nc button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+.nc button, .nc-tokens button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
 
 /* ---- toolbar ------------------------------------------------------------------------ */
 .nc-toolbar { display: flex; align-items: center; justify-content: space-between; height: 42px;
@@ -275,19 +275,18 @@
    - on phones, popups and dialogs are bottom sheets over the calendar
    Everything is scoped to html[data-ux="2"], so v1 is untouched.
    ========================================================================================= */
-html[data-ux="2"] {
-    --nc-line: #ebecef; --nc-weekend: #fafafb; --nc-muted: #62666e; --nc-text: #1c1c1e;
-    --nc-toolbar: var(--bg); --nc-active: #eef0f3; --nc-today: #d6124f; --nc-select: #f0f2f5; --nc-now: #d6124f;
-    --nc-soft: #f5f6f8; --nc-field: #c9ccd2; --nc-radius: 10px;
-}
-html[data-ux="2"][data-theme="dark"] {
-    --nc-line: #34353b; --nc-weekend: #202125; --nc-muted: #a3a7ae; --nc-text: #ececf0;
-    --nc-toolbar: var(--bg); --nc-active: #2d2e34; --nc-today: #ff5c8d; --nc-select: #2a2b30; --nc-now: #ff5c8d;
-    --nc-soft: #26272c; --nc-field: #4a4c53;
+/* v2 reads the design tokens (tokens.css). Declared on the calendar's own elements, not
+   <html>, so a [data-theme="dark"] subtree -- as on /dev/design -- resolves dark values.
+   .nc-tokens: put it on any container that shows NativeCal pieces outside the calendar. */
+html[data-ux="2"] :is(.nc, .np, .nq, .ne-overlay, .nd-overlay, .nu-snack, .nc-tokens) {
+    --nc-line: var(--pc-line); --nc-weekend: var(--pc-weekend); --nc-muted: var(--pc-text-muted); --nc-text: var(--pc-text);
+    --nc-toolbar: var(--pc-bg); --nc-active: var(--pc-hover); --nc-today: var(--pc-accent); --nc-select: var(--pc-soft);
+    --nc-now: var(--pc-accent); --nc-soft: var(--pc-soft); --nc-field: var(--pc-field); --nc-radius: var(--pc-radius-lg);
+    --bg: var(--pc-bg);
 }
 html[data-ux="2"] .nc, html[data-ux="2"] .np, html[data-ux="2"] .nq, html[data-ux="2"] .ne-dialog, html[data-ux="2"] .nd, html[data-ux="2"] .nu-snack,
 html[data-ux="2"] .ne-field input, html[data-ux="2"] .ne-field select, html[data-ux="2"] .ne-field textarea, html[data-ux="2"] .ne-btn {
-    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font-family: var(--pc-font);
 }
 html[data-ux="2"] .nc { font-size: 14px; border-radius: var(--nc-radius); }
 
@@ -303,7 +302,7 @@ html[data-ux="2"] .nc-views { border-left: 0; padding: 3px; gap: 2px; background
 html[data-ux="2"] .nc-views button { padding: 5px 11px; border-radius: 7px; font-size: 13px; font-weight: 500; letter-spacing: 0; color: var(--nc-muted); }
 html[data-ux="2"] .nc-views button:hover { color: var(--nc-text); }
 html[data-ux="2"] .nc-views button.on { background: var(--bg); color: var(--nc-text); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
-html[data-ux="2"] .nc-picker { border-radius: 12px; box-shadow: 0 8px 28px rgba(0,0,0,.16); }
+html[data-ux="2"] .nc-picker { border-radius: var(--pc-radius-lg); box-shadow: var(--pc-shadow-md); }
 html[data-ux="2"] .nc-link { font-weight: 600; }
 
 /* type: one family, a clear scale -- 18 title / 14 body / 12.5 event / 11 caps labels --
@@ -321,7 +320,8 @@ html[data-ux="2"] .nc-cell { padding: 5px 6px 0; }
 html[data-ux="2"] .nc-date { font-size: 13px; font-weight: 500; min-width: 24px; height: 24px; line-height: 24px; text-align: center; margin-left: -4px; }
 html[data-ux="2"] .nc-cell.out .nc-date { font-weight: 400; }
 html[data-ux="2"] .nc-date.first { font-size: 13px; font-weight: 700; line-height: 24px; }
-html[data-ux="2"] .nc-date.today { border-radius: 12px; font-weight: 700; }
+html[data-ux="2"] .nc-date.today { border-radius: 12px; font-weight: 700; color: var(--pc-on-accent) !important; }
+html[data-ux="2"] .nc-picker-months button.on, html[data-ux="2"] .ne-days button.on { color: var(--pc-on-accent); }
 html[data-ux="2"] .nc-more { font-size: 12px !important; font-weight: 600; color: var(--nc-muted) !important; left: 6px; }
 html[data-ux="2"] .nc-more:hover { color: var(--nc-text) !important; }
 html[data-ux="2"] .nc-bar { border-radius: 5px; font-size: 12.5px; font-weight: 600; letter-spacing: -.005em; padding: 0 6px; gap: 5px; }
@@ -343,7 +343,7 @@ html[data-ux="2"] .nc-dayhead { padding: 10px 8px 6px; }
 html[data-ux="2"] .nc-dayhead-name { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--nc-muted); }
 html[data-ux="2"] .nc-dayhead-num { display: inline-block; font-size: 22px; font-weight: 600; letter-spacing: -.02em; line-height: 34px; min-width: 34px; margin-left: -6px; text-align: center; }
 html[data-ux="2"] .nc-dayhead.today .nc-dayhead-name { color: var(--nc-today); }
-html[data-ux="2"] .nc-dayhead.today .nc-dayhead-num { background: var(--nc-today); color: #fff; border-radius: 17px; }
+html[data-ux="2"] .nc-dayhead.today .nc-dayhead-num { background: var(--pc-accent); color: var(--pc-on-accent); border-radius: 17px; }
 html[data-ux="2"] .nc-hour-label { font-size: 11.5px; font-weight: 500; color: var(--nc-muted); }
 html[data-ux="2"] .nc-mini-wd, html[data-ux="2"] .nc-agenda-item .w { color: var(--nc-muted); }
 html[data-ux="2"] .nc-now-label { font-size: 12px; font-weight: 600; }
@@ -361,7 +361,7 @@ html[data-ux="2"] .nc-agenda-item { border-left-width: 4px; border-radius: 4px; 
 html[data-ux="2"] .nc-agenda-item .t { font-weight: 600; }
 
 /* event popup: plain card, color square */
-html[data-ux="2"] .np { border-radius: 14px; box-shadow: 0 12px 36px rgba(0,0,0,.18), 0 2px 6px rgba(0,0,0,.08); font-size: 14px; }
+html[data-ux="2"] .np { border-radius: var(--pc-radius-lg); box-shadow: var(--pc-shadow-lg); font-size: var(--pc-fs-body); }
 html[data-ux="2"] .np2-bar { display: flex; justify-content: flex-end; gap: 2px; padding: 8px 8px 0; }
 html[data-ux="2"] .np2-icon { width: 34px; height: 34px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; color: var(--nc-muted); background: none; border: 0; cursor: pointer; }
 html[data-ux="2"] .np2-icon:hover { background: var(--nc-active); color: var(--nc-text); }
@@ -374,7 +374,7 @@ html[data-ux="2"] .np-glyph { color: var(--nc-muted); }
 html[data-ux="2"] .np-sub { color: var(--nc-muted); opacity: 1; font-size: 13px; }
 
 /* quick create */
-html[data-ux="2"] .nq { border-radius: 14px; box-shadow: 0 12px 36px rgba(0,0,0,.18), 0 2px 6px rgba(0,0,0,.08); padding: 18px 18px 14px; }
+html[data-ux="2"] .nq { border-radius: var(--pc-radius-lg); box-shadow: var(--pc-shadow-lg); padding: 18px 18px 14px; }
 html[data-ux="2"] .nq-title { font-size: 18px; font-weight: 500; border: 1px solid var(--nc-field); border-radius: 8px; padding: 9px 12px; width: calc(100% - 28px); box-sizing: border-box; }
 html[data-ux="2"] .nq-title:focus { border-color: var(--nc-today); box-shadow: 0 0 0 3px color-mix(in srgb, var(--nc-today) 18%, transparent); }
 html[data-ux="2"] .nq-x { top: 20px; right: 12px; color: var(--nc-muted); }
@@ -384,14 +384,13 @@ html[data-ux="2"] .nq-line svg { color: var(--nc-muted); }
 /* buttons */
 html[data-ux="2"] .ne-btn { border-radius: 8px; padding: 8px 16px; font-size: 14px; font-weight: 600; letter-spacing: 0; }
 html[data-ux="2"] .ne-btn.primary { color: var(--nc-today); }
-html[data-ux="2"] .nq .ne-btn.primary, html[data-ux="2"] .ne-btn.filled { background: var(--nc-today); color: #fff; }
-html[data-ux="2"] .nq .ne-btn.primary:hover, html[data-ux="2"] .ne-btn.filled:hover { background: color-mix(in srgb, var(--nc-today) 88%, #000); }
-html[data-ux="2"] .ne-btn.danger { color: #c62828; }
-html[data-ux="2"][data-theme="dark"] .ne-btn.danger { color: #ff8a80; }
+html[data-ux="2"] .nq .ne-btn.primary, html[data-ux="2"] .ne-btn.filled { background: var(--pc-accent); color: var(--pc-on-accent); }
+html[data-ux="2"] .nq .ne-btn.primary:hover, html[data-ux="2"] .ne-btn.filled:hover { background: var(--pc-accent-hover); }
+html[data-ux="2"] .ne-btn.danger { color: var(--pc-danger); }
 html[data-ux="2"] .ne-btn:focus-visible { outline: 2px solid var(--nc-today); outline-offset: 2px; }
 
 /* editor: outlined fields, swatches */
-html[data-ux="2"] .ne-dialog { border-radius: 16px; box-shadow: 0 24px 60px rgba(0,0,0,.25); font-size: 14px; }
+html[data-ux="2"] .ne-dialog { border-radius: var(--pc-radius-xl); box-shadow: var(--pc-shadow-xl); font-size: var(--pc-fs-body); }
 html[data-ux="2"] .ne-head { padding: 20px 22px 6px; }
 html[data-ux="2"] .ne-head h2 { font-size: 20px; font-weight: 600; }
 html[data-ux="2"] .ne-x { color: var(--nc-muted); }
@@ -412,7 +411,7 @@ html[data-ux="2"] .ne-days button { width: 34px; height: 34px; font-size: 13px; 
 html[data-ux="2"] .ne-foot { padding: 12px 18px 18px; gap: 8px; }
 
 /* recurring scope dialog */
-html[data-ux="2"] .nd { border-radius: 16px; box-shadow: 0 24px 60px rgba(0,0,0,.25); padding: 20px 20px 16px; width: 360px; }
+html[data-ux="2"] .nd { border-radius: var(--pc-radius-xl); box-shadow: var(--pc-shadow-xl); padding: 20px 20px 16px; width: 360px; }
 html[data-ux="2"] .nd-head h2 { font-size: 18px; font-weight: 600; }
 html[data-ux="2"] .nd-options { display: flex; flex-direction: column; gap: 4px; margin: 0 0 16px; }
 html[data-ux="2"] .nd-option { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; font-size: 14px; cursor: pointer; }
@@ -421,10 +420,10 @@ html[data-ux="2"] .nd-option input { width: 18px; height: 18px; accent-color: va
 
 /* undo snackbar */
 .nu-snack { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 70;
-    display: flex; align-items: center; gap: 6px; max-width: calc(100vw - 32px); padding: 8px 8px 8px 16px; border-radius: 12px;
-    background: #26272b; color: #f4f4f6; box-shadow: 0 10px 30px rgba(0,0,0,.25); font-size: 14px; animation: nu-in .18s ease-out; }
+    display: flex; align-items: center; gap: 6px; max-width: calc(100vw - 32px); padding: 8px 8px 8px 16px; border-radius: var(--pc-radius-lg);
+    background: var(--pc-snackbar); color: var(--pc-on-snackbar); box-shadow: var(--pc-shadow-md); font-size: var(--pc-fs-body); font-family: var(--pc-font); animation: nu-in .18s ease-out; }
 .nu-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.nu-undo { background: none; border: 0; color: #ff8fb1; font: 700 14px inherit; padding: 6px 10px; border-radius: 8px; cursor: pointer; }
+.nu-undo { background: none; border: 0; color: var(--pc-snackbar-action); font: 700 14px inherit; padding: 6px 10px; border-radius: 8px; cursor: pointer; }
 .nu-undo:hover { background: rgba(255,255,255,.1); }
 .nu-x { background: none; border: 0; color: #b9bac0; padding: 6px; border-radius: 8px; cursor: pointer; display: inline-flex; }
 @keyframes nu-in { from { opacity: 0; transform: translate(-50%, 8px); } }
@@ -498,13 +497,13 @@ html[data-ux="2"] .ne-days button.on { background: var(--nc-today); border-color
 html[data-ux="2"] .ne-colorfield { max-width: 260px; }
 html[data-ux="2"] .ne-colorfield .ne-color { margin: 0; }
 html[data-ux="2"] .ne-color2 { display: flex; align-items: center; gap: 10px; width: 100%; height: 38px; padding: 0 10px; border: 1px solid var(--nc-field);
-    border-radius: 8px; background: var(--bg); color: var(--nc-text); font: 500 14px ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; cursor: pointer; text-align: left; }
+    border-radius: 8px; background: var(--bg); color: var(--nc-text); font: var(--pc-fw-medium) var(--pc-fs-body) var(--pc-font); cursor: pointer; text-align: left; }
 html[data-ux="2"] .ne-color2:hover { border-color: var(--nc-muted); }
 html[data-ux="2"] .ne-color2:focus-visible, html[data-ux="2"] .ne-color2[aria-expanded="true"] { outline: none; border-color: var(--nc-today); box-shadow: 0 0 0 3px color-mix(in srgb, var(--nc-today) 18%, transparent); }
 html[data-ux="2"] .ne-color2 .sw { width: 14px; height: 14px; border-radius: 4px; flex: none; }
 html[data-ux="2"] .ne-color2-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 html[data-ux="2"] .ne-color2 .nc-lucide { color: var(--nc-muted); }
-html[data-ux="2"] .ne-color-menu2 { z-index: 80; overflow-y: auto; min-width: 220px; border-radius: 10px; padding: 6px; border: 1px solid var(--nc-line); box-shadow: 0 12px 32px rgba(0,0,0,.16); }
+html[data-ux="2"] .ne-color-menu2 { z-index: 80; overflow-y: auto; min-width: 220px; border-radius: var(--pc-radius-lg); padding: 6px; border: 1px solid var(--nc-line); box-shadow: var(--pc-shadow-md); }
 html[data-ux="2"] .ne-color-menu2 button { gap: 10px; padding: 8px 10px; border-radius: 6px; font-size: 14px; }
 html[data-ux="2"] .ne-color-menu2 button[aria-selected="true"] { background: var(--nc-soft); font-weight: 600; }
 html[data-ux="2"] .ne-color-menu2 .sw { width: 14px; height: 14px; border-radius: 4px; margin: 0; flex: none; }
@@ -512,3 +511,10 @@ html[data-ux="2"] .ne-color-menu2 .lbl { flex: 1; min-width: 0; overflow: hidden
 html[data-ux="2"] .ne-color-menu2 .ck { color: var(--nc-today); }
 html[data-ux="2"] .ne-color-menu2 .ne-color-hint { border-top: 1px solid var(--nc-line); margin-top: 4px; padding: 8px 10px 4px; font-style: normal; }
 @media (max-width: 767px) { html[data-ux="2"] .ne-colorfield { max-width: none; } }
+
+/* v2: Start and End each get a row -- a date and a time side by side, twice, do not fit a
+   520px dialog (the times were cut to "05:00 P"). Date wider than time, as in Google's editor. */
+html[data-ux="2"] .ne-row:has(.ne-dt) { flex-direction: column; align-items: stretch; gap: 0; }
+html[data-ux="2"] .ne-row:has(.ne-dt) > .ne-field { width: 100%; margin: 6px 0; }
+html[data-ux="2"] .ne-dt { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 8px; }
+html[data-ux="2"] .ne-dt input[type=time] { width: 100%; }

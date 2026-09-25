@@ -89,6 +89,7 @@ Copyright (c) 2025 Kalid Azad
          Replaced the full 50-package bundle (4.4 MB over the wire) and an UNVERSIONED
          theme that tracked Syncfusion's latest release while the JS stayed on 23.2.6. -->
     <link id="syncfusion-theme" href="/vendor/syncfusion-23.2.6/material.css?v=1790287181" rel="stylesheet" type="text/css" />
+    <link rel="stylesheet" href="/tokens.css?v=1790287181">
     <link rel="stylesheet" href="/style.css?v=1790287181">
     <!-- Tailwind, prebuilt by scripts/build-css.sh (was a 124 KB in-browser compiler). After style.css, as the compiler's output was. -->
     <link rel="stylesheet" href="/tailwind.css?v=1790287181">
@@ -289,7 +290,9 @@ Copyright (c) 2025 Kalid Azad
             </div>
 
             <!-- Row 2: Claim URL (only for new calendars) -->
-            <div v-show="!isExisting"
+            <!-- isNewCalendar, not !isExisting: a view-only calendar is never "existing", so on phones
+                 this bar showed view-only visitors the calendar's EDIT address, with a Claim button. -->
+            <div v-show="isNewCalendar"
                 class="flex items-center bg-1 border border-color-default rounded-lg p-2 shadow-sm">
                 <span class="text-color-1 text-sm pl-1 pr-1 font-medium" id="url-prefix-mobile">pastecal.com/</span>
                 <input type="text" v-model="calendar.id" @input="handleSlugInput" @keyup.enter="create"

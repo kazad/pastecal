@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en" data-ux="2">
+<!--
+  pastecal design system -- /dev/design
+
+  A living page: it loads the real tokens.css, style.css and nativecal/native.css, and
+  mounts the real NativeCal components with sample data. Nothing here is a picture of a
+  component, so it cannot drift from the app. Colors and contrast ratios are read from the
+  browser at run time, not typed in.
+-->
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex">
+    <title>pastecal design system</title>
+    <link rel="icon" type="image/svg+xml" href="/img/icons/favicon.svg" />
+    <link rel="stylesheet" href="/tokens.css">
+    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="/nativecal/native.css">
+    <script>
+        // Theme before first paint: ?theme=dark, else the OS setting.
+        (function () {
+            var q = new URLSearchParams(location.search).get('theme');
+            var dark = q ? q === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+            document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+        })();
+    </script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/rrule@2.8.1/dist/es5/rrule.min.js"></script>
+    <script src="/nativecal/components/ncUx.js"></script>
+    <script src="/nativecal/components/NcIcon.js"></script>
+    <script src="/nativecal/components/NativeCalendar.js"></script>
+    <script src="/nativecal/components/EventPopover.js"></script>
+    <script src="/nativecal/components/QuickCreatePopover.js"></script>
+    <script src="/nativecal/components/EventEditor.js"></script>
+    <style>
+        /* The page itself is built from the tokens it documents. */
+        body { margin: 0; background: var(--pc-bg); color: var(--pc-text); font: var(--pc-fs-body)/var(--pc-lh-body) var(--pc-font);
+            -webkit-font-smoothing: antialiased; }
+        [v-cloak] { display: none; }
+        .ds { display: grid; grid-template-columns: 220px minmax(0, 1fr); max-width: 1320px; margin: 0 auto; }
+        .ds-nav { position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto; padding: var(--pc-space-8) var(--pc-space-4) var(--pc-space-8) var(--pc-space-6);
+            box-sizing: border-box; border-right: 1px solid var(--pc-line); }
+        .ds-brand { display: flex; align-items: center; gap: 10px; font-weight: var(--pc-fw-bold); font-size: var(--pc-fs-lead); margin-bottom: var(--pc-space-6); color: var(--pc-text); text-decoration: none; }
+        .ds-brand img { width: 26px; height: 26px; }
+        .ds-nav a.l { display: block; padding: 5px 10px; margin: 0 -10px; border-radius: var(--pc-radius-sm); color: var(--pc-text-muted); font-size: var(--pc-fs-body); text-decoration: none; }
+        .ds-nav a.l:hover { background: var(--pc-hover); color: var(--pc-text); }
+        .ds-nav .grp { margin: var(--pc-space-5) 0 var(--pc-space-1); font-size: var(--pc-fs-caption); font-weight: var(--pc-fw-semibold); letter-spacing: var(--pc-tracking-caps); text-transform: uppercase; color: var(--pc-text-muted); }
+        .ds-main { padding: var(--pc-space-8) var(--pc-space-8) 96px; min-width: 0; }
+        .ds-top { display: flex; justify-content: flex-end; gap: var(--pc-space-2); position: sticky; top: 0; z-index: 30; padding: var(--pc-space-3) 0; background: var(--pc-bg); }
+        .seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--pc-soft); border-radius: 9px; }
+        .seg button { font: var(--pc-fw-medium) 13px var(--pc-font); color: var(--pc-text-muted); background: none; border: 0; padding: 5px 12px; border-radius: 7px; cursor: pointer; }
+        .seg button[aria-pressed="true"] { background: var(--pc-bg); color: var(--pc-text); box-shadow: var(--pc-shadow-sm); }
+        .seg button:focus-visible { outline: 2px solid var(--pc-accent); outline-offset: 1px; }
+
+        header.hero { padding: var(--pc-space-4) 0 var(--pc-space-8); border-bottom: 1px solid var(--pc-line); }
+        .eyebrow { font-size: var(--pc-fs-caption); font-weight: var(--pc-fw-semibold); letter-spacing: var(--pc-tracking-caps); text-transform: uppercase; color: var(--pc-accent); }
+        h1 { font-size: 34px; line-height: 1.15; letter-spacing: -.02em; margin: 8px 0 12px; font-weight: var(--pc-fw-bold); text-wrap: balance; }
+        .lede { font-size: var(--pc-fs-lead); color: var(--pc-text-2); max-width: 66ch; margin: 0; }
+        .principles { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: var(--pc-space-4); margin-top: var(--pc-space-6); }
+        .principles div { padding: var(--pc-space-4); border: 1px solid var(--pc-line); border-radius: var(--pc-radius-lg); background: var(--pc-surface); }
+        .principles b { display: block; margin-bottom: 4px; }
+        .principles p { margin: 0; color: var(--pc-text-muted); font-size: 13.5px; }
+
+        section.s { padding: var(--pc-space-8) 0 var(--pc-space-4); border-bottom: 1px solid var(--pc-line); scroll-margin-top: 56px; }
+        h2 { font-size: 24px; letter-spacing: -.015em; margin: 0 0 6px; font-weight: var(--pc-fw-bold); }
+        h3 { font-size: var(--pc-fs-lead); margin: var(--pc-space-6) 0 var(--pc-space-3); font-weight: var(--pc-fw-semibold); }
+        .intro { color: var(--pc-text-muted); max-width: 72ch; margin: 0 0 var(--pc-space-4); }
+        code, .mono { font-family: var(--pc-font-mono); font-size: 12.5px; }
+        code { background: var(--pc-soft); padding: 1px 5px; border-radius: 4px; }
+
+        /* token tables */
+        .tbl { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+        .tbl th { text-align: left; font-size: var(--pc-fs-caption); letter-spacing: var(--pc-tracking-caps); text-transform: uppercase; color: var(--pc-text-muted); font-weight: var(--pc-fw-semibold); padding: 8px 10px; border-bottom: 1px solid var(--pc-line); }
+        .tbl td { padding: 8px 10px; border-bottom: 1px solid var(--pc-line); vertical-align: middle; }
+        .tbl-wrap { overflow-x: auto; }
+        .chip-sw { display: inline-flex; align-items: center; gap: 8px; }
+        .sw { width: 36px; height: 24px; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(128,128,128,.25); flex: none; }
+        .aa { display: inline-block; font: 600 11px var(--pc-font-mono); padding: 2px 6px; border-radius: 4px; }
+        .aa.ok { color: var(--pc-success); background: var(--pc-success-soft); }
+        .aa.low { color: var(--pc-danger); background: var(--pc-danger-soft); }
+        .dual { display: grid; grid-template-columns: 1fr 1fr; gap: var(--pc-space-4); }
+        .pane { border: 1px solid var(--pc-line); border-radius: var(--pc-radius-lg); padding: var(--pc-space-4); background: var(--pc-bg); color: var(--pc-text); }
+        .pane-t { font-size: var(--pc-fs-caption); letter-spacing: var(--pc-tracking-caps); text-transform: uppercase; color: var(--pc-text-muted); font-weight: var(--pc-fw-semibold); margin-bottom: var(--pc-space-3); }
+
+        /* event palette */
+        .pal { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: var(--pc-space-3); }
+        .pal-i { display: grid; gap: 6px; padding: var(--pc-space-3); border: 1px solid var(--pc-line); border-radius: var(--pc-radius-lg); background: var(--pc-bg); }
+        .pal-i .meta { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--pc-text-muted); }
+        .ev-solid { height: 22px; border-radius: 5px; display: flex; align-items: center; justify-content: center; font-size: 12.5px; font-weight: 600; }
+        [data-theme="dark"] .ev-solid { box-shadow: inset 0 0 0 1px rgba(255,255,255,.22); }
+        .ev-tint { height: 22px; border-radius: 4px; display: flex; align-items: center; gap: 6px; padding-left: 6px; font-size: 12.5px; font-weight: 600; color: var(--pc-text);
+            background: color-mix(in srgb, var(--c) var(--pc-event-tint), var(--pc-bg)); border-left: 3px solid var(--c); }
+        .ev-tint span { color: var(--pc-text-muted); font-weight: 500; font-variant-numeric: tabular-nums; }
+
+        /* type */
+        .type-row { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: var(--pc-space-4); align-items: baseline; padding: 12px 0; border-bottom: 1px solid var(--pc-line); }
+        .type-row .spec { font-size: 12px; color: var(--pc-text-muted); }
+        .type-row .spec b { display: block; color: var(--pc-text); font-family: var(--pc-font-mono); font-weight: 600; font-size: 12.5px; }
+
+        /* space / shape / elevation */
+        .scale { display: flex; flex-wrap: wrap; gap: var(--pc-space-5); align-items: flex-end; }
+        .scale .it { display: grid; gap: 6px; justify-items: center; font-size: 12px; color: var(--pc-text-muted); }
+        .bar-v { background: var(--pc-accent); border-radius: 2px; width: 14px; }
+        .shape { width: 84px; height: 56px; background: var(--pc-soft); border: 1px solid var(--pc-field); }
+        .elev { width: 150px; height: 84px; background: var(--pc-bg); border-radius: var(--pc-radius-lg); display: grid; place-items: center; font-size: 12px; color: var(--pc-text-muted); }
+
+        /* icons */
+        .icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: var(--pc-space-2); }
+        .icons div { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-md); font-size: 12px; color: var(--pc-text-muted); }
+        .icons svg { color: var(--pc-text); }
+
+        /* component gallery */
+        .gal { display: flex; flex-wrap: wrap; gap: var(--pc-space-3); align-items: center; }
+        .card { border: 1px solid var(--pc-line); border-radius: var(--pc-radius-lg); padding: var(--pc-space-5); background: var(--pc-bg); }
+        .card + .card { margin-top: var(--pc-space-3); }
+        .card-t { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--pc-text-muted); margin-bottom: var(--pc-space-4); }
+        .card-t b { color: var(--pc-text); font-size: 13.5px; }
+        .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: var(--pc-space-4); align-items: start; }
+        .field-demo { max-width: 360px; display: grid; gap: var(--pc-space-3); }
+        /* Fixed-position overlays shown in place, for the gallery only. */
+        .inline .np, .inline .nq { position: relative !important; top: auto !important; left: auto !important; z-index: 1; }
+        .inline .ne-overlay, .inline .nd-overlay { position: relative; inset: auto; background: none; padding: 0; display: block; z-index: 1; }
+        .inline .nu-snack { position: relative; left: auto; bottom: auto; transform: none; animation: none; display: inline-flex; }
+        .cal-demo .nc-grid-scroll { max-height: 360px; }
+        .phone-frame { width: 390px; max-width: 100%; height: 760px; border: 10px solid #111; border-radius: 42px; overflow: hidden; background: #111; box-shadow: var(--pc-shadow-lg); }
+        .phone-frame iframe { width: 100%; height: 100%; border: 0; border-radius: 32px; background: var(--pc-bg); }
+
+        /* writing */
+        .say { display: grid; grid-template-columns: 1fr 1fr 1.4fr; }
+        .say > div { padding: 9px 12px; border-bottom: 1px solid var(--pc-line); font-size: 13.5px; }
+        .say .h { font-size: var(--pc-fs-caption); letter-spacing: var(--pc-tracking-caps); text-transform: uppercase; color: var(--pc-text-muted); font-weight: 600; }
+        .say .yes::before { content: "✓ "; color: var(--pc-success); font-weight: 700; }
+        .say .no { color: var(--pc-text-muted); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--pc-danger) 60%, transparent); }
+        .rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--pc-space-3); }
+        .rules div { padding: var(--pc-space-4); border: 1px solid var(--pc-line); border-radius: var(--pc-radius-lg); }
+        .rules b { display: block; margin-bottom: 4px; }
+        .rules p { margin: 0; color: var(--pc-text-muted); font-size: 13.5px; }
+        .status { display: inline-block; white-space: nowrap; font: 600 11px var(--pc-font-mono); letter-spacing: .04em; text-transform: uppercase; padding: 2px 7px; border-radius: 4px; }
+        .status.on { color: var(--pc-success); background: var(--pc-success-soft); }
+        .status.part { color: var(--pc-warning); background: var(--pc-warning-soft); }
+        .status.off { color: var(--pc-text-muted); background: var(--pc-soft); }
+
+        @media (max-width: 900px) {
+            .ds { grid-template-columns: 1fr; }
+            .ds-nav { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--pc-line); padding: var(--pc-space-4); display: flex; flex-wrap: wrap; gap: 4px 12px; }
+            .ds-nav .grp, .ds-brand { width: 100%; margin: 4px 0; }
+            .ds-nav a.l { margin: 0; padding: 4px 6px; }
+            .ds-main { padding: var(--pc-space-4) var(--pc-space-4) 64px; }
+            .dual, .say { grid-template-columns: 1fr; }
+            .type-row { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+<div id="ds" class="ds" v-cloak>
+    <nav class="ds-nav" aria-label="Sections">
+        <a class="ds-brand" href="#top"><img src="/img/icons/favicon.svg" alt=""> pastecal design</a>
+        <div class="grp">Foundations</div>
+        <a class="l" href="#color">Color</a><a class="l" href="#events">Event colors</a><a class="l" href="#type">Typography</a>
+        <a class="l" href="#space">Space, shape, depth</a><a class="l" href="#icons">Icons</a>
+        <div class="grp">Components</div>
+        <a class="l" href="#buttons">Buttons</a><a class="l" href="#fields">Fields</a><a class="l" href="#calendar">Calendar</a>
+        <a class="l" href="#popups">Popups</a><a class="l" href="#editor">Editor</a><a class="l" href="#dialogs">Dialogs &amp; Undo</a><a class="l" href="#phone">Phone</a>
+        <div class="grp">Guidelines</div>
+        <a class="l" href="#writing">Writing</a><a class="l" href="#behavior">Behavior</a><a class="l" href="#adoption">Adoption</a>
+    </nav>
+
+    <main class="ds-main" id="top">
+        <div class="ds-top">
+            <div class="seg" role="group" aria-label="Theme">
+                <button type="button" :aria-pressed="theme === 'light'" @click="setTheme('light')">Light</button>
+                <button type="button" :aria-pressed="theme === 'dark'" @click="setTheme('dark')">Dark</button>
+            </div>
+        </div>
+
+        <header class="hero">
+            <div class="eyebrow">Design system</div>
+            <h1>A calendar people plan in, readable at a glance</h1>
+            <p class="lede">The tokens, components and rules behind pastecal. Everything on this page is live: it loads
+                <code>tokens.css</code>, <code>style.css</code> and <code>nativecal/native.css</code> and mounts the real
+                components, so what you see is what ships.</p>
+            <div class="principles">
+                <div><b>Color is information</b><p>Categories are how groups plan. Events stay blocks of their color, never reduced to a dot.</p></div>
+                <div><b>Readable first</b><p>Text meets WCAG AA in both themes. Nothing under 11px, and 11px only for uppercase labels.</p></div>
+                <div><b>Familiar, then better</b><p>Layouts people know from today's calendar; cleaner type, spacing and surfaces on top.</p></div>
+                <div><b>One accent</b><p>Pink means "do this" and "today". Blue is only for links. Everything else is neutral.</p></div>
+            </div>
+        </header>
+
+        <!-- ================================================================ COLOR -->
+        <section class="s" id="color">
+            <h2>Color</h2>
+            <p class="intro">Neutrals carry the interface; the accent marks the one thing to do. Values are read live from
+                <code>tokens.css</code> in each theme, and every text color is checked against the background it sits on.</p>
+            <div class="tbl-wrap"><table class="tbl">
+                <thead><tr><th>Token</th><th>Light</th><th>Dark</th><th>Use</th></tr></thead>
+                <tbody>
+                <tr v-for="t in colorTokens" :key="t.name">
+                    <td><code>{{ t.name }}</code></td>
+                    <td v-for="th in ['light','dark']" :key="th">
+                        <span class="chip-sw"><span class="sw" :style="{ background: resolved[th][t.name] }"></span>
+                        <span class="mono">{{ hex(resolved[th][t.name]) }}</span>
+                        <span v-if="t.on" class="aa" :class="ratio(th, t.name, t.on) >= (t.min || 4.5) ? 'ok' : 'low'">{{ ratio(th, t.name, t.on).toFixed(1) }}:1</span></span>
+                    </td>
+                    <td style="color: var(--pc-text-muted)">{{ t.use }}</td>
+                </tr>
+                </tbody>
+            </table></div>
+            <!-- probes: one element per theme to read the resolved tokens from -->
+            <div ref="probeLight" data-theme="light" hidden></div>
+            <div ref="probeDark" data-theme="dark" hidden></div>
+        </section>
+
+        <!-- ================================================================ EVENT COLORS -->
+        <section class="s" id="events">
+            <h2>Event colors</h2>
+            <p class="intro">The sixteen default category colors (people can change them in Settings). All-day and multi-day
+                events are solid bars whose text is black or white, whichever reads better on that color
+                (<code>NcUx.textOn</code>); timed events are a tint of the color with a solid edge and dark text. White on orange was
+                2.2:1, which is why text color is chosen per color rather than fixed.</p>
+            <div class="dual">
+                <div v-for="th in ['light','dark']" :key="th" class="pane" :data-theme="th">
+                    <div class="pane-t">{{ th }}</div>
+                    <div class="pal">
+                        <div v-for="(c, i) in palette" :key="c" class="pal-i">
+                            <div class="meta"><span>{{ labels[i] || ('Category ' + (i + 1)) }}</span><span class="mono">{{ c }}</span></div>
+                            <div class="ev-solid" :style="{ background: c, color: textOn(c) }">All day</div>
+                            <div class="ev-tint" :style="{ '--c': c }"><span>9:00 AM</span>Timed</div>
+                            <div class="meta"><span>text on bar</span><span class="aa" :class="contrast(c, textOn(c)) >= 4.5 ? 'ok' : 'low'">{{ contrast(c, textOn(c)).toFixed(1) }}:1</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================================================================ TYPE -->
+        <section class="s" id="type">
+            <h2>Typography</h2>
+            <p class="intro">One family, the system UI font (San Francisco, Segoe UI, Roboto): crisp at small sizes, fast,
+                familiar on every device. Hierarchy comes from size and weight, not from more fonts. Times use
+                fixed-width digits so they line up down a column.</p>
+            <div v-for="t in typeScale" :key="t.token" class="type-row">
+                <div class="spec"><b>{{ t.token }}</b>{{ t.px }} · {{ t.weight }} · {{ t.use }}</div>
+                <div :style="t.style">{{ t.sample }}</div>
+            </div>
+        </section>
+
+        <!-- ================================================================ SPACE / SHAPE / DEPTH -->
+        <section class="s" id="space">
+            <h2>Space, shape, depth</h2>
+            <p class="intro">A 4px spacing grid. Corners grow with the size of the surface. Shadows grow with how far a
+                surface floats above the page: menus, then popups, then dialogs.</p>
+            <h3>Spacing</h3>
+            <div class="scale"><div v-for="n in [1,2,3,4,5,6,8]" :key="n" class="it"><div class="bar-v" :style="{ height: 'var(--pc-space-' + n + ')' }"></div><code>space-{{ n }}</code>{{ n * 4 }}px</div></div>
+            <h3>Corner radius</h3>
+            <div class="scale"><div v-for="r in radii" :key="r[0]" class="it"><div class="shape" :style="{ borderRadius: 'var(--pc-radius-' + r[0] + ')' }"></div><code>radius-{{ r[0] }}</code>{{ r[1] }}</div></div>
+            <h3>Elevation</h3>
+            <div class="scale"><div v-for="e in shadows" :key="e[0]" class="it"><div class="elev" :style="{ boxShadow: 'var(--pc-shadow-' + e[0] + ')' }">{{ e[1] }}</div><code>shadow-{{ e[0] }}</code></div></div>
+        </section>
+
+        <!-- ================================================================ ICONS -->
+        <section class="s" id="icons">
+            <h2>Icons</h2>
+            <p class="intro"><a href="https://lucide.dev" target="_blank" rel="noopener">Lucide</a>, 2px stroke, inlined in
+                <code>NcIcon.js</code> (no font, no request). Use <code>&lt;nc-icon name="…"&gt;</code>; never text glyphs
+                like ▾ or ✕, which render differently on every platform. Add an icon by pasting its paths from lucide.dev.</p>
+            <div class="icons"><div v-for="n in iconNames" :key="n"><nc-icon :name="n" :size="20"></nc-icon>{{ n }}</div></div>
+        </section>
+
+        <!-- ================================================================ BUTTONS -->
+        <section class="s" id="buttons">
+            <h2>Buttons</h2>
+            <p class="intro">One filled button per surface: the thing to do. Everything else is quiet. Labels are verbs in
+                sentence case ("Save", "More options"), never all caps.</p>
+            <div class="card">
+                <div class="card-t"><b>App buttons</b><code>.pc-btn .pc-btn-primary | -secondary | -danger | -sm</code></div>
+                <div class="gal">
+                    <button class="pc-btn pc-btn-primary">Claim URL</button>
+                    <button class="pc-btn pc-btn-secondary">Cancel</button>
+                    <button class="pc-btn pc-btn-danger">Delete calendar</button>
+                    <button class="pc-btn pc-btn-primary pc-btn-sm">Copy link</button>
+                    <button class="pc-btn pc-btn-primary" disabled>Disabled</button>
+                </div>
+            </div>
+            <div class="card nc-tokens">
+                <div class="card-t"><b>Calendar buttons</b><code>.ne-btn .filled | .danger · .nc-today-btn · .nc-views</code></div>
+                <div class="gal">
+                    <button class="ne-btn filled">Save</button>
+                    <button class="ne-btn">Cancel</button>
+                    <button class="ne-btn danger">Delete</button>
+                    <button class="nc-today-btn">Today</button>
+                    <div class="nc-views"><button v-for="v in ['Day','Week','Month','3 Months','Year','Agenda']" :key="v" :class="{ on: v === demoView }" @click="demoView = v">{{ v }}</button></div>
+                    <button class="nc-icon-btn" aria-label="Previous"><nc-icon name="chevron-left" :size="20"></nc-icon></button>
+                    <button class="nc-icon-btn" aria-label="Next"><nc-icon name="chevron-right" :size="20"></nc-icon></button>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================================================================ FIELDS -->
+        <section class="s" id="fields">
+            <h2>Fields</h2>
+            <p class="intro">Outlined, 8px corners, the label above in small semibold. Focus shows the accent border and a soft
+                ring. Dropdowns use the Lucide chevron, not the browser's arrow.</p>
+            <div class="grid2">
+                <div class="card">
+                    <div class="card-t"><b>App</b><code>.pc-input · .pc-input-group</code></div>
+                    <div class="field-demo">
+                        <input class="pc-input" placeholder="Calendar name">
+                        <div class="pc-input-group"><span class="pc-input-prefix">pastecal.com/</span><input class="pc-input" value="summer-trip" aria-label="Calendar address"></div>
+                    </div>
+                </div>
+                <div class="card nc-tokens">
+                    <div class="card-t"><b>Calendar</b><code>.ne-field · .ne-select · .ne-check</code></div>
+                    <div class="field-demo">
+                        <label class="ne-field"><span>Title</span><input placeholder="Add title"></label>
+                        <label class="ne-field"><span>Repeat</span><span class="ne-select"><select><option>Never</option><option>Weekly</option></select></span></label>
+                        <label class="ne-check"><input type="checkbox" checked> All day</label>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================================================================ CALENDAR -->
+        <section class="s" id="calendar">
+            <h2>Calendar</h2>
+            <p class="intro">The real <code>NativeCalendar</code> component with sample events for this month. Try the toolbar,
+                drag across the Week grid to create, and switch the theme.</p>
+            <div class="cal-demo"><native-calendar :events="events" :colors="palette" :first-day-of-week="0" start-hour="07:00" :read-only="false" initial-view="Month"
+                @update:events="events = $event"></native-calendar></div>
+            <h3>Week</h3>
+            <div class="cal-demo"><native-calendar :events="events" :colors="palette" :first-day-of-week="0" start-hour="08:00" :read-only="false" initial-view="Week"
+                @update:events="events = $event"></native-calendar></div>
+        </section>
+
+        <!-- ================================================================ POPUPS -->
+        <section class="s" id="popups">
+            <h2>Popups</h2>
+            <p class="intro">Anchored to what was clicked, 12px corners, a popup-level shadow. The event popup is a plain card
+                with a color square, so a light category color never puts white text on a pale header.</p>
+            <div class="grid2 inline">
+                <div><event-popover :visible="true" :event="sampleEvent" :occurrence="null" :top="0" :left="0" :colors="palette" :read-only="false"></event-popover></div>
+                <div><event-popover :visible="true" :event="sampleSeries" :occurrence="null" :top="0" :left="0" :colors="palette" :read-only="false"></event-popover></div>
+                <div><quick-create-popover :visible="true" :start="qcStart" :end="qcEnd" :is-all-day="false" :top="0" :left="0"></quick-create-popover></div>
+            </div>
+        </section>
+
+        <!-- ================================================================ EDITOR -->
+        <section class="s" id="editor">
+            <h2>Event editor</h2>
+            <p class="intro">Every field of an event in one dialog. The category dropdown names every label, because the labels are the
+                information. Moving the start moves the end. On phones it becomes a bottom sheet.</p>
+            <div class="inline" style="max-width: 540px"><event-editor :visible="true" :event="editorEvent" :colors="palette" :labels="labels"></event-editor></div>
+        </section>
+
+        <!-- ================================================================ DIALOGS -->
+        <section class="s" id="dialogs">
+            <h2>Dialogs &amp; Undo</h2>
+            <p class="intro">Prefer Undo to "are you sure": the action happens at once and the snackbar offers a way back for 8
+                seconds. Ask first only when the question has real choices, like which events of a series.</p>
+            <div class="grid2 inline">
+                <div class="nd-overlay nc-tokens"><div class="nd" role="dialog" aria-label="Delete recurring event">
+                    <div class="nd-head"><h2>Delete recurring event</h2><button class="ne-x" aria-label="Close"><nc-icon name="x" :size="20"></nc-icon></button></div>
+                    <div class="nd-options" role="radiogroup">
+                        <label v-for="(o, i) in ['This event','This and following events','All events']" :key="o" class="nd-option"><input type="radio" name="demo-scope" :checked="i === 0"> {{ o }}</label>
+                    </div>
+                    <div class="nd-foot"><button class="ne-btn">Cancel</button><button class="ne-btn filled">Delete</button></div>
+                </div></div>
+                <div><div class="nu-snack" role="status"><span class="nu-text">Deleted "Dentist"</span><button class="nu-undo">Undo</button>
+                    <button class="nu-x" aria-label="Dismiss"><nc-icon name="x" :size="16"></nc-icon></button></div></div>
+            </div>
+        </section>
+
+        <!-- ================================================================ PHONE -->
+        <section class="s" id="phone">
+            <h2>Phone</h2>
+            <p class="intro">The real calendar in a 390px frame (a view-only link, so nothing can be changed). Popups and the editor
+                become bottom sheets over the calendar; event chips show titles; a tap anywhere in a day creates there.
+                Touch targets are at least 44px.</p>
+            <div class="phone-frame"><iframe :src="phoneSrc" title="pastecal on a phone" loading="lazy"></iframe></div>
+        </section>
+
+        <!-- ================================================================ WRITING -->
+        <section class="s" id="writing">
+            <h2>Writing</h2>
+            <p class="intro">Plain words from the user's side of the screen. Sentence case everywhere. Name things by what people
+                recognize, not by how the code is built.</p>
+            <div class="say">
+                <div class="h">Say</div><div class="h">Not</div><div class="h">Why</div>
+                <template v-for="w in words" :key="w[0]"><div class="yes">{{ w[0] }}</div><div class="no">{{ w[1] }}</div><div style="color: var(--pc-text-muted)">{{ w[2] }}</div></template>
+            </div>
+        </section>
+
+        <!-- ================================================================ BEHAVIOR -->
+        <section class="s" id="behavior">
+            <h2>Behavior</h2>
+            <div class="rules">
+                <div v-for="r in rules" :key="r[0]"><b>{{ r[0] }}</b><p>{{ r[1] }}</p></div>
+            </div>
+        </section>
+
+        <!-- ================================================================ ADOPTION -->
+        <section class="s" id="adoption">
+            <h2>Adoption</h2>
+            <p class="intro">Where the system is in use, and what is left. Update this table when a surface moves over.</p>
+            <div class="tbl-wrap"><table class="tbl">
+                <thead><tr><th>Surface</th><th>Status</th><th>Notes</th></tr></thead>
+                <tbody><tr v-for="a in adoption" :key="a[0]"><td>{{ a[0] }}</td><td><span class="status" :class="a[1]">{{ { on: 'On tokens', part: 'Partly', off: 'Not yet' }[a[1]] }}</span></td><td style="color: var(--pc-text-muted)">{{ a[2] }}</td></tr></tbody>
+            </table></div>
+        </section>
+    </main>
+</div>
+
+<script>
+(function () {
+    const now = new Date(), Y = now.getFullYear(), M = now.getMonth();
+    const at = (d, h = 0, m = 0) => new Date(Y, M, d, h, m).toISOString();
+    const day = (d) => new Date(Y, M, d).toISOString();   // all-day: local midnight, as stored
+    const firstTue = 1 + ((2 - new Date(Y, M, 1).getDay() + 7) % 7);
+    const today = now.getDate();
+
+    const app = Vue.createApp({
+        data() {
+            return {
+                theme: document.documentElement.getAttribute('data-theme'),
+                resolved: { light: {}, dark: {} },
+                palette: Array.from({ length: 16 }, (_, i) => getComputedStyle(document.documentElement).getPropertyValue('--pc-event-' + (i + 1)).trim()),
+                labels: ['Team', 'Soccer', 'Family', 'School', 'Birthdays', 'Holidays', 'Chores', 'Travel'],
+                demoView: 'Month',
+                events: [
+                    { id: 'd1', title: 'Team standup', start: at(firstTue, 9), end: at(firstTue, 9, 30), type: 1, recurrencerule: 'FREQ=WEEKLY;BYDAY=TU;INTERVAL=1;', description: 'Weekly sync' },
+                    { id: 'd2', title: 'Soccer practice', start: at(Math.min(today + 1, 27), 17), end: at(Math.min(today + 1, 27), 18, 30), type: 2 },
+                    { id: 'd3', title: 'Dentist', start: at(Math.max(today - 2, 3), 14), end: at(Math.max(today - 2, 3), 15), type: 3, description: 'Bring insurance card' },
+                    { id: 'd4', title: 'Grandma visits', start: day(8), end: day(11), type: 3, isAllDay: true },
+                    { id: 'd5', title: 'Science fair', start: at(Math.min(today, 26), 10), end: at(Math.min(today, 26), 12), type: 4 },
+                    { id: 'd6', title: 'Sam turns 9', start: day(19), end: day(20), type: 5, isAllDay: true },
+                    { id: 'd7', title: 'Long weekend', start: day(Math.min(today + 2, 25)), end: day(Math.min(today + 5, 28)), type: 6, isAllDay: true },
+                    { id: 'd8', title: 'Take out recycling', start: at(Math.max(today - 1, 2), 19), end: at(Math.max(today - 1, 2), 19, 30), type: 7 },
+                    { id: 'd9', title: 'Late flight', start: at(22, 22), end: at(23, 1), type: 8 },
+                    { id: 'd10', title: 'Lunch with Ana', start: at(Math.min(today, 26), 12, 30), end: at(Math.min(today, 26), 13, 30), type: 5 },
+                ],
+                sampleEvent: { id: 's1', title: 'Dentist', start: at(12, 14), end: at(12, 15), type: 3, description: 'Bring insurance card https://example.com/forms' },
+                sampleSeries: { id: 's2', title: 'Team standup', start: at(firstTue, 9), end: at(firstTue, 9, 30), type: 1, recurrencerule: 'FREQ=WEEKLY;BYDAY=TU;INTERVAL=1;', description: 'Weekly sync' },
+                qcStart: at(14, 11), qcEnd: at(14, 12, 30),
+                editorEvent: { id: 'e1', title: 'Soccer practice', start: at(14, 17), end: at(14, 18, 30), type: 2, description: 'Bring shin guards' },
+                phoneSrc: '/nativecal/view/heCUA?ux=2',
+                iconNames: Object.keys(window.NC_ICONS || {}),
+                colorTokens: [
+                    { name: '--pc-bg', use: 'Page, cards, popups' },
+                    { name: '--pc-surface', use: 'Panels, secondary buttons' },
+                    { name: '--pc-soft', use: 'Wells: segmented control, selected row, repeat panel' },
+                    { name: '--pc-hover', use: 'Hover on neutral controls' },
+                    { name: '--pc-line', use: 'Dividers and grid lines' },
+                    { name: '--pc-field', use: 'Input and outlined-button borders', on: '--pc-bg', min: 1.5 },
+                    { name: '--pc-text', use: 'Primary text', on: '--pc-bg' },
+                    { name: '--pc-text-2', use: 'Secondary strong text', on: '--pc-bg' },
+                    { name: '--pc-text-muted', use: 'Labels, meta, times', on: '--pc-bg' },
+                    { name: '--pc-accent', use: 'The one action, today, selection (text on it: --pc-on-accent)', on: '--pc-on-accent' },
+                    { name: '--pc-link', use: 'Links only', on: '--pc-bg' },
+                    { name: '--pc-success', use: 'Confirmations', on: '--pc-success-soft' },
+                    { name: '--pc-warning', use: 'Cautions', on: '--pc-warning-soft' },
+                    { name: '--pc-danger', use: 'Destructive actions, errors', on: '--pc-bg' },
+                ],
+                typeScale: [
+                    { token: 'display 22', px: '22px', weight: '600', use: 'Day numbers in Week/Day', sample: '24', style: 'font-size: var(--pc-fs-display); font-weight: 600; letter-spacing: -.02em' },
+                    { token: 'heading 20', px: '20px', weight: '600', use: 'Dialog and popup titles', sample: 'New event', style: 'font-size: var(--pc-fs-heading); font-weight: 600' },
+                    { token: 'title 18', px: '18px', weight: '600', use: 'Toolbar title', sample: 'September 2026', style: 'font-size: var(--pc-fs-title); font-weight: 600; letter-spacing: -.01em' },
+                    { token: 'lead 16', px: '16px', weight: '400-600', use: 'Phone title, emphasis', sample: 'Shared calendars that just work', style: 'font-size: var(--pc-fs-lead)' },
+                    { token: 'body 14', px: '14px', weight: '400-600', use: 'Body, buttons, inputs', sample: 'Bring insurance card and the forms from the portal.', style: 'font-size: var(--pc-fs-body)' },
+                    { token: 'small 12.5', px: '12.5px', weight: '500-600', use: 'Events, field labels, meta', sample: '9:00 AM  Team standup', style: 'font-size: var(--pc-fs-small); font-weight: 600; font-variant-numeric: tabular-nums' },
+                    { token: 'caption 11', px: '11px', weight: '600 caps +.06em', use: 'Weekdays, eyebrows', sample: 'SUNDAY  MONDAY  TUESDAY', style: 'font-size: var(--pc-fs-caption); font-weight: 600; letter-spacing: var(--pc-tracking-caps); color: var(--pc-text-muted)' },
+                ],
+                radii: [['xs', '4px · bars'], ['sm', '6px · blocks'], ['md', '8px · buttons'], ['lg', '12px · popups'], ['xl', '16px · dialogs']],
+                shadows: [['sm', 'Active tab'], ['md', 'Menus'], ['lg', 'Popups'], ['xl', 'Dialogs']],
+                words: [
+                    ['Category', 'Type, Label, Color', 'The word Settings uses ("+ Add category"); a category is a named color like "Soccer".'],
+                    ['Save', 'SAVE, Submit', 'Sentence case; the verb for what happens.'],
+                    ['More options', 'MORE DETAILS', 'Says what opens.'],
+                    ['This and following events', 'Following occurrences', 'Google\'s wording, which people already know.'],
+                    ['Deleted "Dentist"', 'Event deleted successfully!', 'Name the thing; no exclamation, no "successfully".'],
+                    ['9:00 AM', '09:00 AM', 'No leading zero; fixed-width digits so times align.'],
+                    ['Couldn\'t save. Check your connection and try again.', 'Error 500', 'Say what went wrong and what to do.'],
+                    ['Edit categories in Settings', 'Customize labels in Settings', 'One word for one thing.'],
+                ],
+                rules: [
+                    ['Undo over "are you sure"', 'Delete and move happen at once, with Undo for 8 seconds. Undo restores exactly the rows it touched, so other people\'s changes are kept.'],
+                    ['Ask only real questions', 'A dialog appears only for a choice (which events of a series), never to confirm.'],
+                    ['Sensible defaults', 'A click on a time slot makes a one-hour event; moving the start moves the end.'],
+                    ['Drag to create', 'Drag across the week grid to set start and end in one gesture, snapped to 15 minutes.'],
+                    ['Anywhere is a target', 'On phones a tap anywhere in a day creates there; targets are at least 44px.'],
+                    ['Same data as Syncfusion', 'Both calendars read and write one format; the journeys check NativeCal\'s writes in the Syncfusion app.'],
+                ],
+                adoption: [
+                    ['NativeCal v2 (/nativecal/<name>?ux=2)', 'on', 'Colors, type, radii and shadows all come from tokens.'],
+                    ['App theme variables and .pc-* components', 'on', '--bg, --text-color-1/2, --link and friends now read tokens; .pc-btn, .pc-input, .pc-modal use them.'],
+                    ['Links', 'on', 'Darker blue for contrast (4.8:1, was 2.6:1).'],
+                    ['Main app buttons written as Tailwind utilities', 'part', '64 hard-coded blue utilities (21 in index.html, the rest in QuickAddDialog, QuickAddButton, WelcomeDock) still to move to .pc-btn.'],
+                    ['Main app header, settings panel, dialogs', 'part', 'Use the theme variables; spacing and type still set per element with Tailwind.'],
+                    ['NativeCal v1 (/nativecal/<name>)', 'off', 'Deliberately Syncfusion\'s look so the switch is familiar; v2 replaces it.'],
+                    ['Syncfusion calendar (pastecal.com/<name>)', 'off', 'Its own Material theme; replaced by NativeCal.'],
+                ],
+            };
+        },
+        mounted() {
+            this.readTokens();
+            // The quick-create popup focuses its title when shown, which scrolls the page to it.
+            this.$nextTick(() => setTimeout(() => {
+                if (document.activeElement) document.activeElement.blur();
+                const h = location.hash && document.querySelector(location.hash);
+                if (h) h.scrollIntoView(); else window.scrollTo(0, 0);
+            }, 50));
+        },
+        methods: {
+            setTheme(t) {
+                this.theme = t;
+                document.documentElement.setAttribute('data-theme', t);
+                const u = new URL(location.href); u.searchParams.set('theme', t); history.replaceState(null, '', u);
+                this.phoneSrc = '/nativecal/view/heCUA?ux=2&t=' + t;   // reload the frame in the new theme
+            },
+            readTokens() {
+                const read = (el) => { const cs = getComputedStyle(el), o = {};
+                    for (const t of this.colorTokens) { o[t.name] = this.toRGB(cs.getPropertyValue(t.name).trim()); if (t.on) o[t.on] = this.toRGB(cs.getPropertyValue(t.on).trim()); }
+                    return o; };
+                this.resolved = { light: read(this.$refs.probeLight), dark: read(this.$refs.probeDark) };
+            },
+            // Any CSS color (hex, rgb(), color-mix) -> "rgb(r, g, b)", via a canvas.
+            toRGB(v) {
+                const ctx = this._ctx || (this._ctx = document.createElement('canvas').getContext('2d', { willReadFrequently: true }));
+                ctx.clearRect(0, 0, 1, 1); ctx.fillStyle = '#000'; ctx.fillStyle = v; ctx.fillRect(0, 0, 1, 1);
+                const d = ctx.getImageData(0, 0, 1, 1).data; return `rgb(${d[0]}, ${d[1]}, ${d[2]})`;
+            },
+            rgb(v) { const m = String(v).match(/(\d+)\D+(\d+)\D+(\d+)/); return m ? [+m[1], +m[2], +m[3]] : [0, 0, 0]; },
+            lum(v) { return this.rgb(this.toRGB(v)).map(c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); })
+                .reduce((s, c, i) => s + c * [0.2126, 0.7152, 0.0722][i], 0); },
+            contrast(a, b) { const x = this.lum(a), y = this.lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); },
+            ratio(th, a, b) { const r = this.resolved[th]; return r[a] && r[b] ? this.contrast(r[a], r[b]) : 0; },
+            hex(v) { if (!v) return ''; return '#' + this.rgb(v).map(n => n.toString(16).padStart(2, '0')).join(''); },
+            textOn(c) { return NcUx.textOn(c); },
+        },
+    });
+    app.component('nc-icon', NcIcon);
+    app.component('native-calendar', NativeCalendar);
+    app.component('event-popover', EventPopover);
+    app.component('quick-create-popover', QuickCreatePopover);
+    app.component('event-editor', EventEditor);
+    app.mount('#ds');
+})();
+</script>
+</body>
+</html>

@@ -62,6 +62,7 @@ Copyright (c) 2025 Kalid Azad
     <!-- End Google Tag Manager -->
 
     <!-- Core styles -->
+    <link rel="stylesheet" href="/tokens.css?v=1763769217">
     <link rel="stylesheet" href="/style.css?v=1763769217">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:400,500,700&display=swap">
     <!-- ?ux=2 switches NativeCal to the redesign (see components/ncUx.js). Set before
@@ -244,7 +245,9 @@ Copyright (c) 2025 Kalid Azad
             </div>
 
             <!-- Row 2: Claim URL (only for new calendars) -->
-            <div v-show="!isExisting"
+            <!-- isNewCalendar, not !isExisting: a view-only calendar is never "existing", so on phones
+                 this bar showed view-only visitors the calendar's EDIT address, with a Claim button. -->
+            <div v-show="isNewCalendar"
                 class="flex items-center bg-1 border border-color-default rounded-lg p-2 shadow-sm">
                 <span class="text-color-1 text-sm pl-1 pr-1 font-medium" id="url-prefix-mobile">pastecal.com/</span>
                 <input type="text" v-model="calendar.id" @input="handleSlugInput" @keyup.enter="create"

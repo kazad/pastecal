@@ -186,3 +186,91 @@ test('the prebuilt tailwind.css contains the theme and dark-mode rules the marku
     if (INDEX.includes(cls)) assert.ok(TAILWIND_BUILT.includes('.' + cls), `${cls} is used but not in public/tailwind.css`);
   }
 });
+
+// --- Design tokens (public/tokens.css, shown live at /dev/design) --------------------------
+// One source for color, type, space, shape and motion. These checks keep it the source:
+// every token used is defined, the palette agrees with the app, and text stays readable.
+
+const TOKENS = read('public/tokens.css');
+const NATIVE_CSS = read('public/nativecal/native.css');
+const DESIGN_PAGE = read('public/dev/design.html');
+const APP_JS = read('public/app.js');
+const NC_APP_JS = read('public/nativecal/app.js');
+
+/** name -> value for the declarations in one block of tokens.css (":root" or the dark one). */
+function tokenBlock(selector) {
+  const i = TOKENS.indexOf(selector + ' {');
+  assert.notEqual(i, -1, `${selector} block missing from tokens.css`);
+  const body = TOKENS.slice(i, TOKENS.indexOf('\n}', i));
+  const out = {};
+  for (const m of body.matchAll(/(--pc-[\w-]+)\s*:\s*([^;]+);/g)) out[m[1]] = m[2].trim();
+  return out;
+}
+const LIGHT = tokenBlock(':root');
+const DARK = { ...LIGHT, ...tokenBlock('[data-theme="dark"]') };
+
+function luminance(hex) {
+  const n = parseInt(hex.replace('#', ''), 16);
+  return [n >> 16, (n >> 8) & 255, n & 255].map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; })
+    .reduce((s, c, i) => s + c * [0.2126, 0.7152, 0.0722][i], 0);
+}
+const contrast = (a, b) => { const x = luminance(a), y = luminance(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+
+test('every var(--pc-*) used by the app, NativeCal and /dev/design is defined in tokens.css', () => {
+  const used = new Set();
+  for (const src of [read('public/style.css'), NATIVE_CSS, DESIGN_PAGE]) for (const m of src.matchAll(/var\((--pc-[\w-]*\w)[,)]/g)) used.add(m[1]);   // [,)]: skip names built in JS ('--pc-space-' + n)
+  const missing = [...used].filter((t) => !(t in LIGHT));
+  assert.deepEqual(missing, [], `used but not defined: ${missing.join(', ')}`);
+});
+
+test('text tokens meet WCAG AA (4.5:1) on the page background, in both themes', () => {
+  for (const [name, theme] of [['light', LIGHT], ['dark', DARK]]) {
+    for (const t of ['--pc-text', '--pc-text-2', '--pc-text-muted', '--pc-link', '--pc-danger']) {
+      const r = contrast(theme[t], theme['--pc-bg']);
+      assert.ok(r >= 4.5, `${t} on --pc-bg in ${name}: ${r.toFixed(2)}:1`);
+    }
+    const onAccent = contrast(theme['--pc-accent'], theme['--pc-on-accent']);
+    assert.ok(onAccent >= 4.5, `--pc-on-accent on --pc-accent in ${name}: ${onAccent.toFixed(2)}:1`);
+  }
+});
+
+test('the event palette in tokens.css is the one the apps use', () => {
+  const tokens = Array.from({ length: 16 }, (_, i) => LIGHT[`--pc-event-${i + 1}`].toLowerCase());
+  const list = (src, name) => {
+    const m = src.match(new RegExp(`const ${name} = \\[([^\\]]+)\\]`));
+    assert.ok(m, `${name} not found`);
+    return [...m[1].matchAll(/#[0-9a-fA-F]{6}/g)].map((x) => x[0].toLowerCase());
+  };
+  assert.deepEqual(tokens.slice(0, 8), list(NC_APP_JS, 'DEFAULT_COLORS'), 'categories 1-8 differ from nativecal DEFAULT_COLORS');
+  assert.deepEqual(tokens.slice(8), list(APP_JS, 'EXTRA_COLORS'), 'categories 9-16 differ from app.js EXTRA_COLORS');
+});
+
+test('every default event color has readable text on it (black or white, whichever is better)', () => {
+  // Mirrors NcUx.textOn: white or #1c1c1e, whichever has more contrast.
+  for (let i = 1; i <= 16; i++) {
+    const c = LIGHT[`--pc-event-${i}`];
+    const best = Math.max(contrast(c, '#ffffff'), contrast(c, '#1c1c1e'));
+    assert.ok(best >= 4.5, `category ${i} ${c}: best text contrast ${best.toFixed(2)}:1`);
+  }
+});
+
+test('pages that load style.css load tokens.css before it', () => {
+  for (const page of ['public/index.html', 'public/nativecal/index.html', 'public/dev/pro.html', 'public/dev/design.html']) {
+    const src = read(page);
+    const t = src.indexOf('/tokens.css'), s = src.indexOf('/style.css');
+    assert.ok(t !== -1 && t < s, `${page}: tokens.css must be linked before style.css`);
+  }
+});
+
+test('NativeCal v2 takes its colors from tokens, not hard-coded white', () => {
+  const v2 = NATIVE_CSS.slice(NATIVE_CSS.indexOf('v2 (?ux=2)'));
+  const bad = [...v2.matchAll(/[^-]color:\s*#fff\b/g)];
+  assert.equal(bad.length, 0, 'use var(--pc-on-accent) for text on the accent: white is 2.9:1 on the dark-theme accent');
+});
+
+test('/dev/design is served', () => {
+  const fb = JSON.parse(read('firebase.json'));
+  const r = fb.hosting.rewrites.find((x) => x.source === '/dev/design');
+  assert.ok(r && r.destination === '/dev/design.html', 'firebase.json needs a /dev/design rewrite before the catch-all');
+  assert.ok(fb.hosting.rewrites.indexOf(r) < fb.hosting.rewrites.findIndex((x) => x.source === '**'), '/dev/design must come before **');
+});

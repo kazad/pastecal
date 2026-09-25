@@ -383,7 +383,6 @@ test('Monday-first and 24-hour settings stick after a reload', async ({ browser,
 // SHARING -- #34 #16: the read-only link shows events and cannot edit
 // ===========================================================================
 test('the read-only link shows the events and does not let a visitor edit', async ({ browser, page }) => {
-  test.skip(isPhone(page), 'read-only view covered on desktop');
   await newCalendar(browser, page, 'readonly');
   await openNewEventEditor(page, 18);
   await typeTitle(page, 'Public event');
@@ -392,18 +391,27 @@ test('the read-only link shows the events and does not let a visitor edit', asyn
 
   const viewUrl = await page.evaluate(`${VM}.getReadOnlyURL()`);
   expect(viewUrl).toContain('/view/');
-  const visitor = await (await browser.newContext()).newPage();
+  // The visitor uses the same kind of device as this project: on phones the header is
+  // different, and it is where the edit address leaked (below).
+  const visitor = await (await browser.newContext(test.info().project.use)).newPage();
   await visitor.addInitScript(() => { window.__TEST__ = true; });
   await visitor.goto(new URL(viewUrl).pathname);
   await expect(visitor.locator('.e-appointment', { hasText: 'Public event' })).toBeVisible({ timeout: 20_000 });
 
-  const cell = await visitor.locator('.e-work-cells').nth(22).boundingBox();
-  await visitor.mouse.dblclick(cell.x + cell.width / 2, cell.y + cell.height / 2);
-  await visitor.waitForTimeout(800);
-  await expect(visitor.locator('.e-schedule-dialog.e-popup-open')).toHaveCount(0);
-  // #34: nothing on the visitor's page reveals the editable link.
-  const slugPath = new URL(page.url()).pathname;
-  await expect.poll(() => visitor.evaluate((p) => document.body.innerText.includes('pastecal.com' + p), slugPath)).toBe(false);
+  if (!isPhone(visitor)) {
+    const cell = await visitor.locator('.e-work-cells').nth(22).boundingBox();
+    await visitor.mouse.dblclick(cell.x + cell.width / 2, cell.y + cell.height / 2);
+    await visitor.waitForTimeout(800);
+    await expect(visitor.locator('.e-schedule-dialog.e-popup-open')).toHaveCount(0);
+  }
+  // #34: nothing on the visitor's page reveals the editable address -- in text OR in a
+  // visible input. On phones the new-calendar bar ("pastecal.com/ [slug] Claim") showed
+  // for view-only links, the slug inside an input, which a text-only check never saw.
+  const slug = new URL(page.url()).pathname.slice(1);
+  await visitor.waitForTimeout(1500);
+  const shown = await visitor.evaluate(() => document.body.innerText + ' ' + [...document.querySelectorAll('input')]
+    .filter((i) => i.offsetParent !== null).map((i) => i.value).join(' '));
+  expect(shown.includes(slug), 'the edit address is visible to a view-only visitor').toBe(false);
 });
 
 // ===========================================================================

@@ -132,8 +132,9 @@ const CalendarVueApp = {
         // eight AND each other -- an eyeballed set put #13 crimson 22 units from #2
         // crimson, close enough that two categories looked like one, which defeats the
         // point of having them. The worst pair here is 130 apart.
+        // #11 is #00836f, not #00897b: text on #00897b was 4.3:1, under the 4.5:1 minimum.
         const EXTRA_COLORS = [
-            "#827717", "#c0ca33", "#00897b", "#8e24aa",
+            "#827717", "#c0ca33", "#00836f", "#8e24aa",
             "#880e4f", "#bf360c", "#455a64", "#00bfa5"
         ];
 
