@@ -67,7 +67,8 @@ Copyright (c) 2025 Kalid Azad
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:400,500,700&display=swap">
     <!-- ?ux=2 switches NativeCal to the redesign (see components/ncUx.js). Set before
          first paint so neither look flashes. -->
-    <script>if (new URLSearchParams(location.search).get('ux') === '2') document.documentElement.dataset.ux = '2';</script>
+    <script>(function () { var ux = new URLSearchParams(location.search).get('ux');
+        if (ux === '2' || (ux !== '1' && /^\/beta(\/|$)/.test(location.pathname))) document.documentElement.dataset.ux = '2'; })();</script>
     <link rel="stylesheet" href="/nativecal/native.css">
 
     <!-- Third-party libraries -->
@@ -79,7 +80,9 @@ Copyright (c) 2025 Kalid Azad
     <script src="https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js"></script>
     
     <script>
-        window.CAL_BASE = '/nativecal';
+        // Served at /beta/<name> (the public beta: the v2 redesign) and /nativecal/<name>
+        // (v1, laid out like Syncfusion; ?ux=2 for v2).
+        window.CAL_BASE = /^\/beta(\/|$)/.test(location.pathname) ? '/beta' : '/nativecal';
     </script>
 
     <!-- Firebase config -->

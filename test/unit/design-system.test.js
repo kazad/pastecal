@@ -274,3 +274,14 @@ test('/dev/design is served', () => {
   assert.ok(r && r.destination === '/dev/design.html', 'firebase.json needs a /dev/design rewrite before the catch-all');
   assert.ok(fb.hosting.rewrites.indexOf(r) < fb.hosting.rewrites.findIndex((x) => x.source === '**'), '/dev/design must come before **');
 });
+
+test('/beta serves NativeCal (the public beta), before the catch-all', () => {
+  const fb = JSON.parse(read('firebase.json'));
+  const all = fb.hosting.rewrites.findIndex((x) => x.source === '**');
+  for (const src of ['/beta', '/beta/**']) {
+    const i = fb.hosting.rewrites.findIndex((x) => x.source === src);
+    assert.ok(i !== -1 && i < all && fb.hosting.rewrites[i].destination === '/nativecal/index.html', `${src} must rewrite to /nativecal/index.html before **`);
+  }
+  // Nobody can claim a calendar whose address the site routes elsewhere.
+  assert.match(read('public/services/CalendarDataService.js'), /\['beta', 'nativecal', 'view', 'dev'\]\.includes/);
+});

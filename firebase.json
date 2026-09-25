@@ -22,6 +22,14 @@
         "destination": "/dev/design.html"
       },
       {
+        "source": "/beta",
+        "destination": "/nativecal/index.html"
+      },
+      {
+        "source": "/beta/**",
+        "destination": "/nativecal/index.html"
+      },
+      {
         "source": "/nativecal/**",
         "destination": "/nativecal/index.html"
       },

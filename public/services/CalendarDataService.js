@@ -613,6 +613,9 @@ class CalendarDataService {
      * of the app does, so it sees a twin under any casing.
      */
     static checkExists(id, callback_yes, callback_no) {
+        // Names the site itself routes (pastecal.com/beta/..., /view/..., /nativecal/...) are
+        // "taken": a calendar claimed under one would have an address that opens something else.
+        if (['beta', 'nativecal', 'view', 'dev'].includes(String(id || '').toLowerCase())) { callback_yes(); return; }
         this.db.child(id).once('value', async data => {
             if (data.val()) { callback_yes(); return; }
             try {

@@ -31,6 +31,10 @@ const COMPONENT_REGISTRY = {
 };
 
 const CAL_BASE = (typeof window !== 'undefined' && window.CAL_BASE) ? window.CAL_BASE : '/';
+/** A calendar's page INSIDE this app (/beta/<id> or /nativecal/<id>), so creating or renaming
+ *  a calendar keeps beta testers in beta. Share links stay pastecal.com/<id>, the page
+ *  everyone else uses. */
+const calPath = (id) => (CAL_BASE === '/' ? '' : CAL_BASE.replace(/\/$/, '')) + '/' + (id || '');
 const stripBase = (path) => {
     const base = CAL_BASE.endsWith('/') ? CAL_BASE.slice(0, -1) : CAL_BASE;
     if (base && base !== '/' && path.startsWith(base)) {
@@ -1120,7 +1124,7 @@ const CalendarVueApp = {
                     this.recentManager.add(slug, this.calendar.title, true);
                     this.recentCalendars = this.recentManager.getAll();
                     this.showToast('Calendar created!', 'success');
-                    window.location.href = "/" + slug;
+                    window.location.href = calPath(slug);
                 });
             });
         },
@@ -1178,7 +1182,7 @@ const CalendarVueApp = {
                         if (previous?.pinned) this.recentManager.togglePin(newId);
                         this.recentCalendars = this.recentManager.getAll();
 
-                        window.location.href = "/" + newId;
+                        window.location.href = calPath(newId);
                     });
                 }
             });
@@ -1413,7 +1417,7 @@ const CalendarVueApp = {
 
         goToHomepage() {
             this.closeRecents();
-            window.location.href = '/';
+            window.location.href = calPath('');
         },
 
         // ============================================================

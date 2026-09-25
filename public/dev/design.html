@@ -443,7 +443,7 @@
                 sampleSeries: { id: 's2', title: 'Team standup', start: at(firstTue, 9), end: at(firstTue, 9, 30), type: 1, recurrencerule: 'FREQ=WEEKLY;BYDAY=TU;INTERVAL=1;', description: 'Weekly sync' },
                 qcStart: at(14, 11), qcEnd: at(14, 12, 30),
                 editorEvent: { id: 'e1', title: 'Soccer practice', start: at(14, 17), end: at(14, 18, 30), type: 2, description: 'Bring shin guards' },
-                phoneSrc: '/nativecal/view/heCUA?ux=2',
+                phoneSrc: '/beta/view/heCUA',
                 iconNames: Object.keys(window.NC_ICONS || {}),
                 colorTokens: [
                     { name: '--pc-bg', use: 'Page, cards, popups' },
@@ -491,12 +491,12 @@
                     ['Same data as Syncfusion', 'Both calendars read and write one format; the journeys check NativeCal\'s writes in the Syncfusion app.'],
                 ],
                 adoption: [
-                    ['NativeCal v2 (/nativecal/<name>?ux=2)', 'on', 'Colors, type, radii and shadows all come from tokens.'],
+                    ['NativeCal beta (pastecal.com/beta/<name>)', 'on', 'Colors, type, radii and shadows all come from tokens.'],
                     ['App theme variables and .pc-* components', 'on', '--bg, --text-color-1/2, --link and friends now read tokens; .pc-btn, .pc-input, .pc-modal use them.'],
                     ['Links', 'on', 'Darker blue for contrast (4.8:1, was 2.6:1).'],
                     ['Main app buttons written as Tailwind utilities', 'part', '64 hard-coded blue utilities (21 in index.html, the rest in QuickAddDialog, QuickAddButton, WelcomeDock) still to move to .pc-btn.'],
                     ['Main app header, settings panel, dialogs', 'part', 'Use the theme variables; spacing and type still set per element with Tailwind.'],
-                    ['NativeCal v1 (/nativecal/<name>)', 'off', 'Deliberately Syncfusion\'s look so the switch is familiar; v2 replaces it.'],
+                    ['NativeCal v1 (/nativecal/<name>, or /beta/<name>?ux=1)', 'off', 'Deliberately Syncfusion\'s look, kept for comparison; the beta replaces it.'],
                     ['Syncfusion calendar (pastecal.com/<name>)', 'off', 'Its own Material theme; replaced by NativeCal.'],
                 ],
             };
@@ -515,7 +515,7 @@
                 this.theme = t;
                 document.documentElement.setAttribute('data-theme', t);
                 const u = new URL(location.href); u.searchParams.set('theme', t); history.replaceState(null, '', u);
-                this.phoneSrc = '/nativecal/view/heCUA?ux=2&t=' + t;   // reload the frame in the new theme
+                this.phoneSrc = '/beta/view/heCUA?t=' + t;   // reload the frame in the new theme
             },
             readTokens() {
                 const read = (el) => { const cs = getComputedStyle(el), o = {};

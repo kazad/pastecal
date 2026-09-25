@@ -443,7 +443,7 @@ const SlugService = {
         // Cannot be 'view' or other reserved words
         const slugRegex = /^[a-zA-Z0-9-_]{3,50}$/;
         const reservedWords = [
-            'view', 'api', 'admin', 'administrator', 'www', 'app', 'apps', 'calendar', 'cal',
+            'view', 'beta', 'nativecal', 'api', 'admin', 'administrator', 'www', 'app', 'apps', 'calendar', 'cal',
             'about', 'account', 'accounts', 'assets', 'auth', 'bin', 'billing', 'blog', 'bot',
             'cache', 'careers', 'cgi-bin', 'config', 'contact', 'cpanel', 'css', 'dashboard',
             'dev', 'docs', 'download', 'downloads', 'enterprise', 'faq', 'favicon.ico', 'ftp',
