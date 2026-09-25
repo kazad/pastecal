@@ -1,6 +1,7 @@
 (function() {
     const timestamp = new Date().getTime();
     const files = [
+        '/nativecal/components/ncUx.js',
         '/nativecal/components/NcIcon.js',
         '/nativecal/components/NativeCalendar.js',
         '/nativecal/components/EventEditor.js',

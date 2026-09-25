@@ -27,7 +27,8 @@ const EventEditor = {
             title: '', type: 1, description: '', isAllDay: false,
             startDate: '', startTime: '09:00', endDate: '', endTime: '10:00',
             freq: '', interval: 1, byDay: [], endMode: 'never', until: '', count: 10,
-            colorMenu: false, error: '',
+            colorMenu: false, menuStyle: null, error: '',
+            v2: typeof NcUx !== 'undefined' && NcUx.v2(),
         };
     },
     computed: {
@@ -37,11 +38,29 @@ const EventEditor = {
         isOccurrence() { return !!(this.event && (this.event._occurrenceOf || this.event.recurrenceID)); },
         palette() { return this.colors.length ? this.colors : ['#3f51b5', '#e3165b', '#ff6652', '#4caf50', '#ff9800', '#03a9f4', '#9e9e9e', '#27282f']; },
         currentColor() { return this.palette[(this.type - 1) % this.palette.length]; },
+        // The start as one number, for "end follows start". Uses the time field even
+        // when All day hides it, so toggling All day never counts as moving the start.
+        startStamp() { return new Date(`${this.startDate}T${this.startTime || '00:00'}`).getTime(); },
         unit() { return { DAILY: 'Day(s)', WEEKLY: 'Week(s)', MONTHLY: 'Month(s)', YEARLY: 'Year(s)' }[this.freq] || ''; },
     },
+    mounted() {
+        // A click anywhere outside the color menu closes it.
+        this._onDown = (e) => { if (this.colorMenu && !e.target.closest('.ne-color')) this.colorMenu = false; };
+        document.addEventListener('mousedown', this._onDown);
+    },
+    beforeUnmount() { document.removeEventListener('mousedown', this._onDown); },
     watch: {
         event: { handler() { this.load(); }, immediate: true },
         visible(v) { if (v) this.$nextTick(() => this.$refs.title && this.$refs.title.focus()); },
+        // v2: move the start and the end moves with it, keeping the length (Google,
+        // Apple). v1 leaves the end alone, as Syncfusion does.
+        startStamp(now) {
+            const was = this._lastStart; this._lastStart = now;
+            if (!this.v2 || isNaN(now) || isNaN(was) || now === was || was === undefined) return;
+            const end = new Date(new Date(`${this.endDate}T${this.endTime || '00:00'}`).getTime() + (now - was));
+            if (isNaN(end)) return;
+            this.endDate = this.dateStr(end); this.endTime = this.timeStr(end);
+        },
         isAllDay(now, was) {
             if (now && !was && this.endDate < this.startDate) this.endDate = this.startDate;
         },
@@ -64,6 +83,7 @@ const EventEditor = {
             this.startDate = this.dateStr(s); this.startTime = this.timeStr(s);
             this.endDate = this.dateStr(en); this.endTime = this.timeStr(en);
             this.parseRule(e.recurrencerule, s);
+            this._lastStart = this.startStamp;   // loading an event is not "moving the start"
         },
         parseRule(rule, start) {
             this.freq = ''; this.interval = 1; this.byDay = [start.getDay()]; this.endMode = 'never'; this.until = ''; this.count = 10;
@@ -75,7 +95,12 @@ const EventEditor = {
                 const map = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
                 this.byDay = parts.BYDAY.split(',').map(d => map[d.replace(/^[+-]?\d+/, '')]).filter(n => n !== undefined);
             }
-            if (parts.UNTIL) { const u = parts.UNTIL; this.endMode = 'until'; this.until = `${u.slice(0, 4)}-${u.slice(4, 6)}-${u.slice(6, 8)}`; }
+            if (parts.UNTIL) {
+                // A UTC stamp: show the LOCAL day it falls on.
+                const u = parts.UNTIL, t = /T(\d{2})(\d{2})(\d{2})/.exec(u) || [0, '00', '00', '00'];
+                const at = new Date(Date.UTC(+u.slice(0, 4), +u.slice(4, 6) - 1, +u.slice(6, 8), +t[1], +t[2], +t[3]));
+                this.endMode = 'until'; this.until = /Z$/.test(u) ? this.dateStr(at) : `${u.slice(0, 4)}-${u.slice(4, 6)}-${u.slice(6, 8)}`;
+            }
             else if (parts.COUNT) { this.endMode = 'count'; this.count = parseInt(parts.COUNT, 10) || 1; }
         },
         toggleDay(d) {
@@ -115,24 +140,62 @@ const EventEditor = {
         },
         close() { this.$emit('update:visible', false); },
         pickColor(i) { this.type = i + 1; this.colorMenu = false; },
+        // v2 says "Category" (the word Settings uses: "+ Add category"); v1 keeps Syncfusion's "Type".
+        label(i) {
+            const l = this.labels[i];
+            // The defaults are STORED as "Type 1".."Type 8"; v2 shows an unrenamed one as
+            // "Category N". Names people chose ("Soccer") are shown as they are.
+            if (this.v2 && (!l || /^Type \d+$/.test(l))) return 'Category ' + (i + 1);
+            return l || ('Type ' + (i + 1));
+        },
+        // v2: the menu is placed against the window, so the editor's scrolling body cannot
+        // clip it; it opens downward if it fits, else upward, and scrolls if it must.
+        toggleColorMenu(e) {
+            this.colorMenu = !this.colorMenu;
+            if (!this.colorMenu || !this.v2) return;
+            const r = e.currentTarget.getBoundingClientRect(), want = 44 + this.palette.length * 36;
+            const below = window.innerHeight - r.bottom - 12, above = r.top - 12;
+            const down = below >= Math.min(want, 240) || below >= above;
+            const room = Math.max(160, down ? below : above);
+            this.menuStyle = { position: 'fixed', left: r.left + 'px', width: Math.max(r.width, 220) + 'px', maxHeight: Math.min(want, room) + 'px',
+                ...(down ? { top: (r.bottom + 4) + 'px' } : { bottom: (window.innerHeight - r.top + 4) + 'px' }) };
+        },
     },
     template: /* html */ `
 <div v-if="visible" class="ne-overlay" @mousedown.self="close">
   <div class="ne-dialog" role="dialog" aria-modal="true" :aria-label="isNew ? 'New Event' : 'Edit Event'" data-testid="event-editor">
     <div class="ne-head">
-      <h2>{{ isNew ? 'New Event' : 'Edit Event' }}</h2>
+      <h2>{{ v2 ? (isNew ? 'New event' : 'Edit event') : (isNew ? 'New Event' : 'Edit Event') }}</h2>
       <button class="ne-x" aria-label="Close" data-testid="editor-close" @click="close"><nc-icon name="x" :size="20"></nc-icon></button>
     </div>
     <div class="ne-body">
       <div class="ne-row ne-title-row">
         <label class="ne-field ne-grow"><span>Title</span>
           <input ref="title" v-model="title" data-testid="editor-title" @keydown.enter.prevent="save"></label>
-        <div class="ne-color">
+        <div v-if="!v2" class="ne-color">
           <button class="ne-color-btn" :style="{ background: currentColor }" aria-label="Color" data-testid="editor-color" @click="colorMenu = !colorMenu"><nc-icon name="chevron-down" :size="16" :stroke-width="2.5"></nc-icon></button>
           <div v-if="colorMenu" class="ne-color-menu">
             <button v-for="(c, i) in palette" :key="i" :data-testid="'editor-color-' + (i + 1)" @click="pickColor(i)">
               <span class="sw" :style="{ background: c }"></span>{{ labels[i] || ('Type ' + (i + 1)) }}</button>
             <div class="ne-color-hint">Customize labels in Settings</div>
+          </div>
+        </div>
+      </div>
+      <!-- v2: the color as a labeled dropdown. The labels ("Soccer", "Practice") are the
+           information, so the closed button names the current one and the open menu names
+           them all -- swatches alone hid every label behind a click. -->
+      <div v-if="v2" class="ne-field ne-colorfield"><span>Category</span>
+        <div class="ne-color">
+          <button type="button" class="ne-color2" aria-haspopup="listbox" :aria-expanded="colorMenu" data-testid="editor-color" @click="toggleColorMenu">
+            <span class="sw" :style="{ background: currentColor }"></span>
+            <span class="ne-color2-label" data-testid="editor-color-label">{{ label(type - 1) }}</span>
+            <nc-icon name="chevron-down" :size="16"></nc-icon></button>
+          <div v-if="colorMenu" class="ne-color-menu ne-color-menu2" :style="menuStyle" role="listbox" aria-label="Category">
+            <button v-for="(c, i) in palette" :key="i" type="button" role="option" :aria-selected="type === i + 1"
+              :data-testid="'editor-color-' + (i + 1)" @click="pickColor(i)">
+              <span class="sw" :style="{ background: c }"></span><span class="lbl">{{ label(i) }}</span>
+              <nc-icon v-if="type === i + 1" class="ck" name="check" :size="16" :stroke-width="2.5"></nc-icon></button>
+            <div class="ne-color-hint">Edit categories in Settings</div>
           </div>
         </div>
       </div>
@@ -143,23 +206,25 @@ const EventEditor = {
           <div class="ne-dt"><input type="date" v-model="endDate" data-testid="editor-end-date"><input v-if="!isAllDay" type="time" v-model="endTime" data-testid="editor-end-time"></div></label>
       </div>
       <label class="ne-check"><input type="checkbox" v-model="isAllDay" data-testid="editor-allday"> All day</label>
-      <label v-if="!isOccurrence" class="ne-field ne-half"><span>Repeat</span>
-        <span class="ne-select"><select v-model="freq" data-testid="editor-repeat">
-          <option value="">Never</option><option value="DAILY">Daily</option><option value="WEEKLY">Weekly</option>
-          <option value="MONTHLY">Monthly</option><option value="YEARLY">Yearly</option></select></span></label>
-      <div v-if="freq && !isOccurrence" class="ne-repeat" data-testid="editor-repeat-options">
-        <div class="ne-row">
-          <label class="ne-field"><span>Repeat every</span>
-            <div class="ne-inline"><input type="number" min="1" v-model="interval" class="ne-num"> {{ unit }}</div></label>
-        </div>
-        <div v-if="freq === 'WEEKLY'" class="ne-field"><span>Repeat On</span>
-          <div class="ne-days">
-            <button v-for="(n, d) in ['S','M','T','W','T','F','S']" :key="d" :class="{ on: byDay.includes(d) }" @click="toggleDay(d)">{{ n }}</button></div></div>
-        <div class="ne-row">
-          <label class="ne-field ne-half"><span>End</span>
-            <span class="ne-select"><select v-model="endMode"><option value="never">Never</option><option value="until">Until</option><option value="count">Count</option></select></span></label>
-          <label v-if="endMode === 'until'" class="ne-field ne-half"><span>&nbsp;</span><input type="date" v-model="until"></label>
-          <label v-if="endMode === 'count'" class="ne-field ne-half"><span>&nbsp;</span><input type="number" min="1" v-model="count" class="ne-num"></label>
+      <!-- v1: Syncfusion's two columns -- Repeat | Repeat every, then Repeat On | End.
+           v2: the options stacked in a tinted panel under Repeat. Same fields. -->
+      <div v-if="!isOccurrence" class="ne-rep">
+        <label class="ne-field ne-rep-freq"><span>Repeat</span>
+          <span class="ne-select"><select v-model="freq" data-testid="editor-repeat">
+            <option value="">Never</option><option value="DAILY">Daily</option><option value="WEEKLY">Weekly</option>
+            <option value="MONTHLY">Monthly</option><option value="YEARLY">Yearly</option></select></span></label>
+        <div v-if="freq" class="ne-repeat" data-testid="editor-repeat-options">
+          <label class="ne-field ne-rep-every"><span>Repeat every</span>
+            <div class="ne-inline"><input type="number" min="1" v-model="interval" class="ne-num" data-testid="editor-interval"> {{ unit }}</div></label>
+          <div v-if="freq === 'WEEKLY'" class="ne-field ne-rep-on"><span>Repeat On</span>
+            <div class="ne-days">
+              <button v-for="(n, d) in ['S','M','T','W','T','F','S']" :key="d" type="button" :class="{ on: byDay.includes(d) }" @click="toggleDay(d)">{{ n }}</button></div></div>
+          <div class="ne-rep-end">
+            <label class="ne-field"><span>End</span>
+              <span class="ne-select"><select v-model="endMode" data-testid="editor-end-mode"><option value="never">Never</option><option value="until">Until</option><option value="count">Count</option></select></span></label>
+            <label v-if="endMode === 'until'" class="ne-field"><span>Until</span><input type="date" v-model="until" data-testid="editor-until"></label>
+            <label v-if="endMode === 'count'" class="ne-field"><span>Occurrences</span><input type="number" min="1" v-model="count" class="ne-num" data-testid="editor-count"></label>
+          </div>
         </div>
       </div>
       <label class="ne-field"><span>Description</span>
@@ -167,10 +232,18 @@ const EventEditor = {
       <p v-if="error" class="ne-error">{{ error }}</p>
     </div>
     <div class="ne-foot">
-      <button v-if="!isNew" class="ne-btn" data-testid="editor-delete" @click="$emit('delete', event.id)">DELETE</button>
-      <span class="ne-spacer"></span>
-      <button class="ne-btn primary" data-testid="editor-save" @click="save">SAVE</button>
-      <button class="ne-btn" data-testid="editor-cancel" @click="close">CANCEL</button>
+      <template v-if="v2">
+        <button v-if="!isNew" class="ne-btn danger" data-testid="editor-delete" @click="$emit('delete', event.id)">Delete</button>
+        <span class="ne-spacer"></span>
+        <button class="ne-btn" data-testid="editor-cancel" @click="close">Cancel</button>
+        <button class="ne-btn filled" data-testid="editor-save" @click="save">Save</button>
+      </template>
+      <template v-else>
+        <button v-if="!isNew" class="ne-btn" data-testid="editor-delete" @click="$emit('delete', event.id)">DELETE</button>
+        <span class="ne-spacer"></span>
+        <button class="ne-btn primary" data-testid="editor-save" @click="save">SAVE</button>
+        <button class="ne-btn" data-testid="editor-cancel" @click="close">CANCEL</button>
+      </template>
     </div>
   </div>
 </div>`,

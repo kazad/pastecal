@@ -312,3 +312,141 @@ test('NativeCal: popups close by clicking away or Escape, and cancelling the edi
   await page.waitForTimeout(1000);
   expect((await onServer(page)).map(e => e.title)).toEqual(['Anchor']);
 });
+
+// ---------------------------------------------------------------------------
+// v2 (?ux=2): the redesign's new behavior. Same calendars, same data format.
+// ---------------------------------------------------------------------------
+async function newCalendarV2(browser, page, name) {
+  const slug = await newCalendar(browser, page, name);
+  await openNative(page, slug + '?ux=2');
+  return slug;
+}
+
+test('NativeCal v2: drag across the week grid to create an event with that start and end', async ({ browser, page }) => {
+  test.skip(isPhone(page), 'drag is a mouse gesture');
+  await newCalendarV2(browser, page, 'v2drag');
+  await tap(page, t(page, 'view-Week'));
+  const col = page.locator('.nc-col').nth(3);
+  const bx = await col.boundingBox();
+  await page.mouse.move(bx.x + 30, bx.y + 48 * 4 + 2);          // an hour row, four hours down
+  await page.mouse.down();
+  await page.mouse.move(bx.x + 30, bx.y + 48 * 5.5 + 2, { steps: 10 });   // 90 minutes later
+  await expect(t(page, 'create-preview')).toBeVisible();
+  await page.mouse.up();
+  await expect(t(page, 'quick-create')).toBeVisible();
+  await t(page, 'quick-create-title').pressSequentially('Planning', { delay: TYPE_DELAY_MS });
+  await tap(page, t(page, 'quick-create-save'));
+  await serverSoon(page, (r) => r.some(e => e.title === 'Planning'));
+  const e = await byTitle(page, 'Planning');
+  const s = new Date(e.start), en = new Date(e.end);
+  expect(en - s).toBe(90 * 60000);
+  expect(s.getMinutes() % 15).toBe(0);
+  expect(!!e.isAllDay).toBe(false);
+});
+
+test('NativeCal v2: moving the start moves the end, keeping the length', async ({ browser, page }) => {
+  await newCalendarV2(browser, page, 'v2end');
+  await openNewEditor(page, 14);
+  await tap(page, t(page, 'editor-allday'));
+  await t(page, 'editor-start-time').fill('09:00');
+  await t(page, 'editor-end-time').fill('10:30');
+  await t(page, 'editor-start-time').fill('14:00');
+  await expect(t(page, 'editor-end-time')).toHaveValue('15:30');
+  await typeInto(page, 'editor-title', 'Moved start');
+  await save(page);
+  await serverSoon(page, (r) => r.some(e => e.title === 'Moved start'));
+  const e = await byTitle(page, 'Moved start');
+  expect(new Date(e.start).getTime()).toBe(await localDay(page, 14, 14));
+  expect(new Date(e.end).getTime()).toBe(await localDay(page, 14, 15, 30));
+});
+
+test('NativeCal v2: delete happens at once and Undo brings the same event back', async ({ browser, page }) => {
+  await newCalendarV2(browser, page, 'v2undo');
+  await quickCreate(page, 9, 'Keep me');
+  await quickCreate(page, 11, 'Oops');
+  await serverSoon(page, (r) => r.length === 2);
+  const before = await byTitle(page, 'Oops');
+
+  await openPopup(page, 'Oops');
+  await tap(page, t(page, 'popover-delete'));
+  await expect(t(page, 'confirm-dialog')).toHaveCount(0);
+  await expect(t(page, 'undo-snackbar')).toContainText('Oops');
+  await serverSoon(page, (r) => r.length === 1 && r[0].title === 'Keep me');
+
+  await tap(page, t(page, 'undo-button'));
+  await serverSoon(page, (r) => r.length === 2);
+  const back = await byTitle(page, 'Oops');
+  expect(back.id).toBe(before.id);
+  expect(back.start).toBe(before.start);
+  await expect(bar(page, 'Oops')).toBeVisible();
+});
+
+test('NativeCal v2: a dragged event can be put back with Undo', async ({ browser, page }) => {
+  test.skip(isPhone(page), 'drag is a mouse gesture');
+  await newCalendarV2(browser, page, 'v2move');
+  await quickCreate(page, 8, 'Dragme');
+  await serverSoon(page, (r) => r.some(e => e.title === 'Dragme'));
+  const was = (await byTitle(page, 'Dragme')).start;
+  const from = await bar(page, 'Dragme').boundingBox();
+  const to = await (await cell(page, 17)).boundingBox();
+  await page.mouse.move(from.x + 10, from.y + from.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 12 });
+  await page.mouse.up();
+  const moved = await localDay(page, 17);
+  await serverSoon(page, (r) => r.some(e => e.title === 'Dragme' && new Date(e.start).getTime() === moved));
+  await tap(page, t(page, 'undo-button'));
+  await serverSoon(page, (r) => r.some(e => e.title === 'Dragme' && e.start === was));
+});
+
+test('NativeCal v2: "this and following" splits the series the way Syncfusion reads it; deleting following can be undone', async ({ browser, page }) => {
+  test.skip(isPhone(page), 'repeat flows covered on desktop');
+  const slug = await newCalendarV2(browser, page, 'v2follow');
+  await openNewEditor(page, 1);
+  await typeInto(page, 'editor-title', 'Weekly sync');
+  await tap(page, t(page, 'editor-allday'));
+  await t(page, 'editor-start-time').fill('09:00');
+  await t(page, 'editor-end-time').fill('09:30');
+  await t(page, 'editor-repeat').selectOption('WEEKLY');
+  await save(page);
+  await serverSoon(page, (r) => r.some(e => e.title === 'Weekly sync'));
+  const series = await byTitle(page, 'Weekly sync');
+
+  // Edit the third occurrence "and following".
+  await openPopup(page, 'Weekly sync', 2);
+  await tap(page, t(page, 'popover-edit'));
+  await tap(page, t(page, 'scope-following'));
+  await tap(page, t(page, 'confirm-ok'));
+  await expect(t(page, 'editor-repeat')).toHaveCount(1);
+  await typeInto(page, 'editor-title', 'Sync v2');
+  await save(page);
+  await serverSoon(page, (r) => r.length === 2 && r.some(e => e.title === 'Sync v2'));
+  const rows = await onServer(page);
+  const old = rows.find(e => e.id === series.id), next = rows.find(e => e.title === 'Sync v2');
+  expect(old.recurrencerule).toMatch(/UNTIL=\d{8}T\d{6}Z/);
+  expect(next.recurrencerule).toMatch(/^FREQ=WEEKLY;/);
+  expect(new Date(next.start).getTime()).toBe(await localDay(page, 15, 9));
+  const nOld = await page.locator('.nc-bar', { hasText: 'Weekly sync' }).count();
+  const nNew = await page.locator('.nc-bar', { hasText: 'Sync v2' }).count();
+  expect(nOld).toBe(2);
+
+  // Syncfusion draws the same split.
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await ctx.addInitScript(() => { window.__TEST__ = true; });
+  const sf = await ctx.newPage();
+  await sf.goto('/' + slug);
+  await sf.waitForFunction(`${VM_SAFE}?.isExisting === true`);
+  await expect(sf.locator('.e-appointment', { hasText: 'Weekly sync' })).toHaveCount(nOld, { timeout: 15_000 });
+  await expect(sf.locator('.e-appointment', { hasText: 'Sync v2' })).toHaveCount(nNew);
+  await ctx.close();
+
+  // Delete the new series from its second occurrence on, then Undo.
+  const v2rule = next.recurrencerule;
+  await openPopup(page, 'Sync v2', 1);
+  await tap(page, t(page, 'popover-delete'));
+  await tap(page, t(page, 'scope-following'));
+  await tap(page, t(page, 'confirm-ok'));
+  await serverSoon(page, (r) => /UNTIL=/.test(r.find(e => e.title === 'Sync v2')?.recurrencerule || ''));
+  await tap(page, t(page, 'undo-button'));
+  await serverSoon(page, (r) => r.find(e => e.title === 'Sync v2')?.recurrencerule === v2rule);
+});

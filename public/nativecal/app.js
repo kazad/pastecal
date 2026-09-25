@@ -152,6 +152,8 @@ const CalendarVueApp = {
             popoverEventId: null,
             popoverOccurrence: null,
             confirmDialog: null,
+            snackbar: null,             // v2: { text, undo } after a delete or move
+            ux2: typeof NcUx !== 'undefined' && NcUx.v2(),
             popoverPosition: { top: 0, left: 0 },
             
             // Quick Create
@@ -803,6 +805,16 @@ const CalendarVueApp = {
         requestEdit(event) {
             const occ = this.popoverOccurrence;
             this.closePopover();
+            if (this._isSeries(event) && occ && this.ux2) {
+                const at = (extra) => ({ ...event, start: new Date(occ.start).toISOString(), end: new Date(occ.end).toISOString(),
+                    _occurrenceStart: new Date(occ.start).toISOString(), ...extra });
+                this._scopeDialog('Edit recurring event', [
+                    { label: 'This event', testid: 'scope-this', action: () => this.openEditorForEvent(at({ _occurrenceOf: event.id })) },
+                    { label: 'This and following events', testid: 'scope-following', action: () => this.openEditorForEvent(at({ _followingOf: event.id })) },
+                    { label: 'All events', testid: 'scope-all', action: () => this.openEditorForEvent(event) },
+                ]);
+                return;
+            }
             if (this._isSeries(event) && occ) {
                 this.confirmDialog = {
                     title: 'Edit Event', message: 'How would you like to change the appointment in the series?',
@@ -826,6 +838,18 @@ const CalendarVueApp = {
             const occStart = (editing && editing._occurrenceStart) || (this.popoverOccurrence && this.popoverOccurrence.start);
             const series = this.calendar.events.find(e => e.id === ((editing && editing._occurrenceOf) || id));
             this.closePopover();
+            if (this.ux2) {
+                // v2: no "are you sure". Delete now and offer Undo -- faster, and it
+                // protects against the mistake a confirm dialog only asks about.
+                if (this._isSeries(series) && occStart) {
+                    this._scopeDialog('Delete recurring event', [
+                        { label: 'This event', testid: 'scope-this', action: () => this.deleteOccurrence(series, occStart) },
+                        { label: 'This and following events', testid: 'scope-following', action: () => this.deleteFollowing(series, occStart) },
+                        { label: 'All events', testid: 'scope-all', action: () => this.deleteSeries(series) },
+                    ], 'Delete');
+                } else this.handleDeleteEvent(id);
+                return;
+            }
             if (this._isSeries(series) && occStart) {
                 this.confirmDialog = {
                     title: 'Delete Event', message: 'How would you like to delete the appointment in the series?',
@@ -843,6 +867,96 @@ const CalendarVueApp = {
                     { label: 'CANCEL', testid: 'confirm-cancel', action: () => {} },
                 ],
             };
+        },
+
+        /** v2's recurring prompt: a choice of scope, then OK (Google's wording). */
+        _scopeDialog(title, options, ok = 'OK') {
+            const dlg = { title, options, choice: 0 };
+            dlg.buttons = [
+                { label: 'Cancel', testid: 'confirm-cancel', action: () => {} },
+                { label: ok, primary: true, testid: 'confirm-ok', action: () => dlg.options[dlg.choice].action() },
+            ];
+            this.confirmDialog = dlg;
+        },
+
+        /**
+         * Apply a change to the events. In v2 it can be taken back: the rows it touched are
+         * remembered and Undo puts exactly those back, so anything someone else changed in
+         * the meantime is kept. Shrinking writes are declared, as the write gate requires.
+         */
+        _applyEvents(next, undoText) {
+            const before = this.calendar.events;
+            if (before.length > next.length) CalendarDataService.declareIntent(before.length - next.length);
+            this.calendar.setEvents(next);
+            if (!this.ux2 || !undoText) return;
+            const snap = (list) => new Map(list.filter(e => e && e.id).map(e => [e.id, JSON.stringify(e)]));
+            const was = snap(before), now = snap(next);
+            const touched = [...new Set([...was.keys(), ...now.keys()])].filter(id => was.get(id) !== now.get(id));
+            this.showSnackbar(undoText, () => {
+                const cur = this.calendar.events;
+                const out = cur.filter(e => !touched.includes(e.id) || was.has(e.id))
+                    .map(e => touched.includes(e.id) ? new Event(JSON.parse(was.get(e.id))) : e);
+                for (const id of touched) if (was.has(id) && !out.some(e => e.id === id)) out.push(new Event(JSON.parse(was.get(id))));
+                if (cur.length > out.length) CalendarDataService.declareIntent(cur.length - out.length);
+                this.calendar.setEvents(out);
+            });
+        },
+
+        showSnackbar(text, undo) {
+            clearTimeout(this._snackTimer);
+            this.snackbar = { text, undo };
+            this._snackTimer = setTimeout(() => { this.snackbar = null; }, 8000);
+        },
+        undoSnackbar() {
+            const s = this.snackbar; this.snackbar = null; clearTimeout(this._snackTimer);
+            if (s && s.undo) s.undo();
+        },
+
+        /** Drag / resize from the calendar. */
+        onCalendarEdit(next) {
+            const moved = next.find((e, i) => e !== this.calendar.events[i]);
+            this._applyEvents(next, moved ? `Moved "${moved.title || '(No title)'}"` : 'Event moved');
+        },
+
+        /**
+         * "This and following": end the series just before this occurrence (UNTIL, a UTC
+         * stamp, as Syncfusion writes it) and, for an edit, start a new series there.
+         * A COUNT rule keeps its total: the first part becomes UNTIL, the second gets
+         * what is left. Edited copies of the following occurrences go with them.
+         * Returns the new events array and the remaining count (or null).
+         */
+        _cutSeries(series, occStart) {
+            const occ = new Date(occStart);
+            const parts = String(series.recurrencerule || '').replace(/^RRULE:/i, '').split(';').filter(p => p.includes('='));
+            const get = (k) => (parts.find(p => p.startsWith(k + '=')) || '').split('=')[1];
+            let remaining = null;
+            if (get('COUNT') && window.rrule) {
+                const RR = window.rrule.RRule;
+                const f = (d) => new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds()));
+                const s0 = new Date(series.start);
+                const rule = new RR({ ...RR.parseString(parts.filter(p => !/^(COUNT|UNTIL)=/.test(p)).join(';')), dtstart: f(s0) });
+                const before = rule.between(f(s0), f(new Date(occ.getTime() - 1000)), true).length;
+                remaining = Math.max(1, parseInt(get('COUNT'), 10) - before);
+            }
+            // Syncfusion's own split: UNTIL = the occurrence one day earlier. Syncfusion
+            // reads UNTIL as "through the end of that local day", so this ends the old
+            // part the day before -- anything later would still include this occurrence.
+            const until = this._stamp(new Date(occ.getFullYear(), occ.getMonth(), occ.getDate() - 1, occ.getHours(), occ.getMinutes()));
+            const cutRule = parts.filter(p => !/^(COUNT|UNTIL)=/.test(p)).join(';') + `;UNTIL=${until};`;
+            const occStamp = this._stamp(occ);
+            // Nothing of the series is left before this occurrence: "following" is "all".
+            const nothingBefore = occ.getTime() <= new Date(series.start).getTime();
+            const events = this.calendar.events
+                .filter(e => !(e.recurrenceID === series.id && String(e.recurrenceException || '') >= occStamp))
+                .filter(e => !(nothingBefore && (e.id === series.id || e.recurrenceID === series.id)))
+                .map(e => e.id === series.id && !e.recurrenceID ? new Event({ ...e, recurrencerule: cutRule }) : e);
+            return { events, remaining };
+        },
+
+        deleteFollowing(series, occStart) {
+            const { events } = this._cutSeries(series, occStart);
+            this._applyEvents(events, `Deleted "${series.title || '(No title)'}" from this date on`);
+            this.closeEditor();
         },
 
         runConfirm(button) {
@@ -872,6 +986,22 @@ const CalendarVueApp = {
             const events = [...this.calendar.events];
             const { _occurrenceOf, _occurrenceStart, ...data } = eventData;
 
+            if (data._followingOf) {
+                const { _followingOf, ...rest } = data;
+                const series = events.find(e => e.id === _followingOf && !e.recurrenceID);
+                if (series) {
+                    const { events: cut, remaining } = this._cutSeries(series, _occurrenceStart);
+                    let rule = rest.recurrencerule;
+                    // Unchanged COUNT rule: the new part repeats only what was left.
+                    const norm = (r) => String(r || '').split(';').filter(p => p.includes('=')).sort().join(';');
+                    if (remaining !== null && norm(rule) === norm(series.recurrencerule)) rule = rule.replace(/COUNT=\d+/, `COUNT=${remaining}`);
+                    cut.push(new Event({ ...rest, id: Utils.uuidv4(), recurrencerule: rule, recurrenceException: '' }));
+                    this._applyEvents(cut);
+                    if (typeof AuthorSignal !== 'undefined') AuthorSignal.touch(this.calendar.id);
+                    this.closeEditor();
+                    return;
+                }
+            }
             if (_occurrenceOf) {
                 // "Edit Event" on one occurrence: an exception row plus a stamp on the series.
                 const i = events.findIndex(e => e.id === _occurrenceOf);
@@ -910,33 +1040,25 @@ const CalendarVueApp = {
             });
             // An edited copy of this occurrence goes with it.
             const kept = events.filter(e => !(e.recurrenceID === series.id && e.recurrenceException === stamp));
-            if (kept.length < events.length) CalendarDataService.declareIntent(events.length - kept.length);
-            this.calendar.setEvents(kept);
+            this._applyEvents(kept, `Deleted "${series.title || '(No title)'}" on ${new Date(occStart).toLocaleDateString([], { month: 'short', day: 'numeric' })}`);
             this.closeEditor();
         },
 
         deleteSeries(series) {
             const kept = this.calendar.events.filter(e => e.id !== series.id && e.recurrenceID !== series.id);
-            const removed = this.calendar.events.length - kept.length;
-            if (removed > 0) CalendarDataService.declareIntent(removed);
-            this.calendar.setEvents(kept);
+            this._applyEvents(kept, `Deleted all of "${series.title || '(No title)'}"`);
             this.closeEditor();
         },
 
         handleDeleteEvent(id) {
-            const before = this.calendar.events.length;
+            const gone = this.calendar.events.find(e => e.id === id);
             // A series takes its edited occurrences with it; otherwise they linger as orphans.
             const events = this.calendar.events.filter(e => e.id !== id && e.recurrenceID !== id);
-            const removed = before - events.length;
-
-            // CalendarDataService refuses any write that shrinks the array unless the
-            // caller announced it first -- the gate that stops a bug from wiping a
-            // calendar. NativeCal never declared, so every delete was refused: the
-            // event vanished from the grid, the write never reached Firebase, and a
-            // reload brought it back. Silent, and indistinguishable from data loss.
-            if (removed > 0) CalendarDataService.declareIntent(removed);
-
-            this.calendar.setEvents(events);
+            // _applyEvents declares the shrink first: CalendarDataService refuses any write
+            // that shrinks the array unless the caller announced it -- the gate that stops a
+            // bug from wiping a calendar. Before NativeCal declared, every delete was
+            // refused silently and a reload brought the event back.
+            this._applyEvents(events, `Deleted "${(gone && gone.title) || '(No title)'}"`);
             this.closePopover();
             this.closeEditor();
         },

@@ -64,6 +64,9 @@ Copyright (c) 2025 Kalid Azad
     <!-- Core styles -->
     <link rel="stylesheet" href="/style.css?v=1763769217">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:400,500,700&display=swap">
+    <!-- ?ux=2 switches NativeCal to the redesign (see components/ncUx.js). Set before
+         first paint so neither look flashes. -->
+    <script>if (new URLSearchParams(location.search).get('ux') === '2') document.documentElement.dataset.ux = '2';</script>
     <link rel="stylesheet" href="/nativecal/native.css">
 
     <!-- Third-party libraries -->
@@ -1084,7 +1087,7 @@ Copyright (c) 2025 Kalid Azad
                 :first-day-of-week="globalSettings.firstDayOfWeek"
                 :start-hour="globalSettings.startHour"
                 :read-only="!canEdit"
-                @update:events="calendar.setEvents($event)"
+                @update:events="onCalendarEdit"
                 @event-create="handleEventCreate"
                 @event-click="handleEventClick"
             ></native-calendar>
@@ -1129,15 +1132,26 @@ Copyright (c) 2025 Kalid Azad
                 @delete="requestDelete"
             ></event-editor>
 
+            <!-- v2: after a delete or move, a way back instead of an "are you sure" first. -->
+            <div v-if="snackbar" class="nu-snack" role="status" data-testid="undo-snackbar">
+                <span class="nu-text">{{ snackbar.text }}</span>
+                <button v-if="snackbar.undo" class="nu-undo" data-testid="undo-button" @click="undoSnackbar">Undo</button>
+                <button class="nu-x" aria-label="Dismiss" @click="snackbar = null"><nc-icon name="x" :size="16"></nc-icon></button>
+            </div>
+
             <!-- Delete / recurring prompts, worded and laid out like Syncfusion's. -->
             <div v-if="confirmDialog" class="nd-overlay" @mousedown.self="confirmDialog = null">
                 <div class="nd" role="alertdialog" aria-modal="true" :aria-label="confirmDialog.title" data-testid="confirm-dialog">
                     <div class="nd-head"><h2>{{ confirmDialog.title }}</h2>
                         <button class="ne-x" aria-label="Close" @click="confirmDialog = null"><nc-icon name="x" :size="20"></nc-icon></button></div>
-                    <p>{{ confirmDialog.message }}</p>
+                    <p v-if="confirmDialog.message">{{ confirmDialog.message }}</p>
+                    <div v-if="confirmDialog.options" class="nd-options" role="radiogroup" :aria-label="confirmDialog.title">
+                        <label v-for="(o, i) in confirmDialog.options" :key="o.label" class="nd-option">
+                            <input type="radio" name="nd-scope" :value="i" v-model="confirmDialog.choice" :data-testid="o.testid"> {{ o.label }}</label>
+                    </div>
                     <div class="nd-foot">
                         <button v-for="b in confirmDialog.buttons" :key="b.label" class="ne-btn"
-                            :class="{ primary: b.primary, solid: b.primary }" :data-testid="b.testid"
+                            :class="ux2 ? { filled: b.primary } : { primary: b.primary, solid: b.primary }" :data-testid="b.testid"
                             @click="runConfirm(b)">{{ b.label }}</button>
                     </div>
                 </div>

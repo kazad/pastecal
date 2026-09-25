@@ -265,3 +265,250 @@
     background: var(--nc-text); opacity: .7;
     -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat;
             mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") center / contain no-repeat; }
+
+/* =========================================================================================
+   v2 (?ux=2) -- the redesign. Same layout as v1 so nothing moves, but:
+   - readable: nothing under 12px; secondary text >= 4.5:1; event text black or white
+     chosen per color (NcUx.textOn), and timed events as tinted blocks with dark text
+   - modern: the app's own system font, sentence-case labels, a filled primary button,
+     outlined fields, 8-12px radii, a Today button and a segmented view switcher
+   - on phones, popups and dialogs are bottom sheets over the calendar
+   Everything is scoped to html[data-ux="2"], so v1 is untouched.
+   ========================================================================================= */
+html[data-ux="2"] {
+    --nc-line: #ebecef; --nc-weekend: #fafafb; --nc-muted: #62666e; --nc-text: #1c1c1e;
+    --nc-toolbar: var(--bg); --nc-active: #eef0f3; --nc-today: #d6124f; --nc-select: #f0f2f5; --nc-now: #d6124f;
+    --nc-soft: #f5f6f8; --nc-field: #c9ccd2; --nc-radius: 10px;
+}
+html[data-ux="2"][data-theme="dark"] {
+    --nc-line: #34353b; --nc-weekend: #202125; --nc-muted: #a3a7ae; --nc-text: #ececf0;
+    --nc-toolbar: var(--bg); --nc-active: #2d2e34; --nc-today: #ff5c8d; --nc-select: #2a2b30; --nc-now: #ff5c8d;
+    --nc-soft: #26272c; --nc-field: #4a4c53;
+}
+html[data-ux="2"] .nc, html[data-ux="2"] .np, html[data-ux="2"] .nq, html[data-ux="2"] .ne-dialog, html[data-ux="2"] .nd, html[data-ux="2"] .nu-snack,
+html[data-ux="2"] .ne-field input, html[data-ux="2"] .ne-field select, html[data-ux="2"] .ne-field textarea, html[data-ux="2"] .ne-btn {
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+html[data-ux="2"] .nc { font-size: 14px; border-radius: var(--nc-radius); }
+
+/* toolbar */
+html[data-ux="2"] .nc-toolbar { height: 52px; padding: 0 10px; border-radius: var(--nc-radius) var(--nc-radius) 0 0; }
+html[data-ux="2"] .nc-toolbar-left { gap: 4px; }
+html[data-ux="2"] .nc-today-btn { height: 32px; padding: 0 14px; border: 1px solid var(--nc-field); border-radius: 8px; font-weight: 500; margin-right: 4px; }
+html[data-ux="2"] .nc-today-btn:hover { background: var(--nc-active); }
+html[data-ux="2"] .nc-toolbar-left > .nc-icon-btn { color: var(--nc-text); }
+html[data-ux="2"] .nc-title { font-size: 18px; font-weight: 600; letter-spacing: -.01em; }
+html[data-ux="2"] .nc-caret { color: var(--nc-muted); }
+html[data-ux="2"] .nc-views { border-left: 0; padding: 3px; gap: 2px; background: var(--nc-soft); border-radius: 9px; }
+html[data-ux="2"] .nc-views button { padding: 5px 11px; border-radius: 7px; font-size: 13px; font-weight: 500; letter-spacing: 0; color: var(--nc-muted); }
+html[data-ux="2"] .nc-views button:hover { color: var(--nc-text); }
+html[data-ux="2"] .nc-views button.on { background: var(--bg); color: var(--nc-text); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+html[data-ux="2"] .nc-picker { border-radius: 12px; box-shadow: 0 8px 28px rgba(0,0,0,.16); }
+html[data-ux="2"] .nc-link { font-weight: 600; }
+
+/* type: one family, a clear scale -- 18 title / 14 body / 12.5 event / 11 caps labels --
+   weights 500-600 (never 400 on colored blocks), fixed-width digits wherever times stack */
+html[data-ux="2"] .nc, html[data-ux="2"] .np, html[data-ux="2"] .nq, html[data-ux="2"] .ne-dialog, html[data-ux="2"] .nd {
+    -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+html[data-ux="2"] .nc-bar-time, html[data-ux="2"] .nc-timed-time, html[data-ux="2"] .nc-hour-label, html[data-ux="2"] .nc-now-label,
+html[data-ux="2"] .nc-agenda-item .w, html[data-ux="2"] .nc-create-preview { font-variant-numeric: tabular-nums; }
+
+/* month */
+html[data-ux="2"] .nc-weekday { font-size: 11px; font-weight: 600; color: var(--nc-muted); text-transform: uppercase; letter-spacing: .06em;
+    padding: 10px 8px 8px; border-right-color: transparent; }
+html[data-ux="2"] .nc-weekday.today { color: var(--nc-today); }
+html[data-ux="2"] .nc-cell { padding: 5px 6px 0; }
+html[data-ux="2"] .nc-date { font-size: 13px; font-weight: 500; min-width: 24px; height: 24px; line-height: 24px; text-align: center; margin-left: -4px; }
+html[data-ux="2"] .nc-cell.out .nc-date { font-weight: 400; }
+html[data-ux="2"] .nc-date.first { font-size: 13px; font-weight: 700; line-height: 24px; }
+html[data-ux="2"] .nc-date.today { border-radius: 12px; font-weight: 700; }
+html[data-ux="2"] .nc-more { font-size: 12px !important; font-weight: 600; color: var(--nc-muted) !important; left: 6px; }
+html[data-ux="2"] .nc-more:hover { color: var(--nc-text) !important; }
+html[data-ux="2"] .nc-bar { border-radius: 5px; font-size: 12.5px; font-weight: 600; letter-spacing: -.005em; padding: 0 6px; gap: 5px; }
+html[data-ux="2"] .nc-bar-time { font-size: 12px; font-weight: 500; opacity: .8; }
+
+/* timed events (month bars and week/day blocks): a tinted block of the event's color with a
+   solid colored edge and dark text -- still a block of color to plan by, readable in every
+   color. All-day and multi-day bars stay solid, text black or white per color (inline). */
+html[data-ux="2"] .nc-timed, html[data-ux="2"] .nc-bar.tint {
+    background: color-mix(in srgb, var(--c) 22%, var(--bg)); color: var(--nc-text); border: 0; border-left: 3px solid var(--c); }
+html[data-ux="2"] .nc-timed:hover, html[data-ux="2"] .nc-bar.tint:hover {
+    background: color-mix(in srgb, var(--c) 32%, var(--bg)); filter: none; box-shadow: none; }
+html[data-ux="2"] .nc-bar.tint { border-radius: 4px; padding-left: 5px; }
+html[data-ux="2"] .nc-bar.tint .nc-bar-time { color: var(--nc-muted); opacity: 1; }
+html[data-ux="2"] .nc-bar.tint .nc-recur, html[data-ux="2"] .nc-timed .nc-recur { color: var(--nc-muted); }
+
+/* week / day */
+html[data-ux="2"] .nc-dayhead { padding: 10px 8px 6px; }
+html[data-ux="2"] .nc-dayhead-name { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--nc-muted); }
+html[data-ux="2"] .nc-dayhead-num { display: inline-block; font-size: 22px; font-weight: 600; letter-spacing: -.02em; line-height: 34px; min-width: 34px; margin-left: -6px; text-align: center; }
+html[data-ux="2"] .nc-dayhead.today .nc-dayhead-name { color: var(--nc-today); }
+html[data-ux="2"] .nc-dayhead.today .nc-dayhead-num { background: var(--nc-today); color: #fff; border-radius: 17px; }
+html[data-ux="2"] .nc-hour-label { font-size: 11.5px; font-weight: 500; color: var(--nc-muted); }
+html[data-ux="2"] .nc-mini-wd, html[data-ux="2"] .nc-agenda-item .w { color: var(--nc-muted); }
+html[data-ux="2"] .nc-now-label { font-size: 12px; font-weight: 600; }
+html[data-ux="2"] .nc-early { color: var(--nc-text) !important; font-weight: 500; }
+html[data-ux="2"] .nc-timed { border-radius: 6px; padding: 4px 7px; font-size: 12.5px; }
+html[data-ux="2"] .nc-timed-title { font-weight: 600; letter-spacing: -.005em; }
+html[data-ux="2"] .nc-timed-time { font-size: 12px; font-weight: 500; color: var(--nc-muted); opacity: 1; margin-top: 1px; }
+html[data-ux="2"] .nc-create-preview { position: absolute; left: 2px; right: 4px; z-index: 6; border-radius: 6px; pointer-events: none;
+    background: color-mix(in srgb, var(--nc-today) 14%, var(--bg)); border: 2px solid var(--nc-today); color: var(--nc-text);
+    font-size: 12px; font-weight: 600; padding: 2px 6px; box-sizing: border-box; }
+
+/* year / agenda */
+html[data-ux="2"] .nc-mini-title { font-weight: 600; }
+html[data-ux="2"] .nc-agenda-item { border-left-width: 4px; border-radius: 4px; }
+html[data-ux="2"] .nc-agenda-item .t { font-weight: 600; }
+
+/* event popup: plain card, color square */
+html[data-ux="2"] .np { border-radius: 14px; box-shadow: 0 12px 36px rgba(0,0,0,.18), 0 2px 6px rgba(0,0,0,.08); font-size: 14px; }
+html[data-ux="2"] .np2-bar { display: flex; justify-content: flex-end; gap: 2px; padding: 8px 8px 0; }
+html[data-ux="2"] .np2-icon { width: 34px; height: 34px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; color: var(--nc-muted); background: none; border: 0; cursor: pointer; }
+html[data-ux="2"] .np2-icon:hover { background: var(--nc-active); color: var(--nc-text); }
+html[data-ux="2"] .np2-titlerow { display: flex; gap: 14px; align-items: flex-start; padding: 2px 24px 0; }
+html[data-ux="2"] .np2-swatch { flex: none; width: 16px; height: 16px; border-radius: 5px; margin-top: 6px; }
+html[data-ux="2"] .np2-title { font-size: 21px; font-weight: 600; line-height: 1.3; word-break: break-word; }
+html[data-ux="2"] .np-body { padding: 10px 24px 18px; }
+html[data-ux="2"] .np-line { gap: 14px; }
+html[data-ux="2"] .np-glyph { color: var(--nc-muted); }
+html[data-ux="2"] .np-sub { color: var(--nc-muted); opacity: 1; font-size: 13px; }
+
+/* quick create */
+html[data-ux="2"] .nq { border-radius: 14px; box-shadow: 0 12px 36px rgba(0,0,0,.18), 0 2px 6px rgba(0,0,0,.08); padding: 18px 18px 14px; }
+html[data-ux="2"] .nq-title { font-size: 18px; font-weight: 500; border: 1px solid var(--nc-field); border-radius: 8px; padding: 9px 12px; width: calc(100% - 28px); box-sizing: border-box; }
+html[data-ux="2"] .nq-title:focus { border-color: var(--nc-today); box-shadow: 0 0 0 3px color-mix(in srgb, var(--nc-today) 18%, transparent); }
+html[data-ux="2"] .nq-x { top: 20px; right: 12px; color: var(--nc-muted); }
+html[data-ux="2"] .nq-line { color: var(--nc-text); margin: 14px 2px 14px; }
+html[data-ux="2"] .nq-line svg { color: var(--nc-muted); }
+
+/* buttons */
+html[data-ux="2"] .ne-btn { border-radius: 8px; padding: 8px 16px; font-size: 14px; font-weight: 600; letter-spacing: 0; }
+html[data-ux="2"] .ne-btn.primary { color: var(--nc-today); }
+html[data-ux="2"] .nq .ne-btn.primary, html[data-ux="2"] .ne-btn.filled { background: var(--nc-today); color: #fff; }
+html[data-ux="2"] .nq .ne-btn.primary:hover, html[data-ux="2"] .ne-btn.filled:hover { background: color-mix(in srgb, var(--nc-today) 88%, #000); }
+html[data-ux="2"] .ne-btn.danger { color: #c62828; }
+html[data-ux="2"][data-theme="dark"] .ne-btn.danger { color: #ff8a80; }
+html[data-ux="2"] .ne-btn:focus-visible { outline: 2px solid var(--nc-today); outline-offset: 2px; }
+
+/* editor: outlined fields, swatches */
+html[data-ux="2"] .ne-dialog { border-radius: 16px; box-shadow: 0 24px 60px rgba(0,0,0,.25); font-size: 14px; }
+html[data-ux="2"] .ne-head { padding: 20px 22px 6px; }
+html[data-ux="2"] .ne-head h2 { font-size: 20px; font-weight: 600; }
+html[data-ux="2"] .ne-x { color: var(--nc-muted); }
+html[data-ux="2"] .ne-body { padding: 4px 22px 8px; }
+html[data-ux="2"] .ne-row { align-items: flex-start; }
+html[data-ux="2"] .ne-field { margin: 10px 0; }
+html[data-ux="2"] .ne-field > span { font-size: 12.5px; font-weight: 600; color: var(--nc-muted); margin-bottom: 5px; }
+html[data-ux="2"] .ne-field:focus-within > span { color: var(--nc-today); }
+html[data-ux="2"] .ne-field input, html[data-ux="2"] .ne-field select, html[data-ux="2"] .ne-field textarea {
+    border: 1px solid var(--nc-field); border-radius: 8px; padding: 8px 10px; font-size: 14px; }
+html[data-ux="2"] .ne-field input:focus, html[data-ux="2"] .ne-field select:focus, html[data-ux="2"] .ne-field textarea:focus {
+    border: 1px solid var(--nc-today); box-shadow: 0 0 0 3px color-mix(in srgb, var(--nc-today) 18%, transparent); }
+html[data-ux="2"] .ne-field select { padding-right: 32px; }
+html[data-ux="2"] .ne-select::after { right: 10px; bottom: 11px; }
+html[data-ux="2"] .ne-title-row .ne-field input { font-size: 17px; font-weight: 500; padding: 10px 12px; }
+html[data-ux="2"] .ne-repeat { border-left: 0; background: var(--nc-soft); border-radius: 10px; padding: 4px 14px 8px; }
+html[data-ux="2"] .ne-days button { width: 34px; height: 34px; font-size: 13px; font-weight: 600; }
+html[data-ux="2"] .ne-foot { padding: 12px 18px 18px; gap: 8px; }
+
+/* recurring scope dialog */
+html[data-ux="2"] .nd { border-radius: 16px; box-shadow: 0 24px 60px rgba(0,0,0,.25); padding: 20px 20px 16px; width: 360px; }
+html[data-ux="2"] .nd-head h2 { font-size: 18px; font-weight: 600; }
+html[data-ux="2"] .nd-options { display: flex; flex-direction: column; gap: 4px; margin: 0 0 16px; }
+html[data-ux="2"] .nd-option { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 8px; font-size: 14px; cursor: pointer; }
+html[data-ux="2"] .nd-option:hover { background: var(--nc-soft); }
+html[data-ux="2"] .nd-option input { width: 18px; height: 18px; accent-color: var(--nc-today); margin: 0; }
+
+/* undo snackbar */
+.nu-snack { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 70;
+    display: flex; align-items: center; gap: 6px; max-width: calc(100vw - 32px); padding: 8px 8px 8px 16px; border-radius: 12px;
+    background: #26272b; color: #f4f4f6; box-shadow: 0 10px 30px rgba(0,0,0,.25); font-size: 14px; animation: nu-in .18s ease-out; }
+.nu-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nu-undo { background: none; border: 0; color: #ff8fb1; font: 700 14px inherit; padding: 6px 10px; border-radius: 8px; cursor: pointer; }
+.nu-undo:hover { background: rgba(255,255,255,.1); }
+.nu-x { background: none; border: 0; color: #b9bac0; padding: 6px; border-radius: 8px; cursor: pointer; display: inline-flex; }
+@keyframes nu-in { from { opacity: 0; transform: translate(-50%, 8px); } }
+@media (prefers-reduced-motion: reduce) { .nu-snack { animation: none; } }
+
+/* phone: bottom sheets over the calendar (Google) */
+@media (max-width: 767px) {
+    html[data-ux="2"] .np, html[data-ux="2"] .nq {
+        top: auto !important; left: 0 !important; right: 0; bottom: 0; width: 100%; max-width: none;
+        border-radius: 18px 18px 0 0; padding-bottom: env(safe-area-inset-bottom, 0px); box-shadow: 0 -8px 30px rgba(0,0,0,.18); }
+    html[data-ux="2"] .np::before, html[data-ux="2"] .nq::before, html[data-ux="2"] .ne-dialog::before {
+        content: ""; display: block; width: 36px; height: 4px; border-radius: 2px; background: var(--nc-field); margin: 8px auto 0; }
+    html[data-ux="2"] .nq { padding-top: 6px; }
+    html[data-ux="2"] .nq .nq-title { margin-top: 12px; }
+    html[data-ux="2"] .nq-x { top: 28px; }
+    html[data-ux="2"] .ne-overlay, html[data-ux="2"] .nd-overlay { align-items: flex-end; padding: 0; background: rgba(0,0,0,.28); }
+    html[data-ux="2"] .ne-dialog { border-radius: 18px 18px 0 0; max-height: 88vh; padding-bottom: env(safe-area-inset-bottom, 0px); }
+    html[data-ux="2"] .nd { width: 100%; border-radius: 18px 18px 0 0; padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+    html[data-ux="2"] .ne-row { flex-wrap: wrap; gap: 0 12px; }
+    html[data-ux="2"] .ne-row > .ne-field.ne-grow { flex: 1 1 100%; }
+    html[data-ux="2"] .nc-toolbar { height: 48px; padding: 0 4px; }
+    html[data-ux="2"] .nc-title { font-size: 16px; }
+    html[data-ux="2"] .nc-today-btn { padding: 0 10px; }
+}
+html[data-ux="2"] .nc-phone .nc-bar { font-size: 11.5px; }
+html[data-ux="2"] .nc-phone .nc-bar { font-size: 11px; font-weight: 600; padding: 0 3px; border-radius: 4px; }
+html[data-ux="2"] .nc-phone .nc-bar .nc-bar-time, html[data-ux="2"] .nc-phone .nc-bar .nc-recur { display: none; }
+html[data-ux="2"] .nc-phone .nc-bar .nc-bar-title { display: block; text-align: left; }
+html[data-ux="2"] .nc-phone .nc-more-word { display: none; }
+html[data-ux="2"] .nc-phone .nc-weekday { font-size: 11px; text-align: center; padding: 6px 0; }
+.nc-more { white-space: nowrap; }
+/* v2 dark: a near-black event color would vanish into the background -- outline solid bars. */
+html[data-ux="2"][data-theme="dark"] .nc-bar:not(.tint) { box-shadow: inset 0 0 0 1px rgba(255,255,255,.22); }
+/* v2 phone: the date number is not its own tap target. At 24px it is far under the 44px
+   touch minimum, and iOS "tap adjustment" snapped taps meant for the empty day onto it,
+   opening Day view instead of creating an event. A tap anywhere in a day now creates
+   there; Day view is one tap away in the view menu. */
+html[data-ux="2"] .nc-phone .nc-date { pointer-events: none; }
+
+/* ---- repeat options layout ------------------------------------------------------------ */
+/* v1 (Syncfusion): two columns -- Repeat | Repeat every, then Repeat On | End. */
+.ne-rep { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 16px; align-items: start; }
+.ne-rep > .ne-repeat { display: contents; }
+.ne-rep-freq { grid-column: 1; }
+.ne-rep-every { grid-column: 2; grid-row: 1; }
+.ne-rep-on { grid-column: 1; }
+.ne-rep-end { grid-column: 2; }
+.ne-rep-end .ne-field { width: 100px; }
+.ne-rep-end .ne-field:last-child:not(:first-child) { width: 140px; }
+.ne-days { flex-wrap: wrap; max-width: 210px; gap: 10px; }
+.ne-days button { width: 36px; height: 36px; border-radius: 4px; border: 0; box-shadow: 0 1px 3px rgba(0,0,0,.2); font-size: 14px; }
+.ne-days button.on { background: #f06292; }
+/* v2: stacked, the options in a tinted panel under Repeat */
+html[data-ux="2"] .ne-rep { display: block; }
+html[data-ux="2"] .ne-rep-freq { width: 50%; }
+html[data-ux="2"] .ne-rep > .ne-repeat { display: block; background: var(--nc-soft); border-radius: 10px; padding: 4px 14px 8px; margin: 4px 0 8px; border: 0; }
+html[data-ux="2"] .ne-rep-end { display: flex; gap: 12px; }
+html[data-ux="2"] .ne-rep-end .ne-field { width: 160px; }
+html[data-ux="2"] .ne-days { max-width: none; gap: 6px; }
+html[data-ux="2"] .ne-days button { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--nc-line); box-shadow: none; font-size: 13px; font-weight: 600; }
+html[data-ux="2"] .ne-days button.on { background: var(--nc-today); border-color: var(--nc-today); }
+@media (max-width: 767px) { html[data-ux="2"] .ne-rep-freq { width: 100%; } }
+/* Phones: Start and End each take a full row -- two date+time pairs side by side do not
+   fit at 390px and the fields ran into each other. */
+@media (max-width: 767px) {
+    .ne-row:has(.ne-dt) { flex-wrap: wrap; gap: 0 12px; }
+    .ne-row:has(.ne-dt) > .ne-field { flex: 1 1 100%; }
+}
+
+/* v2 color dropdown: a field-sized button (swatch + label + chevron) and a menu of all labels */
+html[data-ux="2"] .ne-colorfield { max-width: 260px; }
+html[data-ux="2"] .ne-colorfield .ne-color { margin: 0; }
+html[data-ux="2"] .ne-color2 { display: flex; align-items: center; gap: 10px; width: 100%; height: 38px; padding: 0 10px; border: 1px solid var(--nc-field);
+    border-radius: 8px; background: var(--bg); color: var(--nc-text); font: 500 14px ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; cursor: pointer; text-align: left; }
+html[data-ux="2"] .ne-color2:hover { border-color: var(--nc-muted); }
+html[data-ux="2"] .ne-color2:focus-visible, html[data-ux="2"] .ne-color2[aria-expanded="true"] { outline: none; border-color: var(--nc-today); box-shadow: 0 0 0 3px color-mix(in srgb, var(--nc-today) 18%, transparent); }
+html[data-ux="2"] .ne-color2 .sw { width: 14px; height: 14px; border-radius: 4px; flex: none; }
+html[data-ux="2"] .ne-color2-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html[data-ux="2"] .ne-color2 .nc-lucide { color: var(--nc-muted); }
+html[data-ux="2"] .ne-color-menu2 { z-index: 80; overflow-y: auto; min-width: 220px; border-radius: 10px; padding: 6px; border: 1px solid var(--nc-line); box-shadow: 0 12px 32px rgba(0,0,0,.16); }
+html[data-ux="2"] .ne-color-menu2 button { gap: 10px; padding: 8px 10px; border-radius: 6px; font-size: 14px; }
+html[data-ux="2"] .ne-color-menu2 button[aria-selected="true"] { background: var(--nc-soft); font-weight: 600; }
+html[data-ux="2"] .ne-color-menu2 .sw { width: 14px; height: 14px; border-radius: 4px; margin: 0; flex: none; }
+html[data-ux="2"] .ne-color-menu2 .lbl { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html[data-ux="2"] .ne-color-menu2 .ck { color: var(--nc-today); }
+html[data-ux="2"] .ne-color-menu2 .ne-color-hint { border-top: 1px solid var(--nc-line); margin-top: 4px; padding: 8px 10px 4px; font-style: normal; }
+@media (max-width: 767px) { html[data-ux="2"] .ne-colorfield { max-width: none; } }

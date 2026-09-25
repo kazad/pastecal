@@ -16,6 +16,7 @@ const EventPopover = {
         readOnly: { type: Boolean, default: false },
     },
     emits: ['close', 'edit', 'delete'],
+    data() { return { v2: typeof NcUx !== 'undefined' && NcUx.v2() }; },
     computed: {
         headerColor() {
             const p = this.colors.length ? this.colors : ['#3f51b5'];
@@ -28,7 +29,7 @@ const EventPopover = {
             const fmtD = (d) => `${M[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
             const pad = (n) => String(n).padStart(2, '0');
             const fmtT = (d) => this.timeFormat === '24' ? `${pad(d.getHours())}:${pad(d.getMinutes())}`
-                : `${pad(d.getHours() % 12 || 12)}:${pad(d.getMinutes())} ${d.getHours() < 12 ? 'AM' : 'PM'}`;
+                : `${this.v2 ? (d.getHours() % 12 || 12) : pad(d.getHours() % 12 || 12)}:${pad(d.getMinutes())} ${d.getHours() < 12 ? 'AM' : 'PM'}`;
             if (e.isAllDay) {
                 const day = (v) => { const r = new Date(new Date(v).getTime() + 43200000); return new Date(r.getUTCFullYear(), r.getUTCMonth(), r.getUTCDate()); };
                 s = this.occurrence ? new Date(this.occurrence.start) : day(e.start);
@@ -56,7 +57,18 @@ const EventPopover = {
     },
     template: /* html */ `
 <div v-if="visible && event" class="np" data-testid="event-popover" :style="{ top: top + 'px', left: left + 'px' }">
-  <div class="np-head" :style="{ background: headerColor }" data-testid="popover-header">
+  <!-- v2: a plain card with a color square beside the title (Google), so a light
+       event color never puts white text on a pale header. -->
+  <template v-if="v2">
+    <div class="np2-bar">
+      <button v-if="!readOnly" class="np2-icon" title="Edit" aria-label="Edit" data-testid="popover-edit" @click="$emit('edit', event)"><nc-icon name="pencil" :size="18"></nc-icon></button>
+      <button v-if="!readOnly" class="np2-icon" title="Delete" aria-label="Delete" data-testid="popover-delete" @click="$emit('delete', event.id)"><nc-icon name="trash-2" :size="18"></nc-icon></button>
+      <button class="np2-icon" title="Close" aria-label="Close" data-testid="popover-close" @click="$emit('close')"><nc-icon name="x" :size="20"></nc-icon></button>
+    </div>
+    <div class="np2-titlerow"><span class="np2-swatch" data-testid="popover-swatch" :style="{ background: headerColor }"></span>
+      <div class="np2-title" data-testid="popover-title">{{ event.title || '(No title)' }}</div></div>
+  </template>
+  <div v-else class="np-head" :style="{ background: headerColor }" data-testid="popover-header">
     <div class="np-icons">
       <button v-if="!readOnly" class="np-icon" title="Edit" aria-label="Edit" data-testid="popover-edit" @click="$emit('edit', event)">
         <nc-icon name="pencil" :size="16"></nc-icon></button>

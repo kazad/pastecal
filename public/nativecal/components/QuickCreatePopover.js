@@ -13,7 +13,7 @@ const QuickCreatePopover = {
         timeFormat: { type: String, default: '12' },
     },
     emits: ['save', 'more-details', 'close'],
-    data() { return { localTitle: '' }; },
+    data() { return { localTitle: '', v2: typeof NcUx !== 'undefined' && NcUx.v2() }; },
     watch: {
         visible: {
             handler(v) { if (v) { this.localTitle = ''; this.$nextTick(() => this.$refs.titleInput && this.$refs.titleInput.focus()); } },
@@ -28,7 +28,7 @@ const QuickCreatePopover = {
             const pad = (n) => String(n).padStart(2, '0');
             const d = (x) => `${M[x.getMonth()]} ${x.getDate()}, ${x.getFullYear()}`;
             const t = (x) => this.timeFormat === '24' ? `${pad(x.getHours())}:${pad(x.getMinutes())}`
-                : `${pad(x.getHours() % 12 || 12)}:${pad(x.getMinutes())} ${x.getHours() < 12 ? 'AM' : 'PM'}`;
+                : `${this.v2 ? (x.getHours() % 12 || 12) : pad(x.getHours() % 12 || 12)}:${pad(x.getMinutes())} ${x.getHours() < 12 ? 'AM' : 'PM'}`;
             if (this.isAllDay) {
                 const last = new Date(e.getTime() - 86400000);
                 return last.toDateString() !== s.toDateString() && last > s ? `${d(s)} - ${d(last)} (All day)` : `${d(s)} (All day)`;
@@ -46,8 +46,8 @@ const QuickCreatePopover = {
     @keydown.enter.prevent="save" @keydown.esc.prevent="$emit('close')">
   <div class="nq-line"><nc-icon class="np-glyph" name="calendar-clock"></nc-icon>{{ when }}</div>
   <div class="nq-foot">
-    <button class="ne-btn" data-testid="quick-create-more" @click="$emit('more-details', localTitle.trim())">MORE DETAILS</button>
-    <button class="ne-btn primary" data-testid="quick-create-save" @click="save">SAVE</button>
+    <button class="ne-btn" data-testid="quick-create-more" @click="$emit('more-details', localTitle.trim())">{{ v2 ? 'More options' : 'MORE DETAILS' }}</button>
+    <button class="ne-btn primary" data-testid="quick-create-save" @click="save">{{ v2 ? 'Save' : 'SAVE' }}</button>
   </div>
 </div>`,
 };
