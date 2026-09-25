@@ -88,15 +88,15 @@ Copyright (c) 2025 Kalid Azad
     <!-- Syncfusion, calendar subset only, self-hosted and pinned (scripts/build-vendor.sh).
          Replaced the full 50-package bundle (4.4 MB over the wire) and an UNVERSIONED
          theme that tracked Syncfusion's latest release while the JS stayed on 23.2.6. -->
-    <link id="syncfusion-theme" href="/vendor/syncfusion-23.2.6/material.css?v=1790287181" rel="stylesheet" type="text/css" />
-    <link rel="stylesheet" href="/tokens.css?v=1790287181">
-    <link rel="stylesheet" href="/style.css?v=1790287181">
+    <link id="syncfusion-theme" href="/vendor/syncfusion-23.2.6/material.css?v=1790370209" rel="stylesheet" type="text/css" />
+    <link rel="stylesheet" href="/tokens.css?v=1790370209">
+    <link rel="stylesheet" href="/style.css?v=1790370209">
     <!-- Tailwind, prebuilt by scripts/build-css.sh (was a 124 KB in-browser compiler). After style.css, as the compiler's output was. -->
-    <link rel="stylesheet" href="/tailwind.css?v=1790287181">
+    <link rel="stylesheet" href="/tailwind.css?v=1790370209">
 
     <!-- Third-party libraries -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-    <script src="/vendor/syncfusion-23.2.6/ej2-calendar.min.js?v=1790287181" type="text/javascript"></script>
+    <script src="/vendor/syncfusion-23.2.6/ej2-calendar.min.js?v=1790370209" type="text/javascript"></script>
     <!-- Only the Firebase services the app uses (92 KB), not firebase-compat.js, which
          bundles every service (224 KB). Same version, same compat API; app must load first. -->
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
@@ -142,24 +142,24 @@ Copyright (c) 2025 Kalid Azad
     </script>
 
     <!-- App scripts (order matters: Utils → models/services → directives → components) -->
-    <script src="/utils/analytics.js?v=1790287181"></script>
-    <script src="/utils/utils.js?v=1790287181"></script>
-    <script src="/models/Event.js?v=1790287181"></script>
-    <script src="/services/SlugManager.js?v=1790287181"></script>
+    <script src="/utils/analytics.js?v=1790370209"></script>
+    <script src="/utils/utils.js?v=1790370209"></script>
+    <script src="/models/Event.js?v=1790370209"></script>
+    <script src="/services/SlugManager.js?v=1790370209"></script>
     <!-- Before CalendarDataService, which calls into it on every write. -->
-    <script src="/services/AuthorSignal.js?v=1790287181"></script>
-    <script src="/services/CalendarDataService.js?v=1790287181"></script>
-    <script src="/models/Calendar.js?v=1790287181"></script>
-    <script src="/directives/clickOutside.js?v=1790287181"></script>
+    <script src="/services/AuthorSignal.js?v=1790370209"></script>
+    <script src="/services/CalendarDataService.js?v=1790370209"></script>
+    <script src="/models/Calendar.js?v=1790370209"></script>
+    <script src="/directives/clickOutside.js?v=1790370209"></script>
     <!-- Components -->
-    <script src="/components/icons.js?v=1790287181"></script>
-    <script src="/components/ToastNotification.js?v=1790287181"></script>
-    <script src="/components/QuickAddButton.js?v=1790287181"></script>
-    <script src="/components/Tooltip.js?v=1790287181"></script>
-    <script src="/components/QuickAddDialog.js?v=1790287181"></script>
-    <script src="/components/CalendarTitle.js?v=1790287181"></script>
-    <script src="/components/NavigationDropdown.js?v=1790287181"></script>
-    <script src="/components/WelcomeDock.js?v=1790287181"></script>
+    <script src="/components/icons.js?v=1790370209"></script>
+    <script src="/components/ToastNotification.js?v=1790370209"></script>
+    <script src="/components/QuickAddButton.js?v=1790370209"></script>
+    <script src="/components/Tooltip.js?v=1790370209"></script>
+    <script src="/components/QuickAddDialog.js?v=1790370209"></script>
+    <script src="/components/CalendarTitle.js?v=1790370209"></script>
+    <script src="/components/NavigationDropdown.js?v=1790370209"></script>
+    <script src="/components/WelcomeDock.js?v=1790370209"></script>
 
     <script>
         // Load-order guard for critical globals
@@ -190,7 +190,7 @@ Copyright (c) 2025 Kalid Azad
     <script>
         if (window.location.hostname.match(/^(localhost|127\.0\.0\.1|::1)$/)) {
             const script = document.createElement('script');
-            script.src = '/selftest.js?v=1790287181';
+            script.src = '/selftest.js?v=1790370209';
             document.head.appendChild(script);
         }
     </script>
@@ -1431,7 +1431,7 @@ Copyright (c) 2025 Kalid Azad
     </div>
 
     
-    <script src="/app.js?v=1790287181"></script>
+    <script src="/app.js?v=1790370209"></script>
 
 </body>
 
