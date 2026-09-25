@@ -1,7 +1,7 @@
 /**
  * NativeCalendar -- pastecal's own calendar, laid out like the Syncfusion Schedule it
  * replaces, so people who use pastecal today find everything where they expect it:
- * the same toolbar (‹ › title ▾ on the left, DAY WEEK MONTH 3 MONTHS YEAR AGENDA on
+ * the same toolbar (prev / next, title with chevron on the left, DAY WEEK MONTH 3 MONTHS YEAR AGENDA on
  * the right), the same month grid (full weekday names, date top-left, "Sep 1" on the
  * first, spanning bars, "+N more"), the same week/day time grid with an all-day row,
  * and the same Year and Agenda views. Reference screenshots: sync-*.png from the
@@ -399,18 +399,18 @@ const NativeCalendar = (() => {
         },
         template: /* html */ `
 <div class="nc" :class="{ 'nc-phone': isPhone }">
-  <!-- Toolbar: ‹ › title ▾ | DAY WEEK MONTH 3 MONTHS YEAR AGENDA -->
+  <!-- Toolbar: prev / next, title with chevron | DAY WEEK MONTH 3 MONTHS YEAR AGENDA -->
   <div class="nc-toolbar">
     <div class="nc-toolbar-left">
       <button class="nc-icon-btn" data-testid="nav-prev" aria-label="Previous" @click="step(-1)">
-        <svg viewBox="0 0 24 24" width="22" height="22"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
+        <nc-icon name="chevron-left" :size="20"></nc-icon></button>
       <button class="nc-icon-btn" data-testid="nav-next" aria-label="Next" @click="step(1)">
-        <svg viewBox="0 0 24 24" width="22" height="22"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2"/></svg></button>
+        <nc-icon name="chevron-right" :size="20"></nc-icon></button>
       <button class="nc-title" :class="{ open: pickerOpen }" data-testid="current-date-range" @click="togglePicker">
-        {{ title }} <span class="nc-caret"></span></button>
+        {{ title }} <nc-icon class="nc-caret" name="chevron-down" :size="16"></nc-icon></button>
       <div v-if="pickerOpen" class="nc-picker" data-testid="date-picker">
         <div class="nc-picker-head"><span>{{ pickerYear }}</span>
-          <span><button class="nc-icon-btn" aria-label="Previous year" @click="pickerYear--">▲</button><button class="nc-icon-btn" aria-label="Next year" @click="pickerYear++">▼</button></span></div>
+          <span><button class="nc-icon-btn" aria-label="Previous year" @click="pickerYear--"><nc-icon name="chevron-up" :size="18"></nc-icon></button><button class="nc-icon-btn" aria-label="Next year" @click="pickerYear++"><nc-icon name="chevron-down" :size="18"></nc-icon></button></span></div>
         <div class="nc-picker-months">
           <button v-for="(m, i) in ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']" :key="m"
             :class="{ on: pickerYear === date.getFullYear() && i === date.getMonth() }" @click="pickMonth(i)">{{ m }}</button>
@@ -418,10 +418,10 @@ const NativeCalendar = (() => {
         <div class="nc-picker-foot"><button class="nc-link" @click="goToday">TODAY</button></div>
       </div>
     </div>
-    <!-- Phone: the view buttons do not fit, so they live behind a ⋮ menu, as in Syncfusion. -->
+    <!-- Phone: the view buttons do not fit, so they live behind a "more" menu, as in Syncfusion. -->
     <div v-if="isPhone" class="nc-phone-views">
       <button class="nc-icon-btn" aria-label="Change view" data-testid="view-menu" @click="viewMenu = !viewMenu">
-        <svg viewBox="0 0 24 24" width="18" height="18"><circle cx="12" cy="5" r="1.8" fill="currentColor"/><circle cx="12" cy="12" r="1.8" fill="currentColor"/><circle cx="12" cy="19" r="1.8" fill="currentColor"/></svg></button>
+        <nc-icon name="ellipsis-vertical" :size="20"></nc-icon></button>
       <div v-if="viewMenu" class="nc-view-menu">
         <button v-for="v in ['Day','Week','Month','3 Months','Year','Agenda']" :key="v" :class="{ on: view === v }"
           :data-testid="'view-' + v.replace(' ', '')" @click="setView(v); viewMenu = false">{{ v }}</button>
@@ -459,7 +459,7 @@ const NativeCalendar = (() => {
           <template v-else>
             <span class="nc-bar-time">{{ time(b.occ.start) }}</span><span class="nc-bar-title">{{ b.occ.title }}</span>
           </template>
-          <span v-if="b.occ.recurring" class="nc-recur" aria-label="Repeats">↻</span>
+          <nc-icon v-if="b.occ.recurring" class="nc-recur" name="repeat" :size="11" :stroke-width="2.5"></nc-icon>
         </div>
       </div>
     </div>
@@ -502,7 +502,7 @@ const NativeCalendar = (() => {
             <div v-for="it in gridLayout.timed[i]" :key="it.occ.key" class="nc-timed" :style="timedStyle(it)"
               :data-testid="'event-' + it.occ.event.id"
               @mousedown="startDrag($event, it.occ, 'move', { top0: it.top, top: it.top, height: it.height })" @click.stop="clickEvent(it.occ, $event)">
-              <div class="nc-timed-title">{{ it.occ.title }} <span v-if="it.occ.recurring" class="nc-recur">↻</span></div>
+              <div class="nc-timed-title">{{ it.occ.title }} <nc-icon v-if="it.occ.recurring" class="nc-recur" name="repeat" :size="11" :stroke-width="2.5"></nc-icon></div>
               <div v-if="it.height > 34" class="nc-timed-time">{{ time(it.occ.start) }} - {{ time(it.occ.end) }}</div>
               <div class="nc-resize" @mousedown.stop="startDrag($event, it.occ, 'resize', { height0: it.height, height: it.height, top: it.top, top0: it.top })"></div>
             </div>
@@ -535,7 +535,7 @@ const NativeCalendar = (() => {
       <div class="nc-agenda-items">
         <div v-for="it in day.items" :key="it.key" class="nc-agenda-item" :style="{ borderLeftColor: color(it.occ.type) }"
           :data-testid="'event-' + it.occ.event.id" @click="clickEvent(it.occ, $event)">
-          <div class="t">{{ it.occ.title }} <span v-if="it.occ.recurring" class="nc-recur dark">↻</span></div>
+          <div class="t">{{ it.occ.title }} <nc-icon v-if="it.occ.recurring" class="nc-recur dark" name="repeat" :size="11" :stroke-width="2.5"></nc-icon></div>
           <div class="w">{{ it.when }}</div>
         </div>
       </div>

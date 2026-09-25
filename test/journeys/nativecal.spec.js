@@ -21,6 +21,9 @@ const test = base.test.extend({
 const { expect } = base;
 
 const VM = `document.querySelector('#app')._vnode.component.proxy`;
+// For waits that can run while a page is navigating, when #app is briefly missing: a
+// wait must keep polling then, not throw.
+const VM_SAFE = `document.querySelector('#app')?._vnode?.component?.proxy`;
 const isPhone = (page) => (page.viewportSize()?.width || 1280) < 768;
 const THINK_MS = 250;
 const TYPE_DELAY_MS = 25;
@@ -34,7 +37,7 @@ async function newCalendar(browser, page, name = 'n') {
   await d.locator('input[placeholder="your-name"]').fill(slug);
   await d.locator('button:has-text("Claim")').locator('visible=true').first().click();
   await expect(d).toHaveURL(new RegExp(`/${slug}`, 'i'), { timeout: 20_000 });
-  await d.waitForFunction(`${VM}.isExisting === true`, null, { timeout: 20_000 });
+  await d.waitForFunction(`${VM_SAFE}?.isExisting === true`, null, { timeout: 20_000 });
   await ctx.close();
   await openNative(page, slug);
   return slug;
@@ -44,7 +47,7 @@ async function openNative(page, path) {
   await page.goto('/nativecal/' + path);
   // A /view/ link never sets isExisting; it signals by finishing loading.
   const ready = path.startsWith('view/') ? `${VM}.isLoading === false` : `${VM}.isExisting === true`;
-  await page.waitForFunction(`${VM} && ${ready}`, null, { timeout: 20_000 });
+  await page.waitForFunction(`${VM_SAFE} && ${ready}`, null, { timeout: 20_000 });
   await expect(page.locator('[data-testid="month-view-grid"]')).toBeVisible({ timeout: 15_000 });
 }
 

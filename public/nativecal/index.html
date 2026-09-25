@@ -1133,7 +1133,7 @@ Copyright (c) 2025 Kalid Azad
             <div v-if="confirmDialog" class="nd-overlay" @mousedown.self="confirmDialog = null">
                 <div class="nd" role="alertdialog" aria-modal="true" :aria-label="confirmDialog.title" data-testid="confirm-dialog">
                     <div class="nd-head"><h2>{{ confirmDialog.title }}</h2>
-                        <button class="ne-x" aria-label="Close" @click="confirmDialog = null">✕</button></div>
+                        <button class="ne-x" aria-label="Close" @click="confirmDialog = null"><nc-icon name="x" :size="20"></nc-icon></button></div>
                     <p>{{ confirmDialog.message }}</p>
                     <div class="nd-foot">
                         <button v-for="b in confirmDialog.buttons" :key="b.label" class="ne-btn"

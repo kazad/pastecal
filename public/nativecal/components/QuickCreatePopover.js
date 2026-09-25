@@ -41,10 +41,10 @@ const QuickCreatePopover = {
     },
     template: /* html */ `
 <div v-if="visible" class="nq" data-testid="quick-create" :style="{ top: top + 'px', left: left + 'px' }">
-  <button class="nq-x" aria-label="Close" data-testid="quick-create-close" @click="$emit('close')">✕</button>
+  <button class="nq-x" aria-label="Close" data-testid="quick-create-close" @click="$emit('close')"><nc-icon name="x" :size="18"></nc-icon></button>
   <input ref="titleInput" v-model="localTitle" class="nq-title" placeholder="Add title" data-testid="quick-create-title"
     @keydown.enter.prevent="save" @keydown.esc.prevent="$emit('close')">
-  <div class="nq-line"><svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M19 4h-1V2h-2v2H8V2H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7v-2H5V10h14v2h2V6a2 2 0 0 0-2-2zm-2 10a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm1.6 5.9-2.1-1.3V16h1v2.1l1.6.9-.5.9z"/></svg>{{ when }}</div>
+  <div class="nq-line"><nc-icon class="np-glyph" name="calendar-clock"></nc-icon>{{ when }}</div>
   <div class="nq-foot">
     <button class="ne-btn" data-testid="quick-create-more" @click="$emit('more-details', localTitle.trim())">MORE DETAILS</button>
     <button class="ne-btn primary" data-testid="quick-create-save" @click="save">SAVE</button>

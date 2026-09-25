@@ -121,14 +121,14 @@ const EventEditor = {
   <div class="ne-dialog" role="dialog" aria-modal="true" :aria-label="isNew ? 'New Event' : 'Edit Event'" data-testid="event-editor">
     <div class="ne-head">
       <h2>{{ isNew ? 'New Event' : 'Edit Event' }}</h2>
-      <button class="ne-x" aria-label="Close" data-testid="editor-close" @click="close">✕</button>
+      <button class="ne-x" aria-label="Close" data-testid="editor-close" @click="close"><nc-icon name="x" :size="20"></nc-icon></button>
     </div>
     <div class="ne-body">
       <div class="ne-row ne-title-row">
         <label class="ne-field ne-grow"><span>Title</span>
           <input ref="title" v-model="title" data-testid="editor-title" @keydown.enter.prevent="save"></label>
         <div class="ne-color">
-          <button class="ne-color-btn" :style="{ background: currentColor }" aria-label="Color" data-testid="editor-color" @click="colorMenu = !colorMenu">▾</button>
+          <button class="ne-color-btn" :style="{ background: currentColor }" aria-label="Color" data-testid="editor-color" @click="colorMenu = !colorMenu"><nc-icon name="chevron-down" :size="16" :stroke-width="2.5"></nc-icon></button>
           <div v-if="colorMenu" class="ne-color-menu">
             <button v-for="(c, i) in palette" :key="i" :data-testid="'editor-color-' + (i + 1)" @click="pickColor(i)">
               <span class="sw" :style="{ background: c }"></span>{{ labels[i] || ('Type ' + (i + 1)) }}</button>
@@ -144,9 +144,9 @@ const EventEditor = {
       </div>
       <label class="ne-check"><input type="checkbox" v-model="isAllDay" data-testid="editor-allday"> All day</label>
       <label v-if="!isOccurrence" class="ne-field ne-half"><span>Repeat</span>
-        <select v-model="freq" data-testid="editor-repeat">
+        <span class="ne-select"><select v-model="freq" data-testid="editor-repeat">
           <option value="">Never</option><option value="DAILY">Daily</option><option value="WEEKLY">Weekly</option>
-          <option value="MONTHLY">Monthly</option><option value="YEARLY">Yearly</option></select></label>
+          <option value="MONTHLY">Monthly</option><option value="YEARLY">Yearly</option></select></span></label>
       <div v-if="freq && !isOccurrence" class="ne-repeat" data-testid="editor-repeat-options">
         <div class="ne-row">
           <label class="ne-field"><span>Repeat every</span>
@@ -157,7 +157,7 @@ const EventEditor = {
             <button v-for="(n, d) in ['S','M','T','W','T','F','S']" :key="d" :class="{ on: byDay.includes(d) }" @click="toggleDay(d)">{{ n }}</button></div></div>
         <div class="ne-row">
           <label class="ne-field ne-half"><span>End</span>
-            <select v-model="endMode"><option value="never">Never</option><option value="until">Until</option><option value="count">Count</option></select></label>
+            <span class="ne-select"><select v-model="endMode"><option value="never">Never</option><option value="until">Until</option><option value="count">Count</option></select></span></label>
           <label v-if="endMode === 'until'" class="ne-field ne-half"><span>&nbsp;</span><input type="date" v-model="until"></label>
           <label v-if="endMode === 'count'" class="ne-field ne-half"><span>&nbsp;</span><input type="number" min="1" v-model="count" class="ne-num"></label>
         </div>

@@ -1852,6 +1852,7 @@ const CalendarVueApp = {
 };
 
 const app = Vue.createApp(CalendarVueApp)
+    .component('nc-icon', NcIcon)
     .component('quick-add-button', QuickAddButton)
     .component('quick-add-dialog', QuickAddDialog);
 

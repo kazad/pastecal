@@ -31,6 +31,9 @@ const test = base.test.extend({
 const { expect } = base;
 
 const VM = `document.querySelector('#app')._vnode.component.proxy`;
+// For waits that can run while a page is navigating, when #app is briefly missing: a
+// wait must keep polling then, not throw.
+const VM_SAFE = `document.querySelector('#app')?._vnode?.component?.proxy`;
 const isPhone = (page) => (page.viewportSize()?.width || 1280) < 768;
 
 // ---------------------------------------------------------------------------
@@ -47,7 +50,7 @@ async function newCalendar(browser, page, name = 'j') {
   await d.locator('input[placeholder="your-name"]').fill(slug);
   await d.locator('button:has-text("Claim")').locator('visible=true').first().click();
   await expect(d).toHaveURL(new RegExp(`/${slug}`, 'i'), { timeout: 20_000 });
-  await d.waitForFunction(`${VM}.isExisting === true`, null, { timeout: 20_000 });
+  await d.waitForFunction(`${VM_SAFE}?.isExisting === true`, null, { timeout: 20_000 });
   await ctx.close();
   await openCalendar(page, slug);
   return slug;
@@ -55,7 +58,7 @@ async function newCalendar(browser, page, name = 'j') {
 
 async function openCalendar(page, slug) {
   await page.goto('/' + slug);
-  await page.waitForFunction(`${VM} && ${VM}.isExisting === true`, null, { timeout: 20_000 });
+  await page.waitForFunction(`${VM_SAFE}?.isExisting === true`, null, { timeout: 20_000 });
   await expect(page.locator('.e-appointment').first()).toBeVisible({ timeout: 15_000 });
 }
 
@@ -527,7 +530,7 @@ test('an event survives quitting the browser right after creating it', async ({ 
     const slug = `test-quit-${Date.now()}`;
     await p.locator('input[placeholder="your-name"]').fill(slug);
     await p.locator('button:has-text("Claim")').locator('visible=true').first().click();
-    await p.waitForFunction(`${VM} && ${VM}.isExisting === true`, null, { timeout: 20_000 });
+    await p.waitForFunction(`${VM_SAFE}?.isExisting === true`, null, { timeout: 20_000 });
     await p.waitForTimeout(1500);
 
     await p.locator('text=+Event').locator('visible=true').first().click();
@@ -538,7 +541,7 @@ test('an event survives quitting the browser right after creating it', async ({ 
     ctx = await launch();                                 // come back later, same browser
     p = ctx.pages()[0] || await ctx.newPage();
     await p.goto('/' + slug);
-    await p.waitForFunction(`${VM} && ${VM}.isExisting === true`, null, { timeout: 20_000 });
+    await p.waitForFunction(`${VM_SAFE}?.isExisting === true`, null, { timeout: 20_000 });
     await expect.poll(async () => (await onServer(p)).map(e => e.title), { timeout: 15_000 })
       .toContain('Survives the quit');
     await ctx.close();
