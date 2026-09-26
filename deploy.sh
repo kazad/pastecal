@@ -185,4 +185,10 @@ if [[ ",$ALL_TARGETS," == *,hosting,* ]]; then
         echo "If this release misbehaves, go back to the previous one (takes seconds):"
         echo "  firebase hosting:clone pastecal-web@$PREV_VERSION pastecal-web:live"
     fi
+    # A baseline now; the release's own effect shows once real people have used it.
+    echo
+    echo "=== Health (baseline, read-only) ==="
+    ./scripts/stats.sh health || true
+    echo
+    echo "Run ./scripts/stats.sh health again in ~30 minutes to see this release under real use."
 fi

@@ -16,6 +16,8 @@
 #   ./scripts/stats.sh setup           # check GA4 is configured to answer all of the above
 #   ./scripts/stats.sh setup --create  # create the missing custom dimensions
 #   ./scripts/stats.sh --live          # what is firing right now (post-deploy check)
+#   ./scripts/stats.sh health          # is anything wrong? data integrity, errors, refused
+#                                      # saves, DAU/WAU/MAU, active calendars, cost (scripts/health.py)
 #
 # Options (either side of the subcommand -- `stats.sh -d 7 adds` and
 # `stats.sh adds -d 7` both work):
@@ -73,6 +75,10 @@ while [ $# -gt 0 ]; do
     esac
 done
 set -- ${ARGS+"${ARGS[@]}"}
+
+# health is its own script (database + GA4 + Cloud Monitoring); it calls back into
+# `stats.sh raw` for the GA4 part, so it shares this script's login.
+if [ "${1:-}" = "health" ]; then exec python3 "$(dirname "$0")/health.py"; fi
 
 case "$DAYS" in
     ''|*[!0-9]*) echo "ERROR: -d takes a whole number of days, got '$DAYS'." >&2; exit 1 ;;
