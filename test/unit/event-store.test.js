@@ -178,3 +178,78 @@ test('delete one occurrence: only the series stamp changes; nothing is removed',
     s.store.undo();
     assert.equal(s.events[0].recurrenceException, '20261012T210000Z', 'undo takes the stamp back off');
 });
+
+// Sep 26, live: editing a WHOLE series from one of its occurrences. Syncfusion's record at
+// actionBegin (EditSeries) carries the occurrence's RecurrenceID = the series' own id.
+test('edit a whole series from an occurrence: the series stays a series (#series-vanished)', () => {
+    const rule = 'FREQ=WEEKLY;BYDAY=SU,MO,TU,WE,TH,FR,SA;INTERVAL=1;';
+    const s = storeOf([ev('series-1', 'Morning routine', 5, { recurrencerule: rule })]);
+    const args = { requestType: 'eventChange', changedRecords: [{ Id: 'series-1', Subject: 'Daily routine', RecurrenceID: 'series-1',
+        StartTime: new Date(at(5, 9)), EndTime: new Date(at(5, 10)), RecurrenceRule: rule, Type: 1 }] };
+    const r = s.store.dispatch(ScheduleAdapter.toCommand(args, s.store, { action: 'EditSeries' }));
+    assert.ok(r.ok, r.error && r.error.message);
+    assert.equal(s.events.length, 1);
+    assert.equal(s.events[0].title, 'Daily routine');
+    assert.equal(s.events[0].recurrenceID ?? null, null, 'still the series, not an occurrence of itself');
+    assert.equal(s.events[0].recurrencerule, rule);
+});
+
+test('an update can never change which row it is', () => {
+    const s = storeOf([ev('a', 'A')]);
+    s.store.dispatch({ type: 'update', key: { id: 'a' }, changes: { id: 'zzz', recurrenceID: 'a', title: 'A2' } });
+    assert.deepEqual([s.events[0].id, s.events[0].recurrenceID ?? null, s.events[0].title], ['a', null, 'A2']);
+});
+
+test('a change that would orphan an edited occurrence is refused and reported, not saved', () => {
+    const s = storeOf([ev('m', 'Series', 1, { recurrencerule: 'FREQ=WEEKLY;' })]);
+    const before = s.events;
+    const r = s.store.dispatch({ type: 'add', event: ev(null, 'Occurrence of nothing', 8, { recurrenceID: 'missing-series' }) });
+    assert.equal(r.ok, false);
+    assert.equal(s.events, before);
+    assert.equal(s.commits.length, 0);
+    assert.match(s.errors[0], /repeating series that is not in the calendar/);
+});
+
+// Sep 26: "delete entire series" from an occurrence. At actionBegin Syncfusion lists the
+// series under changedRecords (with RecurrenceID = its own id) and deletes nothing; only
+// currentAction = DeleteSeries says what the user meant.
+test('delete a whole series from an occurrence: the series and its edited occurrences go', () => {
+    const s = storeOf([ev(9, 'Weekly', 5, { recurrencerule: 'FREQ=WEEKLY;' }), ev('x', 'Weekly (one)', 12, { recurrenceID: 9 }), ev(5, 'Other')]);
+    const args = { requestType: 'eventRemove', changedRecords: [{ Id: '9', Subject: 'Weekly', RecurrenceID: '9', RecurrenceRule: 'FREQ=WEEKLY;' }], deletedRecords: [] };
+    const r = s.store.dispatch(ScheduleAdapter.toCommand(args, s.store, { action: 'DeleteSeries' }));
+    assert.ok(r.ok, r.error && r.error.message);
+    assert.deepEqual(s.events.map((e) => e.title), ['Other']);
+    assert.equal(s.commits[0].shrink, 2);
+    s.store.undo();
+    assert.equal(s.events.length, 3, 'undo brings the series back');
+});
+
+test('an unmapped action on a repeating event is refused, never guessed', () => {
+    const s = storeOf([ev(9, 'Weekly', 5, { recurrencerule: 'FREQ=WEEKLY;' })]);
+    assert.throws(() => ScheduleAdapter.toCommand({ requestType: 'eventChange', changedRecords: [{ Id: '9', RecurrenceRule: 'FREQ=WEEKLY;' }] }, s.store, { action: 'EditFollowingEvents' }),
+        /unsupported action EditFollowingEvents/);
+});
+
+// Syncfusion's EditSeries rule: after "match every occurrence to the series again?",
+// Yes clears the skipped dates and the separately edited occurrences; No keeps both.
+for (const [answer, keep] of [['Yes', false], ['No', true]]) {
+test(`edit a whole series after editing one occurrence, "${answer}" to resetting occurrences`, () => {
+    const s = storeOf([ev(9, 'Weekly', 5, { recurrencerule: 'FREQ=WEEKLY;', recurrenceException: '20261012T210000Z' }),
+        ev('x', 'Weekly (one)', 12, { recurrenceID: 9, recurrenceException: '20261012T210000Z', recurrencerule: 'FREQ=WEEKLY;' })]);
+    const args = { requestType: 'eventChange', changedRecords: [{ Id: '9', Subject: 'Weekly all', RecurrenceID: '9', RecurrenceRule: 'FREQ=WEEKLY;',
+        RecurrenceException: '20261012T210000Z', StartTime: new Date(at(5, 9)), EndTime: new Date(at(5, 10)), Type: 1 }] };
+    const r = s.store.dispatch(ScheduleAdapter.toCommand(args, s.store, { action: 'EditSeries', keepOccurrences: keep }));
+    assert.ok(r.ok, r.error && r.error.message);
+    const master = s.events.find((e) => e.id === 9);
+    assert.equal(master.title, 'Weekly all');
+    assert.equal(master.recurrenceID ?? null, null);
+    if (keep) {
+        assert.equal(master.recurrenceException, '20261012T210000Z');
+        assert.ok(s.events.find((e) => e.title === 'Weekly (one)'), 'edited occurrence kept');
+    } else {
+        assert.equal(master.recurrenceException ?? null, null);
+        assert.equal(s.events.length, 1, 'edited occurrence removed');
+        assert.equal(s.commits[0].shrink, 1);
+    }
+});
+}

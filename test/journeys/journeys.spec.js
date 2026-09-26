@@ -71,6 +71,22 @@ const onServer = (page) => page.evaluate(`(async () => {
 const titles = async (page) => (await onServer(page)).map(e => e.title);
 const byTitle = async (page, t) => (await onServer(page)).find(e => e.title === t);
 
+/**
+ * What the calendar MEANS, not just what text it holds (Sep 26: a series edit saved its new
+ * title onto a broken row -- the title check passed while the series vanished). Every
+ * edited occurrence must point at a series that exists, a series must not point at
+ * anything, and the grid must still draw `minOccurrences` of the series titled `title`.
+ */
+async function expectSeriesIntact(page, title, minOccurrences) {
+  const rows = await onServer(page);
+  const series = rows.find(e => e.title === title && e.recurrencerule && (e.recurrenceID === undefined || e.recurrenceID === null));
+  expect(series, `"${title}" is still a repeating series (not an occurrence of itself)`).toBeTruthy();
+  const seriesIds = new Set(rows.filter(e => e.recurrenceID === undefined || e.recurrenceID === null).map(e => String(e.id)));
+  const orphans = rows.filter(e => e.recurrenceID !== undefined && e.recurrenceID !== null && !seriesIds.has(String(e.recurrenceID)));
+  expect(orphans.map(e => e.title), 'edited occurrences point at a series that exists').toEqual([]);
+  await expect.poll(() => page.locator('.e-appointment', { hasText: title }).count(), { timeout: 10_000 }).toBeGreaterThanOrEqual(minOccurrences);
+}
+
 // ---------------------------------------------------------------------------
 // Primitive gestures. Each goes through what the user sees.
 // ---------------------------------------------------------------------------
@@ -544,10 +560,63 @@ test(`edit one occurrence of a weekly event, then the whole series ("${answer}" 
   await expect(page.locator('.e-schedule-dialog.e-popup-open')).toHaveCount(0);
 
   await expect.poll(() => titles(page), { timeout: 10_000 }).toContain('Weekly rota');
+  // Still a weekly series on the grid: it starts mid-month, and one occurrence may be kept separately.
+  await expectSeriesIntact(page, 'Weekly rota', 2);
   expect(refused, 'the write gate refused an ordinary series edit').toEqual([]);
   await expect(page.getByText(/Recovered \d+ events? that were about to be lost/)).toHaveCount(0);
 });
 }
+
+// Sep 26, live: edit the WHOLE series from one of its occurrences, change the title, Save.
+// The series turned into an "edited occurrence" of itself and every other occurrence
+// disappeared (27 -> 1); the history log recorded it as a delete. The title was saved, so a
+// title check alone called it a success.
+test('edit a whole repeating series from one of its occurrences: every occurrence stays', async ({ browser, page }) => {
+  test.skip(isPhone(page), 'repeat editor differs on phones; covered on desktop');
+  await newCalendar(browser, page, 'wholeseries');
+  await openNewEventEditor(page, 8);
+  await typeTitle(page, 'Standup');
+  await tap(page, dialog(page).locator('.e-repeat-element').locator('..'));
+  await tap(page, page.locator('.e-popup-open li', { hasText: /^Daily$/ }).first());
+  await saveEditor(page);
+  await expect.poll(async () => (await byTitle(page, 'Standup'))?.recurrencerule || '', { timeout: 10_000 }).toMatch(/DAILY/);
+  const before = await page.locator('.e-appointment', { hasText: 'Standup' }).count();
+  expect(before).toBeGreaterThan(5);
+
+  await tap(page, page.locator('.e-appointment', { hasText: 'Standup' }).nth(4));
+  await tap(page, page.locator('button.e-edit').locator('visible=true').first());
+  await tap(page, page.locator('.e-popup-open button', { hasText: /Entire Series/i }).first());
+  await expect(dialog(page)).toBeVisible();
+  await typeTitle(page, 'Daily standup');
+  await saveEditor(page);
+
+  await expect.poll(async () => (await byTitle(page, 'Daily standup'))?.recurrencerule || '', { timeout: 10_000 }).toMatch(/DAILY/);
+  await expectSeriesIntact(page, 'Daily standup', before);
+  expect((await onServer(page)).filter(e => /standup/i.test(e.title)).length, 'still one row: the series').toBe(1);
+});
+
+// Sep 26: "delete entire series" from an occurrence reaches actionBegin as a CHANGE of the
+// series (currentAction DeleteSeries). Read literally, nothing was deleted and the series stayed.
+test('delete a whole repeating series from one of its occurrences: it is gone, nothing else is', async ({ browser, page }) => {
+  test.skip(isPhone(page), 'repeat editor differs on phones; covered on desktop');
+  await newCalendar(browser, page, 'delseries');
+  await openNewEventEditor(page, 8);
+  await typeTitle(page, 'Gym');
+  await tap(page, dialog(page).locator('.e-repeat-element').locator('..'));
+  await tap(page, page.locator('.e-popup-open li', { hasText: /^Daily$/ }).first());
+  await saveEditor(page);
+  await expect.poll(async () => (await byTitle(page, 'Gym'))?.recurrencerule || '', { timeout: 10_000 }).toMatch(/DAILY/);
+
+  await tap(page, page.locator('.e-appointment', { hasText: 'Gym' }).nth(3));
+  await tap(page, page.locator('button.e-delete').locator('visible=true').first());
+  await tap(page, page.locator('.e-quick-dialog.e-popup-open .e-quick-dialog-series-event'));
+  const confirm = page.locator('.e-quick-dialog.e-popup-open .e-quick-dialog-delete');
+  if (await confirm.count()) await tap(page, confirm);
+
+  await expect.poll(async () => (await onServer(page)).some(e => /Gym/.test(e.title)), { timeout: 10_000 }).toBe(false);
+  await expect(page.locator('.e-appointment', { hasText: 'Gym' })).toHaveCount(0);
+  expect(await titles(page), 'the sample event is untouched').toContain('Sample event');
+});
 
 // ===========================================================================
 // SURVIVING A QUIT -- found by the Sep 24 stress run on live pastecal.com: an event

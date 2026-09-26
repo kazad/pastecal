@@ -136,7 +136,12 @@
                 const k = findKey(c.key);
                 if (!k) throw new CommandError(`update: no event ${typeof c.key === 'string' ? c.key : keyOf(c.key)}`, c);
                 const i = index.get(k), prev = list[i];
-                const changes = diff(prev, normalize({ ...prev, ...c.changes }));
+                // An edit never changes WHICH row it is: id and recurrenceID come from the
+                // key, not from the changes. (Sep 26: editing a whole series from one of its
+                // occurrences arrived with the occurrence's RecurrenceID, turned the series
+                // into an orphan "edited occurrence" of itself, and it vanished.)
+                const { id: _id, recurrenceID: _rid, ...fieldChanges } = c.changes || {};
+                const changes = diff(prev, normalize({ ...prev, ...fieldChanges }));
                 if (!Object.keys(changes).length) return { events: list, inverse: null, added: [], changed: [], removed: [] };
                 const next = { ...prev, ...changes };
                 const why = invalid(next);
@@ -174,6 +179,23 @@
         return { events: [...events, e], inverse: { type: 'remove', key: keyOf(e) }, added: [e], changed: [], removed: [] };
     }
 
+    /**
+     * The structure every save must keep: a row that is an edited occurrence (has a
+     * recurrenceID) must point at a series that is in the calendar. Checked for the rows a
+     * command touched -- older data may already hold orphans, and a change elsewhere must
+     * not be refused for them. A command that breaks it is refused and reported, instead
+     * of saving a calendar whose series has silently disappeared.
+     */
+    function structureProblem(events, touched) {
+        const series = new Set(events.filter((e) => blank(e.recurrenceID)).map((e) => String(e.id)));
+        for (const e of touched) {
+            if (!blank(e.recurrenceID) && !series.has(String(e.recurrenceID))) {
+                return `"${e.title || 'event'}" would point at a repeating series that is not in the calendar`;
+            }
+        }
+        return null;
+    }
+
     function applyAny(events, command) {
         return command.type === 'add' && command.restoreId ? restore(events, command.event) : apply(events, command);
     }
@@ -207,6 +229,8 @@
             try {
                 const before = this.getEvents() || [];
                 const result = applyAny(before, command);
+                const broken = structureProblem(result.events, [...result.added, ...result.changed]);
+                if (broken) throw new CommandError(broken, command);
                 // How many rows the save will be shorter by -- what the write gate must be told.
                 const shrink = Math.max(0, before.length - result.events.length);
                 this.commit(result.events, { shrink, added: result.added, changed: result.changed, removed: result.removed, label });
