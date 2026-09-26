@@ -223,7 +223,6 @@ const CalendarVueApp = {
             // The event the Syncfusion editor dialog is currently showing. The dialog's DOM
             // and its type dropdown are reused across opens, so handlers built on the first
             // open read this rather than their own stale closure.
-            activeEditorData: null,
 
             // Store browser locale for display
             browserLocale: navigator.language || navigator.userLanguage || 'en-US',
@@ -761,85 +760,21 @@ const CalendarVueApp = {
 
         // live binding to events
         scheduleObj.eventSettings.dataSource = this.syncFusionEvents;
-        scheduleObj.actionComplete = (ev) => {
-            switch (ev.requestType) {
-                case 'eventChanged':
-                case 'eventCreated':
-                case 'eventRemoved':
-                    console.log("[app] actionComplete()", "event", ev);
-                    console.log(` - syncFusionEvents ${this.syncFusionEvents.length}`, this.syncFusionEvents);
-                    console.log(` - eventsData ${scheduleObj.eventsData.length}`, scheduleObj.eventsData);
-                    // Apply the records this action actually touched on top of our own
-                    // store, rather than trusting any whole-array snapshot.
-                    //
-                    // Two whole-array snapshots were tried here and both lose data:
-                    //   - this.syncFusionEvents is rebuilt by updateCalendarView, so it is
-                    //     only as fresh as the last render and can write back a pre-create
-                    //     or pre-delete state.
-                    //   - scheduleObj.eventsData is NOT the post-change store this callback
-                    //     needs. Measured at the moment actionComplete fires, it is exactly
-                    //     one change BEHIND: on eventCreated it does not yet contain the new
-                    //     event, and on eventChanged it still holds the event's old field
-                    //     values. Saving it therefore persists the calendar as it was before
-                    //     the user's action -- and on a calendar whose only event is the one
-                    //     being created, that snapshot is [], so `eventsData ||
-                    //     syncFusionEvents` cannot even fall back: an empty array is truthy.
-                    //     Grid create/edit silently did nothing while Quick Add (which
-                    //     pushes onto calendar.events directly) still worked. Issues #42/#43.
-                    //
-                    // added/changed/deletedRecords are per-action and always carry the
-                    // post-change values, so merging them by id is correct regardless of
-                    // what the grid is currently filtered to show -- a filtered-out event is
-                    // left untouched instead of being dropped from the save.
-                    // A user-initiated removal, declared before the watcher fires so the
-                    // write gate in sync() knows this shrink was asked for -- and how big
-                    // it should be, so deleting one event cannot authorise a wipe.
-                    // Deleting a recurring series removes the master and every stored
-                    // occurrence exception, so the count is what the merge actually drops,
-                    // not deletedRecords.length.
-                    if (ev.requestType === 'eventRemoved') {
-                        const before = this.calendar.events.length;
-                        const after = this.mergeScheduleRecords(ev).length;
-                        CalendarDataService.declareIntent(Math.max(1, before - after));
-                        this.offerUndoForDelete(ev, before - after);
-                    } else if ((ev.deletedRecords || []).length) {
-                        // Not a Delete, but the user's action still removes records -- and
-                        // the gate must hear about it, or it refuses the save as data loss.
-                        // The case found in production (sync_refused on /ahvolunteers,
-                        // /televedaschedule, /touchpointradio, Sep 14-24): edit a WHOLE
-                        // repeating series after changing one occurrence, answer "Yes" to
-                        // "match it to the whole series again?", and Syncfusion drops the
-                        // edited occurrence's record inside an eventChanged. Undeclared, the
-                        // gate reverted the edit and told the user events "were about to be
-                        // lost". The count is what the merge actually drops, as above, so
-                        // this cannot license removing anything the action did not remove.
-                        const before = this.calendar.events.length;
-                        const after = this.mergeScheduleRecords(ev).length;
-                        if (before > after) CalendarDataService.declareIntent(before - after);
-                    }
-                    // No toast on an edit. Moving or renaming an event is the ordinary
-                    // act of using a calendar, and a confirmation on every one of them is
-                    // noise -- no editor pops a message each time you type. Undo is still
-                    // there where people look for it: Cmd/Ctrl+Z, and Recent changes.
-                    // A DELETE still toasts, because that one is destructive and the undo
-                    // is genuinely hard to find otherwise.
-                    this.calendar.setEvents(this.mergeScheduleRecords(ev));
-                    // A real, user-initiated change to this calendar. Recorded here
-                    // rather than in CalendarDataService.sync(), because sync() also
-                    // runs when the live subscription echoes back someone else's edit --
-                    // which made every viewer look like an editor.
-                    if (typeof AuthorSignal !== 'undefined') {
-                        AuthorSignal.touch(this.calendar.id);
-                    }
-                    if (ev.requestType === 'eventCreated') {
-                        // Everything the scheduler itself creates: grid drag, the
-                        // built-in editor, and the cell popup all land here.
-                        track(a => a.eventAdded('grid', this.calendar));
-                    }
-                    break;
-            }
-            // console.log(ev);
+
+        // Syncfusion is a VIEW. When the user adds, changes or removes an event on the grid,
+        // Syncfusion's own change is cancelled here and the user's intent goes to the
+        // EventStore as a command; the grid is then redrawn from the store (the calendar
+        // watcher calls updateCalendarView). Syncfusion never edits our data itself, so its
+        // internal records -- their id kinds, escaped text, stale fields -- never become it.
+        scheduleObj.actionBegin = (args) => {
+            if (!['eventCreate', 'eventChange', 'eventRemove'].includes(args.requestType)) return;
+            args.cancel = true;
+            this.applyScheduleAction(args);
         };
+        // The user's change is measured from the event as it was when they started (see
+        // ScheduleAdapter.noteStart), so a field someone else changed meanwhile is kept.
+        scheduleObj.dragStart = (args) => ScheduleAdapter.noteStart(args.data);
+        scheduleObj.resizeStart = (args) => ScheduleAdapter.noteStart(args.data);
 
         // color events based on type
         scheduleObj.eventRendered = (args) => {
@@ -850,17 +785,13 @@ const CalendarVueApp = {
             } else {
                 args.element.style.backgroundColor = categoryColor;
             }
+            ScheduleAdapter.showTitle(args.element, args.data);
         }
 
         // custom display for types
         scheduleObj.popupOpen = (args) => {
+            if (args.type === 'QuickInfo' && args.data) ScheduleAdapter.showTitle(args.element, args.data);
 
-            // Cleared on every popup, not just the Editor. Left set, it stays pointing at
-            // the last event edited, so a color chosen from any other popup would land on
-            // that stale event -- the same wrong-event write this field exists to prevent,
-            // moved from a stale closure to a stale field. Clearing first also makes the
-            // `|| args.data` fallback in those handlers reachable again.
-            app.activeEditorData = null;
 
             // One popup at a time. A double-click on a day fires Syncfusion's quick
             // popup twice and THEN the editor, and Syncfusion never closes that quick
@@ -881,12 +812,7 @@ const CalendarVueApp = {
             }
 
             if (args.type === 'Editor') {
-                // console.log("Editor call");
-
-                // Which event the editor is showing. The type dropdown is built once and
-                // reused across every open, so its handlers cannot rely on their own
-                // captured `args` -- they read this instead.
-                app.activeEditorData = args.data;
+                ScheduleAdapter.noteStart(args.data);
 
                 // Configure datetime pickers with strictMode and the user's chosen date format.
                 // Syncfusion's default is en-US (M/d/yy) which is ambiguous internationally
@@ -916,13 +842,11 @@ const CalendarVueApp = {
                     }
 
                     window.btnObj.element.style.background = app.COLORS[id - 1];
+                    // The color is a form field (name="Type", class e-field): Syncfusion reads
+                    // it into the record it hands actionBegin, and the store saves that. Nothing
+                    // writes into Syncfusion's own event objects.
                     window.inputEle.setAttribute('value', id);
-
-                    // Explicitly set the Type on the event data object. Uses the dialog's
-                    // current event rather than this closure's `args`, because the select
-                    // handler that calls this was built on the first open and never rebuilt.
-                    const target = app.activeEditorData || args.data;
-                    target.Type = parseInt(id);
+                    window.inputEle.value = id;
                     // Whether people categorise events at all decides if type
                     // labels/colors are worth building on (see pro.md).
                     track(a => a.featureUsed('event_type', 'popup'));
@@ -944,17 +868,8 @@ const CalendarVueApp = {
                         select: (button_args) => {
                             // console.log("select type args", button_args);
                             let type = button_args.item.value;
-                            inputEle.value = type;
-                            // Write to the event the dialog is showing RIGHT NOW, not the
-                            // one that happened to be open when this dropdown was built.
-                            // Syncfusion reuses the dialog element, and this handler is
-                            // created only on the first open (the guard above), so the
-                            // captured `args` goes stale immediately -- choosing a type on
-                            // the second event edited would set it on the first one, which
-                            // is invisible until that event turns the wrong color or gets
-                            // filtered out from under the user.
-                            const live = app.activeEditorData || args.data;
-                            live.Type = type;
+                            // Only the form field changes; the record Syncfusion builds from
+                            // the form on Save carries it (see setColor).
                             setColor(type);
                         },
                         open: () => {
@@ -1395,6 +1310,12 @@ const CalendarVueApp = {
             const typing = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
             if (typing || !this.isExisting) return;
             e.preventDefault();
+            // This visit's last change is known exactly; undo it directly. Otherwise fall
+            // back to server history (after a reload, or for a change from another browser).
+            if (this.store().canUndo) {
+                const undone = this.store().undo();
+                if (undone) { this.showToast(`Undid: ${undone}`, 'success'); return; }
+            }
             this.undoLastChange();
         };
         window.addEventListener('keydown', this._undoShortcutHandler);
@@ -1906,52 +1827,54 @@ const CalendarVueApp = {
             scheduleObj.dataBind();
         },
 
-        // Fold one scheduler action's records into the full event list.
-        //
-        // The scheduler only ever sees the events the color filter admits (see
-        // updateCalendarView), so no array it exposes is a safe thing to save wholesale --
-        // doing that deletes whatever is currently filtered out. The action's own
-        // added/changed/deletedRecords are the only authoritative statement of what the
-        // user just did, so they are applied over this calendar's complete list.
-        //
-        // Keyed on Id AND RecurrenceID, not Id alone. Editing a single occurrence of a
-        // recurring event emits, in one action, an added record for the exception and a
-        // changed record for the master -- and Syncfusion gives both the SAME Id, telling
-        // them apart only by RecurrenceID (set on the exception, null on the master).
-        // Keyed on Id alone the two collide and the second write wins, so the occurrence
-        // the user just edited is silently dropped from the save.
-        mergeScheduleRecords(ev) {
-            const key = (r) => `${r.Id}|${r.RecurrenceID ?? ''}`;
-            const byKey = new Map(
-                this.calendar.getSyncFusionEvents().map(e => [key(e), e]));
-
-            for (const r of (ev.deletedRecords || [])) byKey.delete(key(r));
-            for (const r of (ev.addedRecords || [])) byKey.set(key(this.withStableId(r)), this.withStableId(r));
-            for (const r of (ev.changedRecords || [])) byKey.set(key(r), r);
-
-            // Syncfusion works on string ids (Calendar.sfId); store the ids exactly as they were.
-            return this.calendar.restoreIds([...byKey.values()]);
+        /**
+         * The EventStore for this calendar -- the one place events change. It saves through
+         * the existing path (calendar.setEvents -> CalendarDataService), so what is stored
+         * and how it syncs are unchanged; it decides WHAT goes into that list.
+         */
+        store() {
+            if (!this._eventStore) {
+                this._eventStore = new EventStore({
+                    getEvents: () => this.calendar.events,
+                    commit: (list, info) => {
+                        // The write gate refuses a save that shrinks the calendar unless the
+                        // shrink was declared. The store knows the exact number, so it is
+                        // declared here and nowhere else.
+                        if (info.shrink) CalendarDataService.declareIntent(info.shrink);
+                        this.calendar.setEvents(list);
+                    },
+                    onError: (err, command) => {
+                        console.warn('[store] command failed:', err.message, command);
+                        track(a => a.jsError('command_failed', err.message, (command && command.label) || (command && command.type) || 'command'));
+                        this.showToast(`Couldn't save that change: ${err.message.replace(/^\w+: /, '')}`, 'error');
+                    },
+                });
+            }
+            return this._eventStore;
         },
 
-        // Give a scheduler-created record a real id before it becomes our data.
-        //
-        // Syncfusion's built-in editor does not preserve the Id it was handed: for a new
-        // event it calls its own getEventMaxID() and assigns a sequential NUMBER (1, 2, 3)
-        // regardless of eventSettings.fields.id. Those ids are per-scheduler-instance, so
-        // they are not unique across calendars, they collide with each other after a
-        // reload, and they are the reason an edit to a grid-created event could hit an
-        // event the scheduler could not resolve -- the "Cannot read properties of
-        // undefined (reading 'RecurrenceRule')" crash inside processCrudActions.
-        //
-        // Every event this app stores must carry the same kind of id Event's constructor
-        // produces (a uuid), so a numeric or missing id is replaced before the record is
-        // merged into calendar.events.
-        withStableId(record) {
-            const id = record && record.Id;
-            const looksGenerated = id === undefined || id === null || id === ''
-                || typeof id === 'number' || /^\d+$/.test(String(id));
-            if (!looksGenerated) return record;
-            return { ...record, Id: Utils.uuidv4() };
+        /** A grid action (Syncfusion's add / change / remove, cancelled in actionBegin) -> the store. */
+        applyScheduleAction(args) {
+            const active = window.scheduleObj && window.scheduleObj.activeEventData && window.scheduleObj.activeEventData.event;
+            const command = ScheduleAdapter.toCommand(args, this.store(), {
+                action: window.scheduleObj && window.scheduleObj.currentAction,
+                occurrenceStart: active && active.StartTime,
+            });
+            if (!command.commands.length) return;
+            const deleting = args.requestType === 'eventRemove';
+            const subject = (r) => r && r.Subject ? `"${String(r.Subject).trim()}"` : 'event';
+            const records = [...(args.deletedRecords || []), ...(args.changedRecords || [])];
+            const label = !deleting ? (args.requestType === 'eventCreate' ? 'Added event' : `Edited ${subject(records[0] || (args.addedRecords || [])[0])}`)
+                : (args.deletedRecords || []).length > 1 && !(args.deletedRecords || []).some(r => r.RecurrenceRule) ? `Deleted ${args.deletedRecords.length} events`
+                : (args.deletedRecords || []).length ? `Deleted ${subject(args.deletedRecords[0])}`
+                : `Deleted one ${subject(records[0])}`;
+            const r = this.store().dispatch(command, { label });
+            if (!r.ok) return;
+            // A real, user-initiated change to this calendar (sync() also runs for other
+            // people's edits echoing back, so it cannot be recorded there).
+            if (typeof AuthorSignal !== 'undefined') AuthorSignal.touch(this.calendar.id);
+            if (args.requestType === 'eventCreate') track(a => a.eventAdded('grid', this.calendar));
+            if (deleting) this.offerUndo(label);
         },
 
         // ============================================================
@@ -2707,14 +2630,9 @@ const CalendarVueApp = {
                 if (!isNaN(startMs)) end = new Date(startMs + 3600000).toISOString();
             }
 
-            const newEvent = new Event({
-                title: event.subject,
-                start: start,
-                end: end,
-                type: event.type || 1
-            });
-            this.calendar.events.push(newEvent);
-            this.calendar.setEvents(this.calendar.events);
+            const r = this.store().dispatch({ type: 'add', event: { title: event.subject, start, end, type: event.type || 1 } },
+                { label: `Added "${(event.subject || '').trim()}"` });
+            if (!r.ok) return;
             // Quick-add bypasses the scheduler, so it needs its own signal.
             if (typeof AuthorSignal !== 'undefined') {
                 AuthorSignal.touch(this.calendar.id);
@@ -3075,10 +2993,12 @@ const CalendarVueApp = {
          * does not mistake a deliberate restore for a buggy save path.
          */
         undoChange(entry) {
-            const events = (entry.events || []).map(e => new Event(e));
-            const removing = Math.max(0, this.calendar.events.length - events.length);
-            if (removing > 0) CalendarDataService.declareIntent(removing);
-            this.calendar.setEvents(events);
+            // Row by row (EventStore.changesBetween): the store counts what goes for the
+            // write gate, and the restore itself can be undone.
+            const events = entry.events || [];
+            const r = this.store().dispatch({ type: 'batch', commands: EventStore.changesBetween(this.calendar.events, events) },
+                { label: 'Restore from Recent changes' });
+            if (!r.ok) return;
             const back = (entry.lost || []).length;
             this.showToast(
                 back === 1 ? `Restored "${entry.lost[0].title || 'event'}"`
@@ -3640,35 +3560,17 @@ const CalendarVueApp = {
 
         /**
          * Offer to undo a deletion at the moment it happens -- the pattern Drive, Gmail and
-         * Notion all use, and the one place a person is guaranteed to be looking. Waiting
-         * for them to find Settings afterwards is how a deletion becomes a support issue.
-         *
-         * The events come from the action itself rather than from /history, so the offer
-         * appears immediately instead of after the debounced write and the trigger have
-         * both landed.
+         * Notion all use, and the one place a person is guaranteed to be looking. The undo is
+         * the store's inverse command: it puts back exactly the rows that went, with their
+         * ids, and leaves every other event as it is now (the old snapshot restore could
+         * revert someone else's edit made in between).
          */
-        offerUndoForDelete(ev, removedCount) {
-            const removed = this.calendar.restoreIds(ev.deletedRecords || []).map(r => new Event(r));
-            if (!removed.length) return;
-
-            const name = removed[0].title && removed[0].title.trim()
-                ? `"${removed[0].title.trim()}"` : 'event';
-            const message = removed.length === 1
-                ? `Deleted ${name}`
-                : `Deleted ${removed.length} events`;
-
-            // Snapshot the list as it was BEFORE this delete, so undo restores exactly
-            // that -- not whatever the calendar looks like by the time they press it.
-            const restoreTo = this.calendar.restoreIds(this.calendar.getSyncFusionEvents()).map(e => new Event(e));
-
+        offerUndo(message) {
             this.showToast(message, 'info', {
                 actionLabel: 'Undo',
                 action: () => {
-                    CalendarDataService.declareIntent(Math.max(1, removedCount));
-                    this.calendar.setEvents(restoreTo);
-                    this.showToast(
-                        removed.length === 1 ? `Restored ${name}` : `Restored ${removed.length} events`,
-                        'success');
+                    const undone = this.store().undo();
+                    if (undone) this.showToast(`Undid: ${undone}`, 'success');
                 },
             });
         },

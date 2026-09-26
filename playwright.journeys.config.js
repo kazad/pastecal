@@ -22,7 +22,8 @@ module.exports = defineConfig({
   // that passes only on retry is reported as flaky, not silently green.
   retries: 1,
   use: {
-    baseURL: 'http://localhost:8000',
+    // BASE_URL points the journeys at another checkout's server (e.g. a worktree on :8020).
+    baseURL: process.env.BASE_URL || 'http://localhost:8000',
     screenshot: 'only-on-failure',
     trace: 'retain-on-failure',
   },
@@ -37,7 +38,7 @@ module.exports = defineConfig({
       grep: /create an event with title|edit an event: rename|mixing old number ids|delete an event|\+Event: typed text/,
       use: { ...devices['Desktop Firefox'], locale: 'fr-FR', timezoneId: 'Europe/Paris' } },
   ],
-  webServer: {
+  webServer: process.env.BASE_URL ? undefined : {
     command: 'firebase serve -p 8000',
     url: 'http://localhost:8000',
     reuseExistingServer: true,

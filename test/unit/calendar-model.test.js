@@ -20,10 +20,10 @@ const path = require('node:path');
 function loadCalendarClass() {
   const src = fs.readFileSync(
     path.join(__dirname, '../../public/models/Calendar.js'), 'utf8');
-  const factory = new Function('Event', `${src}; return Calendar;`);
+  const factory = new Function('Event', 'ScheduleAdapter', `${src}; return Calendar;`);
   // Calendar.defaultEvent() constructs an Event; not exercised by these tests, so a
-  // minimal stub is enough.
-  return factory(class Event {});
+  // minimal stub is enough. getSyncFusionEvents() delegates to the real ScheduleAdapter.
+  return factory(class Event {}, require('../../public/services/ScheduleAdapter.js'));
 }
 
 const Calendar = loadCalendarClass();
