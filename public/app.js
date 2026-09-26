@@ -558,7 +558,7 @@ const CalendarVueApp = {
                     // to this same write, so reading immediately would race it and miss
                     // the change that just happened.
                     clearTimeout(this._undoRefreshTimer);
-                    this._undoRefreshTimer = setTimeout(() => this.loadUndoEntries(), 1200);
+                    this._undoRefreshTimer = setTimeout(() => this.loadLastEdit(), 1200);
                     console.log('[CalendarDataService] Calendar imported, defaultView:', this.calendar?.options?.defaultView);
                     this.ensureCalendarOptionsDefaults();
                     // Update custom view in schedule with calendar's settings
@@ -2673,12 +2673,36 @@ const CalendarVueApp = {
         // Read the changes this calendar can undo. /history is written by a Cloud Function
         // on any write that removed or edited events, and is read-only to clients -- so
         // this is a plain read with nothing to keep in sync.
+        /**
+         * The header's "Edited N ago": one timestamp (/history_meta/<id>/lastEditedAt, a few
+         * bytes). This used to run loadUndoEntries(), which downloads the calendar's whole
+         * /history -- 10-20x the calendar's own size -- on EVERY calendar load and on EVERY
+         * live change, for every open viewer, only to read a date. From Sep 14 that became
+         * most of the database's download bill. The full history is now loaded only when
+         * someone opens Recent changes or Settings, or presses Undo.
+         */
+        async loadLastEdit() {
+            if (!this.isExisting || !this.calendar.id) return;
+            try {
+                const at = (await firebase.database()
+                    .ref('/history_meta/' + this.calendar.id + '/lastEditedAt').once('value')).val();
+                const newest = this.undoEntries && this.undoEntries[0];
+                const editedAt = Math.max(at || 0, newest ? newest.savedAt : 0) || null;
+                this.lastEditLabel = editedAt ? `Edited ${this.describeAgo(editedAt)}` : '';
+                this.lastEditExact = editedAt ? this.describeExact(editedAt) : '';
+            } catch (err) {
+                console.warn('[app] could not read last-edit time', err);
+            }
+        },
+
         async loadUndoEntries() {
             this.undoEntries = [];
             if (!this.isExisting || !this.calendar.id) return;
             try {
+                // Only the newest 20 entries are ever shown, so only they are downloaded:
+                // a calendar's history is 10-20x the calendar itself.
                 const snap = await firebase.database()
-                    .ref('/history/' + this.calendar.id).once('value');
+                    .ref('/history/' + this.calendar.id).orderByKey().limitToLast(20).once('value');
                 const rows = [];
                 snap.forEach(c => { rows.push({ key: c.key, ...c.val() }); });
                 rows.sort((a, b) => b.savedAt - a.savedAt);
@@ -3006,7 +3030,7 @@ const CalendarVueApp = {
                         : `Restored ${events.length} event${events.length === 1 ? '' : 's'}`,
                 'success');
             // The restore is itself a change, so the list it came from is now stale.
-            setTimeout(() => this.loadUndoEntries(), 1500);
+            setTimeout(() => { this.loadLastEdit(); if (this.showRecentChanges) this.loadUndoEntries(); }, 1500);
         },
 
         // ============================================================
