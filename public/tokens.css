@@ -47,7 +47,8 @@
     --pc-event-5: #ff9800;  --pc-event-6: #03a9f4;  --pc-event-7: #9e9e9e;  --pc-event-8: #27282f;
     --pc-event-9: #827717;  --pc-event-10: #c0ca33; --pc-event-11: #00836f; --pc-event-12: #8e24aa;
     --pc-event-13: #880e4f; --pc-event-14: #bf360c; --pc-event-15: #455a64; --pc-event-16: #00bfa5;
-    --pc-event-tint: 22%;        /* how much of the event color a timed block's fill takes */
+    --pc-event-tint: 22%;        /* light mode: how much of the event color a timed block's fill takes.
+                                    Dark mode uses the solid color instead (a tint turned coral brown). */
 
     /* ---- type --------------------------------------------------------------------------- */
     --pc-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;

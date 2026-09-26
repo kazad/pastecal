@@ -331,9 +331,9 @@ html[data-ux="2"] .nc-bar-time { font-size: 12px; font-weight: 500; opacity: .8;
    solid colored edge and dark text -- still a block of color to plan by, readable in every
    color. All-day and multi-day bars stay solid, text black or white per color (inline). */
 html[data-ux="2"] .nc-timed, html[data-ux="2"] .nc-bar.tint {
-    background: color-mix(in srgb, var(--c) 22%, var(--bg)); color: var(--nc-text); border: 0; border-left: 3px solid var(--c); }
+    background: color-mix(in srgb, var(--c) var(--pc-event-tint), var(--bg)); color: var(--nc-text); border: 0; border-left: 3px solid var(--c); }
 html[data-ux="2"] .nc-timed:hover, html[data-ux="2"] .nc-bar.tint:hover {
-    background: color-mix(in srgb, var(--c) 32%, var(--bg)); filter: none; box-shadow: none; }
+    background: color-mix(in srgb, var(--c) calc(var(--pc-event-tint) + 10%), var(--bg)); filter: none; box-shadow: none; }
 html[data-ux="2"] .nc-bar.tint { border-radius: 4px; padding-left: 5px; }
 html[data-ux="2"] .nc-bar.tint .nc-bar-time { color: var(--nc-muted); opacity: 1; }
 html[data-ux="2"] .nc-bar.tint .nc-recur, html[data-ux="2"] .nc-timed .nc-recur { color: var(--nc-muted); }
@@ -518,3 +518,11 @@ html[data-ux="2"] .ne-row:has(.ne-dt) { flex-direction: column; align-items: str
 html[data-ux="2"] .ne-row:has(.ne-dt) > .ne-field { width: 100%; margin: 6px 0; }
 html[data-ux="2"] .ne-dt { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 8px; }
 html[data-ux="2"] .ne-dt input[type=time] { width: 100%; }
+
+/* v2 dark: events are their REAL color, solid, as in the main app -- on a dark page any tint
+   reads as a different, muddier color (coral turned brown). Text is black or white per color
+   (--on, NcUx.textOn), and a faint outline keeps a near-black event visible. */
+html[data-ux="2"][data-theme="dark"] :is(.nc-timed, .nc-bar.tint) {
+    background: var(--c); color: var(--on); border-left: 0; box-shadow: inset 0 0 0 1px rgba(255,255,255,.14); }
+html[data-ux="2"][data-theme="dark"] :is(.nc-timed, .nc-bar.tint):hover { background: var(--c); filter: brightness(1.1); }
+html[data-ux="2"][data-theme="dark"] :is(.nc-timed, .nc-bar.tint) :is(.nc-bar-time, .nc-timed-time, .nc-recur) { color: inherit; opacity: .8; }

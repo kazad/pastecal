@@ -335,7 +335,8 @@ const NativeCalendar = (() => {
             paint(type, tint) {
                 const c = this.color(type);
                 if (!this.v2) return { background: c };
-                return tint ? { '--c': c } : { background: c, color: NcUx.textOn(c) };
+                // --on: the readable text color on the solid color, for dark mode (below).
+                return tint ? { '--c': c, '--on': NcUx.textOn(c) } : { background: c, color: NcUx.textOn(c) };
             },
             isTint(b) { return this.v2 && !(b.occ.allDay || this.isMultiDayTimed(b.occ)); },
             barStyle(b) {

@@ -89,6 +89,9 @@
         .pal-i .meta { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--pc-text-muted); }
         .ev-solid { height: 22px; border-radius: 5px; display: flex; align-items: center; justify-content: center; font-size: 12.5px; font-weight: 600; }
         [data-theme="dark"] .ev-solid { box-shadow: inset 0 0 0 1px rgba(255,255,255,.22); }
+        /* Dark mode: timed events are the solid color too (a tint read as a different color). */
+        [data-theme="dark"] .ev-tint { background: var(--c); color: var(--on); border-left: 0; box-shadow: inset 0 0 0 1px rgba(255,255,255,.14); }
+        [data-theme="dark"] .ev-tint span { color: inherit; opacity: .8; }
         .ev-tint { height: 22px; border-radius: 4px; display: flex; align-items: center; gap: 6px; padding-left: 6px; font-size: 12.5px; font-weight: 600; color: var(--pc-text);
             background: color-mix(in srgb, var(--c) var(--pc-event-tint), var(--pc-bg)); border-left: 3px solid var(--c); }
         .ev-tint span { color: var(--pc-text-muted); font-weight: 500; font-variant-numeric: tabular-nums; }
@@ -217,7 +220,8 @@
             <h2>Event colors</h2>
             <p class="intro">The sixteen default category colors (people can change them in Settings). All-day and multi-day
                 events are solid bars whose text is black or white, whichever reads better on that color
-                (<code>NcUx.textOn</code>); timed events are a tint of the color with a solid edge and dark text. White on orange was
+                (<code>NcUx.textOn</code>); timed events are a tint of the color with a solid edge in light mode,
+                and the solid color in dark mode, where a tint reads as a different, muddier color. White on orange was
                 2.2:1, which is why text color is chosen per color rather than fixed.</p>
             <div class="dual">
                 <div v-for="th in ['light','dark']" :key="th" class="pane" :data-theme="th">
@@ -226,7 +230,7 @@
                         <div v-for="(c, i) in palette" :key="c" class="pal-i">
                             <div class="meta"><span>{{ labels[i] || ('Category ' + (i + 1)) }}</span><span class="mono">{{ c }}</span></div>
                             <div class="ev-solid" :style="{ background: c, color: textOn(c) }">All day</div>
-                            <div class="ev-tint" :style="{ '--c': c }"><span>9:00 AM</span>Timed</div>
+                            <div class="ev-tint" :style="{ '--c': c, '--on': textOn(c) }"><span>9:00 AM</span>Timed</div>
                             <div class="meta"><span>text on bar</span><span class="aa" :class="contrast(c, textOn(c)) >= 4.5 ? 'ok' : 'low'">{{ contrast(c, textOn(c)).toFixed(1) }}:1</span></div>
                         </div>
                     </div>
