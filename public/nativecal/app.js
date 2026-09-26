@@ -364,7 +364,7 @@ const CalendarVueApp = {
                     // "Edited N ago" in the header. Deferred: the stamp is written by a
                     // Cloud Function reacting to this same write.
                     clearTimeout(this._editStampTimer);
-                    this._editStampTimer = setTimeout(() => this.loadLastEdit(), 1200);
+                    this.loadLastEdit();
                     console.log('[CalendarDataService] Calendar imported, defaultView:', this.calendar?.options?.defaultView);
                     this.ensureCalendarOptionsDefaults();
                     // Update custom view in schedule with calendar's settings
@@ -1904,11 +1904,18 @@ const CalendarVueApp = {
             this.calendar.options.notes = newNotes;
         },
 
-        /** Header "Edited 2d ago": the same stamp the main app reads (history_meta). */
+        /** Header "Edited 2d ago": calendar.lastEditedAt, as the main app reads it. */
         async loadLastEdit() {
             if (!this.calendar?.id) return;
             try {
-                const at = (await firebase.database().ref('/history_meta/' + this.calendar.id + '/lastEditedAt').once('value')).val();
+                // On the calendar itself (CalendarDataService._lastEditedAt); /history_meta once
+                // for a calendar not edited since that field existed.
+                let at = this.calendar.lastEditedAt || null;
+                if (!at && !this._lastEditMetaRead) {
+                    this._lastEditMetaRead = true;
+                    this._lastEditMeta = (await firebase.database().ref('/history_meta/' + this.calendar.id + '/lastEditedAt').once('value')).val();
+                }
+                at = at || this._lastEditMeta || null;
                 if (!at) { this.lastEditLabel = ''; return; }
                 const s = Math.max(0, Math.round((Date.now() - at) / 1000)), m = Math.round(s / 60), h = Math.round(m / 60), d = Math.round(h / 24);
                 const ago = s < 60 ? 'just now' : m < 60 ? `${m}m ago` : h < 24 ? `${h}h ago` : d < 7 ? `${d}d ago`
