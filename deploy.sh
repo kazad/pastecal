@@ -172,6 +172,17 @@ fi
 
 if [[ ",$ALL_TARGETS," == *,hosting,* ]]; then
     run_gate
+    # The release this deploy replaces, so going back is one known-good command. (Sep 26: a
+    # bad release was live while the rollback syntax was worked out by trial and error.)
+    PREV_VERSION="$(curl -s -H "Authorization: Bearer $(gcloud auth print-access-token 2>/dev/null)" \
+        -H "x-goog-user-project: pastecal-web" \
+        "https://firebasehosting.googleapis.com/v1beta1/sites/pastecal-web/releases?pageSize=1" \
+        | python3 -c "import json,sys; print(json.load(sys.stdin)['releases'][0]['version']['name'].split('/')[-1])" 2>/dev/null || true)"
     echo "Deploying: hosting"
     firebase deploy --only hosting
+    if [ -n "$PREV_VERSION" ]; then
+        echo
+        echo "If this release misbehaves, go back to the previous one (takes seconds):"
+        echo "  firebase hosting:clone pastecal-web@$PREV_VERSION pastecal-web:live"
+    fi
 fi

@@ -205,3 +205,66 @@ that fails without the fix.
 - Titles containing `>` or `&` are stored HTML-escaped (`-&gt;`) by the grid editor.
 - Drag-selecting several slots highlights them but offers no way to create from the selection.
 - View-only calendars still receive the edit slug in their data (server fix pending).
+
+
+---
+
+# Sep 26: a series edit saved as a delete (20 whys)
+
+**What happened.** The EventStore shipped (deploy #1, 08:41 UTC). Editing a whole repeating series
+from one of its occurrences saved the series as an "edited occurrence" of itself; every other
+occurrence vanished (27 -> 1) and history logged a delete. The owner restored it from Recent
+changes. Deleting a whole series from an occurrence silently did nothing. Live for about
+90 minutes; rolled back to the previous release.
+
+1. Why did the series vanish? Its row was saved with `recurrenceID` = its own id.
+2. Why? The store's update copied `recurrenceID` from Syncfusion's record onto the series.
+3. Why did the record carry it? At `actionBegin`, an "Entire series" edit started from an
+   occurrence still holds the occurrence's link to the series.
+4. Why did the store allow an edit to change identity? Nothing said it couldn't. **Fixed:** an
+   update can never change `id` or `recurrenceID`.
+5. Why did a structurally broken calendar save at all? No check that every edited occurrence
+   points at a series that exists. **Fixed:** checked on every change; a violation is refused,
+   shown, and logged as `command_failed`.
+6. Why did delete-series do nothing? At `actionBegin` Syncfusion lists the series as CHANGED,
+   not deleted; only `currentAction` says "DeleteSeries".
+7. Why did the adapter read records literally? I assumed `actionBegin` records state intent.
+   They don't: Syncfusion computes the real changes AFTER `actionBegin`, in the step we cancel.
+8. Why wasn't that known? I captured Syncfusion's data for occurrence edits and deletes, but not
+   for series edits or deletes. **Fixed:** every action is mapped explicitly
+   (Add, Save, Delete, EditOccurrence, DeleteOccurrence, EditSeries, DeleteSeries), following
+   Syncfusion's own source for series rules, and an unmapped action on a repeating event is
+   refused and logged, never guessed.
+9. Why didn't the old-vs-new comparison catch it? It covered 6 actions, none on a whole series.
+   **Fixed:** 16 actions, including every series action; kept in `test/differential/`.
+10. Why didn't the journeys catch it? The series journey checked that the new title appeared
+    somewhere. It did -- on the broken row. **Fixed:** `expectSeriesIntact` checks what the
+    calendar means (still a series, occurrences drawn, nothing orphaned).
+11. Why do tests keep checking text instead of meaning? Checking a saved title is the easiest
+    assertion to write; checking structure takes knowing the data model.
+12. Why was a refactor of every save path shipped on 6 compared actions? The evidence looked
+    strong (identical data, all journeys passing) and I did not ask which actions were missing.
+13. Why wasn't that question asked? There was no list of the actions the app supports. The
+    matrix is now that list.
+14. Why did it reach every user at once? The deploy is all-or-nothing; there is no staged rollout.
+15. Why did the rollback take minutes? The command's syntax was worked out by trial and error
+    during the incident. **Fixed:** `deploy.sh` prints the exact rollback command for the
+    release it replaced.
+16. Why did the owner find it and not monitoring? The bad save succeeded, so nothing errored.
+    **Fixed** for this class: a structure violation is now a refused save plus a logged
+    `command_failed` with its reason.
+17. Why could history restore it? `/history` snapshots every write that removes or changes
+    events -- the safety net worked exactly as designed.
+18. Why is Syncfusion so hard to wrap? Its public events expose half-built data, and its rules
+    live in minified code we only read when something breaks.
+19. Why wrap it at all? To stop its quirks leaking into our data -- the goal was right; the
+    adapter needed to follow Syncfusion's rules, not its surface.
+20. Root cause: **I replaced Syncfusion's save logic without first listing every action it
+    handles and proving each one equal, and the tests checked that text was saved rather
+    than that the calendar still meant the same thing.**
+
+**Rules from this.**
+- Before replacing behavior, list every case it handles and diff old vs new on each (the matrix).
+- Assert meaning, not text: structure, counts drawn, links resolved.
+- A data layer refuses and logs what it cannot handle; it never guesses.
+- Every deploy prints its rollback.

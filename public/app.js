@@ -1856,10 +1856,23 @@ const CalendarVueApp = {
         /** A grid action (Syncfusion's add / change / remove, cancelled in actionBegin) -> the store. */
         applyScheduleAction(args) {
             const active = window.scheduleObj && window.scheduleObj.activeEventData && window.scheduleObj.activeEventData.event;
-            const command = ScheduleAdapter.toCommand(args, this.store(), {
-                action: window.scheduleObj && window.scheduleObj.currentAction,
-                occurrenceStart: active && active.StartTime,
-            });
+            let command;
+            try {
+                const ui = (window.scheduleObj && window.scheduleObj.uiStateValues) || {};
+                command = ScheduleAdapter.toCommand(args, this.store(), {
+                    action: window.scheduleObj && window.scheduleObj.currentAction,
+                    occurrenceStart: active && active.StartTime,
+                    keepOccurrences: !!ui.isIgnoreOccurrence,
+                });
+                // Syncfusion clears this flag in the step we cancel; clear it so a "No" here
+                // cannot leak into the next series edit.
+                ui.isIgnoreOccurrence = false;
+            } catch (err) {
+                // An action the adapter cannot map safely: nothing is saved, the person is
+                // told, and it is logged with the action name (command_failed).
+                this.store().onError(err, { type: 'schedule', label: `${args.requestType}/${window.scheduleObj && window.scheduleObj.currentAction}` });
+                return;
+            }
             if (!command.commands.length) return;
             const deleting = args.requestType === 'eventRemove';
             const subject = (r) => r && r.Subject ? `"${String(r.Subject).trim()}"` : 'event';

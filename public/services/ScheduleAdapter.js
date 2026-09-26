@@ -152,6 +152,43 @@
                 }
             }
 
+            // The whole series. At actionBegin Syncfusion lists the series under CHANGED even
+            // for a delete (Sep 26: "delete entire series" left the series in place) and with
+            // the occurrence's RecurrenceID; only currentAction says what the user meant.
+            if (action === 'DeleteSeries' || action === 'EditSeries') {
+                const r = (args.changedRecords || [])[0] || (args.deletedRecords || [])[0];
+                const master = r && store.find({ id: r.RecurrenceID ?? r.Id, recurrenceID: null });
+                if (!master) throw new Error(`${action}: the series is not in the calendar`);
+                const ownOccurrences = (store.getEvents() || []).filter((e) => e.recurrenceID !== null && e.recurrenceID !== undefined
+                    && String(e.recurrenceID) === String(master.id));
+                if (action === 'DeleteSeries') {
+                    for (const e of ownOccurrences) commands.push({ type: 'remove', key: e });
+                    commands.push({ type: 'remove', key: master });
+                } else {
+                    // Syncfusion's own EditSeries rule (ej2-schedule 23.2.6, crud "EditSeries"),
+                    // which runs AFTER actionBegin -- in the step we cancel -- so it is done here:
+                    // "Match every occurrence to the series again?" -- No (context.keepOccurrences,
+                    // its uiStateValues.isIgnoreOccurrence) keeps the skipped dates and the
+                    // separately edited occurrences; otherwise both are cleared.
+                    const changes = ScheduleAdapter.changesFrom(r);
+                    if (context.keepOccurrences && !blank(master.recurrenceException)) {
+                        delete changes.recurrenceException;
+                    } else {
+                        changes.recurrenceException = null;
+                        for (const e of ownOccurrences) commands.push({ type: 'remove', key: e });
+                    }
+                    commands.push({ type: 'update', key: master, changes });
+                }
+                return { type: 'batch', commands, label: args.requestType };
+            }
+            // Anything else on a repeating event is an action we have not mapped: refuse it
+            // (reported, nothing saved) rather than guess -- guessing is how a series vanished.
+            const recurring = [...(args.changedRecords || []), ...(args.deletedRecords || [])]
+                .some((r) => !blank(r.RecurrenceRule) || !blank(r.RecurrenceID));
+            if (recurring && action && !['Save', 'Add', 'Delete', 'EditOccurrence', 'DeleteOccurrence'].includes(action)) {
+                throw new Error(`unsupported action ${action} on a repeating event`);
+            }
+
             for (const r of args.deletedRecords || []) commands.push({ type: 'remove', key: keyOf(r) });
             for (const r of args.changedRecords || []) {
                 const existing = store.find(keyOf(r));
