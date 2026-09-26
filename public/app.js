@@ -558,7 +558,7 @@ const CalendarVueApp = {
                     // to this same write, so reading immediately would race it and miss
                     // the change that just happened.
                     clearTimeout(this._undoRefreshTimer);
-                    this._undoRefreshTimer = setTimeout(() => this.loadLastEdit(), 1200);
+                    this.loadLastEdit();
                     console.log('[CalendarDataService] Calendar imported, defaultView:', this.calendar?.options?.defaultView);
                     this.ensureCalendarOptionsDefaults();
                     // Update custom view in schedule with calendar's settings
@@ -2684,8 +2684,17 @@ const CalendarVueApp = {
         async loadLastEdit() {
             if (!this.isExisting || !this.calendar.id) return;
             try {
-                const at = (await firebase.database()
-                    .ref('/history_meta/' + this.calendar.id + '/lastEditedAt').once('value')).val();
+                // Stored on the calendar itself since Sep 26 (CalendarDataService._lastEditedAt),
+                // so it arrives with the data. Calendars not edited since then fall back to the
+                // server's stamp in /history_meta, read once.
+                let at = this.calendar.lastEditedAt || null;
+                if (!at && !this._lastEditMetaRead) {
+                    this._lastEditMetaRead = true;
+                    at = (await firebase.database()
+                        .ref('/history_meta/' + this.calendar.id + '/lastEditedAt').once('value')).val();
+                    this._lastEditMeta = at;
+                }
+                at = at || this._lastEditMeta || null;
                 const newest = this.undoEntries && this.undoEntries[0];
                 const editedAt = Math.max(at || 0, newest ? newest.savedAt : 0) || null;
                 this.lastEditLabel = editedAt ? `Edited ${this.describeAgo(editedAt)}` : '';

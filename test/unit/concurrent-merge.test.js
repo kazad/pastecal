@@ -276,3 +276,33 @@ test('deleting a recurring series removes the master and its exceptions', () => 
 
   assert.deepEqual(merged, [], 'both rows go, not just one of them');
 });
+
+// --- lastEditedAt: "Edited N ago" stored on the calendar ------------------------------------
+// The header used to download the whole /history on every load and live change just to show
+// this date (Sep 14 -> most of the database bill). It now travels with the calendar, stamped
+// by the save transaction with the server's own rule (HistoryService.stampLastEdit).
+const lastEditedAt = (current, next, now) => extractStatic('_lastEditedAt').apply(host, [current, next, now]);
+const cal = (events, extra = {}) => ({ title: 'T', options: { notes: '' }, events, lastEditedAt: 100, ...extra });
+
+test('lastEditedAt: a real change to events, title or options is stamped now', () => {
+  const now = 999;
+  assert.equal(lastEditedAt(cal([ev('A', 'A')]), cal([ev('A', 'A2')]), now), now, 'event edited');
+  assert.equal(lastEditedAt(cal([ev('A', 'A')]), cal([ev('A', 'A'), ev('B', 'B')]), now), now, 'event added');
+  assert.equal(lastEditedAt(cal([ev('A', 'A')]), cal([]), now), now, 'event removed');
+  assert.equal(lastEditedAt(cal([]), cal([], { title: 'New title' }), now), now, 'title');
+  assert.equal(lastEditedAt(cal([]), cal([], { options: { notes: 'hi' } }), now), now, 'options');
+});
+
+test('lastEditedAt: a write that changes nothing keeps the SERVER value, never an older local one', () => {
+  // A viewer's echo or a settings default: same events in a different order, type "2" vs 2,
+  // null vs missing fields. Its local copy carries an OLD stamp (50) -- the server has 100.
+  const server = cal([ev('A', 'A', { type: 2 }), ev('B', 'B')]);
+  const echo = { ...cal([ev('B', 'B', { recurrenceID: null }), ev('A', 'A', { type: '2' })]), lastEditedAt: 50 };
+  assert.equal(lastEditedAt(server, echo, 999), 100);
+});
+
+test('lastEditedAt: a calendar without the field yet gets it on its first real edit only', () => {
+  const old = { title: 'T', options: {}, events: [ev('A', 'A')] };
+  assert.equal(lastEditedAt(old, { ...old }, 999), null, 'no edit: stays absent (the header falls back to history_meta)');
+  assert.equal(lastEditedAt(old, { ...old, events: [ev('A', 'A moved', { start: '2026-09-18T10:00:00.000Z' })] }, 999), 999);
+});

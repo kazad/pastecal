@@ -271,6 +271,38 @@ class CalendarDataService {
     // for that occurrence (recurrenceID pointing back at the master). Keyed on id alone
     // the two collapse into one -- the second row silently evicts the first -- so a user
     // who edits a single occurrence loses either that occurrence or the whole series.
+    /**
+     * When the calendar was last really edited, stored ON the calendar (lastEditedAt), so the
+     * header's "Edited N ago" comes with the data every viewer already has -- no extra read,
+     * and live when someone else edits. The rule is the server's own (HistoryService.
+     * stampLastEdit): an edit is a change to the events, the title or the options. A write
+     * that changes none of those (settings defaults, a viewer's echo) keeps the SERVER's
+     * value -- never the local copy's, which may be older and would move the label backwards.
+     */
+    static _lastEditedAt(current, next, now) {
+        const events = (c) => { const v = c && c.events; return (Array.isArray(v) ? v : Object.values(v || {})).filter(Boolean); };
+        const F = ['title', 'description', 'start', 'end', 'type', 'isAllDay', 'repeat', 'recurrencerule', 'recurrenceID', 'recurrenceException'];
+        const norm = (v) => (v === undefined || v === null || v === '') ? null : String(v);
+        const sig = (e) => F.map((f) => (f === 'type' ? String(parseInt(e[f], 10) || 1) : norm(e[f]))).join('\u0001');
+        const a = events(current), b = events(next);
+        const byKey = new Map(a.map((e) => [this._eventKey(e), sig(e)]));
+        const changed = a.length !== b.length
+            || (current.title ?? '') !== (next.title ?? '')
+            || JSON.stringify(current.options ?? null) !== JSON.stringify(next.options ?? null)
+            || b.some((e) => byKey.get(this._eventKey(e)) !== sig(e));
+        return changed ? now : (current.lastEditedAt ?? null);
+    }
+
+    // Server time, estimated from Firebase's measured clock offset, so a laptop with a wrong
+    // clock cannot stamp an edit hours into the future.
+    static _serverNow() {
+        if (this._timeOffset === undefined && typeof firebase !== 'undefined' && firebase.database) {
+            this._timeOffset = 0;
+            try { firebase.database().ref('.info/serverTimeOffset').on('value', (s) => { this._timeOffset = s.val() || 0; }); } catch (e) { /* keep 0 */ }
+        }
+        return Date.now() + (this._timeOffset || 0);
+    }
+
     static _eventKey(e) {
         return `${e.id}|${e.recurrenceID ?? ''}`;
     }
@@ -434,7 +466,7 @@ class CalendarDataService {
                 // yet -- one we have never received a snapshot for.
                 if (current === null) {
                     if (known) return; // abort; the retry will run against real data
-                    return this._sanitizeForFirebase(safe);
+                    return this._sanitizeForFirebase({ ...safe, lastEditedAt: this._serverNow() });
                 }
                 const remoteEvents = Array.isArray(current.events)
                     ? current.events
@@ -465,6 +497,7 @@ class CalendarDataService {
                     events: this._mergeEvents(base, localEvents, remoteEvents, { yieldOnConflict: replay }),
                 };
                 if (mergedOptions) next.options = mergedOptions;
+                next.lastEditedAt = this._lastEditedAt(current, next, this._serverNow());
                 return next;
             }, (error, committed, snapshot) => {
                 if (error) {
@@ -632,7 +665,8 @@ class CalendarDataService {
     }
 
     static createWithId(key, value, success) {
-        return this.db.child(key).set(this._sanitizeForFirebase(value), (error) => {
+        // Born edited: the header's "Edited N ago" reads this (see _lastEditedAt).
+        return this.db.child(key).set(this._sanitizeForFirebase({ ...value, lastEditedAt: this._serverNow() }), (error) => {
             if (error) {
                 console.log("error creating calendar", error, key, value);
             } else {
