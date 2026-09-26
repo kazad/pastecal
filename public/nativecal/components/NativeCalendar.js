@@ -327,16 +327,15 @@ const NativeCalendar = (() => {
                 return fmtTime(new Date(2000, 0, 1, h), this.timeFormat);
             },
             earlyLabel() { const h = parseInt(this.startHour, 10); return this.timeFormat === '24' ? `00-${pad(h - 1)}` : `12-${(h - 1) % 12 || 12} AM`; },
-            // People plan by color ("the orange ones are soccer"), so events stay blocks of
-            // color in both looks. v1: solid with white text, as Syncfusion. v2: all-day and
-            // multi-day bars solid with black or white text per color (white on orange or
-            // sky blue is 2.2-2.6:1); timed events a tinted block with a solid colored edge
-            // and dark text (the .tint class).
+            // People plan by color ("the orange ones are soccer"), so events are blocks of
+            // their color with WHITE text, exactly as in the main app -- a category must look
+            // the same in both (Sep 26: picking black text for contrast made coral events
+            // look unlike the main app's). v2 light mode draws timed events as a pale tint
+            // with dark text instead (the .tint class), where white would be unreadable.
             paint(type, tint) {
                 const c = this.color(type);
                 if (!this.v2) return { background: c };
-                // --on: the readable text color on the solid color, for dark mode (below).
-                return tint ? { '--c': c, '--on': NcUx.textOn(c) } : { background: c, color: NcUx.textOn(c) };
+                return tint ? { '--c': c, '--on': '#fff' } : { background: c, color: '#fff' };
             },
             isTint(b) { return this.v2 && !(b.occ.allDay || this.isMultiDayTimed(b.occ)); },
             barStyle(b) {

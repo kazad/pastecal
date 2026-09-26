@@ -245,13 +245,14 @@ test('the event palette in tokens.css is the one the apps use', () => {
   assert.deepEqual(tokens.slice(8), list(APP_JS, 'EXTRA_COLORS'), 'categories 9-16 differ from app.js EXTRA_COLORS');
 });
 
-test('every default event color has readable text on it (black or white, whichever is better)', () => {
-  // Mirrors NcUx.textOn: white or #1c1c1e, whichever has more contrast.
-  for (let i = 1; i <= 16; i++) {
-    const c = LIGHT[`--pc-event-${i}`];
-    const best = Math.max(contrast(c, '#ffffff'), contrast(c, '#1c1c1e'));
-    assert.ok(best >= 4.5, `category ${i} ${c}: best text contrast ${best.toFixed(2)}:1`);
-  }
+test('NativeCal v2 solid events have white text, as in the main app', () => {
+  // Sep 26: black text chosen per color for contrast made coral events look unlike the main
+  // app's; a category must look the same in both, so solid events are white text, always.
+  const nc = read('public/nativecal/components/NativeCalendar.js');
+  const paint = nc.slice(nc.indexOf('paint(type, tint)'), nc.indexOf('paint(type, tint)') + 400);
+  assert.ok(!/textOn/.test(paint), 'paint() must not pick text color per event color');
+  assert.match(paint, /'--on': '#fff'/);
+  assert.match(paint, /color: '#fff'/);
 });
 
 test('pages that load style.css load tokens.css before it', () => {

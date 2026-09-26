@@ -268,8 +268,8 @@
 
 /* =========================================================================================
    v2 (?ux=2) -- the redesign. Same layout as v1 so nothing moves, but:
-   - readable: nothing under 12px; secondary text >= 4.5:1; event text black or white
-     chosen per color (NcUx.textOn), and timed events as tinted blocks with dark text
+   - readable: nothing under 12px; secondary text >= 4.5:1; solid events have white text
+     as in the main app, and light-mode timed events are tinted blocks with dark text
    - modern: the app's own system font, sentence-case labels, a filled primary button,
      outlined fields, 8-12px radii, a Today button and a segmented view switcher
    - on phones, popups and dialogs are bottom sheets over the calendar
@@ -324,8 +324,8 @@ html[data-ux="2"] .nc-date.today { border-radius: 12px; font-weight: 700; color:
 html[data-ux="2"] .nc-picker-months button.on, html[data-ux="2"] .ne-days button.on { color: var(--pc-on-accent); }
 html[data-ux="2"] .nc-more { font-size: 12px !important; font-weight: 600; color: var(--nc-muted) !important; left: 6px; }
 html[data-ux="2"] .nc-more:hover { color: var(--nc-text) !important; }
-html[data-ux="2"] .nc-bar { border-radius: 5px; font-size: 12.5px; font-weight: 600; letter-spacing: -.005em; padding: 0 6px; gap: 5px; }
-html[data-ux="2"] .nc-bar-time { font-size: 12px; font-weight: 500; opacity: .8; }
+html[data-ux="2"] .nc-bar { border-radius: 5px; font-size: 12.5px; font-weight: 600; letter-spacing: -.005em; padding: 0 5px; gap: 4px; }
+html[data-ux="2"] .nc-bar-time { font-size: 11px; font-weight: 400; opacity: .9; }   /* as the main app: small enough that "7:00 AM Morning routine" fits a day */
 
 /* timed events (month bars and week/day blocks): a tinted block of the event's color with a
    solid colored edge and dark text -- still a block of color to plan by, readable in every
@@ -456,7 +456,7 @@ html[data-ux="2"] .nc-phone .nc-more-word { display: none; }
 html[data-ux="2"] .nc-phone .nc-weekday { font-size: 11px; text-align: center; padding: 6px 0; }
 .nc-more { white-space: nowrap; }
 /* v2 dark: a near-black event color would vanish into the background -- outline solid bars. */
-html[data-ux="2"][data-theme="dark"] .nc-bar:not(.tint) { box-shadow: inset 0 0 0 1px rgba(255,255,255,.22); }
+
 /* v2 phone: the date number is not its own tap target. At 24px it is far under the 44px
    touch minimum, and iOS "tap adjustment" snapped taps meant for the empty day onto it,
    opening Day view instead of creating an event. A tap anywhere in a day now creates
@@ -520,9 +520,12 @@ html[data-ux="2"] .ne-dt { display: grid; grid-template-columns: minmax(0, 1.4fr
 html[data-ux="2"] .ne-dt input[type=time] { width: 100%; }
 
 /* v2 dark: events are their REAL color, solid, as in the main app -- on a dark page any tint
-   reads as a different, muddier color (coral turned brown). Text is black or white per color
-   (--on, NcUx.textOn), and a faint outline keeps a near-black event visible. */
+   reads as a different, muddier color (coral turned brown). Text is white (--on), as in the
+   main app: a category must look the same in both (Sep 26: black text on coral looked foreign). */
 html[data-ux="2"][data-theme="dark"] :is(.nc-timed, .nc-bar.tint) {
-    background: var(--c); color: var(--on); border-left: 0; box-shadow: inset 0 0 0 1px rgba(255,255,255,.14); }
+    background: var(--c); color: var(--on); border-left: 0; }
 html[data-ux="2"][data-theme="dark"] :is(.nc-timed, .nc-bar.tint):hover { background: var(--c); filter: brightness(1.1); }
-html[data-ux="2"][data-theme="dark"] :is(.nc-timed, .nc-bar.tint) :is(.nc-bar-time, .nc-timed-time, .nc-recur) { color: inherit; opacity: .8; }
+html[data-ux="2"][data-theme="dark"] :is(.nc-timed, .nc-bar.tint) :is(.nc-bar-time, .nc-timed-time, .nc-recur) { color: inherit; opacity: 1; }
+/* Dark: every event block as the main app draws it -- 6px corners, a 1px grey outline. */
+html[data-ux="2"][data-theme="dark"] :is(.nc-bar, .nc-timed) { border-radius: 6px; box-shadow: inset 0 0 0 1px #616161; }
+html[data-ux="2"][data-theme="dark"] .nc-bar :is(.nc-bar-time, .nc-recur) { opacity: 1; }
