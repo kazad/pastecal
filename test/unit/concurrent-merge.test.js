@@ -306,3 +306,20 @@ test('lastEditedAt: a calendar without the field yet gets it on its first real e
   assert.equal(lastEditedAt(old, { ...old }, 999), null, 'no edit: stays absent (the header falls back to history_meta)');
   assert.equal(lastEditedAt(old, { ...old, events: [ev('A', 'A moved', { start: '2026-09-18T10:00:00.000Z' })] }, 999), 999);
 });
+
+// --- Two events with the same id (old calendars have them) ----------------------------------
+// Sep 26-27: keyed on id alone, (1) the merge stored the SECOND event twice and the first was
+// gone, and (2) lastEditedAt saw a change on every write, so each echo stamped a new time,
+// the time came back as a change, and an open NativeCal tab re-saved twice a second for 17
+// hours (9 GB of database downloads in a day).
+test('two events sharing an id both survive a write', () => {
+  const dup = [ev(7, 'First', { start: '2026-09-28T10:00:00.000Z' }), ev(7, 'Second'), ev('u1', 'Normal')];
+  const merged = mergeEvents(dup, dup, dup);
+  assert.deepEqual(merged.map((e) => e.title), ['First', 'Second', 'Normal']);
+});
+
+test('lastEditedAt: an unchanged calendar with duplicate ids is not an edit', () => {
+  const dup = [ev(7, 'First', { start: '2026-09-28T10:00:00.000Z' }), ev(7, 'Second')];
+  assert.equal(lastEditedAt(cal(dup), cal([...dup]), 999), 100, 'echo keeps the server stamp');
+  assert.equal(lastEditedAt(cal(dup), cal([dup[0], ev(7, 'Second edited')]), 999), 999, 'a real edit is still stamped');
+});

@@ -284,12 +284,14 @@ class CalendarDataService {
         const F = ['title', 'description', 'start', 'end', 'type', 'isAllDay', 'repeat', 'recurrencerule', 'recurrenceID', 'recurrenceException'];
         const norm = (v) => (v === undefined || v === null || v === '') ? null : String(v);
         const sig = (e) => F.map((f) => (f === 'type' ? String(parseInt(e[f], 10) || 1) : norm(e[f]))).join('\u0001');
-        const a = events(current), b = events(next);
-        const byKey = new Map(a.map((e) => [this._eventKey(e), sig(e)]));
-        const changed = a.length !== b.length
-            || (current.title ?? '') !== (next.title ?? '')
+        // Compared as a sorted list, not a map by id: a calendar holding two events with the
+        // same id (old data has them) made one of them look changed on EVERY write, so each
+        // echo stamped a new time, the new time came back as a change, and an open NativeCal
+        // tab re-saved twice a second for 17 hours (Sep 26: 9 GB of downloads in a day).
+        const all = (c) => events(c).map((e) => this._eventKey(e) + '\u0002' + sig(e)).sort().join('\u0003');
+        const changed = (current.title ?? '') !== (next.title ?? '')
             || JSON.stringify(current.options ?? null) !== JSON.stringify(next.options ?? null)
-            || b.some((e) => byKey.get(this._eventKey(e)) !== sig(e));
+            || all(current) !== all(next);
         return changed ? now : (current.lastEditedAt ?? null);
     }
 
@@ -308,9 +310,21 @@ class CalendarDataService {
     }
 
     static _mergeEvents(base, local, remote, { yieldOnConflict = false } = {}) {
+        // Old calendars can hold two events with the same id. Keyed on the id alone, the
+        // second evicted the first and the write stored the second one TWICE -- the first
+        // event was gone (found Sep 27). The nth repeat of a key is its own key, "#n".
+        const keysOf = (list) => {
+            const count = new Map();
+            return (list || []).map((e) => {
+                if (!e || !e.id) return null;
+                const k = this._eventKey(e), n = count.get(k) || 0;
+                count.set(k, n + 1);
+                return n ? `${k}#${n}` : k;
+            });
+        };
         const byId = (list) => {
-            const m = new Map();
-            for (const e of list || []) if (e && e.id) m.set(this._eventKey(e), e);
+            const m = new Map(), keys = keysOf(list);
+            (list || []).forEach((e, i) => { if (keys[i]) m.set(keys[i], e); });
             return m;
         };
         const baseM = byId(base), localM = byId(local), remoteM = byId(remote);
@@ -367,10 +381,8 @@ class CalendarDataService {
         // emitted and dropped from the write.
         const out = [];
         const seen = new Set();
-        for (const e of remote || []) {
-            if (!e || !e.id) continue;
-            const k = this._eventKey(e);
-            if (merged.has(k)) { out.push(merged.get(k)); seen.add(k); }
+        for (const k of keysOf(remote)) {
+            if (k && merged.has(k)) { out.push(merged.get(k)); seen.add(k); }
         }
         for (const [k, ev] of merged) if (!seen.has(k)) out.push(ev);
         return out;

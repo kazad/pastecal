@@ -79,6 +79,8 @@ const CalendarVueApp = {
         let COLORS = [...DEFAULT_COLORS];
 
         return {
+            isApplyingRemote: false,        // see findAndSubscribe: a server snapshot is not an edit
+            remoteAppliedSignature: null,
             isReadOnly: false,
             isLoading: true, // set to false when calendar status is determined
             shareCopied: false,
@@ -360,7 +362,15 @@ const CalendarVueApp = {
                     // Calendar found
                     console.log('[CalendarDataService] Calendar loaded from Firebase');
                     this.isExisting = true;
+                    // Applying the server's copy is not an edit: without this the watcher
+                    // saved every incoming snapshot back, and each save came back as a new
+                    // snapshot -- one open tab re-saved a calendar twice a second for 17
+                    // hours (Sep 26). The main app's guard (applyRemoteCalendar), same rule:
+                    // skip the write only while the events are exactly as the import left them.
+                    this.isApplyingRemote = true;
                     this.calendar.import(c);
+                    this.remoteAppliedSignature = JSON.stringify(this.calendar.events || []);
+                    this.$nextTick(() => { this.isApplyingRemote = false; });
                     // "Edited N ago" in the header. Deferred: the stamp is written by a
                     // Cloud Function reacting to this same write.
                     clearTimeout(this._editStampTimer);
@@ -470,6 +480,11 @@ const CalendarVueApp = {
             handler: function (newVal, oldVal) {
                 // console.log("Vue:watch:calendar", newVal, oldVal);
 
+                if (this.isApplyingRemote
+                    && JSON.stringify(this.calendar.events || []) === this.remoteAppliedSignature) {
+                    this.updateCalendarView();
+                    return;
+                }
                 if (!this.isExisting) {
                     this.saveLocalStorage();
                 } else {
