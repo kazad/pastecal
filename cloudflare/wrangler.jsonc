@@ -1,0 +1,16 @@
+{
+  // pastecal's calendar store + live sync. One Durable Object per calendar holds its data
+  // in SQLite, applies every save in order, and pushes changes to open tabs over
+  // hibernating WebSockets. See docs/cloudflare-migration.md.
+  "name": "pastecal-sync",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-01",
+  // Phase 1: workers.dev only. No routes on pastecal.com until the cutover step.
+  "workers_dev": true,
+  "durable_objects": {
+    "bindings": [{ "name": "CALENDARS", "class_name": "CalendarRoom" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["CalendarRoom"] }],
+  "observability": { "enabled": true }
+  // Secrets (wrangler secret put): IMPORT_SECRET -- lets the Firebase shadow copy write.
+}

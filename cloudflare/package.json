@@ -1,0 +1,13 @@
+{
+  "name": "pastecal-sync",
+  "private": true,
+  "description": "pastecal's calendar store and live sync on Cloudflare: one Durable Object per calendar.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "check": "wrangler deploy --dry-run --outdir .dry-run",
+    "test": "node test/sync.test.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "4.142.0"
+  }
+}
