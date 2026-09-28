@@ -279,6 +279,11 @@ const CalendarVueApp = {
         // So: restore the screen to the known-good events, and log it. The state the
         // user can see is corrected either way, which is the part that actually matters.
         // Real deletions declare intent and never land here.
+        // Over the write budget (a save loop): stop and say so, and count it.
+        CalendarDataService.onSyncPaused = ({ writes }) => {
+            this.showToast('Saving paused — reload the page to continue', 'error');
+            try { if (window.Analytics) Analytics.jsError('sync_paused', `${writes} writes in a minute`, 'sync'); } catch (e) { /* never rethrow */ }
+        };
         CalendarDataService.onSyncRefused = ({ before, removing, events }) => {
             console.warn('[nativecal] write refused: would have removed ' + removing +
                 ' of ' + before + ' events without a declared deletion');

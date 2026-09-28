@@ -268,3 +268,135 @@ changes. Deleting a whole series from an occurrence silently did nothing. Live f
 - Assert meaning, not text: structure, counts drawn, links resolved.
 - A data layer refuses and logs what it cannot handle; it never guesses.
 - Every deploy prints its rollback.
+
+---
+
+## Sep 26-27: one open tab re-saved a calendar twice a second for 17 hours
+
+**What happened.** From about 04:00 to 21:40 PDT on Sat Sep 26, one browser tab running the
+beta (`/beta`, NativeCal) wrote the same calendar every ~0.51 s: ~7,000 writes an hour, each
+firing `recordHistory` and `syncPublicView` and re-sending the whole calendar to every
+listener. Database downloads were 14.5 GB that day and 3.9 GB the next (normal: under 1 GB);
+206,000 function runs (normal: ~6,000). It stopped when the tab closed. The owner learned of
+it from a budget alert a day later. No data was lost by the loop itself.
+
+**Mechanism (reproduced).** A calendar holding two events with the same id:
+1. The beta saved back every snapshot it received (the main app has an echo guard; the beta
+   did not).
+2. `_lastEditedAt` compared events through a Map keyed by id, so of two same-id events one
+   always looked "changed": every save stamped a new `lastEditedAt`.
+3. The new stamp arrived as a new snapshot -> step 1 -> 500 ms debounce -> repeat forever.
+The same Map-by-id in `_mergeEvents` also stored the second of two same-id events twice,
+silently deleting the first -- in both apps, on any save.
+
+**50 whys.**
+1. Why did the bill spike? ~7,000 calendar writes an hour for 17 hours.
+2. Why so many writes? One tab saved every 0.51 s: the 500 ms sync debounce, back to back.
+3. Why back to back? Each save produced a snapshot, and each snapshot caused a save.
+4. Why did a snapshot cause a save? The beta's calendar watcher syncs on ANY change, including
+   applying the server's own data.
+5. Why didn't the main app loop? It has `applyRemoteCalendar` + `remoteAppliedSignature`: a
+   snapshot is not an edit. Added there after an earlier echo bug.
+6. Why didn't the beta have it? `nativecal/app.js` was forked from the main `app.js` before that
+   guard existed, and fixes to one are not carried to the other.
+7. Why aren't they carried? Nothing links them: no shared module for "apply remote data", no
+   test that runs both apps against the same rule.
+8. Why did the echo change data at all (a same-data echo is harmless)? `lastEditedAt` was
+   re-stamped on every write.
+9. Why re-stamped? `_lastEditedAt` saw "events changed" when they had not.
+10. Why? It indexed events in a Map by `id|recurrenceID`; two events with the same key collapse,
+    so one of them never matches its own signature.
+11. Why do events share an id? Old data -- the store never enforced unique ids, and some
+    calendars have duplicates (origin not yet traced).
+12. Why didn't the server-side stamp loop too? `stampLastEdit` compares by position, so it saw
+    "no change". Two implementations of "did this change?" disagreed.
+13. Why two implementations? The client copy was written to "mirror" the server rule, but as a
+    re-implementation, not shared code, and it was tested on clean data only.
+14. Why only clean data? Test fixtures are hand-made; none has duplicate ids, legacy shapes, or
+    the other oddities of real calendars.
+15. Why was `lastEditedAt` a feedback risk? It is a value derived from the data, written INTO
+    the node every client listens to. Any disagreement about "changed" becomes a write, and
+    every write becomes a snapshot. Derived fields in a watched node are a loop waiting for a
+    bug.
+16. Why was it put there? To stop downloading `/history` for "Edited N ago" (a real cost fix).
+    Right goal; the feedback edge was not considered.
+17. Why wasn't the feedback edge considered? We had no rule "a client must never write in
+    response to a read", and no test for it.
+18. Why no test for idle writes? Tests assert that edits save. None asserts that a tab that
+    does nothing sends nothing.
+19. Why does that matter so much? "Do nothing -> write nothing" is the invariant whose violation
+    is unbounded in cost; "edit saves" failures are bounded to one edit.
+20. Why was the same Map-by-id bug also deleting data? `_mergeEvents` used the same keying, and
+    its output loop filled both duplicate slots from one Map entry.
+21. Why wasn't that caught? Same reason: no fixture with duplicate ids; the merge tests use
+    unique ids.
+22. Why didn't the data-integrity scan in `stats.sh health` flag duplicates? It checks series
+    structure, not id uniqueness.
+23. Why did 7,000 writes an hour get accepted? Rules for `calendars/$id` are `.write: true` with
+    no validation, no size cap, no rate limit.
+24. Why no rate limit? Realtime Database has none built in; it has to be built in rules, and we
+    never did.
+25. Why never? Cost was never treated as something a bug could drive; the threat model was
+    "someone vandalizes a calendar" (covered by history), not "something writes forever".
+26. Why is each write so expensive? The events are one array: every save re-sends the WHOLE
+    calendar, fires two functions, copies the whole calendar to the read-only view, and pushes
+    it to every open tab.
+27. Why the whole calendar? Arrays in RTDB can't be patched by key safely, so saves are
+    whole-node transactions.
+28. Why a transaction per save? Correctly -- for the 3-way merge. But it multiplies the cost of
+    any extra save.
+29. Why did the loop run 17 hours? Nothing noticed.
+30. Why didn't the browser notice? It has no write budget: no "too many saves, stop".
+31. Why didn't the server notice? No alert on writes or downloads per hour.
+32. Why didn't monitoring notice? `stats.sh health` runs by hand after deploys; it flagged
+    9 GB the next morning only because it was run.
+33. Why no automatic alert? Cloud Monitoring alert policies were never set up; we relied on the
+    budget alert.
+34. Why is the budget alert too late? Billing data lags up to a day and budgets alert on
+    money already spent.
+35. Why didn't analytics show it? The loop threw no errors; saves "succeeded".
+36. Why didn't the Cloud Function logs show which calendar? The functions log nothing on
+    success; finding the calendar took reconstructing it from metrics and reproduction.
+37. Why wasn't the beta held to the main app's release bar? It is "beta", so its journeys cover
+    editing, not background behavior, and it reached real users via `/beta`.
+38. Why can a beta harm the whole project? It shares the production database and billing.
+    A beta's bug costs the same as the main app's.
+39. Why was it deployed the same day as `lastEditedAt`? Several changes shipped in one day;
+    each was tested, their interaction (beta echo x new stamp) was not.
+40. Why was the interaction untested? Tests run each app alone, briefly, then stop; loops only
+    show over time.
+41. Why does the fix need a deploy that was slow? The default `./deploy.sh` fails on
+    firebase-tools' rules bug; hosting had to be deployed on its own.
+42. Why is that still the default? The REST workaround (`scripts/deploy-rules.sh`) was added
+    but `deploy.sh` was never switched to it.
+43. Could an attacker do the same on purpose? Yes: `calendars/*` is readable and writable by
+    plain unauthenticated HTTP. Verified: an unauthenticated GET returns a calendar.
+44. How bad? Write a 10 MB calendar, then download it in a loop: ~$1,800/hour from one laptop.
+    Downloading a normal calendar in a loop: ~$7/hour.
+45. Why no protection? No App Check, no size limits, no per-calendar rate limit.
+46. Why no App Check? Never enabled; pastecal predates it and "no login" was read as "no
+    checks possible". App Check needs no login.
+47. Why no hard cap? Firebase has no spending cap on Blaze; a cap has to be built (budget ->
+    Pub/Sub -> function that disables billing or the service).
+48. Why does "no login" make this worse? There is no identity to rate-limit, so limits must
+    be per calendar (rules) and per app instance (App Check).
+49. Why did it take a user-visible alert to find? Because every layer assumed another layer
+    would catch cost problems.
+50. Root cause: **nothing bounds what one client can cost us.** Writes are unlimited in
+    number, size and fan-out; the client had no write budget; the server had no rate limit
+    or alert; and the one invariant that would have caught it -- "an idle tab writes
+    nothing" -- was never tested. The duplicate-id bug and the missing echo guard were the
+    trigger; the absence of any bound turned a small bug into a 17-hour bill.
+
+**Fixed now.** Beta echo guard; `_lastEditedAt` compares events as a sorted list; `_mergeEvents`
+gives repeated ids their own key (both with unit tests).
+
+**Rules from this.**
+- An idle tab writes nothing: tested in both apps on real-shaped data (duplicate ids, mixed id
+  kinds, repeating events).
+- Every client has a write budget; every calendar has a server-enforced rate and size limit.
+- Never write a derived value into the node clients listen to without proving a no-op write
+  cannot change it.
+- One implementation of "did this change?", shared by client and server.
+- Cost is monitored hourly with an alert, not daily by hand.
+- The database answers only our own pages (App Check).

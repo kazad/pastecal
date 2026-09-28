@@ -1243,6 +1243,10 @@ const CalendarVueApp = {
         // A write that never landed. The user is told, because silently keeping an edit
         // that exists only on their screen is the failure mode this whole investigation
         // was about.
+        CalendarDataService.onSyncPaused = ({ writes }) => {
+            this.showToast('Saving paused — reload the page to continue', 'error');
+            track(a => a.jsError('sync_paused', `${writes} writes in a minute`, 'sync'));
+        };
         CalendarDataService.onSyncFailed = () => {
             this.showToast('Could not save — check your connection', 'error');
             track(a => a.jsError('sync_failed', 'transaction did not commit', 'sync'));

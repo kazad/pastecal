@@ -289,6 +289,48 @@ test('in a calendar mixing old number ids and new text ids, both kinds can be ed
   expect(typeof rows.find((e) => e.title === 'Added with Event').id).toBe('string');
 });
 
+// Sep 26: one open beta tab re-saved a calendar twice a second for 17 hours (14 GB of
+// downloads) -- on data with two events sharing an id, each save came back as a change and
+// caused the next. Every test checked that edits save; none checked that doing NOTHING
+// sends nothing. A tab that is only looking must never write, in either app, on the data
+// shapes real calendars have: duplicate ids, number and text ids, a repeating event with an
+// edited occurrence.
+test('an open tab that is only looking writes nothing (main app and beta)', async ({ browser, page }, info) => {
+  test.skip(info.project.name !== 'desktop-en', 'the same code on every browser; one is enough');
+  const slug = await newCalendar(browser, page, 'idle');
+  await page.waitForTimeout(3000);                       // the new calendar's own first saves
+  const at = (day, h) => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), day, h).toISOString(); };
+  const events = [
+    { id: 7, title: 'First with id 7', start: at(9, 9), end: at(9, 10), type: 1 },
+    { id: 7, title: 'Second with id 7', start: at(10, 9), end: at(10, 10), type: 2 },
+    { id: 'a1b2c3d4-0000-4000-8000-000000000001', title: 'Text id', start: at(11, 9), end: at(11, 10), type: 3, description: 'A > B & "C"' },
+    { id: 9, title: 'Weekly', start: at(5, 14), end: at(5, 15), type: 4, recurrencerule: 'FREQ=WEEKLY;INTERVAL=1;', recurrenceException: '20260112T220000Z' },
+    { id: 10, title: 'Weekly (moved)', start: at(12, 16), end: at(12, 17), type: 4, recurrenceID: 9, recurrencerule: 'FREQ=WEEKLY;INTERVAL=1;', recurrenceException: '20260112T220000Z' },
+  ];
+  // Written from outside, as another person's edit arrives: the open tab must apply it
+  // without echoing it back.
+  await page.evaluate(([slug, events]) => firebase.database().ref(`/calendars/${slug}/events`).set(events), [slug, events]);
+
+  const writesFrom = (p) => { const n = { writes: 0 };
+    p.on('websocket', (ws) => ws.on('framesent', (f) => { try { const m = JSON.parse(f.payload); if (m.d && (m.d.a === 'p' || m.d.a === 'm')) n.writes++; } catch (e) { /* not JSON */ } }));
+    return n; };
+  const tabs = [];
+  for (const path of [`/${slug}`, `/nativecal/${slug}?ux=2`]) {
+    const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    await ctx.addInitScript(() => { window.__TEST__ = true; });
+    const p = await ctx.newPage(); const n = writesFrom(p);
+    await p.goto(path); tabs.push({ path, p, n, ctx });
+  }
+  await page.waitForTimeout(6000);                        // loaded and settled
+  const before = tabs.map((t) => t.n.writes);
+  await page.waitForTimeout(15000);                       // now only looking
+  for (const [i, t] of tabs.entries()) expect(t.n.writes - before[i], `${t.path} wrote while idle`).toBe(0);
+  // ...and the data is exactly what was written: nothing merged away.
+  const rows = await onServer(page);
+  expect(rows.map((e) => e.title).sort()).toEqual(events.map((e) => e.title).sort());
+  for (const t of tabs) await t.ctx.close();
+});
+
 test('edit an event: rename, recolor and change its time, and it stays (#41)', async ({ browser, page }) => {
   await newCalendar(browser, page, 'edit');
   await openNewEventEditor(page, 18);

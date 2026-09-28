@@ -46,6 +46,29 @@ class CalendarDataService {
     static onSyncFailed = null;    // a write did not land at all
     static onSyncRefused = null;   // a write was refused by the gate below before reaching the network
     static onSyncShape = null;     // every write: how many events it carried vs the last snapshot
+    static onSyncPaused = null;    // this tab went over its write budget and stopped saving
+
+    // Write budget. A person saves a few times a minute; a bug that saves in a loop saves
+    // twice a second, forever -- Sep 26, one tab did that for 17 hours (14 GB of downloads).
+    // Past the budget this tab stops writing until reload. Unsaved work is not lost: every
+    // pending write is in the local journal first (debounce_sync), and replays on reload.
+    static WRITE_BUDGET = { max: 40, windowMs: 60 * 1000 };
+    static _writeTimes = [];
+    static _paused = false;
+    static _overWriteBudget(now) {
+        if (this._paused) return true;
+        if (now === undefined) now = Date.now();
+        const { max, windowMs } = this.WRITE_BUDGET;
+        this._writeTimes = this._writeTimes.filter((t) => now - t < windowMs);
+        this._writeTimes.push(now);
+        if (this._writeTimes.length <= max) return false;
+        this._paused = true;
+        console.error(`[CalendarDataService] saving paused: ${this._writeTimes.length} writes in ${windowMs / 1000}s`);
+        if (typeof this.onSyncPaused === 'function') {
+            try { this.onSyncPaused({ writes: this._writeTimes.length }); } catch (e) { /* never rethrow */ }
+        }
+        return true;
+    }
 
     // A user action that legitimately removes events says so here before the watcher
     // fires. The gate in sync() treats an undeclared removal as a bug, because every user
@@ -391,6 +414,7 @@ class CalendarDataService {
     // only sync if we have existed
     static sync(calendar, opts = {}) {
         if (calendar && calendar.id && this.connected) {
+            if (this._overWriteBudget()) return;
             // console.log("CalendarDataService.sync()", calendar);
             const safe = this._dropIncompleteEvents(calendar);
 

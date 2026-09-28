@@ -323,3 +323,18 @@ test('lastEditedAt: an unchanged calendar with duplicate ids is not an edit', ()
   assert.equal(lastEditedAt(cal(dup), cal([...dup]), 999), 100, 'echo keeps the server stamp');
   assert.equal(lastEditedAt(cal(dup), cal([dup[0], ev(7, 'Second edited')]), 999), 999, 'a real edit is still stamped');
 });
+
+// --- Write budget: a tab that saves in a loop stops itself --------------------------------
+test('write budget: a person-paced tab keeps saving; a loop is paused and reported once', () => {
+  const overBudget = extractStatic('_overWriteBudget');
+  const paused = [];
+  const tab = { WRITE_BUDGET: { max: 40, windowMs: 60000 }, _writeTimes: [], _paused: false, onSyncPaused: (x) => paused.push(x) };
+  // A busy person: a save every 3 seconds for 10 minutes.
+  for (let t = 0; t < 600000; t += 3000) assert.equal(overBudget.call(tab, t), false, `person paused at ${t}`);
+  // A loop: a save every 0.5 s.
+  const loop = { ...tab, _writeTimes: [], onSyncPaused: (x) => paused.push(x) };
+  let stoppedAt = null;
+  for (let t = 0; t < 120000; t += 500) if (overBudget.call(loop, t) && stoppedAt === null) stoppedAt = t;
+  assert.ok(stoppedAt !== null && stoppedAt <= 21000, `loop stopped at ${stoppedAt} ms`);
+  assert.equal(paused.length, 1, 'reported once, not on every blocked write');
+});

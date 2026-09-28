@@ -165,6 +165,14 @@ run_gate() {
 ALL_TARGETS="${TARGETS:-database,functions,hosting,remoteconfig}"
 PRE_TARGETS="$(echo "$ALL_TARGETS" | tr ',' '\n' | grep -v '^hosting$' | paste -sd, - || true)"
 
+# Database rules go by REST: `firebase deploy --only database` sends an empty body here and
+# fails with "Expected 'rules' property" (see scripts/deploy-rules.sh). Sep 27: that made the
+# default ./deploy.sh fail while an urgent fix waited.
+if [[ ",$PRE_TARGETS," == *,database,* ]]; then
+    echo "Deploying: database rules (REST)"
+    ./scripts/deploy-rules.sh
+    PRE_TARGETS="$(echo "$PRE_TARGETS" | tr ',' '\n' | grep -v '^database$' | paste -sd, - || true)"
+fi
 if [ -n "$PRE_TARGETS" ]; then
     echo "Deploying: $PRE_TARGETS"
     firebase deploy --only "$PRE_TARGETS"
