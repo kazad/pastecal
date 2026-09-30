@@ -155,6 +155,13 @@ export class CalendarRoom extends DurableObject {
         });
         const why = this.tooBig(events);
         if (why) return { ok: false, error: why };
+        // Identical to what is stored: do nothing. This is what stops a two-way copy with
+        // Firebase from bouncing one write back and forth forever (the Sep 26 shape).
+        const s = this.state;
+        if (s.id === cal.id && s.title === (cal.title ?? '') && json(s.options) === json(cal.options || {})
+            && json(s.events) === json(events)) {
+            return { ok: true, unchanged: true, v: s.v, events: events.length, renamedDuplicates: renamed.length };
+        }
         this.sql.exec(`DELETE FROM events`);
         this.state.events = [];
         this.storeEvents(events, 'all');
@@ -178,6 +185,12 @@ export class CalendarRoom extends DurableObject {
             if (rate) return refuse('rate_limited', rate);
         }
         if (m.t === 'save') {
+            // The tab picks the id of an event it creates. If the server picked one, the tab's
+            // own copy and the server's would hold the same event under different ids.
+            const adds = (cs) => (cs || []).flatMap((c) => (c.type === 'batch' ? adds(c.commands) : c.type === 'add' ? [c] : []));
+            if (adds(m.commands).some((c) => !c.event || c.event.id === undefined || c.event.id === null || c.event.id === '')) {
+                return refuse('bad_command', 'a new event needs an id');
+            }
             let result;
             try { result = EventStore.apply(this.state.events, { type: 'batch', commands: m.commands || [] }); }
             catch (e) { return refuse('bad_command', e.message); }

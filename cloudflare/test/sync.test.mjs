@@ -39,6 +39,10 @@ r = await r.json();
 assert.equal(r.ok, true, JSON.stringify(r)); assert.equal(r.events, events.length); assert.equal(r.renamedDuplicates, 1 + (FIXTURE ? r.renamedDuplicates - 1 : 0));
 step(`import: ${r.events} events, ${r.renamedDuplicates} duplicate id(s) given a fresh id, nothing lost`);
 
+const v1 = r.v; const again = await (await fetch(`${BASE}/cal/${id}/import`, { method: 'PUT', headers: { Authorization: `Bearer ${SECRET}` }, body: JSON.stringify({ ...base, id, events: (await (await fetch(`${BASE}/cal/${id}`)).json()).calendar.events }) })).json();
+assert.equal(again.unchanged, true); assert.equal(again.v, v1);
+step('re-importing identical data stores nothing and bumps nothing (no copy loop with Firebase)');
+
 let bad = await fetch(`${BASE}/cal/${id}/import`, { method: 'PUT', body: '{}' });
 assert.equal(bad.status, 403); step('import without the secret is refused');
 
@@ -50,7 +54,7 @@ step('two tabs connect and receive the same snapshot');
 
 // 3. A adds and edits; B sees each change; version advances by one per save.
 const v0 = A.snapshot.v;
-A.send({ t: 'save', id: 's1', v: v0, commands: [{ type: 'add', event: { title: 'Soccer', start: at(12, 17), end: at(12, 18), type: 3 } }] });
+A.send({ t: 'save', id: 's1', v: v0, commands: [{ type: 'add', event: { id: 'soccer-1', title: 'Soccer', start: at(12, 17), end: at(12, 18), type: 3 } }] });
 const ack1 = await A.waitFor((m) => m.t === 'ack' && m.id === 's1');
 const ch1 = await B.waitFor((m) => m.t === 'change' && m.v === ack1.v);
 assert.equal(ack1.v, v0 + 1); assert.equal(ch1.commands[0].event.title, 'Soccer');
@@ -93,7 +97,7 @@ step(`save loop: ${acked} stored, ${refused} refused by the server (in ${Date.no
 const vBad = (await (await fetch(`${BASE}/cal/${id}`)).json()).v;
 const C = await tab('C').ready;
 C.send({ t: 'save', id: 'bad', v: vBad, commands: [
-    { type: 'add', event: { title: 'ok', start: at(20, 9), end: at(20, 10) } },
+    { type: 'add', event: { id: 'ok-1', title: 'ok', start: at(20, 9), end: at(20, 10) } },
     { type: 'update', key: { id: 'nope' }, changes: { title: 'x' } }] });
 const err = await C.waitFor((m) => m.t === 'error' && m.id === 'bad');
 assert.equal(err.code, 'bad_command');
@@ -101,9 +105,13 @@ const after = (await (await fetch(`${BASE}/cal/${id}`)).json());
 assert.equal(after.v, vBad); assert.ok(!after.calendar.events.some((e) => e.title === 'ok'));
 step('a batch with one bad command is refused whole; nothing stored');
 
-C.send({ t: 'save', id: 'huge', v: vBad, commands: [{ type: 'add', event: { title: 'x', description: 'y'.repeat(30000), start: at(20, 9), end: at(20, 10) } }] });
+C.send({ t: 'save', id: 'huge', v: vBad, commands: [{ type: 'add', event: { id: 'x-1', title: 'x', description: 'y'.repeat(30000), start: at(20, 9), end: at(20, 10) } }] });
 assert.equal((await C.waitFor((m) => m.id === 'huge')).code, 'too_big');
 step('an oversized field is refused');
+
+C.send({ t: 'save', id: 'noid', v: vBad, commands: [{ type: 'add', event: { title: 'no id', start: at(20, 9), end: at(20, 10) } }] });
+assert.equal((await C.waitFor((m) => m.id === 'noid')).message, 'a new event needs an id');
+step('a new event without an id is refused (the tab must choose it)');
 
 // 8. Settings: keys merge, so one tab's settings cannot erase another's (publicViewId).
 C.send({ t: 'meta', id: 'm1', options: { publicViewId: 'abc' } });

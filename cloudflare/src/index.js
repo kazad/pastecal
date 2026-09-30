@@ -14,6 +14,16 @@ const validId = (id) => id.length >= 1 && id.length <= 200 && !/[.#$\[\]\/\u0000
 export default {
     async fetch(request, env) {
         const url = new URL(request.url);
+        // Pages that Firebase Hosting rewrites: /beta and /nativecal/** -> the beta page.
+        if (!url.pathname.startsWith('/cal/')) {
+            const isFile = /\.[a-z0-9]+$/i.test(url.pathname);
+            const beta = url.pathname === '/beta' || url.pathname.startsWith('/beta/') || (url.pathname.startsWith('/nativecal/') && !isFile);
+            const res = await env.ASSETS.fetch(beta ? new Request(new URL('/nativecal/', url), request) : request);
+            const out = new Response(res.body, res);          // headers on a fetched response are read-only
+            out.headers.set('X-Robots-Tag', 'noindex');
+            if (/\.(js|css|json)$/.test(url.pathname) || beta) out.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+            return out;
+        }
         const m = url.pathname.match(/^\/cal\/([^/]+)(\/ws|\/import)?$/);
         let id = null;
         try { id = m && decodeURIComponent(m[1]); } catch { /* bad escape */ }

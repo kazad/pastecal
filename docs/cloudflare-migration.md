@@ -57,13 +57,21 @@ Protocol and limits: `cloudflare/src/CalendarRoom.js` (header comment).
 
 ## Phase 1 -- shadow copy in production (no user-visible change)
 
-- [ ] Deploy `pastecal-sync` to workers.dev; `wrangler secret put IMPORT_SECRET`.
-- [ ] Load every calendar (`scripts/migrate.mjs` against production), verify identical.
+- [x] Deploy `pastecal-sync` to workers.dev; `wrangler secret put IMPORT_SECRET`. (Sep 30)
+- [x] Load every calendar (`scripts/migrate.mjs` against production), verify identical. (Sep 30: 8,613 calendars / 87,632 events, all identical; 17 duplicate ids renamed)
+- [x] `new.pastecal.com` (Worker custom domain, serves `public/`, noindex; same rewrites as Firebase). Still reads Firebase data until Phase 2.
 - [ ] Firebase function `shadowToCloudflare` on `calendars/{id}` writes -> PUT import.
       (Retries on failure; logs failures. Deployed with the existing functions.)
 - [ ] `scripts/parity.mjs`: compare Firebase vs Cloudflare for every calendar edited in the
       last day; add to `stats.sh health`. Run for 3+ days: zero differences.
 - Rollback: delete the function. Nothing reads from Cloudflare yet.
+
+## Known gaps found in testing (fold into Phase 2)
+
+- Two tabs editing the SAME event at once: the server keeps the later save, but the tab that
+  lost keeps showing its own value. The client must re-sync (take the server's snapshot) when
+  its ack shows another save landed first.
+- A new event must carry an id chosen by the tab; the server refuses one without.
 
 ## Phase 2 -- the browser talks to Cloudflare, behind a flag
 
