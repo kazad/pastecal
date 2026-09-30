@@ -69,19 +69,24 @@ Protocol and limits: `cloudflare/src/CalendarRoom.js` (header comment).
 
 ## Known gaps found in testing (fold into Phase 2)
 
-- Two tabs editing the SAME event at once: the server keeps the later save, but the tab that
+- (Fixed in CloudCalendarService, Sep 30) Two tabs editing the SAME event at once: the server keeps the later save, but the tab that
   lost keeps showing its own value. The client must re-sync (take the server's snapshot) when
   its ack shows another save landed first.
 - A new event must carry an id chosen by the tab; the server refuses one without.
 
 ## Phase 2 -- the browser talks to Cloudflare, behind a flag
 
-- [ ] `CloudCalendarService`: same interface the apps use (`findAndSubscribe`,
+- [x] (Step 2, Sep 30) `CloudCalendarService`: same interface the apps use (`findAndSubscribe`,
       `subscribe_readonly`, `debounce_sync`, `createWithId`, `checkExists`), over the WebSocket
-      (`partysocket` for reconnect/backoff).
-- [ ] Saves become commands: `EventStore.changesBetween(before, after)` -> `save`. Works for
+      (own reconnect/backoff; no library). `public/services/CloudCalendarService.js`, chosen in
+      one place (its last line) by `?backend=cf` (remembered) / `new.pastecal.com`; `?backend=firebase`
+      turns it off. New calendars: `POST /cal/<id>` (empty room only, per-IP rate limit). Tests:
+      `test/unit/cloud-calendar-service.test.js`, `cloudflare/test/cloud-service.test.mjs`,
+      `cloudflare/test/cloud-journeys.spec.js`. Still Firebase in this mode: view-only links
+      (`lookupCalendar`), history, author signal; names resolve by exact id (Phase 3 directory).
+- [x] Saves become commands: `EventStore.changesBetween(before, after)` -> `save`. Works for
       the main app and the beta without restructuring either. Title/options -> `meta`.
-- [ ] Offline: unsent commands kept in the local journal, re-sent on reconnect.
+- [x] Offline: unsent commands kept in the local journal, re-sent on reconnect.
 - [ ] Reverse shadow: while the flag is on, the Worker copies each save back to Firebase, so
       other users (still on Firebase) see it.
 - [ ] Flag: `?backend=cf` and a per-calendar allowlist. Full journey suite + idle-tab journey +

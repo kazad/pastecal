@@ -361,7 +361,12 @@ export class CalendarRoom extends DurableObject {
         refuse('unknown', `unknown message ${m.t}`);
     }
 
-    webSocketClose(ws, code) { try { ws.close(code, 'bye'); } catch { /* already closed */ } }
+    // Answer the close. A tab that calls close() with no code arrives as 1005, which is not a code
+    // close() accepts: it threw, so the close was never answered and the tab sat in CLOSING.
+    webSocketClose(ws, code) {
+        const ok = code >= 1000 && code < 5000 && ![1004, 1005, 1006, 1015].includes(code);
+        try { ws.close(ok ? code : 1000, 'bye'); } catch { /* already closed */ }
+    }
 
     broadcast(msg, except) {
         const text = json(msg);

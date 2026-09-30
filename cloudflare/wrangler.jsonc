@@ -19,6 +19,8 @@
   "durable_objects": {
     "bindings": [{ "name": "CALENDARS", "class_name": "CalendarRoom" }]
   },
+  // New calendars from browsers (POST /cal/<id>): 10 a minute per IP.
+  "ratelimits": [{ "name": "CREATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }],
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["CalendarRoom"] }],
   "observability": { "enabled": true }
   // Secrets (wrangler secret put): IMPORT_SECRET -- lets the Firebase shadow copy write.
