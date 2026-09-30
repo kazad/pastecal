@@ -972,6 +972,38 @@ exports.recordHistory = onValueWritten(`/${DEFAULT_ROOT}/{calendarId}`, async (e
     return HistoryService.record(db, id, before, after);
 });
 
+// Keep the Cloudflare copy (Worker `pastecal-sync`, docs/cloudflare-migration.md) current.
+// Firebase is still the source of truth; the Worker merges each write onto its own state and
+// ignores a write that changes nothing, so a retry or a replay is harmless. Reads only the
+// after-value (same payload recordHistory already receives); small instance, capped
+// concurrency, so a burst of writes cannot turn into a burst of cost. Secret:
+//   firebase functions:secrets:set CLOUDFLARE_IMPORT_SECRET   (same value as the Worker's IMPORT_SECRET)
+const CLOUDFLARE_SYNC_URL = 'https://pastecal-sync.instacalc.workers.dev';
+exports.shadowToCloudflare = onValueWritten(
+    { ref: `/${DEFAULT_ROOT}/{calendarId}`, secrets: ['CLOUDFLARE_IMPORT_SECRET'], memory: '256MiB', timeoutSeconds: 60, maxInstances: 10 },
+    async (event) => {
+        const id = event.params.calendarId;
+        if (!event.data.after.exists()) { console.log(`shadowToCloudflare: ${id} deleted; Cloudflare copy left as is`); return null; }
+        if (isLocal) return null;
+        const body = JSON.stringify({ ...event.data.after.val(), id });
+        let lastError;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+                const res = await fetch(`${CLOUDFLARE_SYNC_URL}/cal/${encodeURIComponent(id)}/from-firebase`, {
+                    method: 'PUT', body, headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_IMPORT_SECRET}` },
+                    signal: AbortSignal.timeout(15000),
+                });
+                const out = await res.json().catch(() => ({}));
+                if (res.ok && out.ok) return null;
+                lastError = `HTTP ${res.status} ${out.error || ''}`;
+                if (res.status === 403 || out.error) break;      // retrying will not help (bad secret, refused by a limit)
+            } catch (e) { lastError = e.message; }
+            if (attempt < 3) await new Promise((r) => setTimeout(r, 500 * 4 ** (attempt - 1)));
+        }
+        console.error(`shadowToCloudflare FAILED for calendar ${id}: ${lastError}`);
+        return null;
+    });
+
 // Case-insensitive calendar lookup function
 exports.lookupCalendar = onCall(async (request) => {
     try {
