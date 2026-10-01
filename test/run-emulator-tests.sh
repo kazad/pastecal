@@ -31,8 +31,10 @@ cd "$(dirname "$0")/.."
 # So: find a new-enough JDK ourselves (Homebrew installs one but does not put it on PATH),
 # and if there genuinely isn't one, say so in those words rather than reporting it as a
 # test failure.
+# Match the version line rather than taking the first line: with JAVA_TOOL_OPTIONS set
+# (common on CI runners) the JVM prints "Picked up JAVA_TOOL_OPTIONS: ..." first.
 java_major() {
-    "$1" -version 2>&1 | head -1 | sed -E 's/.*version "([0-9]+).*/\1/'
+    "$1" -version 2>&1 | grep -m1 -E 'version "' | sed -E 's/.*version "([0-9]+).*/\1/'
 }
 
 JAVA_OK=""

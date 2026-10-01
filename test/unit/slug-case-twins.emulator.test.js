@@ -27,15 +27,16 @@ if (!process.env.FIREBASE_DATABASE_EMULATOR_HOST) {
 const admin = require('../../functions/node_modules/firebase-admin');
 // Requiring the functions entry point is what calls initializeApp() against the emulator;
 // without it admin.database() throws "The default Firebase app does not exist".
-require('../../functions/index.js');
+const { SlugService } = require('../../functions/index.js')._internal;
 const db = admin.database();
 
 const ev = (id, title) => ({
     id, title, start: '2026-09-17T10:00:00.000Z', end: '2026-09-17T11:00:00.000Z', type: 1,
 });
 
-async function seedCalendar(id, events) {
-    await db.ref('calendars').child(id).set({ id, title: 'Test', events, options: {} });
+// The title a fresh calendar gets, so an untouched placeholder reads as empty.
+async function seedCalendar(id, events, { title = 'New Calendar', options = {} } = {}) {
+    await db.ref('calendars').child(id).set({ id, title, events, options });
 }
 async function cleanup(...ids) {
     await Promise.all(ids.map(id => db.ref('calendars').child(id).remove()));
@@ -53,8 +54,7 @@ async function mayTakeSlug(calendarId) {
     const normalized = calendarId.toLowerCase();
     const current = (await db.ref(`slug_mappings/${normalized}`).once('value')).val();
     if (!current || !current.actualSlug || current.actualSlug === calendarId) return true;
-    const incumbent = await db.ref(`calendars/${current.actualSlug}/events`).once('value');
-    return !(incumbent.exists() && incumbent.numChildren() > 0);
+    return !(await SlugService.holdsData(db, current.actualSlug));
 }
 
 test('slug ownership: an empty twin cannot take the slug from one holding events', async () => {
@@ -87,6 +87,21 @@ test('slug ownership: a twin CAN take the slug from an empty placeholder', async
 
         assert.equal(await mayTakeSlug(lower), true,
             'an empty incumbent must not hold a slug hostage');
+    } finally {
+        await cleanup(upper, lower);
+    }
+});
+
+test('slug ownership: a notes-only calendar is not an empty placeholder', async () => {
+    const upper = 'CASETWIN5', lower = 'casetwin5';
+    await cleanup(upper, lower);
+    try {
+        await seedCalendar(upper, [], { options: { notes: 'Gate code 4411' } });
+        await db.ref('slug_mappings/casetwin5').set({ actualSlug: upper, isReadOnly: false });
+        await seedCalendar(lower, [ev('a', 'Other')]);
+
+        assert.equal(await mayTakeSlug(lower), false,
+            'a calendar holding only notes must keep its slug');
     } finally {
         await cleanup(upper, lower);
     }

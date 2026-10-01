@@ -441,6 +441,24 @@ const SlugService = {
         return slugRegex.test(slug) && !reservedWords.includes(slug.toLowerCase());
     },
 
+    /**
+     * Whether a calendar holds anything its owner would miss: events, a title of their own,
+     * or notes. A calendar used purely for notes is as much someone's as one full of events.
+     * Reads at most one event, not the list -- this runs on every create of a case-twin.
+     */
+    async holdsData(db, actualSlug) {
+        const root = db.ref(`/${DEFAULT_ROOT}/${actualSlug}`);
+        const [events, title, notes] = await Promise.all([
+            root.child('events').limitToFirst(1).once('value'),
+            root.child('title').once('value'),
+            root.child('options/notes').once('value'),
+        ]);
+        const t = title.val();
+        return events.hasChildren()
+            || (typeof t === 'string' && t.trim() !== '' && t !== 'New Calendar')
+            || (typeof notes.val() === 'string' && notes.val().trim() !== '');
+    },
+
     normalizeSlug(slug) {
         // Convert to lowercase for consistent storage and lookup
         return slug.toLowerCase();
@@ -572,15 +590,26 @@ const IDService = {
 //
 // So the recovery data is produced here, by the Admin SDK, into /history -- a node the
 // security rules make unwritable by clients. No client, buggy or hostile, can prevent its
-// own destructive write from being recorded, and none can erase the record afterwards.
-// That is the property that makes data loss recoverable rather than merely unlikely.
+// own destructive write from being recorded, or write to /history directly.
 //
-// Only writes that could have LOST something are recorded (an event removed or changed,
-// a title cleared, the calendar deleted). Adds and notes edits are not: nothing was lost,
-// and recording them would bury the entries that matter.
+// What it does NOT guarantee: a hostile client can still push old entries out by making
+// many recordable writes, because retention is bounded. Destructive entries younger than
+// HISTORY_PROTECT_MS are kept up to HISTORY_HARD_CAP, which makes that a sustained effort
+// rather than a 20-write script; past that, the daily backup (docs/backups.md) is the floor.
+//
+// Every entry is a DELTA -- the events it removed, the before/after of the ones it changed,
+// the ones it added -- so the client can undo exactly that change without rolling the
+// whole calendar back over everything done since. Writes that lost something also carry
+// the full prior snapshot (`events`) for the operator's restore script. Additions carry no
+// snapshot: nothing was lost, and a full copy per add is what let a burst of adds evict
+// the snapshot that mattered.
 // ---------------------------------------------------------------------------------------
 const HISTORY_ROOT = "history";
-const HISTORY_KEEP = 20;   // per calendar; older entries are trimmed
+const HISTORY_KEEP = 20;                         // destructive entries always kept, per calendar
+const HISTORY_ADDED_KEEP = 20;                   // `added` entries kept, budgeted separately
+const HISTORY_PROTECT_MS = 24 * 60 * 60 * 1000;  // destructive entries this young survive trimming...
+const HISTORY_HARD_CAP = 100;                    // ...up to this many
+const HISTORY_COALESCE_MS = 60 * 1000;           // a drag is one gesture, not one entry per save
 
 const HistoryService = {
     eventsOf(cal) {
@@ -614,6 +643,21 @@ const HistoryService = {
         });
     },
 
+    // The events this write removed, changed and added. Pure.
+    diff(before, after) {
+        const b = this.eventsOf(before), a = this.eventsOf(after);
+        const beforeByKey = new Map(b.map(e => [this.key(e), e]));
+        const afterByKey = new Map(a.map(e => [this.key(e), e]));
+        const removed = [], changed = [];
+        for (const e of b) {
+            const x = afterByKey.get(this.key(e));
+            if (!x) removed.push(e);
+            else if (!this.sameEvent(x, e)) changed.push({ from: e, to: x });
+        }
+        const added = a.filter(e => !beforeByKey.has(this.key(e)));
+        return { removed, changed, added };
+    },
+
     // What this write did, or null if it did nothing. Pure, so it is unit-testable
     // without a database.
     //
@@ -626,17 +670,8 @@ const HistoryService = {
         const b = this.eventsOf(before);
         if (!after) return { kind: 'deleted', removed: b.length, changed: 0, added: 0 };
 
-        const beforeKeys = new Map(b.map(e => [this.key(e), e]));
-        const afterEvents = this.eventsOf(after);
-        const a = new Map(afterEvents.map(e => [this.key(e), e]));
-
-        let removed = 0, changed = 0;
-        for (const e of b) {
-            const x = a.get(this.key(e));
-            if (!x) removed++;
-            else if (!this.sameEvent(x, e)) changed++;
-        }
-        const added = afterEvents.filter(e => !beforeKeys.has(this.key(e))).length;
+        const d = this.diff(before, after);
+        const removed = d.removed.length, changed = d.changed.length, added = d.added.length;
 
         const titleLost = !!before.title && !after.title;
         if (!removed && !changed && !added && !titleLost) return null;
@@ -648,17 +683,20 @@ const HistoryService = {
         return { kind, removed, changed, added };
     },
 
+    // Options minus the keys the app writes on its own. A visitor opening a legacy
+    // calendar makes the client mint options.publicViewId; that is housekeeping, not
+    // someone editing the calendar, and must not read as "Edited just now".
+    userOptions(cal) {
+        const o = (cal && cal.options) || {};
+        const { publicViewId, ...rest } = o;
+        return JSON.stringify(rest);
+    },
+
     /**
      * Stamp when the calendar last changed at all -- including pure additions.
      *
-     * Separate from the snapshot log below because the two answer different questions.
-     * /history exists to RESTORE, so it only records writes that lost something; recording
-     * every add would bloat it with full event arrays and bury the entries worth
-     * recovering. But "Edited N ago" is asking whether anything happened, and adding an
-     * event is plainly editing the calendar -- a user who adds two events and sees the
-     * label unchanged has been told something false.
-     *
      * One number per calendar, overwritten in place, so it costs nothing to keep current.
+     * The client watches it directly, so the "Edited N ago" label needs no /history read.
      */
     async stampLastEdit(db, calendarId, before, after) {
         if (!after) return null;                       // deletion: nothing left to stamp
@@ -666,58 +704,133 @@ const HistoryService = {
         const changed = !before
             || b.length !== a.length
             || (before.title ?? '') !== (after.title ?? '')
-            || JSON.stringify(before.options ?? null) !== JSON.stringify(after.options ?? null)
+            || this.userOptions(before) !== this.userOptions(after)
             || a.some((e, i) => !this.sameEvent(e, b[i] ?? {}));
         if (!changed) return null;
         return db.ref(`/${HISTORY_ROOT}_meta/${calendarId}/lastEditedAt`).set(Date.now());
     },
 
+    /**
+     * A calendar created at an id whose history is still on file belongs to someone else:
+     * the old calendar was deleted and the slug reused. Its history must not show up in the
+     * newcomer's Recent changes (with Restore buttons), so move it where only the Admin SDK
+     * can read it. Archived rather than dropped: "I deleted my calendar by mistake and then
+     * reopened the link" is the case the operator restore exists for.
+     */
+    async archiveOnCreate(db, calendarId) {
+        const ref = db.ref(`/${HISTORY_ROOT}/${calendarId}`);
+        const old = await ref.once('value');
+        if (!old.exists()) return null;
+        await db.ref(`/${HISTORY_ROOT}_archive/${calendarId}/${Date.now()}`).set(old.val());
+        await Promise.all([
+            ref.remove(),
+            db.ref(`/${HISTORY_ROOT}_index/${calendarId}`).remove(),
+            db.ref(`/${HISTORY_ROOT}_meta/${calendarId}`).remove(),
+        ]);
+        return true;
+    },
+
+    restorable(kind) { return kind !== 'added'; },
+
     async record(db, calendarId, before, after) {
+        if (!before && after) return this.archiveOnCreate(db, calendarId);
         const why = this.changeKind(before, after);
         if (!why) return null;
 
+        const d = after ? this.diff(before, after) : { removed: this.eventsOf(before), changed: [], added: [] };
         const ref = db.ref(`/${HISTORY_ROOT}/${calendarId}`);
-        // For an addition, name what arrived -- the snapshot in `events` is the state
-        // BEFORE, so it cannot answer "what was added" on its own.
-        const beforeKeys = new Set(this.eventsOf(before).map(e => this.key(e)));
-        const addedEvents = after
-            ? this.eventsOf(after).filter(e => !beforeKeys.has(this.key(e)))
-            : [];
+        const indexRef = db.ref(`/${HISTORY_ROOT}_index/${calendarId}`);
+        const index = await this.loadIndex(db, calendarId);
+        const now = Date.now();
+        const changedKeys = d.changed.map(c => this.key(c.from)).sort().join(',');
 
-        const pushed = await ref.push({
-            savedAt: Date.now(),
+        // A drag or resize saves every 500ms, and each save is an edit of the same events.
+        // Fold it into the entry the gesture started: that entry's `from` is the state
+        // before the gesture, which is what undo should return to; only `to` moves on.
+        const newest = index.sort((x, y) => y.t - x.t)[0];
+        if (why.kind === 'edited' && newest && newest.k === 'edited'
+            && newest.ck === changedKeys && now - newest.t < HISTORY_COALESCE_MS) {
+            const prev = (await ref.child(newest.key).child('changedEvents').once('value')).val() || [];
+            const toByKey = new Map(d.changed.map(c => [this.key(c.to), c.to]));
+            await ref.child(newest.key).update({
+                changedEvents: prev.map(c => ({ from: c.from, to: toByKey.get(this.key(c.from)) ?? c.to })),
+                updatedAt: now,
+            });
+            await indexRef.child(newest.key).update({ t: now });
+            return newest.key;
+        }
+
+        const entry = {
+            savedAt: now,
             kind: why.kind,
             removed: why.removed,
             changed: why.changed,
             added: why.added || 0,
-            addedEvents,
+            removedEvents: d.removed,
+            changedEvents: d.changed,
+            addedEvents: d.added,
             eventCount: this.eventsOf(before).length,
             title: before.title ?? null,
             options: before.options ?? null,
-            events: this.eventsOf(before),
-        });
+        };
+        // The full prior state, for the operator's restore -- only when something was lost.
+        if (this.restorable(why.kind)) entry.events = this.eventsOf(before);
 
-        // Trim to the newest HISTORY_KEEP. Push ids are time-ordered, so key order is
-        // savedAt order without needing an index.
-        //
-        // Ask only for the OLDEST few keys rather than the whole node. Reading every
-        // retained entry just to count them would pull ~14.5MB into the function on the
-        // largest real calendar, on every recorded write -- the payloads are full event
-        // arrays. limitToFirst caps that at the handful that might need deleting.
-        //
-        // Only the keys are used, so a concurrent trigger trimming at the same time is
-        // harmless: deletes are by explicit push key and idempotent, and the newest
-        // entries are never in this window. The window is wider than one write's growth,
-        // so any backlog drains over the next few writes rather than persisting.
-        const oldest = await ref.orderByKey().limitToFirst(HISTORY_KEEP * 2).once('value');
-        const keys = [];
-        oldest.forEach(c => { keys.push(c.key); });
-        if (keys.length > HISTORY_KEEP) {
-            const del = {};
-            for (const k of keys.slice(0, keys.length - HISTORY_KEEP)) del[k] = null;
-            await ref.update(del);
-        }
+        const pushed = await ref.push(entry);
+        index.push({ key: pushed.key, k: why.kind, t: now, ck: changedKeys });
+        await indexRef.child(pushed.key).set({ k: why.kind, t: now, ck: changedKeys });
+        await this.trim(db, calendarId, index, now);
         return pushed.key;
+    },
+
+    /**
+     * The index is a few bytes per entry, so trimming never downloads the snapshots it is
+     * deciding about. Entries written before the index existed are folded in once, on the
+     * first write that finds the index missing.
+     */
+    async loadIndex(db, calendarId) {
+        const indexRef = db.ref(`/${HISTORY_ROOT}_index/${calendarId}`);
+        const snap = await indexRef.once('value');
+        const out = [];
+        snap.forEach(c => { out.push({ key: c.key, ...c.val() }); });
+        if (out.length) return out;
+
+        const legacy = await db.ref(`/${HISTORY_ROOT}/${calendarId}`).once('value');
+        if (!legacy.exists()) return out;
+        const fill = {};
+        legacy.forEach(c => {
+            const v = c.val() || {};
+            const row = { k: v.kind || 'edited', t: v.savedAt || 0, ck: '' };
+            fill[c.key] = row;
+            out.push({ key: c.key, ...row });
+        });
+        await indexRef.update(fill);
+        return out;
+    },
+
+    // Which entries to delete. Pure.
+    //   - `added` entries: the newest HISTORY_ADDED_KEEP. They never cost a destructive slot.
+    //   - destructive entries: the newest HISTORY_KEEP, plus any younger than
+    //     HISTORY_PROTECT_MS, up to HISTORY_HARD_CAP in all.
+    toTrim(index, now) {
+        const newestFirst = [...index].sort((x, y) => y.t - x.t);
+        const adds = newestFirst.filter(e => !this.restorable(e.k));
+        const destructive = newestFirst.filter(e => this.restorable(e.k));
+        const drop = adds.slice(HISTORY_ADDED_KEEP);
+        destructive.forEach((e, i) => {
+            const keep = i < HISTORY_KEEP || (i < HISTORY_HARD_CAP && now - e.t < HISTORY_PROTECT_MS);
+            if (!keep) drop.push(e);
+        });
+        return drop.map(e => e.key);
+    },
+
+    async trim(db, calendarId, index, now) {
+        const drop = this.toTrim(index, now);
+        if (!drop.length) return;
+        const del = {}, delIndex = {};
+        for (const k of drop) { del[k] = null; delIndex[k] = null; }
+        await db.ref(`/${HISTORY_ROOT}/${calendarId}`).update(del);
+        await db.ref(`/${HISTORY_ROOT}_index/${calendarId}`).update(delIndex);
     },
 };
 
@@ -884,18 +997,14 @@ exports.indexSlug = onValueWritten(`/${DEFAULT_ROOT}/{calendarId}/id`, async (ev
     // a user with a full calendar ended up looking at a blank one -- somebody opened the
     // other casing, an empty calendar was created there, and the mapping followed it.
     //
-    // Ownership belongs to whoever has the events, not whoever wrote last. An empty
-    // incumbent is still replaced, so a genuinely abandoned placeholder does not hold a
+    // Ownership belongs to whoever has the data -- events, a title, or notes -- not whoever
+    // wrote last. An empty incumbent is still replaced, so a genuinely abandoned placeholder does not hold a
     // slug hostage. The delete branch above already reasons this way; this is the same
     // rule applied to creation.
-    if (current && current.actualSlug && current.actualSlug !== calendarId) {
-        const incumbent = await admin.database()
-            .ref(`/${DEFAULT_ROOT}/${current.actualSlug}/events`).once('value');
-        if (incumbent.exists() && incumbent.numChildren() > 0) {
-            console.log(`indexSlug: ${calendarId} not taking /${normalized} from ` +
-                `${current.actualSlug}, which has ${incumbent.numChildren()} event(s)`);
-            return null;
-        }
+    if (current && current.actualSlug && current.actualSlug !== calendarId
+        && await SlugService.holdsData(admin.database(), current.actualSlug)) {
+        console.log(`indexSlug: ${calendarId} not taking /${normalized} from ${current.actualSlug}, which holds data`);
+        return null;
     }
 
     // Overwrites any negative-cache entry, so a slug that was looked up before it existed
@@ -995,7 +1104,7 @@ exports.lookupCalendar = onCall(async (request) => {
 exports._internal = {
     ICSService, CalendarService, SlugService, HistoryService,
     recordIcsStat, deviceBucket, clientFamily, sweepOldDeviceBuckets,
-    DEVICE_BUCKET_TTL_DAYS, HISTORY_ROOT, HISTORY_KEEP,
+    DEVICE_BUCKET_TTL_DAYS, HISTORY_ROOT, HISTORY_KEEP, HISTORY_ADDED_KEEP, HISTORY_HARD_CAP, HISTORY_PROTECT_MS,
 };
 
 /*
