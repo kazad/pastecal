@@ -307,17 +307,39 @@ Object.assign(Utils, {
         const { subject, duration, days } = extractDuration(remainingText);
 
         // chrono fills a missing time with 12:00, so "vacation dec 11 - dec 15" came out
-        // as a noon-to-noon timed event. No explicit hour on either end (and no hour or
-        // minute duration) means the user gave dates only: make it all-day, ending
-        // (exclusively) the day after the last date.
-        const hasTime = (c) => !!(c && typeof c.isCertain === 'function' && c.isCertain('hour'));
-        const isAllDay = !hasTime(result.start) && !hasTime(result.end) && !duration;
+        // as a noon-to-noon timed event. The rule for all-day:
+        //
+        //   1. No time-of-day signal at all. An explicit hour ("2pm", "at noon") is one,
+        //      and so is a part of day: chrono 1.4.9 reports "morning", "afternoon",
+        //      "evening", "night" and "tonight" as IMPLIED hours (with an implied
+        //      meridiem), so checking isCertain('hour') alone turned "call tomorrow
+        //      morning" and "dinner friday night" into all-day events. An hour or minute
+        //      duration ("for 1 hour") is one too.
+        //   2. And the input is a bare date or a span of days: nothing but the date
+        //      ("tomorrow", "dec 11"), a range ("vacation dec 11 - dec 15") or "for N
+        //      days". A titled single day with no time ("lunch tomorrow", "dentist oct
+        //      5") stays the timed event at chrono's noon it always was.
+        //
+        // All-day ends (exclusively) the day after the last date.
+        const timeOfDay = (c) => !!(c && typeof c.isCertain === 'function' && (c.isCertain('hour')
+            || c.isCertain('meridiem')
+            || (c.impliedValues && c.impliedValues.meridiem !== undefined)));
+        const partOfDay = !!(result.tags && result.tags.ENCasualTimeParser);
+        const hasTime = timeOfDay(result.start) || timeOfDay(result.end) || partOfDay || !!duration;
+        const spansDays = !!endDate || !!days || !subject;
+        const isAllDay = !hasTime && spansDays;
         if (isAllDay) {
             startDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
             if (endDate) {
                 endDate = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate() + 1);
             }
         }
+
+        // A range the user typed backwards ("dec 15 - dec 11", "5pm - 3pm") gets the
+        // default length rather than an end before its start. Quick-add is one of the two
+        // places an inverted range is repaired (Event's constructor does it for scheduler
+        // edits); stored events are never repaired after the fact.
+        if (endDate && endDate < startDate) endDate = null;
 
         if (!endDate && days) {
             // Calendar-day arithmetic: N * 24h drifts an hour across a DST change.

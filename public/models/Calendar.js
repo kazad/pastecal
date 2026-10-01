@@ -26,24 +26,35 @@ class Calendar {
     }
 
     getSyncFusionEvents() {
+        const byId = new Map(this.events.filter(e => e && e.recurrencerule).map(e => [e.id, e]));
         return this.events.map(e => {
             const allDay = !!e.isAllDay;
             const toDate = allDay ? Calendar.allDayToLocal : Calendar.toDateOrNull;
+            // An all-day series' EXDATEs and UNTIL are dates too, and must land on the
+            // same local date as its start (see Event.allDayStampToLocal). An edited
+            // occurrence's exception names a slot in its PARENT's grid, so the parent's
+            // shape decides (as in ICSService.assignOccurrences).
+            const parent = e.recurrenceID ? byId.get(e.recurrenceID) : null;
+            const allDaySeries = parent ? !!parent.isAllDay : allDay;
             return {
                 Id: e.id,
                 Subject: e.title,
                 StartTime: toDate(e.start),
                 EndTime: toDate(e.end),
-                // What the record was built from, so Event can keep it verbatim when the
-                // date is unchanged (see Event.allDayFromLocal).
-                ...(allDay ? { _storedStart: e.start, _storedEnd: e.end } : {}),
+                // What the record was built from, so Event can keep each value verbatim
+                // when its meaning is unchanged (see Event's constructor).
+                _storedStart: e.start,
+                _storedEnd: e.end,
+                _allDaySeries: allDaySeries,
+                ...(allDaySeries ? { _storedRule: e.recurrencerule, _storedException: e.recurrenceException } : {}),
                 Description: e.description,
-                RecurrenceRule: e.recurrencerule,
+                RecurrenceRule: allDaySeries ? Event.allDayRuleToLocal(e.recurrencerule) : e.recurrencerule,
                 Type: parseInt(e.type || 1),
                 IsAllDay: allDay,
                 Recurrence: e.repeat,
                 RecurrenceID: e.recurrenceID,
-                RecurrenceException: e.recurrenceException
+                RecurrenceException: allDaySeries
+                    ? Event.allDayExceptionsToLocal(e.recurrenceException) : e.recurrenceException
             }
         });
     }

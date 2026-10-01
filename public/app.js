@@ -289,7 +289,14 @@ const CalendarVueApp = {
             return this.calendar.events.filter(e => {
                 if (this.isEventVisible(e)) return false;
                 if (!range) return true;
-                const start = new Date(e.start).getTime();
+                // All-day events are read the way the grid reads them (the viewer's local
+                // midnight of the stored date, see Event.allDayToLocal); the raw stored
+                // instant put the banner a day off from the grid in some time zones.
+                const ms = (v) => {
+                    const d = e.isAllDay ? Event.allDayToLocal(v) : new Date(v);
+                    return d ? d.getTime() : NaN;
+                };
+                const start = ms(e.start);
                 if (isNaN(start)) return true; // undateable: count it rather than hide the fact
                 // A recurring event is one stored record but many occurrences, so the
                 // stored start says only when the series began. Ask the scheduler which
@@ -298,7 +305,7 @@ const CalendarVueApp = {
                 // and counting it produced a banner reporting a hidden event the user
                 // could never find.
                 if (e.recurrencerule) return this.recurrenceOccursInRange(e, range);
-                return this.spansRange(start, new Date(e.end).getTime(), range);
+                return this.spansRange(start, ms(e.end), range);
             }).length;
         },
         calendarAutoViewLabel() {
@@ -2289,11 +2296,21 @@ const CalendarVueApp = {
             // The live scheduler cannot answer this: hidden events are filtered out of its
             // dataSource, so it would report "no occurrences" for precisely the events
             // being counted. Expand the rule in isolation instead.
-            const start = new Date(event.start).getTime();
+            // An all-day series is expanded from the same values the grid is given
+            // (Calendar.getSyncFusionEvents): start, UNTIL and EXDATEs at the viewer's
+            // local midnight of their stored dates.
+            const allDay = !!event.isAllDay;
+            const ms = (v) => {
+                const d = allDay ? Event.allDayToLocal(v) : new Date(v);
+                return d ? d.getTime() : NaN;
+            };
+            const start = ms(event.start);
             if (isNaN(start)) return true;
-            const end = new Date(event.end).getTime();
+            const end = ms(event.end);
             const duration = isNaN(end) ? 0 : Math.max(0, end - start);
-            const rule = String(event.recurrencerule || '');
+            const rule = String((allDay ? Event.allDayRuleToLocal(event.recurrencerule) : event.recurrencerule) || '');
+            const exceptions = (allDay ? Event.allDayExceptionsToLocal(event.recurrenceException)
+                : event.recurrenceException) || null;
 
             try {
                 if (typeof ej.schedule.generate === 'function') {
@@ -2304,7 +2321,7 @@ const CalendarVueApp = {
                     const days = Math.ceil((range.end - viewDate.getTime()) / 864e5) + 1;
                     const firstDay = parseInt(this.globalSettings?.firstDayOfWeek) || 0;
                     const dates = ej.schedule.generate(new Date(start), rule,
-                        event.recurrenceException || null, firstDay, days, viewDate);
+                        exceptions, firstDay, days, viewDate);
                     return dates.some(d => this.spansRange(d, d + duration, range));
                 }
             } catch (err) {
