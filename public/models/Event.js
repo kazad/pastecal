@@ -21,27 +21,43 @@ class Event {
 
         // for SyncFusion Internal Object. StartTime and EndTime are converted
         // independently: a bad StartTime must not throw away a good EndTime (Syncfusion
-        // records have no `end` to fall back on).
+        // records have no `end` to fall back on). Calendar.getSyncFusionEvents() hands
+        // each record the stored values it was built from (_storedStart/_storedEnd, and
+        // _storedRule/_storedException for an all-day series); a value whose meaning is
+        // unchanged is kept verbatim, so rebuilding every event in setEvents() after an
+        // unrelated edit rewrites nothing.
         if ('StartTime' in options || 'EndTime' in options) {
             if (this.isAllDay) {
                 this.start = Event.allDayFromLocal(options.StartTime, options._storedStart);
                 this.end = Event.allDayFromLocal(options.EndTime, options._storedEnd);
             } else {
-                this.start = Event.toISOStringOrNull(options.StartTime);
-                this.end = Event.toISOStringOrNull(options.EndTime);
+                this.start = Event.timedFromLocal(options.StartTime, options._storedStart);
+                this.end = Event.timedFromLocal(options.EndTime, options._storedEnd);
             }
-        }
 
-        // An inverted range is almost always a typo or a drag gone wrong, and dropping it
-        // at the write boundary would lose the user's event. Keep the start and give it
-        // the default length instead (one day all-day, one hour timed).
-        const startMs = this.start ? new Date(this.start).getTime() : NaN;
-        const endMs = this.end ? new Date(this.end).getTime() : NaN;
-        if (endMs < startMs) {
-            const end = new Date(startMs);
-            if (this.isAllDay) end.setUTCDate(end.getUTCDate() + 1);
-            else end.setTime(startMs + 3600000);
-            this.end = end.toISOString();
+            // EXDATE and UNTIL of an all-day series were shown at the viewer's local
+            // midnight (see Calendar.getSyncFusionEvents); store them as UTC midnight of
+            // that date. The series' shape decides, not the record's own: an edited
+            // occurrence records its slot in the parent's grid.
+            const allDaySeries = '_allDaySeries' in options ? !!options._allDaySeries : this.isAllDay;
+            if (allDaySeries) {
+                this.recurrencerule = Event.allDayRuleFromLocal(this.recurrencerule, options._storedRule);
+                this.recurrenceException = Event.allDayExceptionsFromLocal(
+                    this.recurrenceException, options._storedException);
+            }
+
+            // An inverted range is almost always a typo or a drag gone wrong, and dropping
+            // it at the write boundary would lose the user's event. Keep the start and give
+            // it the default length instead (one day all-day, one hour timed) -- but only
+            // for a range the user just set in the scheduler. Every untouched stored row
+            // also passes through here (setEvents rebuilds them all after any action), and
+            // repairing one of those made the merge read it as this client's edit and
+            // overwrite a concurrent edit of it from someone else. For the same reason,
+            // data in the stored shape (start/end) is never repaired here; quick-add
+            // repairs its own output in Utils.parseHumanWrittenCalendar.
+            const untouched = '_storedStart' in options && '_storedEnd' in options
+                && this.start === options._storedStart && this.end === options._storedEnd;
+            if (!untouched) this.end = Event.repairedEnd(this.start, this.end, this.isAllDay);
         }
 
         // Firebase saves fail with undefined properties, ensure they are null instead
@@ -60,6 +76,27 @@ class Event {
         if (value === null || value === undefined || value === "") return null;
         const d = new Date(value);
         return isNaN(d.getTime()) ? null : d.toISOString();
+    }
+
+    // The end to store for start..end: `end` itself unless the range is inverted, in
+    // which case start plus the default length (one day all-day, one hour timed).
+    static repairedEnd(start, end, isAllDay) {
+        const startMs = start ? new Date(start).getTime() : NaN;
+        const endMs = end ? new Date(end).getTime() : NaN;
+        if (!(endMs < startMs)) return end;
+        const fixed = new Date(startMs);
+        if (isAllDay) fixed.setUTCDate(fixed.getUTCDate() + 1);
+        else fixed.setTime(startMs + 3600000);
+        return fixed.toISOString();
+    }
+
+    // Syncfusion timed value -> stored ISO string, keeping `stored` verbatim when it is
+    // the same instant (nativecal stores epoch numbers; an untouched one stays a number).
+    // An unusable stored value the record could not carry stays as it was, too.
+    static timedFromLocal(value, stored) {
+        const iso = Event.toISOStringOrNull(value);
+        if (stored !== undefined && Event.toISOStringOrNull(stored) === iso) return stored;
+        return iso;
     }
 
     // All-day events are stored as UTC midnight of their calendar date
@@ -124,12 +161,83 @@ class Event {
     // rewritten on every save (and cannot drift if it sits outside the window above).
     static allDayFromLocal(value, stored) {
         const iso = Event.toISOStringOrNull(value);
-        if (iso === null) return null;
+        if (iso === null) return stored !== undefined && Event.toISOStringOrNull(stored) === null ? stored : null;
         const d = new Date(iso);
         const utc = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
         const prev = Event.allDayDateUTC(stored);
         if (prev && prev.getTime() === utc.getTime()) return stored;
         return utc.toISOString();
+    }
+
+    // Recurrence stamps (RRULE UNTIL, RecurrenceException) are UTC DATE-TIMEs,
+    // "20261015T070000Z", as Syncfusion writes them. NaN for anything else.
+    static recurrenceStampMs(stamp) {
+        const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z?$/.exec(String(stamp).trim());
+        return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) : NaN;
+    }
+
+    static recurrenceStamp(date) {
+        return date.toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+    }
+
+    // An all-day series' EXDATE and UNTIL name DATES, but are stored as instants: UTC
+    // midnight, or (legacy) the author's local midnight. Syncfusion compares them with
+    // occurrences that start at the VIEWER's local midnight -- exceptions by local date,
+    // UNTIL by instant -- so passing the author's instant through hid Tokyo's deleted
+    // Oct 15 on Oct 14 in LA. Read them through allDayDateUTC like the series start
+    // (and like ICSService.formatDate), and show them at the viewer's local midnight.
+    // Anything that is not a DATE-TIME stamp is left alone.
+    static allDayStampToLocal(stamp) {
+        const ms = Event.recurrenceStampMs(stamp);
+        return isNaN(ms) ? stamp : Event.recurrenceStamp(Event.allDayToLocal(ms));
+    }
+
+    // Inverse: a stamp at the viewer's local midnight -> UTC midnight of that local date.
+    static allDayStampFromLocal(stamp) {
+        const ms = Event.recurrenceStampMs(stamp);
+        if (isNaN(ms)) return stamp;
+        const d = new Date(ms);
+        return Event.recurrenceStamp(new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())));
+    }
+
+    static allDayExceptionsToLocal(list) {
+        if (!list || typeof list !== 'string') return list;
+        return list.split(',').map(s => Event.allDayStampToLocal(s.trim())).join(',');
+    }
+
+    // `stored` is the list the record was built from. Each stamp that is one we showed
+    // for a stored stamp gets that stored stamp back verbatim, so an untouched list (or
+    // the untouched part of one the user just added to) is not rewritten.
+    static allDayExceptionsFromLocal(list, stored) {
+        if (!list || typeof list !== 'string') return list;
+        if (typeof stored !== 'string' || !stored) {
+            return list.split(',').map(s => Event.allDayStampFromLocal(s.trim())).join(',');
+        }
+        if (list === Event.allDayExceptionsToLocal(stored)) return stored;
+        const keep = new Map(stored.split(',').map(s => [Event.allDayStampToLocal(s.trim()), s.trim()]));
+        return list.split(',').map(s => s.trim())
+            .map(s => (keep.has(s) ? keep.get(s) : Event.allDayStampFromLocal(s))).join(',');
+    }
+
+    static allDayRuleUntil(rule) {
+        const m = typeof rule === 'string' && /(?:^|;)UNTIL=(\d{8}T\d{6}Z?)/i.exec(rule);
+        return m ? m[1] : null;
+    }
+
+    static allDayRuleToLocal(rule) {
+        if (!rule || typeof rule !== 'string') return rule;
+        return rule.replace(/(^|;)UNTIL=(\d{8}T\d{6}Z?)/i,
+            (match, sep, value) => `${sep}UNTIL=${Event.allDayStampToLocal(value)}`);
+    }
+
+    static allDayRuleFromLocal(rule, stored) {
+        if (!rule || typeof rule !== 'string') return rule;
+        if (typeof stored === 'string' && stored && rule === Event.allDayRuleToLocal(stored)) return stored;
+        const storedUntil = Event.allDayRuleUntil(stored);
+        return rule.replace(/(^|;)UNTIL=(\d{8}T\d{6}Z?)/i, (match, sep, value) => {
+            const kept = storedUntil && Event.allDayStampToLocal(storedUntil) === value;
+            return `${sep}UNTIL=${kept ? storedUntil : Event.allDayStampFromLocal(value)}`;
+        });
     }
 
     // An event is only usable once it has both endpoints. A dateless Event is a legitimate

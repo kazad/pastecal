@@ -20,9 +20,9 @@
  * from public/app.js and execute them, so sabotaging the source fails the suite.
  *
  * Recurrence is expanded by Syncfusion's own ej.schedule.generate, so the recurring-event
- * tests load the real ej2.min.js (the version index.html pins) into a VM. It is cached in
- * the OS temp dir after the first download; set PASTECAL_EJ2_PATH to use a local copy. If
- * it cannot be had, those tests skip rather than test a stand-in.
+ * tests load the real ej2.min.js (the version index.html pins) into a VM; see
+ * helpers/real-ej.js for where it is looked for. If it cannot be had, those tests skip
+ * rather than test a stand-in (and fail under CI).
  *
  * Run: npm run test:unit
  */
@@ -30,13 +30,14 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
-const vm = require('node:vm');
-const { spawnSync } = require('node:child_process');
+const { loadRealEj } = require('./helpers/real-ej.js');
 
 const SRC = fs.readFileSync(path.join(__dirname, '../../public/app.js'), 'utf8');
-const INDEX = fs.readFileSync(path.join(__dirname, '../../public/index.html'), 'utf8');
+// The model the methods read all-day dates through, as the browser's global `Event`.
+const Event = new Function('Utils',
+  `${fs.readFileSync(path.join(__dirname, '../../public/models/Event.js'), 'utf8')}\nreturn Event;`)(
+  { uuidv4: () => 'generated-uuid' });
 
 const METHODS = ['filterSlotFor', 'isEventVisible', 'syncColorFiltersLength',
   'isColorFilterActive', 'hiddenEventCount', 'recurrenceOccursInRange', 'spansRange'];
@@ -56,7 +57,7 @@ function extract(name, ej) {
   }
   const body = SRC.slice(open + 1, i);
   // eslint-disable-next-line no-new-func
-  return new Function('ej', `return function(${m[1]}) {${body}}`)(ej);
+  return new Function('ej', 'Event', `return function(${m[1]}) {${body}}`)(ej, Event);
 }
 
 // Minimal stand-in for Syncfusion WITHOUT generate, which exercises the fallback estimate.
@@ -72,57 +73,15 @@ function stubEj() {
   };
 }
 
-// The real bundle, so recurrence is expanded exactly as the grid expands it.
-function loadRealEj() {
-  const version = (/cdn\.syncfusion\.com\/ej2\/([\d.]+)\/dist\/ej2\.min\.js/.exec(INDEX) || [])[1];
-  if (!version) return { reason: 'index.html no longer pins an ej2.min.js version' };
-  const url = `https://cdn.syncfusion.com/ej2/${version}/dist/ej2.min.js`;
-  const file = process.env.PASTECAL_EJ2_PATH
-    || path.join(os.tmpdir(), `pastecal-ej2-${version}.min.js`);
-  if (!fs.existsSync(file)) {
-    // curl honors the HTTPS proxy settings that node's own fetch ignores.
-    const tmp = `${file}.${process.pid}.part`;
-    const r = spawnSync('curl', ['-sfL', '--max-time', '60', '-o', tmp, url]);
-    if (r.status !== 0) return { reason: `could not download ${url}` };
-    fs.renameSync(tmp, file);
-  }
-
-  const noop = () => {};
-  const any = () => new Proxy(function () {}, {
-    get: (t, k) => (k === Symbol.toPrimitive ? () => '' : any()), apply: () => any(),
-  });
-  // Share the host's Date so the dates generate() returns compare with ours.
-  const sb = { console, setTimeout, clearTimeout, Date, Math, JSON, Intl, Object, Array };
-  Object.assign(sb, {
-    window: sb, self: sb, addEventListener: noop, removeEventListener: noop,
-    navigator: { userAgent: 'node', platform: '', language: 'en-US' },
-    document: {
-      addEventListener: noop, createElement: () => any(), querySelector: () => null,
-      querySelectorAll: () => [], body: any(), documentElement: any(), head: any(),
-      getElementsByTagName: () => [],
-    },
-    location: { href: '', protocol: 'https:' },
-    matchMedia: () => ({ matches: false, addListener: noop }),
-    getComputedStyle: () => ({}), localStorage: { getItem: () => null },
-    Element: function () {}, HTMLElement: function () {}, Node: function () {},
-  });
-  try {
-    vm.createContext(sb);
-    vm.runInContext(fs.readFileSync(file, 'utf8'), sb, { timeout: 120000 });
-  } catch (err) {
-    return { reason: `ej2.min.js failed to load: ${err.message}` };
-  }
-  if (typeof sb.ej?.schedule?.generate !== 'function') {
-    return { reason: 'ej.schedule.generate is missing from the bundle' };
-  }
-  return { ej: sb.ej };
-}
-
-let realEj; // loaded on first use, so only the tests that need it pay for it
+// The real bundle, so recurrence is expanded exactly as the grid expands it. When it
+// cannot be had the test skips -- and must stop there, since t.skip() does not end the
+// body -- except under CI, where a silently skipped suite would hide a regression.
 function needRealEj(t) {
-  if (realEj === undefined) realEj = loadRealEj();
-  if (!realEj.ej) t.skip(realEj.reason);
-  return realEj.ej;
+  const real = loadRealEj();
+  if (real.ej) return real.ej;
+  if (process.env.CI) assert.fail(real.reason);
+  t.skip(real.reason);
+  return null;
 }
 
 // A stand-in for the Vue component instance the methods run against.
@@ -185,6 +144,7 @@ const MIXED = [
 
 test('the count equals the in-view events the grid predicate excludes, for every filter', (t) => {
   const ej = needRealEj(t);
+  if (!ej) return;
   const app = ctx({ ej, events: MIXED.map(f => f.e), visibleDateRange: () => WEEK });
   // Every on/off combination of the types the fixture uses.
   const types = [1, 2, 4];
@@ -398,6 +358,7 @@ test('BYDAY moves the last occurrence of a COUNT series later than start + COUNT
   // Mon Nov 9 -- not Wed Nov 4, where stepping a week at a time from the start puts it.
   // The banner said "none in this view" while that Monday was hidden.
   const ej = needRealEj(t);
+  if (!ej) return;
   const standup = { type: 4, start: '2026-10-07T09:00:00', end: '2026-10-07T10:00:00',
     recurrencerule: 'FREQ=WEEKLY;BYDAY=MO;INTERVAL=1;COUNT=5' };
   assert.equal(hiddenIn(WEEK, standup, ej), 1);
@@ -407,6 +368,7 @@ test('BYDAY moves the last occurrence of a COUNT series later than start + COUNT
 
 test('an open-ended series is counted only where its BYDAY/INTERVAL put it', (t) => {
   const ej = needRealEj(t);
+  if (!ej) return;
   const saturdays = { type: 4, start: '2026-01-03T09:00:00', end: '2026-01-03T10:00:00',
     recurrencerule: 'FREQ=WEEKLY;BYDAY=SA' };
   const monToWed = { start: L('2026-11-09T00:00:00'), end: L('2026-11-12T00:00:00') };
@@ -420,6 +382,7 @@ test('an open-ended series is counted only where its BYDAY/INTERVAL put it', (t)
 
 test('an occurrence removed by EXDATE is not counted', (t) => {
   const ej = needRealEj(t);
+  if (!ej) return;
   const tuesdays = { type: 4, start: '2025-01-07T09:00:00', end: '2025-01-07T10:00:00',
     recurrencerule: 'FREQ=WEEKLY;BYDAY=TU' };
   assert.equal(hiddenIn(WEEK, tuesdays, ej), 1);
@@ -429,10 +392,57 @@ test('an occurrence removed by EXDATE is not counted', (t) => {
 
 test('the real expansion still honors COUNT and UNTIL that ended long ago', (t) => {
   const ej = needRealEj(t);
+  if (!ej) return;
   const old = { type: 4, start: '2025-01-06T09:00:00', end: '2025-01-06T09:30:00' };
   assert.equal(hiddenIn(WEEK, { ...old, recurrencerule: 'FREQ=WEEKLY;INTERVAL=1;COUNT=6' }, ej), 0);
   assert.equal(hiddenIn(WEEK, { ...old, recurrencerule: 'FREQ=WEEKLY;UNTIL=20250301T000000Z' }, ej), 0);
   assert.equal(hiddenIn(WEEK, { ...old, recurrencerule: 'FREQ=WEEKLY;INTERVAL=1' }, ej), 1);
+});
+
+// --- All-day events, read the way the grid reads them -----------------------------------
+
+// Stored all-day dates name a DATE; the grid shows them at the viewer's local midnight of
+// that date (Event.allDayToLocal). Read as raw instants they moved a day in some zones:
+// Saturday Nov 14's UTC midnight is still Friday evening in LA, inside WEEK; Sunday
+// Nov 8's is Sunday morning in Tokyo, outside the week before.
+const ORIGINAL_TZ = process.env.TZ;
+function inTZ(tz, fn) {
+  process.env.TZ = tz;
+  try { return fn(); } finally {
+    if (ORIGINAL_TZ === undefined) delete process.env.TZ; else process.env.TZ = ORIGINAL_TZ;
+  }
+}
+
+test('an all-day event is counted in the view its date is in, whatever the zone', () => {
+  for (const tz of ['America/Los_Angeles', 'Asia/Tokyo', 'UTC']) {
+    inTZ(tz, () => {
+      const weekOf = (y, m, d) => ({ start: new Date(y, m, d).getTime(), end: new Date(y, m, d + 7).getTime() });
+      const sunday = { type: 4, isAllDay: true, start: '2026-11-15T00:00:00.000Z', end: '2026-11-16T00:00:00.000Z' };
+      assert.equal(hiddenIn(weekOf(2026, 10, 8), sunday), 0, `Sun Nov 15 is not in Nov 8-14 (${tz})`);
+      assert.equal(hiddenIn(weekOf(2026, 10, 15), sunday), 1, `Sun Nov 15 is in Nov 15-21 (${tz})`);
+      // Legacy: Tokyo's local midnight of Sat Nov 14.
+      const legacy = { ...sunday, start: '2026-11-13T15:00:00.000Z', end: '2026-11-14T15:00:00.000Z' };
+      assert.equal(hiddenIn(weekOf(2026, 10, 8), legacy), 1, `legacy Sat Nov 14 is in Nov 8-14 (${tz})`);
+      assert.equal(hiddenIn(weekOf(2026, 10, 15), legacy), 0, `legacy Sat Nov 14 is not in Nov 15-21 (${tz})`);
+    });
+  }
+});
+
+test('an all-day series is expanded from the dates the grid shows, EXDATE and UNTIL included', (t) => {
+  const ej = needRealEj(t);
+  if (!ej) return;
+  for (const tz of ['America/Los_Angeles', 'Asia/Tokyo']) {
+    inTZ(tz, () => {
+      const day = (d) => ({ start: new Date(2026, 9, d).getTime(), end: new Date(2026, 9, d + 1).getTime() });
+      // Authored in Tokyo: daily from Oct 1 until Oct 20, Oct 15 deleted (legacy instants).
+      const series = { type: 4, isAllDay: true, start: '2026-09-30T15:00:00.000Z', end: '2026-10-01T15:00:00.000Z',
+        recurrencerule: 'FREQ=DAILY;INTERVAL=1;UNTIL=20261019T150000Z;', recurrenceException: '20261014T150000Z' };
+      assert.equal(hiddenIn(day(14), series, ej), 1, `Oct 14 occurs (${tz})`);
+      assert.equal(hiddenIn(day(15), series, ej), 0, `Oct 15 was deleted (${tz})`);
+      assert.equal(hiddenIn(day(20), series, ej), 1, `Oct 20 is the last day (${tz})`);
+      assert.equal(hiddenIn(day(21), series, ej), 0, `nothing after UNTIL (${tz})`);
+    });
+  }
 });
 
 // --- Exclusive ends ---------------------------------------------------------------------
