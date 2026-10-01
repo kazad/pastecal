@@ -1926,6 +1926,10 @@ const CalendarVueApp = {
                     newCalendar.title = newCalendar.title || "New Calendar";
 
                     const oldId = this.calendar.id;
+                    // Lets the server move the read-only view to the new id (see
+                    // PublicViewService.followRename); without it the view stays bound to
+                    // the old copy and its link and ICS feed stop updating.
+                    newCalendar.options = { ...(newCalendar.options || {}), renamedFrom: oldId };
 
                     // A copy: this browser did not create the original.
                     CalendarDataService.createWithId(newId, newCalendar, () => {

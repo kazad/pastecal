@@ -854,11 +854,13 @@ const PublicViewService = {
     BY_CALENDAR: '/public_views_by_calendar',  // calendarId -> { publicViewId: true }, for cleanup
 
     mirrorOf(cal, publicViewId) {
+        // renamedFrom names the previous EDITABLE id, so it must never be published.
+        const { renamedFrom, ...options } = cal.options || {};
         return {
             id: publicViewId,
             title: cal.title ?? '',
             events: cal.events ?? [],
-            options: { ...(cal.options || {}), publicViewId },
+            options: { ...options, publicViewId },
         };
     },
 
@@ -867,14 +869,36 @@ const PublicViewService = {
      * claimed once, by the calendar its legacy mirror names in `id` -- the one place that
      * still records who made it. Everything else is refused.
      */
-    async owns(db, calendarId, publicViewId) {
+    async owns(db, calendarId, publicViewId, cal = null) {
         if (!/^[A-Za-z0-9_-]{1,100}$/.test(publicViewId)) return false;
         const binding = db.ref(`${this.BINDINGS}/${publicViewId}`);
         const bound = (await binding.once('value')).val();
-        if (bound) return bound === calendarId;
+        if (bound === calendarId) return true;
+        if (bound) return this.followRename(db, bound, calendarId, publicViewId, cal);
         const legacyOwner = (await db.ref(`/${READONLY_ROOT}/${publicViewId}/id`).once('value')).val();
         if (legacyOwner !== calendarId) return false;
         return this.claim(db, publicViewId, calendarId);
+    },
+
+    /**
+     * Renaming copies a calendar to a new id, options.publicViewId included, so the view
+     * has to follow the copy or its link and ICS feed freeze. The copy proves it came from
+     * the bound calendar by naming it in options.renamedFrom -- an id only someone with edit
+     * access to that calendar knows, now that views no longer publish it -- and the source
+     * must still point at this view.
+     */
+    async followRename(db, bound, calendarId, publicViewId, cal) {
+        if (!cal || !cal.options || cal.options.renamedFrom !== bound) return false;
+        const source = (await db.ref(`/${DEFAULT_ROOT}/${bound}/options/publicViewId`).once('value')).val();
+        if (source !== publicViewId) return false;
+        const r = await db.ref(`${this.BINDINGS}/${publicViewId}`)
+            .transaction(cur => cur === null ? null : cur === bound ? calendarId : undefined);
+        if (!r.committed) return false;
+        await db.ref().update({
+            [`${this.BY_CALENDAR}/${bound}/${publicViewId}`]: null,
+            [`${this.BY_CALENDAR}/${calendarId}/${publicViewId}`]: true,
+        });
+        return true;
     },
 
     /** Atomically bind a view id to a calendar; false if another calendar holds it. */
@@ -1060,52 +1084,87 @@ const HistoryService = {
     },
 
     /**
-     * A calendar created at an id whose history is still on file belongs to someone else:
-     * the old calendar was deleted and the slug reused. Its history must not show up in the
-     * newcomer's Recent changes (with Restore buttons), so move it where only the Admin SDK
-     * can read it. Archived rather than dropped: "I deleted my calendar by mistake and then
-     * reopened the link" is the case the operator restore exists for.
+     * A deleted calendar's history leaves /history with it, into an archive only the Admin
+     * SDK can read. Otherwise whoever next creates a calendar at the same slug would see the
+     * old owner's events in Recent changes, with Restore buttons. Kept, not dropped: "I
+     * deleted my calendar by mistake" is what the operator restore exists for.
+     *
+     * Done here, at deletion, and in ONE multi-path update. Archiving on re-creation instead
+     * lost to trigger ordering -- Firebase does not deliver triggers in order, so a delayed
+     * delete could push its full snapshot into the newcomer's history after the archive ran.
+     * Only entries up to the deletion move, so a newcomer's own entries are never swept up.
      */
-    async archiveOnCreate(db, calendarId) {
-        const ref = db.ref(`/${HISTORY_ROOT}/${calendarId}`);
-        const old = await ref.once('value');
-        if (!old.exists()) return null;
-        await db.ref(`/${HISTORY_ROOT}_archive/${calendarId}/${Date.now()}`).set(old.val());
-        await Promise.all([
-            ref.remove(),
-            db.ref(`/${HISTORY_ROOT}_index/${calendarId}`).remove(),
-            db.ref(`/${HISTORY_ROOT}_meta/${calendarId}`).remove(),
+    async archiveOnDelete(db, calendarId, before, at) {
+        const [hist, meta] = await Promise.all([
+            db.ref(`/${HISTORY_ROOT}/${calendarId}`).once('value'),
+            db.ref(`/${HISTORY_ROOT}_meta/${calendarId}/lastEditedAt`).once('value'),
         ]);
-        return true;
+        const batch = `/${HISTORY_ROOT}_archive/${calendarId}/${at}`;
+        const update = {};
+        hist.forEach(c => {
+            if ((c.val() && c.val().savedAt || 0) > at) return;
+            update[`${batch}/${c.key}`] = c.val();
+            update[`/${HISTORY_ROOT}/${calendarId}/${c.key}`] = null;
+            update[`/${HISTORY_ROOT}_index/${calendarId}/${c.key}`] = null;
+        });
+        const removed = this.eventsOf(before);
+        update[`${batch}/${db.ref().push().key}`] = {
+            savedAt: at, kind: 'deleted', removed: removed.length, changed: 0, added: 0,
+            removedEvents: removed, changedEvents: [], addedEvents: [],
+            eventCount: removed.length, title: before.title ?? null, options: before.options ?? null,
+            events: removed,
+        };
+        if ((meta.val() || 0) <= at) update[`/${HISTORY_ROOT}_meta/${calendarId}`] = null;
+        await db.ref().update(update);
+        return batch;
     },
 
     restorable(kind) { return kind !== 'added'; },
 
-    async record(db, calendarId, before, after) {
-        if (!before && after) return this.archiveOnCreate(db, calendarId);
+    // `at` is when the write happened (the trigger's event time), not when this invocation
+    // runs: triggers arrive late and out of order, and ordering decisions must use the former.
+    async record(db, calendarId, before, after, at = Date.now()) {
+        if (!before) return null;                                   // brand-new calendar
+        if (!after) return this.archiveOnDelete(db, calendarId, before, at);
         const why = this.changeKind(before, after);
         if (!why) return null;
 
-        const d = after ? this.diff(before, after) : { removed: this.eventsOf(before), changed: [], added: [] };
+        const d = this.diff(before, after);
         const ref = db.ref(`/${HISTORY_ROOT}/${calendarId}`);
         const indexRef = db.ref(`/${HISTORY_ROOT}_index/${calendarId}`);
         const index = await this.loadIndex(db, calendarId);
-        const now = Date.now();
+        const now = at;
         const changedKeys = d.changed.map(c => this.key(c.from)).sort().join(',');
 
         // A drag or resize saves every 500ms, and each save is an edit of the same events.
         // Fold it into the entry the gesture started: that entry's `from` is the state
         // before the gesture, which is what undo should return to; only `to` moves on.
+        //
+        // The window runs from the gesture's START, so one entry cannot absorb edits forever.
+        // `to` is replaced in a transaction and only by a LATER write, so saves processed out
+        // of order cannot leave it at an intermediate position.
         const newest = index.sort((x, y) => y.t - x.t)[0];
         if (why.kind === 'edited' && newest && newest.k === 'edited'
-            && newest.ck === changedKeys && now - newest.t < HISTORY_COALESCE_MS) {
-            const prev = (await ref.child(newest.key).child('changedEvents').once('value')).val() || [];
+            && newest.ck === changedKeys && now - (newest.s ?? newest.t) < HISTORY_COALESCE_MS) {
             const toByKey = new Map(d.changed.map(c => [this.key(c.to), c.to]));
-            await ref.child(newest.key).update({
-                changedEvents: prev.map(c => ({ from: c.from, to: toByKey.get(this.key(c.from)) ?? c.to })),
-                updatedAt: now,
+            // A transaction's first pass sees the local cache, which is empty here: return
+            // that null (not undefined, which aborts) so it re-runs on the server's value.
+            const r = await ref.child(newest.key).child('changedEvents').transaction(cur => {
+                if (cur === null) return null;
+                if (!Array.isArray(cur)) return undefined;
+                return cur.map(c => {
+                    const next = toByKey.get(this.key(c.from));
+                    return next && (c.at ?? 0) <= now ? { ...c, to: next, at: now } : c;
+                });
             });
-            await indexRef.child(newest.key).update({ t: now });
+            const merged = r.snapshot.val() || [];
+            // Back where the gesture started -- a drag returned to its origin, or an undo of
+            // this very edit. A row reading "1 event edited" whose undo does nothing is noise.
+            if (merged.length && merged.every(c => this.sameEvent(c.from, c.to))) {
+                await Promise.all([ref.child(newest.key).remove(), indexRef.child(newest.key).remove()]);
+                return null;
+            }
+            await indexRef.child(newest.key).update({ t: Math.max(newest.t, now) });
             return newest.key;
         }
 
@@ -1116,7 +1175,7 @@ const HistoryService = {
             changed: why.changed,
             added: why.added || 0,
             removedEvents: d.removed,
-            changedEvents: d.changed,
+            changedEvents: d.changed.map(c => ({ ...c, at: now })),
             addedEvents: d.added,
             eventCount: this.eventsOf(before).length,
             title: before.title ?? null,
@@ -1126,8 +1185,8 @@ const HistoryService = {
         if (this.restorable(why.kind)) entry.events = this.eventsOf(before);
 
         const pushed = await ref.push(entry);
-        index.push({ key: pushed.key, k: why.kind, t: now, ck: changedKeys });
-        await indexRef.child(pushed.key).set({ k: why.kind, t: now, ck: changedKeys });
+        index.push({ key: pushed.key, k: why.kind, t: now, s: now, ck: changedKeys });
+        await indexRef.child(pushed.key).set({ k: why.kind, t: now, s: now, ck: changedKeys });
         await this.trim(db, calendarId, index, now);
         return pushed.key;
     },
@@ -1399,7 +1458,7 @@ exports.syncPublicView = onValueUpdated(`/${DEFAULT_ROOT}/{calendarId}`, async (
     if (!publicViewId) return null;
 
     const db = admin.database();
-    if (!await PublicViewService.owns(db, event.params.calendarId, publicViewId)) {
+    if (!await PublicViewService.owns(db, event.params.calendarId, publicViewId, afterData)) {
         console.warn(`syncPublicView: ${event.params.calendarId} does not own view ${publicViewId}; not syncing`);
         return null;
     }
@@ -1435,7 +1494,8 @@ exports.recordHistory = onValueWritten(`/${DEFAULT_ROOT}/{calendarId}`, async (e
     const after = event.data.after.val();
     // Stamped for every change, snapshotted only for the destructive ones.
     await HistoryService.stampLastEdit(db, id, before, after);
-    return HistoryService.record(db, id, before, after);
+    const at = Date.parse(event.time);
+    return HistoryService.record(db, id, before, after, Number.isFinite(at) ? at : Date.now());
 });
 
 // Case-insensitive calendar lookup function

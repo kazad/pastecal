@@ -316,24 +316,44 @@ test('an all-day moved occurrence east of UTC names the right day', () => {
   assert.doesNotMatch(ics, /^EXDATE/m);
 });
 
-test('two moved occurrences with crossing moves both survive', () => {
-  // Weekly 9/7 17:00Z. 9/21 moved to 9/26 and 9/28 moved to 9/23. Each child carries both
-  // exceptions, and each is nearer the OTHER's slot -- nearest-per-child made both claim
-  // 9/21, so clients kept one and the other meeting vanished.
+test('moved occurrences carrying the whole exception list never share one slot', () => {
+  // Children saved through some paths carry the parent's full list, so each is ambiguous.
+  // Both new dates (9/24, 9/22) are nearest 9/21; nearest-per-child gave both
+  // RECURRENCE-ID 9/21 and clients dropped one meeting. Slots are now one-to-one.
   const both = '20260921T170000Z,20260928T170000Z';
   const ics = ICSService.generateICS({ events: [
     series({ recurrenceException: both }),
-    { id: 'c1', title: 'Moved later', description: '', recurrenceID: 'parent-1',
-      start: '2026-09-26T17:00:00.000Z', end: '2026-09-26T17:30:00.000Z',
-      recurrencerule: 'FREQ=WEEKLY;INTERVAL=1', recurrenceException: both },
-    { id: 'c2', title: 'Moved earlier', description: '', recurrenceID: 'parent-1',
-      start: '2026-09-23T17:00:00.000Z', end: '2026-09-23T17:30:00.000Z',
-      recurrencerule: 'FREQ=WEEKLY;INTERVAL=1', recurrenceException: both },
+    { id: 'c1', title: 'Moved A', description: '', recurrenceID: 'parent-1',
+      start: '2026-09-24T17:00:00.000Z', end: '2026-09-24T17:30:00.000Z', recurrenceException: both },
+    { id: 'c2', title: 'Moved B', description: '', recurrenceID: 'parent-1',
+      start: '2026-09-22T17:00:00.000Z', end: '2026-09-22T17:30:00.000Z', recurrenceException: both },
+  ] }, 'ambiguous');
+  const rids = [...ics.matchAll(/^RECURRENCE-ID:(\S+?)\r?$/gm)].map(m => m[1]);
+  assert.deepEqual(rids.sort(), ['20260921T170000Z', '20260928T170000Z']);
+});
+
+test('two moved occurrences that are both nearest one slot each keep their own', () => {
+  // Weekly 9/7 17:00Z. 9/21 moved to 9/24, and 9/28 moved to 9/22 -- both new dates are
+  // nearest 9/21, so the old nearest-slot guess gave both RECURRENCE-ID 9/21 and clients
+  // kept one, dropping the other meeting. Syncfusion stamps each moved occurrence with the
+  // one slot it replaced; that stamp, not proximity, decides.
+  const ics = ICSService.generateICS({ events: [
+    series({ recurrenceException: '20260921T170000Z,20260928T170000Z' }),
+    { id: 'c1', title: 'From the 21st', description: '', recurrenceID: 'parent-1',
+      start: '2026-09-24T17:00:00.000Z', end: '2026-09-24T17:30:00.000Z',
+      recurrencerule: 'FREQ=WEEKLY;INTERVAL=1', recurrenceException: '20260921T170000Z' },
+    { id: 'c2', title: 'From the 28th', description: '', recurrenceID: 'parent-1',
+      start: '2026-09-22T17:00:00.000Z', end: '2026-09-22T17:30:00.000Z',
+      recurrencerule: 'FREQ=WEEKLY;INTERVAL=1', recurrenceException: '20260928T170000Z' },
   ] }, 'crossing');
 
-  const rids = [...ics.matchAll(/^RECURRENCE-ID:(\S+?)\r?$/gm)].map(m => m[1]);
-  assert.deepEqual(rids.sort(), ['20260921T170000Z', '20260928T170000Z'],
-    'each moved occurrence claims its own slot');
+  const blocks = ics.split('BEGIN:VEVENT').slice(1);
+  const slotOf = (title) => {
+    const b = blocks.find(x => x.includes(`SUMMARY:${title}`));
+    return (b.match(/^RECURRENCE-ID:(\S+?)\r?$/m) || [])[1];
+  };
+  assert.equal(slotOf('From the 21st'), '20260921T170000Z');
+  assert.equal(slotOf('From the 28th'), '20260928T170000Z');
   assert.doesNotMatch(ics, /^EXDATE/m, 'both slots are overrides, not deletions');
   assert.equal((ics.match(/^RRULE:/gm) || []).length, 1, 'children never re-emit the rule');
 });

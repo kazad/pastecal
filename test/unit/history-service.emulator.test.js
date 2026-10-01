@@ -119,14 +119,16 @@ test('HistoryService.record: wiping a calendar stores its full prior state', asy
     }
 });
 
-test('HistoryService.record: deleting the whole calendar node is recorded too', async () => {
+test('HistoryService.record: deleting the whole calendar node is recorded, in the archive', async () => {
     const id = 'hist-delete-' + Date.now();
     await cleanup(id);
     try {
         await HistoryService.record(db, id, cal(id, [ev('A', 'a')]), null);
-        const [entry] = await historyOf(id);
-        assert.equal(entry.kind, 'deleted');
-        assert.equal(entry.events.length, 1);
+        assert.deepEqual(await historyOf(id), [], 'nothing left where a newcomer at this slug would read');
+        const archived = (await db.ref(`${HISTORY_ROOT}_archive/${id}`).once('value')).val();
+        const entries = Object.values(Object.values(archived)[0]);
+        const del = entries.find(e => e.kind === 'deleted');
+        assert.equal(del.events.length, 1);
     } finally {
         await cleanup(id);
     }
@@ -242,16 +244,54 @@ test('HistoryService.record: a calendar recreated at a deleted id does not inher
     const id = 'hist-reuse-' + Date.now();
     await cleanup(id);
     try {
-        await HistoryService.record(db, id, cal(id, [ev('A', 'Private to the first owner')]), null);
-        assert.equal((await historyOf(id)).length, 1);
+        const t0 = Date.now();
+        await HistoryService.record(db, id, cal(id, [ev('A', 'a'), ev('B', 'b')]), cal(id, [ev('A', 'a')]), t0);
 
-        // Someone else creates a calendar at the same slug.
-        await HistoryService.record(db, id, null, cal(id, []));
-        assert.deepEqual(await historyOf(id), [], 'the newcomer sees none of it');
+        // Triggers arrive out of order: the newcomer's first edit is processed BEFORE the
+        // old owner's deletion, which happened earlier.
+        await HistoryService.record(db, id, cal(id, [ev('N', 'new')]), cal(id, []), t0 + 2000);
+        await HistoryService.record(db, id, cal(id, [ev('A', 'Private to the first owner')]), null, t0 + 1000);
+
+        const left = await historyOf(id);
+        assert.equal(left.length, 1, 'only the newcomer\'s own entry remains');
+        assert.ok(!JSON.stringify(left).includes('Private to the first owner'));
+        assert.deepEqual(left[0].removedEvents.map(e => e.title), ['new']);
 
         const archived = (await db.ref(`${HISTORY_ROOT}_archive/${id}`).once('value')).val();
-        const [batch] = Object.values(archived);
-        assert.ok(Object.values(batch).some(e => e.kind === 'deleted'), 'kept for the operator');
+        const entries = Object.values(Object.values(archived)[0]);
+        assert.ok(entries.some(e => e.kind === 'deleted'), 'kept for the operator');
+        assert.ok(entries.some(e => e.kind === 'shrunk'), 'with the history before it');
+    } finally {
+        await cleanup(id);
+    }
+});
+
+test('HistoryService.record: drag saves processed out of order keep the final position', async () => {
+    const id = 'hist-drag-order-' + Date.now();
+    await cleanup(id);
+    try {
+        const at = (h) => ({ ...ev('A', 'Dragged'), start: `2026-09-17T${h}:00:00.000Z`, end: `2026-09-17T${h}:30:00.000Z` });
+        const t0 = Date.now();
+        await HistoryService.record(db, id, cal(id, [at('10')]), cal(id, [at('11')]), t0);
+        await HistoryService.record(db, id, cal(id, [at('12')]), cal(id, [at('13')]), t0 + 1000);
+        await HistoryService.record(db, id, cal(id, [at('11')]), cal(id, [at('12')]), t0 + 500);   // late
+        const [entry] = await historyOf(id);
+        assert.equal(entry.changedEvents[0].from.start, at('10').start);
+        assert.equal(entry.changedEvents[0].to.start, at('13').start, 'the late save did not rewind `to`');
+    } finally {
+        await cleanup(id);
+    }
+});
+
+test('HistoryService.record: an edit undone within the gesture window leaves no dead row', async () => {
+    const id = 'hist-drag-back-' + Date.now();
+    await cleanup(id);
+    try {
+        const at = (h) => ({ ...ev('A', 'Dragged'), start: `2026-09-17T${h}:00:00.000Z`, end: `2026-09-17T${h}:30:00.000Z` });
+        const t0 = Date.now();
+        await HistoryService.record(db, id, cal(id, [at('10')]), cal(id, [at('11')]), t0);
+        await HistoryService.record(db, id, cal(id, [at('11')]), cal(id, [at('10')]), t0 + 1000);
+        assert.deepEqual(await historyOf(id), [], 'a change that ended where it began is not a change');
     } finally {
         await cleanup(id);
     }

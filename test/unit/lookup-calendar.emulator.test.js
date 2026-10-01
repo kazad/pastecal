@@ -489,6 +489,29 @@ test('SlugService.lookupCalendar: only the bound calendar may write a view', asy
     }
 });
 
+test('SlugService.lookupCalendar: a view follows its calendar through a rename, and only then', async () => {
+    const pv = 'pvrename' + Date.now();
+    try {
+        await db.ref(`calendars/OldName${pv}`).set({ id: `OldName${pv}`, title: 't', options: { publicViewId: pv } });
+        assert.equal(await PublicViewService.claim(db, pv, `OldName${pv}`), true);
+
+        const copy = { id: `NewName${pv}`, options: { publicViewId: pv, renamedFrom: `OldName${pv}` } };
+        const stranger = { id: 'Stranger', options: { publicViewId: pv, renamedFrom: 'SomethingElse' } };
+        assert.equal(await PublicViewService.owns(db, 'Stranger', pv, stranger), false);
+        assert.equal(await PublicViewService.owns(db, `NewName${pv}`, pv, copy), true, 'the renamed copy takes over');
+        assert.equal(await PublicViewService.owns(db, `OldName${pv}`, pv, {}), false, 'and the old copy no longer writes');
+        assert.ok(!JSON.stringify(PublicViewService.mirrorOf(copy, pv)).includes('OldName'),
+            'the previous editable id is never published');
+    } finally {
+        await Promise.all([
+            db.ref(`calendars/OldName${pv}`).remove(),
+            db.ref(`public_views/${pv}`).remove(),
+            db.ref(`public_views_by_calendar/OldName${pv}`).remove(),
+            db.ref(`public_views_by_calendar/NewName${pv}`).remove(),
+        ]);
+    }
+});
+
 test('SlugService.lookupCalendar: generated view ids are long, lowercase and unbiased in shape', () => {
     const { IDService } = _internal;
     for (let i = 0; i < 200; i++) assert.match(IDService.generatePublicViewId(), /^[a-z0-9]{10}$/);

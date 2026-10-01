@@ -36,7 +36,11 @@ const count = (c) => { const e = c && c.events; return Array.isArray(e) ? e.filt
 
 (async () => {
     const live = (await db.ref(`calendars/${slug}`).once('value')).val();
+    // A deleted calendar's history moves to /history_archive/<slug>/<deletedAt>/ (see
+    // HistoryService.archiveOnDelete); list both, so restoring a deletion needs no digging.
     const hist = (await db.ref(`history/${slug}`).once('value')).val() || {};
+    const archive = (await db.ref(`history_archive/${slug}`).once('value')).val() || {};
+    for (const batch of Object.values(archive)) Object.assign(hist, batch);
     const entries = Object.entries(hist).sort((a, b) => a[1].savedAt - b[1].savedAt);
 
     console.log(`live /calendars/${slug}: ${live ? `${count(live)} events, title "${live.title || ''}"` : '(missing)'}`);
@@ -48,7 +52,6 @@ const count = (c) => { const e = c && c.events; return Array.isArray(e) ? e.filt
                 `${String(e.eventCount).padStart(5)} events  -${e.removed} ~${e.changed}  "${e.title || ''}"`);
         }
         console.log('\nre-run with an entry key to inspect it, and --yes to restore it.');
-        console.log(`history from a deleted calendar whose slug was reused is under /history_archive/${slug}.`);
         process.exit(0);
     }
 
@@ -77,7 +80,9 @@ const count = (c) => { const e = c && c.events; return Array.isArray(e) ? e.filt
     // the restore to every /view/ link already shared.
     const options = { ...(entry.options || {}) };
     if (live && live.options && live.options.publicViewId) options.publicViewId = live.options.publicViewId;
-    const patch = { events: entry.events, title: entry.title ?? '' };
+    // `id` too: restoring a deleted calendar recreates the node, and one without `id` reads
+    // as nonexistent to the client and to lookupCalendar.
+    const patch = { id: slug, events: entry.events, title: entry.title ?? '' };
     for (const [k, v] of Object.entries(options)) patch[`options/${k}`] = v;
     await db.ref(`calendars/${slug}`).update(patch);
     const after = (await db.ref(`calendars/${slug}`).once('value')).val();

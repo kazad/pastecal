@@ -111,10 +111,13 @@ fi
 # Database rules go through scripts/deploy-rules.sh: firebase-tools uploads an empty body
 # for them on this machine (see that script), so `firebase deploy` would fail on, or skip,
 # the rules that /history and the view bindings depend on.
-if [ -z "$TARGETS" ] || [[ "$TARGETS" == *database* ]]; then
+# Matched as a whole target, so e.g. functions:databaseSync does not also send rules.
+if [ -z "$TARGETS" ] || [[ ",$TARGETS," == *,database,* ]]; then
     ./scripts/deploy-rules.sh
 fi
-REST="$(printf '%s' "${TARGETS:-hosting,functions,remoteconfig}" | tr ',' '\n' | grep -v '^database$' | paste -sd, -)"
+# `|| true`: when database was the only target, grep matches nothing and exits 1, which
+# set -o pipefail would turn into a failed deploy after the rules had already shipped.
+REST="$(printf '%s' "${TARGETS:-hosting,functions,remoteconfig}" | tr ',' '\n' | { grep -v '^database$' || true; } | paste -sd, -)"
 if [ -n "$REST" ]; then
     echo "Deploying: $REST"
     firebase deploy --only "$REST"
