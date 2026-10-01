@@ -75,11 +75,10 @@ test('a refused partial loss is recovered on screen and later edits still save',
   deliver('c');
   const app = wireApp(S, 'c', server.c.events);
 
-  // One ordinary write, so the inbound merge has a _previousSeen baseline -- the
-  // condition under which the old merge-based recovery re-dropped the rows.
+  // One ordinary write first -- the condition under which the old merge-based
+  // recovery re-dropped the rows.
   app.calendar.events[0].title = 'A2';
   S.sync(app.calendar);
-  assert.ok(S._previousSeen.c, 'precondition: an inbound-merge baseline exists');
 
   // A buggy save path drops C and D with no deletion declared.
   let refused = 0;
@@ -107,7 +106,7 @@ test('a refusal that rode on a real deletion still delivers that deletion', () =
   const app = wireApp(S, 'c', server.c.events);
 
   // The user deletes B (declared by key), but the write also loses C and D.
-  S.declareIntent(1, ['B|']);
+  S.declareIntent(['B|']);
   app.calendar.events = app.calendar.events.filter(e => e.id === 'A');
   S.sync(app.calendar);
 
@@ -115,7 +114,7 @@ test('a refusal that rode on a real deletion still delivers that deletion', () =
     'C and D come back; B stays deleted rather than being resurrected');
   assert.deepEqual(serverIds(server, 'c'), ['A', 'C', 'D'],
     'the deletion the user asked for still reaches the server');
-  assert.equal(S._intent, null, 'no declaration is left over to license a later write');
+  assert.equal(S._pendingDeletes.size, 0, 'no declaration is left over to license a later write');
 
   let refused = 0;
   S.onSyncRefused = () => refused++;
@@ -133,7 +132,7 @@ test('a refusal re-sends only the deletion the user named, not the first missing
   deliver('c');
   const app = wireApp(S, 'c', server.c.events);
 
-  S.declareIntent(1, ['C|']);
+  S.declareIntent(['C|']);
   app.calendar.events = app.calendar.events.filter(e => e.id === 'B');
   S.sync(app.calendar);
 
@@ -149,7 +148,7 @@ test('a refusal whose deletion was not named re-sends no removal at all', () => 
   deliver('c');
   const app = wireApp(S, 'c', server.c.events);
 
-  S.declareIntent(1);   // count only: which row is unknown
+  S.declareIntent(1);   // a bare count is not a declaration any more
   app.calendar.events = app.calendar.events.filter(e => e.id === 'B');
   S.sync(app.calendar);
 
@@ -157,15 +156,16 @@ test('a refusal whose deletion was not named re-sends no removal at all', () => 
   assert.deepEqual(serverIds(server, 'c'), ['A', 'B', 'C'], 'nothing is deleted on a guess');
 });
 
-test('keys accumulate across declarations, and one unnamed declaration voids them', () => {
-  const { S } = loadDataService();
-  S.declareIntent(1, ['A|']);
-  S.declareIntent(1, ['B|']);
-  assert.deepEqual([...S._intent.keys], ['A|', 'B|']);
-  assert.equal(S._intent.removing, 2);
-  S.declareIntent(1);
-  assert.equal(S._intent.keys, null);
-  assert.equal(S._intent.removing, 3);
+test('declarations accumulate by key until a write computed with them commits', () => {
+  const { S, server, deliver } = loadDataService();
+  server.c = { id: 'c', events: [ev('A', 'A'), ev('B', 'B'), ev('C', 'C')] };
+  deliver('c');
+  S.declareIntent(['A|']);
+  S.declareIntent(['B|']);
+  assert.deepEqual([...S._pendingDeletes], ['A|', 'B|']);
+  S.sync({ id: 'c', events: [ev('C', 'C')] });
+  assert.deepEqual(serverIds(server, 'c'), ['C'], 'two deletes coalesced into one write');
+  assert.equal(S._pendingDeletes.size, 0, 'spent by the write that carried them');
 });
 
 test('a refused write keeps its own additions and edits, and still saves them', () => {
@@ -183,7 +183,7 @@ test('a refused write keeps its own additions and edits, and still saves them', 
   assert.deepEqual(serverIds(server, 'c'), ['A', 'B', 'C', 'D', 'E'], 'the addition reaches the server');
   assert.equal(server.c.events.find(e => e.id === 'A').title, 'A2', 'so does the edit');
   assert.match(app.toasts[0], /Recovered 2 events/, 'the toast counts rows put back, not the net shrink');
-  assert.equal(S._intent, null);
+  assert.equal(S._pendingDeletes.size, 0);
 });
 
 // --- Incomplete rows already on the server ----------------------------------------------
@@ -303,11 +303,10 @@ test('an aborted transaction is reported, not silent', () => {
 
 // --- The delete handler's declaration ---------------------------------------------------
 
-test('the delete handler declares exactly the net removal, and nothing when it nets zero', () => {
+test('the delete handler declares exactly the rows it removes, by key', () => {
   const at = APP.indexOf("if (ev.requestType === 'eventRemoved')");
   assert.ok(at !== -1, 'eventRemoved branch not found in app.js');
   const branch = blockAt(APP, at);
-  assert.doesNotMatch(branch, /Math\.max\(1,/,
-    'a floor of 1 declares a removal when deleting one occurrence removes nothing');
-  assert.match(branch, /if \(before > after\) CalendarDataService\.declareIntent\(before - after, goneKeys\)/);
+  assert.doesNotMatch(branch, /declareIntent\([^)]*\d/, 'no count is declared');
+  assert.match(branch, /if \(goneKeys\.length\) CalendarDataService\.declareIntent\(goneKeys\)/);
 });

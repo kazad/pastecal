@@ -292,6 +292,10 @@ const CalendarVueApp = {
             })();
         } else if (this.urlslug) {
             // default: pastecal.com/ID
+            // The third argument is the local copy. Each snapshot arrives already merged
+            // with it (CalendarDataService._receive), so importing it whole is safe: edits
+            // still in the debounce window and deletions not yet sent survive. A bare
+            // import of the raw snapshot overwrote both.
             CalendarDataService.findAndSubscribe(this.urlslug, (c) => {
                 if (c) {
                     // Calendar found
@@ -317,7 +321,7 @@ const CalendarVueApp = {
                     this.isExisting = false;
                 }
                 this.isLoading = false;
-            });
+            }, () => this.calendar);
         } else {
             // homepage - no remote calendar to load
             this.isExisting = false;
@@ -854,8 +858,7 @@ const CalendarVueApp = {
             // The write gate refuses any removal nobody declared, and undeclared it also
             // re-saved the row on the next edit. Name exactly the rows going away.
             if (removed.length) {
-                CalendarDataService.declareIntent(removed.length,
-                    removed.map(e => CalendarDataService._eventKey(e)));
+                CalendarDataService.declareIntent(removed.map(e => CalendarDataService._eventKey(e)));
             }
             this.calendar.setEvents(all.filter(e => !gone(e)));
             this.closePopover();

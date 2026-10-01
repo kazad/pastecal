@@ -6,7 +6,9 @@
  *   - undoing an edit of ONE occurrence of a series removed the exception row but skipped
  *     the master (its exception dates had changed since), so the occurrence vanished
  *   - isHandledHistory took a colleague's edit of the same event, inside the time window,
- *     for this session's own undo and skipped it
+ *     for this session's own undo and skipped it -- and after a reload its in-memory
+ *     guess was gone, so Cmd+Z redid the user's last undo. Undo writes now say what they
+ *     reverse (`_undoOf`, stored on the history entry), and Cmd+Z reads that back.
  *   - quick-add never reached the session undo stack, so Cmd+Z after it undid something older
  *   - Cmd+Z fired under the scheduler's open editor dialog
  *
@@ -24,7 +26,8 @@ const APP = fs.readFileSync(path.join(PUBLIC, 'app.js'), 'utf8');
 
 // Source of a Vue method (`        name(args) { ... }`), brace-matched.
 function method(name) {
-  const i = APP.indexOf(`\n        ${name}(`);
+  let i = APP.indexOf(`\n        ${name}(`);
+  if (i === -1) i = APP.indexOf(`\n        async ${name}(`);
   assert.ok(i !== -1, `${name} not found in app.js — renamed?`);
   let j = APP.indexOf('{', APP.indexOf(')', i)), d = 0, k = j;
   for (; k < APP.length; k++) {
@@ -40,12 +43,11 @@ function loadApp(events) {
   vm.runInContext('var Utils = { uuidv4: () => Math.random().toString(36).slice(2) };', ctx);
   vm.runInContext(fs.readFileSync(path.join(PUBLIC, 'models/Event.js'), 'utf8') + ';this.Event = Event;', ctx);
   const names = ['planUndo', 'revertExdates', 'sameEvent', 'eventKey', 'deltaBetween',
-    'sameDelta', 'isHandledHistory'];
+    'isHandledHistory', 'reversedHistory'];
   vm.runInContext(`this.app = {\n${names.map(method).join(',\n')}\n}`, ctx);
   const app = ctx.app;
   app.calendar = { events: clone(events) };
   app._undoneHistoryKeys = new Set();
-  app._handledUndo = [];
   return app;
 }
 
@@ -117,33 +119,96 @@ test('plain events still undo independently', () => {
   assert.deepEqual([...plan.removingKeys], ['C|']);
 });
 
-// --- isHandledHistory: match on what was written, not which events ------------------------
+// --- isHandledHistory: identities read from /history, not guesses --------------------------
 
-test('a colleague\'s edit of the same event is not taken for our undo', () => {
+test('an undo entry, and what it reversed, are passed over by key or gesture', () => {
   const app = loadApp([]);
-  const ours = { removed: [], added: [], changed: [{ from: ev('A', 'A2'), to: ev('A', 'A') }] };
-  app._handledUndo.push({ at: 1000, delta: ours });
-
-  const theirs = { removed: [], added: [], changed: [{ from: ev('A', 'A'), to: ev('A', 'Theirs') }] };
-  assert.equal(app.isHandledHistory({ key: 'h1', savedAt: 3000, keys: ['A|'], delta: theirs }), false);
-  assert.equal(app.isHandledHistory({ key: 'h2', savedAt: 3000, keys: ['A|'], delta: clone(ours) }), true,
-    'our own write, as the server logged it, is still recognized');
-  assert.equal(app.isHandledHistory({ key: 'h3', savedAt: 1000 + 61 * 1000, keys: ['A|'], delta: clone(ours) }), false,
-    'outside the window it is not');
+  const rows = [
+    { key: 'U2', undoOf: ['E1'] },          // a history-path undo names entry keys
+    { key: 'U1', undoOf: ['g7'] },          // a session undo names the action's gesture
+    { key: 'E3', gesture: 'g7' },
+    { key: 'E2', gesture: 'g7' },
+    { key: 'E1', gesture: 'g1' },
+    { key: 'E0', gesture: 'g0' },
+  ];
+  const reversed = app.reversedHistory(rows);
+  assert.deepEqual([...reversed].sort(), ['E1', 'E2', 'E3']);
+  const part = (r) => ({ ...r, reversed: reversed.has(r.key) });
+  assert.deepEqual(rows.filter(r => !app.isHandledHistory(part(r))).map(r => r.key), ['E0']);
 });
 
-test('a subset delta is not a match', () => {
+test('a colleague\'s identical edit is never taken for our undo', () => {
+  // Nothing is matched on content or timing any more: only what an undo NAMED.
   const app = loadApp([]);
-  app._handledUndo.push({ at: 1000, delta: { removed: [ev('A', 'A'), ev('B', 'B')], changed: [], added: [] } });
-  assert.equal(app.isHandledHistory({ key: 'h', savedAt: 1500, keys: ['A|'],
-    delta: { removed: [ev('A', 'A')], changed: [], added: [] } }), false);
+  app._undoneHistoryKeys.add('mine');
+  assert.equal(app.isHandledHistory({ key: 'theirs', gesture: 'gT', reversed: false }), false);
+  assert.equal(app.isHandledHistory({ key: 'mine', reversed: false }), true);
+});
+
+// Reviewer repro (r4c): drag X, Cmd+Z it, reload, Cmd+Z again. The undo had left no
+// trace but a timing guess held in memory, so after the reload Cmd+Z took the undo entry
+// for a fresh change and redid the drag -- then undid that, flip-flopping forever.
+test('after a reload, Cmd+Z never redoes an undo', async () => {
+  const X = (h) => ({ id: 'X', title: 'X', start: `2026-09-17T${h}:00:00.000Z`,
+    end: `2026-09-17T${h + 1}:00:00.000Z`, type: 1 });
+  const x0 = X(10), x1 = X(14), xa = X(8);
+  // The server's log, newest first. E0: an earlier move xa -> x0; E1: a drag x0 -> x1.
+  const history = [
+    { key: 'E1', writer: 'me', gesture: 'g1', delta: { removed: [], added: [], changed: [{ from: x0, to: x1 }] } },
+    { key: 'E0', writer: 'me', gesture: 'g0', delta: { removed: [], added: [], changed: [{ from: xa, to: x0 }] } },
+  ];
+  let n = 0;
+  // Each undo write becomes an entry of its own, carrying the _undoOf it was stamped with.
+  function boot(events) {
+    const app = loadApp(events);
+    const marked = [];
+    const names = ['undoLastChange', 'undoLocalAction', 'commitUndo'];
+    const ctx = vm.createContext({ console, JSON, Map, Set, Math, Object, Array, String, Promise,
+      CalendarDataService: { writerId: 'me', declareIntent() {}, markUndo: (ids) => marked.push(...ids) } });
+    vm.runInContext(`this.m = {\n${names.map(method).join(',\n')}\n}`, ctx);
+    Object.assign(app, ctx.m, {
+      _undoBusy: false, _sessionUndo: [], isExisting: true, toasts: [],
+      describeUndo: () => 'undone',
+      showToast(msg) { this.toasts.push(msg); },
+      async loadUndoEntries() {
+        const reversed = this.reversedHistory(history);
+        return history.map(r => ({ parts: [{ ...r, reversed: reversed.has(r.key) }] }));
+      },
+    });
+    app.calendar.setEvents = function (list) {
+      const before = this.events;
+      this.events = clone(list);
+      const delta = app.deltaBetween(before, this.events);
+      history.unshift({ key: `U${n++}`, writer: 'me', undoOf: marked.splice(0), delta });
+    };
+    return app;
+  }
+
+  // Before the reload: Cmd+Z undid the drag from this session's memory, naming its gesture.
+  let app = boot([x1]);
+  app._sessionUndo.push({ delta: history[0].delta, gesture: 'g1', done: false });
+  await app.undoLastChange();
+  assert.equal(app.calendar.events[0].start, x0.start);
+  assert.deepEqual(clone(history[0].undoOf), ['g1'], 'the undo write names the drag it reversed');
+
+  // Reload: no memory. Cmd+Z goes past the undo and the drag to the change before them.
+  app = boot([x0]);
+  await app.undoLastChange();
+  assert.equal(app.calendar.events[0].start, xa.start, 'it undoes E0 -- it does not redo the drag');
+  assert.deepEqual(clone(history[0].undoOf), ['E0']);
+
+  // And again, after another reload: nothing of ours is left to undo.
+  app = boot([xa]);
+  await app.undoLastChange();
+  assert.equal(app.calendar.events[0].start, xa.start);
+  assert.deepEqual(app.toasts, ['Nothing to undo']);
 });
 
 // --- Wiring checks on the source --------------------------------------------------------
 
 test('quick-add is recorded as a local action', () => {
   const body = method('handleQuickAddEvent');
-  assert.match(body, /recordLocalAction\('eventCreated', priorEvents\)/);
+  assert.match(body, /recordLocalAction\('eventCreated', priorEvents, CalendarDataService\.actionGesture\(\)\)/);
   assert.ok(body.indexOf('priorEvents =') < body.indexOf('events.push('),
     'the prior state is captured before the push');
 });
