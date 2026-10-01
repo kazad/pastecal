@@ -8,8 +8,10 @@ const { test, expect } = require('./fixtures');
  * Why both exist. The toast catches the immediate "no, not that one" -- it is the pattern
  * Drive, Gmail and Notion all use, and the one moment a person is guaranteed to be looking
  * at the screen. Cmd+Z catches everything after that: it is the reflex, it needs no
- * discovery at all, and because it reads the server's /history rather than a local stack,
- * it still works after a reload or when the change came from another browser.
+ * discovery at all. It undoes this tab's own actions first, from memory (the server's
+ * /history entry for something done a moment ago may not exist yet), then falls back to
+ * /history -- so it still works after a reload or when the change came from another
+ * browser.
  *
  * Neither existed when a user lost a whole calendar and had to file an issue to get it
  * back (#44) -- there was no recovery path in the product at all.
@@ -76,18 +78,76 @@ test('the delete toast offers Undo, and it puts the event back', async ({ page }
   expect(await titlesOnServer(page)).toContain('Standup');
 });
 
-test('Cmd+Z restores the last deletion after the toast is gone', async ({ page }) => {
+const historyCount = (page) => page.evaluate(`(async () => {
+  const snap = await firebase.database().ref('/history/' + ${VM}.calendar.id).once('value');
+  return snap.numChildren();
+})()`);
+
+test('Cmd+Z restores the last deletion after a reload', async ({ page }) => {
   await freshCalendar(page);
   await seed(page, ['Standup', 'Design review']);
   await deleteEvent(page, 'Design review');
 
-  // Wait past the toast, so this exercises the server-history path rather than the
-  // in-memory offer -- the state someone is in when they notice a loss later.
+  // Reload, so this exercises the server-history path rather than the in-memory stack --
+  // the state someone is in when they notice a loss later.
   await expect.poll(() => titlesOnServer(page), { timeout: 10_000 }).not.toContain('Design review');
-  await page.evaluate(`document.querySelector('#app')._vnode.component.proxy.$refs.toast.hide()`);
+  await expect.poll(() => historyCount(page), { timeout: 15_000 }).toBeGreaterThanOrEqual(2);
+  await page.reload();
+  await page.waitForFunction(`${VM}.isExisting === true`, null, { timeout: 15_000 });
 
   await pressUndo(page);
   await expect.poll(() => titlesOnServer(page), { timeout: 15_000 }).toContain('Design review');
+  expect(await titlesOnServer(page)).toContain('Standup');
+});
+
+test('a second Cmd+Z goes further back instead of redoing the first', async ({ page }) => {
+  // Two defects this pins down. Cmd+Z right after a delete used to undo an OLDER change,
+  // because the delete's own /history entry had not been written yet. And a second Cmd+Z
+  // found the restore -- logged by the server as an addition -- and deleted the event
+  // again, so pressing it twice did nothing at all.
+  await freshCalendar(page);
+  await seed(page, ['Standup', 'Design review', 'Old one']);
+  await deleteEvent(page, 'Old one');
+  await expect.poll(() => titlesOnServer(page), { timeout: 10_000 }).not.toContain('Old one');
+  await expect.poll(() => historyCount(page), { timeout: 15_000 }).toBeGreaterThanOrEqual(2);
+  // A fresh tab: 'Old one' is now only reachable through /history.
+  await page.reload();
+  await page.waitForFunction(`${VM}.isExisting === true`, null, { timeout: 15_000 });
+
+  await deleteEvent(page, 'Design review');
+  await pressUndo(page);   // immediately: the server has not logged the delete yet
+  await expect.poll(() => titlesOnServer(page), { timeout: 10_000 }).toContain('Design review');
+  expect(await titlesOnServer(page), 'the first Cmd+Z must undo the delete just made')
+    .not.toContain('Old one');
+
+  // Let the server log both the delete and the restore, so the second press sees them.
+  await expect.poll(() => historyCount(page), { timeout: 15_000 }).toBeGreaterThanOrEqual(4);
+  await pressUndo(page);
+  await expect.poll(() => titlesOnServer(page), { timeout: 15_000 }).toContain('Old one');
+  expect(await titlesOnServer(page), 'the second Cmd+Z must not re-delete what the first restored')
+    .toContain('Design review');
+});
+
+test('a keydown with no key (Chrome autofill) does not throw', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (err) => errors.push(err.message));
+  await freshCalendar(page);
+  await page.evaluate(`window.dispatchEvent(new Event('keydown'))`);
+  await page.evaluate(`window.dispatchEvent(new KeyboardEvent('keydown', { metaKey: true }))`);
+  await page.waitForTimeout(300);
+  expect(errors).toEqual([]);
+});
+
+test('an actionable toast stays up while the pointer is on it', async ({ page }) => {
+  await freshCalendar(page);
+  await page.evaluate(`${VM}.showToast('Deleted "Thing"', 'info', { actionLabel: 'Undo', action: () => {}, duration: 400 })`);
+  const undo = page.locator('button', { hasText: /^Undo$/ });
+  await expect(undo).toBeVisible();
+  await undo.hover();
+  await page.waitForTimeout(1_000);
+  await expect(undo, 'auto-dismiss must wait while it is hovered').toBeVisible();
+  await page.mouse.move(5, 5);
+  await expect(undo).toHaveCount(0, { timeout: 5_000 });
 });
 
 test('Cmd+Z is ignored while typing, so it still means undo-my-text', async ({ page }) => {

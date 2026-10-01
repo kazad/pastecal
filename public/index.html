@@ -1257,9 +1257,55 @@ Copyright (c) 2025 Kalid Azad
         </div>
 
         <!-- Claim Intervention Modal -->
-        <!-- Recent changes: what was removed, and a button to put it back. -->
-        <div v-if="showRecentChanges" class="pc-modal" v-cloak @click.self="showRecentChanges = false">
+        <div v-if="showClaimDialog" class="pc-modal" v-cloak>
             <div class="pc-modal-panel">
+                <button @click="showClaimDialog = false"
+                    class="absolute top-4 right-4 text-color-1 hover:text-theme-strong transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd"
+                            d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                            clip-rule="evenodd" />
+                    </svg>
+                </button>
+
+                <div class="text-center mb-6">
+                    <h3 class="text-lg font-bold text-color-2 mb-2">Name your calendar</h3>
+                    <p class="text-sm text-color-1">
+                        You're about to claim this permanent link.
+                        <br>
+                        Want to give it a custom name to make it easier to remember?
+                    </p>
+                </div>
+
+                <div class="mb-6">
+                    <div class="pc-input-group">
+                        <span class="pc-input-prefix">pastecal.com/</span>
+                        <input ref="claimInput" type="text" v-model="calendar.id" aria-label="Claim custom URL"
+                            class="pc-input" placeholder="my-calendar"
+                            @keyup.enter="confirmClaim">
+                    </div>
+                    <p class="text-xs text-color-1 mt-2 text-center">
+                        Examples: <span class="italic">marketing-schedule, trip-2025, soccer-team</span>
+                    </p>
+                </div>
+                <button @click="confirmClaim" class="pc-btn pc-btn-primary w-full shadow-md">
+                    <span>Claim URL</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- Recent changes: what was removed, and a button to put it back. -->
+        <div v-if="showRecentChanges" class="pc-modal" v-cloak @click.self="showRecentChanges = false"
+            @keydown.esc.stop="showRecentChanges = false">
+            <!-- A real dialog for assistive tech: focus moves in on open and back to the
+                 opener on close (the showRecentChanges watcher), and Escape closes it. -->
+            <div class="pc-modal-panel" ref="recentChangesPanel" role="dialog" aria-modal="true"
+                aria-labelledby="recent-changes-title" tabindex="-1" style="outline: none;">
                 <button @click="showRecentChanges = false" aria-label="Close"
                     class="absolute top-4 right-4 text-color-1 hover:text-theme-strong transition-colors">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -1269,7 +1315,7 @@ Copyright (c) 2025 Kalid Azad
                     </svg>
                 </button>
 
-                <h3 class="text-lg font-bold text-color-2 mb-1">Recent changes</h3>
+                <h3 id="recent-changes-title" class="text-lg font-bold text-color-2 mb-1">Recent changes</h3>
                 <p class="text-sm text-color-1 mb-4">Everything that happened to this calendar. Deleted and edited events can be restored.</p>
 
                 <div class="divide-y divide-color-default -mx-1">
@@ -1351,7 +1397,7 @@ Copyright (c) 2025 Kalid Azad
                                     {{ entry.ago }}
                                 </span>
                                 <button v-if="entry.canRestore" @click="undoChange(entry)"
-                                    class="px-3 py-1 border border-color-default rounded text-xs whitespace-nowrap hover:bg-2 transition-colors">
+                                    class="px-3 py-1 border border-color-default rounded text-xs whitespace-nowrap hover:bg-theme-hover transition-colors">
                                     {{ entry.restoreLabel }}
                                 </button>
                             </div>
@@ -1362,48 +1408,6 @@ Copyright (c) 2025 Kalid Azad
                 <p class="text-xs text-color-1 mt-4 italic">
                     Restoring is itself a change, so it can be undone too.
                 </p>
-            </div>
-        </div>
-
-        <div v-if="showClaimDialog" class="pc-modal" v-cloak>
-            <div class="pc-modal-panel">
-                <button @click="showClaimDialog = false"
-                    class="absolute top-4 right-4 text-color-1 hover:text-theme-strong transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd"
-                            d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
-                            clip-rule="evenodd" />
-                    </svg>
-                </button>
-
-                <div class="text-center mb-6">
-                    <h3 class="text-lg font-bold text-color-2 mb-2">Name your calendar</h3>
-                    <p class="text-sm text-color-1">
-                        You're about to claim this permanent link.
-                        <br>
-                        Want to give it a custom name to make it easier to remember?
-                    </p>
-                </div>
-
-                <div class="mb-6">
-                    <div class="pc-input-group">
-                        <span class="pc-input-prefix">pastecal.com/</span>
-                        <input ref="claimInput" type="text" v-model="calendar.id" aria-label="Claim custom URL"
-                            class="pc-input" placeholder="my-calendar"
-                            @keyup.enter="confirmClaim">
-                    </div>
-                    <p class="text-xs text-color-1 mt-2 text-center">
-                        Examples: <span class="italic">marketing-schedule, trip-2025, soccer-team</span>
-                    </p>
-                </div>
-                <button @click="confirmClaim" class="pc-btn pc-btn-primary w-full shadow-md">
-                    <span>Claim URL</span>
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-                        stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                            d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                    </svg>
-                </button>
             </div>
         </div>
 
