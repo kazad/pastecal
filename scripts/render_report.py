@@ -9,41 +9,22 @@ Kept separate from report.sh because building HTML in bash is how you get
 unescaped user data in an attribute. Every value here goes through esc().
 """
 
+import datetime
 import html
 import json
-import re
 import sys
+
+from report_metrics import (
+    LAG_DAYS, MIN_N, SHARE_WEEKS, ALIVE_FROM, ALIVE_TO, TONE,
+    rows, truncation, num, times, pct, direction, as_date,
+    fold_weekly, weekly_series, yoy, cohorts as build_cohorts, leak,
+    window_weeks, share_rate, active_weeks, reach_people, sticky,
+    months, growth_multiple, avg_mom, growth_verdict, delta,
+)
 
 
 def esc(v):
     return html.escape(str(v), quote=True)
-
-
-def rows(block):
-    """GA4 rows -> [(dims tuple, metrics tuple)] with metrics as floats."""
-    out = []
-    for r in (block or {}).get("rows", []) or []:
-        dims = tuple(d.get("value", "") for d in r.get("dimensionValues", []) or [])
-        mets = []
-        for m in r.get("metricValues", []) or []:
-            try:
-                mets.append(float(m.get("value", 0) or 0))
-            except (TypeError, ValueError):
-                mets.append(0.0)
-        out.append((dims, tuple(mets)))
-    return out
-
-
-def num(x, places=0):
-    if x is None:
-        return "0"
-    if places == 0:
-        return f"{int(round(x)):,}"
-    return f"{x:,.{places}f}"
-
-
-def pct(part, whole):
-    return 0.0 if not whole else part * 100.0 / whole
 
 
 def secs(x):
@@ -54,7 +35,7 @@ def secs(x):
 # ---------------------------------------------------------------- charts
 
 
-def sparkline(series, width=760, height=128):
+def sparkline(series, width=760, height=128, label="Daily people over the reporting window"):
     """Area+line over time. One series, so no legend: the heading names it."""
     if len(series) < 2:
         return '<p class="empty">Not enough days in range to plot.</p>'
@@ -98,7 +79,7 @@ def sparkline(series, width=760, height=128):
     # that stops at the data. Padding is cheaper than clamping every label.
     pad = 26
     return f'''<svg viewBox="{-pad} {-14} {width + pad * 2} {height + 14 + 6}" class="spark" role="img"
-     aria-label="Daily users over the reporting window">
+     aria-label="{esc(label)}">
   <polygon points="{area}" class="area"/>
   <polyline points="{line}" class="line"/>
   {''.join(marks)}
@@ -106,17 +87,18 @@ def sparkline(series, width=760, height=128):
 <div class="axis"><span>{esc(series[0][0])}</span><span>{esc(series[-1][0])}</span></div>'''
 
 
-def monthly_chart(items, partial_item=None):
+def monthly_chart(items, partial_items=()):
     """Monthly users, returning vs new, as stacked columns.
 
     Stacked rather than two lines because the QUESTION is the mix -- how much of
     the growth is people coming back -- and a stack answers that directly. A 2px
     surface gap separates the segments so the boundary is never ambiguous.
+    Months still filling in are drawn faded after the complete ones.
     """
     if len(items) < 2:
         return '<p class="empty">Not enough months yet.</p>'
     show = items[-12:]
-    hi = max(r["users"] for r in show) or 1
+    hi = max(r["users"] for r in list(show) + list(partial_items)) or 1
     cols = []
     for r in show:
         ret_h = r["returning"] / hi * 100
@@ -128,24 +110,24 @@ def monthly_chart(items, partial_item=None):
             f'<span class="mret" style="height:{ret_h:.1f}%"></span>'
             f'</span></span>'
             f'<span class="mlab">{esc(r["short"])}</span></div>')
-    tail = ""
-    if partial_item:
-        ret_h = partial_item["returning"] / hi * 100
-        new_h = partial_item["new"] / hi * 100
-        tail = (f'<div class="mcol partial" title="{esc(partial_item["label"])}: '
-                f'month still in progress">'
-                f'<span class="mplot"><span class="mstack">'
-                f'<span class="mnew" style="height:{new_h:.1f}%"></span>'
-                f'<span class="mret" style="height:{ret_h:.1f}%"></span>'
-                f'</span></span>'
-                f'<span class="mlab">{esc(partial_item["short"])}</span></div>')
+    for r in partial_items:
+        ret_h = r["returning"] / hi * 100
+        new_h = r["new"] / hi * 100
+        cols.append(
+            f'<div class="mcol partial" title="{esc(r["label"])}: still filling in">'
+            f'<span class="mplot"><span class="mstack">'
+            f'<span class="mnew" style="height:{new_h:.1f}%"></span>'
+            f'<span class="mret" style="height:{ret_h:.1f}%"></span>'
+            f'</span></span>'
+            f'<span class="mlab">{esc(r["short"])}</span></div>')
     return (
         '<div class="mlegend">'
         '<span><i class="sw ret"></i>Returning</span>'
         '<span><i class="sw new"></i>New</span></div>'
-        '<div class="months">' + "".join(cols) + tail + "</div>"
-        + ('<p class="mnote">The final column is the current month, still in '
-           'progress &mdash; it is not a decline.</p>' if partial_item else ""))
+        '<div class="months">' + "".join(cols) + "</div>"
+        + ('<p class="mnote">Faded columns are still filling in (the current '
+           'month, or one that ended inside GA4&rsquo;s 24&ndash;48 hour '
+           'processing lag) &mdash; they are not a decline.</p>' if partial_items else ""))
 
 
 def bars(items, unit=""):
@@ -235,21 +217,22 @@ missing = [p for p in NEEDED if not dims_list or p not in dims_list] if dims_lis
 
 # Reach: how many DIFFERENT people saw a calendar, vs the same few reloading.
 # pagePath, not landingPage -- landingPage only counts sessions that started on
-# the page, undercounting anything reached from the homepage.
+# the page, undercounting anything reached from the homepage. No per-calendar
+# new/returning split: GA4 credits newUsers to the page the first_visit event
+# fired on, so a person who first landed on the homepage reads as "returning"
+# on every calendar they then open.
 reach_rows = []
 for dims, mets in rows(d.get("reach")):
     path = dims[0] or "(not set)"
-    views, users, new_users = mets[0], mets[1], (mets[2] if len(mets) > 2 else 0)
+    views, users = mets[0], mets[1]
     if users <= 0:
         continue
-    reach_rows.append({
-        "path": path,
-        "views": views,
-        "users": users,
-        "new": new_users,
-        "returning": max(users - new_users, 0),
-        "per": views / users,
-    })
+    reach_rows.append({"path": path, "views": views, "users": users,
+                       "per": views / users})
+
+# "Today" decides which weeks and months are settled. report.sh passes it so a
+# run near midnight cannot disagree with the dates it queried.
+today = as_date(d.get("today"), datetime.date.today())
 
 # ---------------------------------------------------------------- north star
 #
@@ -260,90 +243,16 @@ for dims, mets in rows(d.get("reach")):
 # summed across weeks" would double-count the same person returning.
 #
 # Alongside it, cohort survival: of the calendars first seen each week, how
-# many ever reached a second person, and how many still had traffic 4+ weeks
-# on. When the north star is flat while new users keep arriving, these two
-# rates say WHERE the loop leaks -- at the share step, or at week-2-to-4
-# retention (in Aug 2026 it was retention: ~50% shared, only ~25% survived).
-
-# Not calendars: app pages, static files, and the test/probe paths that once
-# put 314 phantom "users" into a single week. App prefixes end at a segment
-# boundary so real slugs like /demolition-crew or /imgur-fans still count;
-# zz- and test- are deliberately bare prefixes. /view/ is the read-only mirror
-# of a calendar already counted under its slug, and its id cannot be mapped
-# back to that slug, so it is dropped everywhere rather than counted twice.
-# Keep in sync with NOT_CAL_RE in stats.sh.
-_NOT_CAL = re.compile(
-    r"^/((nativecal|view|demo|components|directives|img|js-old-components"
-    r"|models|services|utils)(/|$)|zz-|test-)")
-
-
-def norm_cal(path):
-    """A calendar's identity, or None for non-calendar paths. /edit/slug folds
-    into /slug (same calendar, different door). Requires a leading slash so
-    GA4's "(other)" overflow row is never read as a calendar."""
-    if not path or not path.startswith("/") or "." in path:
-        return None
-    p = path.lower()
-    if p == "/" or _NOT_CAL.match(p):
-        return None
-    if p.startswith("/edit/"):
-        p = "/" + p[len("/edit/"):]
-    p = p.rstrip("/")
-    return p or None
-
-
-# (week, calendar) -> people, current partial ISO week dropped: it can neither
-# host a birth nor prove a calendar dead, and it makes every trend look like a
-# collapse. Paths that fold together (/solo and /solo/) take the MAX, not the
-# sum: GA4 de-duplicates users per row, so one browser on both rows would
-# otherwise read as two people and fake a "shared" calendar. Max keeps it a floor.
-curweek = d.get("curweek") or ""
-wk_cal = {}
-for dims_, mets_ in rows(d.get("weekly")):
-    wk, cal = dims_[0], norm_cal(dims_[1])
-    if wk == curweek or cal is None:
-        continue
-    wk_cal[(wk, cal)] = max(wk_cal.get((wk, cal), 0), mets_[0])
-
-ns_weeks = sorted({wk for wk, _ in wk_cal})
-_by_week = {}
-for (wk, cal), u in wk_cal.items():
-    _by_week.setdefault(wk, []).append(u)
-
-# The first week of a 364-day window almost never starts on a Monday, so it is
-# partial too. Drop it rather than let the series open with a fake dip.
-if ns_weeks:
-    ns_weeks = ns_weeks[1:]
-
-wasc = [{
-    "week": wk,
-    "active": len(_by_week.get(wk, [])),
-    "shared": sum(1 for u in _by_week.get(wk, []) if u >= 2),
-    "strong": sum(1 for u in _by_week.get(wk, []) if u >= 3),
-} for wk in ns_weeks]
-
-# Cohort survival. Births only count after an 8-week lookback so an
-# established calendar is not mistaken for a newborn.
-_LOOKBACK = 8
-_widx = {wk: i for i, wk in enumerate(ns_weeks)}
-_cal_weeks = {}
-for (wk, cal), u in wk_cal.items():
-    if wk not in _widx:
-        continue
-    _cal_weeks.setdefault(cal, {})[_widx[wk]] = u
-
-_last_idx = len(ns_weeks) - 1
-cohorts = {}
-for cal, wks in _cal_weeks.items():
-    birth = min(wks)
-    if birth < _LOOKBACK:
-        continue
-    c = cohorts.setdefault(birth, {"born": 0, "shared": 0, "alive": 0})
-    c["born"] += 1
-    if max(wks.values()) >= 2:
-        c["shared"] += 1
-    if any(i >= birth + 4 for i in wks):
-        c["alive"] += 1
+# many reached a second person within SHARE_WEEKS, and how many still had
+# traffic in weeks ALIVE_FROM..ALIVE_TO. When the north star is flat while new
+# users keep arriving, these two rates say WHERE the loop leaks.
+weeks_all, wk_cal = fold_weekly(d.get("weekly"), today, d.get("weeklyFrom"))
+wasc_all = weekly_series(weeks_all, wk_cal)
+# The payload reaches back past a year (for the year-ago comparison and the
+# cohort lookback); the chart and the peak cover the last 52 weeks.
+wasc = wasc_all[-52:]
+cohorts = build_cohorts(weeks_all, wk_cal)
+leak_stats = leak(cohorts)
 
 # ---------------------------------------------------------------- KPIs
 #
@@ -352,12 +261,13 @@ for cal, wks in _cal_weeks.items():
 # MAU -> conversion -> MRR, with the free tier as the growth engine. Each answers
 # a question that would change what gets built next.
 #
-#   1. Returning people   -- the population that could ever convert. Total users
-#                            flatters: most are one-visit arrivals.
-#   2. Sharing ratio      -- calendar viewers per homepage visitor. The free tier
-#                            exists to be shared; this is whether that works.
-#   3. Calendars that stick -- calendars with 3+ people AND returning visitors.
-#                            The unit of real value, and the Pro upsell target.
+#   1. Returning people     -- the population that could ever convert. Total users
+#                              flatters: most are one-visit arrivals.
+#   2. Calendars shared     -- share of active calendars that reached anyone
+#                              beyond their creator inside a week. The free tier
+#                              exists to be shared; this is whether that works.
+#   3. Calendars that stick -- 3+ people in the window and traffic in 2+ of its
+#                              weeks. The unit of real value, the Pro upsell target.
 
 
 def split_users(block):
@@ -370,110 +280,35 @@ def split_users(block):
     return (ret[1] if len(ret) > 1 else 0, new_[1] if len(new_) > 1 else 0)
 
 
-def reach_of(block):
-    out = []
-    for dims, mets in rows(block):
-        path = dims[0] or ""
-        if not path:
-            continue
-        views, users = mets[0], mets[1]
-        new_u = mets[2] if len(mets) > 2 else 0
-        if users <= 0:
-            continue
-        out.append({"path": path, "views": views, "users": users,
-                    "new": new_u, "returning": max(users - new_u, 0)})
-    return out
-
-
-def by_cal(items):
-    """Reach rows folded per calendar through norm_cal, so the KPIs use the same
-    exclusions as the north star. Folded rows take the max of each count, not
-    the sum, for the same per-row de-duplication reason as wk_cal above."""
-    out = {}
-    for r in items:
-        cal = norm_cal(r["path"])
-        if cal is None:
-            continue
-        c = out.setdefault(cal, {"path": cal, "users": 0, "returning": 0})
-        c["users"] = max(c["users"], r["users"])
-        c["returning"] = max(c["returning"], r["returning"])
-    return list(out.values())
-
-
-def sharing_ratio(items):
-    """Calendar viewers per homepage visitor."""
-    home = sum(r["users"] for r in items if r["path"] == "/")
-    cals = sum(r["users"] for r in by_cal(items))
-    return (cals / home) if home else 0.0
-
-
-def sticky(items, min_people=3):
-    """Calendars with a real audience: several people, some of them returning."""
-    return [r for r in by_cal(items)
-            if r["users"] >= min_people and r["returning"] >= 1]
-
-
 # ---- monthly history --------------------------------------------------------
 # The single most important context in the report. A two-window delta on a noisy
 # site says almost nothing; twelve months of direction says a lot.
-monthly = []
-for dims, mets in sorted(rows(d.get("monthly")), key=lambda r: r[0][0]):
-    ym = dims[0]
-    if len(ym) != 6:
-        continue
-    users, new_users = mets[0], mets[1]
-    monthly.append({
-        "ym": ym,
-        "label": f"{ym[:4]}-{ym[4:]}",
-        "short": ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][int(ym[4:]) - 1] + " " + ym[2:4],
-        "users": users,
-        "new": new_users,
-        "returning": max(users - new_users, 0),
-    })
-
-# The current month is partial, so it always looks like a crash. Flag it rather
-# than letting it read as a decline.
-partial = monthly[-1] if monthly else None
-complete = monthly[:-1] if len(monthly) > 1 else monthly
-
-
-def growth_multiple(items, key):
-    if len(items) < 2 or not items[0][key]:
-        return None
-    return items[-1][key] / items[0][key]
-
-
-def avg_mom(items, key):
-    if len(items) < 2 or not items[0][key]:
-        return None
-    n = len(items) - 1
-    return ((items[-1][key] / items[0][key]) ** (1.0 / n) - 1) * 100
-
+complete, partial = months(d.get("monthly"), today, d.get("monthsFrom"))
 
 cur_ret, cur_new = split_users(d.get("overview"))
 prev_ret, prev_new = split_users(d.get("prevOverview"))
 
-cur_reach = reach_of(d.get("reach"))
-prev_reach_items = reach_of(d.get("prevReach"))
+# The KPI windows in whole settled weeks, so the weekly data can answer them.
+k_weeks = window_weeks(days)
+cur_share = share_rate(weeks_all, wk_cal, k_weeks)
+prev_share = share_rate(weeks_all, wk_cal, k_weeks, offset=k_weeks)
 
-cur_ratio = sharing_ratio(cur_reach)
-prev_ratio = sharing_ratio(prev_reach_items)
+cur_sticky = sticky(reach_people(d.get("reach")),
+                    active_weeks(weeks_all, wk_cal, k_weeks), k_weeks)
+prev_sticky = sticky(reach_people(d.get("prevReach")),
+                     active_weeks(weeks_all, wk_cal, k_weeks, offset=k_weeks), k_weeks)
 
-cur_sticky = sticky(cur_reach)
-prev_sticky = sticky(prev_reach_items)
-
-
-def delta(now, before):
-    """Percent change, and a direction word. None when there is no baseline."""
-    if not before:
-        return None, "flat"
-    change = (now - before) * 100.0 / before
-    if change >= 3:
-        return change, "up"
-    if change <= -3:
-        return change, "down"
-    return change, "flat"
-
+# Every query the numbers depend on, checked for GA4's silent row cap. Top-N
+# display lists (channels, countries, landing pages) are capped on purpose and
+# change no metric, so they are not listed.
+METRIC_BLOCKS = {
+    "overview": "visitor totals", "prevOverview": "previous-window totals",
+    "daily": "daily people", "reach": "reach and sticky calendars",
+    "prevReach": "previous-window sticky calendars", "monthly": "monthly growth",
+    "weekly": "north star, cohorts and sharing", "events": "product events",
+}
+capped = [(label, t) for key, label in METRIC_BLOCKS.items()
+          for t in [truncation(d.get(key))] if t]
 
 bd = d.get("breakdowns") or {}
 
@@ -637,6 +472,27 @@ footer{{border-top:1px solid var(--rule);padding-top:20px;margin-top:14px;
      <code>pastecal-web</code>. This file is local; nothing is published.</p>
 </header>''')
 
+# ---- capped queries: any metric built on a truncated report reads low
+if capped:
+    items = "".join(
+        f"<li><b>{esc(label)}</b> &mdash; {esc(num(got))} of {esc(num(total))} rows</li>"
+        for label, (got, total) in capped)
+    A(f'''<div class="note warn">
+<h3>Some numbers below are truncated</h3>
+<p>GA4 returned fewer rows than exist for these queries, so the figures built on
+them read <b>low</b>. Raise the query's limit in <code>scripts/report.sh</code>.</p>
+<ul style="font-size:14px;color:var(--muted);margin:0;padding-left:20px">{items}</ul>
+</div>''')
+
+
+def rate_cell(part, whole):
+    """count (pct%) -- the percentage only once the base is big enough to mean
+    something; under MIN_N the cell says so instead."""
+    if whole < MIN_N:
+        return f'{num(part)} <span class="empty">(n&lt;{MIN_N})</span>'
+    return f'{num(part)} ({pct(part, whole):.0f}%)'
+
+
 # ---- north star (leads the report: the one number, then the diagnostics)
 if len(wasc) >= 6:
     def wlab(wk):
@@ -645,8 +501,10 @@ if len(wasc) >= 6:
     shared_series = [(wlab(w["week"]), w["shared"]) for w in wasc]
     latest = wasc[-1]
     cur4 = sum(w["shared"] for w in wasc[-4:]) / 4
-    base4 = sum(w["shared"] for w in wasc[:4]) / 4
-    yoy = (cur4 / base4) if base4 else None
+    # Same ISO weeks a year earlier -- not the first weeks of the chart, which
+    # sit ~47 weeks back and change with the window.
+    yoy_x, yoy_why = yoy(wasc_all)
+    yoy_tone = TONE[direction(yoy_x)]
     roll = [sum(w["shared"] for w in wasc[i:i + 4]) / 4 for i in range(len(wasc) - 3)]
     peak4 = max(roll)
     peak_wk = wlab(wasc[roll.index(peak4) + 3]["week"])
@@ -654,12 +512,17 @@ if len(wasc) >= 6:
     # Trend, judged against the best 4-week stretch rather than last window:
     # this series plateaued for 14 weeks in summer 2026 while every short delta
     # read "flat, fine". Distance from peak is the honest question.
-    off = (cur4 / peak4) if peak4 else 1.0
-    if off >= 0.97:
+    off = (cur4 / peak4) if peak4 else None
+    if off is None:
+        trend_note = '''<div class="note amber">
+<h3>No shared calendars yet</h3>
+<p>No calendar reached a second person in any week of the last year, so there
+is no peak to measure against.</p></div>'''
+    elif off >= 0.97:
         trend_note = f'''<div class="note good">
 <h3>At the high-water mark</h3>
 <p>The current 4-week average (<b>{num(cur4, 1)}</b>) is at or above the best
-4-week stretch on record. Growth is compounding; keep feeding it.</p></div>'''
+4-week stretch of the last year (<b>{num(peak4, 1)}</b>). Keep feeding it.</p></div>'''
     elif off >= 0.88:
         trend_note = f'''<div class="note amber">
 <h3>Plateaued below the peak</h3>
@@ -677,32 +540,53 @@ past plateau territory &mdash; something changed. Compare the cohort table's
 birth counts (acquisition) against its survival rates (retention) to see which
 side fell.</p></div>'''
 
+    too_young = '<span class="empty">too young</span>'
     coh_rows = []
     for b in sorted(cohorts)[-12:]:
         c = cohorts[b]
-        alive_cell = (f'{num(c["alive"])} ({pct(c["alive"], c["born"]):.0f}%)'
-                      if b + 4 <= _last_idx else '<span class="empty">too young</span>')
         coh_rows.append([
-            esc(wlab(ns_weeks[b])),
+            esc(wlab(weeks_all[b])),
             num(c["born"]),
-            f'{num(c["shared"])} ({pct(c["shared"], c["born"]):.0f}%)',
-            alive_cell,
+            rate_cell(c["shared"], c["born"]) if c["share_judged"] else too_young,
+            rate_cell(c["alive"], c["born"]) if c["alive_judged"] else too_young,
         ])
 
-    mature = [c for b, c in cohorts.items() if b + 4 <= _last_idx and c["born"]]
+    coh_headers = ["Born week", "Calendars", f"2nd person by wk {SHARE_WEEKS}",
+                   f"Alive wk {ALIVE_FROM}–{ALIVE_TO}"]
+
     leak_note = ""
-    if mature:
-        born_t = sum(c["born"] for c in mature)
-        sh_rate = pct(sum(c["shared"] for c in mature), born_t)
-        al_rate = pct(sum(c["alive"] for c in mature), born_t)
-        leak_note = f'''<div class="note">
+    if leak_stats:
+        L = leak_stats
+        basis = (f'{num(L["born"])} calendars from {num(L["cohorts"])} '
+                 f'cohort{"s" if L["cohorts"] != 1 else ""}')
+        if not L["enough"]:
+            verdict = (f'<p>Only {basis} are old enough to judge &mdash; too few '
+                       f'for the rates to mean anything yet.</p>')
+            tone = ""
+        elif L["worse"] == "retention":
+            verdict = (f'<p>Across {basis} old enough to judge, <b>{L["share_rate"]:.0f}%</b> '
+                       f'reached a second person within {SHARE_WEEKS} weeks and '
+                       f'<b>{L["alive_rate"]:.0f}%</b> still had traffic in weeks '
+                       f'{ALIVE_FROM}&ndash;{ALIVE_TO}. Fewer survive than get shared, '
+                       f'so the bigger leak is <b>retention</b>: groups try it, share '
+                       f'it, then drift.</p>')
+            tone = " amber"
+        else:
+            rates = (f'<p>Across {basis} old enough to judge, <b>{L["share_rate"]:.0f}%</b> '
+                     f'reached a second person within {SHARE_WEEKS} weeks and '
+                     f'<b>{L["alive_rate"]:.0f}%</b> still had traffic in weeks '
+                     f'{ALIVE_FROM}&ndash;{ALIVE_TO}. ')
+            if L["worse"] == "sharing":
+                verdict = rates + ('More calendars fail to reach a second person '
+                                   'than fail to survive, so the bigger leak is the '
+                                   '<b>share step</b>.</p>')
+            else:
+                verdict = rates + ('The two steps lose about as many calendars '
+                                   'each; neither is clearly the bigger leak.</p>')
+            tone = " amber"
+        leak_note = f'''<div class="note{tone}">
 <h3>Where the loop leaks</h3>
-<p>Across cohorts old enough to judge, <b>{sh_rate:.0f}%</b> of new calendars
-reached a second person but only <b>{al_rate:.0f}%</b> still had any traffic
-four weeks on. Read the pair together: a healthy share rate with low survival
-means the leak is week-2&ndash;4 <b>retention</b>, not the share step &mdash;
-groups try it, share it, then drift. Survivors per week is the inflow that has
-to beat churn of the existing stock for the north star to rise.</p>
+{verdict}
 <p>Floors, not ceilings: "2nd person" means 2+ browsers in a single week (GA4
 cannot de-duplicate people across weeks), <code>/view/</code>-link visitors
 cannot be attributed to their calendar, and ICS subscribers never hit GA4 at
@@ -718,26 +602,29 @@ projection. "People" means distinct browsers, so one person on two devices
 counts &mdash; the 3+ tile is the conservative floor.</p>
 <div class="tiles">
   <div class="tile hi"><div class="v">{num(latest["shared"])}</div>
-    <div class="k">Shared calendars, {esc(wlab(latest["week"]))} (last complete week)</div></div>
+    <div class="k">Shared calendars, {esc(wlab(latest["week"]))} (last settled week;
+    weeks under {LAG_DAYS} days old are left out while GA4 catches up)</div></div>
   <div class="tile"><div class="v">{num(cur4, 1)}</div>
     <div class="k">4-week average</div></div>
-  <div class="tile good"><div class="v">{num(yoy, 1)}&times;</div>
-    <div class="k">vs the same 4 weeks a year ago</div></div>
+  <div class="tile {yoy_tone}"><div class="v">{times(yoy_x)}</div>
+    <div class="k">Last 4 weeks vs the same ISO weeks a year ago{
+        " (" + esc(yoy_why) + ")" if yoy_why else ""}</div></div>
   <div class="tile"><div class="v">{num(latest["strong"])}</div>
     <div class="k">With 3+ people, same week</div></div>
 </div>
 <div class="card">
   <h3>Weekly active shared calendars, last 12 months</h3>
-  {sparkline(shared_series)}
+  {sparkline(shared_series, label="Weekly active shared calendars, last 12 months")}
 </div>
 {trend_note}
 <div class="card">
   <h3>Cohort survival &mdash; the input that moves the number</h3>
-  <p class="lede">Of calendars first seen each week: how many ever reached a
-  second person, and how many were still alive 4+ weeks later. Terminal
-  version: <code>./scripts/stats.sh cohorts</code>.</p>
-  {table(["Born week", "Calendars", "Reached 2nd person", "Alive 4wk on"],
-         coh_rows, ["l", "r", "r", "r"])}
+  <p class="lede">Of calendars first seen each week: how many reached a second
+  person within {SHARE_WEEKS} weeks of birth, and how many had any traffic in
+  weeks {ALIVE_FROM}&ndash;{ALIVE_TO}. Every cohort gets the same windows, so a
+  cohort is "too young" until its window has fully passed. Terminal version:
+  <code>./scripts/stats.sh cohorts</code> (open-ended windows; may differ).</p>
+  {table(coh_headers, coh_rows, ["l", "r", "r", "r"])}
 </div>
 {leak_note}
 </section>''')
@@ -748,7 +635,13 @@ if len(complete) >= 3:
     mult_r = growth_multiple(complete, "returning")
     mom = avg_mom(complete, "users")
     span = f"{complete[0]['short']} to {complete[-1]['short']}"
+    g_tone, g_title, g_body = growth_verdict(mult_u, mult_r)
 
+    def mult_tile(x, label):
+        return (f'<div class="tile {TONE[direction(x)]}"><div class="v">{times(x)}</div>'
+                f'<div class="k">{label}</div></div>')
+
+    mom_dir = None if mom is None else direction(1 + mom / 100.0, band=0.005)
     A(f'''<section>
 <h2>Growth</h2>
 <p class="lede">Twelve months of direction. A two-window comparison on a site
@@ -756,11 +649,9 @@ this noisy can say the opposite of the trend, so direction comes before the
 short-window numbers below.</p>
 
 <div class="tiles">
-  <div class="tile hi"><div class="v">{num(mult_u, 1)}&times;</div>
-    <div class="k">People, {esc(span)}</div></div>
-  <div class="tile hi"><div class="v">{num(mult_r, 1)}&times;</div>
-    <div class="k">Returning people, same span</div></div>
-  <div class="tile good"><div class="v">{num(mom, 1)}%</div>
+  {mult_tile(mult_u, "People, " + esc(span))}
+  {mult_tile(mult_r, "Returning people, same span")}
+  <div class="tile {TONE[mom_dir]}"><div class="v">{"n/a" if mom is None else num(mom, 1) + "%"}</div>
     <div class="k">Average month over month</div></div>
 </div>
 
@@ -769,31 +660,42 @@ short-window numbers below.</p>
   {monthly_chart(complete, partial)}
 </div>
 
-<div class="note good">
-<h3>Returning growth is tracking total growth</h3>
-<p>People grew <b>{num(mult_u, 1)}&times;</b> and returning people grew
-<b>{num(mult_r, 1)}&times;</b> over the same span. Retention is keeping pace with
-acquisition rather than lagging it &mdash; the audience is compounding, not
-churning through.</p>
+<div class="note {g_tone}">
+<h3>{g_title}</h3>
+<p>People: <b>{times(mult_u)}</b>; returning people: <b>{times(mult_r)}</b>,
+{esc(span)}. {g_body}</p>
 </div>
 </section>''')
 
+
 # ---- KPIs
-def kpi(name, value, now, before, note, invert=False):
-    change, direction = delta(now, before)
+def kpi(name, value, now, before, note, n=None):
+    change, direction_, why = delta(now, before, n)
     if change is None:
-        chip = '<span class="kd flat">no baseline</span>'
+        chip = f'<span class="kd flat">{esc(why)}</span>'
     else:
-        arrow = {"up": "&uarr;", "down": "&darr;", "flat": "&rarr;"}[direction]
-        cls = direction
-        if invert and direction in ("up", "down"):
-            cls = "down" if direction == "up" else "up"
-        chip = (f'<span class="kd {cls}">{arrow} {abs(change):.0f}% '
+        arrow = {"up": "&uarr;", "down": "&darr;", "flat": "&rarr;"}[direction_]
+        chip = (f'<span class="kd {direction_}">{arrow} {abs(change):.0f}% '
                 f'vs previous {days}d</span>')
     return (f'<div class="kpi"><div class="kn">{esc(name)}</div>'
             f'<div class="kv">{value}</div>{chip}'
             f'<div class="kw">{note}</div></div>')
 
+
+if cur_share:
+    share_val = (f"{pct(*cur_share):.0f}%" if cur_share[1] >= MIN_N
+                 else f"{num(cur_share[0])}/{num(cur_share[1])}")
+    share_kpi = kpi(
+        "Calendars shared", share_val,
+        pct(*cur_share), pct(*prev_share) if prev_share else None,
+        f"Of {num(cur_share[1])} calendars active in the last {k_weeks} settled "
+        f"week{'s' if k_weeks != 1 else ''}, {num(cur_share[0])} reached a second "
+        "person inside a week. Per calendar, not per person: someone with three "
+        "solo calendars is three unshared calendars.",
+        n=min(cur_share[1], prev_share[1]) if prev_share else None)
+else:
+    share_kpi = kpi("Calendars shared", "n/a", 0, None,
+                    "No settled weeks of calendar data in the payload.")
 
 A(f'''<section>
 <h2>The three numbers</h2>
@@ -801,17 +703,19 @@ A(f'''<section>
 calendars actually get shared, and how many calendars have a real audience.</p>
 <p class="lede"><b>Read the deltas against the trend above, not on their own.</b>
 A {days}-day window is short enough that a busy fortnight can invert the sign
-&mdash; these say what changed recently, not which way the product is going.</p>
+&mdash; these say what changed recently, not which way the product is going.
+Deltas are hidden when either window has fewer than {MIN_N} to compare.</p>
 <div class="kpis">
 {kpi("Returning people", num(cur_ret), cur_ret, prev_ret,
      "People who came back at least once. Total visitors flatters &mdash; most arrive once "
-     "and never return, so this is the population that could ever matter commercially.")}
-{kpi("Sharing ratio", f"{cur_ratio:.2f}&times;", cur_ratio, prev_ratio,
-     "Calendar viewers per homepage visitor. The free tier exists to be shared; "
-     "below 1.0 means calendars are being made but not sent to anyone.")}
+     "and never return, so this is the population that could ever matter commercially.",
+     n=min(cur_ret, prev_ret))}
+{share_kpi}
 {kpi("Calendars that stick", num(len(cur_sticky)), len(cur_sticky), len(prev_sticky),
-     "Calendars with 3+ people where someone returned. A calendar a group depends "
-     "on, not a link opened once.")}
+     f"Calendars with 3+ people in the window and traffic in "
+     f"{'2+ of its weeks' if k_weeks >= 2 else 'its week'}. A calendar a group "
+     "keeps coming back to, not a link opened once.",
+     n=min(len(cur_sticky), len(prev_sticky)))}
 </div>
 </section>''')
 
@@ -953,11 +857,11 @@ hard those same people are reloading it.</p>
 
 <div class="card">
   <h3>Seen by the most different people</h3>
-  {table(["Calendar", "People", "New", "Returning", "Views", "Views each"],
-         [[f"<code>{esc(r['path'])}</code>", num(r["users"]), num(r["new"]),
-           num(r["returning"]), num(r["views"]), num(r["per"], 1)]
+  {table(["Calendar", "People", "Views", "Views each"],
+         [[f"<code>{esc(r['path'])}</code>", num(r["users"]),
+           num(r["views"]), num(r["per"], 1)]
           for r in by_people],
-         ["l", "r", "r", "r", "r", "r"])}
+         ["l", "r", "r", "r"])}
 </div>
 
 <div class="card">
@@ -976,9 +880,9 @@ hard those same people are reloading it.</p>
 <p><b>Many people, few views each</b> is a calendar being discovered or shared
 around. <b>Few people, many views each</b> is a small group who depend on it
 &mdash; the strongest signal that a calendar matters to someone.</p>
-<p>"New" counts people first seen in this window, so a calendar whose users are
-mostly new is still spreading; one where few are new has settled into a regular
-audience.</p>
+<p>There is deliberately no new-versus-returning split per calendar: GA4
+credits a person's first visit to whichever page it happened on, so someone who
+first opened the homepage counts as "returning" on every calendar after it.</p>
 </div>
 </section>''')
 

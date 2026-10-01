@@ -4,6 +4,12 @@
 //
 //   node scripts/ga-token.js            # read-only scope (reporting)
 //   node scripts/ga-token.js --edit     # edit scope (creating dimensions)
+//   node scripts/ga-token.js --key=PATH # a specific key file
+//
+// Which key: --key=PATH, else $PASTECAL_GA_KEY, else the ONLY .json file in
+// internal/keys/. More than one there is an error rather than a guess -- it used
+// to take whichever readdir listed first, so adding a second key (a rotation, a
+// different project) silently changed which identity the reports ran as.
 //
 // Why this exists: gcloud's Application Default Credentials can no longer be
 // granted analytics.edit. Google blocks that scope on gcloud's built-in client
@@ -25,16 +31,42 @@ const path = require('path');
 const KEY_DIR = path.join(__dirname, '..', 'internal', 'keys');
 
 function findKey() {
+  const flag = process.argv.find((a) => a.startsWith('--key='));
+  const explicit = flag ? flag.slice('--key='.length) : process.env.PASTECAL_GA_KEY;
+  if (explicit) return path.resolve(explicit);
+
   let names;
   try {
     names = fs.readdirSync(KEY_DIR);
   } catch {
     fail(`No ${KEY_DIR} directory. This needs the service account key, which is
-gitignored -- see internal/keys/.`);
+gitignored -- see internal/keys/. Or pass --key=PATH / set PASTECAL_GA_KEY.`);
   }
-  const hit = names.find((n) => n.endsWith('.json'));
-  if (!hit) fail(`No .json service account key in ${KEY_DIR}.`);
-  return path.join(KEY_DIR, hit);
+  const keys = names.filter((n) => n.endsWith('.json')).sort();
+  if (!keys.length) fail(`No .json service account key in ${KEY_DIR}.`);
+  if (keys.length > 1) {
+    fail(`${keys.length} .json files in ${KEY_DIR} (${keys.join(', ')}); refusing to guess
+which service account to use. Remove the stale ones, or choose one with
+--key=PATH or PASTECAL_GA_KEY=PATH.`);
+  }
+  return path.join(KEY_DIR, keys[0]);
+}
+
+// A private key readable by other local users is a credential leak in waiting.
+// Warn rather than refuse: the fix (chmod 600) is the owner's call, and a hard
+// failure here would only push them to the weaker gcloud fallback.
+function checkPerms(keyPath) {
+  if (process.platform === 'win32') return;
+  let mode;
+  try {
+    mode = fs.statSync(keyPath).mode;
+  } catch {
+    return; // the read below reports a missing file properly
+  }
+  if (mode & 0o077) {
+    process.stderr.write(`WARNING: ${keyPath} is readable by other users ` +
+      `(mode ${(mode & 0o777).toString(8)}). Fix with: chmod 600 "${keyPath}"\n`);
+  }
 }
 
 function fail(msg) {
@@ -50,6 +82,7 @@ async function main() {
     : 'https://www.googleapis.com/auth/analytics.readonly';
 
   const keyPath = findKey();
+  checkPerms(keyPath);
   let key;
   try {
     key = JSON.parse(fs.readFileSync(keyPath, 'utf8'));
