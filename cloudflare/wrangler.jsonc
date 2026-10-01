@@ -22,6 +22,13 @@
   // New calendars from browsers (POST /cal/<id>): 10 a minute per IP.
   "ratelimits": [{ "name": "CREATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }],
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["CalendarRoom"] }],
+  // Copy-back to Firebase (see CalendarRoom). Inert until the FIREBASE_SA secret exists.
+  // COPY_BACK is the allowlist of calendars whose saves are written back: names, or "prefix-*".
+  "vars": {
+    "FIREBASE_DB_URL": "https://pastecal-web-default-rtdb.firebaseio.com",
+    "COPY_BACK": "test-cf-*,kalid"
+  },
   "observability": { "enabled": true }
-  // Secrets (wrangler secret put): IMPORT_SECRET -- lets the Firebase shadow copy write.
+  // Secrets (wrangler secret put): IMPORT_SECRET -- lets the Firebase shadow copy write;
+  // FIREBASE_SA -- a service account key (JSON) that lets the room write to Firebase.
 }

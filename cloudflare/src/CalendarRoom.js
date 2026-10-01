@@ -41,6 +41,7 @@ export const LIMITS = {
     maxField: 20000,             // longest real description: 5,641 chars
     maxTitle: 2000,
     maxMessage: 512 * 1024,      // one save message
+    copyBackDelayMs: 3000,       // after the last save, before writing to Firebase
     maxCreate: 1024 * 1024,      // the body of a first save (POST /cal/<id>)
 };
 
@@ -147,6 +148,7 @@ export class CalendarRoom extends DurableObject {
             let cal; try { cal = JSON.parse(text); } catch { return Response.json({ ok: false, error: 'bad json' }, { status: 400 }); }
             let id; try { id = decodeURIComponent(url.pathname.split('/')[2]); } catch { id = null; }
             const r = this.createCalendar(id, cal);
+            if (r.ok) await this.scheduleCopyBack();
             return Response.json(r, { status: r.ok ? 201 : r.status });
         }
         if (request.method === 'PUT' && url.pathname.endsWith('/import')) {
@@ -301,6 +303,89 @@ export class CalendarRoom extends DurableObject {
         return done({ v: s.v });
     }
 
+
+    // ---- copy back to Firebase ------------------------------------------------------------
+    // While pastecal.com still runs on Firebase, a save made here must reach it. A few seconds
+    // after the last save (one Durable Object alarm, so a burst is ONE write) the room:
+    //   1. reads Firebase's copy with its ETag and merges anything new from it (fromFirebase),
+    //   2. writes the current calendar back, only if the ETag still matches (a pc.com tab that
+    //      wrote in between makes it retry from step 1, as the browsers do themselves).
+    // `mirrored` is set to the intended state BEFORE the write, so when Firebase's function
+    // sends that same state back it finds nothing new and stores nothing -- no ping-pong.
+    // Off unless COPY_BACK (comma list: "kalid", "test-*", "*") names the calendar, and unless
+    // there is somewhere to write: FIREBASE_DB_URL, plus FIREBASE_SA (a service account key)
+    // for the real database.
+    copyBackAllowed() {
+        const id = this.state.id, list = String(this.env.COPY_BACK || '').split(',').map((x) => x.trim()).filter(Boolean);
+        if (!id || !this.env.FIREBASE_DB_URL) return false;
+        if (!this.firebaseLocal() && !this.env.FIREBASE_SA) return false;
+        return list.some((p) => p === '*' || (p.endsWith('*') ? id.startsWith(p.slice(0, -1)) : id === p));
+    }
+    firebaseLocal() { return /^http:\/\/(localhost|127\.0\.0\.1)[:/]/.test(this.env.FIREBASE_DB_URL || ''); }
+
+    async scheduleCopyBack() {
+        if (!this.copyBackAllowed()) return;
+        if (await this.ctx.storage.getAlarm() == null) await this.ctx.storage.setAlarm(Date.now() + LIMITS.copyBackDelayMs);
+    }
+
+    async firebaseToken() {
+        if (this.firebaseLocal()) return null;
+        if (this.token && this.token.exp > Date.now() + 60000) return this.token.value;
+        const sa = JSON.parse(this.env.FIREBASE_SA);
+        const b64 = (x) => btoa(typeof x === 'string' ? x : String.fromCharCode(...new Uint8Array(x))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        const now = Math.floor(Date.now() / 1000);
+        const head = b64(json({ alg: 'RS256', typ: 'JWT' }));
+        const claim = b64(json({ iss: sa.client_email, scope: 'https://www.googleapis.com/auth/firebase.database https://www.googleapis.com/auth/userinfo.email', aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600 }));
+        const pem = sa.private_key.replace(/-----[A-Z ]+-----|\s/g, '');
+        const key = await crypto.subtle.importKey('pkcs8', Uint8Array.from(atob(pem), (c) => c.charCodeAt(0)), { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
+        const sig = b64(await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(`${head}.${claim}`)));
+        const res = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `grant_type=${encodeURIComponent('urn:ietf:params:oauth:grant-type:jwt-bearer')}&assertion=${head}.${claim}.${sig}` });
+        const out = await res.json();
+        if (!out.access_token) throw new Error(`no Firebase token: ${out.error || res.status}`);
+        this.token = { value: out.access_token, exp: Date.now() + (out.expires_in || 3600) * 1000 };
+        return this.token.value;
+    }
+
+    async firebaseFetch(id, init = {}) {
+        const token = await this.firebaseToken();
+        const headers = { ...(init.headers || {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) };
+        return fetch(`${this.env.FIREBASE_DB_URL}/calendars/${encodeURIComponent(id)}.json`, { ...init, headers, signal: AbortSignal.timeout(15000) });
+    }
+
+    // Undefined has no meaning in Firebase; the browsers write null (CalendarDataService._sanitizeForFirebase).
+    static forFirebase(v) { return JSON.parse(JSON.stringify(v, (k, x) => (x === undefined ? null : x))); }
+
+    async alarm() {
+        const id = this.state.id;
+        if (!id || !this.copyBackAllowed()) return;
+        try {
+            for (let attempt = 1; attempt <= 4; attempt++) {
+                const got = await this.firebaseFetch(id, { headers: { 'X-Firebase-ETag': 'true' } });
+                if (!got.ok) throw new Error(`read HTTP ${got.status}`);
+                const etag = got.headers.get('ETag'), remote = await got.json();
+                if (remote && typeof remote === 'object') {
+                    const merged = this.fromFirebase(remote);                   // Firebase's newer edits first
+                    if (!merged.ok) throw new Error(`merge refused: ${merged.error}`);
+                }
+                const s = this.state, m = this.mirrored;
+                // Firebase has no copy yet (a calendar born here): always write. Otherwise skip if nothing differs.
+                if (remote && m && m.title === s.title && json(m.options) === json(s.options) && json(m.events) === json(s.events)) return;
+                const body = CalendarRoom.forFirebase({ ...(remote && typeof remote === 'object' ? remote : {}), id: s.id, title: s.title, options: s.options, events: s.events, lastEditedAt: s.lastEditedAt });
+                const before = this.mirrored;
+                this.setMirrored(s.title, s.options, s.events);                  // BEFORE the write: see above
+                const put = await this.firebaseFetch(id, { method: 'PUT', body: json(body), headers: { 'If-Match': etag || 'null_etag' } });
+                if (put.ok) return;
+                this.mirrored = before; this.setMeta('mirrored', before);
+                if (put.status !== 412) throw new Error(`write HTTP ${put.status}`);
+            }
+            throw new Error('Firebase kept changing; gave up after 4 tries');
+        } catch (e) {
+            console.error(`copyBack FAILED for ${id}: ${e.message}`);
+            await this.ctx.storage.setAlarm(Date.now() + 30000);                // try again; the state is safe here meanwhile
+        }
+    }
+
     // ---- WebSocket messages ---------------------------------------------------------------
     async webSocketMessage(ws, message) {
         if (typeof message !== 'string' || message.length > LIMITS.maxMessage) {
@@ -334,6 +419,7 @@ export class CalendarRoom extends DurableObject {
             this.bump('save', m.commands);
             ws.send(json({ t: 'ack', id: m.id, v: this.state.v }));
             this.broadcast({ t: 'change', v: this.state.v, commands: m.commands }, ws);
+            await this.scheduleCopyBack();
             return;
         }
         if (m.t === 'meta') {
@@ -351,6 +437,7 @@ export class CalendarRoom extends DurableObject {
             this.bump('meta', [{ type: 'meta', title: m.title, options: m.options }]);
             ws.send(json({ t: 'ack', id: m.id, v: s.v }));
             this.broadcast({ t: 'meta', v: s.v, title: s.title, options: s.options }, ws);
+            await this.scheduleCopyBack();
             return;
         }
         if (m.t === 'hello') {
