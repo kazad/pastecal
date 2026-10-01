@@ -23,12 +23,20 @@ if [ -z "${TOKEN:-}" ]; then
     exit 1
 fi
 
+# Anything but exactly --dry-run or nothing is refused: a typo like --dryrun used to be
+# ignored and deploy to production.
 QS=""
-[ "${1:-}" = "--dry-run" ] && QS="?dryRun=true"
+case "${1:-}" in
+    "") ;;
+    --dry-run) QS="?dryRun=true" ;;
+    *) echo "usage: scripts/deploy-rules.sh [--dry-run]"; exit 2 ;;
+esac
 
 echo "Uploading $RULES to $DB/.settings/rules.json$QS"
-RESP="$(curl -s -X PUT -w $'\n%{http_code}' \
-    -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+# The token goes in through a file descriptor, not argv, where any local user could read
+# it from ps. -S so a network failure says why instead of exiting silently under set -e.
+RESP="$(curl -sS -X PUT -w $'\n%{http_code}' \
+    -H @<(printf 'Authorization: Bearer %s\n' "$TOKEN") -H "Content-Type: application/json" \
     --data-binary @"$RULES" "$DB/.settings/rules.json$QS")"
 
 CODE="$(printf '%s' "$RESP" | tail -1)"

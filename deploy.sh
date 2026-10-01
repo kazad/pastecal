@@ -108,9 +108,14 @@ else
 fi
 
 # --- Deploy -------------------------------------------------------------------------------
-if [ -n "$TARGETS" ]; then
-    echo "Deploying only: $TARGETS"
-    firebase deploy --only "$TARGETS"
-else
-    firebase deploy
+# Database rules go through scripts/deploy-rules.sh: firebase-tools uploads an empty body
+# for them on this machine (see that script), so `firebase deploy` would fail on, or skip,
+# the rules that /history and the view bindings depend on.
+if [ -z "$TARGETS" ] || [[ "$TARGETS" == *database* ]]; then
+    ./scripts/deploy-rules.sh
+fi
+REST="$(printf '%s' "${TARGETS:-hosting,functions,remoteconfig}" | tr ',' '\n' | grep -v '^database$' | paste -sd, -)"
+if [ -n "$REST" ]; then
+    echo "Deploying: $REST"
+    firebase deploy --only "$REST"
 fi

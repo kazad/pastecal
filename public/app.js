@@ -35,8 +35,13 @@ function track(fn) {
     if (typeof window === 'undefined') return;
 
     const seen = new Set();   // one report per distinct failure, not one per repaint
+    // Firebase errors embed database paths, and a path names the calendar: strip the key
+    // after any of our roots so a slug never rides along to analytics.
+    const scrub = (m) => String(m).replace(
+        /\b(calendars(?:_readonly)?|history(?:_meta)?|slug_mappings|calendar_authors)([./])[^\s.\/'"]+/g, '$1$2<id>');
     const report = (kind, message, where) => {
         try {
+            message = scrub(message);
             const key = kind + '|' + message + '|' + where;
             if (seen.has(key)) return;
             if (seen.size > 20) return;   // a storm is one signal, not a thousand hits

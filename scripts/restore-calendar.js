@@ -48,11 +48,17 @@ const count = (c) => { const e = c && c.events; return Array.isArray(e) ? e.filt
                 `${String(e.eventCount).padStart(5)} events  -${e.removed} ~${e.changed}  "${e.title || ''}"`);
         }
         console.log('\nre-run with an entry key to inspect it, and --yes to restore it.');
+        console.log(`history from a deleted calendar whose slug was reused is under /history_archive/${slug}.`);
         process.exit(0);
     }
 
     const entry = hist[entryKey];
     if (!entry) { console.error(`no history entry ${entryKey} for ${slug}`); process.exit(1); }
+    if (!Array.isArray(entry.events)) {
+        // `added` entries record what arrived, not a snapshot: there is nothing to put back.
+        console.error(`entry ${entryKey} (${entry.kind}) holds no snapshot to restore`);
+        process.exit(1);
+    }
 
     console.log(`snapshot ${entryKey} (${new Date(entry.savedAt).toISOString()}, ${entry.kind}):`);
     console.log(`  title   : "${entry.title || ''}"`);
@@ -66,11 +72,14 @@ const count = (c) => { const e = c && c.events; return Array.isArray(e) ? e.filt
         process.exit(0);
     }
 
-    await db.ref(`calendars/${slug}`).update({
-        events: entry.events,
-        title: entry.title ?? '',
-        options: entry.options ?? {},
-    });
+    // Options are merged key by key, never replaced: a snapshot older than the calendar's
+    // read-only link has no publicViewId, and dropping it stops syncPublicView mirroring
+    // the restore to every /view/ link already shared.
+    const options = { ...(entry.options || {}) };
+    if (live && live.options && live.options.publicViewId) options.publicViewId = live.options.publicViewId;
+    const patch = { events: entry.events, title: entry.title ?? '' };
+    for (const [k, v] of Object.entries(options)) patch[`options/${k}`] = v;
+    await db.ref(`calendars/${slug}`).update(patch);
     const after = (await db.ref(`calendars/${slug}`).once('value')).val();
     console.log(`\nrestored. live now has ${count(after)} events, title "${after.title || ''}".`);
     process.exit(0);
