@@ -36,7 +36,7 @@ function makeManager(seed = {}) {
   const src = fs.readFileSync(
     path.join(__dirname, '../../public/utils/utils.js'), 'utf8');
   const body = src.slice(
-    src.indexOf('class RecentCalendars'),
+    src.indexOf('// Every localStorage-backed list'),
     src.indexOf('// Legacy calendar helpers'));
   const factory = new Function('localStorage', `${body}; return RecentCalendars;`);
   const RecentCalendars = factory(localStorage);
@@ -310,4 +310,147 @@ test('touchTitle does not reorder the list', () => {
   manager.touchTitle('first', 'First Renamed');
   assert.equal(manager.getAll()[0].id, 'second',
     'renaming an older calendar must not promote it to most-recent');
+});
+
+// --- Corrupt storage must never take the app down ----------------------------------------
+//
+// RecentCalendars is constructed in the app's created() hook. Any throw there blanks the
+// whole app, on every load, until the user clears site data. These are the exact values
+// that did it.
+
+for (const [key, value] of [
+  ['myCalendars', '{bad'],
+  ['myCalendars', '"x"'],
+  ['recentCalendars', '{"a":1}'],
+  ['recentCalendars', '[null]'],
+  ['recentCalendars', '[1, "s", [], {"title":"no id"}, {"id": 7}]'],
+  ['myCalendars', 'null'],
+]) {
+  test(`corrupt ${key}=${value} loads as empty and is repaired in storage`, () => {
+    const { manager, store } = makeManager({ [key]: value });
+    assert.deepEqual(manager.getAll(), []);
+    assert.deepEqual(JSON.parse(store[key]), [], 'bad value is rewritten, not re-tolerated');
+    manager.add('ok', 'OK');
+    assert.equal(manager.getAll()[0].id, 'ok', 'fully usable afterwards');
+  });
+}
+
+test('valid entries survive alongside corrupt ones', () => {
+  const { manager, store } = makeManager({
+    recentCalendars: JSON.stringify([null, { id: 'keep', title: 'Keep' }, 42]),
+  });
+  assert.deepEqual(manager.getAll().map((c) => c.id), ['keep']);
+  assert.deepEqual(JSON.parse(store.recentCalendars).map((c) => c.id), ['keep']);
+});
+
+// A localStorage whose reads and/or writes throw (blocked storage, full quota).
+function classWith(localStorage) {
+  const src = fs.readFileSync(path.join(__dirname, '../../public/utils/utils.js'), 'utf8');
+  const body = src.slice(src.indexOf('// Every localStorage-backed list'), src.indexOf('// Legacy calendar helpers'));
+  return new Function('localStorage', `${body}; return RecentCalendars;`)(localStorage);
+}
+
+test('blocked storage (getItem/setItem throw) loads as empty and add() does not throw', () => {
+  const boom = () => { throw new Error('SecurityError'); };
+  const RC = classWith({ getItem: boom, setItem: boom, removeItem: boom });
+  const m = new RC();
+  assert.deepEqual(m.getAll(), []);
+  assert.doesNotThrow(() => m.add('a', 'A'));
+  assert.equal(m.getAll()[0].id, 'a', 'in-memory list still correct');
+});
+
+test('a quota error on save does not throw into the caller', () => {
+  const store = {};
+  let full = false;
+  const RC = classWith({
+    getItem: (k) => (k in store ? store[k] : null),
+    setItem: (k, v) => { if (full) throw new Error('QuotaExceededError'); store[k] = String(v); },
+  });
+  const m = new RC();
+  m.add('x', 'X', true);
+  full = true;
+  assert.doesNotThrow(() => m.add('y', 'Y', true));
+});
+
+test('app.js records the new calendar in recents before clearing the draft', () => {
+  const src = fs.readFileSync(path.join(__dirname, '../../public/app.js'), 'utf8');
+  const add = src.indexOf('this.recentManager.add(slug, this.calendar.title, true);');
+  const clear = src.indexOf('this.clearLocalStorage();', add - 2000);
+  assert.ok(add > 0 && clear > add, 'add() must precede clearLocalStorage() in the create path');
+});
+
+// --- Read-only links are a kind, not a title suffix --------------------------------------
+
+test('a view visit is stored with kind "view" and a clean title', () => {
+  const { manager, store } = makeManager();
+  manager.visit('abc', 'Team Roster', { kind: 'view' });
+  const entry = JSON.parse(store.recentCalendars)[0];
+  assert.equal(entry.kind, 'view');
+  assert.equal(entry.title, 'Team Roster');
+});
+
+test('old " (View Only)" entries migrate to kind "view" on load', () => {
+  const { manager, store } = makeManager({
+    recentCalendars: JSON.stringify([
+      { id: 'abc', title: 'Team Roster (View Only)', mine: false, lastVisited: '2026-01-02T00:00:00Z' },
+      { id: 'def', title: 'Editable', mine: false, lastVisited: '2026-01-01T00:00:00Z' },
+    ]),
+  });
+  const [abc, def] = ['abc', 'def'].map((id) => manager.getAll().find((c) => c.id === id));
+  assert.equal(abc.kind, 'view');
+  assert.equal(abc.title, 'Team Roster');
+  assert.equal(def.kind, undefined);
+  assert.equal(JSON.parse(store.recentCalendars)[0].kind, 'view', 'migration is persisted');
+});
+
+test('kind survives a later add() that does not name it', () => {
+  const { manager } = makeManager();
+  manager.add('abc', 'R', false, 'view');
+  manager.add('abc', 'R2');
+  assert.equal(manager.getAll()[0].kind, 'view');
+});
+
+test('the dropdown links a view entry to /view/<id> and others to /<id>', () => {
+  const src = fs.readFileSync(path.join(__dirname, '../../public/components/NavigationDropdown.js'), 'utf8');
+  const NavigationDropdown = new Function(`${src}; return NavigationDropdown;`)();
+  const { pathFor } = NavigationDropdown.methods;
+  assert.equal(pathFor({ id: 'abc', kind: 'view' }), '/view/abc');
+  assert.equal(pathFor({ id: 'abc' }), '/abc');
+  assert.match(src, /:href="pathFor\(item\)"/, 'the link uses pathFor');
+});
+
+// --- visit(): one count per page load, shared by every subscription path ------------------
+
+test('visit() counts the first call and only refreshes the title after', () => {
+  const { manager } = makeManager({
+    recentCalendars: JSON.stringify([{ id: 'c', title: 'C', visitCount: 3, lastVisited: '2026-01-01T00:00:00Z' }]),
+  });
+  assert.deepEqual(manager.visit('c', 'C'), { firstLoad: true, visitCount: 4 });
+  for (let i = 0; i < 20; i++) {
+    assert.equal(manager.visit('c', 'C renamed').firstLoad, false, 'remote edits are not visits');
+  }
+  const entry = manager.getAll()[0];
+  assert.equal(entry.visitCount, 4);
+  assert.equal(entry.title, 'C renamed');
+});
+
+test('visit() on the /view/ path does not inflate visitCount on remote edits', () => {
+  const { manager } = makeManager();
+  for (let i = 0; i < 10; i++) manager.visit('ro', 'RO', { kind: 'view' });
+  assert.equal(manager.getAll()[0].visitCount, 1);
+});
+
+test('an id recorded by add() this page load is not counted again by visit()', () => {
+  const { manager } = makeManager();
+  manager.add('new', 'New', true);
+  assert.equal(manager.visit('new', 'New').firstLoad, false);
+  assert.equal(manager.getAll()[0].visitCount, 1);
+});
+
+test('both apps route both subscription paths through visit(), not add()', () => {
+  for (const file of ['../../public/app.js', '../../public/nativecal/app.js']) {
+    const src = fs.readFileSync(path.join(__dirname, file), 'utf8');
+    assert.ok(!src.includes('(View Only)`'), `${file}: no title-suffix kind`);
+    assert.equal((src.match(/this\.recentManager\.visit\(/g) || []).length, 2, `${file}: editable and /view/ paths`);
+  }
 });

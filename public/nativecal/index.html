@@ -215,7 +215,7 @@ Copyright (c) 2025 Kalid Azad
                                 class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
                                                                         <icon name="search" class="w-5 h-5"></icon>                                Search
                             </button>
-                            <button
+                            <button v-if="canEdit"
                                 @click="showMobileMenu = false; $refs.quickAddDialog && $refs.quickAddDialog.showDialog()"
                                 class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
                                 <span class="text-lg leading-none font-bold text-blue-500">+</span> Quick Add Event
@@ -257,7 +257,7 @@ Copyright (c) 2025 Kalid Azad
         <!-- Mobile FAB removed - mobile menu will open the central quick-add dialog directly -->
 
         <!-- Single dialog instance used by button triggers -->
-        <quick-add-dialog ref="quickAddDialog" @event-created="handleQuickAddEvent"></quick-add-dialog>
+        <quick-add-dialog ref="quickAddDialog" :can-edit="canEdit" @event-created="handleQuickAddEvent"></quick-add-dialog>
 
         <topbar class="hidden md:flex justify-between items-center pb-1 md:pb-3 text-sm">
             <!-- Left section -->

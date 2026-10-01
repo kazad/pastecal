@@ -82,20 +82,78 @@ Object.assign(Utils, {
     beforeUnmount,
     sanitizeUrl,
     parseDate,
+    safeReadArray,
 });
 window.Utils = Utils;
+
+// Every localStorage-backed list is read through safeReadArray.
+//
+// localStorage is shared, user-editable, quota-limited state written by every
+// build this browser has ever run. A value of `{bad`, `"x"`, `{"a":1}` or
+// `[null]` used to throw from JSON.parse / .filter / item.mine inside the app's
+// created() hook, which blanked the app on EVERY load until site data was
+// cleared -- a corrupt convenience list took down the whole product. The cause
+// is reading untrusted storage as if it were typed, so the fix is one reader
+// that types it: parse failures and non-arrays become [], each entry goes
+// through `normalize` (return null to drop it), and if the cleaned list differs
+// from what was stored the key is rewritten so the damage is repaired once
+// rather than re-tolerated on every load. Never throws.
+function safeReadArray(key, normalize = normalizeIdEntry) {
+    let raw = null;
+    try { raw = localStorage.getItem(key); } catch (e) { return []; }
+    if (raw === null) return [];
+    let parsed;
+    try { parsed = JSON.parse(raw); } catch (e) { parsed = null; }
+    const clean = Array.isArray(parsed)
+        ? parsed.map(entry => { try { return normalize(entry); } catch (e) { return null; } })
+            .filter(entry => entry !== null && entry !== undefined)
+        : [];
+    const cleanJson = JSON.stringify(clean);
+    if (cleanJson !== raw) {
+        try { localStorage.setItem(key, cleanJson); } catch (e) { /* quota/blocked: still return the clean list */ }
+    }
+    return clean;
+}
+
+// Default entry shape: an object with a non-empty string id.
+function normalizeIdEntry(entry) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return null;
+    if (typeof entry.id !== 'string' || !entry.id) return null;
+    return entry;
+}
+
+// Recents entries. Older builds recorded "this is a read-only link" only as a
+// " (View Only)" suffix on the title, so nothing could build the right URL
+// (/view/<slug>) from the entry. Kind is now a field; old entries are migrated
+// here, at the one place every entry is read.
+const VIEW_ONLY_SUFFIX = ' (View Only)';
+function normalizeRecentEntry(entry) {
+    entry = normalizeIdEntry(entry);
+    if (!entry) return null;
+    const out = { ...entry };
+    if (typeof out.title !== 'string' || !out.title) out.title = out.id;
+    if (out.title.endsWith(VIEW_ONLY_SUFFIX)) {
+        out.title = out.title.slice(0, -VIEW_ONLY_SUFFIX.length) || out.id;
+        out.kind = 'view';
+    }
+    if (out.kind !== 'view') delete out.kind;
+    return out;
+}
 
 // RecentCalendars manager (localStorage-backed)
 class RecentCalendars {
     constructor() {
+        // Ids whose visit has been counted during this page load. The calendar
+        // subscriptions re-fire on every remote edit; see visit().
+        this.counted = new Set();
         this.load();
     }
 
     load() {
         // Calendars you created live under their own key and are never evicted.
         // Calendars you merely visited stay in the capped `recentCalendars` list.
-        const mine = JSON.parse(localStorage.getItem('myCalendars')) || [];
-        const visited = JSON.parse(localStorage.getItem('recentCalendars')) || [];
+        const mine = safeReadArray('myCalendars', normalizeRecentEntry);
+        const visited = safeReadArray('recentCalendars', normalizeRecentEntry);
 
         // Older builds stored everything in `recentCalendars`. Anything already
         // flagged `mine` there is migrated across on first load so upgrading
@@ -114,11 +172,43 @@ class RecentCalendars {
     save() {
         const mine = this.items.filter(item => item.mine);
         const visited = this.items.filter(item => !item.mine);
-        localStorage.setItem('myCalendars', JSON.stringify(mine));
-        localStorage.setItem('recentCalendars', JSON.stringify(visited));
+        // Recents are a convenience. A full or blocked localStorage must never
+        // turn into an exception in the code path that opened or created a
+        // calendar; the in-memory list stays correct for this page either way.
+        try {
+            localStorage.setItem('myCalendars', JSON.stringify(mine));
+            localStorage.setItem('recentCalendars', JSON.stringify(visited));
+        } catch (e) {
+            console.warn('Could not save recent calendars', e);
+        }
     }
 
-    add(id, title, mine = false) {
+    /**
+     * Record that this page opened a calendar, from a live subscription callback.
+     *
+     * Both the editable and the /view/ subscriptions re-fire on every remote edit.
+     * Calling add() from them counted every edit by anyone as a visit, inflating
+     * visitCount and firing calendarReturned on the first real return. This is the
+     * one place that decides "first time this page load": the first call per id
+     * counts a visit, later calls only refresh the title.
+     *
+     * Returns { firstLoad, visitCount } so the caller can report return depth once.
+     */
+    visit(id, title, { kind } = {}) {
+        const firstLoad = !this.counted.has(id);
+        if (firstLoad) {
+            this.add(id, title, false, kind);
+        } else {
+            this.touchTitle(id, title);
+        }
+        const item = this.items.find(entry => entry.id === id);
+        return { firstLoad, visitCount: item ? item.visitCount : 0 };
+    }
+
+    add(id, title, mine = false, kind) {
+        // Anything that records an id (create, rename, visit) counts as this page
+        // load's visit, so a later subscription fire for it is not counted again.
+        this.counted.add(id);
         const existingItem = this.items.find(item => item.id === id);
         const wasPinned = existingItem ? existingItem.pinned : false;
         // `mine` is sticky: visiting a calendar you created must never demote it
@@ -142,6 +232,9 @@ class RecentCalendars {
             pinned: wasPinned,
             mine: isMine,
             visitCount: visitCount,
+            // 'view' marks a read-only link, which lives at /view/<id>. Kept from the
+            // existing entry when the caller doesn't say.
+            ...((kind || existingItem?.kind) === 'view' ? { kind: 'view' } : {}),
             ...(createdAt ? { createdAt } : {}),
             lastVisited: new Date().toISOString()
         });

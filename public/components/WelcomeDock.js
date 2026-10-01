@@ -57,6 +57,14 @@ const WelcomeDock = {
             timer: null,
             remaining: 12000,
             startedAt: 0,
+            // The 600ms reveal delay below.
+            revealTimer: null,
+            // Set by the first close for any reason (interaction, timeout, dismiss,
+            // unmount). It is the one answer to "should this dock still appear?".
+            // close() used to key off `visible`, which is false during the reveal
+            // delay -- so a click or keypress in that window was dropped and the
+            // dock appeared anyway over someone already using the calendar.
+            done: false,
         };
     },
 
@@ -64,7 +72,9 @@ const WelcomeDock = {
         // Let the calendar paint before anything appears over it. The whole
         // pitch is that the product loads instantly; showing this first would
         // undercut the one thing we're claiming.
-        setTimeout(() => {
+        this.revealTimer = setTimeout(() => {
+            this.revealTimer = null;
+            if (this.done) return;
             this.visible = true;
             this.startTimer();
         }, 600);
@@ -76,6 +86,11 @@ const WelcomeDock = {
     },
 
     beforeUnmount() {
+        // A dock unmounted before its reveal must not flip `visible` on a dead
+        // component or start a fade timer nothing will clear.
+        this.done = true;
+        if (this.revealTimer) clearTimeout(this.revealTimer);
+        this.revealTimer = null;
         this.clearTimer();
         document.removeEventListener('pointerdown', this.onFirstInteraction, true);
         document.removeEventListener('keydown', this.onFirstInteraction, true);
@@ -101,7 +116,7 @@ const WelcomeDock = {
         },
 
         resume() {
-            if (this.timer || !this.visible) return;
+            if (this.done || this.timer || !this.visible) return;
             if (this.remaining <= 0) return this.fade();
             this.startTimer();
         },
@@ -129,11 +144,20 @@ const WelcomeDock = {
         },
 
         close() {
-            if (!this.visible || this.leaving) return;
+            if (this.done) return;
+            this.done = true;
+            if (this.revealTimer) clearTimeout(this.revealTimer);
+            this.revealTimer = null;
             this.clearTimer();
-            this.leaving = true;
             document.removeEventListener('pointerdown', this.onFirstInteraction, true);
             document.removeEventListener('keydown', this.onFirstInteraction, true);
+            // Closed before it was ever shown: the person got on with the calendar
+            // during the reveal delay. Same outcome as moving on after it appeared.
+            if (!this.visible) {
+                this.$emit('dismissed');
+                return;
+            }
+            this.leaving = true;
             setTimeout(() => {
                 this.visible = false;
                 this.$emit('dismissed');

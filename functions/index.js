@@ -1362,6 +1362,16 @@ const HistoryService = {
     },
 };
 
+// ETag for a generated feed: a hash of the body, minus the DTSTAMP values. DTSTAMP
+// is "when this copy was generated" (a fresh timestamp per request), so hashing it
+// would make every response unique and no poller would ever get a 304. Everything
+// else in the body is a function of the calendar, so if it changed, subscribers
+// must get it.
+function icsEtag(icsBody) {
+    const stable = String(icsBody).replace(/^DTSTAMP:[^\r\n]*/gm, 'DTSTAMP:');
+    return '"' + crypto.createHash('sha1').update(stable).digest('hex') + '"';
+}
+
 exports.generateICSV2 = onRequest({ cors: true }, async (req, res) => {
     try {
         const pathWithoutICS = req.path.replace(/[.]ICS.*/i, '');
@@ -1386,12 +1396,14 @@ exports.generateICSV2 = onRequest({ cors: true }, async (req, res) => {
 
         const { data: calendarData } = await CalendarService.getCalendarData(cleanId, isReadOnly);
 
-        // ETag is a hash of the events data only, so it's stable across requests when
-        // nothing has changed and busts automatically the moment an event is added/edited/
-        // removed — this is what lets calendar-app pollers 304 instead of re-downloading the
-        // full feed every few minutes (the previous bandwidth spike investigation showed this
-        // route had no caching at all).
-        const etag = '"' + crypto.createHash('sha1').update(JSON.stringify(calendarData?.events ?? null)).digest('hex') + '"';
+        // The ETag lets calendar-app pollers 304 instead of re-downloading the full feed
+        // every few minutes. It is a hash of the generated feed itself (see icsEtag),
+        // the one source of truth for what subscribers get. It used to hash only the
+        // events, so a change that reaches the feed without touching an event -- renaming
+        // the calendar (X-WR-CALNAME), or any change to how the feed is rendered -- 304'd
+        // forever and never reached a subscriber.
+        const icsData = ICSService.generateICS(calendarData, cleanId);
+        const etag = icsEtag(icsData);
         // The raw user-agent and IP are only ever passed to recordIcsStat, which hashes
         // them into a device bucket. Neither is stored or logged: a full UA carries OS
         // build numbers, which together with a calendar id is close to identifying.
@@ -1406,8 +1418,6 @@ exports.generateICSV2 = onRequest({ cors: true }, async (req, res) => {
             await recordIcsStat(cleanId, { wasNotModified: true, userAgent, ip: clientIp });
             return;
         }
-
-        const icsData = ICSService.generateICS(calendarData, cleanId);
 
         console.log(`ICS served: id=${cleanId} readonly=${isReadOnly} bytes=${icsData.length} client=${family}`);
         res.set('Content-Type', 'text/calendar')
@@ -1665,7 +1675,7 @@ exports.lookupCalendar = onCall(async (request) => {
 // Exported for unit tests (test/unit/ics.test.js). Not used by deployed functions.
 exports._internal = {
     ICSService, CalendarService, SlugService, HistoryService, PublicViewService, IDService,
-    recordIcsStat, deviceBucket, clientFamily, clientIpOf, sweepOldDeviceBuckets,
+    recordIcsStat, icsEtag, deviceBucket, clientFamily, clientIpOf, sweepOldDeviceBuckets,
     deviceSaltSecret, sweepAllDeviceBuckets, DEVICE_SALT_PATH, SWEEP_CURSOR_PATH,
     _resetDeviceSaltCache: () => { deviceSaltSecretPromise = null; },
     sweepHistoryArchive, HISTORY_ARCHIVE_TTL_MS,
