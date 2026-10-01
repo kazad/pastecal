@@ -25,6 +25,7 @@ function loadDataService() {
     var firebase = { database: () => ({ ref: () => ({}) }) };
     var Utils = { debounce: (f) => f, uuidv4: () => Math.random().toString(36).slice(2) };
     var SlugManager = { autoCreateReadOnlyLink() {} };`, ctx);
+  vm.runInContext(fs.readFileSync(path.join(PUBLIC, 'models/caldate.js'), 'utf8'), ctx);
   vm.runInContext(fs.readFileSync(path.join(PUBLIC, 'models/Event.js'), 'utf8') +
     ';this.Event = Event;', ctx);
   vm.runInContext(fs.readFileSync(path.join(PUBLIC, 'services/CalendarDataService.js'), 'utf8') +

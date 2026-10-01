@@ -428,6 +428,11 @@ class CalendarDataService {
         const FIELDS = ['title', 'description', 'start', 'end', 'type', 'isAllDay',
             'repeat', 'recurrencerule', 'recurrenceID', 'recurrenceException'];
         const norm = (v) => (v === undefined || v === null || v === '') ? null : v;
+        // allDayDates is compared by the days it names (CalDate.allDayKey), not as a
+        // field: the same row with and without it (as a client that predates it writes)
+        // is one event when it covers the same days, and a correction that changes only
+        // the dates (possible at UTC-11/UTC+14, where the instants stay put) is an edit.
+        if (CalDate.allDayKey(a) !== CalDate.allDayKey(b)) return false;
         return FIELDS.every(f => {
             const x = norm(a[f]), y = norm(b[f]);
             // type is written as a number locally and can read back as a string.

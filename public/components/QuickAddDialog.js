@@ -129,7 +129,7 @@ const QuickAddDialog = {
             return !!this.fields.startDate && !this.fields.startTime && !this.fields.endTime;
         },
         // All-day events are stored as local midnight of their date, end exclusive (the
-        // legacy format, see Event.allDayDateUTC); the End date input shows the last day.
+        // legacy format, see CalDate.instantDate); the End date input shows the last day.
         startDateTime() {
             if (this.isAllDay) return this.toLocalDate(this.fields.startDate, 0);
             return this.toISO(this.fields.startDate, this.fields.startTime);

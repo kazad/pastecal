@@ -100,6 +100,11 @@ if [ "$(node_major node)" != "$REQUIRED_NODE_MAJOR" ]; then
     fi
 fi
 
+# --- Shared modules: functions/caldate.js -> public/models/caldate.js ---------------------
+# The ICS feed and the app must read dates identically; the browser copy is synced from
+# functions/ (the source of truth) before anything is deployed. See scripts/sync-shared.sh.
+./scripts/sync-shared.sh
+
 # --- Cache-bust static assets (hosting only; skip when deploying just functions) -----------
 if [ -z "$TARGETS" ] || [[ "$TARGETS" == *hosting* ]]; then
     ./bust_cache.sh

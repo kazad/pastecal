@@ -41,6 +41,7 @@ function loadApp(events) {
   const ctx = { console, JSON, Date, Map, Set, Math, Object, Array, String };
   vm.createContext(ctx);
   vm.runInContext('var Utils = { uuidv4: () => Math.random().toString(36).slice(2) };', ctx);
+  vm.runInContext(fs.readFileSync(path.join(PUBLIC, 'models/caldate.js'), 'utf8'), ctx);
   vm.runInContext(fs.readFileSync(path.join(PUBLIC, 'models/Event.js'), 'utf8') + ';this.Event = Event;', ctx);
   const names = ['planUndo', 'revertExdates', 'sameEvent', 'eventKey', 'deltaBetween',
     'isHandledHistory', 'reversedHistory'];

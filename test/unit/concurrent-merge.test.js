@@ -26,6 +26,8 @@ const path = require('node:path');
 
 const SRC = fs.readFileSync(
   path.join(__dirname, '../../public/services/CalendarDataService.js'), 'utf8');
+// In the browser caldate.js is a global loaded before the service (_sameEvent uses it).
+globalThis.CalDate = require('../../public/models/caldate.js');
 
 // Extract a real static method so a drift between test and source shows up as a failure.
 function extractStatic(name) {

@@ -36,7 +36,7 @@ const { loadRealEj } = require('./helpers/real-ej.js');
 const SRC = fs.readFileSync(path.join(__dirname, '../../public/app.js'), 'utf8');
 // The model the methods read all-day dates through, as the browser's global `Event`.
 const Event = new Function('Utils',
-  `${fs.readFileSync(path.join(__dirname, '../../public/models/Event.js'), 'utf8')}\nreturn Event;`)(
+  `${fs.readFileSync(path.join(__dirname, '../../public/models/caldate.js'), 'utf8')}\n${fs.readFileSync(path.join(__dirname, '../../public/models/Event.js'), 'utf8')}\nreturn Event;`)(
   { uuidv4: () => 'generated-uuid' });
 
 const METHODS = ['filterSlotFor', 'isEventVisible', 'syncColorFiltersLength',
@@ -453,7 +453,10 @@ test('an all-day series is expanded from the dates the grid shows, EXDATE and UN
 test('an all-day event ending at midnight is not counted in the week that midnight opens', () => {
   // Ends are exclusive: Sat Nov 7 all-day ends Sun Nov 8 00:00, which is the first instant
   // of WEEK, and the grid does not draw it there.
-  const sat = { type: 4, isAllDay: true, start: '2026-11-07T00:00:00', end: '2026-11-08T00:00:00' };
+  // As this client writes it: the local midnights, and the dates (which is what keeps it
+  // on Nov 7 at UTC-11, where the instants alone read as the next day).
+  const sat = { type: 4, isAllDay: true, start: '2026-11-07T00:00:00', end: '2026-11-08T00:00:00',
+    allDayDates: { start: '2026-11-07', end: '2026-11-08' } };
   assert.equal(hiddenIn(WEEK, sat), 0);
   assert.equal(hiddenIn({ start: L('2026-11-01T00:00:00'), end: WEEK.start }, sat), 1);
 });

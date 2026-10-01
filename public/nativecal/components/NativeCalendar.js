@@ -484,69 +484,23 @@ var NativeCalendar = {
             
             // console.log('[NativeCalendar] processedEvents computing. Total events:', props.events?.length);
 
+            // A series expands into its occurrences (Event.expandOccurrences: the series'
+            // own DTSTART, deleted and moved dates left out). A row with a recurrenceID is
+            // one edited occurrence of its parent -- it carries the parent's rule, but is
+            // drawn once, where it now is, never expanded into a second series.
             (props.events || []).forEach(event => {
-                if (!event.recurrencerule) {
+                if (!event.recurrencerule || event.recurrenceID || !window.rrule) {
                     results.push(event);
                     return;
                 }
-                
-                // console.log('[NativeCalendar] Found recurring event:', event.title, event.recurrencerule);
-
-                if (window.rrule) {
-                    try {
-                        // Ensure we're accessing the library correctly
-                        // rrule library exports might vary (rrule.RRule or just RRule global)
-                        const RRule = window.rrule.RRule || window.RRule;
-                        const rrulestr = window.rrule.rrulestr || window.rrulestr;
-                        
-                        if (!RRule || !rrulestr) {
-                            console.error('[NativeCalendar] RRule library not found correctly', { RRule: !!RRule, rrulestr: !!rrulestr });
-                            results.push(event);
-                            return;
-                        }
-
-                        // "FREQ=WEEKLY;UNTIL=..."
-                        // Handle cases where RRULE: might already be present or not
-                        let ruleString = event.recurrencerule;
-                        
-                        // Clean up potentially trailing semicolons or whitespace and empty segments
-                        ruleString = ruleString.split(';').filter(part => part.trim() !== '').join(';');
-                        
-                        ruleString = ruleString.startsWith("RRULE:") 
-                            ? ruleString 
-                            : "RRULE:" + ruleString;
-                            
-                        const options = rrulestr(ruleString).options;
-                        options.dtstart = new Date(event.start);
-                        
-                        const rule = new RRule(options);
-                        
-                        const dates = rule.between(rangeStart, rangeEnd, true);
-                        
-                        const duration = event.end - event.start;
-                        
-                        dates.forEach(date => {
-                             // Virtual event
-                             const start = date.getTime();
-                             const end = start + duration;
-                             results.push({
-                                 ...event,
-                                 start,
-                                 end,
-                                 id: event.id + '_' + start,
-                                 originalEventId: event.id,
-                                 isRecurringInstance: true
-                             });
-                        });
-                    } catch (e) {
-                        console.warn("[NativeCalendar] Recurrence error for event", event.title, e);
-                        results.push(event);
-                    }
-                } else {
+                try {
+                    results.push(...Event.expandOccurrences(event, rangeStart, rangeEnd, window.rrule));
+                } catch (e) {
+                    console.warn("[NativeCalendar] Recurrence error for event", event.title, e);
                     results.push(event);
                 }
             });
-            
+
             return results;
         });
 
