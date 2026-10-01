@@ -47,25 +47,6 @@ class CalendarDataService {
     static onSyncRefused = null;   // a write was refused by the gate below before reaching the network
     static onSyncShape = null;     // every write: how many events it carried vs the last snapshot
 
-    // A user action that legitimately removes events says so here before the watcher
-    // fires. The gate in sync() treats an undeclared removal as a bug, because every user
-    // path that removes an event goes through the scheduler and declares itself.
-    //
-    // The declaration carries HOW MANY events the action removed, and is consumed by the
-    // first write that follows. A bare time window was wrong: deleting one event opened a
-    // 5s hole through which a buggy path could wipe the whole calendar unchallenged
-    // (measured -- the server went to zero). Authorising a removal of exactly N means a
-    // one-event delete cannot license a 40-event wipe. The short deadline remains only so
-    // a declaration cannot sit around indefinitely waiting for an unrelated write.
-    // Declarations ACCUMULATE until a write consumes them. The debounce coalesces every
-    // edit inside a rolling 500ms window into one sync, so several deletions in quick
-    // succession arrive as a single write removing N -- and a declaration that merely
-    // overwrote would authorise only the last one and refuse the user's own deletions.
-    //
-    // `keys` names WHICH rows (by _eventKey) the action removed. A count alone cannot say
-    // which of the missing rows were deleted on purpose, and the refusal path below once
-    // guessed by baseline order -- re-sending a deletion of an event the user never
-    // touched. Without keys (null), nothing is treated as a deliberate removal there.
     // Which browser made a write. Stamped as top-level `_writer` on every calendar write,
     // and the history trigger copies it onto the entry: Cmd+Z then only reaches for this
     // browser's own entries, and the server only coalesces a drag's writes when one
@@ -91,7 +72,7 @@ class CalendarDataService {
     // Server bookkeeping on the calendar node, not calendar data. Stripped from every
     // snapshot before the app sees it: import() would otherwise copy `_writer` onto the
     // calendar, and every later write would carry another browser's id back as ours.
-    static META_KEYS = ['_writer'];
+    static META_KEYS = ['_writer', '_undoOf', '_gesture'];
     static _withoutMeta(calendar) {
         if (!calendar || typeof calendar !== 'object') return calendar;
         if (!this.META_KEYS.some(k => k in calendar)) return calendar;
@@ -116,20 +97,74 @@ class CalendarDataService {
         return JSON.stringify(canon(a) ?? null) === JSON.stringify(canon(b) ?? null);
     }
 
-    static _intent = null;
-    static declareIntent(removing = 1, keys = null) {
-        const now = Date.now();
-        const live = this._intent && now - this._intent.at < 5000 ? this._intent : null;
-        const ours = Array.isArray(keys) ? keys.map(String) : null;
-        // One declaration with unknown keys makes the whole accumulated set unknown.
-        const merged = !live ? ours
-            : (live.keys && ours ? [...live.keys, ...ours] : null);
-        this._intent = { removing: (live ? live.removing : 0) + removing, keys: merged, at: now };
+    // A user action that removes events NAMES the rows it removes (by _eventKey) here,
+    // before the watcher fires. The gate in sync() refuses any row that leaves the
+    // calendar without being named: every user path that removes an event declares it,
+    // so an unnamed removal is a bug in a save path (issues #42-#44).
+    //
+    // By name, never by count. A count authorised the NET shrink, so a write that dropped
+    // B while adding D passed, declaring A licensed losing B, and a delete+add netting
+    // zero left the declaration live for the next buggy write to spend.
+    //
+    // A declared key belongs to the pending change, not to a clock: it stays until a
+    // write that was computed with it COMMITS, which either carried the deletion to the
+    // server or (the row being back, e.g. undone) superseded it. A 5s expiry instead
+    // refused the user's own delete whenever they kept typing past it -- the debounce
+    // restarts on every keystroke -- and then lost the typing too.
+    static _pendingDeletes = new Set();
+    static declareIntent(keys) {
+        if (!Array.isArray(keys)) {
+            console.error('[CalendarDataService] declareIntent takes the removed rows\' keys');
+            return;
+        }
+        for (const k of keys) this._pendingDeletes.add(String(k));
     }
-    static _takeIntent() {
-        const i = this._intent;
-        this._intent = null;
-        return (i && Date.now() - i.at < 5000) ? i : null;
+
+    // What a write IS, for the history trigger, which copies these onto the entry:
+    //   _undoOf  -- the history entry keys (or, for this session's own action whose entry
+    //               key is not known yet, its gesture id) that this write reverses. Cmd+Z
+    //               reads it back from /history, so "that was an undo" survives a reload
+    //               instead of being guessed from timing.
+    //   _gesture -- one user action: a drag/resize from its start to its final save, or a
+    //               single scheduler action. The server folds saves of one gesture into one
+    //               entry, instead of folding anything inside a 60s window.
+    // Like _writer, every write sets both, null when absent: the node keeps the last
+    // value, so a write that left them out would inherit the previous write's.
+    static _pendingUndoOf = [];
+    static markUndo(ids) {
+        for (const id of ids || []) {
+            if (id && !this._pendingUndoOf.includes(String(id))) this._pendingUndoOf.push(String(id));
+        }
+    }
+    static _gesture = null;   // { id, ending }
+    static _newId(prefix) {
+        return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+    }
+    /** A drag or resize started: its saves, through the final one, carry this id. */
+    static beginGesture() {
+        this._gesture = { id: this._newId('g'), ending: false };
+        return this._gesture.id;
+    }
+    /** The gesture ended: the next write is its final save, and then it is cleared. */
+    static endGesture() {
+        if (this._gesture) this._gesture.ending = true;
+    }
+    /** The gesture a user action belongs to -- the open drag, or a one-save gesture. */
+    static actionGesture() {
+        if (!this._gesture) this._gesture = { id: this._newId('g'), ending: true };
+        return this._gesture.id;
+    }
+    // Read once per write that is actually sent; an ended gesture and the undo marks are
+    // spent by it.
+    static _takeWriteMeta() {
+        const g = this._gesture;
+        const meta = {
+            _gesture: g ? g.id : null,
+            _undoOf: this._pendingUndoOf.length ? [...this._pendingUndoOf] : null,
+        };
+        if (g && g.ending) this._gesture = null;
+        this._pendingUndoOf = [];
+        return meta;
     }
 
     // `base` is the server's copy as of the last snapshot. An incomplete row the server
@@ -178,8 +213,12 @@ class CalendarDataService {
         return { ...calendar, events: kept };
     }
 
-    // subscribe to live updates
-    static subscribe(slug, callback) {
+    // subscribe to live updates.
+    //
+    // `localCopy` returns the calendar the app is showing (and editing). Each snapshot is
+    // delivered already merged with it -- see _receive -- so an app only ever imports
+    // what it is handed. Without it, snapshots arrive as the server sent them.
+    static subscribe(slug, callback, localCopy = null) {
         if (!slug) return;
 
         // First try exact case match
@@ -187,7 +226,7 @@ class CalendarDataService {
             var calendar = this._withoutMeta(data.val());
             if (calendar && calendar.id) {
                 this.connected = slug;
-                this._rememberSnapshot(calendar);
+                calendar = this._receive(calendar, localCopy);
 
                 this.validateCalendarData(calendar);
                 callback(calendar);
@@ -201,7 +240,7 @@ class CalendarDataService {
 
                     if (result.data.found && !result.data.isReadOnly) {
                         // Found as editable calendar - subscribe with correct case
-                        this._subscribeExact(result.data.actualSlug, callback);
+                        this._subscribeExact(result.data.actualSlug, callback, localCopy);
                     } else {
                         // Calendar doesn't exist as editable
                         callback(null);
@@ -222,13 +261,13 @@ class CalendarDataService {
     }
 
     // internal method for exact subscription without fallback
-    static _subscribeExact(slug, callback) {
+    static _subscribeExact(slug, callback, localCopy = null) {
         if (slug) {
             this.db.child(slug).on('value', data => {
                 var calendar = this._withoutMeta(data.val());
                 if (calendar && calendar.id) {
                     this.connected = slug;
-                    this._rememberSnapshot(calendar);
+                    calendar = this._receive(calendar, localCopy);
 
                     this.validateCalendarData(calendar);
                     callback(calendar);
@@ -254,7 +293,7 @@ class CalendarDataService {
     }
 
     // find calendar (with redirect logic) and subscribe
-    static async findAndSubscribe(slug, callback) {
+    static async findAndSubscribe(slug, callback, localCopy = null) {
         if (!slug) {
             console.warn('findAndSubscribe called with empty slug');
             callback(null);
@@ -276,11 +315,11 @@ class CalendarDataService {
                     return; // Don't call callback, we're redirecting
                 } else {
                     // Found as editable calendar - subscribe with correct case
-                    this._subscribeExact(result.data.actualSlug, callback);
+                    this._subscribeExact(result.data.actualSlug, callback, localCopy);
                 }
             } else {
                 // Calendar doesn't exist in any case - try direct subscription (might be new)
-                this._subscribeExact(slug, callback);
+                this._subscribeExact(slug, callback, localCopy);
             }
         } catch (error) {
             console.error('Calendar lookup failed:', error);
@@ -291,7 +330,7 @@ class CalendarDataService {
                 stack: error.stack
             });
             // Fall back to direct subscription
-            this._subscribeExact(slug, callback);
+            this._subscribeExact(slug, callback, localCopy);
         }
     }
 
@@ -309,25 +348,57 @@ class CalendarDataService {
     }
 
 
-    // The server state as of the last snapshot we received, keyed by calendar id. sync()
-    // diffs against this to work out what THIS client actually changed, so a write carries
-    // one person's edit instead of their entire view of the calendar.
-    static _lastSeen = {};
+    // The baseline: per calendar id, the server's events as the LOCAL COPY last
+    // incorporated them. Both 3-way merges diff against it -- the outbound one in sync()
+    // (what did this client change?) and the inbound one in _receive (what did the
+    // server change?) -- because both ask what the local copy derives from.
+    //
+    // There used to be two globals instead: _lastSeen, advanced by every snapshot, and
+    // _previousSeen, "the one before", which each app had to remember to use. nativecal
+    // never did -- it imported snapshots bare, overwriting edits still in the debounce
+    // window and resurrecting deletions not yet sent -- and the main app's own merge read
+    // whichever baseline happened to be current when its callback ran. The baseline now
+    // moves only when the local copy actually takes in a server state.
+    static _base = {};
 
-    // The baseline as it stood BEFORE the snapshot currently being delivered. The inbound
-    // merge needs it: by the time a subscription callback runs, _lastSeen has already been
-    // advanced to the new snapshot, and diffing local against that makes every local row
-    // look like an edit -- which reinstates our stale copy over the change that just
-    // arrived, silently reverting the other person's work.
-    static _previousSeen = {};
+    // Calendars whose server state reaches the local copy through a live subscription.
+    // For those, every state a write commits is also delivered as a snapshot (Firebase
+    // raises the value event for a transaction's result), and _receive moves the
+    // baseline. Without one, the commit itself is the only news, so sync() records it.
+    static _live = new Set();
 
-    // Remember what the server just told us. Called from every subscription callback.
+    static _hasBase(id) {
+        return Object.prototype.hasOwnProperty.call(this._base, id);
+    }
+
+    // Record a server state as the baseline without merging (no local copy to merge:
+    // a write's commit with no subscription, or a test standing in for one).
     static _rememberSnapshot(calendar) {
         if (!calendar || !calendar.id) return;
-        if (Object.prototype.hasOwnProperty.call(this._lastSeen, calendar.id)) {
-            this._previousSeen[calendar.id] = this._lastSeen[calendar.id];
+        this._base[calendar.id] = JSON.parse(JSON.stringify(this._eventList(calendar.events)));
+    }
+
+    // One inbound snapshot, as the local copy should take it in: the 3-way merge of the
+    // baseline, the local copy (with any edits not yet written), and the incoming
+    // server state. The incoming state becomes the baseline, because after the merge the
+    // local copy holds all of it plus only its own pending changes.
+    //
+    // Only events are merged. Title and options are single fields whose later write is
+    // the intended one, as on the write path.
+    static _receive(calendar, localCopy = null) {
+        const id = calendar.id;
+        this._live.add(id);
+        const incoming = this._eventList(calendar.events);
+        let local = null;
+        try { local = typeof localCopy === 'function' ? localCopy() : null; } catch (e) { local = null; }
+        let events = incoming;
+        // Same calendar only: an app still showing its homepage draft has no edits to
+        // this one. And no baseline means nothing to diff against -- the first snapshot.
+        if (local && local.id === id && this._hasBase(id)) {
+            events = this._mergeEvents(this._base[id], this._eventList(local.events), incoming);
         }
-        this._lastSeen[calendar.id] = JSON.parse(JSON.stringify(this._eventList(calendar.events)));
+        this._base[id] = JSON.parse(JSON.stringify(incoming));
+        return { ...calendar, events: JSON.parse(JSON.stringify(events)) };
     }
 
     // Firebase returns an array with holes as an object keyed by index ({"0":A,"2":B}),
@@ -467,8 +538,8 @@ class CalendarDataService {
             // detectable (correct -- we have no evidence anything was deleted). Deletes
             // start working as soon as the first snapshot lands, which is immediate in
             // practice since sync() only runs on a connected calendar.
-            const known = Object.prototype.hasOwnProperty.call(this._lastSeen, calendar.id);
-            const base = known ? this._eventList(this._lastSeen[calendar.id]) : [];
+            const known = this._hasBase(calendar.id);
+            const base = known ? this._eventList(this._base[calendar.id]) : [];
             // Filtered against the baseline, so incomplete rows the server already holds
             // are carried through untouched and both sides of the gate count them alike.
             const safe = this._dropIncompleteEvents(calendar, base);
@@ -478,47 +549,41 @@ class CalendarDataService {
             rest._writer = this.writerId;
 
             // Report the shape of every write, and refuse any removal the user did not
-            // ask for. Every path that legitimately removes an event runs through the
-            // scheduler and declares how many it is removing, so an undeclared shrink --
-            // or one larger than was declared -- is a bug in a save path, which is exactly
-            // what issues #42-#44 were.
+            // name. Every path that legitimately removes an event declares the rows it
+            // removes (declareIntent), so a row that leaves without being named is a bug
+            // in a save path -- exactly what issues #42-#44 were.
+            //
+            // Row by row: `gone` is the baseline's rows the local copy no longer holds.
+            // Counting (before - after) let an addition hide a loss and let any declared
+            // row license any other.
             //
             // The refusal is deliberately not silent: it leaves the screen showing fewer
             // events than the server holds, so the caller is handed the server's copy to
             // put back (see onSyncRefused) rather than the user being stranded looking at
             // an empty calendar.
+            const key = (e) => this._eventKey(e);
             const prevEvents = base;
-            const prevCount = prevEvents.length;
-            const nextCount = localEvents.length;
-            const removing = prevCount - nextCount;
-            const intent = removing > 0 ? this._takeIntent() : null;
+            const localByKey = new Map(localEvents.map(e => [key(e), e]));
+            const gone = prevEvents.map(key).filter(k => !localByKey.has(k));
+            // The declarations this write is computed with -- and resolves, once it commits.
+            const declared = new Set(this._pendingDeletes);
+            const unnamed = gone.filter(k => !declared.has(k));
             if (typeof this.onSyncShape === 'function') {
                 try {
-                    this.onSyncShape({ before: prevCount, after: nextCount, intent: !!intent });
+                    this.onSyncShape({ before: prevEvents.length, after: localEvents.length,
+                        intent: gone.length > 0 && !unnamed.length });
                 } catch (e) { /* never rethrow */ }
             }
-            if (known && removing > 0 && (!intent || removing > intent.removing)) {
-                console.error(`[CalendarDataService] refused to save: this write removes ${removing} of ${prevCount} events` +
-                    (intent ? ` but only ${intent.removing} were deleted by the user` : ' and no deletion was made'));
-                // Only the unexplained REMOVALS are reverted; everything else this write
-                // carried is the user's work and is kept: rows it added, and its edits to
-                // rows that still exist. Restoring the bare baseline silently dropped an
-                // event quick-added or a title typed in the same 500ms debounce window.
-                //
-                // A removal is deliberate only if the delete that declared it named that
-                // row. Guessing from the count (the first N missing rows in baseline
-                // order) re-sent a deletion of an event the user never touched and
-                // resurrected the one they did; with no names, restore everything and let
-                // the user redo the delete.
-                const key = (e) => this._eventKey(e);
-                const localByKey = new Map(localEvents.map(e => [key(e), e]));
-                const baseKeys = new Set(prevEvents.map(key));
-                const declared = new Set(intent && intent.keys ? intent.keys : []);
-                const deliberatelyGone = new Set(prevEvents.map(key)
-                    .filter(k => !localByKey.has(k) && declared.has(k)));
-                const recovered = prevEvents.filter(e => !localByKey.has(key(e)) && !deliberatelyGone.has(key(e)));
-                const kept = prevEvents.filter(e => !deliberatelyGone.has(key(e)))
+            if (known && unnamed.length) {
+                console.error(`[CalendarDataService] refused to save: this write removes ${unnamed.length} of ` +
+                    `${prevEvents.length} events that no deletion named`);
+                // Only the unnamed removals are reverted; everything else this write
+                // carried is the user's work and is kept: rows it added, its edits to
+                // rows that still exist, and the deletions the user named.
+                const lost = new Set(unnamed);
+                const kept = prevEvents.filter(e => localByKey.has(key(e)) || lost.has(key(e)))
                     .map(e => localByKey.get(key(e)) || e);
+                const baseKeys = new Set(prevEvents.map(key));
                 const added = localEvents.filter(e => !baseKeys.has(key(e)));
                 const restore = JSON.parse(JSON.stringify([...kept, ...added]));
                 if (typeof this.onSyncRefused === 'function') {
@@ -526,25 +591,24 @@ class CalendarDataService {
                     // against the baseline reads every dropped row as deleted-by-us and
                     // drops it again), which also puts local back in step with the gate.
                     try {
-                        this.onSyncRefused({ before: prevCount, removing, recovered: recovered.length,
-                            events: JSON.parse(JSON.stringify(restore)) });
+                        this.onSyncRefused({ before: prevEvents.length, removing: gone.length,
+                            recovered: unnamed.length, events: JSON.parse(JSON.stringify(restore)) });
                     } catch (e) { /* never rethrow */ }
                 }
-                // What the user really did -- named deletions, additions, edits -- is still
-                // owed to the server, and the refused write consumed the declaration.
-                // Re-declare exactly the named deletions and send the corrected list now;
-                // otherwise the work is lost, or local sits below the baseline and every
-                // later edit is refused until a reload.
-                const edited = prevEvents.some(e => localByKey.has(key(e))
-                    && !this._sameEvent(e, localByKey.get(key(e))));
-                if (deliberatelyGone.size || added.length || edited) {
-                    this._intent = prevCount > restore.length
-                        ? { removing: prevCount - restore.length, keys: [...deliberatelyGone], at: Date.now() }
-                        : null;
-                    this.sync({ ...calendar, events: restore });
-                }
+                // What the user really did is still owed to the server: named deletions,
+                // additions, edits, and title/options. Send the corrected list now --
+                // ALWAYS, not only when events differ: a refused write also carried
+                // everything else typed in its debounce window (notes, title), and that
+                // must not be lost with the bad removal. The declarations were not spent
+                // (nothing committed), and the corrected list removes only named rows, so
+                // it cannot be refused again.
+                this.sync({ ...calendar, events: restore });
                 return;
             }
+
+            // Stamped on the write that is actually sent, so a refused attempt does not
+            // spend them.
+            Object.assign(rest, this._takeWriteMeta());
 
             // Filled by the transaction body, read once it commits. The body can run more
             // than once under contention, so only the committed run's value is reported.
@@ -564,7 +628,7 @@ class CalendarDataService {
                     // node is cached, so a null here means the server really has nothing.
                     if (current === null) {
                         if (known) return; // abort; reported by the completion callback
-                        return this._sanitizeForFirebase({ ...this._withoutMeta(safe), _writer: this.writerId });
+                        return this._sanitizeForFirebase({ ...this._withoutMeta(safe), ...rest, events: safe.events });
                     }
                     const remoteEvents = this._eventList(current.events);
                     // options is a bag of independent keys, not one field, so a shallow spread
@@ -586,12 +650,17 @@ class CalendarDataService {
                         events: this._mergeEvents(base, localEvents, remoteEvents),
                     };
                     if (mergedOptions) next.options = mergedOptions;
-                    // A write that changes nothing else leaves `_writer` as it was. Nothing
-                    // happened to attribute -- and nativecal echoes every snapshot it
-                    // imports back through sync(), so two open browsers would otherwise
+                    // A write that changes nothing else leaves the bookkeeping as it was.
+                    // Nothing happened to attribute -- and nativecal echoes every snapshot
+                    // it imports back through sync(), so two open browsers would otherwise
                     // flip the id back and forth, each flip a fresh snapshot, forever.
-                    if (this._sameNode({ ...next, _writer: null }, { ...current, _writer: null })) {
-                        next._writer = current._writer ?? null;
+                    const noMeta = (n) => {
+                        const o = { ...n };
+                        for (const k of this.META_KEYS) o[k] = null;
+                        return o;
+                    };
+                    if (this._sameNode(noMeta(next), noMeta(current))) {
+                        for (const k of this.META_KEYS) next[k] = current[k] ?? null;
                     }
                     return next;
                 } catch (err) {
@@ -612,8 +681,16 @@ class CalendarDataService {
                         try { this.onSyncFailed(failure); } catch (e) { /* never rethrow */ }
                     }
                 } else if (snapshot) {
-                    // Our write is now the baseline for the next diff.
-                    this._rememberSnapshot({ id: calendar.id, events: snapshot.val()?.events });
+                    // The declarations this write was computed with are settled: each
+                    // deletion it named is now on the server, or the row was back in the
+                    // write and the deletion is moot. Declarations made since stay.
+                    for (const k of declared) this._pendingDeletes.delete(k);
+                    // Without a live subscription the commit is the only news of the
+                    // server's state; with one, the value event for this very state has
+                    // already been merged into the local copy and moved the baseline.
+                    if (!this._live.has(calendar.id)) {
+                        this._rememberSnapshot({ id: calendar.id, events: snapshot.val()?.events });
+                    }
 
                     const m = pendingMerge;
                     if (m && (m.addedByOthers || m.removedByOthers || m.changedByOthers)
@@ -723,7 +800,9 @@ class CalendarDataService {
     }
 
     static update(key, value) {
-        return this.db.child(key).update(this._sanitizeForFirebase({ ...value, _writer: this.writerId }));
+        // Not an undo and not part of a gesture: clear what the previous write said.
+        return this.db.child(key).update(this._sanitizeForFirebase(
+            { ...value, _writer: this.writerId, _undoOf: null, _gesture: null }));
     }
 
     static delete(key) {

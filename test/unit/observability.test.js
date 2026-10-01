@@ -95,7 +95,7 @@ test('sync_merged fires only for concurrent server changes, never for our own ed
 
   // Single client: add, then delete, then edit.
   S.sync({ id: 'c', events: [ev('A', 'A'), ev('B', 'B'), ev('C', 'C'), ev('MINE', 'mine')] });
-  S.declareIntent(1);
+  S.declareIntent(['C|']);
   S.sync({ id: 'c', events: [ev('A', 'A'), ev('B', 'B'), ev('MINE', 'mine')] });
   S.sync({ id: 'c', events: [ev('A', 'A2'), ev('B', 'B'), ev('MINE', 'mine')] });
   assert.deepEqual(merges, [], 'our own adds, deletes and edits are not collisions');

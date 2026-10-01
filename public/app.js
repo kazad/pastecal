@@ -359,12 +359,10 @@ const CalendarVueApp = {
 
         // Undo bookkeeping, deliberately non-reactive. _sessionUndo is this tab's own
         // undoable actions (newest last), so Cmd+Z right after an action undoes THAT
-        // action even before its /history entry exists. _handledUndo and
-        // _undoneHistoryKeys let the /history fallback skip changes this session already
-        // undid and the entries its own undos produced -- otherwise a second Cmd+Z just
-        // re-applies the change the first one reversed.
+        // action even before its /history entry exists. _undoneHistoryKeys holds the
+        // history keys and gesture ids this session has undone, for the moments before
+        // the undo's own /history entry (which names them in `undoOf`) has landed.
         this._sessionUndo = [];
-        this._handledUndo = [];
         this._undoneHistoryKeys = new Set();
 
         // Initialize recents
@@ -441,6 +439,8 @@ const CalendarVueApp = {
             })();
         } else if (this.urlslug) {
             // default: pastecal.com/ID
+            // The third argument is the local copy: every snapshot arrives already merged
+            // with it, so edits still in the debounce window survive (see _receive).
             CalendarDataService.findAndSubscribe(this.urlslug, (c) => {
                 if (c) {
                     // Calendar found
@@ -494,7 +494,7 @@ const CalendarVueApp = {
                     this.isExisting = false;
                 }
                 this.isLoading = false;
-            });
+            }, () => this.calendar);
         } else {
             // homepage - no remote calendar to load
             this.isExisting = false;
@@ -641,6 +641,14 @@ const CalendarVueApp = {
 
         // live binding to events
         scheduleObj.eventSettings.dataSource = this.syncFusionEvents;
+        // One drag or resize is one gesture, from its start to its final save: every write
+        // in between carries the same `_gesture` id, so the server folds exactly that
+        // gesture's saves into one history entry. It used to fold any same-event edits
+        // inside 60s, which merged two separate drags into one undo step.
+        scheduleObj.dragStart = () => { CalendarDataService.beginGesture(); };
+        scheduleObj.resizeStart = () => { CalendarDataService.beginGesture(); };
+        scheduleObj.dragStop = () => { CalendarDataService.endGesture(); };
+        scheduleObj.resizeStop = () => { CalendarDataService.endGesture(); };
         scheduleObj.actionComplete = (ev) => {
             switch (ev.requestType) {
                 case 'eventChanged':
@@ -675,27 +683,26 @@ const CalendarVueApp = {
                     // exactly what this action touched (see recordLocalAction).
                     const priorEvents = this.calendar.events.map(e => new Event(e));
                     // A user-initiated removal, declared before the watcher fires so the
-                    // write gate in sync() knows this shrink was asked for -- and how big
-                    // it should be, so deleting one event cannot authorise a wipe.
-                    // Deleting a recurring series removes the master and every stored
-                    // occurrence exception, so the count is what the merge actually drops,
-                    // not deletedRecords.length.
+                    // write gate in sync() knows exactly which rows were asked to go, so
+                    // deleting one event cannot authorise losing any other. Deleting a
+                    // recurring series removes the master and every stored occurrence
+                    // exception: the rows the merge actually drops, not deletedRecords.
                     if (ev.requestType === 'eventRemoved') {
-                        const before = this.calendar.events.length;
-                        const merged = this.mergeScheduleRecords(ev);
-                        const after = merged.length;
-                        // Exactly the net drop, and nothing when there is none: deleting one
-                        // occurrence of a series adds an exception row as it hides the
-                        // date, so it nets zero -- and a phantom declaration of 1 would
-                        // license the next buggy write to drop an event unchallenged.
-                        // Named by key, so a refused write knows WHICH rows were deleted on
-                        // purpose instead of guessing (see CalendarDataService.sync).
-                        const afterKeys = new Set(merged.map(r => `${r.Id}|${r.RecurrenceID ?? ''}`));
+                        // Exactly the rows this delete takes out, by key -- the gate
+                        // authorises those rows and no others (see CalendarDataService.sync).
+                        // Deleting one occurrence of a series removes no row (it adds an
+                        // exception date), so it names none.
+                        const afterKeys = new Set(this.mergeScheduleRecords(ev)
+                            .map(r => `${r.Id}|${r.RecurrenceID ?? ''}`));
                         const goneKeys = this.calendar.events.map(this.eventKey).filter(k => !afterKeys.has(k));
-                        if (before > after) CalendarDataService.declareIntent(before - after, goneKeys);
+                        if (goneKeys.length) CalendarDataService.declareIntent(goneKeys);
                     }
+                    // This action is one gesture -- or part of the drag/resize that
+                    // opened one -- so its write(s) fold into one history entry, and its
+                    // undo can name it before that entry's key is known.
+                    const gesture = CalendarDataService.actionGesture();
                     this.calendar.setEvents(this.mergeScheduleRecords(ev));
-                    this.recordLocalAction(ev.requestType, priorEvents);
+                    this.recordLocalAction(ev.requestType, priorEvents, gesture);
                     // A real, user-initiated change to this calendar. Recorded here
                     // rather than in CalendarDataService.sync(), because sync() also
                     // runs when the live subscription echoes back someone else's edit --
@@ -1168,12 +1175,12 @@ const CalendarVueApp = {
         // applyRemoteCalendar marks it as a remote apply, so the watcher does not treat
         // the restoration as a fresh local edit and bounce it back at the server.
         //
-        // REPLACE, not merge: the ordinary inbound merge diffs local against the
-        // baseline, sees every dropped row as deleted-by-us, and drops it again -- the
-        // toast said "Recovered" while the screen stayed shrunk and every later edit was
-        // refused until a reload. The list keeps this write's own additions and edits,
-        // and the service re-sends them along with any deletion the user named, so local
-        // and server converge on the same list.
+        // REPLACE, not merge: merging against the baseline would read every dropped row
+        // as deleted-by-us and drop it again -- the toast said "Recovered" while the
+        // screen stayed shrunk. applyRemoteCalendar imports as given (the service, not
+        // this app, does inbound merging). The list keeps this write's own additions and
+        // edits, and the service re-sends them along with any deletion the user named,
+        // so local and server converge on the same list.
         CalendarDataService.onSyncRefused = ({ before, removing, recovered, events }) => {
             // The rows put back, not the net shrink: an addition in the same write offsets
             // the count without making the loss any smaller.
@@ -1181,8 +1188,7 @@ const CalendarVueApp = {
             this.showToast(`Recovered ${n} event${n === 1 ? '' : 's'} that were about to be lost`, 'error');
             track(a => a.syncRefused({ before, removing }));
             if (Array.isArray(events)) {
-                this.applyRemoteCalendar({ ...this.calendar, events: JSON.parse(JSON.stringify(events)) },
-                    { replace: true });
+                this.applyRemoteCalendar({ ...this.calendar, events: JSON.parse(JSON.stringify(events)) });
             }
         };
 
@@ -2001,31 +2007,20 @@ const CalendarVueApp = {
         // local edit and writing it back. The flag is cleared after the watcher queue has
         // drained -- a deep watcher fires asynchronously, so clearing it synchronously
         // would let the echo through anyway.
-        // `replace` skips the merge: used when local is known to be wrong (a refused
-        // write's recovery), where merging would keep exactly the damage being undone.
-        applyRemoteCalendar(c, { replace = false } = {}) {
+        //
+        // No merging here. CalendarDataService delivers each snapshot already merged with
+        // the local copy against the baseline that copy derives from (_receive), so edits
+        // in the debounce window survive. This app once merged on its own against a
+        // global "previous snapshot", which nativecal never did -- and which was the wrong
+        // baseline whenever a commit or a second snapshot had moved it.
+        applyRemoteCalendar(c) {
             this.isApplyingRemote = true;
             try {
-                // import() is a bare Object.assign, so it replaces events wholesale. A
-                // local edit made inside the 500ms debounce window has not reached the
-                // server yet, and would simply be overwritten by the snapshot -- the user
-                // watches their change undo itself. Merge the incoming events over the
-                // local ones the same way the write path does, so unsent work survives
-                // until its sync lands.
                 // Normalized: Firebase hands back a holey array as an object keyed by index.
-                const incoming = CalendarDataService._eventList(c?.events);
-                // `_writer` is the server's note of who wrote last, not calendar data;
-                // carried into local state it would be sent back as this browser's.
-                c = { ...CalendarDataService._withoutMeta(c), events: incoming };
-                // The baseline from BEFORE this snapshot. _lastSeen has already been
-                // advanced to the incoming data by the time we get here, and diffing
-                // against that would mark every local row as an edit and reinstate our
-                // stale copies over the change that just arrived.
-                const base = CalendarDataService._previousSeen[this.calendar.id];
-                if (!replace && base && this.calendar.events && this.calendar.events.length) {
-                    c = { ...c, events: CalendarDataService._mergeEvents(
-                        base, this.calendar.events, incoming) };
-                }
+                // `_writer` and friends are the server's bookkeeping, not calendar data;
+                // carried into local state they would be sent back as this browser's.
+                c = { ...CalendarDataService._withoutMeta(c),
+                    events: CalendarDataService._eventList(c?.events) };
                 this.calendar.import(c);
             } finally {
                 // Record what the calendar looks like immediately after the import. The
@@ -2681,7 +2676,7 @@ const CalendarVueApp = {
             const priorEvents = this.calendar.events.map(e => new Event(e));
             this.calendar.events.push(newEvent);
             this.calendar.setEvents(this.calendar.events);
-            this.recordLocalAction('eventCreated', priorEvents);
+            this.recordLocalAction('eventCreated', priorEvents, CalendarDataService.actionGesture());
             // Quick-add bypasses the scheduler, so it needs its own signal.
             if (this.isExisting && typeof AuthorSignal !== 'undefined') {
                 AuthorSignal.touch(this.calendar.id);
@@ -2742,6 +2737,8 @@ const CalendarVueApp = {
                 const rows = [];
                 snap.forEach(c => { rows.push({ key: c.key, ...c.val() }); });
                 rows.sort((a, b) => b.savedAt - a.savedAt);
+                // Over the whole log, not just the rows listed, so an older undo still counts.
+                const reversed = this.reversedHistory(rows);
 
                 const keyOf = this.eventKey;
                 // Full events, not just ids: detecting an EDIT means comparing values.
@@ -2831,7 +2828,10 @@ const CalendarVueApp = {
                         added,
                         // One per history entry, newest first. A collapsed row undoes every
                         // part in turn rather than jumping back to the oldest snapshot.
-                        parts: [{ key: r.key, savedAt: r.savedAt, writer: r.writer || null, keys, delta }],
+                        parts: [{ key: r.key, savedAt: r.savedAt, writer: r.writer || null, keys, delta,
+                            gesture: r.gesture || null,
+                            undoOf: Array.isArray(r.undoOf) ? r.undoOf : null,
+                            reversed: reversed.has(r.key) }],
                         // An addition has nothing to put back -- the event is already
                         // there. Listing it without a button is honest; a no-op Restore is
                         // not. (Cmd+Z can still take an addition back: undoLastChange.)
@@ -3097,16 +3097,18 @@ const CalendarVueApp = {
             return out.length ? out.join(',') : null;
         },
 
-        /** Write a plan from planUndo, and remember the write as this session's own. */
-        commitUndo(plan) {
+        /**
+         * Write a plan from planUndo. `undoOf` names what it reverses -- history entry
+         * keys, or the gesture id of this session's own action -- and rides on the write
+         * as `_undoOf`, so /history itself records that the entry is an undo and of what
+         * (see isHandledHistory). Nothing has to recognise it later by timing.
+         */
+        commitUndo(plan, undoOf = []) {
             if (plan.noop) return;
-            if (plan.removing > 0) CalendarDataService.declareIntent(plan.removing, plan.removingKeys);
-            const before = this.calendar.events.map(e => new Event(e));
+            if (plan.removingKeys.length) CalendarDataService.declareIntent(plan.removingKeys);
+            CalendarDataService.markUndo(undoOf);
+            for (const id of undoOf) this._undoneHistoryKeys.add(id);
             this.calendar.setEvents(plan.next);
-            // The server logs this undo as a change of its own; the /history fallback
-            // must not then offer to undo the undo. Matched on exactly what we wrote, at
-            // the time we wrote it (see isHandledHistory).
-            this._handledUndo.push({ at: this.serverNow(), delta: this.deltaBetween(before, this.calendar.events) });
             if (this.showRecentChanges || this.showSettings) {
                 clearTimeout(this._undoRefreshTimer);
                 this._undoRefreshTimer = setTimeout(() => this.loadUndoEntries(), 1500);
@@ -3138,41 +3140,33 @@ const CalendarVueApp = {
         },
 
         /**
-         * True if this session already undid this history entry, or its own undo wrote it.
-         *
-         * Matched on what the entry DID, not just which events it touched: the writer id
-         * names a browser, not a tab or session, so another tab's edit to the same event
-         * inside the window would otherwise be taken for this session's undo and skipped
-         * (before writers were recorded, a colleague's was too), and Cmd+Z undid
-         * something older. A near miss is the safe failure -- an unmatched entry of ours plans as a
-         * no-op or names what it would change; skipping someone else's change does not.
+         * The keys of the history entries some undo in `rows` reversed. An undo names
+         * what it reversed in `undoOf`: entry keys, or the gesture id of an action this
+         * session undid before its entry existed -- which reverses every entry of that
+         * gesture.
          */
-        isHandledHistory(part) {
-            if (this._undoneHistoryKeys.has(part.key)) return true;
-            // savedAt is stamped after the debounced write and the Cloud Function have
-            // both run, so it trails the moment we wrote by up to a cold start.
-            return this._handledUndo.some(h => part.savedAt >= h.at - 2000
-                && part.savedAt <= h.at + 60 * 1000
-                && this.sameDelta(part.delta, h.delta));
+        reversedHistory(rows) {
+            const named = new Set(rows.flatMap(r => Array.isArray(r.undoOf) ? r.undoOf : []));
+            return new Set(rows.filter(r => named.has(r.key) || (!!r.gesture && named.has(r.gesture)))
+                .map(r => r.key));
         },
 
-        /** Two deltas make the same change, compared on meaning (see sameEvent). */
-        sameDelta(a, b) {
-            if (!a || !b) return false;
-            const keyOf = this.eventKey;
-            const sameSet = (x, y) => {
-                x = x || []; y = y || [];
-                if (x.length !== y.length) return false;
-                const byKey = new Map(y.map(e => [keyOf(e), e]));
-                return x.every(e => this.sameEvent(e, byKey.get(keyOf(e))));
-            };
-            const tos = (d) => (d.changed || []).filter(p => p && p.from && p.to)
-                .map(p => ({ ...p.to, id: p.from.id, recurrenceID: p.from.recurrenceID }));
-            const any = (d) => (d.removed || []).length + (d.changed || []).length + (d.added || []).length;
-            return any(a) > 0
-                && sameSet(a.removed, b.removed)
-                && sameSet(a.added, b.added)
-                && sameSet(tos(a), tos(b));
+        /**
+         * True if Cmd+Z must pass over this history entry: it IS an undo (Cmd+Z never
+         * redoes), or an undo already reversed it.
+         *
+         * Read from /history itself -- undo writes carry `_undoOf`, which the trigger
+         * stores on their entry -- so the answer survives a reload. It was once guessed
+         * from timing and content held in memory ("an entry like the undo we wrote within
+         * 60s"); after a reload that memory was gone, and Cmd+Z redid the user's last undo.
+         * `reversed` is set by loadUndoEntries from every entry's `undoOf`; the session set
+         * covers the moment before this session's own undo entry has landed.
+         */
+        isHandledHistory(part) {
+            if (Array.isArray(part.undoOf) && part.undoOf.length) return true;
+            if (part.reversed) return true;
+            return this._undoneHistoryKeys.has(part.key)
+                || (!!part.gesture && this._undoneHistoryKeys.has(part.gesture));
         },
 
         /**
@@ -3362,8 +3356,7 @@ const CalendarVueApp = {
          */
         undoChange(entry) {
             const plan = this.planUndo(entry.parts.map(p => p.delta));
-            this.commitUndo(plan);
-            if (!plan.noop) entry.parts.forEach(p => this._undoneHistoryKeys.add(p.key));
+            this.commitUndo(plan, entry.parts.map(p => p.key));
             this.showToast(this.describeUndo(plan), plan.noop ? 'info' : 'success');
         },
 
@@ -3861,12 +3854,13 @@ const CalendarVueApp = {
          * stack too, with no toast: Cmd+Z right after adding an event should take THAT
          * back, not some older change whose /history entry happens to be the newest yet.
          */
-        recordLocalAction(requestType, priorEvents) {
+        recordLocalAction(requestType, priorEvents, gesture = null) {
             const delta = this.deltaBetween(priorEvents, this.calendar.events);
             if (!delta.removed.length && !delta.changed.length && !delta.added.length) return;
-            // `at` is when this action was written -- the window its /history entry lands
-            // in, which isHandledHistory matches on once the action is undone.
-            const action = { delta, at: this.serverNow(), done: false };
+            // `gesture` is the id this action's write carries: its undo names it in
+            // `_undoOf`, which identifies the action's /history entry whether or not that
+            // entry exists yet.
+            const action = { delta, gesture, done: false };
             this._sessionUndo.push(action);
             if (this._sessionUndo.length > 50) this._sessionUndo.shift();
 
@@ -3930,11 +3924,9 @@ const CalendarVueApp = {
         undoLocalAction(action) {
             if (action.done) return;
             const plan = this.planUndo([action.delta]);
-            this.commitUndo(plan);
+            this.commitUndo(plan, action.gesture ? [action.gesture] : []);
             action.done = true;
             this._sessionUndo = this._sessionUndo.filter(a => a !== action);
-            // Its /history entry, whenever that lands, is now already undone.
-            this._handledUndo.push({ at: action.at, delta: action.delta });
             this.showToast(this.describeUndo(plan), plan.noop ? 'info' : 'success');
         },
 
@@ -3945,9 +3937,9 @@ const CalendarVueApp = {
          * for something done a moment ago may not exist yet (500ms debounce plus a Cloud
          * Function), and reading it then undid an OLDER change instead. Only when there is
          * nothing local left does it fall back to /history -- which still works after a
-         * reload -- skipping what this session already undid, the entries its own undos
-         * produced (otherwise a second Cmd+Z re-deletes what the first restored), and
-         * entries with nothing left to undo.
+         * reload -- skipping undo entries and the entries they reversed, both read from
+         * /history (otherwise a second Cmd+Z, or the first after a reload, redoes what an
+         * undo reversed), and entries with nothing left to undo.
          *
          * The fallback only takes entries THIS browser wrote. Cmd+Z reverting a
          * collaborator's change is a surprise nobody asked for, and two browsers pressing
@@ -3965,7 +3957,6 @@ const CalendarVueApp = {
                         // Already undone some other way (e.g. from Recent changes).
                         this._sessionUndo.pop();
                         action.done = true;
-                        this._handledUndo.push({ at: action.at, delta: action.delta });
                         continue;
                     }
                     this.undoLocalAction(action);
@@ -3984,8 +3975,7 @@ const CalendarVueApp = {
                     if (!parts.length) continue;
                     const plan = this.planUndo(parts.map(p => p.delta));
                     if (plan.noop) continue;
-                    this.commitUndo(plan);
-                    parts.forEach(p => this._undoneHistoryKeys.add(p.key));
+                    this.commitUndo(plan, parts.map(p => p.key));
                     this.showToast(this.describeUndo(plan), 'success');
                     return;
                 }

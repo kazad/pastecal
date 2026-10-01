@@ -160,7 +160,7 @@ function loadUndo(rows) {
     loadUndoEntries: async () => rows,
     isHandledHistory: () => false,
     planUndo: (deltas) => ({ noop: false, deltas }),
-    commitUndo(plan) { this.committed.push(plan); },
+    commitUndo(plan, undoOf) { this.committed.push({ ...plan, undoOf }); },
     describeUndo: () => 'undone',
     showToast(msg) { this.toasts.push(msg); },
   });
@@ -173,7 +173,7 @@ test('Cmd+Z skips a collaborator\'s and legacy entries for this browser\'s own',
   await app.undoLastChange();
   assert.equal(app.committed.length, 1);
   assert.deepEqual([...app.committed[0].deltas], ['mine']);
-  assert.ok(app._undoneHistoryKeys.has('mine'));
+  assert.deepEqual([...app.committed[0].undoOf], ['mine'], 'the undo write names the entry it reverses');
 });
 
 test('Cmd+Z with only others\' entries undoes nothing', async () => {
@@ -221,7 +221,7 @@ test('a nativecal delete reaches the server and a later edit does not resurrect 
   app.handleDeleteEvent('B');
   assert.deepEqual(serverIds(server, 'c'), ['A', 'C'], 'the delete is not refused');
   assert.deepEqual(app.toasts, []);
-  assert.equal(S._intent, null, 'the declaration was consumed by that write');
+  assert.equal(S._pendingDeletes.size, 0, 'the declaration was spent by that write');
 
   const events = clone(app.calendar.events);
   events.find(e => e.id === 'A').title = 'A2';
