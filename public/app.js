@@ -2596,7 +2596,8 @@ const CalendarVueApp = {
             const newEvent = new Event({
                 title: event.subject,
                 start: start,
-                end: end
+                end: end,
+                isAllDay: !!event.isAllDay
             });
             this.calendar.events.push(newEvent);
             this.calendar.setEvents(this.calendar.events);

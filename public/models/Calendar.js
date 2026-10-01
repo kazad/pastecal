@@ -18,17 +18,30 @@ class Calendar {
         return isNaN(d.getTime()) ? null : d;
     }
 
+    // Stored all-day instant -> the viewer's LOCAL midnight of its calendar date.
+    // Converting the stored instant directly showed Tokyo's Oct 2 holiday on Oct 1 in LA;
+    // see Event.allDayDateUTC for how the date is derived.
+    static allDayToLocal(value) {
+        const utc = Event.allDayDateUTC(value);
+        return utc && new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate());
+    }
+
     getSyncFusionEvents() {
         return this.events.map(e => {
+            const allDay = !!e.isAllDay;
+            const toDate = allDay ? Calendar.allDayToLocal : Calendar.toDateOrNull;
             return {
                 Id: e.id,
                 Subject: e.title,
-                StartTime: Calendar.toDateOrNull(e.start),
-                EndTime: Calendar.toDateOrNull(e.end),
+                StartTime: toDate(e.start),
+                EndTime: toDate(e.end),
+                // What the record was built from, so Event can keep it verbatim when the
+                // date is unchanged (see Event.allDayFromLocal).
+                ...(allDay ? { _storedStart: e.start, _storedEnd: e.end } : {}),
                 Description: e.description,
                 RecurrenceRule: e.recurrencerule,
                 Type: parseInt(e.type || 1),
-                IsAllDay: !!e.isAllDay,
+                IsAllDay: allDay,
                 Recurrence: e.repeat,
                 RecurrenceID: e.recurrenceID,
                 RecurrenceException: e.recurrenceException
