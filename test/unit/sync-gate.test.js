@@ -106,8 +106,8 @@ test('a refusal that rode on a real deletion still delivers that deletion', () =
   deliver('c');
   const app = wireApp(S, 'c', server.c.events);
 
-  // The user deletes B (declared), but the write also loses C and D.
-  S.declareIntent(1);
+  // The user deletes B (declared by key), but the write also loses C and D.
+  S.declareIntent(1, ['B|']);
   app.calendar.events = app.calendar.events.filter(e => e.id === 'A');
   S.sync(app.calendar);
 
@@ -123,6 +123,67 @@ test('a refusal that rode on a real deletion still delivers that deletion', () =
   S.sync(app.calendar);
   assert.equal(refused, 0, 'a later edit is not refused');
   assert.deepEqual(serverIds(server, 'c'), ['A', 'C', 'D', 'E']);
+});
+
+test('a refusal re-sends only the deletion the user named, not the first missing row', () => {
+  // Server [A,B,C]; the user deletes C, a bug also drops A. Guessing by count picked A
+  // (first missing in baseline order), so the "recovery" deleted A and resurrected C.
+  const { S, server, deliver } = loadDataService();
+  server.c = { id: 'c', events: [ev('A', 'A'), ev('B', 'B'), ev('C', 'C')] };
+  deliver('c');
+  const app = wireApp(S, 'c', server.c.events);
+
+  S.declareIntent(1, ['C|']);
+  app.calendar.events = app.calendar.events.filter(e => e.id === 'B');
+  S.sync(app.calendar);
+
+  assert.deepEqual(ids(app.calendar.events), ['A', 'B']);
+  assert.deepEqual(serverIds(server, 'c'), ['A', 'B'], 'C is deleted, A is not');
+  assert.equal(app.toasts.length, 1);
+  assert.match(app.toasts[0], /Recovered 1 event that/);
+});
+
+test('a refusal whose deletion was not named re-sends no removal at all', () => {
+  const { S, server, deliver } = loadDataService();
+  server.c = { id: 'c', events: [ev('A', 'A'), ev('B', 'B'), ev('C', 'C')] };
+  deliver('c');
+  const app = wireApp(S, 'c', server.c.events);
+
+  S.declareIntent(1);   // count only: which row is unknown
+  app.calendar.events = app.calendar.events.filter(e => e.id === 'B');
+  S.sync(app.calendar);
+
+  assert.deepEqual(ids(app.calendar.events), ['A', 'B', 'C'], 'everything is put back');
+  assert.deepEqual(serverIds(server, 'c'), ['A', 'B', 'C'], 'nothing is deleted on a guess');
+});
+
+test('keys accumulate across declarations, and one unnamed declaration voids them', () => {
+  const { S } = loadDataService();
+  S.declareIntent(1, ['A|']);
+  S.declareIntent(1, ['B|']);
+  assert.deepEqual([...S._intent.keys], ['A|', 'B|']);
+  assert.equal(S._intent.removing, 2);
+  S.declareIntent(1);
+  assert.equal(S._intent.keys, null);
+  assert.equal(S._intent.removing, 3);
+});
+
+test('a refused write keeps its own additions and edits, and still saves them', () => {
+  const { S, server, deliver } = loadDataService();
+  server.c = { id: 'c', events: [ev('A', 'A'), ev('B', 'B'), ev('C', 'C'), ev('D', 'D')] };
+  deliver('c');
+  const app = wireApp(S, 'c', server.c.events);
+
+  // Same debounce window: A renamed, E added -- and a bug drops C and D.
+  app.calendar.events = [{ ...ev('A', 'A2') }, ev('B', 'B'), ev('E', 'new')];
+  S.sync(app.calendar);
+
+  assert.deepEqual(ids(app.calendar.events), ['A', 'B', 'C', 'D', 'E']);
+  assert.equal(app.calendar.events.find(e => e.id === 'A').title, 'A2', 'the edit survives');
+  assert.deepEqual(serverIds(server, 'c'), ['A', 'B', 'C', 'D', 'E'], 'the addition reaches the server');
+  assert.equal(server.c.events.find(e => e.id === 'A').title, 'A2', 'so does the edit');
+  assert.match(app.toasts[0], /Recovered 2 events/, 'the toast counts rows put back, not the net shrink');
+  assert.equal(S._intent, null);
 });
 
 // --- Incomplete rows already on the server ----------------------------------------------
@@ -248,5 +309,5 @@ test('the delete handler declares exactly the net removal, and nothing when it n
   const branch = blockAt(APP, at);
   assert.doesNotMatch(branch, /Math\.max\(1,/,
     'a floor of 1 declares a removal when deleting one occurrence removes nothing');
-  assert.match(branch, /if \(before > after\) CalendarDataService\.declareIntent\(before - after\)/);
+  assert.match(branch, /if \(before > after\) CalendarDataService\.declareIntent\(before - after, goneKeys\)/);
 });
