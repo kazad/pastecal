@@ -2014,7 +2014,9 @@ const CalendarVueApp = {
                 // until its sync lands.
                 // Normalized: Firebase hands back a holey array as an object keyed by index.
                 const incoming = CalendarDataService._eventList(c?.events);
-                c = { ...c, events: incoming };
+                // `_writer` is the server's note of who wrote last, not calendar data;
+                // carried into local state it would be sent back as this browser's.
+                c = { ...CalendarDataService._withoutMeta(c), events: incoming };
                 // The baseline from BEFORE this snapshot. _lastSeen has already been
                 // advanced to the incoming data by the time we get here, and diffing
                 // against that would mark every local row as an edit and reinstate our
@@ -2820,13 +2822,16 @@ const CalendarVueApp = {
                     return {
                         key: r.key,
                         savedAt: r.savedAt,
+                        // Which browser wrote it (null on entries from before writers
+                        // were recorded). Collapsing and Cmd+Z both go by it.
+                        writer: r.writer || null,
                         keys,
                         lost,
                         edited,
                         added,
                         // One per history entry, newest first. A collapsed row undoes every
                         // part in turn rather than jumping back to the oldest snapshot.
-                        parts: [{ key: r.key, savedAt: r.savedAt, keys, delta }],
+                        parts: [{ key: r.key, savedAt: r.savedAt, writer: r.writer || null, keys, delta }],
                         // An addition has nothing to put back -- the event is already
                         // there. Listing it without a button is honest; a no-op Restore is
                         // not. (Cmd+Z can still take an addition back: undoLastChange.)
@@ -3135,10 +3140,11 @@ const CalendarVueApp = {
         /**
          * True if this session already undid this history entry, or its own undo wrote it.
          *
-         * Matched on what the entry DID, not just which events it touched: nothing in an
-         * entry ties it to this browser, so a colleague's edit to the same event inside
-         * the window used to be taken for ours and skipped, and Cmd+Z undid something
-         * older. A near miss is the safe failure -- an unmatched entry of ours plans as a
+         * Matched on what the entry DID, not just which events it touched: the writer id
+         * names a browser, not a tab or session, so another tab's edit to the same event
+         * inside the window would otherwise be taken for this session's undo and skipped
+         * (before writers were recorded, a colleague's was too), and Cmd+Z undid
+         * something older. A near miss is the safe failure -- an unmatched entry of ours plans as a
          * no-op or names what it would change; skipping someone else's change does not.
          */
         isHandledHistory(part) {
@@ -3237,7 +3243,11 @@ const CalendarVueApp = {
          * Two entries merge when they touch exactly the same events (by identity, not by
          * title: two events called "Standup" are not one event, and a rename changes the
          * title mid-run) AND each is within the gap of the one before it, so distinct edits
-         * made back to back stay separate. Every entry in a run is kept: undoing the row
+         * made back to back stay separate -- and only when one browser wrote them all: two
+         * people nudging the same event are two changes, and undoing the row must not take
+         * back a collaborator's along with yours. Entries with no recorded writer (older
+         * than the field) count as one writer of their own, so they still collapse with
+         * each other but never with a known writer's. Every entry in a run is kept: undoing the row
          * reverses each one in turn, newest first, which lands where the gesture began
          * without discarding unrelated changes the way restoring the oldest snapshot did.
          */
@@ -3260,6 +3270,7 @@ const CalendarVueApp = {
                 const sameThing = prev
                     && prev.oldestAt - entry.savedAt < SESSION_GAP_MS
                     && kindOf(prev) === kindOf(entry)
+                    && (prev.writer || null) === (entry.writer || null)
                     && keysOf(prev) === keysOf(entry)
                     && keysOf(entry) !== '';
                 if (!sameThing) {
@@ -3934,9 +3945,14 @@ const CalendarVueApp = {
          * for something done a moment ago may not exist yet (500ms debounce plus a Cloud
          * Function), and reading it then undid an OLDER change instead. Only when there is
          * nothing local left does it fall back to /history -- which still works after a
-         * reload, or for a change made in somebody else's browser -- skipping what this
-         * session already undid, the entries its own undos produced (otherwise a second
-         * Cmd+Z re-deletes what the first restored), and entries with nothing left to undo.
+         * reload -- skipping what this session already undid, the entries its own undos
+         * produced (otherwise a second Cmd+Z re-deletes what the first restored), and
+         * entries with nothing left to undo.
+         *
+         * The fallback only takes entries THIS browser wrote. Cmd+Z reverting a
+         * collaborator's change is a surprise nobody asked for, and two browsers pressing
+         * it at once would race over the same entry. Entries with no recorded writer
+         * predate the field and cannot be claimed; Recent changes still restores them.
          */
         async undoLastChange() {
             if (this._undoBusy) return;
@@ -3961,8 +3977,10 @@ const CalendarVueApp = {
                     return;
                 }
                 const rows = await this.loadUndoEntries();
+                const me = CalendarDataService.writerId;
                 for (const row of rows) {
-                    const parts = row.parts.filter(p => !this.isHandledHistory(p));
+                    const parts = row.parts.filter(p => p.writer && p.writer === me
+                        && !this.isHandledHistory(p));
                     if (!parts.length) continue;
                     const plan = this.planUndo(parts.map(p => p.delta));
                     if (plan.noop) continue;

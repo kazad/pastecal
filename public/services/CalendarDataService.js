@@ -66,6 +66,56 @@ class CalendarDataService {
     // which of the missing rows were deleted on purpose, and the refusal path below once
     // guessed by baseline order -- re-sending a deletion of an event the user never
     // touched. Without keys (null), nothing is treated as a deliberate removal there.
+    // Which browser made a write. Stamped as top-level `_writer` on every calendar write,
+    // and the history trigger copies it onto the entry: Cmd+Z then only reaches for this
+    // browser's own entries, and the server only coalesces a drag's writes when one
+    // browser made them all. Per browser rather than per tab, so a reload or a second tab
+    // can still undo what this browser did.
+    //
+    // Every write sets it, never only some: the node keeps the last value, so a write
+    // that left it out would be attributed to whoever wrote before.
+    static WRITER_KEY = 'pastecal_writer_id';
+    static _writerId = null;
+    static get writerId() {
+        if (this._writerId) return this._writerId;
+        let id = null;
+        try { id = localStorage.getItem(this.WRITER_KEY); } catch (e) { /* storage blocked */ }
+        if (!id || typeof id !== 'string') {
+            id = 'w' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+            // Unpersisted (private mode, blocked storage) it still identifies this page.
+            try { localStorage.setItem(this.WRITER_KEY, id); } catch (e) { /* in memory only */ }
+        }
+        return (this._writerId = id);
+    }
+
+    // Server bookkeeping on the calendar node, not calendar data. Stripped from every
+    // snapshot before the app sees it: import() would otherwise copy `_writer` onto the
+    // calendar, and every later write would carry another browser's id back as ours.
+    static META_KEYS = ['_writer'];
+    static _withoutMeta(calendar) {
+        if (!calendar || typeof calendar !== 'object') return calendar;
+        if (!this.META_KEYS.some(k => k in calendar)) return calendar;
+        const out = { ...calendar };
+        for (const k of this.META_KEYS) delete out[k];
+        return out;
+    }
+
+    // Equal as Firebase would store them: null, undefined and empty containers are absent
+    // there, and key order is not data.
+    static _sameNode(a, b) {
+        const canon = (v) => {
+            if (v === undefined || v === null) return undefined;
+            if (typeof v !== 'object') return v;
+            const out = {};
+            for (const k of Object.keys(v).sort()) {
+                const c = canon(v[k]);
+                if (c !== undefined) out[k] = c;
+            }
+            return Object.keys(out).length ? out : undefined;
+        };
+        return JSON.stringify(canon(a) ?? null) === JSON.stringify(canon(b) ?? null);
+    }
+
     static _intent = null;
     static declareIntent(removing = 1, keys = null) {
         const now = Date.now();
@@ -134,7 +184,7 @@ class CalendarDataService {
 
         // First try exact case match
         this.db.child(slug).on('value', async data => {
-            var calendar = data.val();
+            var calendar = this._withoutMeta(data.val());
             if (calendar && calendar.id) {
                 this.connected = slug;
                 this._rememberSnapshot(calendar);
@@ -175,7 +225,7 @@ class CalendarDataService {
     static _subscribeExact(slug, callback) {
         if (slug) {
             this.db.child(slug).on('value', data => {
-                var calendar = data.val();
+                var calendar = this._withoutMeta(data.val());
                 if (calendar && calendar.id) {
                     this.connected = slug;
                     this._rememberSnapshot(calendar);
@@ -249,7 +299,7 @@ class CalendarDataService {
     static subscribe_readonly(slug, callback) {
         if (slug) {
             this.db_readonly.child(slug).on('value', data => {
-                var calendar = data.val();
+                var calendar = this._withoutMeta(data.val());
                 if (calendar && calendar.id) {
                     // don't set connected
                     callback(calendar);
@@ -423,8 +473,9 @@ class CalendarDataService {
             // are carried through untouched and both sides of the gate count them alike.
             const safe = this._dropIncompleteEvents(calendar, base);
             const localEvents = this._sanitizeForFirebase(safe.events);
-            const rest = this._sanitizeForFirebase({ ...safe, events: undefined });
+            const rest = this._sanitizeForFirebase({ ...this._withoutMeta(safe), events: undefined });
             delete rest.events;
+            rest._writer = this.writerId;
 
             // Report the shape of every write, and refuse any removal the user did not
             // ask for. Every path that legitimately removes an event runs through the
@@ -513,7 +564,7 @@ class CalendarDataService {
                     // node is cached, so a null here means the server really has nothing.
                     if (current === null) {
                         if (known) return; // abort; reported by the completion callback
-                        return this._sanitizeForFirebase(safe);
+                        return this._sanitizeForFirebase({ ...this._withoutMeta(safe), _writer: this.writerId });
                     }
                     const remoteEvents = this._eventList(current.events);
                     // options is a bag of independent keys, not one field, so a shallow spread
@@ -535,6 +586,13 @@ class CalendarDataService {
                         events: this._mergeEvents(base, localEvents, remoteEvents),
                     };
                     if (mergedOptions) next.options = mergedOptions;
+                    // A write that changes nothing else leaves `_writer` as it was. Nothing
+                    // happened to attribute -- and nativecal echoes every snapshot it
+                    // imports back through sync(), so two open browsers would otherwise
+                    // flip the id back and forth, each flip a fresh snapshot, forever.
+                    if (this._sameNode({ ...next, _writer: null }, { ...current, _writer: null })) {
+                        next._writer = current._writer ?? null;
+                    }
                     return next;
                 } catch (err) {
                     bodyError = err;
@@ -635,7 +693,7 @@ class CalendarDataService {
      * create the original, so it is recorded as an ordinary editor of the new id.
      */
     static createWithId(key, value, success, { asCreator = true } = {}) {
-        const data = this._sanitizeForFirebase(value);
+        const data = this._sanitizeForFirebase({ ...this._withoutMeta(value), _writer: this.writerId });
         const plainSet = () => this.db.child(key).set(data, (error) => {
             if (error) {
                 console.log("error creating calendar", error, key, value);
@@ -665,7 +723,7 @@ class CalendarDataService {
     }
 
     static update(key, value) {
-        return this.db.child(key).update(this._sanitizeForFirebase(value));
+        return this.db.child(key).update(this._sanitizeForFirebase({ ...value, _writer: this.writerId }));
     }
 
     static delete(key) {

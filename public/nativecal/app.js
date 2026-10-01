@@ -339,6 +339,23 @@ const CalendarVueApp = {
         // Apply custom colors CSS if any
         this.updateColorCSS();
 
+        // The write gate refused a removal nobody declared (see CalendarDataService.sync),
+        // so the screen is missing events the server still has. Same recovery as the main
+        // app: REPLACE the events with the list handed over -- the server's copy plus this
+        // write's own additions and edits, minus deletions the user named. Merging it
+        // against the baseline would read the dropped rows as deleted-by-us and drop them
+        // again. The service re-sends that list itself, so the watcher's echo is a no-op.
+        CalendarDataService.onSyncRefused = ({ removing, recovered, events }) => {
+            // Restore first: the service swallows a throw from here, and a missing toast
+            // ref must not cost the user the recovery itself.
+            if (Array.isArray(events)) {
+                this.calendar.import({ events: JSON.parse(JSON.stringify(events)) });
+            }
+            // The rows put back, not the net shrink (an addition offsets the count).
+            const n = recovered ?? removing;
+            this.showToast(`Recovered ${n} event${n === 1 ? '' : 's'} that were about to be lost`, 'error');
+        };
+
         // extended hours button
         document.addEventListener('click', (e) => {
             if (e.target.className == "e-header-cells e-disable-dates") {
@@ -817,8 +834,20 @@ const CalendarVueApp = {
         },
 
         handleDeleteEvent(id) {
-            const events = this.calendar.events.filter(e => e.id !== id);
-            this.calendar.setEvents(events);
+            // Deleting a series takes its edited occurrences (rows whose recurrenceID
+            // names it) along; left behind, they would show here as stray one-off events.
+            const all = this.calendar.events;
+            const series = all.some(e => e.id === id && !e.recurrenceID);
+            const gone = (e) => e.id === id
+                || (series && e.recurrenceID != null && String(e.recurrenceID) === String(id));
+            const removed = all.filter(gone);
+            // The write gate refuses any removal nobody declared, and undeclared it also
+            // re-saved the row on the next edit. Name exactly the rows going away.
+            if (removed.length) {
+                CalendarDataService.declareIntent(removed.length,
+                    removed.map(e => CalendarDataService._eventKey(e)));
+            }
+            this.calendar.setEvents(all.filter(e => !gone(e)));
             this.closePopover();
             this.closeEditor();
         },
