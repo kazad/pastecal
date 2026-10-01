@@ -1139,36 +1139,28 @@ const HistoryService = {
         const now = at;
         const changedKeys = d.changed.map(c => this.key(c.from)).sort().join(',');
 
+        // Which browser made this write (CalendarDataService stamps `_writer`). Only that
+        // browser's later saves may fold into its entry, and its Cmd+Z only undoes its own.
+        const writer = typeof after._writer === 'string' ? after._writer.slice(0, 64) : null;
+
         // A drag or resize saves every 500ms, and each save is an edit of the same events.
         // Fold it into the entry the gesture started: that entry's `from` is the state
         // before the gesture, which is what undo should return to; only `to` moves on.
         //
+        // Only a pure edit, by the same writer: folding a collaborator's move into my drag
+        // made "undo" revert their work, and folding a write that also ADDED rows (an
+        // occurrence edit adds an exception row) dropped those rows from history.
         // The window runs from the gesture's START, so one entry cannot absorb edits forever.
         // `to` is replaced in a transaction and only by a LATER write, so saves processed out
         // of order cannot leave it at an intermediate position.
         const newest = index.sort((x, y) => y.t - x.t)[0];
-        if (why.kind === 'edited' && newest && newest.k === 'edited'
-            && newest.ck === changedKeys && now - (newest.s ?? newest.t) < HISTORY_COALESCE_MS) {
-            const toByKey = new Map(d.changed.map(c => [this.key(c.to), c.to]));
-            // A transaction's first pass sees the local cache, which is empty here: return
-            // that null (not undefined, which aborts) so it re-runs on the server's value.
-            const r = await ref.child(newest.key).child('changedEvents').transaction(cur => {
-                if (cur === null) return null;
-                if (!Array.isArray(cur)) return undefined;
-                return cur.map(c => {
-                    const next = toByKey.get(this.key(c.from));
-                    return next && (c.at ?? 0) <= now ? { ...c, to: next, at: now } : c;
-                });
-            });
-            const merged = r.snapshot.val() || [];
-            // Back where the gesture started -- a drag returned to its origin, or an undo of
-            // this very edit. A row reading "1 event edited" whose undo does nothing is noise.
-            if (merged.length && merged.every(c => this.sameEvent(c.from, c.to))) {
-                await Promise.all([ref.child(newest.key).remove(), indexRef.child(newest.key).remove()]);
-                return null;
-            }
-            await indexRef.child(newest.key).update({ t: Math.max(newest.t, now) });
-            return newest.key;
+        if (why.kind === 'edited' && !why.added && writer && newest && newest.k === 'edited'
+            && newest.w === writer && newest.ck === changedKeys
+            && now - (newest.s ?? newest.t) < HISTORY_COALESCE_MS) {
+            const folded = await this.fold(db, calendarId, newest, d, now);
+            if (folded !== undefined) return folded;
+            // The entry vanished under us (a concurrent save returned the gesture to its
+            // start and removed it): record this write on its own instead of losing it.
         }
 
         const entry = {
@@ -1183,6 +1175,7 @@ const HistoryService = {
             eventCount: this.eventsOf(before).length,
             title: before.title ?? null,
             options: before.options ?? null,
+            writer,
         };
         // The full prior state, for the operator's restore -- only where the delta does not
         // already hold it. A wipe's removedEvents IS the prior state, and an edit's `from`
@@ -1192,10 +1185,49 @@ const HistoryService = {
         if (why.kind === 'shrunk' || why.kind === 'title-cleared') entry.events = this.eventsOf(before);
 
         const pushed = await ref.push(entry);
-        index.push({ key: pushed.key, k: why.kind, t: now, s: now, ck: changedKeys });
-        await indexRef.child(pushed.key).set({ k: why.kind, t: now, s: now, ck: changedKeys });
+        const row = { k: why.kind, t: now, s: now, ck: changedKeys, ...(writer ? { w: writer } : {}) };
+        index.push({ key: pushed.key, ...row });
+        await indexRef.child(pushed.key).set(row);
         await this.trim(db, calendarId, index, now);
         return pushed.key;
+    },
+
+    /**
+     * Fold one more save of a gesture into its entry. Returns the entry key, null when the
+     * gesture ended where it began (the entry is removed), or undefined when the entry no
+     * longer exists and the caller should record the write on its own.
+     */
+    async fold(db, calendarId, newest, d, now) {
+        const ref = db.ref(`/${HISTORY_ROOT}/${calendarId}/${newest.key}`);
+        const indexRef = db.ref(`/${HISTORY_ROOT}_index/${calendarId}/${newest.key}`);
+        const toByKey = new Map(d.changed.map(c => [this.key(c.to), c.to]));
+        // A transaction's first pass sees the local cache, which is empty here: return that
+        // null (not undefined, which aborts) so it re-runs on the server's value.
+        const r = await ref.child('changedEvents').transaction(cur => {
+            if (cur === null) return null;
+            if (!Array.isArray(cur)) return undefined;
+            return cur.map(c => {
+                const next = toByKey.get(this.key(c.from));
+                return next && (c.at ?? 0) <= now ? { ...c, to: next, at: now } : c;
+            });
+        });
+        const merged = r.snapshot.val();
+        if (!Array.isArray(merged) || !merged.length) {
+            // Gone. Drop the index row too, or a row with no kind would count as a
+            // destructive entry in toTrim forever.
+            await indexRef.remove();
+            return undefined;
+        }
+        // Back where the gesture started -- a drag returned to its origin, or an undo of
+        // this very edit. A row reading "1 event edited" whose undo does nothing is noise.
+        if (merged.every(c => this.sameEvent(c.from, c.to))) {
+            await Promise.all([ref.remove(), indexRef.remove()]);
+            return null;
+        }
+        // Only touch an index row that still exists: update() on a removed one would
+        // recreate it without a kind.
+        await indexRef.transaction(cur => cur === null ? null : { ...cur, t: Math.max(cur.t || 0, now) });
+        return newest.key;
     },
 
     /**
@@ -1228,7 +1260,7 @@ const HistoryService = {
     //   - destructive entries: the newest HISTORY_KEEP, plus any younger than
     //     HISTORY_PROTECT_MS, up to HISTORY_HARD_CAP in all.
     toTrim(index, now) {
-        const newestFirst = [...index].sort((x, y) => y.t - x.t);
+        const newestFirst = [...index].filter(e => e.k).sort((x, y) => y.t - x.t);
         const adds = newestFirst.filter(e => !this.restorable(e.k));
         const destructive = newestFirst.filter(e => this.restorable(e.k));
         const drop = adds.slice(HISTORY_ADDED_KEEP);

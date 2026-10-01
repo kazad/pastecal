@@ -230,13 +230,48 @@ test('HistoryService.record: a drag is one entry, keeping the pre-gesture state'
     await cleanup(id);
     try {
         const at = (h) => ({ ...ev('A', 'Dragged'), start: `2026-09-17T${h}:00:00.000Z`, end: `2026-09-17T${h}:30:00.000Z` });
-        await HistoryService.record(db, id, cal(id, [at('10')]), cal(id, [at('11')]));
-        await HistoryService.record(db, id, cal(id, [at('11')]), cal(id, [at('12')]));
-        await HistoryService.record(db, id, cal(id, [at('12')]), cal(id, [at('13')]));
+        await HistoryService.record(db, id, cal(id, [at('10')]), cal(id, [at('11')], { _writer: 'w1' }));
+        await HistoryService.record(db, id, cal(id, [at('11')]), cal(id, [at('12')], { _writer: 'w1' }));
+        await HistoryService.record(db, id, cal(id, [at('12')]), cal(id, [at('13')], { _writer: 'w1' }));
         const entries = await historyOf(id);
         assert.equal(entries.length, 1, 'three saves of one drag are one entry');
         assert.equal(entries[0].changedEvents[0].from.start, at('10').start, 'undo returns to before the drag');
         assert.equal(entries[0].changedEvents[0].to.start, at('13').start);
+    } finally {
+        await cleanup(id);
+    }
+});
+
+test('HistoryService.record: a collaborator\'s edit is never folded into my drag', async () => {
+    const id = 'hist-drag-two-' + Date.now();
+    await cleanup(id);
+    try {
+        const at = (h) => ({ ...ev('A', 'Dragged'), start: `2026-09-17T${h}:00:00.000Z`, end: `2026-09-17T${h}:30:00.000Z` });
+        const t0 = Date.now();
+        await HistoryService.record(db, id, cal(id, [at('10')]), cal(id, [at('11')], { _writer: 'alice' }), t0);
+        await HistoryService.record(db, id, cal(id, [at('11')]), cal(id, [at('14')], { _writer: 'bob' }), t0 + 1000);
+        const entries = (await historyOf(id)).sort((x, y) => x.savedAt - y.savedAt);
+        assert.equal(entries.length, 2, 'two people, two entries');
+        assert.deepEqual(entries.map(e => e.writer), ['alice', 'bob']);
+        assert.equal(entries[0].changedEvents[0].to.start, at('11').start, 'my entry ends where I left it');
+    } finally {
+        await cleanup(id);
+    }
+});
+
+test('HistoryService.record: a save that also adds rows is never folded away', async () => {
+    const id = 'hist-drag-add-' + Date.now();
+    await cleanup(id);
+    try {
+        const at = (h) => ({ ...ev('A', 'Weekly'), start: `2026-09-17T${h}:00:00.000Z`, end: `2026-09-17T${h}:30:00.000Z` });
+        const t0 = Date.now();
+        await HistoryService.record(db, id, cal(id, [at('10')]), cal(id, [at('11')], { _writer: 'w1' }), t0);
+        await HistoryService.record(db, id, cal(id, [at('11')]),
+            cal(id, [at('12'), ev('X', 'Moved occurrence')], { _writer: 'w1' }), t0 + 1000);
+        const entries = await historyOf(id);
+        assert.equal(entries.length, 2);
+        assert.ok(entries.some(e => (e.addedEvents || []).some(x => x.title === 'Moved occurrence')),
+            'the added row is on record');
     } finally {
         await cleanup(id);
     }
@@ -274,9 +309,9 @@ test('HistoryService.record: drag saves processed out of order keep the final po
     try {
         const at = (h) => ({ ...ev('A', 'Dragged'), start: `2026-09-17T${h}:00:00.000Z`, end: `2026-09-17T${h}:30:00.000Z` });
         const t0 = Date.now();
-        await HistoryService.record(db, id, cal(id, [at('10')]), cal(id, [at('11')]), t0);
-        await HistoryService.record(db, id, cal(id, [at('12')]), cal(id, [at('13')]), t0 + 1000);
-        await HistoryService.record(db, id, cal(id, [at('11')]), cal(id, [at('12')]), t0 + 500);   // late
+        await HistoryService.record(db, id, cal(id, [at('10')]), cal(id, [at('11')], { _writer: 'w1' }), t0);
+        await HistoryService.record(db, id, cal(id, [at('12')]), cal(id, [at('13')], { _writer: 'w1' }), t0 + 1000);
+        await HistoryService.record(db, id, cal(id, [at('11')]), cal(id, [at('12')], { _writer: 'w1' }), t0 + 500);   // late
         const [entry] = await historyOf(id);
         assert.equal(entry.changedEvents[0].from.start, at('10').start);
         assert.equal(entry.changedEvents[0].to.start, at('13').start, 'the late save did not rewind `to`');
@@ -291,8 +326,8 @@ test('HistoryService.record: an edit undone within the gesture window leaves no 
     try {
         const at = (h) => ({ ...ev('A', 'Dragged'), start: `2026-09-17T${h}:00:00.000Z`, end: `2026-09-17T${h}:30:00.000Z` });
         const t0 = Date.now();
-        await HistoryService.record(db, id, cal(id, [at('10')]), cal(id, [at('11')]), t0);
-        await HistoryService.record(db, id, cal(id, [at('11')]), cal(id, [at('10')]), t0 + 1000);
+        await HistoryService.record(db, id, cal(id, [at('10')]), cal(id, [at('11')], { _writer: 'w1' }), t0);
+        await HistoryService.record(db, id, cal(id, [at('11')]), cal(id, [at('10')], { _writer: 'w1' }), t0 + 1000);
         assert.deepEqual(await historyOf(id), [], 'a change that ended where it began is not a change');
     } finally {
         await cleanup(id);
