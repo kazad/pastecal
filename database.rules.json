@@ -5,7 +5,7 @@
     "calendars": {
       "$id": {
         ".read": true,
-        ".write": true
+        ".write": "data.exists() || !newData.exists() || ($id.matches(/^[A-Za-z0-9_-]{1,100}$/) && !root.child('calendars_readonly').child($id).exists() && !root.child('calendars_readonly').child($id.toLowerCase()).exists() && !root.child('public_views').child($id.toLowerCase()).exists())"
       }
     },
     "calendars_readonly": {

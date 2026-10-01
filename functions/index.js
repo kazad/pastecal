@@ -274,6 +274,28 @@ async function sweepAllDeviceBuckets({ pageSize = SWEEP_PAGE_SIZE, maxPerRun = S
     return { examined, reachedEnd };
 }
 
+// Archived history (deleted calendars) is kept as long as the daily backups, then dropped.
+// Without this the archive was the one store with no retention: deleting and recreating a
+// calendar moved its whole log there each time, forever.
+const HISTORY_ARCHIVE_TTL_MS = 90 * 24 * 60 * 60 * 1000;
+
+async function sweepHistoryArchive(db, now = Date.now(), limit = 500) {
+    const expired = await db.ref(`/${HISTORY_ROOT}_archive_index`)
+        .orderByKey().endAt(String(now - HISTORY_ARCHIVE_TTL_MS)).limitToFirst(limit).once('value');
+    const update = {};
+    expired.forEach(c => {
+        const [at, ...rest] = c.key.split('_');
+        const calendarId = rest.join('_');
+        update[`/${HISTORY_ROOT}_archive/${calendarId}/${at}`] = null;
+        update[`/${HISTORY_ROOT}_archive_index/${c.key}`] = null;
+    });
+    if (Object.keys(update).length) await db.ref().update(update);
+    return Object.keys(update).length / 2;
+}
+
+exports.sweepHistoryArchive = onSchedule({ schedule: 'every day 03:41', timeZone: 'UTC' },
+    () => sweepHistoryArchive(admin.database()));
+
 exports.sweepDeviceBuckets = onSchedule({ schedule: 'every day 03:17', timeZone: 'UTC' }, async () => {
     const { examined, reachedEnd } = await sweepAllDeviceBuckets();
     console.log(`Device bucket sweep: examined=${examined} reachedEnd=${reachedEnd}`);
@@ -901,8 +923,8 @@ const PublicViewService = {
         if (!cal || !cal.options || cal.options.renamedFrom !== bound) return false;
         const source = (await db.ref(`/${DEFAULT_ROOT}/${bound}/options/publicViewId`).once('value')).val();
         if (source !== publicViewId) return false;
-        const r = await db.ref(`${this.BINDINGS}/${publicViewId}`)
-            .transaction(cur => cur === null ? null : cur === bound ? calendarId : undefined);
+        const r = await updateExisting(db.ref(`${this.BINDINGS}/${publicViewId}`),
+            cur => cur === bound ? calendarId : undefined);
         if (!r.committed) return false;
         await db.ref().update({
             [`${this.BY_CALENDAR}/${bound}/${publicViewId}`]: null,
@@ -987,6 +1009,18 @@ const IDService = {
 // snapshot: nothing was lost, and a full copy per add is what let a burst of adds evict
 // the snapshot that mattered.
 // ---------------------------------------------------------------------------------------
+/**
+ * Transform a value that should already exist, atomically. A transaction's first pass runs
+ * on the local cache, which is empty in a function, so `cur` is null there even when the
+ * server holds a value; returning undefined then ABORTS instead of retrying on the real
+ * value. That mistake was made three separate times, so it lives here once: a null pass
+ * returns null (the server retries with its value if there is one), and `fn` returning
+ * undefined aborts deliberately.
+ */
+function updateExisting(ref, fn) {
+    return ref.transaction(cur => cur === null ? null : fn(cur));
+}
+
 const HISTORY_ROOT = "history";
 const HISTORY_KEEP = 20;                         // destructive entries always kept, per calendar
 const HISTORY_ADDED_KEEP = 20;                   // `added` entries kept, budgeted separately
@@ -1081,7 +1115,7 @@ const HistoryService = {
      * One number per calendar, overwritten in place, so it costs nothing to keep current.
      * The client watches it directly, so the "Edited N ago" label needs no /history read.
      */
-    async stampLastEdit(db, calendarId, before, after) {
+    async stampLastEdit(db, calendarId, before, after, at = Date.now()) {
         if (!after) return null;                       // deletion: nothing left to stamp
         const b = this.eventsOf(before), a = this.eventsOf(after);
         const changed = !before
@@ -1090,7 +1124,9 @@ const HistoryService = {
             || this.userOptions(before) !== this.userOptions(after)
             || a.some((e, i) => !this.sameEvent(e, b[i] ?? {}));
         if (!changed) return null;
-        return db.ref(`/${HISTORY_ROOT}_meta/${calendarId}/lastEditedAt`).set(Date.now());
+        // The write's own time, and only forward: triggers arrive out of order.
+        return db.ref(`/${HISTORY_ROOT}_meta/${calendarId}/lastEditedAt`)
+            .transaction(cur => (cur === null || cur < at) ? at : undefined);
     },
 
     /**
@@ -1106,6 +1142,11 @@ const HistoryService = {
      */
     async archiveOnDelete(db, calendarId, before, at) {
         const batch = `/${HISTORY_ROOT}_archive/${calendarId}/${at}`;
+        // Late writes from before this deletion follow it into the archive (see record).
+        await db.ref(`/${HISTORY_ROOT}_deleted/${calendarId}`)
+            .transaction(cur => (cur === null || cur < at) ? at : undefined);
+        // Time-ordered, so the retention sweep finds expired batches without reading them.
+        await db.ref(`/${HISTORY_ROOT}_archive_index/${at}_${calendarId}`).set(true);
         const removed = this.eventsOf(before);
         await db.ref(`${batch}/${db.ref().push().key}`).set({
             savedAt: at, kind: 'deleted', removed: removed.length, changed: 0, added: 0,
@@ -1143,6 +1184,13 @@ const HistoryService = {
         const why = this.changeKind(before, after);
         if (!why) return null;
 
+        // History belongs to an incarnation of the calendar, not to its slug. A write made
+        // before the calendar was deleted can reach this trigger after the deletion was
+        // archived; it belongs with that archive, never in the /history a newcomer at the
+        // same slug reads.
+        const deletedAt = (await db.ref(`/${HISTORY_ROOT}_deleted/${calendarId}`).once('value')).val();
+        const toArchive = typeof deletedAt === 'number' && at <= deletedAt;
+
         const d = this.diff(before, after);
         const ref = db.ref(`/${HISTORY_ROOT}/${calendarId}`);
         const indexRef = db.ref(`/${HISTORY_ROOT}_index/${calendarId}`);
@@ -1153,6 +1201,12 @@ const HistoryService = {
         // Which browser made this write (CalendarDataService stamps `_writer`). Only that
         // browser's later saves may fold into its entry, and its Cmd+Z only undoes its own.
         const writer = typeof after._writer === 'string' ? after._writer.slice(0, 64) : null;
+        // What the client says this write is: one save of a drag/resize gesture, or an undo
+        // of named entries. Identities, so neither has to be guessed from timing later.
+        const gesture = typeof after._gesture === 'string' ? after._gesture.slice(0, 64) : null;
+        const undoOf = Array.isArray(after._undoOf)
+            ? after._undoOf.filter(k => typeof k === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(k)).slice(0, 50)
+            : [];
 
         // A drag or resize saves every 500ms, and each save is an edit of the same events.
         // Fold it into the entry the gesture started: that entry's `from` is the state
@@ -1165,9 +1219,13 @@ const HistoryService = {
         // `to` is replaced in a transaction and only by a LATER write, so saves processed out
         // of order cannot leave it at an intermediate position.
         const newest = index.sort((x, y) => y.t - x.t)[0];
-        if (why.kind === 'edited' && !why.added && writer && newest && newest.k === 'edited'
-            && newest.w === writer && newest.ck === changedKeys
-            && now - (newest.s ?? newest.t) < HISTORY_COALESCE_MS) {
+        // Same gesture when the client names one; the time window remains only for clients
+        // that predate gesture ids, so two separate drags are never folded into one entry.
+        const sameGesture = gesture
+            ? newest && newest.g === gesture
+            : newest && !newest.g && now - (newest.s ?? newest.t) < HISTORY_COALESCE_MS;
+        if (!toArchive && why.kind === 'edited' && !why.added && !undoOf.length && writer && newest
+            && newest.k === 'edited' && newest.w === writer && newest.ck === changedKeys && sameGesture) {
             const folded = await this.fold(db, calendarId, newest, d, now);
             if (folded !== undefined) return folded;
             // The entry vanished under us (a concurrent save returned the gesture to its
@@ -1187,16 +1245,31 @@ const HistoryService = {
             title: before.title ?? null,
             options: before.options ?? null,
             writer,
+            ...(gesture ? { gesture } : {}),
+            ...(undoOf.length ? { undoOf } : {}),
         };
         // The full prior state, for the operator's restore -- only where the delta does not
         // already hold it. A wipe's removedEvents IS the prior state, and an edit's `from`
         // values are what restoring it needs, so storing `events` too made each entry two or
         // three copies of the calendar; with up to HISTORY_HARD_CAP entries a day, that let
         // one writer multiply a calendar's storage a few hundredfold.
-        if (why.kind === 'shrunk' || why.kind === 'title-cleared') entry.events = this.eventsOf(before);
+        //
+        // At most one full checkpoint per calendar per day: the delta already reverses a
+        // shrink, and a snapshot on every shrink let one-event remove/re-add loops turn a
+        // 1MB calendar into 20MB of history.
+        const lastCheckpoint = Math.max(0, ...index.filter(r => r.cp).map(r => r.t || 0));
+        const checkpoint = (why.kind === 'shrunk' || why.kind === 'title-cleared')
+            && now - lastCheckpoint >= HISTORY_PROTECT_MS;
+        if (checkpoint) entry.events = this.eventsOf(before);
+
+        if (toArchive) {
+            await db.ref(`/${HISTORY_ROOT}_archive/${calendarId}/${deletedAt}/${db.ref().push().key}`).set(entry);
+            return null;
+        }
 
         const pushed = await ref.push(entry);
-        const row = { k: why.kind, t: now, s: now, ck: changedKeys, ...(writer ? { w: writer } : {}) };
+        const row = { k: why.kind, t: now, s: now, ck: changedKeys,
+            ...(writer ? { w: writer } : {}), ...(gesture ? { g: gesture } : {}), ...(checkpoint ? { cp: 1 } : {}) };
         index.push({ key: pushed.key, ...row });
         await indexRef.child(pushed.key).set(row);
         await this.trim(db, calendarId, index, now);
@@ -1212,10 +1285,7 @@ const HistoryService = {
         const ref = db.ref(`/${HISTORY_ROOT}/${calendarId}/${newest.key}`);
         const indexRef = db.ref(`/${HISTORY_ROOT}_index/${calendarId}/${newest.key}`);
         const toByKey = new Map(d.changed.map(c => [this.key(c.to), c.to]));
-        // A transaction's first pass sees the local cache, which is empty here: return that
-        // null (not undefined, which aborts) so it re-runs on the server's value.
-        const r = await ref.child('changedEvents').transaction(cur => {
-            if (cur === null) return null;
+        const r = await updateExisting(ref.child('changedEvents'), cur => {
             if (!Array.isArray(cur)) return undefined;
             return cur.map(c => {
                 const next = toByKey.get(this.key(c.from));
@@ -1237,7 +1307,7 @@ const HistoryService = {
         }
         // Only touch an index row that still exists: update() on a removed one would
         // recreate it without a kind.
-        await indexRef.transaction(cur => cur === null ? null : { ...cur, t: Math.max(cur.t || 0, now) });
+        await updateExisting(indexRef, cur => ({ ...cur, t: Math.max(cur.t || 0, now) }));
         return newest.key;
     },
 
@@ -1296,7 +1366,7 @@ exports.generateICSV2 = onRequest({ cors: true }, async (req, res) => {
     try {
         const pathWithoutICS = req.path.replace(/[.]ICS.*/i, '');
         //console.log('Path without ICS:', pathWithoutICS);
-        const { rawSlug } = CalendarService.parseCalendarPath(pathWithoutICS);
+        const { rawSlug, isReadOnly: wantsView } = CalendarService.parseCalendarPath(pathWithoutICS);
 
         // Calendars are stored under their original casing, but URLs (and the naive
         // lowercase in parseCalendarPath) may not match it — resolve via the same
@@ -1304,6 +1374,11 @@ exports.generateICSV2 = onRequest({ cors: true }, async (req, res) => {
         // key directly, which silently 404s or returns an unrelated calendar (#37).
         const lookup = await SlugService.lookupCalendar(rawSlug);
         if (!lookup.found) {
+            throw new functions.https.HttpsError('not-found', 'Calendar not found');
+        }
+        // A /view/ URL only ever serves a read-only view. Resolving it to whatever the slug
+        // maps to let an editable calendar written at a view's key feed its subscribers.
+        if (wantsView && !lookup.isReadOnly) {
             throw new functions.https.HttpsError('not-found', 'Calendar not found');
         }
         const cleanId = lookup.actualSlug;
@@ -1467,12 +1542,18 @@ exports.indexSlug = onValueWritten(`/${DEFAULT_ROOT}/{calendarId}/id`, async (ev
     // wrote last. An empty incumbent is still replaced, so a genuinely abandoned placeholder does not hold a
     // slug hostage. The delete branch above already reasons this way; this is the same
     // rule applied to creation.
-    // A read-only view holds its slug too: without this, writing /calendars/<view id>/id
-    // was enough to take a shared view's URL and its ICS feed.
-    if (current && current.actualSlug && current.actualSlug !== calendarId
-        && (current.isReadOnly
-            ? (await admin.database().ref(`/${READONLY_ROOT}/${current.actualSlug}/id`).once('value')).exists()
-            : await SlugService.holdsData(admin.database(), current.actualSlug))) {
+    // One name, one owner. Editable calendars and read-only views share a URL namespace but
+    // live in two key spaces, so a live view's mapping is never handed to an editable
+    // calendar -- not even one written at the view's own key, which is exactly what an
+    // attacker does to take over its URL and ICS feed (database.rules.json also refuses
+    // creating such a calendar; this holds for any that predate the rule).
+    if (current && current.isReadOnly && current.actualSlug
+        && (await admin.database().ref(`/${READONLY_ROOT}/${current.actualSlug}/id`).once('value')).exists()) {
+        console.log(`indexSlug: ${calendarId} not taking /${normalized} from live view ${current.actualSlug}`);
+        return null;
+    }
+    if (current && current.actualSlug && current.actualSlug !== calendarId && !current.isReadOnly
+        && await SlugService.holdsData(admin.database(), current.actualSlug)) {
         console.log(`indexSlug: ${calendarId} not taking /${normalized} from ${current.actualSlug}, which holds data`);
         return null;
     }
@@ -1559,7 +1640,8 @@ exports.recordHistory = onValueWritten(`/${DEFAULT_ROOT}/{calendarId}`, async (e
     const before = event.data.before.val();
     const after = event.data.after.val();
     // Stamped for every change, snapshotted only for the destructive ones.
-    await HistoryService.stampLastEdit(db, id, before, after);
+    const writeAt = Date.parse(event.time);
+    await HistoryService.stampLastEdit(db, id, before, after, Number.isFinite(writeAt) ? writeAt : Date.now());
     const at = Date.parse(event.time);
     return HistoryService.record(db, id, before, after, Number.isFinite(at) ? at : Date.now());
 });
@@ -1586,6 +1668,7 @@ exports._internal = {
     recordIcsStat, deviceBucket, clientFamily, clientIpOf, sweepOldDeviceBuckets,
     deviceSaltSecret, sweepAllDeviceBuckets, DEVICE_SALT_PATH, SWEEP_CURSOR_PATH,
     _resetDeviceSaltCache: () => { deviceSaltSecretPromise = null; },
+    sweepHistoryArchive, HISTORY_ARCHIVE_TTL_MS,
     DEVICE_BUCKET_TTL_DAYS, HISTORY_ROOT, HISTORY_KEEP, HISTORY_ADDED_KEEP, HISTORY_HARD_CAP, HISTORY_PROTECT_MS,
 };
 

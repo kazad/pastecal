@@ -27,7 +27,7 @@ if (!process.env.FIREBASE_DATABASE_EMULATOR_HOST) {
 
 const admin = require('../../functions/node_modules/firebase-admin');
 const { _internal } = require('../../functions/index.js');
-const { HistoryService, HISTORY_ROOT, HISTORY_KEEP, HISTORY_ADDED_KEEP, HISTORY_HARD_CAP, HISTORY_PROTECT_MS } = _internal;
+const { HistoryService, sweepHistoryArchive, HISTORY_ARCHIVE_TTL_MS, HISTORY_ROOT, HISTORY_KEEP, HISTORY_ADDED_KEEP, HISTORY_HARD_CAP, HISTORY_PROTECT_MS } = _internal;
 
 const db = admin.database();
 
@@ -49,6 +49,7 @@ async function cleanup(...ids) {
         db.ref(`${HISTORY_ROOT}_index`).child(id).remove(),
         db.ref(`${HISTORY_ROOT}_meta`).child(id).remove(),
         db.ref(`${HISTORY_ROOT}_archive`).child(id).remove(),
+        db.ref(`${HISTORY_ROOT}_deleted`).child(id).remove(),
     ]));
 }
 
@@ -345,6 +346,95 @@ test('HistoryService.record: trimming reads the index, not the snapshots', async
         assert.ok(!('events' in row), 'the index carries no payload');
     } finally {
         await cleanup(id);
+    }
+});
+
+// --- round 4: identities instead of guesses -------------------------------------------
+
+test('HistoryService.record: a write from before a deletion, arriving late, goes to the archive', async () => {
+    const id = 'hist-late-' + Date.now();
+    await cleanup(id);
+    try {
+        const t0 = Date.now();
+        await HistoryService.record(db, id, cal(id, [ev('S', 'old owner secret')]), null, t0 + 2000);
+        // The shrink that happened BEFORE the deletion is delivered after it.
+        await HistoryService.record(db, id, cal(id, [ev('S', 'old owner secret'), ev('D', 'dentist')]),
+            cal(id, [ev('S', 'old owner secret')]), t0 + 1000);
+        assert.deepEqual(await historyOf(id), [], 'nothing of the old calendar where a newcomer reads');
+        const batch = (await db.ref(`${HISTORY_ROOT}_archive/${id}/${t0 + 2000}`).once('value')).val();
+        assert.ok(Object.values(batch).some(e => e.kind === 'shrunk'), 'it joined the deletion\'s archive');
+    } finally {
+        await cleanup(id);
+    }
+});
+
+test('HistoryService.record: one full checkpoint a day, however many shrinks', async () => {
+    const id = 'hist-cp-' + Date.now();
+    await cleanup(id);
+    try {
+        let events = Array.from({ length: 6 }, (_, i) => ev('E' + i, 'e' + i));
+        const t0 = Date.now();
+        for (let i = 0; i < 4; i++) {
+            const next = events.slice(1);
+            await HistoryService.record(db, id, cal(id, events), cal(id, next), t0 + i * 1000);
+            events = next;
+        }
+        const entries = await historyOf(id);
+        assert.equal(entries.length, 4);
+        assert.equal(entries.filter(e => Array.isArray(e.events)).length, 1, 'only the first carries a snapshot');
+        assert.ok(entries.every(e => e.removedEvents.length === 1), 'every entry still names what it removed');
+    } finally {
+        await cleanup(id);
+    }
+});
+
+test('HistoryService.record: saves fold by gesture id, not by a time window', async () => {
+    const id = 'hist-gesture-' + Date.now();
+    await cleanup(id);
+    try {
+        const at = (h) => ({ ...ev('A', 'Dragged'), start: `2026-09-17T${h}:00:00.000Z`, end: `2026-09-17T${h}:30:00.000Z` });
+        const t0 = Date.now();
+        await HistoryService.record(db, id, cal(id, [at('10')]), cal(id, [at('11')], { _writer: 'w', _gesture: 'g1' }), t0);
+        // Same gesture, long after any time window: still one entry.
+        await HistoryService.record(db, id, cal(id, [at('11')]), cal(id, [at('12')], { _writer: 'w', _gesture: 'g1' }), t0 + 5 * 60000);
+        // A new gesture seconds later: its own entry.
+        await HistoryService.record(db, id, cal(id, [at('12')]), cal(id, [at('13')], { _writer: 'w', _gesture: 'g2' }), t0 + 5 * 60000 + 2000);
+        const entries = (await historyOf(id)).sort((x, y) => x.savedAt - y.savedAt);
+        assert.equal(entries.length, 2);
+        assert.deepEqual(entries.map(e => e.gesture), ['g1', 'g2']);
+        assert.equal(entries[0].changedEvents[0].to.start, at('12').start);
+    } finally {
+        await cleanup(id);
+    }
+});
+
+test('HistoryService.record: an undo names the entries it reverses', async () => {
+    const id = 'hist-undoof-' + Date.now();
+    await cleanup(id);
+    try {
+        await HistoryService.record(db, id, cal(id, [ev('A', 'a')]), cal(id, [ev('A', 'a'), ev('B', 'b')],
+            { _writer: 'w', _undoOf: ['-Kabc123', 'bad/key', 42] }));
+        const [entry] = await historyOf(id);
+        assert.deepEqual(entry.undoOf, ['-Kabc123'], 'only well-formed keys are kept');
+    } finally {
+        await cleanup(id);
+    }
+});
+
+test('sweepHistoryArchive: archived history expires with the backups, and only then', async () => {
+    const id = 'hist-ttl-' + Date.now();
+    await cleanup(id);
+    try {
+        const now = Date.now();
+        const old = now - HISTORY_ARCHIVE_TTL_MS - 1000, recent = now - 1000;
+        await HistoryService.record(db, id, cal(id, [ev('A', 'a')]), null, old);
+        await HistoryService.record(db, id, cal(id, [ev('B', 'b')]), null, recent);
+        await sweepHistoryArchive(db, now);
+        const left = Object.keys((await db.ref(`${HISTORY_ROOT}_archive/${id}`).once('value')).val() || {});
+        assert.deepEqual(left, [String(recent)]);
+    } finally {
+        await cleanup(id);
+        await db.ref(`${HISTORY_ROOT}_archive_index`).remove();
     }
 });
 

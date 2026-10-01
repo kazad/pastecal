@@ -499,6 +499,30 @@ test('SlugService.lookupCalendar: a view follows its calendar through a rename, 
     }
 });
 
+test('rules: nobody can create an editable calendar at a live view\'s key', async () => {
+    const host = process.env.FIREBASE_DATABASE_EMULATOR_HOST;
+    const u = new URL(admin.app().options.databaseURL || 'http://x?ns=pastecal-web-default-rtdb');
+    const ns = u.searchParams.get('ns') || u.hostname.split('.')[0];
+    const pv = 'viewkey' + Date.now();
+    try {
+        await db.ref(`calendars_readonly/${pv}`).set({ id: pv, title: 'shared' });
+        const put = (key, body) => fetch(`http://${host}/calendars/${key}.json?ns=${ns}`,
+            { method: 'PUT', body: JSON.stringify(body) });
+
+        assert.equal((await put(pv, { id: pv, events: [{ id: 'x', title: 'SCAM' }] })).status, 401,
+            'taking over a view by writing its key is refused');
+        assert.equal((await put(`${pv}/id`, pv)).status, 401, 'by a child write too');
+        assert.equal((await put(pv.toUpperCase(), { id: pv.toUpperCase() })).status, 401, 'or by its case-twin');
+
+        const fresh = 'freshcal' + Date.now();
+        assert.equal((await put(fresh, { id: fresh, title: 'mine' })).status, 200, 'an ordinary new calendar is fine');
+        assert.equal((await put(`${fresh}/title`, 'renamed')).status, 200, 'and editing it is fine');
+        await db.ref(`calendars/${fresh}`).remove();
+    } finally {
+        await db.ref(`calendars_readonly/${pv}`).remove();
+    }
+});
+
 test('SlugService.lookupCalendar: generated view ids are long, lowercase and unbiased in shape', () => {
     const { IDService } = _internal;
     for (let i = 0; i < 200; i++) assert.match(IDService.generatePublicViewId(), /^[a-z0-9]{10}$/);
