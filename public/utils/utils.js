@@ -304,11 +304,30 @@ Object.assign(Utils, {
         // behind, so collapse runs of whitespace rather than only trimming ends.
         let remainingText = entry.replace(parsedText, '').replace(/\s+/g, ' ').trim();
 
-        const { subject, duration } = extractDuration(remainingText);
+        const { subject, duration, days } = extractDuration(remainingText);
 
-        if (duration && !endDate) {
+        // chrono fills a missing time with 12:00, so "vacation dec 11 - dec 15" came out
+        // as a noon-to-noon timed event. No explicit hour on either end (and no hour or
+        // minute duration) means the user gave dates only: make it all-day, ending
+        // (exclusively) the day after the last date.
+        const hasTime = (c) => !!(c && typeof c.isCertain === 'function' && c.isCertain('hour'));
+        const isAllDay = !hasTime(result.start) && !hasTime(result.end) && !duration;
+        if (isAllDay) {
+            startDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+            if (endDate) {
+                endDate = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate() + 1);
+            }
+        }
+
+        if (!endDate && days) {
+            // Calendar-day arithmetic: N * 24h drifts an hour across a DST change.
+            endDate = new Date(startDate);
+            endDate.setDate(endDate.getDate() + days);
+        } else if (!endDate && duration) {
             endDate = new Date(startDate.getTime() + duration);
-        } else if (!endDate && !duration) {
+        } else if (!endDate && isAllDay) {
+            endDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + 1);
+        } else if (!endDate) {
             const defaultDuration = 60 * 60 * 1000;
             endDate = new Date(startDate.getTime() + defaultDuration);
         }
@@ -316,7 +335,8 @@ Object.assign(Utils, {
         return {
             subject: subject || 'Untitled Event',
             startDateTime: startDate.toISOString(),
-            endDateTime: endDate ? endDate.toISOString() : null
+            endDateTime: endDate ? endDate.toISOString() : null,
+            isAllDay
         };
     }
 });
@@ -327,7 +347,7 @@ function extractDuration(text) {
     const match = text.match(durationRegex);
 
     if (!match) {
-        return { subject: text, duration: null };
+        return { subject: text, duration: null, days: null };
     }
 
     const [fullMatch, amount, unit] = match;
@@ -343,6 +363,12 @@ function extractDuration(text) {
             durationMs = parseFloat(amount) * 60 * 1000;
             break;
         case 'day':
+            // Whole days are added as calendar days by the caller (DST-safe); a
+            // fractional day has no calendar meaning, so it stays elapsed time.
+            if (Number.isInteger(parseFloat(amount))) {
+                const subject = text.replace(fullMatch, '').replace(/\s+/g, ' ').trim();
+                return { subject, duration: null, days: parseInt(amount, 10) };
+            }
             durationMs = parseFloat(amount) * 24 * 60 * 60 * 1000;
             break;
         default:
@@ -351,7 +377,7 @@ function extractDuration(text) {
 
     const subject = text.replace(fullMatch, '').replace(/\s+/g, ' ').trim();
 
-    return { subject, duration: durationMs };
+    return { subject, duration: durationMs, days: null };
 }
 
 window.RecentCalendars = RecentCalendars;

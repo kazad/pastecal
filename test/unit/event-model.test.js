@@ -163,3 +163,33 @@ test('Event.isComplete: works on plain objects read back from Firebase', () => {
   assert.equal(Event.isComplete(null), false);
   assert.equal(Event.isComplete(undefined), false);
 });
+
+// --- Data that Firebase would reject or the write gate would drop -------------------------
+
+test('Event: a non-numeric type falls back to the default instead of NaN', () => {
+  // NaN anywhere in the payload makes Firebase reject the whole calendar write.
+  assert.equal(new Event({ type: 'abc' }).type, 1);
+  assert.equal(new Event({ Type: 'abc' }).type, 1);
+  assert.equal(new Event({ type: '3' }).type, 3);
+  assert.equal(new Event({ type: 0 }).type, 1, '0 is not a valid type; default as before');
+});
+
+test('Event: a valid EndTime survives an invalid StartTime', () => {
+  // getSyncFusionEvents() turns a bad stored start into StartTime: null; the end used to
+  // be thrown away with it because Syncfusion records have no `end` to fall back on.
+  const e = new Event({ Subject: 'X', StartTime: null, EndTime: new Date(ISO_END) });
+  assert.equal(e.start, null);
+  assert.equal(e.end, ISO_END);
+});
+
+test('Event: an inverted range keeps its start and gets the default length', () => {
+  // Normalized rather than rejected: rejecting at the write gate would drop the event.
+  const timed = new Event({ title: 'X', start: ISO_END, end: ISO_START });
+  assert.equal(timed.start, ISO_END);
+  assert.equal(timed.end, '2026-05-27T14:00:00.000Z');
+  assert.equal(timed.isComplete(), true);
+
+  const allDay = new Event({ title: 'X', isAllDay: true,
+    start: '2026-10-02T00:00:00.000Z', end: '2026-10-01T00:00:00.000Z' });
+  assert.equal(allDay.end, '2026-10-03T00:00:00.000Z');
+});
