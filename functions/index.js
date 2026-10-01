@@ -828,12 +828,11 @@ const SlugService = {
         // Paging or shallow-reading the scan would only have made an O(all-calendars)
         // operation cheaper; the index makes it O(1).
         //
-        // Only over nothing or another miss: this runs after reads that may be stale, and a
-        // plain set() here replaced a mapping indexSlug had written in the meantime, hiding a
-        // calendar created a moment ago for the whole cache period.
-        await cacheRef.transaction(cur => (cur === null || (cur && cur.notFound))
-            ? { notFound: true, cachedAt: Date.now() }
-            : undefined);
+        // No negative-cache write any more. It existed because a miss used to cost a full
+        // scan; with the index a miss is two tiny reads, and caching it wrote one permanent
+        // row per guessed slug -- unbounded growth from an unauthenticated callable -- and
+        // could overwrite a mapping indexSlug wrote meanwhile. Entries already cached still
+        // expire through the branch above.
         return { found: false };
     }
 };
@@ -1095,27 +1094,31 @@ const HistoryService = {
      * Only entries up to the deletion move, so a newcomer's own entries are never swept up.
      */
     async archiveOnDelete(db, calendarId, before, at) {
-        const [hist, meta] = await Promise.all([
-            db.ref(`/${HISTORY_ROOT}/${calendarId}`).once('value'),
-            db.ref(`/${HISTORY_ROOT}_meta/${calendarId}/lastEditedAt`).once('value'),
-        ]);
         const batch = `/${HISTORY_ROOT}_archive/${calendarId}/${at}`;
-        const update = {};
-        hist.forEach(c => {
-            if ((c.val() && c.val().savedAt || 0) > at) return;
-            update[`${batch}/${c.key}`] = c.val();
-            update[`/${HISTORY_ROOT}/${calendarId}/${c.key}`] = null;
-            update[`/${HISTORY_ROOT}_index/${calendarId}/${c.key}`] = null;
-        });
         const removed = this.eventsOf(before);
-        update[`${batch}/${db.ref().push().key}`] = {
+        await db.ref(`${batch}/${db.ref().push().key}`).set({
             savedAt: at, kind: 'deleted', removed: removed.length, changed: 0, added: 0,
             removedEvents: removed, changedEvents: [], addedEvents: [],
             eventCount: removed.length, title: before.title ?? null, options: before.options ?? null,
             events: removed,
-        };
-        if ((meta.val() || 0) <= at) update[`/${HISTORY_ROOT}_meta/${calendarId}`] = null;
-        await db.ref().update(update);
+        });
+
+        // One entry at a time, chosen from the index: a single read of the whole log could
+        // hold a hundred calendar-sized snapshots in memory and fail, leaving the log where
+        // a newcomer at this slug would read it. Each move is one multi-path update, so an
+        // entry is always in exactly one place.
+        const index = await this.loadIndex(db, calendarId);
+        for (const row of index) {
+            if ((row.s ?? row.t) > at) continue;             // a newcomer's own entry
+            const entry = (await db.ref(`/${HISTORY_ROOT}/${calendarId}/${row.key}`).once('value')).val();
+            await db.ref().update({
+                [`${batch}/${row.key}`]: entry,
+                [`/${HISTORY_ROOT}/${calendarId}/${row.key}`]: null,
+                [`/${HISTORY_ROOT}_index/${calendarId}/${row.key}`]: null,
+            });
+        }
+        const meta = await db.ref(`/${HISTORY_ROOT}_meta/${calendarId}/lastEditedAt`).once('value');
+        if ((meta.val() || 0) <= at) await db.ref(`/${HISTORY_ROOT}_meta/${calendarId}`).remove();
         return batch;
     },
 
@@ -1181,8 +1184,12 @@ const HistoryService = {
             title: before.title ?? null,
             options: before.options ?? null,
         };
-        // The full prior state, for the operator's restore -- only when something was lost.
-        if (this.restorable(why.kind)) entry.events = this.eventsOf(before);
+        // The full prior state, for the operator's restore -- only where the delta does not
+        // already hold it. A wipe's removedEvents IS the prior state, and an edit's `from`
+        // values are what restoring it needs, so storing `events` too made each entry two or
+        // three copies of the calendar; with up to HISTORY_HARD_CAP entries a day, that let
+        // one writer multiply a calendar's storage a few hundredfold.
+        if (why.kind === 'shrunk' || why.kind === 'title-cleared') entry.events = this.eventsOf(before);
 
         const pushed = await ref.push(entry);
         index.push({ key: pushed.key, k: why.kind, t: now, s: now, ck: changedKeys });
@@ -1321,7 +1328,13 @@ exports.generateICSV2 = onRequest({ cors: true }, async (req, res) => {
 });
 
 exports.createPublicLink = onCall(async (request) => {
-    const { sourceCalendarId, customSlug } = request.data;
+    const { sourceCalendarId, customSlug } = request.data || {};
+    // A calendar id, never a path. "atk/<view id>" used to plant a binding under
+    // public_views_by_calendar/atk/<view id>, which removePublicView then read as one of
+    // atk's views -- deleting someone else's view so its URL and feed could be re-claimed.
+    if (typeof sourceCalendarId !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(sourceCalendarId)) {
+        throw new functions.https.HttpsError('invalid-argument', 'Invalid calendar id.');
+    }
 
     try {
         const { data: calendarData, ref: sourceCalRef } = await CalendarService.getCalendarData(sourceCalendarId);
@@ -1452,7 +1465,10 @@ exports.indexReadOnlySlug = onValueWritten(`/${READONLY_ROOT}/{calendarId}/id`, 
     return mappingRef.set({ actualSlug: calendarId, isReadOnly: true });
 });
 
-exports.syncPublicView = onValueUpdated(`/${DEFAULT_ROOT}/{calendarId}`, async (event) => {
+// onValueWritten, not onValueUpdated: a rename creates the copy as a NEW node, and the view
+// has to move to it at once -- otherwise it stays bound to the old id until the copy's first
+// edit, and deleting the old calendar in that window deletes the view.
+exports.syncPublicView = onValueWritten(`/${DEFAULT_ROOT}/{calendarId}`, async (event) => {
     const afterData = event.data.after.val();
     const publicViewId = afterData && afterData.options?.publicViewId;
     if (!publicViewId) return null;
@@ -1475,8 +1491,15 @@ exports.removePublicView = onValueDeleted(`/${DEFAULT_ROOT}/{calendarId}/id`, as
     const calendarId = event.params.calendarId;
     const byCalendar = db.ref(`${PublicViewService.BY_CALENDAR}/${calendarId}`);
     const views = (await byCalendar.once('value')).val() || {};
+    // The reverse map is a hint, not the authority: remove only views whose binding still
+    // names this calendar (a renamed copy may have taken one over).
+    const owned = [];
+    for (const pvid of Object.keys(views)) {
+        const bound = (await db.ref(`${PublicViewService.BINDINGS}/${pvid}`).once('value')).val();
+        if (bound === calendarId) owned.push(pvid);
+    }
     return Promise.all([
-        ...Object.keys(views).flatMap(pvid => [
+        ...owned.flatMap(pvid => [
             db.ref(`/${READONLY_ROOT}/${pvid}`).remove(),
             db.ref(`${PublicViewService.BINDINGS}/${pvid}`).remove(),
         ]),

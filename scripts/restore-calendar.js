@@ -57,9 +57,12 @@ const count = (c) => { const e = c && c.events; return Array.isArray(e) ? e.filt
 
     const entry = hist[entryKey];
     if (!entry) { console.error(`no history entry ${entryKey} for ${slug}`); process.exit(1); }
+    // A wipe stores its prior state once, as removedEvents.
+    if (!Array.isArray(entry.events) && entry.kind === 'wiped') entry.events = entry.removedEvents;
     if (!Array.isArray(entry.events)) {
-        // `added` entries record what arrived, not a snapshot: there is nothing to put back.
-        console.error(`entry ${entryKey} (${entry.kind}) holds no snapshot to restore`);
+        // `added` and `edited` entries are deltas, not snapshots: undo them from Recent
+        // changes, which reverts exactly what they changed.
+        console.error(`entry ${entryKey} (${entry.kind}) holds no snapshot; undo it from Recent changes`);
         process.exit(1);
     }
 

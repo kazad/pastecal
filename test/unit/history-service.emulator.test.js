@@ -112,7 +112,9 @@ test('HistoryService.record: wiping a calendar stores its full prior state', asy
         assert.equal(entry.eventCount, 3);
         assert.equal(entry.title, 'History Test');
         assert.deepEqual(entry.options, { defaultView: 'week' });
-        assert.deepEqual(entry.events.map(e => e.title), ['Standup', 'Review', 'Retro']);
+        // A wipe's removedEvents IS the prior state; it is not stored twice.
+        assert.deepEqual(entry.removedEvents.map(e => e.title), ['Standup', 'Review', 'Retro']);
+        assert.equal(entry.events, undefined);
         assert.ok(typeof entry.savedAt === 'number' && entry.savedAt > 0);
     } finally {
         await cleanup(id);
@@ -199,7 +201,7 @@ test('HistoryService.record: twenty additions do not evict the snapshot of a wip
         const entries = await historyOf(id);
         const wipe = entries.find(e => e.kind === 'wiped');
         assert.ok(wipe, 'the wipe is still on file');
-        assert.deepEqual(wipe.events.map(e => e.title), ['Precious', 'Also precious']);
+        assert.deepEqual(wipe.removedEvents.map(e => e.title), ['Precious', 'Also precious']);
         // Additions carry no snapshot: nothing was lost, and a copy per add is the cost.
         assert.ok(entries.filter(e => e.kind === 'added').every(e => e.events === undefined));
     } finally {

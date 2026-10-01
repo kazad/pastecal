@@ -204,39 +204,26 @@ test('SlugService.lookupCalendar: exact-casing hit caches without needing a scan
     }
 });
 
-test('SlugService.lookupCalendar: unknown slug writes a negative-cache entry', async () => {
+test('SlugService.lookupCalendar: an unknown slug writes nothing', async () => {
+    // A miss used to cache {notFound} -- one permanent row per guessed slug, from a callable
+    // anyone can hit. With the index a miss costs two small reads, so nothing is cached.
     const slug = 'never-existed-negative-cache-smoke';
     try {
         const result = await SlugService.lookupCalendar(slug);
         assert.equal(result.found, false);
-
-        const cached = await db.ref(`slug_mappings/${slug}`).once('value');
-        const cacheData = cached.val();
-        assert.ok(cacheData, 'a not-found lookup must still write a cache entry');
-        assert.equal(cacheData.notFound, true);
-        assert.equal(typeof cacheData.cachedAt, 'number');
+        assert.equal((await db.ref(`slug_mappings/${slug}`).once('value')).val(), null);
     } finally {
         await db.ref(`slug_mappings/${slug}`).remove();
     }
 });
 
-test('SlugService.lookupCalendar: negative cache is honored even after the calendar is created (within TTL)', async () => {
-    // This is the actual regression proof: if lookupCalendar re-scanned on every miss (the
-    // original bug) instead of trusting the negative cache, it would find the calendar
-    // created between the two calls and incorrectly report found=true. Reporting found=false
-    // here is direct evidence the second call used the cache, not a live re-scan.
+test('SlugService.lookupCalendar: a calendar created right after a miss is found at once', async () => {
     const slug = 'created-after-negative-cache-smoke';
     try {
-        const first = await SlugService.lookupCalendar(slug);
-        assert.equal(first.found, false);
-
-        // __skipIndex: simulate a calendar appearing without the index being updated, which
-        // is the only way the negative cache is still the deciding factor. (With the index
-        // written, the trigger's entry correctly wins -- covered by its own test below.)
-        await seedCalendar(slug, { title: 'Created after the negative cache was written', __skipIndex: true });
-
+        assert.equal((await SlugService.lookupCalendar(slug)).found, false);
+        await seedCalendar(slug, { title: 'Created after a miss', __skipIndex: true });
         const second = await SlugService.lookupCalendar(slug);
-        assert.equal(second.found, false, 'negative cache must be trusted within its TTL, not re-scanned');
+        assert.equal(second.found, true, 'no stale miss hides a calendar created a moment ago');
     } finally {
         await cleanup(slug);
     }
