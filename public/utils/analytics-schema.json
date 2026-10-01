@@ -1,0 +1,29 @@
+{
+  "_comment": "Every event param analytics.js sends, and how GA4 must register it. scripts/stats.sh setup creates the custom definitions from this file, and test/unit/analytics-privacy.test.js fails if analytics.js sends a param that is not listed here -- an unregistered param is collected but can never be queried, and GA4 does not backfill.",
+  "params": {
+    "where":              { "type": "dimension", "label": "Where in UI" },
+    "surface":            { "type": "dimension", "label": "Surface" },
+    "source":             { "type": "dimension", "label": "Event source" },
+    "method":             { "type": "dimension", "label": "Share method" },
+    "feature":            { "type": "dimension", "label": "Feature" },
+    "detail":             { "type": "dimension", "label": "Feature detail" },
+    "named":              { "type": "dimension", "label": "Named at creation" },
+    "visit_bucket":       { "type": "dimension", "label": "Visit depth" },
+    "slug_length":        { "type": "dimension", "label": "Slug length" },
+    "event_count_bucket": { "type": "dimension", "label": "Calendar size" },
+    "has_custom_slug":    { "type": "dimension", "label": "Has custom slug" },
+    "reason":             { "type": "dimension", "label": "Failure reason" },
+    "kind":               { "type": "dimension", "label": "Error kind" },
+    "message":            { "type": "dimension", "label": "Error message" },
+    "intent":             { "type": "dimension", "label": "Write intent" },
+    "cal_key":            { "type": "dimension", "label": "Calendar key" },
+    "added_by_others":    { "type": "metric",    "label": "Added by others" },
+    "removed_by_others":  { "type": "metric",    "label": "Removed by others" },
+    "changed_by_others":  { "type": "metric",    "label": "Changed by others" },
+    "count":              { "type": "metric",    "label": "Dropped events" },
+    "before":             { "type": "metric",    "label": "Events before write" },
+    "after":              { "type": "metric",    "label": "Events after write" },
+    "delta":              { "type": "metric",    "label": "Write delta" },
+    "removing":           { "type": "metric",    "label": "Events removing" }
+  }
+}

@@ -12,8 +12,9 @@
 #   ./scripts/stats.sh northstar       # THE number: weekly active shared calendars (2+ people)
 #   ./scripts/stats.sh cohorts         # per birth week: reached a 2nd person? alive 4 weeks on?
 #   ./scripts/stats.sh raw <json>      # any runReport body, printed as JSON
+#   ./scripts/stats.sh key <slug>      # the cal_key a calendar appears under in GA4
 #   ./scripts/stats.sh setup           # check GA4 is configured to answer all of the above
-#   ./scripts/stats.sh setup --create  # create the missing custom dimensions
+#   ./scripts/stats.sh setup --create  # create missing custom dimensions/metrics, fix labels
 #   ./scripts/stats.sh --live          # what is firing right now (post-deploy check)
 #
 # Options (either side of the subcommand -- `stats.sh -d 7 adds` and
@@ -62,7 +63,7 @@ while [ $# -gt 0 ]; do
         -j) JSON_ONLY=1; shift ;;
         --today) INCLUDE_TODAY=1; shift ;;
         --live|--realtime) REALTIME=1; shift ;;
-        -h|--help) sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,36p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         --) shift; ARGS+=("$@"); break ;;
         -*) echo "ERROR: unknown option '$1'. See: $0 -h" >&2; exit 1 ;;
         *) ARGS+=("$1"); shift ;;
@@ -167,7 +168,9 @@ check_truncated() {
 # slugs like /demolition-crew still count; zz- and test- are bare prefixes on
 # purpose. /view/ is a read-only mirror whose id cannot be mapped back to its
 # slug, so it is dropped rather than counted as a second calendar.
-NOT_CAL_RE='^/((nativecal|view|demo|components|directives|img|js-old-components|models|services|utils)(/|$)|zz-|test-)'
+# `cal` is the route template analytics-boot.js sends in place of a real path, so
+# post-deploy pagePath rows can never be mistaken for a calendar named "cal".
+NOT_CAL_RE='^/((nativecal|view|cal|demo|components|directives|img|js-old-components|models|services|utils)(/|$)|zz-|test-)'
 
 # jq: GA4 week x pagePath rows -> one {cal, week, users} per calendar-week.
 # Requires a leading slash so GA4's "(other)" overflow row never counts, and
@@ -192,6 +195,95 @@ CAL_WEEK_JQ='
         | {cal: .[0].cal, week: .[0].week, users: (map(.users) | max)} ]'
 
 WEEKLY_BODY='{"dateRanges":[%s],"dimensions":[{"name":"isoYearIsoWeek"},{"name":"pagePath"}],"metrics":[{"name":"totalUsers"}],"limit":250000}'
+
+# How calendars are identified.
+#
+# Since the analytics-boot.js deploy, GA4 never sees a real path: the path is the edit
+# credential, so every hit carries the template /cal and the calendar rides along as
+# cal_key = first 16 hex of sha256(lowercased slug). Before that deploy the only
+# identifier is pagePath. calendar_weeks stitches the two: it finds the first day
+# cal_key has data, uses pagePath before it (LEGACY, hashed here into the same key so a
+# calendar is one row across the cutover) and cal_key from it on. Hashing locally
+# means the owner's machine sees slugs from old data; nothing new ever leaves the page.
+#
+# /view pages carry a cal_key too (of the VIEW id), which cannot be tied to its
+# calendar, so -- exactly as /view/ paths were dropped before -- only pagePath=/cal
+# rows count.
+KEY_WEEKLY_BODY='{"dateRanges":[%s],"dimensions":[{"name":"isoYearIsoWeek"},{"name":"customEvent:cal_key"},{"name":"pagePath"}],"metrics":[{"name":"totalUsers"}],"limit":250000}'
+
+# First 16 hex chars of sha256 -- must match calKey() in public/utils/analytics-boot.js.
+sha16() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        printf '%s' "$1" | sha256sum | cut -c1-16
+    else
+        printf '%s' "$1" | shasum -a 256 | cut -c1-16
+    fi
+}
+
+# Like report(), but prints nothing instead of exiting -- for probing a dimension
+# that may not be registered yet.
+report_soft() {
+    local body="$1" out http
+    out="$(mktemp)"
+    http="$(curl -sS -o "$out" -w '%{http_code}' -X POST "$API" \
+        -H @<(auth_header "$TOKEN") -H 'Content-Type: application/json' -d "$body")" || http=0
+    [ "$http" = "200" ] && cat "$out"
+    rm -f "$out"
+}
+
+range_from() {   # range_from <startDate> -- any GA4 date form
+    if [ "$INCLUDE_TODAY" = "1" ]; then
+        printf '{"startDate":"%s","endDate":"today"}' "$1"
+    else
+        printf '{"startDate":"%s","endDate":"yesterday"}' "$1"
+    fi
+}
+
+# First date (YYYY-MM-DD) in the last N days with any cal_key, or nothing.
+cal_key_since() {
+    local n="$1" d
+    d="$(report_soft "$(printf '{"dateRanges":[%s],"dimensions":[{"name":"date"}],"metrics":[{"name":"eventCount"}],"dimensionFilter":{"filter":{"fieldName":"customEvent:cal_key","stringFilter":{"matchType":"FULL_REGEXP","value":"[0-9a-f]{16}"}}},"orderBys":[{"dimension":{"dimensionName":"date"}}],"limit":1}' "$(range "$n")")" \
+        | jq -r '(.rows // [])[0].dimensionValues[0].value // empty' 2>/dev/null)"
+    [ -n "$d" ] && printf '%s-%s-%s' "${d:0:4}" "${d:4:2}" "${d:6:2}"
+}
+
+# One {cal, week, users} per calendar-week over the last N days, cal = cal_key.
+# Prints the source split on stderr so every report says which identifier it used.
+calendar_weeks() {
+    local n="$1" since legacy='[]' keyed='[]' map='{}' json
+    since="$(cal_key_since "$n")"
+
+    # LEGACY: pagePath, for the days before cal_key existed (through the cutover day,
+    # which holds both; the max-per-week below de-duplicates it).
+    if [ -n "$since" ]; then
+        json="$(report "$(printf "$WEEKLY_BODY" "$(printf '{"startDate":"%ddaysAgo","endDate":"%s"}' "$n" "$since")")")"
+    else
+        json="$(report "$(printf "$WEEKLY_BODY" "$(range "$n")")")"
+    fi
+    check_truncated "$json"
+    legacy="$(echo "$json" | jq -c --arg cur "$(date +%G%V)" --arg notcal "$NOT_CAL_RE" "$CAL_WEEK_JQ")"
+    map="$(echo "$legacy" | jq -r '[.[].cal] | unique | .[]' | while IFS= read -r c; do
+               printf '%s\t%s\n' "$c" "$(sha16 "${c#/}")"
+           done | jq -R -s -c 'split("\n") | map(select(length > 0) | split("\t") | {(.[0]): .[1]}) | add // {}')"
+
+    if [ -n "$since" ]; then
+        json="$(report "$(printf "$KEY_WEEKLY_BODY" "$(range_from "$since")")")"
+        check_truncated "$json"
+        keyed="$(echo "$json" | jq -c --arg cur "$(date +%G%V)" '
+            [ (.rows // [])[]
+              | {week: .dimensionValues[0].value, cal: .dimensionValues[1].value,
+                 path: .dimensionValues[2].value, users: (.metricValues[0].value | tonumber)}
+              | select(.week != $cur and .path == "/cal" and (.cal | test("^[0-9a-f]{16}$")))
+              | {cal, week, users} ]')"
+        echo "  calendars by cal_key from $since; before that by pagePath (LEGACY, hashed to cal_key)" >&2
+    else
+        echo "  LEGACY: no cal_key data in range -- calendars identified by pagePath" >&2
+    fi
+
+    jq -n -c --argjson l "$legacy" --argjson k "$keyed" --argjson m "$map" '
+        ($l | map(.cal = ($m[.cal] // .cal))) + $k
+        | [ group_by([.cal, .week])[] | {cal: .[0].cal, week: .[0].week, users: (map(.users) | max)} ]'
+}
 
 # Realtime is a different endpoint with a different (much smaller) dimension set:
 # customEvent:* does not exist there, so the breakdown subcommands cannot use it.
@@ -330,6 +422,13 @@ window_label() {
     fi
 }
 
+# Editable-calendar pages only: /view pages carry the VIEW id's key, which would show
+# up as a second calendar.
+ONLY_CAL_PAGES='{"filter":{"fieldName":"pagePath","stringFilter":{"matchType":"EXACT","value":"/cal"}}}'
+
+# The param schema analytics.js is held to (test/unit/analytics-privacy.test.js).
+SCHEMA="$(dirname "$0")/../public/utils/analytics-schema.json"
+
 CUSTOM="calendar_created,slug_prompt_shown,slug_claimed,slug_autoassigned,slug_claim_failed,event_added,calendar_shared,calendar_returned,feature_used"
 
 # --live short-circuits the subcommand: it is a different endpoint answering a
@@ -408,13 +507,20 @@ events)
 
 calendars)
     # Busiest calendars, with sessions-per-user as the return-depth proxy.
-    json="$(report "$(mk 'landingPage' 'sessions,totalUsers' '' 25)")"
+    # By cal_key (find yours with: stats.sh key <slug>); LEGACY landingPage only when
+    # no cal_key data exists yet in the window.
+    json="$(report_soft "$(mk 'customEvent:cal_key' 'sessions,totalUsers' "$ONLY_CAL_PAGES" 25)")"
+    label="calendar key"
+    if [ "$(printf '%s' "${json:-"{}"}" | jq '(.rows // []) | length')" = "0" ]; then
+        json="$(report "$(mk 'landingPage' 'sessions,totalUsers' '' 25)")"
+        label="LEGACY path"
+    fi
     if [ "$JSON_ONLY" = "1" ]; then echo "$json" | jq '.'; exit 0; fi
 
     echo "Busiest calendars — $(window_label)"
     echo
-    echo "$json" | jq -r '
-        ["calendar","sessions","users","visits each"],
+    echo "$json" | jq -r --arg label "$label" '
+        [$label,"sessions","users","visits each"],
         ((.rows // [])[]
          | [.dimensionValues[0].value,
             .metricValues[0].value,
@@ -451,15 +557,14 @@ northstar)
     # NOT_CAL_RE).
     [ "$DAYS_SET" = "1" ] || DAYS=84   # a trend needs runway; default 12 weeks
 
-    json="$(report "$(printf "$WEEKLY_BODY" "$(range)")")"
-    check_truncated "$json"
+    json="$(calendar_weeks "$DAYS")"
 
     if [ "$JSON_ONLY" = "1" ]; then echo "$json" | jq '.'; exit 0; fi
 
     echo "North star: weekly active shared calendars — $(window_label), current week dropped"
     echo
-    echo "$json" | jq -r --arg cur "$(date +%G%V)" --arg notcal "$NOT_CAL_RE" "$CAL_WEEK_JQ"'
-        | group_by(.week)
+    echo "$json" | jq -r '
+        group_by(.week)
         | map(.[0].week as $w
               | map(.users) as $cals
               | [$w,
@@ -488,8 +593,8 @@ cohorts)
     # SEEN each week, how many ever reached a second person, and how many still
     # had any traffic 4+ weeks later.
     #
-    # GA4 has no calendar id on events, so a calendar is its pagePath, /edit/slug
-    # folded into /slug, and its birth is the first week that path shows up. Two
+    # A calendar is its cal_key (pagePath, hashed to the same key, before cal_key
+    # existed -- see calendar_weeks), and its birth is the first week it shows up. Two
     # blind spots to read the numbers with:
     #   - "birth" is first traffic in an 8-week lookback, so a calendar dormant
     #     longer than that reads as newborn when it wakes up (overcounts births);
@@ -499,8 +604,7 @@ cohorts)
     [ "$DAYS_SET" = "1" ] || DAYS=84   # cohorts need runway; default 12 weeks
     LOOKBACK=8
 
-    json="$(report "$(printf "$WEEKLY_BODY" "$(range $(( DAYS + LOOKBACK * 7 )))")")"
-    check_truncated "$json"
+    json="$(calendar_weeks $(( DAYS + LOOKBACK * 7 )))"
 
     if [ "$JSON_ONLY" = "1" ]; then echo "$json" | jq '.'; exit 0; fi
 
@@ -508,7 +612,7 @@ cohorts)
     echo
     # The current ISO week is excluded outright: it is partial, so it can neither
     # host a birth nor prove a calendar dead.
-    echo "$json" | jq -r --arg cur "$(date +%G%V)" --arg notcal "$NOT_CAL_RE" --argjson lb "$LOOKBACK" "$CAL_WEEK_JQ"' as $rows
+    echo "$json" | jq -r --argjson lb "$LOOKBACK" '. as $rows
         | ([$rows[].week] | unique | sort) as $weeks
         | (($weeks | length) - 1) as $last
         | $rows
@@ -540,6 +644,15 @@ cohorts)
     echo "  A healthy loop needs both: shared calendars that then keep coming back."
     ;;
 
+key)
+    # The cal_key a calendar is reported under. Computed here, never sent: GA4 only
+    # ever receives the hash.
+    slug="${2:-}"
+    [ -n "$slug" ] || { echo "usage: $0 key <slug>" >&2; exit 1; }
+    slug="${slug##*/}"
+    sha16 "$(printf '%s' "$slug" | tr '[:upper:]' '[:lower:]')"
+    ;;
+
 raw)
     body="${2:-}"
     [ -n "$body" ] || { echo "usage: $0 raw '<runReport JSON body>'" >&2; exit 1; }
@@ -556,14 +669,22 @@ reach)
     # first-timers in the window, which is the reach-vs-loyalty split: a calendar
     # where most users are new is spreading; one where few are is a small group
     # checking back.
-    json="$(report "$(mk 'pagePath' 'screenPageViews,totalUsers,newUsers' '' 40)")"
+    #
+    # By cal_key (find yours with: stats.sh key <slug>); LEGACY pagePath only when no
+    # cal_key data exists yet in the window.
+    json="$(report_soft "$(mk 'customEvent:cal_key' 'screenPageViews,totalUsers,newUsers' "$ONLY_CAL_PAGES" 40)")"
+    label="calendar key"
+    if [ "$(printf '%s' "${json:-"{}"}" | jq '(.rows // []) | length')" = "0" ]; then
+        json="$(report "$(mk 'pagePath' 'screenPageViews,totalUsers,newUsers' '' 40)")"
+        label="LEGACY path"
+    fi
     if [ "$JSON_ONLY" = "1" ]; then echo "$json" | jq '.'; exit 0; fi
 
     echo "Reach per calendar — $(window_label)"
     echo
-    echo "$json" | jq -r '
+    echo "$json" | jq -r --arg label "$label" '
         def n: (tonumber? // 0);
-        ["calendar","views","people","new","returning","views each"],
+        [$label,"views","people","new","returning","views each"],
         ((.rows // [])[]
          | (.metricValues[0].value|n) as $v
          | (.metricValues[1].value|n) as $u
@@ -585,40 +706,66 @@ reach)
     ;;
 
 setup)
-    # The params the call sites send, and the dimension each one needs.
+    # Every param analytics.js sends, read from the same schema file the unit tests
+    # hold analytics.js to -- a hand-typed list here drifted (detail, kind, intent and
+    # message were never registered, and counters were registered as dimensions,
+    # which GA4 cannot sum).
     echo "GA4 configuration check"
     echo
-    dims_raw="$(mktemp)"
-    dims_http="$(curl -sS -o "$dims_raw" -w '%{http_code}' \
-        -H @<(auth_header "$TOKEN") \
-        "https://analyticsadmin.googleapis.com/v1beta/properties/${PROPERTY_ID}/customDimensions")"
+    [ -f "$SCHEMA" ] || { echo "ERROR: schema not found at $SCHEMA" >&2; exit 1; }
 
-    # Distinguish "no dimensions" from "could not ask" -- otherwise a permissions
-    # error reads as a clean bill of missing dimensions and sends you to the UI
-    # to create things that may already exist.
-    if [ "$dims_http" != "200" ]; then
-        echo "  Could not read custom dimensions (HTTP $dims_http)." >&2
-        jq -r '.error.message // empty' < "$dims_raw" >&2 2>/dev/null || true
-        echo "  The Analytics Admin API may need enabling for this project." >&2
-        rm -f "$dims_raw"
-        exit 1
-    fi
+    ADMIN="https://analyticsadmin.googleapis.com/v1beta/properties/${PROPERTY_ID}"
 
-    dims="$(jq -r '[(.customDimensions // [])[].parameterName] | join(" ")' < "$dims_raw")"
-    rm -f "$dims_raw"
+    # name<TAB>displayName for every existing definition of one kind.
+    existing_defs() {   # existing_defs customDimensions|customMetrics
+        local raw http
+        raw="$(mktemp)"
+        http="$(curl -sS -o "$raw" -w '%{http_code}' -H @<(auth_header "$TOKEN") "$ADMIN/$1?pageSize=200")"
+        # Distinguish "none" from "could not ask" -- otherwise a permissions error
+        # reads as a clean bill of missing definitions and sends you to the UI to
+        # create things that may already exist.
+        if [ "$http" != "200" ]; then
+            echo "  Could not read $1 (HTTP $http)." >&2
+            jq -r '.error.message // empty' < "$raw" >&2 2>/dev/null || true
+            echo "  The Analytics Admin API may need enabling for this project." >&2
+            rm -f "$raw"
+            exit 1
+        fi
+        jq -r --arg k "$1" '(.[$k] // [])[] | [.parameterName, .displayName, .name] | @tsv' < "$raw"
+        rm -f "$raw"
+    }
+    dims_tsv="$(existing_defs customDimensions)"
+    mets_tsv="$(existing_defs customMetrics)"
+
+    # param<TAB>type<TAB>label from the schema.
+    wanted="$(jq -r '.params | to_entries[] | [.key, .value.type, .value.label] | @tsv' < "$SCHEMA")"
 
     missing=0
-    for p in where source method feature named visit_bucket slug_length event_count_bucket has_custom_slug reason surface; do
-        if echo " $dims " | grep -q " $p "; then
-            printf '  ok       %s\n' "$p"
+    relabel=0
+    while IFS="$(printf '\t')" read -r p type label; do
+        [ -n "$p" ] || continue
+        if [ "$type" = "metric" ]; then have="$mets_tsv"; other="$dims_tsv"; else have="$dims_tsv"; other="$mets_tsv"; fi
+        cur="$(printf '%s\n' "$have" | awk -F'\t' -v p="$p" '$1 == p { print $2; exit }')"
+        if [ -n "$cur" ]; then
+            if [ "$cur" = "$label" ]; then
+                printf '  ok       %-20s %s\n' "$p" "$type"
+            else
+                printf '  RELABEL  %-20s %s "%s" -> "%s"\n' "$p" "$type" "$cur" "$label"
+                relabel=$((relabel + 1))
+            fi
+        elif printf '%s\n' "$other" | awk -F'\t' -v p="$p" '$1 == p { f=1 } END { exit !f }'; then
+            # Registered as the wrong kind. GA4 will not convert one; the old one has
+            # to be archived in the UI before the right one can be created.
+            printf '  WRONG    %-20s registered as the wrong kind; want %s (archive it in the UI)\n' "$p" "$type"
+            missing=$((missing + 1))
         else
-            printf '  MISSING  %s\n' "$p"
+            printf '  MISSING  %-20s %s\n' "$p" "$type"
             missing=$((missing + 1))
         fi
-    done
+    done <<< "$wanted"
 
     echo
-    if [ "$missing" = "0" ]; then
+    if [ "$missing" = "0" ] && [ "$relabel" = "0" ]; then
         echo "All parameters are queryable."
         exit 0
     fi
@@ -626,11 +773,11 @@ setup)
     if [ "${2:-}" != "--create" ]; then
         cat <<'MSG'
 Missing parameters are still being COLLECTED -- they are just not queryable as a
-breakdown until a custom dimension exists. GA4 does not backfill them, so a
-dimension created today shows nothing for yesterday. Create them sooner rather
+breakdown until a custom definition exists. GA4 does not backfill them, so a
+definition created today shows nothing for yesterday. Create them sooner rather
 than later.
 
-Create them all:
+Create them all (and fix labels):
     ./scripts/stats.sh setup --create
 
 That uses the service account in internal/keys/, which must be an Editor on the
@@ -638,13 +785,11 @@ GA4 property (Analytics UI -> Admin -> Property access management).
 
 Or by hand, once per parameter:
   analytics.google.com -> Admin -> Custom definitions -> Create custom dimension
-    Scope: Event, Event parameter: the name printed above
+  (or metric, for type "metric"). Scope: Event, Event parameter: the name above
 MSG
         exit 0
     fi
 
-    # --create: make each missing dimension. Names are chosen to read well in
-    # GA4 reports, where the raw parameter name is not shown.
     # Writing needs the edit scope, which only the service account can hold.
     EDIT_TOKEN="$(mint_token edit)"
     if [ -z "$EDIT_TOKEN" ]; then
@@ -653,37 +798,40 @@ MSG
         exit 1
     fi
 
-    echo "Creating missing dimensions..."
+    echo "Creating missing definitions and fixing labels..."
     echo
     created=0
     failed=0
-    for p in where source method feature named visit_bucket slug_length event_count_bucket has_custom_slug reason surface; do
-        echo " $dims " | grep -q " $p " && continue
+    while IFS="$(printf '\t')" read -r p type label; do
+        [ -n "$p" ] || continue
+        if [ "$type" = "metric" ]; then
+            kind=customMetrics; have="$mets_tsv"; other="$dims_tsv"
+            body="$(jq -n --arg p "$p" --arg l "$label" \
+                '{parameterName:$p, displayName:$l, scope:"EVENT", measurementUnit:"STANDARD"}')"
+        else
+            kind=customDimensions; have="$dims_tsv"; other="$mets_tsv"
+            body="$(jq -n --arg p "$p" --arg l "$label" '{parameterName:$p, displayName:$l, scope:"EVENT"}')"
+        fi
+        row="$(printf '%s\n' "$have" | awk -F'\t' -v p="$p" '$1 == p { print; exit }')"
+        printf '%s\n' "$other" | awk -F'\t' -v p="$p" '$1 == p { f=1 } END { exit !f }' && continue
 
-        case "$p" in
-            where)              label="Surface" ;;
-            feature)            label="Feature" ;;
-            named)              label="Named at creation" ;;
-            source)             label="Event source" ;;
-            method)             label="Share method" ;;
-            visit_bucket)       label="Visit depth" ;;
-            slug_length)        label="Slug length" ;;
-            event_count_bucket) label="Calendar size" ;;
-            has_custom_slug)    label="Has custom slug" ;;
-            reason)             label="Failure reason" ;;
-            surface)            label="Platform" ;;
-        esac
-
-        body="$(jq -n --arg p "$p" --arg l "$label" \
-            '{parameterName:$p, displayName:$l, scope:"EVENT"}')"
         out="$(mktemp)"
-        http="$(curl -sS -o "$out" -w '%{http_code}' -X POST \
-            "https://analyticsadmin.googleapis.com/v1beta/properties/${PROPERTY_ID}/customDimensions" \
-            -H @<(auth_header "$EDIT_TOKEN") \
-            -H 'Content-Type: application/json' -d "$body")"
+        if [ -n "$row" ]; then
+            [ "$(printf '%s' "$row" | cut -f2)" = "$label" ] && { rm -f "$out"; continue; }
+            # Labels only: existing data is untouched, reports just read correctly.
+            http="$(curl -sS -o "$out" -w '%{http_code}' -X PATCH \
+                "https://analyticsadmin.googleapis.com/v1beta/$(printf '%s' "$row" | cut -f3)?updateMask=displayName" \
+                -H @<(auth_header "$EDIT_TOKEN") -H 'Content-Type: application/json' \
+                -d "$(jq -n --arg l "$label" '{displayName:$l}')")"
+            verb=relabeled
+        else
+            http="$(curl -sS -o "$out" -w '%{http_code}' -X POST "$ADMIN/$kind" \
+                -H @<(auth_header "$EDIT_TOKEN") -H 'Content-Type: application/json' -d "$body")"
+            verb=created
+        fi
 
         if [ "$http" = "200" ]; then
-            printf '  created  %-20s as "%s"\n' "$p" "$label"
+            printf '  %-9s %-20s %s "%s"\n' "$verb" "$p" "$type" "$label"
             created=$((created + 1))
         else
             printf '  FAILED   %-20s (HTTP %s) %s\n' "$p" "$http" \
@@ -691,10 +839,10 @@ MSG
             failed=$((failed + 1))
         fi
         rm -f "$out"
-    done
+    done <<< "$wanted"
 
     echo
-    echo "Created $created, failed $failed."
+    echo "Changed $created, failed $failed."
     if [ "$failed" -gt 0 ]; then
         cat <<'MSG'
 

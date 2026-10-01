@@ -5,7 +5,8 @@
 // The fake transaction follows the SDK's contract where it matters: the update function
 // gets a deep copy of the node (null when absent), returning undefined ABORTS (no retry;
 // the completion callback receives (null, false, null)), and a committed write hands the
-// callback a snapshot of what was stored.
+// callback a snapshot of what was stored. Like the SDK with a live listener, a commit
+// raises the value event for the new state BEFORE the completion callback runs.
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
@@ -22,7 +23,8 @@ function loadDataService() {
   vm.createContext(ctx);
   vm.runInContext(`
     var firebase = { database: () => ({ ref: () => ({}) }) };
-    var Utils = { debounce: (f) => f, uuidv4: () => Math.random().toString(36).slice(2) };`, ctx);
+    var Utils = { debounce: (f) => f, uuidv4: () => Math.random().toString(36).slice(2) };
+    var SlugManager = { autoCreateReadOnlyLink() {} };`, ctx);
   vm.runInContext(fs.readFileSync(path.join(PUBLIC, 'models/Event.js'), 'utf8') +
     ';this.Event = Event;', ctx);
   vm.runInContext(fs.readFileSync(path.join(PUBLIC, 'services/CalendarDataService.js'), 'utf8') +
@@ -30,21 +32,31 @@ function loadDataService() {
   const S = ctx.CalendarDataService;
 
   const server = {};
+  const listeners = {};
+  const fire = (id) => (listeners[id] || []).forEach(cb =>
+    cb({ val: () => clone(server[id] === undefined ? null : server[id]) }));
   S.db = {
     child: (id) => ({
+      on(_, cb) {
+        (listeners[id] = listeners[id] || []).push(cb);
+        if (server[id] !== undefined) cb({ val: () => clone(server[id]) });
+      },
       transaction(fn, done) {
         const result = fn(server[id] === undefined ? null : clone(server[id]));
         if (result === undefined) { done(null, false, null); return; }
         server[id] = clone(result);
+        fire(id);
         done(null, true, { val: () => clone(server[id]) });
       },
     }),
   };
 
-  // What a live subscription does when the server pushes a value.
+  // The server pushes its current value: through the live subscription when there is
+  // one, else straight into the baseline, as a subscription with no local copy would.
   const deliver = (id) => {
     S.connected = id;
-    S._rememberSnapshot({ id, ...clone(server[id]) });
+    if (listeners[id]) fire(id);
+    else S._rememberSnapshot({ id, ...clone(server[id]) });
   };
 
   return { S, server, deliver, errors, ctx };

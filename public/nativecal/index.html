@@ -43,23 +43,9 @@ Copyright (c) 2025 Kalid Azad
     <link rel="preconnect" href="https://unpkg.com">
     <link rel="preconnect" href="https://cdn.jsdelivr.net">
 
-    <!-- Google Tag Manager -->
-    <script>
-        (function (w, d, s, l, i) {
-            const enableAnalytics = !(w.__TEST__ || w.location.search.includes('no-analytics'));
-            if (!enableAnalytics) {
-                console.log('[analytics] disabled by test mode');
-                return;
-            }
-            w[l] = w[l] || []; w[l].push({
-                'gtm.start':
-                    new Date().getTime(), event: 'gtm.js'
-            }); var f = d.getElementsByTagName(s)[0],
-                j = d.createElement(s), dl = l != 'dataLayer' ? '&l=' + l : ''; j.async = true; j.src =
-                    'https://www.googletagmanager.com/gtm.js?id=' + i + dl; f.parentNode.insertBefore(j, f);
-        })(window, document, 'script', 'dataLayer', 'GTM-WTP9VTM');
-    </script>
-    <!-- End Google Tag Manager -->
+    <!-- Analytics: gate, GA loader and URL scrubbing, shared with every page so they
+         cannot drift. Must stay synchronous and before analytics.js. -->
+    <script src="/utils/analytics-boot.js?v=1763769217"></script>
 
     <!-- Core styles -->
     <link rel="stylesheet" href="/style.css?v=1763769217">
