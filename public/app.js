@@ -2411,10 +2411,15 @@ const CalendarVueApp = {
          * gets used, and lumping them together would hide the answer.
          */
         copyShareLink() {
-            const url = this.getReadOnlyURL() || this.getEditableURL();
+            const readOnly = this.getReadOnlyURL();
+            const url = readOnly || this.getEditableURL();
             if (!url) return;
 
             const settle = () => {
+                // The view-only link is minted asynchronously and can be missing or still
+                // pending; the fallback grants full edit access, so say so rather than
+                // giving the same "copied" as the safe link.
+                if (!readOnly) this.showToast('Copied the edit link: anyone with it can change this calendar', 'info');
                 this.shareCopied = true;
                 clearTimeout(this.shareCopiedTimer);
                 this.shareCopiedTimer = setTimeout(() => { this.shareCopied = false; }, 1600);

@@ -32,7 +32,7 @@ if (!process.env.FIREBASE_DATABASE_EMULATOR_HOST) {
 
 const admin = require('../../functions/node_modules/firebase-admin');
 const { _internal } = require('../../functions/index.js');
-const { CalendarService, SlugService } = _internal;
+const { CalendarService, SlugService, PublicViewService } = _internal;
 
 const db = admin.database();
 
@@ -445,6 +445,53 @@ test('lookupCalendar: a read-only view resolves through the index too', async ()
     } finally {
         await cleanup('ReadOnlyIndexProbe');
     }
+});
+
+
+// --- adversarial review: path injection, and read-only views ------------------------------
+
+test('SlugService.lookupCalendar: a slug with path syntax is not found, and writes nothing', async () => {
+    const before = (await db.ref('slug_mappings/pathprobe').once('value')).val();
+    for (const slug of ['/', 'pathprobe/x', 'a.b', 'a#b', 'a$b', 'a[b]']) {
+        assert.deepEqual(await SlugService.lookupCalendar(slug), { found: false }, slug);
+    }
+    assert.deepEqual((await db.ref('slug_mappings/pathprobe').once('value')).val(), before,
+        'no negative-cache entry was written under a parent of the probed path');
+});
+
+test('SlugService.lookupCalendar: PublicViewService mirror never carries the editable id', () => {
+    const mirror = PublicViewService.mirrorOf(
+        { id: 'secret-edit-slug', title: 'T', events: [{ id: 'e' }], options: { notes: 'n' }, extra: 'x' },
+        'viewid1234');
+    assert.equal(mirror.id, 'viewid1234');
+    assert.ok(!JSON.stringify(mirror).includes('secret-edit-slug'), 'editable slug leaked into the view');
+    assert.equal(mirror.extra, undefined, 'only whitelisted fields are published');
+    assert.equal(mirror.options.publicViewId, 'viewid1234');
+});
+
+test('SlugService.lookupCalendar: only the bound calendar may write a view', async () => {
+    const pv = 'pvowner' + Date.now();
+    try {
+        // A legacy view, made before bindings: its mirror names the owner in `id`.
+        await db.ref(`calendars_readonly/${pv}`).set({ id: 'OwnerCal', title: 't', options: { publicViewId: pv } });
+        assert.equal(await PublicViewService.owns(db, 'Attacker', pv), false, 'a stranger cannot claim it');
+        assert.equal(await PublicViewService.owns(db, 'OwnerCal', pv), true, 'the legacy owner claims it once');
+        assert.equal((await db.ref(`public_views/${pv}`).once('value')).val(), 'OwnerCal');
+        assert.equal(await PublicViewService.owns(db, 'Attacker', pv), false, 'and it stays theirs');
+        // A view id nobody created cannot be claimed through options.publicViewId.
+        assert.equal(await PublicViewService.owns(db, 'Attacker', pv + 'new'), false);
+    } finally {
+        await Promise.all([
+            db.ref(`calendars_readonly/${pv}`).remove(),
+            db.ref(`public_views/${pv}`).remove(),
+            db.ref('public_views_by_calendar/OwnerCal').remove(),
+        ]);
+    }
+});
+
+test('SlugService.lookupCalendar: generated view ids are long, lowercase and unbiased in shape', () => {
+    const { IDService } = _internal;
+    for (let i = 0; i < 200; i++) assert.match(IDService.generatePublicViewId(), /^[a-z0-9]{10}$/);
 });
 
 // The Admin SDK holds its RTDB socket open, so without this the process lingers ~150s

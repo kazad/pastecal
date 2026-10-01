@@ -1,6 +1,6 @@
 const functions = require('firebase-functions');
 const { onRequest, onCall } = require('firebase-functions/v2/https');
-const { onValueUpdated, onValueWritten } = require("firebase-functions/v2/database");
+const { onValueUpdated, onValueWritten, onValueDeleted } = require("firebase-functions/v2/database");
 const admin = require('firebase-admin');
 const crypto = require('crypto');
 
@@ -625,13 +625,21 @@ const SlugService = {
         return slug.toLowerCase();
     },
 
+    // Free means nothing resolves to it: no view, no binding, and no mapping to an editable
+    // calendar -- otherwise a view could be created at a name that already opens someone's
+    // calendar, and one of the two would become unreachable.
     async isSlugAvailable(slug) {
-        // Check if normalized slug exists in readonly calendars
         const normalizedSlug = this.normalizeSlug(slug);
-        const slugRef = admin.database().ref(READONLY_ROOT).child(normalizedSlug);
-        const snapshot = await slugRef.once('value');
-        return !snapshot.exists();
+        const db = admin.database();
+        const [view, binding, mapping] = await Promise.all([
+            db.ref(READONLY_ROOT).child(normalizedSlug).child('id').once('value'),
+            db.ref(`/public_views/${normalizedSlug}`).once('value'),
+            db.ref(`/slug_mappings/${normalizedSlug}`).once('value'),
+        ]);
+        const m = mapping.val();
+        return !view.exists() && !binding.exists() && !(m && !m.notFound);
     },
+
 
     // A not-found result is cached for this long, then re-checked with a real lookup. Short
     // relative to how long a slug stays unclaimed, but long enough that a burst of requests
@@ -639,7 +647,16 @@ const SlugService = {
     // for one full scan instead of one per request.
     NOT_FOUND_CACHE_MS: 10 * 60 * 1000,
 
+    // Characters that are path syntax or illegal in an RTDB key. A slug containing `/` used
+    // to be read as a path: "/" read the entire index, and "foo/x" wrote a negative-cache
+    // entry under slug_mappings/foo that made `foo` look taken forever.
+    isLookupable(slug) {
+        return typeof slug === 'string' && slug.length > 0 && slug.length <= 100
+            && !/[\/.#$\[\]\x00-\x1f\x7f]/.test(slug);
+    },
+
     async lookupCalendar(requestedSlug) {
+        if (!this.isLookupable(requestedSlug)) return { found: false };
         const normalizedSlug = this.normalizeSlug(requestedSlug);
 
         // Check cache first
@@ -703,9 +720,64 @@ const SlugService = {
         // (verified 2026-08-25: nonexistent slugs returned HTTP 500/503, existing ones 200).
         // Paging or shallow-reading the scan would only have made an O(all-calendars)
         // operation cheaper; the index makes it O(1).
-        await cacheRef.set({ notFound: true, cachedAt: Date.now() });
+        //
+        // Only over nothing or another miss: this runs after reads that may be stale, and a
+        // plain set() here replaced a mapping indexSlug had written in the meantime, hiding a
+        // calendar created a moment ago for the whole cache period.
+        await cacheRef.transaction(cur => (cur === null || (cur && cur.notFound))
+            ? { notFound: true, cachedAt: Date.now() }
+            : undefined);
         return { found: false };
     }
+};
+
+// Read-only views
+//
+// /calendars_readonly/<publicViewId> is world-readable, so what goes into it is published.
+// It used to be a verbatim copy of the calendar, `id` included -- and `id` IS the editable
+// slug, so anyone holding a view-only link could read it and get full edit access. The
+// mirror is now built from a whitelist and carries the view's own id.
+//
+// Which calendar may write a view is recorded in /public_views/<publicViewId>, a node only
+// the Admin SDK can write. The calendar's own options.publicViewId cannot be the authority:
+// anyone can write it, so pointing it at someone else's view used to make syncPublicView
+// overwrite that view with the attacker's events.
+const PublicViewService = {
+    BINDINGS: '/public_views',                 // publicViewId -> calendarId
+    BY_CALENDAR: '/public_views_by_calendar',  // calendarId -> { publicViewId: true }, for cleanup
+
+    mirrorOf(cal, publicViewId) {
+        return {
+            id: publicViewId,
+            title: cal.title ?? '',
+            events: cal.events ?? [],
+            options: { ...(cal.options || {}), publicViewId },
+        };
+    },
+
+    /**
+     * Whether calendarId may write the view. A view created before bindings existed is
+     * claimed once, by the calendar its legacy mirror names in `id` -- the one place that
+     * still records who made it. Everything else is refused.
+     */
+    async owns(db, calendarId, publicViewId) {
+        if (!/^[A-Za-z0-9_-]{1,100}$/.test(publicViewId)) return false;
+        const binding = db.ref(`${this.BINDINGS}/${publicViewId}`);
+        const bound = (await binding.once('value')).val();
+        if (bound) return bound === calendarId;
+        const legacyOwner = (await db.ref(`/${READONLY_ROOT}/${publicViewId}/id`).once('value')).val();
+        if (legacyOwner !== calendarId) return false;
+        return this.claim(db, publicViewId, calendarId);
+    },
+
+    /** Atomically bind a view id to a calendar; false if another calendar holds it. */
+    async claim(db, publicViewId, calendarId) {
+        const r = await db.ref(`${this.BINDINGS}/${publicViewId}`)
+            .transaction(cur => cur === null ? calendarId : undefined);
+        if (!r.committed && r.snapshot.val() !== calendarId) return false;
+        await db.ref(`${this.BY_CALENDAR}/${calendarId}/${publicViewId}`).set(true);
+        return true;
+    },
 };
 
 // ID Generation Service
@@ -723,15 +795,24 @@ const IDService = {
             .join('');
     },
 
+    // Lowercase only: views resolve case-insensitively through /slug_mappings, so mixed case
+    // added no real entropy and let a new id collide with an existing one differing in case.
+    // Ten characters (36^10) where five (effectively 36^5, ~6e7) was enumerable.
+    generatePublicViewId(length = 10) {
+        const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
+        const out = [];
+        while (out.length < length) {
+            for (const b of crypto.getRandomValues(new Uint8Array(length))) {
+                if (b < 252 && out.length < length) out.push(alphabet[b % 36]);  // no modulo bias
+            }
+        }
+        return out.join('');
+    },
+
     async generateUniquePublicId(attempts = 5) {
         for (let i = 0; i < attempts; i++) {
-            const publicViewId = this.generateNanoId(5);
-            try {
-                await CalendarService.getCalendarData(publicViewId, true);
-            } catch (error) {
-                if (error.code === 'not-found') return publicViewId;
-                throw error;
-            }
+            const publicViewId = this.generatePublicViewId();
+            if (await SlugService.isSlugAvailable(publicViewId)) return publicViewId;
         }
         throw new functions.https.HttpsError('internal', 'Failed to generate a unique public view ID');
     }
@@ -1095,16 +1176,17 @@ exports.createPublicLink = onCall(async (request) => {
             publicViewId = await IDService.generateUniquePublicId();
         }
 
-        const publicCalData = JSON.parse(JSON.stringify(calendarData));
-        // Embed publicViewId in the mirror at creation so a viewer who arrives before
-        // the next syncPublicView fires can still resolve the read-only path. Without
-        // this, the client's getViewerBasePath would fall through to /${calendar.id}.
-        publicCalData.options = publicCalData.options || {};
-        publicCalData.options.publicViewId = publicViewId;
+        // Claimed atomically: the availability check above and this write used to be
+        // separate, so two concurrent claims of one custom slug both passed and the second
+        // overwrote the first's view.
+        if (!await PublicViewService.claim(admin.database(), publicViewId, sourceCalendarId)) {
+            throw new functions.https.HttpsError('already-exists', 'Slug is already taken. Please choose a different one.');
+        }
 
         await Promise.all([
             sourceCalRef.child('options/publicViewId').set(publicViewId),
-            admin.database().ref(`${READONLY_ROOT}/${publicViewId}`).set(publicCalData)
+            admin.database().ref(`${READONLY_ROOT}/${publicViewId}`)
+                .set(PublicViewService.mirrorOf(calendarData, publicViewId)),
         ]);
 
         return { publicViewId };
@@ -1162,8 +1244,12 @@ exports.indexSlug = onValueWritten(`/${DEFAULT_ROOT}/{calendarId}/id`, async (ev
     // wrote last. An empty incumbent is still replaced, so a genuinely abandoned placeholder does not hold a
     // slug hostage. The delete branch above already reasons this way; this is the same
     // rule applied to creation.
+    // A read-only view holds its slug too: without this, writing /calendars/<view id>/id
+    // was enough to take a shared view's URL and its ICS feed.
     if (current && current.actualSlug && current.actualSlug !== calendarId
-        && await SlugService.holdsData(admin.database(), current.actualSlug)) {
+        && (current.isReadOnly
+            ? (await admin.database().ref(`/${READONLY_ROOT}/${current.actualSlug}/id`).once('value')).exists()
+            : await SlugService.holdsData(admin.database(), current.actualSlug))) {
         console.log(`indexSlug: ${calendarId} not taking /${normalized} from ${current.actualSlug}, which holds data`);
         return null;
     }
@@ -1199,14 +1285,36 @@ exports.indexReadOnlySlug = onValueWritten(`/${READONLY_ROOT}/{calendarId}/id`, 
     return mappingRef.set({ actualSlug: calendarId, isReadOnly: true });
 });
 
-exports.syncPublicView = onValueUpdated(`/${DEFAULT_ROOT}/{calendarId}`, (event) => {
+exports.syncPublicView = onValueUpdated(`/${DEFAULT_ROOT}/{calendarId}`, async (event) => {
     const afterData = event.data.after.val();
-    const publicViewId = afterData.options?.publicViewId;
-
+    const publicViewId = afterData && afterData.options?.publicViewId;
     if (!publicViewId) return null;
 
-    const updatedData = JSON.parse(JSON.stringify(afterData));
-    return admin.database().ref(`/${READONLY_ROOT}/${publicViewId}`).update(updatedData);
+    const db = admin.database();
+    if (!await PublicViewService.owns(db, event.params.calendarId, publicViewId)) {
+        console.warn(`syncPublicView: ${event.params.calendarId} does not own view ${publicViewId}; not syncing`);
+        return null;
+    }
+    // set(), not update(): update() only replaces keys present in the payload, and RTDB
+    // drops empty arrays, so deleting every event left them all live on the view and its
+    // ICS feed indefinitely.
+    return db.ref(`/${READONLY_ROOT}/${publicViewId}`).set(PublicViewService.mirrorOf(afterData, publicViewId));
+});
+
+// A deleted calendar's view would otherwise keep serving its last state forever. Scoped to
+// /id for the same payload reason as indexSlug; the binding names the view to remove.
+exports.removePublicView = onValueDeleted(`/${DEFAULT_ROOT}/{calendarId}/id`, async (event) => {
+    const db = admin.database();
+    const calendarId = event.params.calendarId;
+    const byCalendar = db.ref(`${PublicViewService.BY_CALENDAR}/${calendarId}`);
+    const views = (await byCalendar.once('value')).val() || {};
+    return Promise.all([
+        ...Object.keys(views).flatMap(pvid => [
+            db.ref(`/${READONLY_ROOT}/${pvid}`).remove(),
+            db.ref(`${PublicViewService.BINDINGS}/${pvid}`).remove(),
+        ]),
+        byCalendar.remove(),
+    ]);
 });
 
 // Record the prior state of any calendar write that removed or changed events. Fires on
@@ -1224,46 +1332,23 @@ exports.recordHistory = onValueWritten(`/${DEFAULT_ROOT}/{calendarId}`, async (e
 
 // Case-insensitive calendar lookup function
 exports.lookupCalendar = onCall(async (request) => {
+    const requestedSlug = request.data?.slug;
+    if (!requestedSlug) {
+        throw new functions.https.HttpsError('invalid-argument', 'Slug is required.');
+    }
     try {
-        console.log('lookupCalendar called with request.data:', request.data);
-        console.log('Request context auth:', request.auth ? 'authenticated' : 'unauthenticated');
-        
-        const requestedSlug = request.data?.slug;
-        
-        if (!requestedSlug) {
-            const errorMsg = `Slug is required. Received slug: ${request.data?.slug}`;
-            console.error(errorMsg);
-            throw new functions.https.HttpsError('invalid-argument', errorMsg);
-        }
-        
-        console.log('Looking up calendar for slug:', requestedSlug);
-        const result = await SlugService.lookupCalendar(requestedSlug);
-        console.log('Lookup result:', JSON.stringify(result));
-        
-        return result;
+        return await SlugService.lookupCalendar(requestedSlug);
     } catch (error) {
-        console.error('Calendar lookup error:', error);
-        
-        // If it's already an HttpsError, re-throw it
-        if (error instanceof functions.https.HttpsError) {
-            throw error;
-        }
-        
-        // Otherwise, wrap it in an HttpsError with details
-        throw new functions.https.HttpsError('internal', 
-            `Failed to lookup calendar: ${error.message}`, 
-            { 
-                originalError: error.message || error.toString(), 
-                slug: request.data?.slug,
-                errorName: error.name
-            }
-        );
+        // Logged here, not returned: the message names database paths, and the caller is
+        // anyone on the internet.
+        console.error('lookupCalendar failed for', JSON.stringify(String(requestedSlug).slice(0, 100)), error);
+        throw new functions.https.HttpsError('internal', 'Failed to look up calendar.');
     }
 });
 
 // Exported for unit tests (test/unit/ics.test.js). Not used by deployed functions.
 exports._internal = {
-    ICSService, CalendarService, SlugService, HistoryService,
+    ICSService, CalendarService, SlugService, HistoryService, PublicViewService, IDService,
     recordIcsStat, deviceBucket, clientFamily, sweepOldDeviceBuckets,
     DEVICE_BUCKET_TTL_DAYS, HISTORY_ROOT, HISTORY_KEEP, HISTORY_ADDED_KEEP, HISTORY_HARD_CAP, HISTORY_PROTECT_MS,
 };
