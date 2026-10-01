@@ -163,3 +163,60 @@ test('Event.isComplete: works on plain objects read back from Firebase', () => {
   assert.equal(Event.isComplete(null), false);
   assert.equal(Event.isComplete(undefined), false);
 });
+
+// --- Data that Firebase would reject or the write gate would drop -------------------------
+
+test('Event: a non-numeric type falls back to the default instead of NaN', () => {
+  // NaN anywhere in the payload makes Firebase reject the whole calendar write.
+  assert.equal(new Event({ type: 'abc' }).type, 1);
+  assert.equal(new Event({ Type: 'abc' }).type, 1);
+  assert.equal(new Event({ type: '3' }).type, 3);
+  assert.equal(new Event({ type: 0 }).type, 1, '0 is not a valid type; default as before');
+});
+
+test('Event: a valid EndTime survives an invalid StartTime', () => {
+  // getSyncFusionEvents() turns a bad stored start into StartTime: null; the end used to
+  // be thrown away with it because Syncfusion records have no `end` to fall back on.
+  const e = new Event({ Subject: 'X', StartTime: null, EndTime: new Date(ISO_END) });
+  assert.equal(e.start, null);
+  assert.equal(e.end, ISO_END);
+});
+
+test('Event: an inverted range from the scheduler keeps its start and gets the default length', () => {
+  // Normalized rather than rejected: rejecting at the write gate would drop the event.
+  const timed = new Event({ Subject: 'X', StartTime: new Date(ISO_END), EndTime: new Date(ISO_START) });
+  assert.equal(timed.start, ISO_END);
+  assert.equal(timed.end, '2026-05-27T14:00:00.000Z');
+  assert.equal(timed.isComplete(), true);
+
+  const allDay = new Event({ Subject: 'X', IsAllDay: true,
+    StartTime: new Date(2026, 9, 2), EndTime: new Date(2026, 9, 1) });
+  // Stored in the legacy form: the author's local midnight (see Event.allDayDateUTC).
+  assert.equal(allDay.start, new Date(2026, 9, 2).toISOString());
+  assert.equal(allDay.end, new Date(2026, 9, 3).toISOString());
+});
+
+test('Event: stored-shape data is never repaired', () => {
+  // setEvents() rebuilds every stored row after any action; repairing one here made the
+  // merge read an untouched row as this client's edit and overwrite a concurrent edit.
+  const timed = new Event({ id: 'x', title: 'X', start: ISO_END, end: ISO_START });
+  assert.equal(timed.start, ISO_END);
+  assert.equal(timed.end, ISO_START);
+
+  const allDay = new Event({ id: 'y', title: 'Y', isAllDay: true,
+    start: '2026-10-02T00:00:00.000Z', end: '2026-10-01T00:00:00.000Z' });
+  assert.equal(allDay.end, '2026-10-01T00:00:00.000Z');
+});
+
+test('Event: a scheduler record of an untouched inverted row is not repaired', () => {
+  // What Calendar.getSyncFusionEvents() hands the scheduler for a stored inverted row.
+  const record = { Id: 'x', Subject: 'X', StartTime: new Date(ISO_END), EndTime: new Date(ISO_START),
+    _storedStart: ISO_END, _storedEnd: ISO_START };
+  assert.equal(new Event(record).end, ISO_START);
+
+  // ...but dragging it is an edit, and that range is repaired.
+  const dragged = new Event({ ...record, StartTime: new Date('2026-05-28T13:00:00.000Z'),
+    EndTime: new Date('2026-05-28T10:00:00.000Z') });
+  assert.equal(dragged.start, '2026-05-28T13:00:00.000Z');
+  assert.equal(dragged.end, '2026-05-28T14:00:00.000Z');
+});

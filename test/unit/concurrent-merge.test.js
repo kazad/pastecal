@@ -41,10 +41,13 @@ function extractStatic(name) {
   return new Function(`return function(${sig[1]}) {${SRC.slice(open + 1, i)}}`)();
 }
 
-// _mergeEvents calls this._eventKey, so it needs a host carrying the real helper --
+// _mergeEvents calls this._eventKey and friends, so it needs a host carrying the real helpers --
 // also extracted from source, so a change to how rows are identified is exercised here
 // rather than silently diverging from what ships.
-const host = { _eventKey: extractStatic('_eventKey') };
+const host = {};
+for (const name of ['_eventKey', '_eventList', '_byKey', '_sameEvent']) {
+  host[name] = extractStatic(name).bind(host);
+}
 const rawMerge = extractStatic('_mergeEvents');
 const mergeEvents = (...args) => rawMerge.apply(host, args);
 const ev = (id, title, extra = {}) => ({ id, title, start: '2026-09-17T10:00:00.000Z',
@@ -275,4 +278,32 @@ test('deleting a recurring series removes the master and its exceptions', () => 
   const merged = mergeEvents([master, exception], [], [master, exception]);
 
   assert.deepEqual(merged, [], 'both rows go, not just one of them');
+});
+
+// --- Date spelling ----------------------------------------------------------------------
+
+test('an epoch-number date and its ISO string are the same instant, not an edit', () => {
+  // nativecal stores start/end as epoch milliseconds; this app rewrites them as ISO
+  // strings on any save. Compared with ===, every nativecal event looked edited by us,
+  // so an unrelated edit here overwrote a concurrent nativecal edit with a stale copy.
+  const startMs = Date.parse('2026-09-17T10:00:00.000Z');
+  const endMs = Date.parse('2026-09-17T11:00:00.000Z');
+  const base = [ev('N', 'Native', { start: startMs, end: endMs }), ev('A', 'A')];
+  // Local holds N rewritten to ISO strings (same instant), and edited A.
+  const local = [ev('N', 'Native'), ev('A', 'A edited')];
+  // Meanwhile nativecal renamed N.
+  const remote = [ev('N', 'Native renamed', { start: startMs, end: endMs }), ev('A', 'A')];
+
+  const merged = mergeEvents(base, local, remote);
+  assert.equal(merged.find(e => e.id === 'N').title, 'Native renamed',
+    'the concurrent nativecal edit survives');
+  assert.equal(merged.find(e => e.id === 'A').title, 'A edited');
+});
+
+test('a real move is still an edit when the spellings differ', () => {
+  const startMs = Date.parse('2026-09-17T10:00:00.000Z');
+  const base = [ev('N', 'Native', { start: startMs })];
+  const local = [ev('N', 'Native', { start: '2026-09-17T12:00:00.000Z' })];
+  const merged = mergeEvents(base, local, base);
+  assert.equal(merged[0].start, '2026-09-17T12:00:00.000Z');
 });

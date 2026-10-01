@@ -67,6 +67,7 @@ const QuickAddDialog = {
                                        class="w-32 shrink-0 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                             </div>
 
+                            <p v-if="isAllDay" class="text-sm opacity-70">All day</p>
                             <p v-if="endBeforeStart" class="text-sm text-red-500">End is before start.</p>
                         </div>
 
@@ -123,10 +124,18 @@ const QuickAddDialog = {
         };
     },
     computed: {
+        // Dates with no time on either end ("vacation dec 11 - dec 15") are all-day.
+        isAllDay() {
+            return !!this.fields.startDate && !this.fields.startTime && !this.fields.endTime;
+        },
+        // All-day events are stored as local midnight of their date, end exclusive (the
+        // legacy format, see Event.allDayDateUTC); the End date input shows the last day.
         startDateTime() {
+            if (this.isAllDay) return this.toLocalDate(this.fields.startDate, 0);
             return this.toISO(this.fields.startDate, this.fields.startTime);
         },
         endDateTime() {
+            if (this.isAllDay) return this.toLocalDate(this.fields.endDate || this.fields.startDate, 1);
             return this.toISO(this.fields.endDate, this.fields.endTime);
         },
         endBeforeStart() {
@@ -181,22 +190,31 @@ const QuickAddDialog = {
             if (!this.pinned.subject) {
                 this.fields.subject = empty ? '' : (parsed.subject || '');
             }
+            const allDay = !empty && !!parsed.isAllDay;
             if (!this.pinned.start) {
-                this.setDateTime('start', empty ? null : parsed.startDateTime);
+                this.setDateTime('start', empty ? null : parsed.startDateTime, allDay);
             }
             if (!this.pinned.end) {
-                this.setDateTime('end', empty ? null : parsed.endDateTime);
+                let end = empty ? null : parsed.endDateTime;
+                // The parser's all-day end is exclusive; show the last day instead.
+                if (allDay && end) {
+                    const d = new Date(end);
+                    d.setDate(d.getDate() - 1);
+                    end = d.toISOString();
+                }
+                this.setDateTime('end', end, allDay);
             }
         },
         // Split an ISO string into the local date/time strings the inputs expect.
-        setDateTime(which, isoString) {
+        // dateOnly leaves the time blank, which is what marks the event all-day.
+        setDateTime(which, isoString, dateOnly) {
             const d = isoString ? new Date(isoString) : null;
             const valid = d && !isNaN(d.getTime());
             const pad = (n) => String(n).padStart(2, '0');
             this.fields[which + 'Date'] = valid
                 ? `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
                 : '';
-            this.fields[which + 'Time'] = valid
+            this.fields[which + 'Time'] = valid && !dateOnly
                 ? `${pad(d.getHours())}:${pad(d.getMinutes())}`
                 : '';
         },
@@ -206,6 +224,13 @@ const QuickAddDialog = {
             const [y, m, d] = dateStr.split('-').map(Number);
             const [hh, mm] = (timeStr || '00:00').split(':').map(Number);
             const dt = new Date(y, (m || 1) - 1, d || 1, hh || 0, mm || 0);
+            return isNaN(dt.getTime()) ? null : dt.toISOString();
+        },
+        // "YYYY-MM-DD" + offset days -> local midnight as an ISO string, or null.
+        toLocalDate(dateStr, offsetDays) {
+            if (!dateStr) return null;
+            const [y, m, d] = dateStr.split('-').map(Number);
+            const dt = new Date(y, (m || 1) - 1, (d || 1) + offsetDays);
             return isNaN(dt.getTime()) ? null : dt.toISOString();
         },
         useExample(text) {
@@ -232,7 +257,8 @@ const QuickAddDialog = {
             this.$emit('event-created', {
                 subject: this.fields.subject.trim(),
                 startDateTime: this.startDateTime,
-                endDateTime: this.effectiveEndDateTime
+                endDateTime: this.effectiveEndDateTime,
+                isAllDay: this.isAllDay
             });
             this.hideDialog();
         },

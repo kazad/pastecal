@@ -376,3 +376,54 @@ test('a deletion is not swallowed by the restore that follows it', async ({ page
   expect(whats.some(w => /^Deleted .*Design review/.test(w)),
     `the deletion must still be listed: ${JSON.stringify(whats)}`).toBe(true);
 });
+
+test('Restore puts back only what was lost, keeping later changes', async ({ page }) => {
+  // Restore used to write back the whole snapshot from before the change, which also
+  // deleted every event added since -- by anyone -- and undid every later edit.
+  await freshCalendar(page);
+  await seed(page, ['Standup', 'Design review']);
+  await deleteEvent(page, 'Design review');
+
+  // A later, unrelated addition.
+  await page.evaluate(`(() => {
+    const vm = ${VM};
+    const s = new Date(); s.setDate(s.getDate() + 5); s.setHours(14, 0, 0, 0);
+    const e = new Date(s); e.setHours(15);
+    vm.calendar.events.push(new Event({ id: 'later', title: 'Added later', start: s.toISOString(), end: e.toISOString(), type: 1 }));
+  })()`);
+  await expect.poll(() => titlesOnServer(page), { timeout: 10_000 }).toContain('Added later');
+  await page.evaluate(`${VM}.$refs.toast.hide()`);
+
+  await openRecentChanges(page);
+  await expect.poll(() => rows(page), { timeout: 10_000 })
+    .toEqual(expect.arrayContaining([expect.objectContaining({ lost: ['Design review'] })]));
+  await page.locator('.pc-modal button:has-text("Restore event")').first().click();
+
+  await expect.poll(() => titlesOnServer(page), { timeout: 10_000 }).toContain('Design review');
+  const titles = await titlesOnServer(page);
+  expect(titles).toContain('Added later');
+  expect(titles).toContain('Standup');
+});
+
+test('the Recent changes dialog is a keyboard-usable modal', async ({ page }) => {
+  await freshCalendar(page);
+  await seed(page, ['Standup']);
+
+  await page.locator('button[aria-label="Settings"]').click();
+  const opener = page.locator('button:has-text("Recent changes")');
+  await expect(opener).toBeVisible({ timeout: 10_000 });
+  await opener.focus();
+  await opener.press('Enter');
+
+  const dialog = page.getByRole('dialog', { name: 'Recent changes' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveAttribute('aria-modal', 'true');
+  // Focus moved into it...
+  await expect.poll(() => page.evaluate(
+    `!!document.activeElement.closest('[role="dialog"]')`)).toBe(true);
+
+  // ...Escape closes it, and focus goes back to what opened it.
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(opener).toBeFocused();
+});
