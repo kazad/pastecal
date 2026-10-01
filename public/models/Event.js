@@ -76,6 +76,48 @@ class Event {
         return new Date(Math.floor((new Date(iso).getTime() + 13 * 3600000) / DAY) * DAY);
     }
 
+    // Stored all-day instant -> the viewer's LOCAL midnight of its calendar date.
+    static allDayToLocal(value) {
+        const utc = Event.allDayDateUTC(value);
+        return utc && new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate());
+    }
+
+    // nativecal shows an all-day event as local midnight of its first day through local
+    // 23:59:59.999 of its last day (epoch ms), and works on stored events directly, so it
+    // maps them at its boundary with this pair. The stored end is exclusive, like the
+    // Syncfusion and ICS conventions; nativecal's legacy inclusive end (23:59:59.999
+    // local) maps to the next date under allDayDateUTC, so it reads as exclusive too.
+    static allDayDisplayRange(e) {
+        const start = Event.allDayToLocal(e.start);
+        let end = Event.allDayToLocal(e.end);
+        if (!start) return { start: null, end: end && end.getTime() - 1 };
+        if (!end || end <= start) end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1);
+        return { start: start.getTime(), end: end.getTime() - 1 };
+    }
+
+    // Inverse of allDayDisplayRange: UTC midnight of the first local date and of the day
+    // after the last, as epoch ms (nativecal's storage type). `stored` is the event as
+    // stored before the edit, or null; a value whose date is unchanged is kept verbatim
+    // so an untouched event is not rewritten.
+    static allDayStoredRange(displayStart, displayEnd, stored) {
+        const toUTC = (value, addDays) => {
+            const iso = Event.toISOStringOrNull(value);
+            if (iso === null) return null;
+            const d = new Date(iso);
+            return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate() + addDays);
+        };
+        const keep = (ms, prev) => {
+            const prevDate = Event.allDayDateUTC(prev);
+            return prevDate && prevDate.getTime() === ms ? prev : ms;
+        };
+        const start = toUTC(displayStart, 0);
+        const end = toUTC(displayEnd, 1);
+        return {
+            start: start === null ? null : keep(start, stored && stored.start),
+            end: end === null ? null : keep(end, stored && stored.end),
+        };
+    }
+
     // Syncfusion all-day record (viewer's local midnight) -> stored UTC midnight of
     // that local Y-M-D. `stored` is the value the record was built from: when it maps
     // to the same date it is kept verbatim, so an untouched legacy event is not

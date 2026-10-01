@@ -22,8 +22,7 @@ class Calendar {
     // Converting the stored instant directly showed Tokyo's Oct 2 holiday on Oct 1 in LA;
     // see Event.allDayDateUTC for how the date is derived.
     static allDayToLocal(value) {
-        const utc = Event.allDayDateUTC(value);
-        return utc && new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate());
+        return Event.allDayToLocal(value);
     }
 
     getSyncFusionEvents() {
