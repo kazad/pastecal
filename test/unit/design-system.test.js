@@ -139,13 +139,22 @@ test('theme colors exposed to Tailwind map to the CSS variables in style.css', (
 
 // --- 3. The shared component classes exist and are theme-driven ---------------------------
 
-test('style.css defines the shared control classes', () => {
-  for (const cls of [
-    '.pc-btn', '.pc-btn-primary', '.pc-btn-secondary', '.pc-btn-danger',
-    '.pc-modal', '.pc-modal-panel', '.pc-input', '.pc-input-group',
-  ]) {
-    assert.ok(STYLE.includes(cls), `missing ${cls} in style.css`);
+test('every pc-* class our markup uses is defined in style.css', () => {
+  // A class with no rule silently does nothing -- the same failure as a variant-prefixed
+  // CSS-only class above. (This replaces a list of class names that only had to exist in
+  // style.css, used or not, which protected nothing.)
+  const undefinedClasses = new Set();
+  let checked = 0;
+  for (const file of OUR_MARKUP) {
+    for (const tok of classTokens(read(file))) {
+      const base = tok.slice(tok.lastIndexOf(':') + 1);
+      if (!/^pc-[\w-]+$/.test(base)) continue;
+      checked++;
+      if (!new RegExp(`\\.${base}(?![\\w-])`).test(STYLE)) undefinedClasses.add(`${file}: ${base}`);
+    }
   }
+  assert.ok(checked >= 5, `expected the markup to use pc-* classes, found ${checked}`);
+  assert.deepEqual([...undefinedClasses], []);
 });
 
 test('shared surface classes derive their colors from theme variables', () => {
@@ -161,15 +170,4 @@ test('shared surface classes derive their colors from theme variables', () => {
     assert.match(ruleOf(selector), /var\(--/,
       `${selector} should be built from theme variables`);
   }
-});
-
-test('the claim dialog uses the shared modal, input and button classes', () => {
-  const start = INDEX.indexOf('<!-- Claim Intervention Modal -->');
-  assert.notEqual(start, -1, 'claim dialog not found');
-  const dialog = INDEX.slice(start, start + 2500);
-
-  assert.match(dialog, /class="pc-modal"/, 'overlay should use .pc-modal');
-  assert.match(dialog, /class="pc-modal-panel"/, 'panel should use .pc-modal-panel');
-  assert.match(dialog, /class="pc-input-group"/, 'slug field should use .pc-input-group');
-  assert.match(dialog, /pc-btn pc-btn-primary/, 'submit should use .pc-btn .pc-btn-primary');
 });

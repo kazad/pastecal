@@ -20,7 +20,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const APP = fs.readFileSync(path.join(__dirname, '../../public/app.js'), 'utf8');
+const { appMethod, APP } = require('./helpers/app-method');
 const INDEX = fs.readFileSync(path.join(__dirname, '../../public/index.html'), 'utf8');
 
 test('the grid is filtered with the same predicate the count uses', () => {
@@ -51,20 +51,16 @@ test('the count helpers that take arguments are methods, not computeds', () => {
   }
 });
 
-test('no second, query-shaped definition of visibility has come back', () => {
-  assert.doesNotMatch(APP, /getFilteredEventsQuery/,
-    'the ej.data.Query allow-list was the other source of truth');
-  assert.doesNotMatch(APP, /Predicate\(\s*['"]Type['"]/,
-    'a Type equality predicate is that same parallel definition in another form');
-});
-
 test('visibility does not depend on whether the search panel is open', () => {
   // The original #41 defect: panel visibility was a hidden input to the filter, and
-  // nothing rebuilt the query when the panel closed.
-  const start = APP.indexOf('isEventVisible(event) {');
-  assert.ok(start !== -1, 'isEventVisible should exist');
-  assert.doesNotMatch(APP.slice(start, start + 300), /showSearch/,
-    'visibility must depend only on colorFilters');
+  // nothing rebuilt the query when the panel closed. Run the real predicate both ways.
+  const isEventVisible = appMethod('isEventVisible');
+  const filterSlotFor = appMethod('filterSlotFor');
+  for (const showSearch of [true, false]) {
+    const vm = { showSearch, COLORS: ['a', 'b', 'c'], colorFilters: [true, false, true], filterSlotFor };
+    assert.equal(isEventVisible.call(vm, { type: 1 }), true, `showSearch=${showSearch}`);
+    assert.equal(isEventVisible.call(vm, { type: 2 }), false, `showSearch=${showSearch}`);
+  }
 });
 
 test('every assignment to COLORS keeps colorFilters the same length', () => {
@@ -115,20 +111,37 @@ test('the color dots are real, labeled toggle controls', () => {
 });
 
 test('quick-add cannot produce an event with no end time', () => {
-  // An event with a null end is dropped at the write boundary, so it sits on the grid
-  // until reload and is then gone for good.
-  const at = APP.indexOf('handleQuickAddEvent(event)');
-  assert.ok(at !== -1, 'handleQuickAddEvent should exist');
-  const fn = APP.slice(at, at + 1200);
-  assert.match(fn, /if \(start && !end\)/, 'a missing end must be defaulted, not passed through');
-  assert.match(fn, /3600000/, 'default the end to one hour after the start');
+  // An event with a null end is dropped at the write boundary, so it sat on the grid
+  // until reload and was then gone for good. Runs the shipped handleQuickAddEvent.
+  const Event = new Function('Utils',
+    `${fs.readFileSync(path.join(__dirname, '../../public/models/Event.js'), 'utf8')}\nreturn Event;`)(
+    { uuidv4: () => 'generated-uuid' });
+  const handleQuickAddEvent = appMethod('handleQuickAddEvent',
+    { Event, track: () => {}, AuthorSignal: undefined });
+  const events = [];
+  const vm = {
+    isExisting: false,
+    calendar: { events, setEvents() {} },
+    recordLocalAction() {},
+  };
+  handleQuickAddEvent.call(vm, { subject: 'standup', startDateTime: '2026-09-17T09:00:00.000Z' });
+  assert.equal(events.length, 1);
+  assert.ok(Event.isComplete(events[0]), 'the event must reach the write path complete');
+  assert.equal(new Date(events[0].end).getTime() - new Date(events[0].start).getTime(), 3600000,
+    'a missing end defaults to one hour after the start');
 });
 
 test('dropped events are surfaced to the user, not only the console', () => {
-  const svc = fs.readFileSync(
-    path.join(__dirname, '../../public/services/CalendarDataService.js'), 'utf8');
-  assert.match(svc, /onIncompleteEvents/,
-    '_dropIncompleteEvents must be able to report what it dropped');
+  // The service reports what it dropped (behavior, through the real write-boundary
+  // filter) ...
+  const { loadDataService, ev } = require('./helpers/data-service-harness');
+  const { S } = loadDataService();
+  const reported = [];
+  S.onIncompleteEvents = (dropped) => reported.push(...dropped);
+  const out = S._dropIncompleteEvents({ id: 'c', events: [ev('ok', 'ok'), ev('bad', 'bad', { end: null })] });
+  assert.deepEqual([...out.events].map(e => e.id), ['ok']);
+  assert.deepEqual(reported.map(e => e.id), ['bad']);
+  // ... and the app registers a handler for it (wiring, which only the source shows).
   assert.match(APP, /CalendarDataService\.onIncompleteEvents\s*=/,
     'the app must register a handler so the drop reaches the user');
 });

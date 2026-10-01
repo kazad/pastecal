@@ -18,11 +18,12 @@ const assert = require('node:assert/strict');
 // firebase-functions is installed under functions/, not at the repo root.
 const functions = require('../../functions/node_modules/firebase-functions');
 
-const { ICSService } = require('../../functions/index.js')._internal;
+const { _internal } = require('../../functions/index.js');
+const { ICSService } = _internal;
 
-// Mirrors the status selection in the generateICSV2 catch block. Kept in sync by
-// the "status mapping" tests below, which assert against real HttpsError instances.
-const statusFor = (err) => err?.httpErrorCode?.status ?? 500;
+// The status selection generateICSV2's catch block actually uses -- not a copy of it, which
+// could drift from the real one while these tests kept passing.
+const statusFor = _internal.icsErrorStatus;
 
 // The exact shape of the record that took down the live feed, copied from
 // /calendars_readonly/bht-asta-sprechzeiten/events[26]. Note: no start, no end.

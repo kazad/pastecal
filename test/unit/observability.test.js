@@ -20,14 +20,14 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
+const http = require('node:http');
 
 const ANALYTICS = fs.readFileSync(
   path.join(__dirname, '../../public/utils/analytics.js'), 'utf8');
 const APP = fs.readFileSync(path.join(__dirname, '../../public/app.js'), 'utf8');
 const SERVICE = fs.readFileSync(
   path.join(__dirname, '../../public/services/CalendarDataService.js'), 'utf8');
-const FUNCTIONS = fs.readFileSync(
-  path.join(__dirname, '../../functions/index.js'), 'utf8');
 
 // Load the Analytics object with its sinks replaced by a recorder, so the real track()
 // path is exercised rather than a copy of it.
@@ -136,19 +136,61 @@ test('a sink that throws does not reach the caller', () => {
 
 // --- The wiring -------------------------------------------------------------------------
 
-test('uncaught errors and rejected promises are reported', () => {
-  assert.match(APP, /addEventListener\('error'/,
-    'an uncaught error was previously visible only in the user\'s own devtools');
-  assert.match(APP, /addEventListener\('unhandledrejection'/);
-  assert.match(APP, /a\.jsError\(/, 'and they must reach the analytics seam');
+// Run app.js's real error reporter (track() and the installErrorReporting IIFE, sliced out
+// of the shipped file) against a fake window, and dispatch errors at it. These used to
+// regex-match the source for `seen.has(key)`, which passes whether or not the dedupe works.
+function loadErrorReporter() {
+  const start = APP.indexOf('function track(');
+  const iife = APP.indexOf('(function installErrorReporting');
+  const end = APP.indexOf('})();', iife);
+  assert.ok(start >= 0 && iife > start && end > iife,
+    'app.js must define track() and then the installErrorReporting IIFE');
+  const listeners = {};
+  const reports = [];
+  const sandbox = {
+    window: { addEventListener: (type, fn) => { (listeners[type] ||= []).push(fn); } },
+    Analytics: { jsError: (kind, message, where) => reports.push({ kind, message, where }) },
+    String, Set,
+  };
+  vm.runInNewContext(APP.slice(start, end + '})();'.length), sandbox);
+  const fire = (type, e) => (listeners[type] || []).forEach(fn => fn(e));
+  return { listeners, reports, fire };
+}
+
+test('uncaught errors and rejected promises are reported, with message and origin', () => {
+  const { reports, fire } = loadErrorReporter();
+  fire('error', { error: new Error('boom'), filename: 'https://x/app.js', lineno: 12 });
+  fire('unhandledrejection', { reason: { code: 'PERMISSION_DENIED' } });
+  assert.deepEqual(reports, [
+    { kind: 'error', message: 'boom', where: 'app.js:12' },
+    { kind: 'unhandledrejection', message: 'PERMISSION_DENIED', where: 'promise' },
+  ]);
 });
 
 test('repeated failures are reported once, not once per repaint', () => {
   // A render loop throwing every frame is one signal, not thousands of hits.
-  const block = APP.slice(APP.indexOf('installErrorReporting'),
-                          APP.indexOf('installErrorReporting') + 1600);
-  assert.match(block, /seen\.has\(key\)/, 'duplicate failures are suppressed');
-  assert.match(block, /seen\.size > \d+/, 'and a storm is capped');
+  const { reports, fire } = loadErrorReporter();
+  for (let i = 0; i < 50; i++) fire('error', { message: 'same', filename: 'a.js', lineno: 1 });
+  assert.equal(reports.length, 1, 'duplicate failures are suppressed');
+});
+
+test('an error storm is capped', () => {
+  const { reports, fire } = loadErrorReporter();
+  for (let i = 0; i < 500; i++) fire('error', { message: `distinct ${i}`, filename: 'a.js', lineno: i });
+  assert.ok(reports.length > 1 && reports.length <= 25, `capped, got ${reports.length}`);
+});
+
+test('a reported error never names the calendar it happened on', () => {
+  const { reports, fire } = loadErrorReporter();
+  fire('unhandledrejection', { reason: new Error('permission_denied at /calendars/my-secret-slug/events') });
+  assert.equal(reports.length, 1);
+  assert.doesNotMatch(reports[0].message, /my-secret-slug/);
+});
+
+test('the reporter survives the analytics module being absent or broken', () => {
+  const { fire } = loadErrorReporter();
+  assert.doesNotThrow(() => fire('error', { error: null, message: undefined }));
+  assert.doesNotThrow(() => fire('unhandledrejection', { reason: undefined }));
 });
 
 test('the write path exposes hooks for merges and failures', () => {
@@ -166,15 +208,52 @@ test('a failed write tells the user, not only the console', () => {
     'silently keeping an edit that exists only on their screen is the failure mode');
 });
 
-test('an ICS failure is logged as a queryable structured line', () => {
+// generateICSV2 itself, served over a real HTTP socket (onRequest wraps it in CORS
+// middleware that needs a genuine response object), with the slug lookup forced to fail.
+async function serveIcs(lookup, urlPath) {
+  const fns = require('../../functions/index.js');
+  const { SlugService } = fns._internal;
+  const saved = SlugService.lookupCalendar;
+  const errors = [];
+  const savedError = console.error;
+  SlugService.lookupCalendar = lookup;
+  console.error = (...args) => errors.push(args.map(String).join(' '));
+  const server = http.createServer((req, res) => {
+    req.path = new URL(req.url, 'http://x').pathname;
+    res.status = (c) => { res.statusCode = c; return res; };
+    res.set = (k, v) => { res.setHeader(k, v); return res; };
+    res.send = (b) => { res.end(b); return res; };
+    fns.generateICSV2(req, res);
+  });
+  try {
+    await new Promise(r => server.listen(0, '127.0.0.1', r));
+    // Bounded: a handler that throws inside its own catch never answers at all.
+    const resp = await fetch(`http://127.0.0.1:${server.address().port}${urlPath}`,
+      { signal: AbortSignal.timeout(5000) });
+    return { status: resp.status, body: await resp.text(), errors };
+  } finally {
+    server.closeAllConnections();
+    server.close();
+    SlugService.lookupCalendar = saved;
+    console.error = savedError;
+  }
+}
+
+test('an ICS failure answers 500 and logs one queryable structured line', async () => {
   // Subscribers cannot report a feed that quietly stops updating, so the log is the only
   // place the failure can be noticed.
-  assert.match(FUNCTIONS, /event:\s*'ics_failed'/);
-  assert.match(FUNCTIONS, /severity:\s*'ERROR'/);
-  // And it must not reference a binding that only exists inside the try block: a
-  // ReferenceError while reporting would replace the real error with a worse one.
-  const block = FUNCTIONS.slice(FUNCTIONS.indexOf("event: 'ics_failed'") - 400,
-                                FUNCTIONS.indexOf("event: 'ics_failed'") + 400);
-  assert.doesNotMatch(block, /calendar:\s*id\b/,
-    'cleanId is scoped to the try block and is not available in the catch');
+  const r = await serveIcs(async () => { throw new TypeError('db exploded'); }, '/somecal.ics');
+  assert.equal(r.status, 500);
+  const lines = r.errors.filter(l => l.startsWith('{')).map(l => JSON.parse(l));
+  assert.equal(lines.length, 1, r.errors.join('\n'));
+  assert.equal(lines[0].event, 'ics_failed');
+  assert.equal(lines[0].severity, 'ERROR');
+  assert.equal(lines[0].reason, 'db exploded', 'the real error, not one raised while reporting it');
+  assert.equal(lines[0].path, '/somecal.ics');
+});
+
+test('a missing calendar answers 404 and is not logged as a server error', async () => {
+  const r = await serveIcs(async () => ({ found: false }), '/gone.ics');
+  assert.equal(r.status, 404);
+  assert.deepEqual(r.errors, []);
 });

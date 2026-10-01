@@ -17,6 +17,32 @@
  * predates it, and writing it over live data destroys whatever has been re-entered.
  */
 const path = require('path');
+
+const count = (c) => { const e = c && c.events; return Array.isArray(e) ? e.filter(Boolean).length : (e ? Object.keys(e).length : 0); };
+
+/**
+ * The multi-path update that writes history `entry` back over the `live` calendar at `slug`.
+ * Pure, and exported, so the merge rules below are unit-tested (test/unit/restore-calendar.test.js)
+ * rather than only exercised by hand against production.
+ */
+function restorePatch(slug, entry, live) {
+    // Options are merged key by key, never replaced: a snapshot older than the calendar's
+    // read-only link has no publicViewId, and dropping it stops syncPublicView mirroring
+    // the restore to every /view/ link already shared.
+    const options = { ...(entry.options || {}) };
+    if (live && live.options && live.options.publicViewId) options.publicViewId = live.options.publicViewId;
+    // `id` too: restoring a deleted calendar recreates the node, and one without `id` reads
+    // as nonexistent to the client and to lookupCalendar.
+    const patch = { id: slug, events: entry.events, title: entry.title ?? '' };
+    for (const [k, v] of Object.entries(options)) patch[`options/${k}`] = v;
+    return patch;
+}
+
+module.exports = { restorePatch };
+
+if (require.main === module) main();
+
+function main() {
 const admin = require(path.join(__dirname, '../functions/node_modules/firebase-admin'));
 
 const [slug, entryKey, flag] = process.argv.slice(2);
@@ -31,8 +57,6 @@ admin.initializeApp({
     databaseURL: 'https://pastecal-web-default-rtdb.firebaseio.com',
 });
 const db = admin.database();
-
-const count = (c) => { const e = c && c.events; return Array.isArray(e) ? e.filter(Boolean).length : (e ? Object.keys(e).length : 0); };
 
 (async () => {
     const live = (await db.ref(`calendars/${slug}`).once('value')).val();
@@ -78,17 +102,10 @@ const count = (c) => { const e = c && c.events; return Array.isArray(e) ? e.filt
         process.exit(0);
     }
 
-    // Options are merged key by key, never replaced: a snapshot older than the calendar's
-    // read-only link has no publicViewId, and dropping it stops syncPublicView mirroring
-    // the restore to every /view/ link already shared.
-    const options = { ...(entry.options || {}) };
-    if (live && live.options && live.options.publicViewId) options.publicViewId = live.options.publicViewId;
-    // `id` too: restoring a deleted calendar recreates the node, and one without `id` reads
-    // as nonexistent to the client and to lookupCalendar.
-    const patch = { id: slug, events: entry.events, title: entry.title ?? '' };
-    for (const [k, v] of Object.entries(options)) patch[`options/${k}`] = v;
+    const patch = restorePatch(slug, entry, live);
     await db.ref(`calendars/${slug}`).update(patch);
     const after = (await db.ref(`calendars/${slug}`).once('value')).val();
     console.log(`\nrestored. live now has ${count(after)} events, title "${after.title || ''}".`);
     process.exit(0);
 })().catch(err => { console.error(err); process.exit(1); });
+}

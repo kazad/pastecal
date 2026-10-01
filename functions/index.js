@@ -1362,6 +1362,13 @@ const HistoryService = {
     },
 };
 
+// The HTTP status generateICSV2 answers a thrown error with: an HttpsError's own status
+// (not-found -> 404), anything else 500. A function so the unit tests exercise this mapping
+// rather than a copy of it.
+function icsErrorStatus(err) {
+    return err?.httpErrorCode?.status ?? 500;
+}
+
 exports.generateICSV2 = onRequest({ cors: true }, async (req, res) => {
     try {
         const pathWithoutICS = req.path.replace(/[.]ICS.*/i, '');
@@ -1420,7 +1427,7 @@ exports.generateICSV2 = onRequest({ cors: true }, async (req, res) => {
     } catch (err) {
         // A missing calendar is a client error, not a server fault. Returning 500 here made
         // subscribed calendar apps retry a deleted feed forever; 404 tells them to stop.
-        const status = err?.httpErrorCode?.status ?? 500;
+        const status = icsErrorStatus(err);
 
         if (status >= 500) {
             // Structured so this is queryable and alertable in Cloud Logging, not just
@@ -1665,7 +1672,7 @@ exports.lookupCalendar = onCall(async (request) => {
 // Exported for unit tests (test/unit/ics.test.js). Not used by deployed functions.
 exports._internal = {
     ICSService, CalendarService, SlugService, HistoryService, PublicViewService, IDService,
-    recordIcsStat, deviceBucket, clientFamily, clientIpOf, sweepOldDeviceBuckets,
+    icsErrorStatus, recordIcsStat, deviceBucket, clientFamily, clientIpOf, sweepOldDeviceBuckets,
     deviceSaltSecret, sweepAllDeviceBuckets, DEVICE_SALT_PATH, SWEEP_CURSOR_PATH,
     _resetDeviceSaltCache: () => { deviceSaltSecretPromise = null; },
     sweepHistoryArchive, HISTORY_ARCHIVE_TTL_MS,

@@ -14,6 +14,8 @@
     "test": "npm run test:e2e"
   },
   "devDependencies": {
-    "@playwright/test": "^1.60.0"
+    "@playwright/test": "^1.60.0",
+    "@syncfusion/ej2": "23.2.6",
+    "chrono-node": "1.4.9"
   }
 }
