@@ -67,6 +67,11 @@ Protocol and limits: `cloudflare/src/CalendarRoom.js` (header comment).
       last day; add to `stats.sh health`. Run for 3+ days: zero differences.
 - Rollback: delete the function. Nothing reads from Cloudflare yet.
 
+- Sep 30: `shadowToCloudflare` deployed (us-central1). Catch-up pass via `MODE=merge scripts/migrate.mjs`
+  (8,618 calendars, 0 failed). Parity (48h): 133 of 133 identical. Live check: a Firebase write reached
+  Cloudflare in under 8 s, an edit followed, and replaying identical state did not bump the version.
+  Deliberate differences: `~2` ids for repeated event ids, and edits made on new.pastecal.com.
+
 ## Known gaps found in testing (fold into Phase 2)
 
 - (Fixed in CloudCalendarService, Sep 30) Two tabs editing the SAME event at once: the server keeps the later save, but the tab that

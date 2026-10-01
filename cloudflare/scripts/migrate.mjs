@@ -3,6 +3,8 @@
 // A dry run is the same against `wrangler dev`.
 import { readFileSync } from 'node:fs';
 const [file, BASE = 'http://localhost:8787'] = process.argv.slice(2);
+// MODE=merge pushes through /from-firebase (keeps Cloudflare-side edits); default is a plain import.
+const ROUTE = process.env.MODE === 'merge' ? 'from-firebase' : 'import';
 const SECRET = process.env.IMPORT_SECRET || 'dev-secret';
 const all = JSON.parse(readFileSync(file, 'utf8'));
 const only = process.env.ONLY ? new Set(JSON.parse(process.env.ONLY)) : null;
@@ -13,7 +15,7 @@ const stats = { ok: 0, mismatch: [], failed: [], renamed: 0, events: 0 };
 const t0 = Date.now();
 async function one(id) {
     const cal = all[id];
-    const r = await fetch(`${BASE}/cal/${encodeURIComponent(id)}/import`, { method: 'PUT', headers: { Authorization: `Bearer ${SECRET}` }, body: JSON.stringify({ ...cal, id }) });
+    const r = await fetch(`${BASE}/cal/${encodeURIComponent(id)}/${ROUTE}`, { method: 'PUT', headers: { Authorization: `Bearer ${SECRET}` }, body: JSON.stringify({ ...cal, id }) });
     const res = await r.json().catch(() => ({ ok: false, error: `HTTP ${r.status}` }));
     if (!res.ok) return stats.failed.push(`${id}: ${res.error}`);
     stats.renamed += res.renamedDuplicates; stats.events += res.events;
