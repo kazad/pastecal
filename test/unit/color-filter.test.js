@@ -103,6 +103,9 @@ function ctx(overrides = {}) {
 
 // Local-time ms, so the fixtures read the same in every time zone the suite runs in.
 const L = s => new Date(s).getTime();
+// The Tuesday-series occurrence on Nov 10 (09:00 local) as a UTC stamp, so the EXDATE
+// matches it in every zone (a fixed 12:00Z stamp is Nov 11 in Auckland).
+const TUE_NOV_10 = Event.recurrenceStamp(new Date('2026-11-10T09:00:00'));
 // The week of Sun Nov 8 - Sat Nov 14 2026, as visibleDateRange reports it.
 const WEEK = { start: L('2026-11-08T00:00:00'), end: L('2026-11-15T00:00:00') };
 
@@ -117,7 +120,7 @@ const MIXED = [
     recurrencerule: 'FREQ=WEEKLY;BYDAY=MO,WE,FR;COUNT=3' } },
   { inView: false, e: { title: 'open-ended Tuesdays, Nov 10 excepted', type: 4,
     start: '2025-01-07T09:00:00', end: '2025-01-07T10:00:00',
-    recurrencerule: 'FREQ=WEEKLY;BYDAY=TU;INTERVAL=1', recurrenceException: '20261110T120000Z' } },
+    recurrencerule: 'FREQ=WEEKLY;BYDAY=TU;INTERVAL=1', recurrenceException: TUE_NOV_10 } },
   { inView: true, e: { title: 'every other Saturday, on Nov 14', type: 4,
     start: '2026-10-31T09:00:00', end: '2026-10-31T10:00:00',
     recurrencerule: 'FREQ=WEEKLY;BYDAY=SA;INTERVAL=2' } },
@@ -386,7 +389,7 @@ test('an occurrence removed by EXDATE is not counted', (t) => {
   const tuesdays = { type: 4, start: '2025-01-07T09:00:00', end: '2025-01-07T10:00:00',
     recurrencerule: 'FREQ=WEEKLY;BYDAY=TU' };
   assert.equal(hiddenIn(WEEK, tuesdays, ej), 1);
-  assert.equal(hiddenIn(WEEK, { ...tuesdays, recurrenceException: '20261110T120000Z' }, ej), 0,
+  assert.equal(hiddenIn(WEEK, { ...tuesdays, recurrenceException: TUE_NOV_10 }, ej), 0,
     'the only Tuesday in view was deleted from the series');
 });
 

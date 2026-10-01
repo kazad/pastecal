@@ -4,9 +4,14 @@
  * Bug: an all-day event was stored as the UTC instant of the AUTHOR's local midnight
  * (Tokyo's Oct 2 -> "2026-10-01T15:00:00.000Z") and every viewer converted that instant
  * back to their own local time, so LA saw the holiday on Oct 1. All-day events are now
- * stored as UTC midnight of their date and shown at the viewer's local midnight of that
- * date; legacy instants map to a date with floor((ms + 13h) / 1 day), the same mapping
- * the ICS feed uses.
+ * shown at the viewer's local midnight of their date; the stored instant maps to a date
+ * with floor((ms + 13h + 1s) / 1 day), the same mapping the ICS feed uses.
+ *
+ * WRITES keep the legacy format (the writer's local midnight as a UTC instant): a tab
+ * opened before a deploy keeps running the old client, which shows the stored instant
+ * as-is, so a UTC-midnight write showed Oct 2 on Oct 1 in an old LA tab and the old
+ * tab's next save made that permanent. UTC-midnight data (from an unreleased build)
+ * must still read correctly.
  *
  * Node honors runtime changes to process.env.TZ, so each case switches zone in-process.
  *
@@ -37,6 +42,7 @@ function inTZ(tz, fn) {
 }
 
 const ymd = (d) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+const until = (rule) => /UNTIL=([0-9TZ]+)/.exec(rule)[1];
 
 // What the scheduler emits when an author creates an all-day event on Oct 2 local.
 function authorAllDay(tz) {
@@ -54,11 +60,77 @@ function viewerSees(tz, stored) {
   });
 }
 
-test('all-day: a new event is stored as UTC midnight of its date, whatever the author zone', () => {
-  for (const tz of ['Asia/Tokyo', 'America/Los_Angeles', 'Pacific/Auckland', 'UTC']) {
+test('all-day: a new event is stored in the legacy form, the author\'s local midnight', () => {
+  const expected = {
+    'Asia/Tokyo': ['2026-10-01T15:00:00.000Z', '2026-10-02T15:00:00.000Z'],
+    'America/Los_Angeles': ['2026-10-02T07:00:00.000Z', '2026-10-03T07:00:00.000Z'],
+    'Pacific/Auckland': ['2026-10-01T11:00:00.000Z', '2026-10-02T11:00:00.000Z'],
+    'Europe/Berlin': ['2026-10-01T22:00:00.000Z', '2026-10-02T22:00:00.000Z'],
+    'UTC': ['2026-10-02T00:00:00.000Z', '2026-10-03T00:00:00.000Z'],
+  };
+  for (const [tz, [start, end]] of Object.entries(expected)) {
     const e = authorAllDay(tz);
-    assert.equal(e.start, '2026-10-02T00:00:00.000Z', `start authored in ${tz}`);
-    assert.equal(e.end, '2026-10-03T00:00:00.000Z', `end authored in ${tz}`);
+    assert.equal(e.start, start, `start authored in ${tz}`);
+    assert.equal(e.end, end, `end authored in ${tz}`);
+  }
+});
+
+// What a client from before the cross-zone fix shows: the stored instant, as-is, in the
+// viewer's zone (Calendar.toDateOrNull for start/end; Syncfusion reads EXDATE/UNTIL
+// stamps by instant too).
+const oldClientDate = (value) => ymd(new Date(value));
+const stampDate = (s) => ymd(new Date(Date.UTC(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8),
+  +s.slice(9, 11), +s.slice(11, 13), +s.slice(13, 15))));
+
+test('all-day: an OLD client in the same zone reads a NEW client\'s writes as the same dates', () => {
+  // Tabs opened before a deploy keep the old client. Whatever the new client writes for
+  // an all-day event, its exception, or its UNTIL, an old tab in the author's zone must
+  // show on the same date the new client does.
+  for (const tz of ['America/Los_Angeles', 'Asia/Tokyo', 'Europe/Berlin', 'Pacific/Auckland', 'UTC']) {
+    inTZ(tz, () => {
+      const created = new Event({ Id: 'h', Subject: 'Holiday', IsAllDay: true,
+        StartTime: new Date(2026, 9, 2), EndTime: new Date(2026, 9, 3) });
+      assert.equal(oldClientDate(created.start), '2026-10-2', `old start in ${tz}`);
+      assert.equal(oldClientDate(created.end), '2026-10-3', `old end in ${tz}`);
+      const shown = new Calendar('c', 't', [created]).getSyncFusionEvents()[0];
+      assert.equal(ymd(shown.StartTime), oldClientDate(created.start), `new == old start in ${tz}`);
+      assert.equal(ymd(shown.EndTime), oldClientDate(created.end), `new == old end in ${tz}`);
+
+      // A daily series, with an occurrence deleted and an UNTIL picked in the new client.
+      const series = new Event({ Id: 's', Subject: 'Daily', IsAllDay: true,
+        StartTime: new Date(2026, 9, 1), EndTime: new Date(2026, 9, 2),
+        RecurrenceRule: `FREQ=DAILY;INTERVAL=1;UNTIL=${Event.recurrenceStamp(new Date(2026, 9, 20))};`,
+        RecurrenceException: Event.recurrenceStamp(new Date(2026, 9, 15)) });
+      assert.equal(stampDate(series.recurrenceException), '2026-10-15', `old EXDATE in ${tz}`);
+      assert.equal(stampDate(Event.allDayRuleUntil(series.recurrencerule)), '2026-10-20', `old UNTIL in ${tz}`);
+      // Old clients compare UNTIL by instant against occurrences at local midnight: the
+      // stored UNTIL must be exactly the last day's local midnight to include it.
+      assert.equal(Event.recurrenceStampMs(Event.allDayRuleUntil(series.recurrencerule)),
+        new Date(2026, 9, 20).getTime(), `old UNTIL includes the last day in ${tz}`);
+      const r = new Calendar('c', 't', [series]).getSyncFusionEvents()[0];
+      assert.equal(stampDate(r.RecurrenceException), '2026-10-15', `new EXDATE in ${tz}`);
+
+      // And the reverse: what an old client writes reads back as the same date.
+      const oldWrite = { id: 'o', title: 'Old', isAllDay: true, type: 1,
+        start: new Date(2026, 9, 2).toISOString(), end: new Date(2026, 9, 3).toISOString() };
+      const back = new Calendar('c', 't', [oldWrite]).getSyncFusionEvents()[0];
+      assert.equal(ymd(back.StartTime), '2026-10-2', `old write read by new in ${tz}`);
+    });
+  }
+});
+
+test('all-day: UTC-midnight data (from the unreleased build) still reads as its date', () => {
+  const stored = { id: 'u', title: 'U', isAllDay: true, type: 1,
+    start: '2026-10-02T00:00:00.000Z', end: '2026-10-03T00:00:00.000Z',
+    recurrencerule: 'FREQ=DAILY;UNTIL=20261020T000000Z', recurrenceException: '20261015T000000Z' };
+  for (const tz of ['America/Los_Angeles', 'Asia/Tokyo', 'Europe/Berlin', 'Pacific/Auckland', 'UTC']) {
+    inTZ(tz, () => {
+      const r = new Calendar('c', 't', [stored]).getSyncFusionEvents()[0];
+      assert.equal(ymd(r.StartTime), '2026-10-2', `start in ${tz}`);
+      assert.equal(ymd(r.EndTime), '2026-10-3', `end in ${tz}`);
+      assert.equal(stampDate(r.RecurrenceException), '2026-10-15', `EXDATE in ${tz}`);
+      assert.equal(stampDate(until(r.RecurrenceRule)), '2026-10-20', `UNTIL in ${tz}`);
+    });
   }
 });
 
@@ -105,15 +177,15 @@ test('all-day: an untouched legacy event survives a save round-trip byte-for-byt
   }
 });
 
-test('all-day: moving a legacy event to another day writes the new UTC-midnight form', () => {
+test('all-day: moving a legacy event to another day writes the mover\'s local midnight', () => {
   const stored = { id: 'l', title: 'Old', start: '2026-10-01T15:00:00.000Z',
     end: '2026-10-02T15:00:00.000Z', isAllDay: true, type: 1 };
   inTZ('America/Los_Angeles', () => {
     const r = new Calendar('c', 't', [stored]).getSyncFusionEvents()[0];
     const moved = { ...r, StartTime: new Date(2026, 9, 5), EndTime: new Date(2026, 9, 6) };
     const e = new Event(moved);
-    assert.equal(e.start, '2026-10-05T00:00:00.000Z');
-    assert.equal(e.end, '2026-10-06T00:00:00.000Z');
+    assert.equal(e.start, '2026-10-05T07:00:00.000Z');
+    assert.equal(e.end, '2026-10-06T07:00:00.000Z');
   });
 });
 
@@ -176,7 +248,6 @@ const stampMs = (s) => {
   const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(s);
   return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
 };
-const until = (rule) => /UNTIL=([0-9TZ]+)/.exec(rule)[1];
 
 // An LA-authored daily series (legacy local-midnight instants), Oct 15 deleted, until Oct 20,
 // and the same series authored in Tokyo.
@@ -228,7 +299,7 @@ test('all-day series: the real scheduler hides the deleted date, not the day bef
   }
 });
 
-test('all-day series: an occurrence deleted now is stored as a UTC-midnight stamp', () => {
+test('all-day series: an occurrence deleted now is stored at the deleter\'s local midnight', () => {
   for (const viewer of ['America/Los_Angeles', 'Asia/Tokyo']) {
     inTZ(viewer, () => {
       const a = SERIES['Asia/Tokyo'];
@@ -236,19 +307,19 @@ test('all-day series: an occurrence deleted now is stored as a UTC-midnight stam
       // Syncfusion appends the occurrence's own start: local midnight of Oct 17.
       const deleted = new Date(2026, 9, 17).toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
       const e = new Event({ ...r, RecurrenceException: `${r.RecurrenceException},${deleted}` });
-      assert.equal(e.recurrenceException, `${a.exdate},20261017T000000Z`, `in ${viewer}`);
+      assert.equal(e.recurrenceException, `${a.exdate},${deleted}`, `in ${viewer}`);
       assert.equal(e.recurrencerule, seriesRow(a).recurrencerule, 'untouched rule kept verbatim');
     });
   }
 });
 
-test('all-day series: a new UNTIL is stored as UTC midnight of its date', () => {
+test('all-day series: a new UNTIL is stored at the editor\'s local midnight of its date', () => {
   inTZ('Asia/Tokyo', () => {
     const r = new Calendar('c', 't', [seriesRow(SERIES['America/Los_Angeles'])]).getSyncFusionEvents()[0];
     // The editor's until-date picker yields local midnight of Oct 25.
     const picked = new Date(2026, 9, 25).toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
     const e = new Event({ ...r, RecurrenceRule: `FREQ=DAILY;INTERVAL=1;UNTIL=${picked};` });
-    assert.equal(e.recurrencerule, 'FREQ=DAILY;INTERVAL=1;UNTIL=20261025T000000Z;');
+    assert.equal(e.recurrencerule, 'FREQ=DAILY;INTERVAL=1;UNTIL=20261024T150000Z;');
     assert.equal(e.recurrenceException, SERIES['America/Los_Angeles'].exdate);
   });
 });
@@ -270,6 +341,90 @@ test('all-day series: the grid and the ICS feed read EXDATE and UNTIL as the sam
       const rule = ICSService.seriesRule(Event.allDayRuleFromLocal(
         Event.allDayRuleToLocal('FREQ=DAILY;UNTIL=20261019T150000Z')), true);
       assert.equal(rule, 'FREQ=DAILY;UNTIL=20261020');
+    });
+  }
+});
+
+// --- Floating UNTIL (nativecal's editor) and UTC+13 inclusive ends ----------------------
+
+test('all-day series: a floating UNTIL names its own date, in the grid and the feed', () => {
+  // nativecal's editor wrote UNTIL=20261025T235959 (no Z) for "through Oct 25"; read as
+  // a UTC instant through the +13h window it became Oct 26 everywhere.
+  const { ICSService } = require('../../functions/index.js')._internal;
+  const row = { id: 'n', title: 'N', isAllDay: true, type: 1,
+    start: '2026-10-20T07:00:00.000Z', end: '2026-10-21T07:00:00.000Z',
+    recurrencerule: 'FREQ=DAILY;UNTIL=20261025T235959' };
+  assert.equal(ICSService.seriesRule(row.recurrencerule, true), 'FREQ=DAILY;UNTIL=20261025');
+  for (const tz of ['America/Los_Angeles', 'Asia/Tokyo', 'Pacific/Auckland', 'UTC']) {
+    inTZ(tz, () => {
+      const r = new Calendar('c', 't', [row]).getSyncFusionEvents()[0];
+      const u = new Date(stampMs(until(r.RecurrenceRule)));
+      assert.equal(u.getTime(), new Date(2026, 9, 25).getTime(), `UNTIL at local Oct 25 in ${tz}`);
+      assert.equal(Event.ruleUntilDate(row.recurrencerule, true), '2026-10-25', `editor reads Oct 25 in ${tz}`);
+      // Untouched, it stays verbatim.
+      assert.equal(new Event(r).recurrencerule, row.recurrencerule, `kept in ${tz}`);
+    });
+  }
+});
+
+test('nativecal editor: UNTIL reads as the date the grid shows and is written in its format', () => {
+  for (const tz of ['America/Los_Angeles', 'Asia/Tokyo', 'Pacific/Auckland', 'UTC']) {
+    inTZ(tz, () => {
+      // Grid-written (local midnight), UTC-midnight, and floating stamps all read Oct 25.
+      const gridStamp = Event.recurrenceStamp(new Date(2026, 9, 25));
+      for (const rule of [`FREQ=DAILY;UNTIL=${gridStamp}`, 'FREQ=DAILY;UNTIL=20261025T000000Z',
+        'FREQ=DAILY;UNTIL=20261025T235959', 'FREQ=DAILY;UNTIL=20261025']) {
+        assert.equal(Event.ruleUntilDate(rule, true), '2026-10-25', `${rule} in ${tz}`);
+      }
+      assert.equal(Event.ruleUntilStamp('2026-10-25', true), gridStamp, `all-day write in ${tz}`);
+      assert.equal(Event.ruleUntilStamp('2026-10-25', false), '20261025T235959', `timed write in ${tz}`);
+      assert.equal(Event.ruleUntilDate('FREQ=DAILY', true), '');
+    });
+  }
+});
+
+test('all-day: a legacy nativecal event authored at UTC+13 keeps its last day', () => {
+  // nativecal stored local midnight .. local 23:59:59.999 of the last day. At UTC+13 that
+  // end sat exactly 1ms short of the next date under the +13h window.
+  const { ICSService } = require('../../functions/index.js')._internal;
+  const rows = inTZ('Pacific/Auckland', () => [
+    { id: 'm', title: 'M', isAllDay: true, type: 1,
+      start: new Date(2026, 9, 20).getTime(), end: new Date(2026, 9, 22, 23, 59, 59, 999).getTime() },
+    { id: 'one', title: 'O', isAllDay: true, type: 1,
+      start: new Date(2026, 9, 20).getTime(), end: new Date(2026, 9, 20, 23, 59, 59, 999).getTime() },
+  ]);
+  assert.equal(ICSService.formatDate(rows[0].end), '20261023', 'feed end (exclusive)');
+  assert.equal(ICSService.formatDate(rows[1].end), '20261021', 'feed single-day end');
+  for (const tz of ['America/Los_Angeles', 'Asia/Tokyo', 'Pacific/Auckland', 'UTC']) {
+    inTZ(tz, () => {
+      const cal = new Calendar('c', 't', rows.map(r => ({ ...r })));
+      const [m, one] = cal.getSyncFusionEvents();
+      assert.equal(ymd(m.StartTime), '2026-10-20', `multi-day start in ${tz}`);
+      assert.equal(ymd(m.EndTime), '2026-10-23', `multi-day end (exclusive) in ${tz}`);
+      assert.equal(ymd(one.EndTime), '2026-10-21', `single-day end in ${tz}`);
+      const shown = Event.allDayDisplayRange(rows[0]);
+      assert.equal(ymd(new Date(shown.end)), '2026-10-22', `nativecal last day in ${tz}`);
+      cal.setEvents(cal.getSyncFusionEvents());
+      cal.events.forEach((e, i) => {
+        assert.equal(e.start, rows[i].start, `${rows[i].id} start untouched in ${tz}`);
+        assert.equal(e.end, rows[i].end, `${rows[i].id} end untouched in ${tz}`);
+      });
+    });
+  }
+});
+
+test('all-day: a zero-length stored row reaches the grid as one day and stays untouched', () => {
+  const row = { id: 'z', title: 'Z', isAllDay: true, type: 1,
+    start: '2026-10-20T00:00:00.000Z', end: '2026-10-20T00:00:00.000Z' };
+  for (const tz of ['America/Los_Angeles', 'Asia/Tokyo', 'Pacific/Auckland', 'UTC']) {
+    inTZ(tz, () => {
+      const cal = new Calendar('c', 't', [{ ...row }]);
+      const r = cal.getSyncFusionEvents()[0];
+      assert.equal(ymd(r.StartTime), '2026-10-20', `start in ${tz}`);
+      assert.equal(ymd(r.EndTime), '2026-10-21', `end in ${tz}`);
+      cal.setEvents([r]);
+      assert.equal(cal.events[0].end, row.end, `end untouched in ${tz}`);
+      assert.equal(cal.events[0]._shownEnd, undefined, 'helper fields are not persisted');
     });
   }
 });

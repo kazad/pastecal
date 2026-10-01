@@ -36,11 +36,20 @@ class Calendar {
             // shape decides (as in ICSService.assignOccurrences).
             const parent = e.recurrenceID ? byId.get(e.recurrenceID) : null;
             const allDaySeries = parent ? !!parent.isAllDay : allDay;
+            const start = toDate(e.start);
+            let end = toDate(e.end);
+            // A zero-length or inverted all-day range (a single-day row with end == start)
+            // would reach the grid with EndTime == StartTime; show it as one day. Event
+            // keeps the stored end while this shown end comes back unchanged.
+            const shownEnd = allDay && start && (!end || end <= start)
+                ? new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1) : null;
+            if (shownEnd) end = shownEnd;
             return {
                 Id: e.id,
                 Subject: e.title,
-                StartTime: toDate(e.start),
-                EndTime: toDate(e.end),
+                StartTime: start,
+                EndTime: end,
+                ...(shownEnd ? { _shownEnd: shownEnd } : {}),
                 // What the record was built from, so Event can keep each value verbatim
                 // when its meaning is unchanged (see Event's constructor).
                 _storedStart: e.start,

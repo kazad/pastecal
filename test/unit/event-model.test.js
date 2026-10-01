@@ -191,8 +191,9 @@ test('Event: an inverted range from the scheduler keeps its start and gets the d
 
   const allDay = new Event({ Subject: 'X', IsAllDay: true,
     StartTime: new Date(2026, 9, 2), EndTime: new Date(2026, 9, 1) });
-  assert.equal(allDay.start, '2026-10-02T00:00:00.000Z');
-  assert.equal(allDay.end, '2026-10-03T00:00:00.000Z');
+  // Stored in the legacy form: the author's local midnight (see Event.allDayDateUTC).
+  assert.equal(allDay.start, new Date(2026, 9, 2).toISOString());
+  assert.equal(allDay.end, new Date(2026, 9, 3).toISOString());
 });
 
 test('Event: stored-shape data is never repaired', () => {
