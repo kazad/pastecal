@@ -266,52 +266,6 @@ const CalendarVueApp = {
                 : 'Some event types are hidden — none in this view.';
         },
 
-        // Does this series actually put an occurrence inside the window? The stored start
-        // only says when the series began, so COUNT/UNTIL have to be honoured -- a weekly
-        // standup that finished last year starts before every future window but belongs in
-        // none of them. Syncfusion's own expansion is the authority; if it is unavailable
-        // we fall back to the old "starts before the window" guess, which over-reports
-        // rather than hiding something.
-        recurrenceOccursInRange(event, range) {
-            // The live scheduler cannot answer this: hidden events are filtered out of its
-            // dataSource, so it would report "no occurrences" for precisely the events
-            // being counted. Expand the rule in isolation instead.
-            const start = new Date(event.start).getTime();
-            if (isNaN(start)) return true;
-
-            try {
-                const rule = String(event.recurrencerule || '');
-                const until = /UNTIL=([0-9TZ]+)/.exec(rule);
-                if (until) {
-                    const u = ej.schedule.getDateFromRecurrenceDateString(until[1]);
-                    if (u && !isNaN(u.getTime()) && u.getTime() < range.start) return false;
-                }
-                const count = /COUNT=(\d+)/.exec(rule);
-                if (count) {
-                    // Walk the rule's own interval forward COUNT times and see whether the
-                    // last occurrence lands before the window opens.
-                    const n = parseInt(count[1], 10);
-                    const every = parseInt((/INTERVAL=(\d+)/.exec(rule) || [, '1'])[1], 10) || 1;
-                    const freq = (/FREQ=(\w+)/.exec(rule) || [, ''])[1];
-                    const stepMs = { DAILY: 864e5, WEEKLY: 6048e5 }[freq];
-                    if (stepMs && n > 0) {
-                        const lastStart = start + stepMs * every * (n - 1);
-                        if (lastStart < range.start) return false;
-                    } else if (freq === 'MONTHLY' || freq === 'YEARLY') {
-                        const last = new Date(start);
-                        const add = every * (n - 1);
-                        if (freq === 'MONTHLY') last.setMonth(last.getMonth() + add);
-                        else last.setFullYear(last.getFullYear() + add);
-                        if (last.getTime() < range.start) return false;
-                    }
-                }
-            } catch (err) {
-                // Fall through: over-reporting is safer than silently not counting.
-            }
-
-            return start < range.end;
-        },
-
         // Is any color switched off? Distinct from hiddenEventCount, which is 0 whenever
         // the current view happens to contain none of the hidden types. Now that filters
         // persist past closing the panel, that state is reachable by simply paging to
@@ -337,8 +291,7 @@ const CalendarVueApp = {
                 // and counting it produced a banner reporting a hidden event the user
                 // could never find.
                 if (e.recurrencerule) return this.recurrenceOccursInRange(e, range);
-                const end = new Date(e.end).getTime();
-                return start < range.end && (isNaN(end) ? start : end) >= range.start;
+                return this.spansRange(start, new Date(e.end).getTime(), range);
             }).length;
         },
         calendarAutoViewLabel() {
@@ -2248,6 +2201,81 @@ const CalendarVueApp = {
             if (isNaN(first) || isNaN(last)) return null;
             return { start: first, end: last + 86400000 }; // through the end of the last day
         },
+
+        // Does this series actually put an occurrence inside the window? The stored start
+        // only says when the series began, so the rule has to be expanded: COUNT/UNTIL end
+        // it, and BYDAY/INTERVAL/EXDATE decide which days it lands on. Syncfusion's own
+        // expansion is the authority, since it is what draws the grid; if it is unavailable
+        // we fall back to a COUNT/UNTIL estimate, which over-reports rather than hiding
+        // something. A method, not a computed: Vue 3 calls a computed getter with no
+        // arguments, so as a computed this was a boolean and calling it threw.
+        recurrenceOccursInRange(event, range) {
+            // The live scheduler cannot answer this: hidden events are filtered out of its
+            // dataSource, so it would report "no occurrences" for precisely the events
+            // being counted. Expand the rule in isolation instead.
+            const start = new Date(event.start).getTime();
+            if (isNaN(start)) return true;
+            const end = new Date(event.end).getTime();
+            const duration = isNaN(end) ? 0 : Math.max(0, end - start);
+            const rule = String(event.recurrencerule || '');
+
+            try {
+                if (typeof ej.schedule.generate === 'function') {
+                    // Same call the scheduler makes when it renders a view: begin one event
+                    // length before the window, so an occurrence spilling in from the day
+                    // before is caught, and cap the walk at the window's length in days.
+                    const viewDate = new Date(range.start - duration);
+                    const days = Math.ceil((range.end - viewDate.getTime()) / 864e5) + 1;
+                    const firstDay = parseInt(this.globalSettings?.firstDayOfWeek) || 0;
+                    const dates = ej.schedule.generate(new Date(start), rule,
+                        event.recurrenceException || null, firstDay, days, viewDate);
+                    return dates.some(d => this.spansRange(d, d + duration, range));
+                }
+            } catch (err) {
+                // Fall through to the estimate: over-reporting is safer than not counting.
+            }
+
+            try {
+                const until = /UNTIL=([0-9TZ]+)/.exec(rule);
+                if (until) {
+                    const u = ej.schedule.getDateFromRecurrenceDateString(until[1]);
+                    if (u && !isNaN(u.getTime()) && u.getTime() < range.start) return false;
+                }
+                const count = /COUNT=(\d+)/.exec(rule);
+                if (count) {
+                    // Walk the rule's own interval forward COUNT times and see whether the
+                    // last occurrence lands before the window opens. BYDAY can push it
+                    // later, so this is only a lower bound -- the reason it is a fallback.
+                    const n = parseInt(count[1], 10);
+                    const every = parseInt((/INTERVAL=(\d+)/.exec(rule) || [, '1'])[1], 10) || 1;
+                    const freq = (/FREQ=(\w+)/.exec(rule) || [, ''])[1];
+                    const stepMs = { DAILY: 864e5, WEEKLY: 6048e5 }[freq];
+                    if (stepMs && n > 0) {
+                        const lastStart = start + stepMs * every * (n - 1);
+                        if (lastStart < range.start) return false;
+                    } else if (freq === 'MONTHLY' || freq === 'YEARLY') {
+                        const last = new Date(start);
+                        const add = every * (n - 1);
+                        if (freq === 'MONTHLY') last.setMonth(last.getMonth() + add);
+                        else last.setFullYear(last.getFullYear() + add);
+                        if (last.getTime() < range.start) return false;
+                    }
+                }
+            } catch (err) {
+                // Fall through: over-reporting is safer than silently not counting.
+            }
+
+            return start < range.end;
+        },
+
+        // Does [start, end) overlap the window? Ends are exclusive, so an all-day Saturday
+        // ending at Sunday 00:00 is not in the week that starts that Sunday. A zero-length
+        // event has no extent to overlap with, so it counts where it starts.
+        spansRange(start, end, range) {
+            if (isNaN(end) || end <= start) return start >= range.start && start < range.end;
+            return start < range.end && end > range.start;
+        },
+
 
         // The only definition of "visible". updateCalendarView() filters the grid with
         // this, and hiddenEventCount counts with it, so the two cannot disagree.
