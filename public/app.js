@@ -51,9 +51,11 @@ function track(fn) {
     };
 
     window.addEventListener('error', (e) => {
-        const where = e.filename
-            ? `${String(e.filename).split('/').pop()}:${e.lineno || 0}`
-            : 'unknown';
+        // Not filename.split('/').pop(): for an inline script the filename is the page
+        // URL, whose last segment is the calendar's slug. errorSource keeps only our
+        // own .js files.
+        let where = 'unknown';
+        track(a => { where = a.errorSource(e.filename, e.lineno); });
         report('error', (e.error && e.error.message) || e.message, where);
     });
 
@@ -1879,6 +1881,8 @@ const CalendarVueApp = {
                     // the slug events below because those answer "did they choose a
                     // name" and the read-only-link flow reuses their names for
                     // something that is not a new calendar at all.
+                    // Sent urgently (synchronously, by beacon): the redirect below
+                    // unloads this page before a deferred send would run.
                     track(a => a.calendarCreated(chosen, this.calendar));
 
                     // `where` matches the tag SlugManager puts on the read-only
@@ -1888,12 +1892,12 @@ const CalendarVueApp = {
                             where: 'calendar_url',
                             slug_length: slug ? slug.length : 0,
                             event_count_bucket: a.bucketEvents(this.calendar?.events?.length),
-                        }));
+                        }, { urgent: true }));
                     } else {
                         track(a => a.track('slug_autoassigned', {
                             where: 'calendar_url',
                             event_count_bucket: a.bucketEvents(this.calendar?.events?.length),
-                        }));
+                        }, { urgent: true }));
                     }
                     // success - clear localStorage so homepage starts fresh next time
                     this.clearLocalStorage();

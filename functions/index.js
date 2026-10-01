@@ -1458,6 +1458,16 @@ exports.createPublicLink = onCall(async (request) => {
         const { data: calendarData, ref: sourceCalRef } = await CalendarService.getCalendarData(sourceCalendarId);
         let publicViewId;
 
+        // Idempotent for auto-creation: a calendar that already owns a view gets that view
+        // back. Clients ask whenever a snapshot lacks publicViewId, and a second tab (or a
+        // snapshot that beat the first answer back) used to mint a second, orphaned view.
+        // Only a binding in /public_views counts -- options.publicViewId is client-writable.
+        const existing = calendarData?.options?.publicViewId;
+        if (!customSlug && typeof existing === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(existing)
+            && (await admin.database().ref(`${PublicViewService.BINDINGS}/${existing}`).once('value')).val() === sourceCalendarId) {
+            return { publicViewId: existing, created: false };
+        }
+
         // Use custom slug if provided, otherwise generate random ID
         if (customSlug) {
             if (!SlugService.validateSlug(customSlug)) {
@@ -1482,12 +1492,17 @@ exports.createPublicLink = onCall(async (request) => {
         }
 
         await Promise.all([
-            sourceCalRef.child('options/publicViewId').set(publicViewId),
+            // publicViewSource is recorded here, where it is known, so analytics never has
+            // to guess custom-vs-generated from the id's shape.
+            sourceCalRef.child('options').update({
+                publicViewId,
+                publicViewSource: customSlug ? 'custom' : 'generated',
+            }),
             admin.database().ref(`${READONLY_ROOT}/${publicViewId}`)
                 .set(PublicViewService.mirrorOf(calendarData, publicViewId)),
         ]);
 
-        return { publicViewId };
+        return { publicViewId, created: true };
     } catch (error) {
         throw error;
     }
