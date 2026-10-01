@@ -74,13 +74,36 @@ class CalendarDataService {
         return (i && Date.now() - i.at < 5000) ? i : null;
     }
 
-    static _dropIncompleteEvents(calendar) {
-        if (!calendar || !Array.isArray(calendar.events)) return calendar;
+    // `base` is the server's copy as of the last snapshot. An incomplete row the server
+    // already holds (legacy data, written before this check existed) is carried through
+    // as the SERVER's copy rather than dropped: the client merely cannot display it, and
+    // leaving it out made the merge read it as deleted-by-us and the gate count it as a
+    // removal -- so one old dateless event refused every write to that calendar. The
+    // server copy, not ours, so an edit that blanked a complete event's dates is still
+    // not saved (and is reported); the row just stays as it was.
+    static _dropIncompleteEvents(calendar, base = []) {
+        if (!calendar) return calendar;
+        const events = this._eventList(calendar.events);
+        const baseM = this._byKey(base);
 
-        const complete = calendar.events.filter(e => Event.isComplete(e));
-        if (complete.length === calendar.events.length) return calendar;
+        const kept = [], dropped = [];
+        for (const e of events) {
+            if (Event.isComplete(e)) { kept.push(e); continue; }
+            const server = e.id ? baseM.get(this._eventKey(e)) : null;
+            if (server) {
+                kept.push(server);
+                if (Event.isComplete(server)) dropped.push(e);
+            } else {
+                dropped.push(e);
+            }
+        }
+        // And one the local copy never held at all: no screen can show it, so its absence
+        // here cannot be a deliberate delete.
+        const held = new Set(events.filter(e => e.id).map(e => this._eventKey(e)));
+        for (const [k, e] of baseM) if (!held.has(k) && !Event.isComplete(e)) kept.push(e);
 
-        const dropped = calendar.events.filter(e => !Event.isComplete(e));
+        if (!dropped.length) return { ...calendar, events: kept };
+
         console.warn(
             `[CalendarDataService] Refusing to save ${dropped.length} event(s) with a ` +
             `missing/invalid start or end — they would break this calendar's ICS feed.`,
@@ -94,7 +117,7 @@ class CalendarDataService {
             }
         }
 
-        return { ...calendar, events: complete };
+        return { ...calendar, events: kept };
     }
 
     // subscribe to live updates
@@ -246,7 +269,64 @@ class CalendarDataService {
         if (Object.prototype.hasOwnProperty.call(this._lastSeen, calendar.id)) {
             this._previousSeen[calendar.id] = this._lastSeen[calendar.id];
         }
-        this._lastSeen[calendar.id] = JSON.parse(JSON.stringify(calendar.events || []));
+        this._lastSeen[calendar.id] = JSON.parse(JSON.stringify(this._eventList(calendar.events)));
+    }
+
+    // Firebase returns an array with holes as an object keyed by index ({"0":A,"2":B}),
+    // and arrays can carry null slots. Every event list this service stores or reads goes
+    // through here: a raw object made the gate's count undefined (so the gate compared
+    // NaN and let anything through) and made the merge throw "not iterable".
+    static _eventList(events) {
+        if (!events || typeof events !== 'object') return [];
+        return (Array.isArray(events) ? events : Object.values(events))
+            .filter(e => e && typeof e === 'object');
+    }
+
+    static _byKey(list) {
+        const m = new Map();
+        for (const e of this._eventList(list)) if (e.id) m.set(this._eventKey(e), e);
+        return m;
+    }
+
+    // Compare on meaning, not on JSON text. Firebase does not store null-valued keys,
+    // so an event read back from the server lacks recurrenceID/recurrenceException,
+    // while the same event rebuilt through Event's constructor has them as null -- and
+    // key order differs too. JSON.stringify called those unequal, so EVERY untouched
+    // event looked "edited by me" and the merge overwrote the server wholesale. That is
+    // last-write-wins again, i.e. precisely the bug the merge exists to prevent.
+    static _sameEvent(a, b) {
+        if (!a || !b) return a === b;
+        const FIELDS = ['title', 'description', 'start', 'end', 'type', 'isAllDay',
+            'repeat', 'recurrencerule', 'recurrenceID', 'recurrenceException'];
+        const norm = (v) => (v === undefined || v === null || v === '') ? null : v;
+        return FIELDS.every(f => {
+            const x = norm(a[f]), y = norm(b[f]);
+            // type is written as a number locally and can read back as a string.
+            if (f === 'type') return String(x === null ? 1 : x) === String(y === null ? 1 : y);
+            if (f === 'isAllDay') return !!x === !!y;
+            // Same instant, any spelling: nativecal stores epoch numbers and this app
+            // rewrites them as ISO strings, so === made every nativecal event look
+            // edited-by-us and a stale copy overwrote its concurrent edit.
+            if ((f === 'start' || f === 'end') && x !== null && y !== null) {
+                const tx = new Date(x).getTime(), ty = new Date(y).getTime();
+                if (!Number.isNaN(tx) && !Number.isNaN(ty)) return tx === ty;
+            }
+            return x === y;
+        });
+    }
+
+    // What somebody else changed on the server between our baseline and this write --
+    // the work the merge had to route around. Diffed base-to-remote, so this client's
+    // own adds and deletes (local vs remote) never count as a collision.
+    static _concurrentChanges(base, remote) {
+        const baseM = this._byKey(base), remoteM = this._byKey(remote);
+        let addedByOthers = 0, removedByOthers = 0, changedByOthers = 0;
+        for (const [k, e] of remoteM) {
+            if (!baseM.has(k)) addedByOthers++;
+            else if (!this._sameEvent(baseM.get(k), e)) changedByOthers++;
+        }
+        for (const k of baseM.keys()) if (!remoteM.has(k)) removedByOthers++;
+        return { addedByOthers, removedByOthers, changedByOthers };
     }
 
     // Merge local events over the server's current events, instead of overwriting them.
@@ -274,32 +354,8 @@ class CalendarDataService {
     }
 
     static _mergeEvents(base, local, remote) {
-        const byId = (list) => {
-            const m = new Map();
-            for (const e of list || []) if (e && e.id) m.set(this._eventKey(e), e);
-            return m;
-        };
-        const baseM = byId(base), localM = byId(local), remoteM = byId(remote);
-
-        // Compare on meaning, not on JSON text. Firebase does not store null-valued keys,
-        // so an event read back from the server lacks recurrenceID/recurrenceException,
-        // while the same event rebuilt through Event's constructor has them as null -- and
-        // key order differs too. JSON.stringify called those unequal, so EVERY untouched
-        // event looked "edited by me" and the merge overwrote the server wholesale. That is
-        // last-write-wins again, i.e. precisely the bug this merge exists to prevent.
-        const FIELDS = ['title', 'description', 'start', 'end', 'type', 'isAllDay',
-            'repeat', 'recurrencerule', 'recurrenceID', 'recurrenceException'];
-        const norm = (v) => (v === undefined || v === null || v === '') ? null : v;
-        const same = (a, b) => {
-            if (!a || !b) return a === b;
-            return FIELDS.every(f => {
-                const x = norm(a[f]), y = norm(b[f]);
-                // type is written as a number locally and can read back as a string.
-                if (f === 'type') return String(x === null ? 1 : x) === String(y === null ? 1 : y);
-                if (f === 'isAllDay') return !!x === !!y;
-                return x === y;
-            });
-        };
+        const baseM = this._byKey(base), localM = this._byKey(local), remoteM = this._byKey(remote);
+        const same = (a, b) => this._sameEvent(a, b);
 
         const merged = new Map(remoteM);
 
@@ -327,8 +383,8 @@ class CalendarDataService {
         // emitted and dropped from the write.
         const out = [];
         const seen = new Set();
-        for (const e of remote || []) {
-            if (!e || !e.id) continue;
+        for (const e of this._eventList(remote)) {
+            if (!e.id) continue;
             const k = this._eventKey(e);
             if (merged.has(k)) { out.push(merged.get(k)); seen.add(k); }
         }
@@ -340,7 +396,6 @@ class CalendarDataService {
     static sync(calendar) {
         if (calendar && calendar.id && this.connected) {
             // console.log("CalendarDataService.sync()", calendar);
-            const safe = this._dropIncompleteEvents(calendar);
 
             // Merge the events under a transaction so a concurrent write cannot be lost
             // between the read and the write. Everything else on the calendar (title,
@@ -355,8 +410,11 @@ class CalendarDataService {
             // start working as soon as the first snapshot lands, which is immediate in
             // practice since sync() only runs on a connected calendar.
             const known = Object.prototype.hasOwnProperty.call(this._lastSeen, calendar.id);
-            const localEvents = this._sanitizeForFirebase(safe.events || []);
-            const base = known ? this._lastSeen[calendar.id] : [];
+            const base = known ? this._eventList(this._lastSeen[calendar.id]) : [];
+            // Filtered against the baseline, so incomplete rows the server already holds
+            // are carried through untouched and both sides of the gate count them alike.
+            const safe = this._dropIncompleteEvents(calendar, base);
+            const localEvents = this._sanitizeForFirebase(safe.events);
             const rest = this._sanitizeForFirebase({ ...safe, events: undefined });
             delete rest.events;
 
@@ -370,7 +428,7 @@ class CalendarDataService {
             // events than the server holds, so the caller is handed the server's copy to
             // put back (see onSyncRefused) rather than the user being stranded looking at
             // an empty calendar.
-            const prevEvents = known ? (this._lastSeen[calendar.id] || []) : [];
+            const prevEvents = base;
             const prevCount = prevEvents.length;
             const nextCount = localEvents.length;
             const removing = prevCount - nextCount;
@@ -383,22 +441,36 @@ class CalendarDataService {
             if (known && removing > 0 && (!intent || removing > intent.removing)) {
                 console.error(`[CalendarDataService] refused to save: this write removes ${removing} of ${prevCount} events` +
                     (intent ? ` but only ${intent.removing} were deleted by the user` : ' and no deletion was made'));
+                // The known-good events, so the app can restore what it was about to
+                // lose instead of leaving the user to discover it on their next reload.
+                //
+                // Minus anything the user really did delete: the baseline is the last
+                // SERVER snapshot, so when a legitimate delete is still in flight and a
+                // buggy write arrives behind it, restoring the baseline verbatim would
+                // resurrect the event they just removed. Events still present locally
+                // are the ones that were never deleted on purpose.
+                const localIds = new Set(localEvents.map(e => this._eventKey(e)));
+                const deliberatelyGone = intent
+                    ? new Set(prevEvents.filter(e => !localIds.has(this._eventKey(e)))
+                        .slice(0, intent.removing).map(e => this._eventKey(e)))
+                    : new Set();
+                const restore = JSON.parse(JSON.stringify(
+                    prevEvents.filter(e => !deliberatelyGone.has(this._eventKey(e)))));
                 if (typeof this.onSyncRefused === 'function') {
-                    // The known-good events, so the app can restore what it was about to
-                    // lose instead of leaving the user to discover it on their next reload.
-                    //
-                    // Minus anything the user really did delete: the baseline is the last
-                    // SERVER snapshot, so when a legitimate delete is still in flight and a
-                    // buggy write arrives behind it, restoring the baseline verbatim would
-                    // resurrect the event they just removed. Events still present locally
-                    // are the ones that were never deleted on purpose.
-                    const localIds = new Set(localEvents.map(e => e && this._eventKey(e)));
-                    const deliberatelyGone = intent
-                        ? new Set(prevEvents.filter(e => !localIds.has(this._eventKey(e)))
-                            .slice(0, intent.removing).map(e => this._eventKey(e)))
-                        : new Set();
-                    const restore = prevEvents.filter(e => !deliberatelyGone.has(this._eventKey(e)));
-                    try { this.onSyncRefused({ before: prevCount, removing, events: restore }); } catch (e) { /* never rethrow */ }
+                    // The caller REPLACES its events with this list (no merge: merging
+                    // against the baseline reads every dropped row as deleted-by-us and
+                    // drops it again), which also puts local back in step with the gate.
+                    try {
+                        this.onSyncRefused({ before: prevCount, removing, events: JSON.parse(JSON.stringify(restore)) });
+                    } catch (e) { /* never rethrow */ }
+                }
+                // The deletions the user really made are still owed to the server, and the
+                // refused write consumed their declaration. Re-declare exactly those and
+                // send the corrected list now; otherwise local would sit permanently below
+                // the baseline and every later edit would be refused until a reload.
+                if (deliberatelyGone.size) {
+                    this._intent = { removing: deliberatelyGone.size, at: Date.now() };
+                    this.sync({ ...calendar, events: restore });
                 }
                 return;
             }
@@ -406,61 +478,69 @@ class CalendarDataService {
             // Filled by the transaction body, read once it commits. The body can run more
             // than once under contention, so only the committed run's value is reported.
             let pendingMerge = null;
+            let bodyError = null;
 
             this.db.child(calendar.id).transaction((current) => {
-                // Firebase may run this with a null `current` speculatively, before the
-                // node's real value is available, and runs it again on contention. Writing
-                // the whole local calendar here would discard whatever the server actually
-                // holds, so only take that path for a calendar that genuinely has no data
-                // yet -- one we have never received a snapshot for.
-                if (current === null) {
-                    if (known) return; // abort; the retry will run against real data
-                    return this._sanitizeForFirebase(safe);
+                pendingMerge = null;
+                bodyError = null;
+                // A throw in here would escape into Firebase and the edit would vanish
+                // without onSyncFailed ever hearing of it. Abort instead, and let the
+                // completion callback report it.
+                try {
+                    // Writing the whole local calendar over a null node would recreate a
+                    // calendar someone deleted or reset, so only take that path for one we
+                    // have never received a snapshot for. With a live subscription the
+                    // node is cached, so a null here means the server really has nothing.
+                    if (current === null) {
+                        if (known) return; // abort; reported by the completion callback
+                        return this._sanitizeForFirebase(safe);
+                    }
+                    const remoteEvents = this._eventList(current.events);
+                    // options is a bag of independent keys, not one field, so a shallow spread
+                    // is wrong: a client whose local options predate another client's
+                    // autoCreateReadOnlyLink would erase publicViewId, and every /view/ link
+                    // already shared would stop resolving. Merge the keys instead.
+                    const mergedOptions = (current.options || rest.options)
+                        ? { ...(current.options || {}), ...(rest.options || {}) }
+                        : undefined;
+
+                    // Did this write actually have to reconcile with somebody else? Only
+                    // changes made on the server since our baseline count; without a
+                    // baseline everything would look foreign. Reported after commit.
+                    pendingMerge = known ? this._concurrentChanges(base, remoteEvents) : null;
+
+                    const next = {
+                        ...current,
+                        ...rest,
+                        events: this._mergeEvents(base, localEvents, remoteEvents),
+                    };
+                    if (mergedOptions) next.options = mergedOptions;
+                    return next;
+                } catch (err) {
+                    bodyError = err;
+                    return;
                 }
-                const remoteEvents = Array.isArray(current.events)
-                    ? current.events
-                    : Object.values(current.events || {});
-                // options is a bag of independent keys, not one field, so a shallow spread
-                // is wrong: a client whose local options predate another client's
-                // autoCreateReadOnlyLink would erase publicViewId, and every /view/ link
-                // already shared would stop resolving. Merge the keys instead.
-                const mergedOptions = (current.options || rest.options)
-                    ? { ...(current.options || {}), ...(rest.options || {}) }
-                    : undefined;
-
-                // Did this write actually have to reconcile with somebody else? Compared
-                // against what we hold, not against base, so it counts real collisions
-                // rather than our own edits. Reported after the transaction commits.
-                const localIds = new Set(localEvents.map(e => e && e.id).filter(Boolean));
-                const remoteIds = new Set(remoteEvents.map(e => e && e.id).filter(Boolean));
-                pendingMerge = {
-                    addedByOthers: [...remoteIds].filter(id => !localIds.has(id)).length,
-                    removedByUs: [...localIds].filter(id => !remoteIds.has(id)).length,
-                };
-
-                const next = {
-                    ...current,
-                    ...rest,
-                    events: this._mergeEvents(base, localEvents, remoteEvents),
-                };
-                if (mergedOptions) next.options = mergedOptions;
-                return next;
             }, (error, committed, snapshot) => {
-                if (error) {
+                // An abort is not retried by Firebase: it arrives as (null, false), and
+                // treating only `error` as failure lost the edit in silence.
+                const failure = error || bodyError ||
+                    (!committed ? new Error('sync transaction aborted: no calendar on the server to merge into') : null);
+                if (failure) {
                     // A failed write is the one thing a user must never discover later.
                     // Surfaced to them, and counted, because the console is not a channel
                     // anybody watches.
-                    console.error('[CalendarDataService] sync transaction failed', error);
+                    console.error('[CalendarDataService] sync transaction failed', failure);
                     if (typeof this.onSyncFailed === 'function') {
-                        try { this.onSyncFailed(error); } catch (e) { /* never rethrow */ }
+                        try { this.onSyncFailed(failure); } catch (e) { /* never rethrow */ }
                     }
-                } else if (committed && snapshot) {
+                } else if (snapshot) {
                     // Our write is now the baseline for the next diff.
                     this._rememberSnapshot({ id: calendar.id, events: snapshot.val()?.events });
 
-                    if (pendingMerge && (pendingMerge.addedByOthers || pendingMerge.removedByUs)
+                    const m = pendingMerge;
+                    if (m && (m.addedByOthers || m.removedByOthers || m.changedByOthers)
                         && typeof this.onSyncMerged === 'function') {
-                        try { this.onSyncMerged(pendingMerge); } catch (e) { /* never rethrow */ }
+                        try { this.onSyncMerged(m); } catch (e) { /* never rethrow */ }
                     }
                 }
             });
