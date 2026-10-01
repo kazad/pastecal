@@ -43,6 +43,8 @@ function loadApp(events) {
   vm.runInContext('var Utils = { uuidv4: () => Math.random().toString(36).slice(2) };', ctx);
   vm.runInContext(fs.readFileSync(path.join(PUBLIC, 'models/caldate.js'), 'utf8'), ctx);
   vm.runInContext(fs.readFileSync(path.join(PUBLIC, 'models/Event.js'), 'utf8') + ';this.Event = Event;', ctx);
+  // The real service: app.sameEvent delegates to its _sameEvent, the one client definition.
+  ctx.CalendarDataService = require('./helpers/data-service-harness').loadDataService().S;
   const names = ['planUndo', 'revertExdates', 'sameEvent', 'eventKey', 'deltaBetween',
     'isHandledHistory', 'reversedHistory'];
   vm.runInContext(`this.app = {\n${names.map(method).join(',\n')}\n}`, ctx);

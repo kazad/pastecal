@@ -2957,17 +2957,12 @@ const CalendarVueApp = {
          * Firebase drops empty values and dates can round-trip as different strings, so
          * compare normalized rather than with JSON equality.
          */
+        // One definition of "the same event" on the client: undo used to keep its own copy,
+        // which fell behind the service's (it ignored allDayDates, so a dates-only
+        // correction at UTC-11/UTC+14 never showed as undoable).
         sameEvent(a, b) {
             if (!a || !b) return false;
-            const norm = (v) => (v === undefined || v === null || v === '') ? null : v;
-            const when = (v) => Event.toISOStringOrNull(v);
-            return norm(a.title) === norm(b.title)
-                && when(a.start) === when(b.start) && when(a.end) === when(b.end)
-                && norm(a.description) === norm(b.description)
-                && String(a.type ?? 1) === String(b.type ?? 1)
-                && !!a.isAllDay === !!b.isAllDay
-                && norm(a.recurrencerule) === norm(b.recurrencerule)
-                && norm(a.recurrenceException) === norm(b.recurrenceException);
+            return CalendarDataService._sameEvent(a, b);
         },
 
         /** What turned `before` into `after`, in the same shape the server records. */

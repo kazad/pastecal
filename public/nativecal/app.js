@@ -157,7 +157,7 @@ const CalendarVueApp = {
 
     computed: {
         // What the grid, popover and editor see. A stored all-day date is the author's
-        // local midnight (see Event.allDayDateUTC); shown raw, LA saw Tokyo's Oct 2
+        // local midnight (see CalDate in models/caldate.js); shown raw, LA saw Tokyo's Oct 2
         // holiday on Oct 1. An all-day series' UNTIL is a date too and is shown at the
         // viewer's local midnight, which is what the grid's rrule expansion compares by
         // instant (a floating "T235959" UNTIL otherwise added a day east of UTC). Timed
