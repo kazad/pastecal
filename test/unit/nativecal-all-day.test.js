@@ -5,7 +5,7 @@
  * nativecal renders stored events directly, so an all-day event authored in another zone
  * showed a day off. It now maps all-day events at its boundary: stored -> local midnight
  * of the first day through local 23:59:59.999 of the last day (its display shape), read
- * through Event.allDayDateUTC. Writes keep nativecal's legacy shape (the writer's local
+ * through CalDate.allDayDates. Writes keep nativecal's legacy shape (the writer's local
  * midnight .. local 23:59:59.999 of the last day, epoch ms) so a tab still running the
  * old nativecal, which shows stored values as-is, agrees with a new one in its zone.
  *
@@ -25,7 +25,8 @@ const path = require('node:path');
 const PUBLIC = path.join(__dirname, '../../public');
 
 function loadEvent() {
-  const src = fs.readFileSync(path.join(PUBLIC, 'models/Event.js'), 'utf8');
+  const src = fs.readFileSync(path.join(PUBLIC, 'models/caldate.js'), 'utf8') + '\n'
+    + fs.readFileSync(path.join(PUBLIC, 'models/Event.js'), 'utf8');
   return new Function('Utils', `${src}; return Event;`)({ uuidv4: () => 'generated-uuid' });
 }
 
@@ -203,15 +204,15 @@ test('nativecal: an all-day series UNTIL is shown at local midnight of its date,
           start: new Date(2026, 9, 20).getTime(), end: new Date(2026, 9, 20, 23, 59, 59, 999).getTime() };
         const vm = nativeVm([{ ...stored }]);
         const shown = vm.displayEvents[0];
-        const m = /UNTIL=(\d{8}T\d{6}Z)/.exec(shown.recurrencerule);
-        assert.equal(Event.recurrenceStampMs(m[1]), new Date(2026, 9, 25).getTime(), `${rule} in ${tz}`);
+        // Shown as the floating stamp of Oct 25 (the viewer's local midnight of that date).
+        assert.match(shown.recurrencerule, /UNTIL=20261025T000000(;|$)/, `${rule} in ${tz}`);
         vm.handleEventsUpdate(vm.displayEvents);
         assert.equal(vm.calendar.events[0].recurrencerule, rule, `kept verbatim in ${tz}`);
-        // An UNTIL changed in the editor is written at the editor's local midnight.
+        // An UNTIL changed in the editor is written as the floating stamp of its date.
         vm.handleSaveEvent({ ...vm.displayEvents[0],
           recurrencerule: `FREQ=DAILY;UNTIL=${Event.ruleUntilStamp('2026-10-27', true)}` });
         assert.equal(vm.calendar.events[0].recurrencerule,
-          `FREQ=DAILY;UNTIL=${Event.recurrenceStamp(new Date(2026, 9, 27))}`, `edited in ${tz}`);
+          'FREQ=DAILY;UNTIL=20261027T000000', `edited in ${tz}`);
       }
     });
   }

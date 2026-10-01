@@ -247,6 +247,7 @@ const EventEditor = {
                 }
                 loadedRecurrence = {
                     rule: newVal.recurrencerule || '',
+                    allDay: !!newVal.isAllDay,
                     freq: recurrenceFreq.value,
                     interval: recurrenceInterval.value,
                     until: recurrenceUntil.value,
@@ -313,6 +314,13 @@ const EventEditor = {
                 && loadedRecurrence.until === recurrenceUntil.value;
             if (untouched) {
                 rruleStr = loadedRecurrence.rule;
+                // Switched between all-day and timed: the same UNTIL date, in the new
+                // type's form. An all-day UNTIL (that date's start) kept on a now-timed
+                // series dropped its last day.
+                if (loadedRecurrence.allDay !== !!localEvent.value.isAllDay) {
+                    rruleStr = Event.ruleUntilForType(rruleStr, !!localEvent.value.isAllDay,
+                        loadedRecurrence.allDay);
+                }
             } else if (recurrenceFreq.value) {
                 rruleStr = `FREQ=${recurrenceFreq.value}`;
                 
@@ -321,8 +329,8 @@ const EventEditor = {
                 }
 
                 if (recurrenceUntil.value) {
-                    // All-day: the grid's format (Event.ruleUntilStamp). Timed: a floating
-                    // T235959 stamp, through the end of that day.
+                    // Through the end of that date, in the series type's form
+                    // (Event.ruleUntilStamp).
                     const stamp = Event.ruleUntilStamp(recurrenceUntil.value, !!localEvent.value.isAllDay);
                     if (stamp) rruleStr += `;UNTIL=${stamp}`;
                 }

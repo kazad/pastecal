@@ -1,5 +1,9 @@
 // Event Model Class
 // May be created from JSON object or SyncFusion internal calendar event
+//
+// Which calendar date a stored value names is decided in caldate.js (the global CalDate,
+// loaded before this file; the same module the ICS feed uses). Nothing here re-implements
+// that mapping.
 
 class Event {
     constructor(options) {
@@ -18,32 +22,47 @@ class Event {
         this.recurrenceID = options.RecurrenceID || options.recurrenceID || null;
         this.recurrenceException = options.RecurrenceException || options.recurrenceException || null;
         this.isAllDay = options.IsAllDay || options.isAllDay || false;
+        // The dates an all-day event covers, { start: 'YYYY-MM-DD', end: 'YYYY-MM-DD' }
+        // (end exclusive), stored ALONGSIDE the legacy start/end instants. The instants
+        // alone cannot name a date in every zone (see CalDate.instantDate: UTC-11 and
+        // UTC+14 fall outside its window, so an event created there read back a day off
+        // and could not be corrected). Clients from before this field drop it when they
+        // save (this constructor copies only known fields), so a row that has it was last
+        // written by a client that kept it consistent with start/end; readers still check
+        // (CalDate.datesMatch) and fall back to the instants. Timed events never carry it.
+        this.allDayDates = this.isAllDay ? Event.cleanDates(options.allDayDates) : null;
+        // An event minted here (no id yet: quick-add in either app, paste import) was
+        // dated by THIS client's clock, so its local dates are the ones meant. Without
+        // this, a quick-added all-day event at UTC-11/UTC+14 read back a day off. The +1s
+        // reads an inclusive end (local 23:59:59.999 of the last day) as the next date,
+        // like an exclusive one.
+        const minted = !(options.Id || options.id);
+        if (this.isAllDay && !this.allDayDates && minted && !('StartTime' in options || 'EndTime' in options)) {
+            const s = CalDate.localYmd(this.start);
+            const endMs = CalDate.toMs(this.end);
+            const e = isNaN(endMs) ? null : CalDate.localYmd(endMs + 1000);
+            if (s) this.allDayDates = { start: s, end: e && e > s ? e : CalDate.addDays(s, 1) };
+        }
 
         // for SyncFusion Internal Object. StartTime and EndTime are converted
         // independently: a bad StartTime must not throw away a good EndTime (Syncfusion
         // records have no `end` to fall back on). Calendar.getSyncFusionEvents() hands
-        // each record the stored values it was built from (_storedStart/_storedEnd, and
-        // _storedRule/_storedException for an all-day series); a value whose meaning is
-        // unchanged is kept verbatim, so rebuilding every event in setEvents() after an
-        // unrelated edit rewrites nothing.
+        // each record the stored values it was built from (_storedStart/_storedEnd/
+        // _storedDates, and _storedRule/_storedException for an all-day series); a value
+        // whose meaning is unchanged is kept verbatim, so rebuilding every event in
+        // setEvents() after an unrelated edit rewrites nothing.
         if ('StartTime' in options || 'EndTime' in options) {
             if (this.isAllDay) {
-                this.start = Event.allDayFromLocal(options.StartTime, options._storedStart);
-                // Calendar.getSyncFusionEvents shows a zero-length stored all-day range as
-                // one day (_shownEnd); that end coming back unchanged is still untouched.
-                this.end = '_shownEnd' in options
-                    && Event.toISOStringOrNull(options.EndTime) === Event.toISOStringOrNull(options._shownEnd)
-                    ? options._storedEnd
-                    : Event.allDayFromLocal(options.EndTime, options._storedEnd);
+                Object.assign(this, Event.allDayFromShown(options));
             } else {
                 this.start = Event.timedFromLocal(options.StartTime, options._storedStart);
                 this.end = Event.timedFromLocal(options.EndTime, options._storedEnd);
             }
 
-            // EXDATE and UNTIL of an all-day series were shown at the viewer's local
-            // midnight (see Calendar.getSyncFusionEvents); store them as that local
-            // midnight (the legacy format, see allDayDateUTC). The series' shape decides, not the record's own: an edited
-            // occurrence records its slot in the parent's grid.
+            // EXDATE and UNTIL of an all-day series name dates; they are stored as
+            // floating stamps of those dates (see CalDate.floatingStamp). The series'
+            // shape decides, not the record's own: an edited occurrence records its slot
+            // in the parent's grid.
             const allDaySeries = '_allDaySeries' in options ? !!options._allDaySeries : this.isAllDay;
             if (allDaySeries) {
                 this.recurrencerule = Event.allDayRuleFromLocal(this.recurrencerule, options._storedRule);
@@ -104,148 +123,138 @@ class Event {
         return iso;
     }
 
-    // All-day dates are WRITTEN as the UTC instant of the WRITER's local midnight
-    // (Tokyo's Oct 2 is "2026-10-01T15:00:00.000Z"), the format every client has always
-    // written. A client from before the cross-zone fix displays that instant as-is, and a
-    // tab opened before a deploy keeps running that code (there is no forced reload):
-    // writing UTC midnight instead showed a new client's Oct 2 on Oct 1 in an old LA tab,
-    // and that tab's next save made it permanent. So writes stay legacy and only the READ
-    // is new: floor((ms + 13h + 1s) / 1 day) maps any writer's local midnight to its
-    // date, for writers from just east of UTC-11 through UTC+13 (NZ summer). It reads
-    // UTC midnight (written by an unreleased build) correctly too, and the extra second
-    // makes nativecal's inclusive end (local 23:59:59.999 of the last day) read as the
-    // next date even at UTC+13, where it would otherwise land exactly one ms short.
-    // This mapping must match ICSService.formatDate in functions/index.js so the grid
-    // and the feed always agree.
-    static allDayDateUTC(value) {
-        const iso = Event.toISOStringOrNull(value);
-        if (iso === null) return null;
-        const DAY = 86400000;
-        return new Date(Math.floor((new Date(iso).getTime() + 13 * 3600000 + 1000) / DAY) * DAY);
+    // A well-formed allDayDates value (a fresh copy), or null.
+    static cleanDates(dates) {
+        if (!dates || typeof dates !== 'object') return null;
+        if (!CalDate.isYmd(dates.start) || !CalDate.isYmd(dates.end) || dates.end <= dates.start) return null;
+        return { start: dates.start, end: dates.end };
     }
 
-    // The calendar date of a local Date (plus addDays), as UTC midnight ms: the same
-    // scale as allDayDateUTC, for checking whether a stored value still means that date.
-    static localDateUTC(d, addDays = 0) {
-        return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate() + addDays);
+    // ---- All-day: stored <-> shown -----------------------------------------------------
+    //
+    // An all-day event is shown at the VIEWER's local midnight of each of its dates.
+    // Writes store the dates (allDayDates) and, for clients that predate that field, the
+    // legacy instants too: the WRITER's local midnight (Tokyo's Oct 2 is
+    // "2026-10-01T15:00:00.000Z"). A tab opened before a deploy keeps running the old code
+    // (there is no forced reload) and shows that instant as-is, so it agrees with this
+    // client in the writer's zone.
+
+    // The viewer's local midnights of an all-day event's first date and of the date after
+    // its last ({ start, end } Dates), or null if it has no usable start. The dates come
+    // from CalDate.allDayDates (stored dates when they match, else the instants).
+    static allDayLocalRange(e) {
+        const d = CalDate.allDayDates(e);
+        return d && { start: CalDate.localMidnight(d.start), end: CalDate.localMidnight(d.end) };
     }
 
-    // Stored all-day instant -> the viewer's LOCAL midnight of its calendar date.
+    // A single stored all-day instant -> the viewer's local midnight of the date it names
+    // (no allDayDates to consult). Prefer allDayLocalRange(event) when the event is at hand.
     static allDayToLocal(value) {
-        const utc = Event.allDayDateUTC(value);
-        return utc && new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate());
+        return CalDate.localMidnight(CalDate.instantDate(value));
+    }
+
+    // The dates a stored all-day event's start and end name, for deciding whether a value
+    // shown back unchanged can be kept verbatim: its dates, or -- when its start is
+    // unusable -- whatever each instant names on its own.
+    static storedDatesOf(e) {
+        return CalDate.allDayDates(e)
+            || { start: CalDate.instantDate(e.start), end: CalDate.instantDate(e.end) };
+    }
+
+    // Syncfusion all-day record (StartTime/EndTime at the viewer's local midnight, end
+    // exclusive) -> { start, end, allDayDates } to store. Each stored value whose date is
+    // unchanged is kept verbatim (an untouched event is not rewritten); a changed one is
+    // written as this client's local midnight (the legacy form), and the dates are written
+    // whenever either end changed.
+    static allDayFromShown(options) {
+        // A stored TIMED value is an instant, not a date: never "the same date".
+        const hasStored = ('_storedStart' in options || '_storedEnd' in options)
+            && options._storedAllDay !== false;
+        const was = hasStored ? Event.storedDatesOf({ start: options._storedStart,
+            end: options._storedEnd, allDayDates: options._storedDates }) : null;
+        const pick = (shown, wasDate, stored) => {
+            const date = CalDate.localYmd(shown);
+            if (date === null) {
+                return { date, value: stored !== undefined && Event.toISOStringOrNull(stored) === null ? stored : null };
+            }
+            if (wasDate && wasDate === date) return { date, value: stored, kept: true };
+            return { date, value: CalDate.localMidnight(date).toISOString() };
+        };
+        const s = pick(options.StartTime, was && was.start, options._storedStart);
+        const e = pick(options.EndTime, was && was.end, options._storedEnd);
+        let allDayDates = null;
+        if (s.kept && e.kept) allDayDates = Event.cleanDates(options._storedDates);
+        else if (s.date && e.date) {
+            allDayDates = { start: s.date, end: e.date > s.date ? e.date : CalDate.addDays(s.date, 1) };
+        }
+        return { start: s.value, end: e.value, allDayDates };
     }
 
     // nativecal shows an all-day event as local midnight of its first day through local
     // 23:59:59.999 of its last day (epoch ms), and works on stored events directly, so it
-    // maps them at its boundary with this pair. A Syncfusion-written end is exclusive
-    // (local midnight after the last day); nativecal's inclusive end (23:59:59.999 local)
-    // maps to the next date under allDayDateUTC, so it reads as exclusive too.
+    // maps them at its boundary with this pair.
     static allDayDisplayRange(e) {
-        const start = Event.allDayToLocal(e.start);
-        let end = Event.allDayToLocal(e.end);
-        if (!start) return { start: null, end: end && end.getTime() - 1 };
-        if (!end || end <= start) end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1);
-        return { start: start.getTime(), end: end.getTime() - 1 };
-    }
-
-    // Inverse of allDayDisplayRange, in nativecal's own (legacy) storage format, epoch
-    // ms: the writer's local midnight of the first date and local 23:59:59.999 of the
-    // last (see allDayDateUTC for why writes stay legacy). `stored` is the event as
-    // stored before the edit, or null; a range shown unchanged is kept verbatim, and so
-    // is each value whose date is unchanged, so an untouched event is not rewritten.
-    static allDayStoredRange(displayStart, displayEnd, stored) {
-        if (stored) {
-            const shown = Event.allDayDisplayRange(stored);
-            const same = (a, b) => Event.toISOStringOrNull(a) === Event.toISOStringOrNull(b);
-            if (same(shown.start, displayStart) && same(shown.end, displayEnd)) {
-                return { start: stored.start, end: stored.end };
-            }
+        const r = Event.allDayLocalRange(e);
+        if (!r) {
+            const end = Event.allDayToLocal(e && e.end);
+            return { start: null, end: end && end.getTime() - 1 };
         }
-        const toDate = (value) => {
-            const iso = Event.toISOStringOrNull(value);
-            return iso === null ? null : new Date(iso);
-        };
-        const keep = (written, date, prev) => {
-            const prevDate = Event.allDayDateUTC(prev);
-            return prevDate && prevDate.getTime() === date ? prev : written;
-        };
-        const s = toDate(displayStart);
-        const e = toDate(displayEnd);
-        return {
-            start: s === null ? null : keep(
-                new Date(s.getFullYear(), s.getMonth(), s.getDate()).getTime(),
-                Event.localDateUTC(s), stored && stored.start),
-            end: e === null ? null : keep(
-                new Date(e.getFullYear(), e.getMonth(), e.getDate() + 1).getTime() - 1,
-                Event.localDateUTC(e, 1), stored && stored.end),
-        };
+        return { start: r.start.getTime(), end: r.end.getTime() - 1 };
     }
 
-    // Syncfusion all-day record (viewer's local midnight) -> the writer's local midnight
-    // of that Y-M-D as an ISO instant (the legacy format; see allDayDateUTC). `stored` is
-    // the value the record was built from: when it maps to the same date it is kept
-    // verbatim, so an untouched event is not rewritten on every save (and cannot drift
-    // if it sits outside the window above).
-    static allDayFromLocal(value, stored) {
-        const iso = Event.toISOStringOrNull(value);
-        if (iso === null) return stored !== undefined && Event.toISOStringOrNull(stored) === null ? stored : null;
-        const d = new Date(iso);
-        const prev = Event.allDayDateUTC(stored);
-        if (prev && prev.getTime() === Event.localDateUTC(d)) return stored;
-        return new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString();
+    // Inverse of allDayDisplayRange, in nativecal's own storage format: epoch ms of the
+    // writer's local midnight of the first date and local 23:59:59.999 of the last, plus
+    // allDayDates. `stored` is the event as stored before the edit, or null; each value
+    // whose date is unchanged is kept verbatim, so an untouched event is not rewritten.
+    static allDayStoredRange(displayStart, displayEnd, stored) {
+        const was = stored ? Event.storedDatesOf(stored) : null;
+        const s = CalDate.localYmd(displayStart);
+        // The shown end is inclusive (last day 23:59:59.999): the date after it is the end.
+        const lastDay = CalDate.localYmd(displayEnd);
+        const e = lastDay && CalDate.addDays(lastDay, 1);
+        const startKept = !!(was && s === was.start);
+        const endKept = !!(was && e === was.end);
+        const out = {
+            start: s === null ? null : startKept ? stored.start : CalDate.localMidnight(s).getTime(),
+            end: e === null ? null : endKept ? stored.end : CalDate.localMidnight(e).getTime() - 1,
+        };
+        if (startKept && endKept) out.allDayDates = Event.cleanDates(stored.allDayDates);
+        else out.allDayDates = s && e ? { start: s, end: e > s ? e : CalDate.addDays(s, 1) } : null;
+        return out;
     }
 
-    // Recurrence stamps (RRULE UNTIL, RecurrenceException) are UTC DATE-TIMEs,
-    // "20261015T070000Z", as Syncfusion writes them. NaN for anything else.
+    // ---- Recurrence stamps ---------------------------------------------------------------
+
+    // Recurrence stamps (RRULE UNTIL, RecurrenceException): "20261015T070000Z" (UTC, as
+    // Syncfusion writes them), floating "20261015T000000", or a DATE. Epoch ms of the
+    // stamp (a floating one's wall clock read as UTC fields); NaN for anything else.
     static recurrenceStampMs(stamp) {
-        const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z?$/.exec(String(stamp).trim());
-        return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) : NaN;
+        const s = CalDate.parseStamp(stamp);
+        return s ? s.ms : NaN;
     }
 
     static recurrenceStamp(date) {
-        return date.toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
+        return CalDate.utcStamp(date);
     }
 
-    // An all-day series' EXDATE and UNTIL name DATES, but are stored as instants: the
-    // writer's local midnight (or UTC midnight, from an unreleased build). Syncfusion compares them with
-    // occurrences that start at the VIEWER's local midnight -- exceptions by local date,
-    // UNTIL by instant -- so passing the author's instant through hid Tokyo's deleted
-    // Oct 15 on Oct 14 in LA. Read them through allDayDateUTC like the series start
-    // (and like ICSService.formatDate), and show them at the viewer's local midnight.
-    // Anything that is not a DATE-TIME stamp is left alone.
+    // An all-day series' EXDATE and UNTIL name DATES (CalDate.stampDate). They are shown
+    // to the scheduler as floating stamps of those dates, which Syncfusion reads as the
+    // viewer's local midnight -- exactly where the occurrences are. Passing a stored
+    // instant through hid Tokyo's deleted Oct 15 on Oct 14 in LA. Anything that is not a
+    // stamp is left alone.
     static allDayStampToLocal(stamp) {
-        const date = Event.allDayStampDate(stamp);
-        return date === null ? stamp
-            : Event.recurrenceStamp(new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+        const date = CalDate.stampDate(stamp);
+        return date === null ? stamp : CalDate.floatingStamp(date);
     }
 
-    // The date (UTC midnight) an all-day series' stamp names, or null if it is not a
-    // DATE-TIME stamp. A floating stamp (no Z) is a wall-clock time, so its Y-M-D IS the
-    // date: nativecal's editor writes UNTIL=20261025T235959 for "through Oct 25", and
-    // pushing that through the instant window read it as Oct 26. Must match
-    // ICSService.allDayStampDate in functions/index.js.
-    static allDayStampDate(stamp) {
-        const ms = Event.recurrenceStampMs(stamp);
-        if (isNaN(ms)) return null;
-        if (!/Z$/i.test(String(stamp).trim())) {
-            const d = new Date(ms);
-            return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-        }
-        return Event.allDayDateUTC(ms);
-    }
-
-    // Inverse: a stamp at the viewer's local midnight -> that local midnight of its local
-    // date (the legacy format, which an old client compares by instant).
+    // Inverse: a stamp the scheduler produced (the viewer's local midnight as a UTC stamp,
+    // or a floating one we handed it) -> the floating stamp of that LOCAL date. Floating
+    // is the form every reader takes the same date from, in every zone (old tabs too:
+    // Syncfusion parses it as local wall-clock time; the feed takes its Y-M-D).
     static allDayStampFromLocal(stamp) {
-        const ms = Event.recurrenceStampMs(stamp);
-        if (isNaN(ms)) return stamp;
-        // A floating stamp's Y-M-D is already the local date (see allDayStampDate).
-        const floating = !/Z$/i.test(String(stamp).trim());
-        const d = new Date(ms);
-        return Event.recurrenceStamp(floating
-            ? new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
-            : new Date(d.getFullYear(), d.getMonth(), d.getDate()));
+        const s = CalDate.parseStamp(stamp);
+        if (!s) return stamp;
+        return CalDate.floatingStamp(s.utc ? CalDate.localYmd(s.ms) : CalDate.ymdFromUTC(s.ms));
     }
 
     static allDayExceptionsToLocal(list) {
@@ -268,35 +277,41 @@ class Event {
     }
 
     // nativecal's editor edits UNTIL as a "YYYY-MM-DD" date input. The date an UNTIL
-    // names: a floating or date-only stamp's own Y-M-D; a UTC stamp through the all-day
-    // mapping (allDayStampDate) for an all-day series, or its local date for a timed
-    // one. Reading the instant's local date showed the grid's Oct 25 (stored as UTC
-    // midnight) as Oct 24 in LA, and saving wrote Oct 24 back. '' if there is none.
+    // names: for an all-day series, CalDate.stampDate; for a timed one, a floating or
+    // DATE stamp's own Y-M-D and a UTC stamp's local date. '' if there is none.
     static ruleUntilDate(rule, allDay) {
-        const m = typeof rule === 'string' && /(?:^|;)UNTIL=(\d{8})(T\d{6}(Z?))?/i.exec(rule);
-        if (!m) return '';
-        const ymd = (y, mo, d) => `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-        if (!m[2] || !m[3]) return ymd(m[1].slice(0, 4), m[1].slice(4, 6), m[1].slice(6, 8));
-        if (allDay) {
-            const date = Event.allDayStampDate(m[1] + m[2]);
-            return date ? ymd(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate()) : '';
-        }
-        const d = new Date(Event.recurrenceStampMs(m[1] + m[2]));
-        return isNaN(d.getTime()) ? '' : ymd(d.getFullYear(), d.getMonth() + 1, d.getDate());
+        const until = Event.allDayRuleUntil(rule);
+        const s = until && CalDate.parseStamp(until);
+        if (!s) return '';
+        if (allDay) return CalDate.stampDate(until) || '';
+        return (s.utc ? CalDate.localYmd(s.ms) : CalDate.ymdFromUTC(s.ms)) || '';
     }
 
-    // Inverse, for a date the user picked: an all-day series gets the grid's format (the
-    // writer's local midnight as a UTC stamp, which old clients compare by instant); a
-    // timed one keeps the editor's floating end-of-day stamp.
+    // Inverse, for a date the user picked: an all-day series gets the floating stamp of
+    // that date (see allDayStampFromLocal); a timed one a UTC stamp of this client's local
+    // 23:59:59 that day, as Syncfusion writes it. The floating "T235959" written for timed
+    // series before read as UTC in the feed and dropped the last occurrence west of UTC.
     static ruleUntilStamp(dateStr, allDay) {
-        const [y, m, d] = String(dateStr).split('-').map(Number);
-        if (!y || !m || !d) return null;
-        if (allDay) return Event.recurrenceStamp(new Date(y, m - 1, d));
-        return `${y}${String(m).padStart(2, '0')}${String(d).padStart(2, '0')}T235959`;
+        if (!CalDate.isYmd(dateStr)) return null;
+        if (allDay) return CalDate.floatingStamp(dateStr);
+        const d = CalDate.localMidnight(dateStr);
+        d.setHours(23, 59, 59);
+        return CalDate.utcStamp(d);
     }
 
+    // `rule` with its UNTIL rewritten, naming the same date, for a series switched between
+    // all-day and timed: an all-day UNTIL (that date's start) kept on a timed series cut
+    // off its last day. A rule without UNTIL comes back unchanged.
+    static ruleUntilForType(rule, allDay, wasAllDay) {
+        const date = Event.ruleUntilDate(rule, wasAllDay);
+        const stamp = date && Event.ruleUntilStamp(date, allDay);
+        if (!stamp) return rule;
+        return rule.replace(/(^|;)UNTIL=[0-9TZ]+/i, (m, sep) => `${sep}UNTIL=${stamp}`);
+    }
+
+    // The UNTIL stamp of a rule, or null.
     static allDayRuleUntil(rule) {
-        const m = typeof rule === 'string' && /(?:^|;)UNTIL=(\d{8}T\d{6}Z?)/i.exec(rule);
+        const m = typeof rule === 'string' && /(?:^|;)UNTIL=(\d{8}(?:T\d{6}Z?)?)(?=;|$)/i.exec(rule);
         return m ? m[1] : null;
     }
 
@@ -314,6 +329,73 @@ class Event {
             const kept = storedUntil && Event.allDayStampToLocal(storedUntil) === value;
             return `${sep}UNTIL=${kept ? storedUntil : Event.allDayStampFromLocal(value)}`;
         });
+    }
+
+    // ---- Recurrence expansion (nativecal) ---------------------------------------------
+
+    // The occurrences of a nativecal display event (epoch ms; an all-day one runs from
+    // local midnight of its first day to 23:59:59.999 of its last) that start within
+    // [rangeStart, rangeEnd], as display events -- expanded the way the grid (Syncfusion)
+    // expands them, in the viewer's wall-clock time.
+    //
+    // rrule.js computes in UTC, so per its docs the wall clock goes in as UTC fields
+    // ("floating") and comes back out to local time. The rule is parsed with
+    // RRule.parseString and given the series' own DTSTART: rrulestr(rule).options had
+    // BYWEEKDAY/BYMONTHDAY/BYHOUR/BYMINUTE/BYSECOND already filled in from a DTSTART of
+    // NOW, so a weekly series showed on today's weekday at page-load time of day.
+    // Deleted and moved occurrences (recurrenceException, matched by local date as
+    // Syncfusion does) are left out; a moved one is drawn from its own row.
+    static expandOccurrences(event, rangeStart, rangeEnd, rrule) {
+        const RRule = rrule && rrule.RRule;
+        if (!RRule || !event || !event.recurrencerule) return [event];
+        const allDay = !!event.isAllDay;
+        const startMs = CalDate.toMs(event.start);
+        if (isNaN(startMs)) return [event];
+        const toFloating = (ms) => {
+            const d = new Date(ms);
+            return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(),
+                d.getHours(), d.getMinutes(), d.getSeconds()));
+        };
+        const fromFloating = (d) => new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(),
+            d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds());
+        // The local date a stamp names: an all-day series' through CalDate.stampDate; a
+        // timed series' UTC stamp by its local date, a floating one by its own Y-M-D.
+        const stampLocalDate = (x) => {
+            if (allDay) return CalDate.stampDate(x);
+            const s = CalDate.parseStamp(x);
+            return s ? (s.utc ? CalDate.localYmd(s.ms) : CalDate.ymdFromUTC(s.ms)) : null;
+        };
+
+        let ruleText = String(event.recurrencerule).replace(/^RRULE:/i, '');
+        const untilStamp = Event.allDayRuleUntil(ruleText);
+        ruleText = ruleText.split(';').map(p => p.trim())
+            .filter(p => p && !/^UNTIL=/i.test(p)).join(';');
+        const options = { ...RRule.parseString(ruleText), dtstart: toFloating(startMs) };
+        // Syncfusion ends a series on UNTIL's local DATE, whatever its time of day: a timed
+        // weekly series whose UNTIL is the last occurrence's UTC instant keeps that
+        // occurrence after a DST change moved it an hour later. So: through that date.
+        const untilDate = untilStamp && stampLocalDate(untilStamp);
+        if (untilDate) options.until = new Date(CalDate.utcOfYmd(untilDate) + CalDate.DAY - 1000);
+
+        const excluded = new Set(String(event.recurrenceException || '').split(',')
+            .map(x => x.trim()).filter(Boolean).map(stampLocalDate).filter(Boolean));
+
+        const endMs = CalDate.toMs(event.end);
+        const duration = isNaN(endMs) ? 0 : Math.max(0, endMs - startMs);
+        const days = allDay ? Math.max(1, Math.round((duration + 1) / CalDate.DAY)) : 0;
+
+        return new RRule(options)
+            .between(toFloating(CalDate.toMs(rangeStart)), toFloating(CalDate.toMs(rangeEnd)), true)
+            .map(fromFloating)
+            .filter(d => !excluded.has(CalDate.localYmd(d)))
+            .map(d => {
+                const start = d.getTime();
+                const end = allDay
+                    ? new Date(d.getFullYear(), d.getMonth(), d.getDate() + days).getTime() - 1
+                    : start + duration;
+                return { ...event, start, end, id: event.id + '_' + start,
+                    originalEventId: event.id, isRecurringInstance: true };
+            });
     }
 
     // An event is only usable once it has both endpoints. A dateless Event is a legitimate

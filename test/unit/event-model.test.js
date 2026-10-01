@@ -27,6 +27,7 @@ const path = require('node:path');
 // Load it into a function scope and hand back the class, mirroring how the browser sees it.
 function loadEventClass() {
   const src = fs.readFileSync(
+    path.join(__dirname, '../../public/models/caldate.js'), 'utf8') + '\n' + fs.readFileSync(
     path.join(__dirname, '../../public/models/Event.js'), 'utf8');
   const factory = new Function('Utils', `${src}; return Event;`);
   return factory({ uuidv4: () => 'generated-uuid' });
@@ -191,7 +192,7 @@ test('Event: an inverted range from the scheduler keeps its start and gets the d
 
   const allDay = new Event({ Subject: 'X', IsAllDay: true,
     StartTime: new Date(2026, 9, 2), EndTime: new Date(2026, 9, 1) });
-  // Stored in the legacy form: the author's local midnight (see Event.allDayDateUTC).
+  // Stored in the legacy form: the author's local midnight (see CalDate.instantDate).
   assert.equal(allDay.start, new Date(2026, 9, 2).toISOString());
   assert.equal(allDay.end, new Date(2026, 9, 3).toISOString());
 });

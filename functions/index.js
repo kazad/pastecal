@@ -4,6 +4,9 @@ const { onValueUpdated, onValueWritten, onValueDeleted } = require("firebase-fun
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const admin = require('firebase-admin');
 const crypto = require('crypto');
+// Which calendar date a stored value names: shared with the browser (public/models/caldate.js
+// is a copy, see scripts/sync-shared.sh) so the grid and the feed cannot disagree.
+const CalDate = require('./caldate');
 
 const isLocal = process.env.FUNCTIONS_EMULATOR === 'true';
 // Set by `firebase emulators:start --only database` and by our own test harness
@@ -367,18 +370,10 @@ const ICSService = {
         return parts.join('\r\n ');
     },
 
-    // Epoch ms for a stored date or an ICS stamp (20260921T170000Z or 20260921), or NaN.
+    // Epoch ms for a stored date or an ICS stamp, or NaN (CalDate.toMs: a floating stamp's
+    // wall clock reads as UTC fields, the only reading available without a time zone).
     toMs(value) {
-        if (value === null || value === undefined || value === '') return NaN;
-        if (typeof value === 'string' && /^\d{8}T\d{6}Z$/.test(value)) {
-            return Date.parse(`${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}T` +
-                `${value.slice(9, 11)}:${value.slice(11, 13)}:${value.slice(13, 15)}Z`);
-        }
-        if (typeof value === 'string' && /^\d{8}$/.test(value)) {
-            return Date.UTC(+value.slice(0, 4), +value.slice(4, 6) - 1, +value.slice(6, 8));
-        }
-        const d = value instanceof Date ? value : new Date(value);
-        return d.getTime();
+        return CalDate.toMs(value);
     },
 
     // Normalize a stored date into ICS basic format (YYYYMMDDTHHMMSSZ), or null if the
@@ -404,28 +399,22 @@ const ICSService = {
         return /^\d{8}T\d{6}Z$/.test(out) ? out : null;
     },
 
-    // Date-only form (YYYYMMDD) for all-day events. RFC 5545 3.8.2.4 requires DTSTART to be
-    // a DATE for an all-day event, and 3.8.5.1 requires EXDATE to use the same value type;
-    // emitting a DATE-TIME instead means a deleted all-day occurrence never matches its
-    // EXDATE and keeps appearing for subscribers.
-    //
-    // The app stores an all-day date as the user's LOCAL midnight converted to UTC, so
-    // Sep 7 in Berlin arrives as 2026-09-06T22:00:00Z, and taking its UTC date moved every
-    // all-day event a day early east of UTC. The server never learns the user's zone, but
-    // local midnight falls in a known window around UTC midnight, so we take the date that
-    // window points at. Populated offsets span 25 hours (UTC-11 to UTC+14) and a day holds
-    // 24, so one end must give: the window runs from just east of UTC-11 through UTC+13,
-    // covering New Zealand summer time, Samoa and Tonga at the cost of American Samoa and
-    // Niue (UTC-11) and Kiribati's Line Islands (UTC+14), which have far fewer people.
+    // Date-only form (YYYYMMDD) of a stored all-day INSTANT. RFC 5545 3.8.2.4 requires
+    // DTSTART to be a DATE for an all-day event, and 3.8.5.1 requires EXDATE to use the
+    // same value type; emitting a DATE-TIME instead means a deleted all-day occurrence
+    // never matches its EXDATE and keeps appearing for subscribers. Which date an instant
+    // names is CalDate.instantDate (the writer's local midnight, read through a window
+    // around UTC midnight); an event's own dates go through allDayRange.
     formatDate(dateTime) {
-        const ms = this.toMs(dateTime);
-        if (isNaN(ms)) return null;
-        // The extra second reads nativecal's inclusive all-day end (local 23:59:59.999 of
-        // the last day) as the next date even at UTC+13. Must match Event.allDayDateUTC.
-        const d = new Date(Math.floor((ms + 13 * HOUR_MS + 1000) / DAY_MS) * DAY_MS);
-        if (isNaN(d.getTime())) return null;
-        const out = d.toISOString().slice(0, 10).replace(/-/g, '');
-        return /^\d{8}$/.test(out) ? out : null;
+        const date = CalDate.instantDate(dateTime);
+        return date ? CalDate.compact(date) : null;
+    },
+
+    // An all-day event's DTSTART and (exclusive) DTEND as DATEs, from its stored dates when
+    // it has them (CalDate.allDayDates), or null.
+    allDayRange(event) {
+        const d = CalDate.allDayDates(event);
+        return d && { start: CalDate.compact(d.start), end: CalDate.compact(d.end) };
     },
 
     // An event is only renderable if BOTH endpoints normalize to a real date. A truthiness
@@ -447,10 +436,12 @@ const ICSService = {
     exceptionDates(event) {
         const raw = event && event.recurrenceException;
         if (!raw || typeof raw !== "string") return [];
+        // Kept as written: a floating stamp names a wall-clock date (CalDate.stampDate),
+        // and appending a Z here moved a floating EXDATE of an all-day series to the
+        // next day in the feed while the grid kept its date.
         return raw.split(",")
             .map(s => s.trim())
-            .filter(s => /^\d{8}T\d{6}Z?$/.test(s))
-            .map(s => (s.endsWith("Z") ? s : `${s}Z`));
+            .filter(s => /^\d{8}T\d{6}Z?$/.test(s));
     },
 
     // What a series' own expansion produces: DATE instances for an all-day series, and
@@ -469,7 +460,7 @@ const ICSService = {
     seriesSlot(stamp, shape) {
         let ms = this.toMs(stamp);
         if (isNaN(ms)) return null;
-        if (shape.allDay) return this.formatDate(ms);
+        if (shape.allDay) return this.allDayStampDate(stamp);
         if (!isNaN(shape.anchorMs)) {
             const timeOfDay = ((shape.anchorMs % DAY_MS) + DAY_MS) % DAY_MS;
             const sameDay = Math.floor(ms / DAY_MS) * DAY_MS + timeOfDay;
@@ -491,13 +482,11 @@ const ICSService = {
         });
     },
 
-    // The DATE an all-day series' stamp names. A floating stamp (no Z) is a wall-clock
-    // time, so its Y-M-D is the date: nativecal's editor writes UNTIL=20261025T235959 for
-    // "through Oct 25", which the instant window read as Oct 26. Must match
-    // Event.allDayStampDate in public/models/Event.js.
+    // The DATE (YYYYMMDD) an all-day series' stamp names, or null: CalDate.stampDate, the
+    // same reading the grid uses.
     allDayStampDate(value) {
-        if (/^\d{8}T\d{6}$/i.test(value)) return value.slice(0, 8);
-        return this.formatDate(/Z$/i.test(value) ? value : `${value}Z`);
+        const date = CalDate.stampDate(value);
+        return date ? CalDate.compact(date) : null;
     },
 
     // Best guess at which instance a moved occurrence replaces, from the event alone. Only
@@ -599,18 +588,19 @@ const ICSService = {
         const isOccurrence = !!event.recurrenceID && !!occurrence;
 
         const allDay = !!event.isAllDay;
-        const start = allDay ? this.formatDate(event.start) : this.formatDateTime(event.start);
-        let end = allDay ? this.formatDate(event.end) : this.formatDateTime(event.end);
+        // All-day: the event's dates (stored, or read from its instants), the same ones
+        // the grid shows; allDayRange already gives a zero-length range its one day.
+        const range = allDay ? this.allDayRange(event) : null;
+        const start = allDay ? range && range.start : this.formatDateTime(event.start);
+        let end = allDay ? range && range.end : this.formatDateTime(event.end);
         const dateParam = allDay ? ";VALUE=DATE" : "";
 
-        // An end before the start makes a negative-length event that strict clients reject,
-        // and a clamped all-day DTEND equal to DTSTART spans no day at all. So an all-day
-        // event lasts at least its own day, and a timed one becomes a zero-length event at
-        // its start: DTEND equal to DTSTART is the form clients broadly accept for that (an
-        // omitted DTEND is valid too, but Outlook reads it unpredictably).
-        if (allDay && (!end || end <= start)) {
-            end = this.formatDate(this.toMs(start) + DAY_MS);
-        } else if (!allDay && this.toMs(end) < this.toMs(start)) {
+        // An end before the start makes a negative-length event that strict clients reject.
+        // An all-day event already lasts at least its own day (CalDate.allDayDates); a
+        // timed one becomes a zero-length event at its start: DTEND equal to DTSTART is the
+        // form clients broadly accept for that (an omitted DTEND is valid too, but Outlook
+        // reads it unpredictably).
+        if (!allDay && this.toMs(end) < this.toMs(start)) {
             end = start;
         }
 
@@ -1052,6 +1042,11 @@ const HistoryService = {
 
     sameEvent(a, b) {
         const norm = (v) => (v === undefined || v === null || v === '') ? null : v;
+        // allDayDates is compared by the days it names, not as a field: a row with it and
+        // the same row without it (as a client that predates it writes) are one event when
+        // they cover the same days -- and an all-day correction that only fixes the dates
+        // (start/end instants unchanged, possible at UTC-11/UTC+14) is a change.
+        if (CalDate.allDayKey(a) !== CalDate.allDayKey(b)) return false;
         return this.FIELDS.every(f => {
             const x = norm(a[f]), y = norm(b[f]);
             if (f === 'type') return String(x === null ? 1 : x) === String(y === null ? 1 : y);

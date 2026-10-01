@@ -26,7 +26,7 @@ const path = require('node:path');
 function loadModels() {
   const read = (f) => fs.readFileSync(path.join(__dirname, '../../public/models', f), 'utf8');
   const factory = new Function('Utils', 'CalendarDataService',
-    `${read('Event.js')}\n${read('Calendar.js')}\nreturn { Event, Calendar };`);
+    `${read('caldate.js')}\n${read('Event.js')}\n${read('Calendar.js')}\nreturn { Event, Calendar };`);
   return factory({ uuidv4: () => 'generated-uuid' }, { debounce_sync() {} });
 }
 
@@ -76,11 +76,17 @@ test('all-day: a new event is stored in the legacy form, the author\'s local mid
 });
 
 // What a client from before the cross-zone fix shows: the stored instant, as-is, in the
-// viewer's zone (Calendar.toDateOrNull for start/end; Syncfusion reads EXDATE/UNTIL
-// stamps by instant too).
+// viewer's zone (Calendar.toDateOrNull for start/end). EXDATE/UNTIL stamps go straight to
+// Syncfusion, which reads a UTC stamp as that instant and a FLOATING one as the viewer's
+// local wall-clock time (ej.schedule.getDateFromRecurrenceDateString; checked against the
+// real bundle below).
 const oldClientDate = (value) => ymd(new Date(value));
-const stampDate = (s) => ymd(new Date(Date.UTC(+s.slice(0, 4), +s.slice(4, 6) - 1, +s.slice(6, 8),
-  +s.slice(9, 11), +s.slice(11, 13), +s.slice(13, 15))));
+const schedulerStampMs = (s) => {
+  const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z?)$/.exec(s);
+  const f = [+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]];
+  return m[7] ? Date.UTC(...f) : new Date(...f).getTime();
+};
+const stampDate = (s) => ymd(new Date(schedulerStampMs(s)));
 
 test('all-day: an OLD client in the same zone reads a NEW client\'s writes as the same dates', () => {
   // Tabs opened before a deploy keep the old client. Whatever the new client writes for
@@ -104,8 +110,8 @@ test('all-day: an OLD client in the same zone reads a NEW client\'s writes as th
       assert.equal(stampDate(series.recurrenceException), '2026-10-15', `old EXDATE in ${tz}`);
       assert.equal(stampDate(Event.allDayRuleUntil(series.recurrencerule)), '2026-10-20', `old UNTIL in ${tz}`);
       // Old clients compare UNTIL by instant against occurrences at local midnight: the
-      // stored UNTIL must be exactly the last day's local midnight to include it.
-      assert.equal(Event.recurrenceStampMs(Event.allDayRuleUntil(series.recurrencerule)),
+      // stored UNTIL must read as exactly the last day's local midnight to include it.
+      assert.equal(schedulerStampMs(Event.allDayRuleUntil(series.recurrencerule)),
         new Date(2026, 9, 20).getTime(), `old UNTIL includes the last day in ${tz}`);
       const r = new Calendar('c', 't', [series]).getSyncFusionEvents()[0];
       assert.equal(stampDate(r.RecurrenceException), '2026-10-15', `new EXDATE in ${tz}`);
@@ -242,12 +248,10 @@ test('setEvents: an untouched stored event keeps every field, inverted ranges in
 
 // --- All-day series: EXDATE and UNTIL ride the same date mapping as the start -------------
 
-// A recurrence stamp as the viewer's scheduler reads it: Syncfusion matches an exception
-// to an occurrence by LOCAL date, and stops at UNTIL by instant.
-const stampMs = (s) => {
-  const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(s);
-  return Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
-};
+// A recurrence stamp as the viewer's scheduler reads it (schedulerStampMs above):
+// Syncfusion matches an exception to an occurrence by LOCAL date, and stops at UNTIL by
+// instant.
+const stampMs = schedulerStampMs;
 
 // An LA-authored daily series (legacy local-midnight instants), Oct 15 deleted, until Oct 20,
 // and the same series authored in Tokyo.
@@ -299,7 +303,7 @@ test('all-day series: the real scheduler hides the deleted date, not the day bef
   }
 });
 
-test('all-day series: an occurrence deleted now is stored at the deleter\'s local midnight', () => {
+test('all-day series: an occurrence deleted now is stored as the floating stamp of its date', () => {
   for (const viewer of ['America/Los_Angeles', 'Asia/Tokyo']) {
     inTZ(viewer, () => {
       const a = SERIES['Asia/Tokyo'];
@@ -307,19 +311,21 @@ test('all-day series: an occurrence deleted now is stored at the deleter\'s loca
       // Syncfusion appends the occurrence's own start: local midnight of Oct 17.
       const deleted = new Date(2026, 9, 17).toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
       const e = new Event({ ...r, RecurrenceException: `${r.RecurrenceException},${deleted}` });
-      assert.equal(e.recurrenceException, `${a.exdate},${deleted}`, `in ${viewer}`);
+      // Floating: every reader (this client, an old tab's Syncfusion, the feed) takes Oct
+      // 17 from it in every zone, which no UTC instant does for UTC-11 and UTC+14.
+      assert.equal(e.recurrenceException, `${a.exdate},20261017T000000`, `in ${viewer}`);
       assert.equal(e.recurrencerule, seriesRow(a).recurrencerule, 'untouched rule kept verbatim');
     });
   }
 });
 
-test('all-day series: a new UNTIL is stored at the editor\'s local midnight of its date', () => {
+test('all-day series: a new UNTIL is stored as the floating stamp of its date', () => {
   inTZ('Asia/Tokyo', () => {
     const r = new Calendar('c', 't', [seriesRow(SERIES['America/Los_Angeles'])]).getSyncFusionEvents()[0];
     // The editor's until-date picker yields local midnight of Oct 25.
     const picked = new Date(2026, 9, 25).toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
     const e = new Event({ ...r, RecurrenceRule: `FREQ=DAILY;INTERVAL=1;UNTIL=${picked};` });
-    assert.equal(e.recurrencerule, 'FREQ=DAILY;INTERVAL=1;UNTIL=20261024T150000Z;');
+    assert.equal(e.recurrencerule, 'FREQ=DAILY;INTERVAL=1;UNTIL=20261025T000000;');
     assert.equal(e.recurrenceException, SERIES['America/Los_Angeles'].exdate);
   });
 });
@@ -376,8 +382,11 @@ test('nativecal editor: UNTIL reads as the date the grid shows and is written in
         'FREQ=DAILY;UNTIL=20261025T235959', 'FREQ=DAILY;UNTIL=20261025']) {
         assert.equal(Event.ruleUntilDate(rule, true), '2026-10-25', `${rule} in ${tz}`);
       }
-      assert.equal(Event.ruleUntilStamp('2026-10-25', true), gridStamp, `all-day write in ${tz}`);
-      assert.equal(Event.ruleUntilStamp('2026-10-25', false), '20261025T235959', `timed write in ${tz}`);
+      assert.equal(Event.ruleUntilStamp('2026-10-25', true), '20261025T000000', `all-day write in ${tz}`);
+      // Timed: a UTC stamp of local 23:59:59, as Syncfusion writes it (a floating
+      // T235959 read as UTC in the feed and lost the last occurrence west of UTC).
+      assert.equal(Event.ruleUntilStamp('2026-10-25', false),
+        Event.recurrenceStamp(new Date(2026, 9, 25, 23, 59, 59)), `timed write in ${tz}`);
       assert.equal(Event.ruleUntilDate('FREQ=DAILY', true), '');
     });
   }

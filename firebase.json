@@ -7,6 +7,9 @@
   },
   "hosting": {
     "public": "public",
+    "predeploy": [
+      "bash \"$PROJECT_DIR/scripts/sync-shared.sh\""
+    ],
     "ignore": [
       "firebase.json",
       "**/.*",

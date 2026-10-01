@@ -18,9 +18,8 @@ class Calendar {
         return isNaN(d.getTime()) ? null : d;
     }
 
-    // Stored all-day instant -> the viewer's LOCAL midnight of its calendar date.
-    // Converting the stored instant directly showed Tokyo's Oct 2 holiday on Oct 1 in LA;
-    // see Event.allDayDateUTC for how the date is derived.
+    // Stored all-day instant -> the viewer's LOCAL midnight of its calendar date. For a
+    // whole event use Event.allDayLocalRange, which also consults its stored dates.
     static allDayToLocal(value) {
         return Event.allDayToLocal(value);
     }
@@ -29,31 +28,35 @@ class Calendar {
         const byId = new Map(this.events.filter(e => e && e.recurrencerule).map(e => [e.id, e]));
         return this.events.map(e => {
             const allDay = !!e.isAllDay;
-            const toDate = allDay ? Calendar.allDayToLocal : Calendar.toDateOrNull;
             // An all-day series' EXDATEs and UNTIL are dates too, and must land on the
             // same local date as its start (see Event.allDayStampToLocal). An edited
             // occurrence's exception names a slot in its PARENT's grid, so the parent's
             // shape decides (as in ICSService.assignOccurrences).
             const parent = e.recurrenceID ? byId.get(e.recurrenceID) : null;
             const allDaySeries = parent ? !!parent.isAllDay : allDay;
-            const start = toDate(e.start);
-            let end = toDate(e.end);
-            // A zero-length or inverted all-day range (a single-day row with end == start)
-            // would reach the grid with EndTime == StartTime; show it as one day. Event
-            // keeps the stored end while this shown end comes back unchanged.
-            const shownEnd = allDay && start && (!end || end <= start)
-                ? new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1) : null;
-            if (shownEnd) end = shownEnd;
+            // All-day: the viewer's local midnight of each date (Event.allDayLocalRange;
+            // a zero-length or inverted stored range reads as its one day, and Event keeps
+            // the stored end while that shown end comes back unchanged).
+            let start, end;
+            if (allDay) {
+                const r = Event.allDayLocalRange(e);
+                start = r ? r.start : null;
+                end = r ? r.end : Event.allDayToLocal(e.end);
+            } else {
+                start = Calendar.toDateOrNull(e.start);
+                end = Calendar.toDateOrNull(e.end);
+            }
             return {
                 Id: e.id,
                 Subject: e.title,
                 StartTime: start,
                 EndTime: end,
-                ...(shownEnd ? { _shownEnd: shownEnd } : {}),
                 // What the record was built from, so Event can keep each value verbatim
                 // when its meaning is unchanged (see Event's constructor).
                 _storedStart: e.start,
                 _storedEnd: e.end,
+                _storedAllDay: allDay,
+                ...(allDay ? { _storedDates: e.allDayDates } : {}),
                 _allDaySeries: allDaySeries,
                 ...(allDaySeries ? { _storedRule: e.recurrencerule, _storedException: e.recurrenceException } : {}),
                 Description: e.description,

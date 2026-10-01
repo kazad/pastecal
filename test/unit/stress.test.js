@@ -23,6 +23,7 @@ const { ICSService } = require('../../functions/index.js')._internal;
 
 function loadEventClass() {
   const src = fs.readFileSync(
+    path.join(__dirname, '../../public/models/caldate.js'), 'utf8') + '\n' + fs.readFileSync(
     path.join(__dirname, '../../public/models/Event.js'), 'utf8');
   return new Function('Utils', `${src}; return Event;`)({ uuidv4: () => 'generated-uuid' });
 }

@@ -290,13 +290,14 @@ const CalendarVueApp = {
                 if (this.isEventVisible(e)) return false;
                 if (!range) return true;
                 // All-day events are read the way the grid reads them (the viewer's local
-                // midnight of the stored date, see Event.allDayToLocal); the raw stored
-                // instant put the banner a day off from the grid in some time zones.
-                const ms = (v) => {
-                    const d = e.isAllDay ? Event.allDayToLocal(v) : new Date(v);
+                // midnight of each of the event's dates, see Event.allDayLocalRange); the
+                // raw stored instant put the banner a day off from the grid in some zones.
+                const days = e.isAllDay ? Event.allDayLocalRange(e) : null;
+                const ms = (which) => {
+                    const d = e.isAllDay ? days && days[which] : new Date(e[which]);
                     return d ? d.getTime() : NaN;
                 };
-                const start = ms(e.start);
+                const start = ms('start');
                 if (isNaN(start)) return true; // undateable: count it rather than hide the fact
                 // A recurring event is one stored record but many occurrences, so the
                 // stored start says only when the series began. Ask the scheduler which
@@ -305,7 +306,7 @@ const CalendarVueApp = {
                 // and counting it produced a banner reporting a hidden event the user
                 // could never find.
                 if (e.recurrencerule) return this.recurrenceOccursInRange(e, range);
-                return this.spansRange(start, ms(e.end), range);
+                return this.spansRange(start, ms('end'), range);
             }).length;
         },
         calendarAutoViewLabel() {
@@ -2302,13 +2303,14 @@ const CalendarVueApp = {
             // (Calendar.getSyncFusionEvents): start, UNTIL and EXDATEs at the viewer's
             // local midnight of their stored dates.
             const allDay = !!event.isAllDay;
-            const ms = (v) => {
-                const d = allDay ? Event.allDayToLocal(v) : new Date(v);
+            const days = allDay ? Event.allDayLocalRange(event) : null;
+            const ms = (which) => {
+                const d = allDay ? days && days[which] : new Date(event[which]);
                 return d ? d.getTime() : NaN;
             };
-            const start = ms(event.start);
+            const start = ms('start');
             if (isNaN(start)) return true;
-            const end = ms(event.end);
+            const end = ms('end');
             const duration = isNaN(end) ? 0 : Math.max(0, end - start);
             const rule = String((allDay ? Event.allDayRuleToLocal(event.recurrencerule) : event.recurrencerule) || '');
             const exceptions = (allDay ? Event.allDayExceptionsToLocal(event.recurrenceException)
@@ -2391,7 +2393,10 @@ const CalendarVueApp = {
 
 
         jumpToEvent(event) {
-            let startDate = new Date(event.start);
+            // An all-day start is a date, shown at the viewer's local midnight of it (the
+            // stored instant is the author's midnight, a day off in other zones).
+            const range = event.isAllDay ? Event.allDayLocalRange(event) : null;
+            let startDate = range ? range.start : new Date(event.start);
             scheduleObj.selectedDate = startDate;
             scheduleObj.currentView = 'Week';
         },
@@ -3337,8 +3342,12 @@ const CalendarVueApp = {
 
         /** When an event was scheduled, for the expanded detail list. */
         describeEventTime(e) {
-            const d = new Date(e.start);
-            if (isNaN(d.getTime())) return '';
+            // All-day: the date the grid shows (Event.allDayLocalRange), not the local
+            // reading of the author's midnight, which labelled LA's view of a Tokyo
+            // holiday with the day before.
+            const range = e.isAllDay ? Event.allDayLocalRange(e) : null;
+            const d = range ? range.start : new Date(e.start);
+            if (!d || isNaN(d.getTime())) return '';
             const date = d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
             if (e.isAllDay) return `${date}, all day`;
             return `${date}, ${d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;

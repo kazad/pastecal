@@ -17,3 +17,7 @@ Screenshots:
 <img width="981" alt="pastecal" src="https://raw.githubusercontent.com/kazad/pastecal/refs/heads/master/public/img/screenshot.png">
 
 
+
+Development:
+
+- `functions/caldate.js` decides which calendar date a stored value names, for both the ICS feed and the app. The browser loads a byte-identical copy, `public/models/caldate.js`: edit the one in `functions/`, then run `scripts/sync-shared.sh` (`deploy.sh` and the hosting predeploy run it too; `npm run test:unit:fast` fails if the copies differ).
