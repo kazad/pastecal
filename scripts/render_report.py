@@ -266,19 +266,26 @@ for dims, mets in rows(d.get("reach")):
 # retention (in Aug 2026 it was retention: ~50% shared, only ~25% survived).
 
 # Not calendars: app pages, static files, and the test/probe paths that once
-# put 314 phantom "users" into a single week.
+# put 314 phantom "users" into a single week. App prefixes end at a segment
+# boundary so real slugs like /demolition-crew or /imgur-fans still count;
+# zz- and test- are deliberately bare prefixes. /view/ is the read-only mirror
+# of a calendar already counted under its slug, and its id cannot be mapped
+# back to that slug, so it is dropped everywhere rather than counted twice.
+# Keep in sync with NOT_CAL_RE in stats.sh.
 _NOT_CAL = re.compile(
-    r"^/(nativecal|demo|components|directives|img|js-old-components"
-    r"|models|services|utils|zz-|test-)")
+    r"^/((nativecal|view|demo|components|directives|img|js-old-components"
+    r"|models|services|utils)(/|$)|zz-|test-)")
 
 
 def norm_cal(path):
     """A calendar's identity, or None for non-calendar paths. /edit/slug folds
-    into /slug (same calendar, different door); /view/IDs stay separate rows
-    because the view id cannot be mapped back to its slug from GA4 alone."""
-    if not path or path == "/" or "." in path or _NOT_CAL.match(path):
+    into /slug (same calendar, different door). Requires a leading slash so
+    GA4's "(other)" overflow row is never read as a calendar."""
+    if not path or not path.startswith("/") or "." in path:
         return None
     p = path.lower()
+    if p == "/" or _NOT_CAL.match(p):
+        return None
     if p.startswith("/edit/"):
         p = "/" + p[len("/edit/"):]
     p = p.rstrip("/")
@@ -287,14 +294,16 @@ def norm_cal(path):
 
 # (week, calendar) -> people, current partial ISO week dropped: it can neither
 # host a birth nor prove a calendar dead, and it makes every trend look like a
-# collapse.
+# collapse. Paths that fold together (/solo and /solo/) take the MAX, not the
+# sum: GA4 de-duplicates users per row, so one browser on both rows would
+# otherwise read as two people and fake a "shared" calendar. Max keeps it a floor.
 curweek = d.get("curweek") or ""
 wk_cal = {}
 for dims_, mets_ in rows(d.get("weekly")):
     wk, cal = dims_[0], norm_cal(dims_[1])
     if wk == curweek or cal is None:
         continue
-    wk_cal[(wk, cal)] = wk_cal.get((wk, cal), 0) + mets_[0]
+    wk_cal[(wk, cal)] = max(wk_cal.get((wk, cal), 0), mets_[0])
 
 ns_weeks = sorted({wk for wk, _ in wk_cal})
 _by_week = {}
@@ -313,17 +322,15 @@ wasc = [{
     "strong": sum(1 for u in _by_week.get(wk, []) if u >= 3),
 } for wk in ns_weeks]
 
-# Cohort survival. /view/ rows are excluded here (their first appearance marks
-# a share, not a birth), and births only count after an 8-week lookback so an
+# Cohort survival. Births only count after an 8-week lookback so an
 # established calendar is not mistaken for a newborn.
 _LOOKBACK = 8
 _widx = {wk: i for i, wk in enumerate(ns_weeks)}
 _cal_weeks = {}
 for (wk, cal), u in wk_cal.items():
-    if cal.startswith("/view/") or wk not in _widx:
+    if wk not in _widx:
         continue
-    _m = _cal_weeks.setdefault(cal, {})
-    _m[_widx[wk]] = _m.get(_widx[wk], 0) + u
+    _cal_weeks.setdefault(cal, {})[_widx[wk]] = u
 
 _last_idx = len(ns_weeks) - 1
 cohorts = {}
@@ -378,23 +385,32 @@ def reach_of(block):
     return out
 
 
-def sharing_ratio(items):
-    """Calendar viewers per homepage visitor.
+def by_cal(items):
+    """Reach rows folded per calendar through norm_cal, so the KPIs use the same
+    exclusions as the north star. Folded rows take the max of each count, not
+    the sum, for the same per-row de-duplication reason as wk_cal above."""
+    out = {}
+    for r in items:
+        cal = norm_cal(r["path"])
+        if cal is None:
+            continue
+        c = out.setdefault(cal, {"path": cal, "users": 0, "returning": 0})
+        c["users"] = max(c["users"], r["users"])
+        c["returning"] = max(c["returning"], r["returning"])
+    return list(out.values())
 
-    /view/ paths are excluded: they are the read-only mirror of a calendar
-    already counted under its own path, so including them double-counts reach.
-    """
+
+def sharing_ratio(items):
+    """Calendar viewers per homepage visitor."""
     home = sum(r["users"] for r in items if r["path"] == "/")
-    cals = sum(r["users"] for r in items
-               if r["path"] != "/" and not r["path"].startswith("/view/"))
+    cals = sum(r["users"] for r in by_cal(items))
     return (cals / home) if home else 0.0
 
 
 def sticky(items, min_people=3):
     """Calendars with a real audience: several people, some of them returning."""
-    return [r for r in items
-            if r["users"] >= min_people and r["returning"] >= 1
-            and r["path"] != "/" and not r["path"].startswith("/view/")]
+    return [r for r in by_cal(items)
+            if r["users"] >= min_people and r["returning"] >= 1]
 
 
 # ---- monthly history --------------------------------------------------------

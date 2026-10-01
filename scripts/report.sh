@@ -15,7 +15,11 @@
 
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+# Resolve our own directory BEFORE the cd: $0 may be relative, and every later
+# "$(dirname "$0")" would otherwise point somewhere else (ga-token.js went
+# missing and auth silently fell back to gcloud).
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR/.."
 
 PROPERTY_ID="298180842"
 API="https://analyticsdata.googleapis.com/v1beta/properties/${PROPERTY_ID}:runReport"
@@ -30,10 +34,17 @@ while getopts "d:o:nh" opt; do
         d) DAYS="$OPTARG" ;;
         o) OUT="$OPTARG" ;;
         n) OPEN=0 ;;
-        h) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        h) sed -n '2,15p' "$SCRIPT_DIR/$(basename "$0")" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "See: $0 -h" >&2; exit 1 ;;
     esac
 done
+
+case "$DAYS" in
+    ''|*[!0-9]*) echo "ERROR: -d takes a whole number of days, got '$DAYS'." >&2; exit 1 ;;
+esac
+# Force base 10: printf %d reads a leading zero as octal, so -d 010 meant 8 days.
+DAYS=$((10#$DAYS))
+[ "$DAYS" -ge 1 ] || { echo "ERROR: -d must be at least 1." >&2; exit 1; }
 
 [ -n "$OUT" ] || OUT="/tmp/pastecal-report-$(date +%Y%m%d).html"
 
@@ -52,11 +63,11 @@ mint_token() {
         [ -x "$candidate" ] && { node="$candidate"; break; }
     done
 
-    if [ -n "$node" ] && [ -f "$(dirname "$0")/ga-token.js" ]; then
+    if [ -n "$node" ] && [ -f "$SCRIPT_DIR/ga-token.js" ]; then
         local args=""
         [ "$want" = "edit" ] && args="--edit"
         local t
-        if t="$("$node" "$(dirname "$0")/ga-token.js" $args 2>/dev/null)" && [ -n "$t" ]; then
+        if t="$("$node" "$SCRIPT_DIR/ga-token.js" $args 2>/dev/null)" && [ -n "$t" ]; then
             printf '%s' "$t"
             return 0
         fi
@@ -73,11 +84,15 @@ TOKEN="$(mint_token read)"
     exit 1
 }
 
+# The bearer token goes to curl through a file descriptor, never argv, where
+# any local user could read it from ps. printf is a builtin, so it never execs.
+auth_header() { printf 'Authorization: Bearer %s\n' "$1"; }
+
 post() {
     local url="$1" body="$2" out http
     out="$(mktemp)"
     http="$(curl -sS -o "$out" -w '%{http_code}' -X POST "$url" \
-        -H "Authorization: Bearer ${TOKEN}" \
+        -H @<(auth_header "$TOKEN") \
         -H 'Content-Type: application/json' -d "$body")"
     if [ "$http" != "200" ]; then
         echo "ERROR: GA4 API returned HTTP $http" >&2
@@ -149,6 +164,14 @@ monthly="$(post "$API" '{"dateRanges":[{"startDate":"365daysAgo","endDate":"yest
 # year rather than the report window because the north star is only readable
 # against its own history.
 weekly="$(post "$API" '{"dateRanges":[{"startDate":"364daysAgo","endDate":"yesterday"}],"dimensions":[{"name":"isoYearIsoWeek"},{"name":"pagePath"}],"metrics":[{"name":"totalUsers"}],"limit":250000}')"
+# GA4 silently caps a report at its limit. rowCount is the true total, so a
+# shortfall means calendars were dropped and the north star reads low.
+w_got="$(echo "$weekly" | jq '(.rows // []) | length')"
+w_total="$(echo "$weekly" | jq '.rowCount // 0')"
+if [ "$w_total" -gt "$w_got" ]; then
+    echo "WARNING: GA4 returned $w_got of $w_total week x page rows -- the north" >&2
+    echo "         star and cohorts are TRUNCATED and read low." >&2
+fi
 
 # Realtime has no processing delay, so it shows whether instrumentation is live
 # right now even when the daily tables have not caught up yet.
@@ -159,7 +182,7 @@ realtime="$(post "$RT_API" '{"dimensions":[{"name":"eventName"}],"metrics":[{"na
 # never backfills -- so a report that silently omitted this would be misleading.
 dims_raw="$(mktemp)"
 dims_http="$(curl -sS -o "$dims_raw" -w '%{http_code}' \
-    -H "Authorization: Bearer ${TOKEN}" \
+    -H @<(auth_header "$TOKEN") \
     "https://analyticsadmin.googleapis.com/v1beta/properties/${PROPERTY_ID}/customDimensions")"
 if [ "$dims_http" = "200" ]; then
     dims="$(jq -c '[(.customDimensions // [])[].parameterName]' < "$dims_raw")"
@@ -211,7 +234,7 @@ DATA="$(jq -n \
 rm -f "$weekly_tmp"
 
 echo "Rendering..." >&2
-printf '%s' "$DATA" | python3 scripts/render_report.py > "$OUT"
+printf '%s' "$DATA" | python3 "$SCRIPT_DIR/render_report.py" > "$OUT"
 
 echo "Report written to $OUT" >&2
 [ "$OPEN" = "1" ] && command -v open >/dev/null 2>&1 && open "$OUT"

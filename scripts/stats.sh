@@ -73,6 +73,10 @@ set -- ${ARGS+"${ARGS[@]}"}
 case "$DAYS" in
     ''|*[!0-9]*) echo "ERROR: -d takes a whole number of days, got '$DAYS'." >&2; exit 1 ;;
 esac
+# Force base 10: printf %d reads a leading zero as octal, so -d 010 meant 8
+# days and -d 08 errored mid-report.
+DAYS=$((10#$DAYS))
+[ "$DAYS" -ge 1 ] || { echo "ERROR: -d must be at least 1." >&2; exit 1; }
 
 CMD="${1:-summary}"
 
@@ -112,13 +116,17 @@ TOKEN="$(mint_token read)"
     exit 1
 }
 
+# The bearer token goes to curl through a file descriptor, never argv, where
+# any local user could read it from ps. printf is a builtin, so it never execs.
+auth_header() { printf 'Authorization: Bearer %s\n' "$1"; }
+
 # POST a runReport body and hand back the raw JSON. Fails loudly rather than
 # letting jq parse an error page into confusing emptiness.
 report() {
     local body="$1" out http
     out="$(mktemp)"
     http="$(curl -sS -o "$out" -w '%{http_code}' -X POST "$API" \
-        -H "Authorization: Bearer ${TOKEN}" \
+        -H @<(auth_header "$TOKEN") \
         -H 'Content-Type: application/json' \
         -d "$body")"
 
@@ -132,13 +140,58 @@ report() {
     rm -f "$out"
 }
 
+# Optional arg overrides the length (cohorts asks for extra lookback).
 range() {
+    local n="${1:-$DAYS}"
     if [ "$INCLUDE_TODAY" = "1" ]; then
-        printf '{"startDate":"%ddaysAgo","endDate":"today"}' "$DAYS"
+        printf '{"startDate":"%ddaysAgo","endDate":"today"}' "$n"
     else
-        printf '{"startDate":"%ddaysAgo","endDate":"yesterday"}' "$DAYS"
+        printf '{"startDate":"%ddaysAgo","endDate":"yesterday"}' "$n"
     fi
 }
+
+# GA4 silently caps a report at its limit. rowCount is the true total, so a
+# shortfall means calendars were dropped and every count below is too low.
+check_truncated() {
+    local json="$1" got total
+    got="$(echo "$json" | jq '(.rows // []) | length')"
+    total="$(echo "$json" | jq '.rowCount // 0')"
+    if [ "$total" -gt "$got" ]; then
+        echo "WARNING: GA4 returned $got of $total rows -- the report was TRUNCATED" >&2
+        echo "         and the counts below are undercounts. Shorten -d." >&2
+    fi
+}
+
+# What is not a calendar, shared by northstar and cohorts (and mirrored in
+# render_report.py's _NOT_CAL). App prefixes end at a segment boundary so real
+# slugs like /demolition-crew still count; zz- and test- are bare prefixes on
+# purpose. /view/ is a read-only mirror whose id cannot be mapped back to its
+# slug, so it is dropped rather than counted as a second calendar.
+NOT_CAL_RE='^/((nativecal|view|demo|components|directives|img|js-old-components|models|services|utils)(/|$)|zz-|test-)'
+
+# jq: GA4 week x pagePath rows -> one {cal, week, users} per calendar-week.
+# Requires a leading slash so GA4's "(other)" overflow row never counts, and
+# drops the current ISO week, which is partial. Paths that fold together
+# (/solo and /solo/, /Team and /team) take the MAX, not the sum: GA4
+# de-duplicates users per row, so one browser on both rows would read as two
+# people and fake a "shared" calendar. Max keeps every count a floor.
+CAL_WEEK_JQ='
+    [ (.rows // [])[]
+      | {week: .dimensionValues[0].value,
+         path: (.dimensionValues[1].value | ascii_downcase),
+         users: (.metricValues[0].value | tonumber)}
+      | select(.week != $cur)
+      | select((.path | startswith("/"))
+          and .path != "/"
+          and (.path | contains(".") | not)
+          and (.path | test($notcal) | not))
+      | .cal = (.path | sub("^/edit/"; "/") | sub("/+$"; ""))
+      | select(.cal != "")
+    ]
+    | [ group_by([.cal, .week])[]
+        | {cal: .[0].cal, week: .[0].week, users: (map(.users) | max)} ]'
+
+WEEKLY_BODY='{"dateRanges":[%s],"dimensions":[{"name":"isoYearIsoWeek"},{"name":"pagePath"}],"metrics":[{"name":"totalUsers"}],"limit":250000}'
 
 # Realtime is a different endpoint with a different (much smaller) dimension set:
 # customEvent:* does not exist there, so the breakdown subcommands cannot use it.
@@ -150,7 +203,7 @@ realtime_report() {
     local body="$1" out http
     out="$(mktemp)"
     http="$(curl -sS -o "$out" -w '%{http_code}' -X POST "$RT_API" \
-        -H "Authorization: Bearer ${TOKEN}" \
+        -H @<(auth_header "$TOKEN") \
         -H 'Content-Type: application/json' \
         -d "$body")"
     if [ "$http" != "200" ]; then
@@ -394,31 +447,21 @@ northstar)
     # group coordinating, not a link opened once. Weekly, because GA4 can only
     # de-duplicate people within one bucket. Same path rules as the HTML
     # report's north-star section (render_report.py): /edit/slug folds into
-    # /slug, app/static/test paths are dropped, /view/ mirrors count as their
-    # own row since the view id cannot be mapped back to its slug.
+    # /slug, and app/static/test paths and /view/ mirrors are dropped (see
+    # NOT_CAL_RE).
     [ "$DAYS_SET" = "1" ] || DAYS=84   # a trend needs runway; default 12 weeks
 
-    json="$(report "$(printf '{"dateRanges":[{"startDate":"%ddaysAgo","endDate":"yesterday"}],"dimensions":[{"name":"isoYearIsoWeek"},{"name":"pagePath"}],"metrics":[{"name":"totalUsers"}],"limit":250000}' "$DAYS")")"
+    json="$(report "$(printf "$WEEKLY_BODY" "$(range)")")"
+    check_truncated "$json"
 
     if [ "$JSON_ONLY" = "1" ]; then echo "$json" | jq '.'; exit 0; fi
 
-    echo "North star: weekly active shared calendars — last $DAYS days"
+    echo "North star: weekly active shared calendars — $(window_label), current week dropped"
     echo
-    echo "$json" | jq -r --arg cur "$(date +%G%V)" '
-        [ (.rows // [])[]
-          | {week: .dimensionValues[0].value,
-             path: .dimensionValues[1].value,
-             users: (.metricValues[0].value | tonumber)}
-          | select(.week != $cur)
-          | select(.path != "/"
-              and (.path | contains(".") | not)
-              and (.path | test("^/(nativecal|demo|components|directives|img|js-old-components|models|services|utils|zz-|test-)") | not))
-          | .cal = (.path | ascii_downcase | sub("^/edit/"; "/") | sub("/+$"; ""))
-          | select(.cal != "")
-        ]
+    echo "$json" | jq -r --arg cur "$(date +%G%V)" --arg notcal "$NOT_CAL_RE" "$CAL_WEEK_JQ"'
         | group_by(.week)
         | map(.[0].week as $w
-              | (group_by(.cal) | map(map(.users) | add)) as $cals
+              | map(.users) as $cals
               | [$w,
                  ($cals | length),
                  ([$cals[] | select(. >= 2)] | length),
@@ -456,33 +499,19 @@ cohorts)
     [ "$DAYS_SET" = "1" ] || DAYS=84   # cohorts need runway; default 12 weeks
     LOOKBACK=8
 
-    json="$(report "$(printf '{"dateRanges":[{"startDate":"%ddaysAgo","endDate":"yesterday"}],"dimensions":[{"name":"isoYearIsoWeek"},{"name":"pagePath"}],"metrics":[{"name":"totalUsers"}],"limit":250000}' \
-        $(( DAYS + LOOKBACK * 7 )))")"
+    json="$(report "$(printf "$WEEKLY_BODY" "$(range $(( DAYS + LOOKBACK * 7 )))")")"
+    check_truncated "$json"
 
     if [ "$JSON_ONLY" = "1" ]; then echo "$json" | jq '.'; exit 0; fi
 
-    echo "Calendar cohorts — born in the last $DAYS days (plus ${LOOKBACK}wk lookback to tell new from old)"
+    echo "Calendar cohorts — born in the $(window_label), current week dropped (plus ${LOOKBACK}wk lookback to tell new from old)"
     echo
     # The current ISO week is excluded outright: it is partial, so it can neither
     # host a birth nor prove a calendar dead.
-    echo "$json" | jq -r --arg cur "$(date +%G%V)" --argjson lb "$LOOKBACK" '
-        [ (.rows // [])[]
-          | {week: .dimensionValues[0].value,
-             path: .dimensionValues[1].value,
-             users: (.metricValues[0].value | tonumber)}
-          | select(.week != $cur)
-          | select(.path != "/"
-              and (.path | contains(".") | not)
-              and (.path | test("^/(nativecal|view|demo|components|directives|img|js-old-components|models|services|utils|zz-|test-)") | not))
-          | .cal = (.path | ascii_downcase | sub("^/edit/"; "/") | sub("/+$"; ""))
-          | select(.cal != "")
-        ] as $rows
+    echo "$json" | jq -r --arg cur "$(date +%G%V)" --arg notcal "$NOT_CAL_RE" --argjson lb "$LOOKBACK" "$CAL_WEEK_JQ"' as $rows
         | ([$rows[].week] | unique | sort) as $weeks
         | (($weeks | length) - 1) as $last
-        | [ $rows
-            | group_by(.cal + " " + .week)[]
-            | {cal: .[0].cal, week: .[0].week, users: (map(.users) | add)}
-          ]
+        | $rows
         | group_by(.cal)
         | map(
             (map(.week as $w | ($weeks | index($w)))) as $idx
@@ -561,7 +590,7 @@ setup)
     echo
     dims_raw="$(mktemp)"
     dims_http="$(curl -sS -o "$dims_raw" -w '%{http_code}' \
-        -H "Authorization: Bearer ${TOKEN}" \
+        -H @<(auth_header "$TOKEN") \
         "https://analyticsadmin.googleapis.com/v1beta/properties/${PROPERTY_ID}/customDimensions")"
 
     # Distinguish "no dimensions" from "could not ask" -- otherwise a permissions
@@ -650,7 +679,7 @@ MSG
         out="$(mktemp)"
         http="$(curl -sS -o "$out" -w '%{http_code}' -X POST \
             "https://analyticsadmin.googleapis.com/v1beta/properties/${PROPERTY_ID}/customDimensions" \
-            -H "Authorization: Bearer ${EDIT_TOKEN}" \
+            -H @<(auth_header "$EDIT_TOKEN") \
             -H 'Content-Type: application/json' -d "$body")"
 
         if [ "$http" = "200" ]; then
