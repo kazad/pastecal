@@ -48,8 +48,12 @@ test('a deleted occurrence is excluded from the feed', () => {
 });
 
 test('several deleted occurrences are all excluded', () => {
-  const block = ICSService.createEventBlock(
-    series({ recurrenceException: '20260310T230000Z,20260908T230000Z' }), DTSTAMP);
+  // The series starts at 23:00Z so these exceptions sit on real instances; one at another
+  // time of day would now be snapped onto the series' grid (see the DST tests below).
+  const block = ICSService.createEventBlock(series({
+    start: '2026-03-03T23:00:00.000Z', end: '2026-03-03T23:30:00.000Z',
+    recurrenceException: '20260310T230000Z,20260908T230000Z',
+  }), DTSTAMP);
 
   assert.match(block, /^EXDATE:20260310T230000Z,20260908T230000Z$/m);
 });
@@ -259,4 +263,199 @@ test('no two components in a feed claim the same instance', () => {
 
   assert.equal(new Set(keys).size, keys.length,
     `duplicate component identity in feed: ${keys.join(' , ')}`);
+});
+
+// --- Time zones, DST, slot assignment, validity -----------------------------------------
+
+const field = (ics, name) => (new RegExp(`^${name}[^:\\r\\n]*:(.*?)\\r?$`, 'm').exec(ics) || [])[1];
+const unfold = (ics) => ics.replace(/\r\n /g, '');
+
+test('an all-day event keeps its date for users east and west of UTC', () => {
+  // All-day dates are stored as the user's LOCAL midnight in UTC. Taking the UTC date put
+  // Berlin's Sep 7 on Sep 6; the server can't know the zone, so it must recover the date.
+  const cases = [
+    ['UTC', '2026-09-07T00:00:00.000Z', '20260907', '20260908'],
+    ['Berlin', '2026-09-06T22:00:00.000Z', '20260907', '20260908'],
+    ['New York', '2026-09-07T04:00:00.000Z', '20260907', '20260908'],
+    ['Honolulu', '2026-09-07T10:00:00.000Z', '20260907', '20260908'],
+    ['Auckland, NZST (UTC+12)', '2026-09-06T12:00:00.000Z', '20260907', '20260908'],
+    ['Auckland, NZDT (UTC+13)', '2026-12-06T11:00:00.000Z', '20261207', '20261208'],
+  ];
+  for (const [zone, start, date, nextDate] of cases) {
+    const end = new Date(Date.parse(start) + 24 * 3600 * 1000).toISOString();
+    const block = ICSService.createEventBlock({
+      id: 'a', title: 'Day off', description: '', isAllDay: true, start, end,
+    }, DTSTAMP);
+    assert.equal(field(block, 'DTSTART'), date, zone);
+    assert.equal(field(block, 'DTEND'), nextDate, zone);
+  }
+});
+
+test('an all-day series east of UTC excludes the right day', () => {
+  // Berlin, weekly from Mon Sep 7; the user deletes Mon Sep 14 (stored as 13th 22:00Z).
+  const block = ICSService.createEventBlock({
+    id: 'h', title: 'Gym', description: '', isAllDay: true,
+    start: '2026-09-06T22:00:00.000Z', end: '2026-09-07T22:00:00.000Z',
+    recurrencerule: 'FREQ=WEEKLY;INTERVAL=1;', recurrenceException: '20260913T220000Z',
+  }, DTSTAMP);
+  assert.equal(field(block, 'DTSTART'), '20260907');
+  assert.equal(field(block, 'EXDATE'), '20260914');
+});
+
+test('an all-day moved occurrence east of UTC names the right day', () => {
+  const ics = ICSService.generateICS({ events: [
+    { id: 'p', title: 'Gym', description: '', isAllDay: true,
+      start: '2026-09-06T22:00:00.000Z', end: '2026-09-07T22:00:00.000Z',
+      recurrencerule: 'FREQ=WEEKLY;INTERVAL=1;', recurrenceException: '20260913T220000Z' },
+    { id: 'p', title: 'Gym', description: '', isAllDay: true, recurrenceID: 'p',
+      start: '2026-09-15T22:00:00.000Z', end: '2026-09-16T22:00:00.000Z',
+      recurrenceException: '20260913T220000Z' },
+  ] }, 'all-day-move');
+  assert.match(ics, /^RECURRENCE-ID;VALUE=DATE:20260914\r?$/m);
+  assert.match(ics, /^DTSTART;VALUE=DATE:20260916\r?$/m);
+  assert.doesNotMatch(ics, /^EXDATE/m);
+});
+
+test('two moved occurrences with crossing moves both survive', () => {
+  // Weekly 9/7 17:00Z. 9/21 moved to 9/26 and 9/28 moved to 9/23. Each child carries both
+  // exceptions, and each is nearer the OTHER's slot -- nearest-per-child made both claim
+  // 9/21, so clients kept one and the other meeting vanished.
+  const both = '20260921T170000Z,20260928T170000Z';
+  const ics = ICSService.generateICS({ events: [
+    series({ recurrenceException: both }),
+    { id: 'c1', title: 'Moved later', description: '', recurrenceID: 'parent-1',
+      start: '2026-09-26T17:00:00.000Z', end: '2026-09-26T17:30:00.000Z',
+      recurrencerule: 'FREQ=WEEKLY;INTERVAL=1', recurrenceException: both },
+    { id: 'c2', title: 'Moved earlier', description: '', recurrenceID: 'parent-1',
+      start: '2026-09-23T17:00:00.000Z', end: '2026-09-23T17:30:00.000Z',
+      recurrencerule: 'FREQ=WEEKLY;INTERVAL=1', recurrenceException: both },
+  ] }, 'crossing');
+
+  const rids = [...ics.matchAll(/^RECURRENCE-ID:(\S+?)\r?$/gm)].map(m => m[1]);
+  assert.deepEqual(rids.sort(), ['20260921T170000Z', '20260928T170000Z'],
+    'each moved occurrence claims its own slot');
+  assert.doesNotMatch(ics, /^EXDATE/m, 'both slots are overrides, not deletions');
+  assert.equal((ics.match(/^RRULE:/gm) || []).length, 1, 'children never re-emit the rule');
+});
+
+test('a child holding a single exception keeps exactly that slot', () => {
+  // Syncfusion's EditOccurrence writes just the occurrence's own start, which is
+  // authoritative; an accumulated list on another child must not take it away.
+  const ics = ICSService.generateICS({ events: [
+    series({ recurrenceException: '20260921T170000Z,20260928T170000Z' }),
+    { id: 'c1', title: 'A', description: '', recurrenceID: 'parent-1',
+      start: '2026-09-26T17:00:00.000Z', end: '2026-09-26T17:30:00.000Z',
+      recurrenceException: '20260921T170000Z' },
+    { id: 'c2', title: 'B', description: '', recurrenceID: 'parent-1',
+      start: '2026-09-22T17:00:00.000Z', end: '2026-09-22T17:30:00.000Z',
+      recurrenceException: '20260921T170000Z,20260928T170000Z' },
+  ] }, 'single');
+  const blocks = ics.split('BEGIN:VEVENT').slice(1);
+  const ridOf = (title) => field(blocks.find(b => b.includes(`SUMMARY:${title}`)), 'RECURRENCE-ID');
+  assert.equal(ridOf('A'), '20260921T170000Z');
+  assert.equal(ridOf('B'), '20260928T170000Z');
+});
+
+test('exceptions recorded after a DST change still match the series', () => {
+  // Berlin, Mondays 18:00 from Oct 5 (CEST, 16:00Z). After Oct 25 the app records 18:00
+  // CET = 17:00Z, but the UTC RRULE still expands to 16:00Z, so neither EXDATE nor
+  // RECURRENCE-ID matched: the deleted meeting stayed and the moved one appeared twice.
+  const ics = ICSService.generateICS({ events: [
+    series({ start: '2026-10-05T16:00:00.000Z', end: '2026-10-05T17:00:00.000Z',
+      recurrenceException: '20261102T170000Z,20261109T170000Z' }),
+    { id: 'c1', title: 'Moved', description: '', recurrenceID: 'parent-1',
+      start: '2026-11-10T17:00:00.000Z', end: '2026-11-10T18:00:00.000Z',
+      recurrenceException: '20261109T170000Z' },
+  ] }, 'dst');
+  assert.equal(field(ics, 'EXDATE'), '20261102T160000Z', 'the deletion lands on the instance');
+  assert.equal(field(ics, 'RECURRENCE-ID'), '20261109T160000Z', 'so does the override');
+});
+
+test('RECURRENCE-ID takes the parent\'s value type, not the child\'s', () => {
+  // A timed series whose moved occurrence was made all-day, and the reverse.
+  const timedParent = ICSService.generateICS({ events: [
+    series({ recurrenceException: '20260921T170000Z' }),
+    { id: 'c', title: 'Now all day', description: '', recurrenceID: 'parent-1', isAllDay: true,
+      start: '2026-09-22T00:00:00.000Z', end: '2026-09-23T00:00:00.000Z',
+      recurrenceException: '20260921T170000Z' },
+  ] }, 't');
+  assert.match(timedParent, /^RECURRENCE-ID:20260921T170000Z\r?$/m);
+
+  const allDayParent = ICSService.generateICS({ events: [
+    { id: 'p', title: 'Holiday', description: '', isAllDay: true,
+      start: '2026-09-06T22:00:00.000Z', end: '2026-09-07T22:00:00.000Z',
+      recurrencerule: 'FREQ=WEEKLY', recurrenceException: '20260913T220000Z' },
+    { id: 'c', title: 'Now timed', description: '', recurrenceID: 'p',
+      start: '2026-09-14T09:00:00.000Z', end: '2026-09-14T10:00:00.000Z',
+      recurrenceException: '20260913T220000Z' },
+  ] }, 'a');
+  assert.match(allDayParent, /^RECURRENCE-ID;VALUE=DATE:20260914\r?$/m);
+});
+
+test('an end before the start still yields a valid component', () => {
+  const timed = ICSService.createEventBlock({
+    id: 't', title: 'Backwards', description: '',
+    start: '2026-09-07T17:00:00.000Z', end: '2026-09-07T16:00:00.000Z',
+  }, DTSTAMP);
+  assert.equal(field(timed, 'DTEND'), field(timed, 'DTSTART'),
+    'a negative duration becomes a zero-length event at its start');
+
+  const allDay = ICSService.createEventBlock({
+    id: 'a', title: 'Same day', description: '', isAllDay: true,
+    start: '2026-09-07T00:00:00.000Z', end: '2026-09-07T00:00:00.000Z',
+  }, DTSTAMP);
+  assert.equal(field(allDay, 'DTSTART'), '20260907');
+  assert.equal(field(allDay, 'DTEND'), '20260908', 'an all-day event spans at least its day');
+});
+
+test('an all-day series gets a DATE UNTIL to match its DATE DTSTART', () => {
+  const block = ICSService.createEventBlock({
+    id: 'a', title: 'Camp', description: '', isAllDay: true,
+    start: '2026-09-06T22:00:00.000Z', end: '2026-09-07T22:00:00.000Z',
+    recurrencerule: 'FREQ=DAILY;INTERVAL=1;UNTIL=20260912T220000Z;',
+  }, DTSTAMP);
+  assert.equal(field(block, 'RRULE'), 'FREQ=DAILY;INTERVAL=1;UNTIL=20260913;');
+
+  const timed = ICSService.createEventBlock(
+    series({ recurrencerule: 'FREQ=DAILY;UNTIL=20260912T170000Z' }), DTSTAMP);
+  assert.equal(field(timed, 'RRULE'), 'FREQ=DAILY;UNTIL=20260912T170000Z', 'timed rules untouched');
+});
+
+test('a moved occurrence that falls back to standalone neither repeats nor reuses the series UID', () => {
+  // Syncfusion gives the child the parent's id and rule. Without a slot it must not become
+  // a second series, nor share a UID with the real one.
+  const block = ICSService.createEventBlock({
+    id: 'parent-1', title: 'Orphan', description: '', recurrenceID: 'parent-1',
+    start: '2026-09-21T21:00:00.000Z', end: '2026-09-21T21:30:00.000Z',
+    recurrencerule: 'FREQ=WEEKLY;INTERVAL=1', recurrenceException: '',
+  }, DTSTAMP);
+  assert.doesNotMatch(block, /^RRULE/m);
+  assert.notEqual(field(block, 'UID'), 'parent-1');
+});
+
+test('long lines are folded at 75 octets without splitting a character', () => {
+  const text = 'Réunion d’équipe 👩‍💻 — ' + 'Ünïcødé ✓ 日本語 🎉 '.repeat(12);
+  const ics = ICSService.generateICS({ title: text, events: [{
+    id: 'f', title: text, description: text,
+    start: '2026-09-07T17:00:00.000Z', end: '2026-09-07T18:00:00.000Z',
+  }] }, 'fold');
+
+  for (const line of ics.split('\r\n')) {
+    assert.ok(Buffer.byteLength(line, 'utf8') <= 75, `over 75 octets: ${line}`);
+    assert.doesNotMatch(line, /^[\uDC00-\uDFFF]|[\uD800-\uDBFF]$/,
+      'a surrogate pair was split across lines');
+  }
+  const escaped = ICSService.escapeText(text);
+  assert.equal(field(unfold(ics), 'SUMMARY'), escaped, 'unfolding restores the text exactly');
+  assert.equal(field(unfold(ics), 'X-WR-CALNAME'), escaped);
+});
+
+test('carriage returns in text are normalized, never emitted raw', () => {
+  assert.equal(ICSService.escapeText('a\r\nb\rc\nd'), 'a\\nb\\nc\\nd');
+  const block = ICSService.createEventBlock({
+    id: 'cr', title: 'Line\rbreak', description: 'one\r\ntwo',
+    start: '2026-09-07T17:00:00.000Z', end: '2026-09-07T18:00:00.000Z',
+  }, DTSTAMP);
+  assert.doesNotMatch(block.replace(/\r\n/g, ''), /\r/, 'no bare CR inside a content line');
+  assert.match(block, /^DESCRIPTION:one\\ntwo\r?$/m);
 });
