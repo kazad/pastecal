@@ -398,7 +398,9 @@ const ICSService = {
     formatDate(dateTime) {
         const ms = this.toMs(dateTime);
         if (isNaN(ms)) return null;
-        const d = new Date(Math.floor((ms + 13 * HOUR_MS) / DAY_MS) * DAY_MS);
+        // The extra second reads nativecal's inclusive all-day end (local 23:59:59.999 of
+        // the last day) as the next date even at UTC+13. Must match Event.allDayDateUTC.
+        const d = new Date(Math.floor((ms + 13 * HOUR_MS + 1000) / DAY_MS) * DAY_MS);
         if (isNaN(d.getTime())) return null;
         const out = d.toISOString().slice(0, 10).replace(/-/g, '');
         return /^\d{8}$/.test(out) ? out : null;
@@ -462,9 +464,18 @@ const ICSService = {
     seriesRule(rule, allDay) {
         if (!allDay) return rule;
         return rule.replace(/(^|;)UNTIL=(\d{8}T\d{6}Z?)/i, (match, sep, value) => {
-            const date = this.formatDate(value.endsWith('Z') ? value : `${value}Z`);
+            const date = this.allDayStampDate(value);
             return date ? `${sep}UNTIL=${date}` : match;
         });
+    },
+
+    // The DATE an all-day series' stamp names. A floating stamp (no Z) is a wall-clock
+    // time, so its Y-M-D is the date: nativecal's editor writes UNTIL=20261025T235959 for
+    // "through Oct 25", which the instant window read as Oct 26. Must match
+    // Event.allDayStampDate in public/models/Event.js.
+    allDayStampDate(value) {
+        if (/^\d{8}T\d{6}$/i.test(value)) return value.slice(0, 8);
+        return this.formatDate(/Z$/i.test(value) ? value : `${value}Z`);
     },
 
     // Best guess at which instance a moved occurrence replaces, from the event alone. Only

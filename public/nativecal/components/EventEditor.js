@@ -129,6 +129,9 @@ const EventEditor = {
         const recurrenceFreq = ref('');
         const recurrenceInterval = ref(1);
         const recurrenceUntil = ref('');
+        // The rule as loaded and what the inputs showed for it; saving with those inputs
+        // unchanged keeps the stored rule verbatim (BYDAY, its UNTIL format and all).
+        let loadedRecurrence = null;
 
         const isNew = computed(() => !props.event?.id || props.event.id.toString().startsWith('temp_'));
 
@@ -236,6 +239,18 @@ const EventEditor = {
                 localEvent.value = { ...newVal, type: newVal.type || 1, isAllDay: !!newVal.isAllDay };
                 updateFormattedDates();
                 parseRecurrence(newVal.recurrencerule);
+                // rrule reads every UNTIL as an instant; take the date it names instead
+                // (see Event.ruleUntilDate).
+                if (recurrenceUntil.value && typeof Event !== 'undefined') {
+                    recurrenceUntil.value = Event.ruleUntilDate(newVal.recurrencerule, !!newVal.isAllDay)
+                        || recurrenceUntil.value;
+                }
+                loadedRecurrence = {
+                    rule: newVal.recurrencerule || '',
+                    freq: recurrenceFreq.value,
+                    interval: recurrenceInterval.value,
+                    until: recurrenceUntil.value,
+                };
             }
         }, { deep: true, immediate: true });
 
@@ -292,7 +307,13 @@ const EventEditor = {
 
             // Build Recurrence Rule
             let rruleStr = "";
-            if (recurrenceFreq.value) {
+            const untouched = loadedRecurrence
+                && loadedRecurrence.freq === recurrenceFreq.value
+                && loadedRecurrence.interval === recurrenceInterval.value
+                && loadedRecurrence.until === recurrenceUntil.value;
+            if (untouched) {
+                rruleStr = loadedRecurrence.rule;
+            } else if (recurrenceFreq.value) {
                 rruleStr = `FREQ=${recurrenceFreq.value}`;
                 
                 if (recurrenceInterval.value && recurrenceInterval.value > 1) {
@@ -300,15 +321,10 @@ const EventEditor = {
                 }
 
                 if (recurrenceUntil.value) {
-                    // Format to YYYYMMDDTHHMMSSZ or local
-                    // Since we use local dates for start/end, let's use floating UNTIL (no Z)
-                    // matching the start time.
-                    const uDate = new Date(recurrenceUntil.value + 'T23:59:59'); // inclusive end of that day
-                    const y = uDate.getFullYear();
-                    const m = pad(uDate.getMonth() + 1);
-                    const d = pad(uDate.getDate());
-                    // T235959 to include the whole day
-                    rruleStr += `;UNTIL=${y}${m}${d}T235959`; 
+                    // All-day: the grid's format (Event.ruleUntilStamp). Timed: a floating
+                    // T235959 stamp, through the end of that day.
+                    const stamp = Event.ruleUntilStamp(recurrenceUntil.value, !!localEvent.value.isAllDay);
+                    if (stamp) rruleStr += `;UNTIL=${stamp}`;
                 }
             }
 

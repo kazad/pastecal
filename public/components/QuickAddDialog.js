@@ -128,14 +128,14 @@ const QuickAddDialog = {
         isAllDay() {
             return !!this.fields.startDate && !this.fields.startTime && !this.fields.endTime;
         },
-        // All-day events are stored as UTC midnight of their date, end exclusive (see
-        // Event.allDayDateUTC); the End date input shows the last day, inclusive.
+        // All-day events are stored as local midnight of their date, end exclusive (the
+        // legacy format, see Event.allDayDateUTC); the End date input shows the last day.
         startDateTime() {
-            if (this.isAllDay) return this.toUTCDate(this.fields.startDate, 0);
+            if (this.isAllDay) return this.toLocalDate(this.fields.startDate, 0);
             return this.toISO(this.fields.startDate, this.fields.startTime);
         },
         endDateTime() {
-            if (this.isAllDay) return this.toUTCDate(this.fields.endDate || this.fields.startDate, 1);
+            if (this.isAllDay) return this.toLocalDate(this.fields.endDate || this.fields.startDate, 1);
             return this.toISO(this.fields.endDate, this.fields.endTime);
         },
         endBeforeStart() {
@@ -226,11 +226,11 @@ const QuickAddDialog = {
             const dt = new Date(y, (m || 1) - 1, d || 1, hh || 0, mm || 0);
             return isNaN(dt.getTime()) ? null : dt.toISOString();
         },
-        // "YYYY-MM-DD" + offset days -> UTC midnight ISO string, or null.
-        toUTCDate(dateStr, offsetDays) {
+        // "YYYY-MM-DD" + offset days -> local midnight as an ISO string, or null.
+        toLocalDate(dateStr, offsetDays) {
             if (!dateStr) return null;
             const [y, m, d] = dateStr.split('-').map(Number);
-            const dt = new Date(Date.UTC(y, (m || 1) - 1, (d || 1) + offsetDays));
+            const dt = new Date(y, (m || 1) - 1, (d || 1) + offsetDays);
             return isNaN(dt.getTime()) ? null : dt.toISOString();
         },
         useExample(text) {
