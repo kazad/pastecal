@@ -61,12 +61,20 @@ class CalendarDataService {
     // edit inside a rolling 500ms window into one sync, so several deletions in quick
     // succession arrive as a single write removing N -- and a declaration that merely
     // overwrote would authorise only the last one and refuse the user's own deletions.
+    //
+    // `keys` names WHICH rows (by _eventKey) the action removed. A count alone cannot say
+    // which of the missing rows were deleted on purpose, and the refusal path below once
+    // guessed by baseline order -- re-sending a deletion of an event the user never
+    // touched. Without keys (null), nothing is treated as a deliberate removal there.
     static _intent = null;
-    static declareIntent(removing = 1) {
+    static declareIntent(removing = 1, keys = null) {
         const now = Date.now();
-        this._intent = (this._intent && now - this._intent.at < 5000)
-            ? { removing: this._intent.removing + removing, at: now }
-            : { removing, at: now };
+        const live = this._intent && now - this._intent.at < 5000 ? this._intent : null;
+        const ours = Array.isArray(keys) ? keys.map(String) : null;
+        // One declaration with unknown keys makes the whole accumulated set unknown.
+        const merged = !live ? ours
+            : (live.keys && ours ? [...live.keys, ...ours] : null);
+        this._intent = { removing: (live ? live.removing : 0) + removing, keys: merged, at: now };
     }
     static _takeIntent() {
         const i = this._intent;
@@ -441,35 +449,47 @@ class CalendarDataService {
             if (known && removing > 0 && (!intent || removing > intent.removing)) {
                 console.error(`[CalendarDataService] refused to save: this write removes ${removing} of ${prevCount} events` +
                     (intent ? ` but only ${intent.removing} were deleted by the user` : ' and no deletion was made'));
-                // The known-good events, so the app can restore what it was about to
-                // lose instead of leaving the user to discover it on their next reload.
+                // Only the unexplained REMOVALS are reverted; everything else this write
+                // carried is the user's work and is kept: rows it added, and its edits to
+                // rows that still exist. Restoring the bare baseline silently dropped an
+                // event quick-added or a title typed in the same 500ms debounce window.
                 //
-                // Minus anything the user really did delete: the baseline is the last
-                // SERVER snapshot, so when a legitimate delete is still in flight and a
-                // buggy write arrives behind it, restoring the baseline verbatim would
-                // resurrect the event they just removed. Events still present locally
-                // are the ones that were never deleted on purpose.
-                const localIds = new Set(localEvents.map(e => this._eventKey(e)));
-                const deliberatelyGone = intent
-                    ? new Set(prevEvents.filter(e => !localIds.has(this._eventKey(e)))
-                        .slice(0, intent.removing).map(e => this._eventKey(e)))
-                    : new Set();
-                const restore = JSON.parse(JSON.stringify(
-                    prevEvents.filter(e => !deliberatelyGone.has(this._eventKey(e)))));
+                // A removal is deliberate only if the delete that declared it named that
+                // row. Guessing from the count (the first N missing rows in baseline
+                // order) re-sent a deletion of an event the user never touched and
+                // resurrected the one they did; with no names, restore everything and let
+                // the user redo the delete.
+                const key = (e) => this._eventKey(e);
+                const localByKey = new Map(localEvents.map(e => [key(e), e]));
+                const baseKeys = new Set(prevEvents.map(key));
+                const declared = new Set(intent && intent.keys ? intent.keys : []);
+                const deliberatelyGone = new Set(prevEvents.map(key)
+                    .filter(k => !localByKey.has(k) && declared.has(k)));
+                const recovered = prevEvents.filter(e => !localByKey.has(key(e)) && !deliberatelyGone.has(key(e)));
+                const kept = prevEvents.filter(e => !deliberatelyGone.has(key(e)))
+                    .map(e => localByKey.get(key(e)) || e);
+                const added = localEvents.filter(e => !baseKeys.has(key(e)));
+                const restore = JSON.parse(JSON.stringify([...kept, ...added]));
                 if (typeof this.onSyncRefused === 'function') {
                     // The caller REPLACES its events with this list (no merge: merging
                     // against the baseline reads every dropped row as deleted-by-us and
                     // drops it again), which also puts local back in step with the gate.
                     try {
-                        this.onSyncRefused({ before: prevCount, removing, events: JSON.parse(JSON.stringify(restore)) });
+                        this.onSyncRefused({ before: prevCount, removing, recovered: recovered.length,
+                            events: JSON.parse(JSON.stringify(restore)) });
                     } catch (e) { /* never rethrow */ }
                 }
-                // The deletions the user really made are still owed to the server, and the
-                // refused write consumed their declaration. Re-declare exactly those and
-                // send the corrected list now; otherwise local would sit permanently below
-                // the baseline and every later edit would be refused until a reload.
-                if (deliberatelyGone.size) {
-                    this._intent = { removing: deliberatelyGone.size, at: Date.now() };
+                // What the user really did -- named deletions, additions, edits -- is still
+                // owed to the server, and the refused write consumed the declaration.
+                // Re-declare exactly the named deletions and send the corrected list now;
+                // otherwise the work is lost, or local sits below the baseline and every
+                // later edit is refused until a reload.
+                const edited = prevEvents.some(e => localByKey.has(key(e))
+                    && !this._sameEvent(e, localByKey.get(key(e))));
+                if (deliberatelyGone.size || added.length || edited) {
+                    this._intent = prevCount > restore.length
+                        ? { removing: prevCount - restore.length, keys: [...deliberatelyGone], at: Date.now() }
+                        : null;
                     this.sync({ ...calendar, events: restore });
                 }
                 return;
