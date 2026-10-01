@@ -11,6 +11,13 @@ function trackSafely(fn, when = true) {
     }
 }
 
+// Calendar ids this page has already asked the server to auto-create a read-only link
+// for, mapped to that request. autoCreateReadOnlyLink runs on every snapshot, and every
+// snapshot until the server's write echoes back lacks publicViewId -- so without this,
+// one page load fired createPublicLink (and slug_autoassigned) once per snapshot.
+// Never cleared: at most one attempt per calendar per page load, success or not.
+const AUTO_LINK_REQUESTS = new Map();
+
 // SlugManager static class for centralized read-only link operations
 class SlugManager {
     // Normalize slug for consistent lookup (matches backend)
@@ -31,12 +38,18 @@ class SlugManager {
 
             const result = await createPublicLink(params);
             const { publicViewId } = result.data;
+            // Whether the server minted a new view or returned the one this calendar
+            // already has (it is idempotent for auto-creation). Older servers omit it.
+            const created = result.data.created !== false;
 
             // Update calendar options
             if (!calendar.options) {
                 calendar.options = {};
             }
             calendar.options.publicViewId = publicViewId;
+            // Recorded now, while it is known, so has_custom_slug never has to be
+            // guessed from the id's shape later. The server writes the same value.
+            if (created) calendar.options.publicViewSource = customSlug ? 'custom' : 'generated';
 
             // Auto-save for auto-creation. Route through sync() so the Firebase sanitizer applies.
             if (autoCreate) {
@@ -44,6 +57,15 @@ class SlugManager {
             }
 
             console.log(`${autoCreate ? 'Auto-created' : 'Created'} read-only link:`, publicViewId);
+            // The moment a calendar silently gets a name nobody chose. This is the
+            // denominator for "was the low custom-slug rate a discoverability
+            // problem?" -- without it, claims have no base to be a rate of. Counted
+            // on creation, not on request: a request answered with the existing view
+            // assigned nothing.
+            trackSafely(a => a.track('slug_autoassigned', {
+                where: 'readonly_link',
+                event_count_bucket: a.bucketEvents(calendar?.events?.length),
+            }), autoCreate && created);
             // `where` separates this from claiming the calendar's own URL in
             // app.js -- same event name, different user action, and conflating
             // them would make the claim rate unreadable.
@@ -71,16 +93,13 @@ class SlugManager {
 
     // Specific read-only link operations with clear naming
     static autoCreateReadOnlyLink(calendar) {
-        if (!calendar.options?.publicViewId) {
-            // The moment a calendar silently gets a name nobody chose. This is the
-            // denominator for "was the low custom-slug rate a discoverability
-            // problem?" -- without it, claims have no base to be a rate of.
-            trackSafely(a => a.track('slug_autoassigned', {
-                where: 'readonly_link',
-                event_count_bucket: a.bucketEvents(calendar?.events?.length),
-            }));
-            return this.createReadOnlyLink(calendar, { autoCreate: true });
-        }
+        if (!calendar?.id || calendar.options?.publicViewId) return;
+        if (AUTO_LINK_REQUESTS.has(calendar.id)) return AUTO_LINK_REQUESTS.get(calendar.id);
+        // Failure is already logged inside; swallowed here so a caller that ignores
+        // the promise (validateCalendarData) never sees an unhandled rejection.
+        const request = this.createReadOnlyLink(calendar, { autoCreate: true }).catch(() => null);
+        AUTO_LINK_REQUESTS.set(calendar.id, request);
+        return request;
     }
 
     static createReadOnlyLinkWithCustomSlug(calendar, customSlug) {

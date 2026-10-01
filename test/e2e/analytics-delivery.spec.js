@@ -43,6 +43,14 @@ function eventParams(request, eventName) {
 }
 
 test.describe('Events actually reach GA4', () => {
+  // analytics-boot.js only loads GA on the production hostnames, so local runs are
+  // let through explicitly -- and every hit is answered locally, so a test run never
+  // lands in the live property (the reason the host gate exists).
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => { window.__ANALYTICS_ALLOW_HOST__ = true; });
+    await page.route(/\/g\/collect/, (route) => route.fulfill({ status: 204, body: '' }));
+  });
+
   // The bug this guards: analytics.js preferred gtag() but fell back to
   // dataLayer.push when it was undefined -- and GTM loads gtm.js WITHOUT
   // defining window.gtag. A dataLayer push is only an event GTM can listen for;
@@ -83,9 +91,15 @@ test.describe('Events actually reach GA4', () => {
     expect(params.some((p) => p.startsWith('event_count_bucket='))).toBe(true);
   });
 
-  test('adding gtag.js does not double-count pageviews', async ({ page }) => {
-    // GTM already sends page_view, so the gtag config uses send_page_view:false.
-    // Getting that wrong doubles every pageview in the property.
+  test('exactly one page_view, and it never carries the path', async ({ page }) => {
+    // gtag.js sends the only page_view now that GTM is gone; two loaders would double
+    // every pageview. The path is the edit credential, so dl must be the template.
+    const locations = [];
+    page.on('request', (r) => {
+      if (!r.url().includes('/g/collect')) return;
+      const dl = r.url().match(/[?&]dl=([^&]*)/);
+      if (dl) locations.push(decodeURIComponent(dl[1]));
+    });
     const pageviews = [];
     page.on('request', (r) => {
       if (!r.url().includes('/g/collect')) return;
@@ -97,5 +111,7 @@ test.describe('Events actually reach GA4', () => {
     await page.waitForTimeout(6000);
 
     expect(pageviews).toHaveLength(1);
+    expect(locations.length).toBeGreaterThan(0);
+    for (const l of locations) expect(new URL(l).pathname).toBe('/');
   });
 });

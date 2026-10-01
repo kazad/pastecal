@@ -25,7 +25,9 @@
 const Analytics = {
     // ---- configuration -------------------------------------------------------
 
-    // Set false to silence everything (tests, local dev, internal browsing).
+    // Set false to silence everything. Decided once, by AnalyticsBoot.gate() in
+    // analytics-boot.js (test mode, opt-out, GPC/DNT, non-production host); see the
+    // bottom of this file.
     enabled: true,
 
     // Sinks receive (name, params). Add or remove freely; each is independent and
@@ -47,16 +49,18 @@ const Analytics = {
          * window.gtag, so the old preference order silently chose the path that
          * never delivered.
          *
-         * The gtag shim below is the standard snippet. It shares the same
-         * dataLayer GTM already created, so both continue to work.
+         * GTM has since been removed entirely (it sent the full URL, which is the
+         * edit credential, from a container this repo cannot change); the gtag
+         * shim and config live in analytics-boot.js.
          */
-        ga4(name, params) {
-            // index.html defines the shim and configures the stream before this
-            // ever runs. The guard is for the case where that block was skipped
-            // (test mode, ?no-analytics) -- there, dropping the event is correct.
-            if (typeof window.gtag === 'function') {
-                window.gtag('event', name, params);
-            }
+        ga4(name, params, urgent) {
+            // analytics-boot.js defines the shim and configures the stream before
+            // this ever runs. The guard is for the case where it was gated off or
+            // blocked -- there, dropping the event is correct.
+            if (typeof window.gtag !== 'function') return;
+            // An urgent event is followed by navigation: the beacon transport is
+            // the one the browser lets finish after the page is gone.
+            window.gtag('event', name, urgent ? Object.assign({ transport_type: 'beacon' }, params) : params);
         },
 
         // Cloudflare Analytics Engine / any HTTP collector. Off until a URL is set.
@@ -87,28 +91,45 @@ const Analytics = {
     // missing global must not affect a single calendar operation. Everything below
     // is wrapped, and delivery is deferred off the caller's stack so a slow sink
     // can't stall a save or a render.
-    track(name, params = {}) {
+    //
+    // `urgent` is for an event followed immediately by navigation (calendar_created
+    // redirects to the new calendar). Deferred delivery would run on a page that no
+    // longer exists, so it is sent synchronously, by beacon.
+    track(name, params = {}, { urgent = false } = {}) {
         try {
             if (!this.enabled) return;
 
-            let enriched;
-            try {
-                enriched = Object.assign({}, this.baseParams(), params);
-            } catch (err) {
-                enriched = params || {}; // baseParams failing must not lose the event
-            }
-
-            this.defer(() => {
+            const deliver = () => {
+                let enriched;
+                try {
+                    enriched = this.scrub(Object.assign({}, this.baseParams(), params));
+                } catch (err) {
+                    enriched = params || {}; // baseParams failing must not lose the event
+                }
                 for (const key of this.active) {
                     const sink = this.SINKS[key];
                     if (typeof sink !== 'function') continue;
                     try {
-                        sink(name, enriched);
+                        sink(name, enriched, urgent);
                     } catch (err) {
                         if (this.debug) console.warn('[analytics] sink failed:', key, err);
                     }
                 }
-            });
+                if (urgent) this.flush(true);
+            };
+
+            if (urgent) {
+                deliver();
+                return;
+            }
+            // Wait for the bootstrap so cal_key is known and gtag has its config
+            // before any event is sent. `ready` never rejects.
+            const ready = this.boot() && this.boot().ready;
+            if (ready && typeof ready.then === 'function') {
+                ready.then(() => this.defer(deliver), () => this.defer(deliver));
+            } else {
+                this.defer(deliver);
+            }
         } catch (err) {
             // Absolute backstop. Never rethrow.
             if (this.debug) console.warn('[analytics] track failed:', name, err);
@@ -129,7 +150,9 @@ const Analytics = {
 
     queue(name, params) {
         if (this._queue.length >= this.MAX_QUEUE) return; // drop, don't leak
-        this._queue.push({ name, params, ts: Date.now(), path: location.pathname });
+        // The route template, never location.pathname: the path is the edit credential.
+        const b = this.boot();
+        this._queue.push({ name, params, ts: Date.now(), path: (b && b.template) || null });
 
         if (this._queue.length >= this.BATCH_SIZE) {
             this.flush();
@@ -189,12 +212,70 @@ const Analytics = {
         }
     },
 
+    // The bootstrap state from analytics-boot.js, or null if it did not load.
+    boot() {
+        return (typeof window !== 'undefined' && window.AnalyticsBoot) || null;
+    },
+
     // Params attached to every event, so segmentation works without the call
-    // sites having to remember to pass them.
+    // sites having to remember to pass them. cal_key is the hashed calendar
+    // slug -- per-calendar counting without the credential.
     baseParams() {
-        return {
-            surface: window.__TEST__ ? 'test' : 'web',
-        };
+        const b = this.boot();
+        const out = { surface: (b && b.surface) || 'web' };
+        if (b && b.calKey) out.cal_key = b.calKey;
+        return out;
+    },
+
+    /**
+     * Last line of defense: no string param may contain the current page's slug.
+     * The URL is the edit credential, and free-text params (error messages, mostly)
+     * can quote it from places this module does not control.
+     */
+    scrub(params) {
+        const slug = this.currentSlug();
+        if (!slug || slug.length < 3) return params;
+        // Whole tokens only (slug characters on neither side), so a slug like
+        // "home" can't mangle a label like "homepage_bar".
+        const esc = slug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const re = new RegExp(`(^|[^a-z0-9_-])${esc}(?![a-z0-9_-])`, 'gi');
+        for (const k of Object.keys(params)) {
+            if (k === 'cal_key') continue;   // a hash, which a short slug could match by chance
+            if (typeof params[k] === 'string') params[k] = params[k].replace(re, '$1<id>');
+        }
+        return params;
+    },
+
+    // Parsed by the bootstrap's route(), so the two can't disagree about which
+    // part of a path is the slug.
+    currentSlug() {
+        try {
+            const b = this.boot();
+            if (!b || typeof b.route !== 'function') return null;
+            return b.route(location.pathname).slug;
+        } catch (err) {
+            return null;
+        }
+    },
+
+    /**
+     * Where an uncaught error came from, as `file.js:line` -- but only for our own
+     * scripts. For an inline script the browser reports the PAGE URL as the
+     * filename, and the page URL ends in the calendar's slug, so `.split('/').pop()`
+     * was sending edit credentials as the error location.
+     */
+    errorSource(filename, lineno) {
+        if (!filename) return 'unknown';
+        try {
+            const base = (typeof location !== 'undefined' && location.href) || undefined;
+            const u = new URL(String(filename), base);
+            const sameOrigin = typeof location === 'undefined' || u.origin === location.origin;
+            if (!sameOrigin) return 'external';
+            if (!/\.js$/i.test(u.pathname)) return 'inline';
+            return `${u.pathname.split('/').pop()}:${lineno || 0}`;
+        } catch (err) {
+            return 'unknown';
+        }
     },
 
     // ---- bucketing -----------------------------------------------------------
@@ -265,8 +346,11 @@ const Analytics = {
     calendarReturned(calendar, visitNumber) {
         this.track('calendar_returned', {
             visit_bucket: this.bucketVisits(visitNumber),
-            has_custom_slug: !!calendar?.options?.publicViewId
-                && !this.looksGenerated(calendar.options.publicViewId),
+            // Recorded when the link was made (SlugManager / createPublicLink), not
+            // guessed from the id's shape: the guess assumed 5-char mixed-case ids,
+            // and every id minted since the switch to 10 lowercase chars read as
+            // custom. Omitted for links made before the source was recorded.
+            ...(this.slugSource(calendar) ? { has_custom_slug: this.slugSource(calendar) === 'custom' } : {}),
             event_count_bucket: this.bucketEvents(calendar?.events?.length),
         });
     },
@@ -294,10 +378,12 @@ const Analytics = {
      * reuses the slug event names for something that is NOT a new calendar.
      */
     calendarCreated(named, calendar) {
+        // Urgent: the caller redirects to the new calendar right after, and a
+        // deferred send was racing that navigation and losing.
         this.track('calendar_created', {
             named: !!named,
             event_count_bucket: this.bucketEvents(calendar?.events?.length),
-        });
+        }, { urgent: true });
     },
 
     /**
@@ -398,19 +484,19 @@ const Analytics = {
         this.track('sync_refused', { before: shape?.before ?? 0, removing: shape?.removing ?? 0 });
     },
 
-    // Generated ids come from IDService.generateNanoId(5): 5 alphanumeric chars.
-    // Human slugs are lowercased at claim time and usually longer.
-    looksGenerated(id) {
-        return !!id && id.length === 5 && /^[a-z0-9]+$/i.test(id) && id !== id.toLowerCase();
+    /** 'custom' | 'generated' for the read-only link, or null when unrecorded. */
+    slugSource(calendar) {
+        const o = calendar?.options;
+        if (!o?.publicViewId) return null;
+        return o.publicViewSource === 'custom' || o.publicViewSource === 'generated'
+            ? o.publicViewSource : null;
     },
 };
 
-// Silence analytics wherever the page itself is silenced, so the seam and the
-// GTM loader in index.html can never disagree.
+// One gate: analytics-boot.js decides, this follows. If the bootstrap did not load
+// (blocked, failed) nothing can be delivered anyway, so stay off.
 if (typeof window !== 'undefined') {
-    if (window.__TEST__ || window.location.search.includes('no-analytics')) {
-        Analytics.enabled = false;
-    }
+    Analytics.enabled = !!(window.AnalyticsBoot && window.AnalyticsBoot.enabled);
     if (window.location.search.includes('debug-analytics')) {
         Analytics.debug = true;
     }
