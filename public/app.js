@@ -687,8 +687,9 @@ const CalendarVueApp = {
                     // A real, user-initiated change to this calendar. Recorded here
                     // rather than in CalendarDataService.sync(), because sync() also
                     // runs when the live subscription echoes back someone else's edit --
-                    // which made every viewer look like an editor.
-                    if (typeof AuthorSignal !== 'undefined') {
+                    // which made every viewer look like an editor. Only once the
+                    // calendar exists: the homepage holds an unsaved random id.
+                    if (this.isExisting && typeof AuthorSignal !== 'undefined') {
                         AuthorSignal.touch(this.calendar.id);
                     }
                     if (ev.requestType === 'eventCreated') {
@@ -1926,6 +1927,7 @@ const CalendarVueApp = {
 
                     const oldId = this.calendar.id;
 
+                    // A copy: this browser did not create the original.
                     CalendarDataService.createWithId(newId, newCalendar, () => {
                         // We don't delete the old one (safer, acts as a copy), but the
                         // recents entry has to move: leaving both would list a stale copy
@@ -1939,7 +1941,7 @@ const CalendarVueApp = {
                         this.recentCalendars = this.recentManager.getAll();
 
                         window.location = "/" + newId;
-                    });
+                    }, { asCreator: false });
                 }
             });
         },
@@ -2638,7 +2640,7 @@ const CalendarVueApp = {
             this.calendar.events.push(newEvent);
             this.calendar.setEvents(this.calendar.events);
             // Quick-add bypasses the scheduler, so it needs its own signal.
-            if (typeof AuthorSignal !== 'undefined') {
+            if (this.isExisting && typeof AuthorSignal !== 'undefined') {
                 AuthorSignal.touch(this.calendar.id);
             }
             track(a => a.eventAdded('quick_add', this.calendar));

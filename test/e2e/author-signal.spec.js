@@ -57,7 +57,8 @@ test.describe('Author signal', () => {
         if (String(path).startsWith('calendar_authors')) attempted = true;
         return realRef(path);
       };
-      AuthorSignal.touch('zz-should-not-be-recorded', { created: true });
+      AuthorSignal.touch('zz-should-not-be-recorded');
+      if (AuthorSignal.creationRecord('zz-should-not-be-recorded') !== null) attempted = true;
       await new Promise((r) => setTimeout(r, 300));
       firebase.database().ref = realRef;
       return attempted;
@@ -120,35 +121,63 @@ test.describe('Author signal', () => {
     expect(await page.evaluate(() => window.__touches)).toEqual([]);
   });
 
-  test('a real edit IS recorded', async ({ page }) => {
-    // The other half: proving the viewer test above is not passing simply because the
-    // signal never fires at all.
-    await page.addInitScript(() => {
-      window.__touches = [];
-      const install = () => {
-        if (typeof AuthorSignal === 'undefined') return setTimeout(install, 20);
-        const real = AuthorSignal.touch.bind(AuthorSignal);
-        AuthorSignal.touch = function (id, opts) {
-          window.__touches.push(id);
-          return real(id, opts);
-        };
+  const recordTouches = (page) => page.addInitScript(() => {
+    window.__touches = [];
+    const install = () => {
+      if (typeof AuthorSignal === 'undefined') return setTimeout(install, 20);
+      const real = AuthorSignal.touch.bind(AuthorSignal);
+      AuthorSignal.touch = function (id, opts) {
+        window.__touches.push(id);
+        return real(id, opts);
       };
-      install();
-    });
+    };
+    install();
+  });
 
-    await page.goto('/');
-    await expect(page.locator('.e-schedule')).toBeVisible({ timeout: 20_000 });
-    await page.waitForTimeout(1500);
-
+  const addEventViaPopup = async (page, title) => {
     await page.locator('.e-work-cells').nth(30).click();
     await page.waitForTimeout(600);
     const input = page.locator('input[placeholder="Add title"]');
     if (await input.count()) {
-      await input.fill('a genuine edit');
+      await input.fill(title);
       await page.locator('button.e-event-create').click();
       await page.waitForTimeout(1500);
     }
+  };
 
-    expect((await page.evaluate(() => window.__touches)).length).toBeGreaterThan(0);
+  test('an edit on the unsaved homepage calendar is not recorded', async ({ page }) => {
+    // The homepage holds a random id that does not exist on the server until claimed.
+    // Recording authorship of it filed records against ids nobody ever saved.
+    await recordTouches(page);
+    await page.goto('/');
+    await expect(page.locator('.e-schedule')).toBeVisible({ timeout: 20_000 });
+    await page.waitForTimeout(1500);
+
+    await addEventViaPopup(page, 'an unsaved edit');
+
+    expect(await page.evaluate(() => window.__touches)).toEqual([]);
+  });
+
+  test('a real edit IS recorded', async ({ page }) => {
+    // Claims a real calendar against Firebase, so it needs more than the 30s default.
+    test.setTimeout(60_000);
+    // The other half: proving the tests above are not passing simply because the
+    // signal never fires at all.
+    await recordTouches(page);
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto('/');
+    const slug = `test-author-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+    await page.locator('input[placeholder="your-name"]').fill(slug);
+    await page.locator('button:has-text("Claim")').locator('visible=true').first().click();
+    await expect(page).toHaveURL(new RegExp(`/${slug}`), { timeout: 15_000 });
+    await page.waitForFunction(
+      `document.querySelector('#app')._vnode.component.proxy.isExisting === true`,
+      null, { timeout: 15_000 });
+    await expect(page.locator('.e-schedule')).toBeVisible({ timeout: 20_000 });
+    await page.waitForTimeout(1500);
+
+    await addEventViaPopup(page, 'a genuine edit');
+
+    expect(await page.evaluate(() => window.__touches)).toContain(slug);
   });
 });

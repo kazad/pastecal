@@ -610,20 +610,38 @@ class CalendarDataService {
         });
     }
 
-    static createWithId(key, value, success) {
-        return this.db.child(key).set(this._sanitizeForFirebase(value), (error) => {
+    /**
+     * `asCreator: false` is for copies (rename): the browser writing a copy did not
+     * create the original, so it is recorded as an ordinary editor of the new id.
+     */
+    static createWithId(key, value, success, { asCreator = true } = {}) {
+        const data = this._sanitizeForFirebase(value);
+        const plainSet = () => this.db.child(key).set(data, (error) => {
             if (error) {
                 console.log("error creating calendar", error, key, value);
             } else {
-                // The strongest ownership signal there is: whoever was present when the
-                // calendar first existed. Flagged separately from ordinary edits so a
-                // later prolific editor can never outrank the creator by volume alone.
-                if (typeof AuthorSignal !== 'undefined') {
-                    AuthorSignal.touch(key, { created: true });
+                if (!asCreator && typeof AuthorSignal !== 'undefined') {
+                    AuthorSignal.touch(key);
                 }
                 success();
             }
         });
+
+        // The strongest ownership signal there is: whoever was present when the
+        // calendar first existed. Written in the same update as the calendar because
+        // the rules accept createdHere only in the write that creates it.
+        const authorRecord = asCreator && typeof AuthorSignal !== 'undefined'
+            ? AuthorSignal.creationRecord(key) : null;
+        if (!authorRecord) return plainSet();
+
+        return firebase.database().ref()
+            .update(Object.assign({ [`calendars/${key}`]: data }, authorRecord))
+            .then(() => success(), (error) => {
+                // The update is atomic, so a rejected author record would also drop the
+                // calendar. Authorship is observational: create it without one instead.
+                console.warn('[CalendarDataService] creating with author record failed; retrying without', error);
+                return plainSet();
+            });
     }
 
     static update(key, value) {

@@ -1,6 +1,7 @@
 const functions = require('firebase-functions');
 const { onRequest, onCall } = require('firebase-functions/v2/https');
 const { onValueUpdated, onValueWritten, onValueDeleted } = require("firebase-functions/v2/database");
+const { onSchedule } = require('firebase-functions/v2/scheduler');
 const admin = require('firebase-admin');
 const crypto = require('crypto');
 
@@ -39,47 +40,84 @@ const STATS_ROOT = "calendar_stats";
 // that motivated this — RTDB egress jumped ~15x with no matching rise in request counts, and
 // there was no per-calendar breakdown anywhere to narrow it down).
 //
-// Must be awaited before the response is sent, not fire-and-forget: this function's instances
-// get frozen/recycled immediately after the HTTP response completes (observed directly —
-// "Container terminated on signal 6" landed right after a served response, and the write
-// initiated alongside it never reached the database), so anything not awaited can be silently
-// dropped. A failure here is logged but swallowed — a stats write must never fail the request.
-// A per-process salt, regenerated every time an instance starts and never stored.
-// It makes the device hashes below un-reversible even by us: without the salt no
-// IP can be tested against a stored hash, and the salt does not outlive the
-// process. This is the difference between "an estimate of how many devices poll
-// this feed" and "a log of who reads this calendar."
-const DEVICE_SALT = crypto.randomBytes(32);
+// Recorded AFTER the response is sent: a subscriber's poll must not wait on our bookkeeping.
+// The cost is that an instance recycled right after responding (observed: "Container
+// terminated on signal 6" right after a served response) can drop that one write. For a
+// popularity estimate an occasional lost increment is fine; slower feeds for everyone are
+// not. A failure here is logged and swallowed — a stats write must never fail the request.
+
+// A server-only secret, created once and stored where no client can read it (the root
+// rules deny everything not explicitly opened). Shared by every instance, so one device
+// hashes to the same bucket no matter which instance or cold start serves it -- a
+// per-process random salt counted one phone as several. Never logged.
+const DEVICE_SALT_PATH = 'internal/device_salt';
+let deviceSaltSecretPromise = null;
+
+/** The stored secret, created on first use with a transaction so concurrent cold starts agree. */
+function deviceSaltSecret() {
+    if (!deviceSaltSecretPromise) {
+        deviceSaltSecretPromise = admin.database().ref(DEVICE_SALT_PATH)
+            .transaction((current) => current || crypto.randomBytes(32).toString('base64'))
+            .then((result) => Buffer.from(result.snapshot.val(), 'base64'))
+            .catch((err) => {
+                // Not cached: the next request retries instead of counting nothing for
+                // the life of the instance.
+                deviceSaltSecretPromise = null;
+                throw err;
+            });
+    }
+    return deviceSaltSecretPromise;
+}
 
 /**
  * A coarse, deliberately lossy device bucket for counting ICS subscribers.
  *
  * The ICS protocol has no client id -- polling is anonymous by design -- so the
  * only available signal is user-agent plus IP. Both are personal data, so neither
- * is stored: they are hashed together with a per-process salt and the UTC date,
- * then truncated to 8 hex chars, and only the resulting bucket name is written.
+ * is stored: they are hashed with a DAILY salt (an HMAC of the UTC date under the
+ * server-only secret above), truncated to 8 hex chars, and only the resulting
+ * bucket name is written.
  *
  * Consequences of that design, all intentional:
- *   - the hash cannot be reversed or matched against a known IP
- *   - it rotates daily, so nothing tracks a device across days
+ *   - without the secret, no IP can be tested against a stored bucket
+ *   - the salt changes every day, so nothing links a device's buckets across days
  *   - 8 hex chars will collide occasionally at scale, which biases the estimate
  *     DOWN. Undercounting is the right failure direction for a vanity metric.
  *
  * Returns null for aggregators (see AGGREGATOR_UA): Google fetches feeds
  * server-side on behalf of every subscriber, so one Google IP may represent one
  * person or five hundred. Counting those as one device would be a lie; they are
- * tallied separately as "unknown reach" instead.
+ * tallied separately as "unknown reach" instead. Also null without a secret, so a
+ * failed salt read skips the estimate rather than hashing with something guessable.
  */
 const AGGREGATOR_UA = /Google-Calendar-Importer|WordPress|Microsoft Exchange|Outlook-iOS|feedburner|Yahoo/i;
 
-function deviceBucket(userAgent, ip) {
-    if (!userAgent || AGGREGATOR_UA.test(userAgent)) return null;
-    const day = new Date().toISOString().slice(0, 10);
-    return crypto.createHash('sha256')
-        .update(DEVICE_SALT)
-        .update(`${day}|${userAgent}|${ip || ''}`)
+function deviceBucket(userAgent, ip, secret, day = new Date().toISOString().slice(0, 10)) {
+    if (!userAgent || AGGREGATOR_UA.test(userAgent) || !secret) return null;
+    const dailySalt = crypto.createHmac('sha256', secret).update(day).digest();
+    return crypto.createHmac('sha256', dailySalt)
+        .update(`${userAgent}|${ip || ''}`)
         .digest('hex')
         .slice(0, 8);
+}
+
+/**
+ * The subscriber's IP, for deviceBucket() only.
+ *
+ * The leftmost X-Forwarded-For entry (and so Express's req.ip under trust proxy) is
+ * whatever the client sent, so one poller could pose as any number of devices.
+ * Through the Hosting rewrite, Hosting's CDN sets Fastly-Client-IP from the TCP peer
+ * and the XFF entries Google adds are CDN addresses; called directly, Google's front
+ * end appends the real peer as the RIGHTMOST XFF entry. A direct caller can still
+ * send its own Fastly-Client-IP -- that only adds noise to a vanity estimate, which
+ * any caller can do anyway by varying its user-agent.
+ */
+function clientIpOf(req) {
+    const fastly = String(req.headers['fastly-client-ip'] || '').trim();
+    if (fastly) return fastly;
+    const hops = String(req.headers['x-forwarded-for'] || '').split(',')
+        .map((s) => s.trim()).filter(Boolean);
+    return hops.length ? hops[hops.length - 1] : (req.socket?.remoteAddress || '');
 }
 
 /** Which family of client this is, for a breakdown that needs no identity at all. */
@@ -101,34 +139,40 @@ function clientFamily(userAgent) {
 const DEVICE_BUCKET_TTL_DAYS = 35;
 
 async function recordIcsStat(id, { bytes, wasNotModified, userAgent, ip }) {
-    const update = {
-        lastServedAt: admin.database.ServerValue.TIMESTAMP,
-        icsRequestCount: admin.database.ServerValue.increment(1),
-    };
-    if (wasNotModified) {
-        update.ics304Count = admin.database.ServerValue.increment(1);
-    } else {
-        update.bytesServedTotal = admin.database.ServerValue.increment(bytes);
-    }
-
-    const day = new Date().toISOString().slice(0, 10);
-    const family = clientFamily(userAgent);
-    const bucket = deviceBucket(userAgent, ip);
-
-    // Client mix, which carries no identity -- just which apps subscribe.
-    update[`clients/${family}`] = admin.database.ServerValue.increment(1);
-
-    if (bucket) {
-        // Presence only. The value is the day, so a sweep can drop stale buckets
-        // without reading anything else, and repeated polls from the same device
-        // collapse into one key rather than accumulating.
-        update[`devices/${day}/${bucket}`] = true;
-    } else {
-        // An aggregator stands in for an unknown number of real people.
-        update[`aggregatorHits/${day}`] = admin.database.ServerValue.increment(1);
-    }
-
     try {
+        const update = {
+            lastServedAt: admin.database.ServerValue.TIMESTAMP,
+            icsRequestCount: admin.database.ServerValue.increment(1),
+        };
+        if (wasNotModified) {
+            update.ics304Count = admin.database.ServerValue.increment(1);
+        } else {
+            update.bytesServedTotal = admin.database.ServerValue.increment(bytes);
+        }
+
+        const day = new Date().toISOString().slice(0, 10);
+        const family = clientFamily(userAgent);
+
+        // Client mix, which carries no identity -- just which apps subscribe.
+        update[`clients/${family}`] = admin.database.ServerValue.increment(1);
+
+        if (AGGREGATOR_UA.test(userAgent || '')) {
+            // An aggregator stands in for an unknown number of real people.
+            update[`aggregatorHits/${day}`] = admin.database.ServerValue.increment(1);
+        } else {
+            let secret = null;
+            try {
+                secret = await deviceSaltSecret();
+            } catch (err) {
+                console.error('Device salt unavailable; skipping device bucket:', err.message);
+            }
+            const bucket = deviceBucket(userAgent, ip, secret, day);
+            // Presence only. The value is the day, so a sweep can drop stale buckets
+            // without reading anything else, and repeated polls from the same device
+            // collapse into one key rather than accumulating.
+            if (bucket) update[`devices/${day}/${bucket}`] = true;
+        }
+
         await admin.database().ref(STATS_ROOT).child(id).update(update);
         await sweepOldDeviceBuckets(id, day);
     } catch (err) {
@@ -136,41 +180,104 @@ async function recordIcsStat(id, { bytes, wasNotModified, userAgent, ip }) {
     }
 }
 
+const expiredBefore = () => new Date(Date.now() - DEVICE_BUCKET_TTL_DAYS * 86400000)
+    .toISOString().slice(0, 10);
+
+// Calendars this instance has already confirmed swept today. A busy feed is polled
+// thousands of times a day; without this every poll paid a marker read. Reset when
+// the day changes, so it holds at most one day's worth of calendar ids.
+let sweptOnDay = null;
+let sweptIds = new Set();
+
 /**
- * Drop device buckets older than the TTL.
+ * Drop device buckets older than the TTL, opportunistically, as a calendar is polled.
  *
- * Opportunistic rather than scheduled: a busy feed is polled every few hours, so
- * its own traffic keeps it swept, and a feed nobody polls has nothing arriving to
- * expire. That avoids standing up Cloud Scheduler for a job with no deadline.
- *
- * Rate-limited to one sweep per calendar per day via a marker, so a feed polled
- * 8,000 times does not pay for 8,000 range reads. Failure is swallowed: retention
- * housekeeping must never break serving a calendar.
+ * Rate-limited to one sweep per calendar per day: in memory per instance first, then
+ * via a marker in the database so other instances skip it too. sweepAllDeviceBuckets
+ * covers feeds nobody polls any more. Failure is swallowed: retention housekeeping must
+ * never break serving a calendar.
  */
 async function sweepOldDeviceBuckets(id, today) {
     try {
+        if (sweptOnDay !== today) { sweptOnDay = today; sweptIds = new Set(); }
+        if (sweptIds.has(id)) return;
+
         const ref = admin.database().ref(STATS_ROOT).child(id);
         const marker = await ref.child('devicesSweptOn').once('value');
-        if (marker.val() === today) return;
+        if (marker.val() !== today) {
+            const cutoff = expiredBefore();
 
-        const cutoff = new Date(Date.now() - DEVICE_BUCKET_TTL_DAYS * 86400000)
-            .toISOString().slice(0, 10);
+            // Keys are ISO dates, so lexical ordering is chronological -- endBefore
+            // gives exactly the expired days without reading the live ones.
+            const stale = await ref.child('devices').orderByKey().endBefore(cutoff).once('value');
 
-        // Keys are ISO dates, so lexical ordering is chronological -- endBefore
-        // gives exactly the expired days without reading the live ones.
-        const stale = await ref.child('devices').orderByKey().endBefore(cutoff).once('value');
+            const updates = { devicesSweptOn: today };
+            stale.forEach((child) => { updates[`devices/${child.key}`] = null; });
 
-        const updates = { devicesSweptOn: today };
-        stale.forEach((child) => { updates[`devices/${child.key}`] = null; });
+            const aggStale = await ref.child('aggregatorHits').orderByKey().endBefore(cutoff).once('value');
+            aggStale.forEach((child) => { updates[`aggregatorHits/${child.key}`] = null; });
 
-        const aggStale = await ref.child('aggregatorHits').orderByKey().endBefore(cutoff).once('value');
-        aggStale.forEach((child) => { updates[`aggregatorHits/${child.key}`] = null; });
-
-        await ref.update(updates);
+            await ref.update(updates);
+        }
+        sweptIds.add(id);
     } catch (err) {
         console.error(`Device bucket sweep failed for ${id}:`, err);
     }
 }
+
+// The scheduled sweep reads calendars in pages and stops after this many per run,
+// resuming from a cursor the next day, so its cost stays flat as calendars grow.
+const SWEEP_PAGE_SIZE = 200;
+const SWEEP_MAX_PER_RUN = 2000;
+const SWEEP_CURSOR_PATH = 'internal/device_sweep_cursor';
+
+/**
+ * Enforce the TTL for every calendar, including ones no longer polled -- the
+ * opportunistic sweep only runs when a feed is requested, so a feed dropped by its
+ * subscribers kept its last 35 days of buckets forever. Bounded per run; returns how
+ * many calendars it examined and whether it reached the end.
+ */
+async function sweepAllDeviceBuckets({ pageSize = SWEEP_PAGE_SIZE, maxPerRun = SWEEP_MAX_PER_RUN } = {}) {
+    const db = admin.database();
+    const cutoff = expiredBefore();
+    let cursor = (await db.ref(SWEEP_CURSOR_PATH).once('value')).val() || null;
+    let examined = 0;
+    let reachedEnd = false;
+
+    while (examined < maxPerRun) {
+        let query = db.ref(STATS_ROOT).orderByKey();
+        if (cursor) query = query.startAfter(cursor);
+        const limit = Math.min(pageSize, maxPerRun - examined);
+        const page = await query.limitToFirst(limit).once('value');
+
+        const updates = {};
+        let count = 0;
+        page.forEach((cal) => {
+            count++;
+            cursor = cal.key;
+            // The page already holds each calendar's buckets, so expired days are found
+            // without a second read per calendar.
+            for (const field of ['devices', 'aggregatorHits']) {
+                Object.keys(cal.child(field).val() || {}).forEach((dayKey) => {
+                    if (dayKey < cutoff) updates[`${cal.key}/${field}/${dayKey}`] = null;
+                });
+            }
+        });
+        if (Object.keys(updates).length) await db.ref(STATS_ROOT).update(updates);
+        examined += count;
+
+        if (count < limit) { reachedEnd = true; break; }
+    }
+
+    // Wrap to the start once the end is reached, so every calendar is visited in turn.
+    await db.ref(SWEEP_CURSOR_PATH).set(reachedEnd ? null : cursor);
+    return { examined, reachedEnd };
+}
+
+exports.sweepDeviceBuckets = onSchedule({ schedule: 'every day 03:17', timeZone: 'UTC' }, async () => {
+    const { examined, reachedEnd } = await sweepAllDeviceBuckets();
+    console.log(`Device bucket sweep: examined=${examined} reachedEnd=${reachedEnd}`);
+});
 
 // Calendar Data Service
 const CalendarService = {
@@ -1101,30 +1208,31 @@ exports.generateICSV2 = onRequest({ cors: true }, async (req, res) => {
         // full feed every few minutes (the previous bandwidth spike investigation showed this
         // route had no caching at all).
         const etag = '"' + crypto.createHash('sha1').update(JSON.stringify(calendarData?.events ?? null)).digest('hex') + '"';
-        const userAgent = req.headers['user-agent'] || 'unknown';
+        // The raw user-agent and IP are only ever passed to recordIcsStat, which hashes
+        // them into a device bucket. Neither is stored or logged: a full UA carries OS
+        // build numbers, which together with a calendar id is close to identifying.
+        const userAgent = req.headers['user-agent'] || '';
+        const clientIp = clientIpOf(req);
+        const family = clientFamily(userAgent);
 
-        // Only ever passed to deviceBucket(), which salts and hashes it. Never stored,
-        // never logged -- see the comment on DEVICE_SALT.
-        const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip || '';
-
+        // Stats are recorded after responding; see the comment on recordIcsStat.
         if (req.headers['if-none-match'] === etag) {
-            console.log(`ICS 304: id=${cleanId} readonly=${isReadOnly} ua="${userAgent}"`);
-            await recordIcsStat(cleanId, { wasNotModified: true, userAgent, ip: clientIp });
+            console.log(`ICS 304: id=${cleanId} readonly=${isReadOnly} client=${family}`);
             res.set('ETag', etag).set('Cache-Control', 'public, max-age=300').status(304).end();
+            await recordIcsStat(cleanId, { wasNotModified: true, userAgent, ip: clientIp });
             return;
         }
 
         const icsData = ICSService.generateICS(calendarData, cleanId);
 
-        console.log(`ICS served: id=${cleanId} readonly=${isReadOnly} bytes=${icsData.length} ua="${userAgent}"`);
-        await recordIcsStat(cleanId, {
-            bytes: icsData.length, wasNotModified: false, userAgent, ip: clientIp,
-        });
-
+        console.log(`ICS served: id=${cleanId} readonly=${isReadOnly} bytes=${icsData.length} client=${family}`);
         res.set('Content-Type', 'text/calendar')
             .set('ETag', etag)
             .set('Cache-Control', 'public, max-age=300')
             .send(icsData);
+        await recordIcsStat(cleanId, {
+            bytes: icsData.length, wasNotModified: false, userAgent, ip: clientIp,
+        });
     } catch (err) {
         // A missing calendar is a client error, not a server fault. Returning 500 here made
         // subscribed calendar apps retry a deleted feed forever; 404 tells them to stop.
@@ -1349,7 +1457,9 @@ exports.lookupCalendar = onCall(async (request) => {
 // Exported for unit tests (test/unit/ics.test.js). Not used by deployed functions.
 exports._internal = {
     ICSService, CalendarService, SlugService, HistoryService, PublicViewService, IDService,
-    recordIcsStat, deviceBucket, clientFamily, sweepOldDeviceBuckets,
+    recordIcsStat, deviceBucket, clientFamily, clientIpOf, sweepOldDeviceBuckets,
+    deviceSaltSecret, sweepAllDeviceBuckets, DEVICE_SALT_PATH, SWEEP_CURSOR_PATH,
+    _resetDeviceSaltCache: () => { deviceSaltSecretPromise = null; },
     DEVICE_BUCKET_TTL_DAYS, HISTORY_ROOT, HISTORY_KEEP, HISTORY_ADDED_KEEP, HISTORY_HARD_CAP, HISTORY_PROTECT_MS,
 };
 
