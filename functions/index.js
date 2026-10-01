@@ -203,12 +203,53 @@ const CalendarService = {
 };
 
 // ICS Generation Service
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+
 const ICSService = {
+    // Line breaks are normalized to LF before escaping. A CR (bare, or the first half of a
+    // pasted CRLF) would otherwise reach the feed raw, and a CR inside a content line ends
+    // it early for strict parsers, truncating the text and garbling the next property.
     escapeText(text) {
-        return String(text ?? '').replace(/\\/g, '\\\\')
+        return String(text ?? '').replace(/\r\n?/g, '\n')
+            .replace(/\\/g, '\\\\')
             .replace(/;/g, '\\;')
             .replace(/,/g, '\\,')
             .replace(/\n/g, '\\n');
+    },
+
+    // RFC 5545 3.1: content lines longer than 75 octets are folded with CRLF + a space.
+    // Counted in UTF-8 octets, not characters, and split only between code points --
+    // cutting a multibyte character in half leaves invalid UTF-8 on both lines.
+    foldLine(line) {
+        if (Buffer.byteLength(line, 'utf8') <= 75) return line;
+        const parts = [];
+        let current = '', size = 0, limit = 75;
+        for (const ch of line) {
+            const n = Buffer.byteLength(ch, 'utf8');
+            if (size + n > limit) {
+                parts.push(current);
+                // The leading space of a continuation line counts toward its 75 octets.
+                current = ''; size = 0; limit = 74;
+            }
+            current += ch; size += n;
+        }
+        parts.push(current);
+        return parts.join('\r\n ');
+    },
+
+    // Epoch ms for a stored date or an ICS stamp (20260921T170000Z or 20260921), or NaN.
+    toMs(value) {
+        if (value === null || value === undefined || value === '') return NaN;
+        if (typeof value === 'string' && /^\d{8}T\d{6}Z$/.test(value)) {
+            return Date.parse(`${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}T` +
+                `${value.slice(9, 11)}:${value.slice(11, 13)}:${value.slice(13, 15)}Z`);
+        }
+        if (typeof value === 'string' && /^\d{8}$/.test(value)) {
+            return Date.UTC(+value.slice(0, 4), +value.slice(4, 6) - 1, +value.slice(6, 8));
+        }
+        const d = value instanceof Date ? value : new Date(value);
+        return d.getTime();
     },
 
     // Normalize a stored date into ICS basic format (YYYYMMDDTHHMMSSZ), or null if the
@@ -238,9 +279,19 @@ const ICSService = {
     // a DATE for an all-day event, and 3.8.5.1 requires EXDATE to use the same value type;
     // emitting a DATE-TIME instead means a deleted all-day occurrence never matches its
     // EXDATE and keeps appearing for subscribers.
+    //
+    // The app stores an all-day date as the user's LOCAL midnight converted to UTC, so
+    // Sep 7 in Berlin arrives as 2026-09-06T22:00:00Z, and taking its UTC date moved every
+    // all-day event a day early east of UTC. The server never learns the user's zone, but
+    // local midnight falls in a known window around UTC midnight, so we take the date that
+    // window points at. Populated offsets span 25 hours (UTC-11 to UTC+14) and a day holds
+    // 24, so one end must give: the window runs from just east of UTC-11 through UTC+13,
+    // covering New Zealand summer time, Samoa and Tonga at the cost of American Samoa and
+    // Niue (UTC-11) and Kiribati's Line Islands (UTC+14), which have far fewer people.
     formatDate(dateTime) {
-        if (dateTime === null || dateTime === undefined || dateTime === '') return null;
-        const d = dateTime instanceof Date ? dateTime : new Date(dateTime);
+        const ms = this.toMs(dateTime);
+        if (isNaN(ms)) return null;
+        const d = new Date(Math.floor((ms + 13 * HOUR_MS) / DAY_MS) * DAY_MS);
         if (isNaN(d.getTime())) return null;
         const out = d.toISOString().slice(0, 10).replace(/-/g, '');
         return /^\d{8}$/.test(out) ? out : null;
@@ -250,7 +301,8 @@ const ICSService = {
     // check is not enough: a Date object, an epoch number, or `{}` are all truthy but blow
     // up (or silently corrupt) downstream. Events missing dates entirely were written by
     // past client bugs; one such record used to throw in formatDateTime and take down the
-    // whole feed, so unusable events are skipped individually instead.
+    // whole feed, so unusable events are skipped individually instead. An end at or before
+    // the start is repaired in createEventBlock rather than skipped: the event is real.
     isRenderable(event) {
         if (!event) return false;
         return this.formatDateTime(event.start) !== null
@@ -270,28 +322,58 @@ const ICSService = {
             .map(s => (s.endsWith("Z") ? s : `${s}Z`));
     },
 
-    // Which instance a moved occurrence replaces. Syncfusion accumulates the parent's whole
-    // exception list onto each child, so the first entry is not necessarily this child's own
-    // original slot -- using it made every child after the first emit the SAME
-    // RECURRENCE-ID, and a duplicate (UID, RECURRENCE-ID) pair makes clients keep one and
-    // discard the rest. That deletes meetings, which is worse than the duplication it
-    // replaced. Pick the exception whose time-of-day matches this occurrence, falling back
-    // to the one nearest its start.
+    // What a series' own expansion produces: DATE instances for an all-day series, and
+    // otherwise DATE-TIMEs that all share DTSTART's UTC time of day.
+    seriesShape(event) {
+        return { allDay: !!event.isAllDay, anchorMs: this.toMs(event.start) };
+    },
+
+    // Rewrite one exception stamp as the instance of `shape` it refers to, so EXDATE and
+    // RECURRENCE-ID actually match something. The RRULE expands from a UTC DTSTART, so
+    // every instance keeps the same UTC time of day -- but the app records an exception at
+    // the occurrence's LOCAL wall-clock time, which after a DST change is an hour off from
+    // the expanded instance. Unmatched, a deleted occurrence stays and a moved one shows up
+    // twice. So snap to the nearest instance time (always within 12h); a series without a
+    // usable anchor is left as recorded.
+    seriesSlot(stamp, shape) {
+        let ms = this.toMs(stamp);
+        if (isNaN(ms)) return null;
+        if (shape.allDay) return this.formatDate(ms);
+        if (!isNaN(shape.anchorMs)) {
+            const timeOfDay = ((shape.anchorMs % DAY_MS) + DAY_MS) % DAY_MS;
+            const sameDay = Math.floor(ms / DAY_MS) * DAY_MS + timeOfDay;
+            const nearest = [sameDay - DAY_MS, sameDay, sameDay + DAY_MS]
+                .reduce((a, b) => (Math.abs(b - ms) < Math.abs(a - ms) ? b : a));
+            if (Math.abs(nearest - ms) < 12 * HOUR_MS) ms = nearest;
+        }
+        return this.formatDateTime(new Date(ms));
+    },
+
+    // UNTIL must share DTSTART's value type (RFC 5545 3.3.10). The app writes a DATE-TIME
+    // UNTIL even for all-day series, which strict clients reject, so convert it the same
+    // way the all-day DTSTART is converted.
+    seriesRule(rule, allDay) {
+        if (!allDay) return rule;
+        return rule.replace(/(^|;)UNTIL=(\d{8}T\d{6}Z?)/i, (match, sep, value) => {
+            const date = this.formatDate(value.endsWith('Z') ? value : `${value}Z`);
+            return date ? `${sep}UNTIL=${date}` : match;
+        });
+    },
+
+    // Best guess at which instance a moved occurrence replaces, from the event alone. Only
+    // used when createEventBlock is called outside a feed; generateICS assigns slots across
+    // a whole series (assignOccurrences) so that no two occurrences claim the same one.
     occurrenceOriginal(event) {
         const candidates = this.exceptionDates(event);
         if (!candidates.length) return null;
         if (candidates.length === 1) return candidates[0];
 
-        const startMs = new Date(event.start).getTime();
+        const startMs = this.toMs(event.start);
         if (isNaN(startMs)) return candidates[0];
-
-        const toMs = (stamp) => Date.parse(
-            `${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)}T` +
-            `${stamp.slice(9, 11)}:${stamp.slice(11, 13)}:${stamp.slice(13, 15)}Z`);
 
         let best = candidates[0], bestDelta = Infinity;
         for (const c of candidates) {
-            const ms = toMs(c);
+            const ms = this.toMs(c);
             if (isNaN(ms)) continue;
             const delta = Math.abs(ms - startMs);
             if (delta < bestDelta) { bestDelta = delta; best = c; }
@@ -299,7 +381,67 @@ const ICSService = {
         return best;
     },
 
-    createEventBlock(event, dtstamp, overriddenSlots) {
+    // Which instance each moved occurrence replaces, one-to-one within each series. Returns
+    // Map(child event -> { slot, allDay }); a child left out becomes a standalone event.
+    //
+    // A child records its original slot only in recurrenceException. Syncfusion's
+    // EditOccurrence writes exactly one stamp there (the occurrence's own start), but
+    // records saved through other paths carry the parent's accumulated list, so a child
+    // with several candidates is ambiguous. Choosing each child's nearest candidate on its
+    // own let two children claim one slot (9/21 -> 9/26 and 9/28 -> 9/23 both chose 9/21),
+    // and a duplicate (UID, RECURRENCE-ID) makes clients drop one of the meetings. So
+    // unambiguous children claim their slot first, then the remaining (child, slot) pairs
+    // are taken greedily by distance, each slot used at most once.
+    assignOccurrences(events) {
+        const seriesById = new Map();
+        const childrenOf = new Map();
+        for (const event of events) {
+            if (event.recurrenceID) {
+                if (!childrenOf.has(event.recurrenceID)) childrenOf.set(event.recurrenceID, []);
+                childrenOf.get(event.recurrenceID).push(event);
+            } else if (event.recurrencerule) {
+                seriesById.set(event.id, event);
+            }
+        }
+
+        const assigned = new Map();
+        for (const [seriesId, children] of childrenOf) {
+            // RECURRENCE-ID takes the PARENT's value type and instance grid; the child's own
+            // isAllDay or start time says nothing about the slot it came from.
+            const parent = seriesById.get(seriesId);
+            const parentShape = parent ? this.seriesShape(parent) : null;
+
+            const pairs = [];
+            children.forEach((child, index) => {
+                const shape = parentShape || { allDay: !!child.isAllDay, anchorMs: NaN };
+                const slots = [...new Set(this.exceptionDates(child)
+                    .map(stamp => this.seriesSlot(stamp, shape))
+                    .filter(Boolean))];
+                const startMs = this.toMs(child.start);
+                for (const slot of slots) {
+                    const distance = Math.abs(this.toMs(slot) - startMs);
+                    pairs.push({ child, index, slot, allDay: shape.allDay,
+                        ambiguous: slots.length > 1 ? 1 : 0,
+                        distance: isNaN(distance) ? Infinity : distance });
+                }
+            });
+            pairs.sort((a, b) => a.ambiguous - b.ambiguous
+                || a.distance - b.distance || a.index - b.index);
+
+            const usedSlots = new Set();
+            for (const pair of pairs) {
+                if (assigned.has(pair.child) || usedSlots.has(pair.slot)) continue;
+                assigned.set(pair.child, { slot: pair.slot, allDay: pair.allDay });
+                usedSlots.add(pair.slot);
+            }
+        }
+        return assigned;
+    },
+
+    // `occurrence` is the slot generateICS assigned this event ({ slot, allDay }), or null
+    // if it assigned none. Left undefined (a block built outside a feed), the event's own
+    // best guess is used.
+    createEventBlock(event, dtstamp, overriddenSlots, occurrence) {
         // An edited occurrence is stored as its own record pointing at its parent through
         // recurrenceID, and it inherits the parent's RecurrenceRule in the process. Emitting
         // that rule would turn one moved occurrence into a second full series.
@@ -308,17 +450,39 @@ const ICSService = {
         // instance this replaces. Without one, two VEVENTs share a UID and a client treats
         // the second as a redefinition of the series -- collapsing every other occurrence.
         // So a child with no usable exception date falls back to being a standalone event.
-        const original = event.recurrenceID ? this.occurrenceOriginal(event) : null;
-        const isOccurrence = !!event.recurrenceID && !!original;
+        if (occurrence === undefined && event.recurrenceID) {
+            const stamp = this.occurrenceOriginal(event);
+            const shape = { allDay: !!event.isAllDay, anchorMs: NaN };
+            const slot = stamp ? this.seriesSlot(stamp, shape) : null;
+            occurrence = slot ? { slot, allDay: shape.allDay } : null;
+        }
+        const isOccurrence = !!event.recurrenceID && !!occurrence;
 
         const allDay = !!event.isAllDay;
         const start = allDay ? this.formatDate(event.start) : this.formatDateTime(event.start);
-        const end = allDay ? this.formatDate(event.end) : this.formatDateTime(event.end);
+        let end = allDay ? this.formatDate(event.end) : this.formatDateTime(event.end);
         const dateParam = allDay ? ";VALUE=DATE" : "";
+
+        // An end before the start makes a negative-length event that strict clients reject,
+        // and a clamped all-day DTEND equal to DTSTART spans no day at all. So an all-day
+        // event lasts at least its own day, and a timed one becomes a zero-length event at
+        // its start: DTEND equal to DTSTART is the form clients broadly accept for that (an
+        // omitted DTEND is valid too, but Outlook reads it unpredictably).
+        if (allDay && (!end || end <= start)) {
+            end = this.formatDate(this.toMs(start) + DAY_MS);
+        } else if (!allDay && this.toMs(end) < this.toMs(start)) {
+            end = start;
+        }
+
+        // Syncfusion gives a moved occurrence the same id as its series, so a child that
+        // falls back to standalone needs a UID of its own, or it redefines the series.
+        let uid = event.id;
+        if (isOccurrence) uid = event.recurrenceID;
+        else if (event.recurrenceID && event.id === event.recurrenceID) uid = `${event.id}-${start}`;
 
         const eventLines = [
             "BEGIN:VEVENT",
-            `UID:${isOccurrence ? event.recurrenceID : event.id}`,
+            `UID:${uid}`,
             `DTSTAMP:${dtstamp}`,
             `DTSTART${dateParam}:${start}`,
             `DTEND${dateParam}:${end}`,
@@ -326,28 +490,26 @@ const ICSService = {
             `DESCRIPTION:${this.escapeText(event.description)}`
         ];
 
-        // EXDATE must use the same value type as DTSTART, or it matches no instance and the
-        // exclusion is silently ignored.
-        const asValue = (stamp) => allDay ? stamp.slice(0, 8) : stamp;
-
         if (isOccurrence) {
-            eventLines.push(`RECURRENCE-ID${dateParam}:${asValue(original)}`);
-        } else if (event.recurrencerule) {
-            eventLines.push(`RRULE:${event.recurrencerule}`);
+            eventLines.push(`RECURRENCE-ID${occurrence.allDay ? ";VALUE=DATE" : ""}:${occurrence.slot}`);
+        } else if (event.recurrencerule && !event.recurrenceID) {
+            eventLines.push(`RRULE:${this.seriesRule(event.recurrencerule, allDay)}`);
 
             // Without EXDATE, an occurrence the user deleted in the app is still generated
             // by the rule, so every subscriber keeps seeing a meeting that was canceled.
             // Slots that a moved occurrence overrides are excluded from this list: those
             // instances are replaced, not removed, and EXDATE'ing one deletes the slot its
-            // override was meant to fill.
-            const exdates = this.exceptionDates(event)
-                .filter(stamp => !(overriddenSlots && overriddenSlots.has(stamp)))
-                .map(asValue);
+            // override was meant to fill. Each date must also take DTSTART's value type and
+            // land on a real instance, or it matches nothing and is silently ignored.
+            const shape = this.seriesShape(event);
+            const exdates = [...new Set(this.exceptionDates(event)
+                .map(stamp => this.seriesSlot(stamp, shape))
+                .filter(slot => slot && !(overriddenSlots && overriddenSlots.has(slot))))];
             if (exdates.length) eventLines.push(`EXDATE${dateParam}:${exdates.join(",")}`);
         }
 
         eventLines.push("END:VEVENT");
-        return eventLines.join("\r\n");
+        return eventLines.map(line => this.foldLine(line)).join("\r\n");
     },
 
     generateICS(calendarData, id) {
@@ -377,17 +539,16 @@ const ICSService = {
         // disappears from the feed entirely. Verified against a real iCalendar parser:
         // with the EXDATE present the occurrence is gone; without it, it resolves at its
         // new time. So EXDATE must carry only the genuinely deleted dates.
+        const occurrences = this.assignOccurrences(renderable);
         const overridden = new Map();
-        for (const event of renderable) {
-            if (!event.recurrenceID) continue;
-            const slot = this.occurrenceOriginal(event);
-            if (!slot) continue;
+        for (const [event, { slot }] of occurrences) {
             if (!overridden.has(event.recurrenceID)) overridden.set(event.recurrenceID, new Set());
             overridden.get(event.recurrenceID).add(slot);
         }
 
-        const events = renderable.map(event =>
-            this.createEventBlock(event, dtstamp, overridden.get(event.id)));
+        const events = renderable.map(event => this.createEventBlock(event, dtstamp,
+            event.recurrenceID ? null : overridden.get(event.id),
+            event.recurrenceID ? (occurrences.get(event) || null) : undefined));
 
         // Without X-WR-CALNAME a subscription shows up in the user's calendar list
         // as the raw feed URL, or as "Untitled" -- so a shared roster is unlabelled
@@ -396,10 +557,10 @@ const ICSService = {
         const name = this.escapeText(calendarData?.title || id);
 
         // REFRESH-INTERVAL is the RFC 7986 hint; X-PUBLISHED-TTL is the older
-        // Microsoft equivalent that Outlook still honours. Clients that read
+        // Microsoft equivalent that Outlook still honors. Clients that read
         // neither pick their own interval, and some default to once a day, which
         // makes a shared calendar feel broken when an edit doesn't show up.
-        return [
+        const header = [
             "BEGIN:VCALENDAR",
             "VERSION:2.0",
             `PRODID:-//PasteCal//${id}//EN`,
@@ -408,10 +569,10 @@ const ICSService = {
             `X-WR-CALNAME:${name}`,
             `NAME:${name}`,
             "REFRESH-INTERVAL;VALUE=DURATION:PT1H",
-            "X-PUBLISHED-TTL:PT1H",
-            ...events,
-            "END:VCALENDAR"
-        ].join("\r\n");
+            "X-PUBLISHED-TTL:PT1H"
+        ].map(line => this.foldLine(line));
+        // Event blocks arrive already folded.
+        return [...header, ...events, "END:VCALENDAR"].join("\r\n");
     }
 };
 
