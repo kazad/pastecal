@@ -709,7 +709,11 @@ const CalendarVueApp = {
                     if (ev.requestType === 'eventRemoved') {
                         const before = this.calendar.events.length;
                         const after = this.mergeScheduleRecords(ev).length;
-                        CalendarDataService.declareIntent(Math.max(1, before - after));
+                        // Exactly the net drop, and nothing when there is none: deleting one
+                        // occurrence of a series adds an exception row as it hides the
+                        // date, so it nets zero -- and a phantom declaration of 1 would
+                        // license the next buggy write to drop an event unchallenged.
+                        if (before > after) CalendarDataService.declareIntent(before - after);
                         this.offerUndoForDelete(ev, before - after);
                     } else if (ev.requestType === 'eventChanged') {
                         this.offerUndoForEdit(ev);
@@ -1185,11 +1189,18 @@ const CalendarVueApp = {
         // leaving the user staring at a calendar that has lost data. Restoring through
         // applyRemoteCalendar marks it as a remote apply, so the watcher does not treat
         // the restoration as a fresh local edit and bounce it back at the server.
+        //
+        // REPLACE, not merge: the ordinary inbound merge diffs local against the
+        // baseline, sees every dropped row as deleted-by-us, and drops it again -- the
+        // toast said "Recovered" while the screen stayed shrunk and every later edit was
+        // refused until a reload. The service itself sends any deletions the user really
+        // made, so local and server converge on the same list.
         CalendarDataService.onSyncRefused = ({ before, removing, events }) => {
             this.showToast(`Recovered ${removing} event${removing === 1 ? '' : 's'} that were about to be lost`, 'error');
             track(a => a.syncRefused({ before, removing }));
             if (Array.isArray(events)) {
-                this.applyRemoteCalendar({ ...this.calendar, events: JSON.parse(JSON.stringify(events)) });
+                this.applyRemoteCalendar({ ...this.calendar, events: JSON.parse(JSON.stringify(events)) },
+                    { replace: true });
             }
         };
 
@@ -1967,7 +1978,9 @@ const CalendarVueApp = {
         // local edit and writing it back. The flag is cleared after the watcher queue has
         // drained -- a deep watcher fires asynchronously, so clearing it synchronously
         // would let the echo through anyway.
-        applyRemoteCalendar(c) {
+        // `replace` skips the merge: used when local is known to be wrong (a refused
+        // write's recovery), where merging would keep exactly the damage being undone.
+        applyRemoteCalendar(c, { replace = false } = {}) {
             this.isApplyingRemote = true;
             try {
                 // import() is a bare Object.assign, so it replaces events wholesale. A
@@ -1976,15 +1989,15 @@ const CalendarVueApp = {
                 // watches their change undo itself. Merge the incoming events over the
                 // local ones the same way the write path does, so unsent work survives
                 // until its sync lands.
-                const incoming = Array.isArray(c?.events)
-                    ? c.events
-                    : Object.values(c?.events || {});
+                // Normalized: Firebase hands back a holey array as an object keyed by index.
+                const incoming = CalendarDataService._eventList(c?.events);
+                c = { ...c, events: incoming };
                 // The baseline from BEFORE this snapshot. _lastSeen has already been
                 // advanced to the incoming data by the time we get here, and diffing
                 // against that would mark every local row as an edit and reinstate our
                 // stale copies over the change that just arrived.
                 const base = CalendarDataService._previousSeen[this.calendar.id];
-                if (base && this.calendar.events && this.calendar.events.length) {
+                if (!replace && base && this.calendar.events && this.calendar.events.length) {
                     c = { ...c, events: CalendarDataService._mergeEvents(
                         base, this.calendar.events, incoming) };
                 }
