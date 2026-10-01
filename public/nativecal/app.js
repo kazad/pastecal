@@ -261,11 +261,12 @@ const CalendarVueApp = {
                             this.updateCustomViewInSchedule();
                             // Re-initialize local settings to load custom colors and labels
                             this.initializeLocalSettings();
-                            // Add to recents when calendar loads, but mark as read-only
+                            // Add to recents when calendar loads, marked as a read-only
+                            // link so the dropdown can send you back to /view/<slug>.
+                            // visit() counts once per page load: this callback re-fires
+                            // on every remote edit.
                             if (c.title) {
-                                // A read-only calendar you were linked to is a visit,
-                                // not something you created.
-                                this.recentManager.add(actualSlug, `${c.title} (View Only)`);
+                                this.recentManager.visit(actualSlug, c.title, { kind: 'view' });
                                 this.recentCalendars = this.recentManager.getAll();
                             }
 
@@ -308,8 +309,9 @@ const CalendarVueApp = {
                     this.updateCustomViewInSchedule();
                     // Re-initialize local settings to load custom colors and labels
                     this.initializeLocalSettings();
-                    // Add to recents when calendar loads
-                    this.recentManager.add(this.calendar.id, this.calendar.title);
+                    // Add to recents when calendar loads. This subscription re-fires
+                    // on every remote edit; visit() counts once per page load.
+                    this.recentManager.visit(this.calendar.id, this.calendar.title);
                     this.recentCalendars = this.recentManager.getAll();
 
                     if (!this.remoteSettingsApplied) {
@@ -913,14 +915,16 @@ const CalendarVueApp = {
                 // does not exist, proceed
                 this.isLoading = true;
                 CalendarDataService.createWithId(slug, this.calendar, () => {
-                    // success - clear localStorage so homepage starts fresh next time
-                    this.clearLocalStorage();
                     // Record in recents here rather than relying on the post-redirect
                     // load to do it, so a calendar you just made is always in the list.
                     // Flagged `mine` so it's stored durably and never evicted by the
                     // recents cap — this list is the only way back without a login.
+                    // Written BEFORE the draft is cleared, so a storage failure can't
+                    // lose both.
                     this.recentManager.add(slug, this.calendar.title, true);
                     this.recentCalendars = this.recentManager.getAll();
+                    // success - clear localStorage so homepage starts fresh next time
+                    this.clearLocalStorage();
                     this.showToast('Calendar created!', 'success');
                     window.location.href = "/" + slug;
                 });
@@ -1311,6 +1315,8 @@ const CalendarVueApp = {
         },
 
         handleQuickAddEvent(event) {
+            // A read-only (/view/) page has nothing to write to.
+            if (!this.canEdit) return;
             const newEvent = new Event({
                 title: event.subject,
                 start: event.startDateTime,

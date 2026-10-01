@@ -5,7 +5,7 @@ const QuickAddDialog = {
     template: /* html */ `
         <div v-if="dialogVisible" 
                  class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div class="bg-1 rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4">
+                <div class="bg-1 rounded-lg shadow-xl p-4 sm:p-6 w-full max-w-2xl mx-4 max-h-[100dvh] overflow-y-auto">
                     <h3 class="text-lg font-semibold mb-4">Add Event by Typing</h3>
                     <form @submit.prevent="createEvent">
                         <div class="flex items-baseline gap-2 mb-1.5">
@@ -37,34 +37,42 @@ const QuickAddDialog = {
                                        class="flex-1 min-w-0 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                             </div>
 
-                            <div class="flex items-center gap-2">
-                                <label for="qa-start-date" class="w-14 shrink-0 text-sm opacity-70">Start</label>
-                                <input id="qa-start-date"
-                                       type="date"
-                                       v-model="fields.startDate"
-                                       @input="pin('start')"
-                                       aria-label="Start date"
-                                       class="w-44 shrink-0 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                <input type="time"
-                                       v-model="fields.startTime"
-                                       @input="pin('start')"
-                                       aria-label="Start time"
-                                       class="w-32 shrink-0 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <!-- Date and time sit side by side from sm up and stack below it.
+                                 They used to be fixed w-44 + w-32 shrink-0, which with the label
+                                 and the dialog's padding is wider than a 375px phone. Inputs are
+                                 min-w-0 so the row can never push the dialog past the viewport. -->
+                            <div class="flex items-start sm:items-center gap-2">
+                                <label for="qa-start-date" class="w-14 shrink-0 text-sm opacity-70 pt-2 sm:pt-0">Start</label>
+                                <div class="flex-1 min-w-0 flex flex-col sm:flex-row gap-2">
+                                    <input id="qa-start-date"
+                                           type="date"
+                                           :value="fields.startDate"
+                                           @input="editStart('Date', $event.target.value)"
+                                           aria-label="Start date"
+                                           class="w-full min-w-0 sm:w-44 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    <input type="time"
+                                           :value="fields.startTime"
+                                           @input="editStart('Time', $event.target.value)"
+                                           aria-label="Start time"
+                                           class="w-full min-w-0 sm:w-32 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
                             </div>
 
-                            <div class="flex items-center gap-2">
-                                <label for="qa-end-date" class="w-14 shrink-0 text-sm opacity-70">End</label>
-                                <input id="qa-end-date"
-                                       type="date"
-                                       v-model="fields.endDate"
-                                       @input="pin('end')"
-                                       aria-label="End date"
-                                       class="w-44 shrink-0 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                <input type="time"
-                                       v-model="fields.endTime"
-                                       @input="pin('end')"
-                                       aria-label="End time"
-                                       class="w-32 shrink-0 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <div class="flex items-start sm:items-center gap-2">
+                                <label for="qa-end-date" class="w-14 shrink-0 text-sm opacity-70 pt-2 sm:pt-0">End</label>
+                                <div class="flex-1 min-w-0 flex flex-col sm:flex-row gap-2">
+                                    <input id="qa-end-date"
+                                           type="date"
+                                           :value="fields.endDate"
+                                           @input="editEnd('Date', $event.target.value)"
+                                           aria-label="End date"
+                                           class="w-full min-w-0 sm:w-44 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                    <input type="time"
+                                           :value="fields.endTime"
+                                           @input="editEnd('Time', $event.target.value)"
+                                           aria-label="End time"
+                                           class="w-full min-w-0 sm:w-32 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                </div>
                             </div>
 
                             <p v-if="isAllDay" class="text-sm opacity-70">All day</p>
@@ -103,6 +111,13 @@ const QuickAddDialog = {
         mode: {
             type: String,
             default: 'desktop'
+        },
+        // False on a read-only (/view/) calendar. Every way of opening the dialog
+        // (shortcut, menu item, button) goes through showDialog(), so refusing there
+        // is the one gate; the parent's handleQuickAddEvent refuses the write too.
+        canEdit: {
+            type: Boolean,
+            default: true
         }
     },
     data() {
@@ -112,6 +127,10 @@ const QuickAddDialog = {
             fields: { subject: '', startDate: '', startTime: '', endDate: '', endTime: '' },
             // A field is pinned once the user edits it directly; re-parsing skips pinned fields.
             pinned: { subject: false, start: false, end: false },
+            // The length of the last timed version of this event, kept so that briefly
+            // clearing a time (backspacing the hour to retype it) and setting it again
+            // restores the event's length instead of collapsing it to the 1h default.
+            lastTimedDurationMs: null,
             // Each shows off a distinct capability: duration, explicit range,
             // numeric date, month-name date, multi-day span.
             examples: [
@@ -170,6 +189,7 @@ const QuickAddDialog = {
     },
     methods: {
         showDialog() {
+            if (!this.canEdit) return;
             this.dialogVisible = true;
             this.$nextTick(() => {
                 const ta = this.$el.querySelector('textarea');
@@ -181,6 +201,7 @@ const QuickAddDialog = {
             this.description = '';
             this.fields = { subject: '', startDate: '', startTime: '', endDate: '', endTime: '' };
             this.pinned = { subject: false, start: false, end: false };
+            this.lastTimedDurationMs = null;
         },
         parseDescription() {
             const parsed = Utils.parseHumanWrittenCalendar(this.description) || {};
@@ -248,8 +269,94 @@ const QuickAddDialog = {
         pin(field) {
             this.pinned[field] = true;
         },
+        // The event is modelled as START + DURATION, not two independent instants.
+        //
+        // The fields used to be four unrelated v-models, so moving the start of
+        // "lunch tomorrow 2pm for 1 hour" to a day later left the parsed end where it
+        // was (a 25-hour event, or an end before the start that blocks Create), and
+        // clearing the start time silently meant 00:00, turning 14:00-15:00 into
+        // 00:00-15:00. Two rules close that:
+        //
+        //  1. Moving the start moves an end the user hasn't edited by the same amount,
+        //     so the length is kept. A hand-edited (pinned) end stays where it was put.
+        //  2. An event is either all-day (no time on either end) or timed (a time on
+        //     both). Clearing either time makes BOTH ends all-day; setting a time on
+        //     one end of an all-day event gives the other end one too, using the
+        //     event's last timed length (or the app's 1h default).
+        editStart(part, value) {
+            const f = this.fields;
+            const wasAllDay = this.isAllDay;
+            const oldStartDate = f.startDate;
+            const oldStart = this.startDateTime;
+            const oldEnd = this.endDateTime;
+            this.rememberDuration(oldStart, oldEnd, wasAllDay);
+
+            f['start' + part] = value;
+            this.pin('start');
+
+            if (part === 'Time') {
+                if (!value) { f.endTime = ''; return; }
+                if (!f.endTime) {
+                    const anchor = this.toISO(f.startDate || f.endDate, value);
+                    this.setDateTime('end', this.offset(anchor, this.timedDuration()), false);
+                    return;
+                }
+            }
+            if (this.pinned.end || !f.endDate) return;
+
+            if (wasAllDay && this.isAllDay) {
+                // All-day: move the last day by the same number of whole days.
+                const days = this.dayDiff(oldStartDate, f.startDate);
+                if (days !== null) f.endDate = this.addDays(f.endDate, days);
+                return;
+            }
+            const newStart = this.startDateTime;
+            if (oldStart && oldEnd && newStart) {
+                const delta = new Date(newStart) - new Date(oldStart);
+                this.setDateTime('end', this.offset(oldEnd, delta), false);
+            }
+        },
+        editEnd(part, value) {
+            const f = this.fields;
+            this.rememberDuration(this.startDateTime, this.endDateTime, this.isAllDay);
+            f['end' + part] = value;
+            this.pin('end');
+            if (part !== 'Time') return;
+            if (!value) { f.startTime = ''; return; }
+            if (!f.startTime) {
+                const anchor = this.toISO(f.endDate || f.startDate, value);
+                this.setDateTime('start', this.offset(anchor, -this.timedDuration()), false);
+            }
+        },
+        rememberDuration(startIso, endIso, allDay) {
+            if (allDay || !startIso || !endIso) return;
+            const ms = new Date(endIso) - new Date(startIso);
+            if (ms > 0) this.lastTimedDurationMs = ms;
+        },
+        timedDuration() {
+            return this.lastTimedDurationMs || 3600000;
+        },
+        offset(iso, ms) {
+            if (!iso) return null;
+            const t = new Date(iso).getTime();
+            return isNaN(t) ? null : new Date(t + ms).toISOString();
+        },
+        // Whole calendar days from one "YYYY-MM-DD" to another, or null.
+        dayDiff(fromStr, toStr) {
+            const utc = (s) => {
+                if (!s) return NaN;
+                const [y, m, d] = s.split('-').map(Number);
+                return Date.UTC(y, (m || 1) - 1, d || 1);
+            };
+            const diff = (utc(toStr) - utc(fromStr)) / 86400000;
+            return isNaN(diff) ? null : Math.round(diff);
+        },
+        addDays(dateStr, days) {
+            const [y, m, d] = dateStr.split('-').map(Number);
+            return new Date(Date.UTC(y, (m || 1) - 1, (d || 1) + days)).toISOString().slice(0, 10);
+        },
         createEvent() {
-            if (!this.isValidEvent) return;
+            if (!this.canEdit || !this.isValidEvent) return;
             // Deliberately not counted here. handleQuickAddEvent() in app.js owns
             // the event_added call: it has the calendar, so the count bucket is
             // right, and it runs through track() so a throwing helper can't stop
@@ -270,11 +377,9 @@ const QuickAddDialog = {
         }
         ,
         handleKeydown(event) {
-            // Support showing dialog via Cmd/Ctrl+E (kept parity with module version)
-            if ((event.metaKey || event.ctrlKey) && event.key === 'e') {
-                event.preventDefault();
-                this.showDialog();
-            }
+            // Cmd/Ctrl+E is owned by the app's _quickAddShortcutHandler. This used to
+            // register a second copy of it, so one keypress opened the dialog twice
+            // over, through a path that skipped every check the app makes.
 
             // Close the dialog when Escape is pressed
             if (event.key === 'Escape' && this.dialogVisible) {

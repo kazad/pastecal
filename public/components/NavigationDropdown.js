@@ -25,12 +25,12 @@ const NavigationDropdown = {
                 <div>
                     <div v-for="item in group.items" :key="item.id"
                         class="flex justify-between items-center px-4 py-3 hover:bg-theme-hover transition-colors group">
-                        <a :href="'/' + item.id" class="flex-1 min-w-0 mr-3">
+                        <a :href="pathFor(item)" class="flex-1 min-w-0 mr-3">
                             <div class="text-color-2 font-medium truncate group-hover:text-blue-500 transition-colors">
-                                {{ item.title }}
+                                {{ item.title }}<span v-if="item.kind === 'view'" class="text-color-1 font-normal"> (View Only)</span>
                             </div>
                             <div class="text-xs text-color-1 truncate">
-                                pastecal.com/{{ item.id }}
+                                pastecal.com{{ pathFor(item) }}
                             </div>
                         </a>
                         <div class="flex items-center gap-1 transition-opacity"
@@ -87,6 +87,15 @@ const NavigationDropdown = {
                 { label: 'My Calendars', items: all.filter(item => item.mine) },
                 { label: 'Recently Visited', items: all.filter(item => !item.mine) },
             ];
+        }
+    },
+    methods: {
+        // A read-only link's slug only resolves under /view/; at /<slug> it is
+        // "not found" (or a different editable calendar with that id). The kind
+        // is a field on the entry (see normalizeRecentEntry in utils.js), so the
+        // URL is built from data rather than guessed from the title.
+        pathFor(item) {
+            return (item.kind === 'view' ? '/view/' : '/') + item.id;
         }
     }
 };
