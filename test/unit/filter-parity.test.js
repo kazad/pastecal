@@ -121,6 +121,7 @@ test('quick-add cannot produce an event with no end time', () => {
   const events = [];
   const vm = {
     isExisting: false,
+    canEdit: true,      // quick-add refuses on read-only pages
     calendar: { events, setEvents() {} },
     recordLocalAction() {},
   };

@@ -84,3 +84,4 @@ playwright/.cache/
 __pycache__/
 *.pyc
 .emulator-test-*.json
+test/.fixtures/

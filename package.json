@@ -14,11 +14,11 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:install": "playwright install chromium",
     "test:smoke": "bash test/smoke-llm.sh",
-    "stats": "bash scripts/stats.sh"
+    "stats": "bash scripts/stats.sh",
+    "fetch-fixtures": "node test/fetch-fixtures.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
-    "@syncfusion/ej2": "23.2.6",
     "chrono-node": "1.4.9"
   },
   "engines": {

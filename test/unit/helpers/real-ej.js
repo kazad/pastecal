@@ -18,39 +18,17 @@ const { spawnSync } = require('node:child_process');
 
 const INDEX = fs.readFileSync(path.join(__dirname, '../../../public/index.html'), 'utf8');
 
-function installedCopy(version) {
-  try {
-    const pkg = require.resolve('@syncfusion/ej2/package.json');
-    if (require(pkg).version !== version) return null;
-    const file = path.join(path.dirname(pkg), 'dist', 'ej2.min.js');
-    return fs.existsSync(file) ? file : null;
-  } catch (err) {
-    return null;
-  }
-}
-
 function locate() {
   const version = (/cdn\.syncfusion\.com\/ej2\/([\d.]+)\/dist\/ej2\.min\.js/.exec(INDEX) || [])[1];
   if (!version) return { reason: 'index.html no longer pins an ej2.min.js version' };
   if (process.env.PASTECAL_EJ2_PATH) return { file: process.env.PASTECAL_EJ2_PATH };
-  const installed = installedCopy(version);
-  if (installed) return { file: installed };
-  const cached = path.join(os.tmpdir(), `pastecal-ej2-${version}.min.js`);
-  if (fs.existsSync(cached)) return { file: cached };
-  if (process.env.CI) {
-    return { reason: `@syncfusion/ej2@${version} is not installed (run \`npm ci\`; the root devDependency must match index.html)` };
+  const { ensure, PINS } = require('../../fetch-fixtures');
+  if (PINS.ej2.version !== version) {
+    return { reason: `test/fixtures.json pins ej2 ${PINS.ej2.version} but index.html loads ${version}` };
   }
-
-  // curl honors the HTTPS proxy settings that node's own fetch ignores.
-  const url = `https://cdn.syncfusion.com/ej2/${version}/dist/ej2.min.js`;
-  const tmp = `${cached}.${process.pid}.part`;
-  const r = spawnSync('curl', ['-sfL', '--max-time', '60', '-o', tmp, url]);
-  if (r.status !== 0) {
-    try { fs.unlinkSync(tmp); } catch (err) { /* nothing was written */ }
-    return { reason: `could not download ${url}` };
-  }
-  fs.renameSync(tmp, cached);
-  return { file: cached };
+  // CI fetches fixtures in its own step (and caches them); a test run never downloads there.
+  try { return { file: ensure('ej2', { download: !process.env.CI }) }; }
+  catch (err) { return { reason: err.message }; }
 }
 
 function load() {

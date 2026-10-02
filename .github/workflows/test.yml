@@ -3,8 +3,9 @@
 # Nothing used to run the suite but a developer remembering to: deploy.sh did not gate on
 # it, network-dependent tests skipped silently when a fixture could not be fetched, and a
 # green local run said nothing about other timezones. CI=1 turns every "fixture missing"
-# skip into a failure, and the fixtures themselves come from npm (root devDependencies),
-# so nothing is downloaded at test time.
+# skip into a failure. Fixtures are fetched in their own step (chrono-node from npm; the
+# Syncfusion bundle as the one pinned file, checksum-verified, cached), so a test run itself
+# never downloads anything.
 #
 # The e2e suite (Playwright) is NOT run here yet -- see test/README.md, "E2E against the
 # emulators", for what remains before it can be.
@@ -45,6 +46,11 @@ jobs:
           python-version: "3.12"
       # postinstall also runs `npm ci --prefix functions`.
       - run: npm ci
+      - uses: actions/cache@v4
+        with:
+          path: test/.fixtures
+          key: fixtures-${{ hashFiles('test/fixtures.json') }}
+      - run: npm run fetch-fixtures
       - run: npm run test:unit:fast
       - run: npm run test:report
 
