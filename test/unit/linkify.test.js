@@ -34,12 +34,14 @@ function loadUtils() {
     setItem: () => {},
   };
 
+  // The page loads utils/linkify.js first; Utils.linkify delegates to it.
   const factory = new Function(
-    'window', 'document', 'crypto', 'localStorage', 'MutationObserver',
+    'window', 'document', 'crypto', 'localStorage', 'MutationObserver', 'Linkify',
     `${src}; return window.Utils;`
   );
   const FakeMutationObserver = class { observe() {} };
-  return factory(fakeWindow, fakeDocument, fakeCrypto, fakeLocalStorage, FakeMutationObserver);
+  return factory(fakeWindow, fakeDocument, fakeCrypto, fakeLocalStorage, FakeMutationObserver,
+    require('../../public/utils/linkify.js'));
 }
 
 const Utils = loadUtils();

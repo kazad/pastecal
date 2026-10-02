@@ -649,7 +649,7 @@ const CalendarVueApp = {
         },
 
         loadLocalStorage() {
-            var c = JSON.parse(localStorage.getItem("calendar"));
+            var c = Utils.safeReadJSON("calendar");
             if (c) {
                 // Load ALL draft data from localStorage (ID, title, events, settings, colors, notes, etc.)
                 this.calendar.import(c);
@@ -1070,28 +1070,8 @@ const CalendarVueApp = {
         },
 
         getReadOnlyNotes() {
-            let notes = this.calendar.options?.notes || '';
-
-            // Escape HTML special characters
-            notes = notes.replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#039;");
-
-            // Convert URLs to hyperlinks safely
-            // Match URLs starting with http://, https://, or ftp://
-            notes = notes.replace(/(\b(https?|ftp):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/ig,
-                '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
-
-            // Match URLs starting with "www." not preceded by '://'
-            notes = notes.replace(/(^|\s)(www\.[\S]+(\b|$))/ig,
-                '$1<a href="http://$2" target="_blank" rel="noopener noreferrer">$2</a>');
-
-            // Convert line breaks to <br> tags
-            notes = notes.replace(/\n/g, "<br>");
-
-            return notes;
+            // Shared linkifier: escapes every piece, never re-scans its own markup.
+            return Linkify.toHtml(this.calendar.options?.notes || '', { breaks: true });
         },
 
         startUpdateLinkTimer() {
@@ -1361,7 +1341,7 @@ const CalendarVueApp = {
 
         // Global Settings methods (device-specific, stored in localStorage)
         loadGlobalSettings() {
-            const settings = JSON.parse(localStorage.getItem('pastecal_global_settings'));
+            const settings = Utils.safeReadJSON('pastecal_global_settings');
             if (settings) {
                 this.globalSettings = { ...this.globalSettings, ...settings };
 
@@ -1600,8 +1580,9 @@ const CalendarVueApp = {
             style.id = 'dynamic-color-styles';
 
             let css = '';
-            this.COLORS.forEach((color, index) => {
+            this.COLORS.forEach((raw, index) => {
                 const num = index + 1;
+                const color = Utils.safeCssColor(raw, (this.DEFAULT_COLORS || [])[index] || '#9e9e9e');
                 css += `.e-color-${num} { background-color: ${color} !important; }\n`;
                 css += `.e-color-${num}:hover { background-color: ${color} !important; }\n`;
             });
