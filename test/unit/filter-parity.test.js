@@ -117,7 +117,7 @@ test('quick-add cannot produce an event with no end time', () => {
     `${fs.readFileSync(path.join(__dirname, '../../public/models/Event.js'), 'utf8')}\nreturn Event;`)(
     { uuidv4: () => 'generated-uuid' });
   const handleQuickAddEvent = appMethod('handleQuickAddEvent',
-    { Event, track: () => {}, AuthorSignal: undefined });
+    { Event, track: () => {}, AuthorSignal: undefined, CalendarDataService: { actionGesture: () => 'g' } });
   const events = [];
   const vm = {
     isExisting: false,

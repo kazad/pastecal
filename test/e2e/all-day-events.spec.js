@@ -11,7 +11,7 @@
 
 const { test, expect } = require('./fixtures');
 
-const BASE = 'http://localhost:8000';
+const BASE = ''; // relative: playwright.config's baseURL is the hosting emulator
 
 async function waitForApp(page) {
   await page.waitForFunction(

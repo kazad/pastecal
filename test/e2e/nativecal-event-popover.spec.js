@@ -5,7 +5,7 @@ test.describe('NativeCal Event Popover', () => {
 
   test.beforeEach(async ({ page }) => {
     const slug = `popover-${Date.now()}`;
-    await page.goto(`http://localhost:8000/nativecal/${slug}`);
+    await page.goto(`/nativecal/${slug}`);
     await expect(page.getByTestId('month-view-grid')).toBeVisible({ timeout: 10000 });
   });
 

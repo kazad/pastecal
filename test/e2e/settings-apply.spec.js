@@ -10,7 +10,7 @@
 
 const { test, expect } = require('./fixtures');
 
-const BASE = 'http://localhost:8000';
+const BASE = ''; // relative: playwright.config's baseURL is the hosting emulator
 
 async function waitForApp(page) {
   await page.waitForFunction(() => !!window.scheduleObj && !!document.getElementById('app')?._vnode?.component?.proxy, { timeout: 15000 });

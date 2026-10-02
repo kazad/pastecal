@@ -18,7 +18,10 @@ console.log('Running in', isLocal ? 'local' : 'production', 'environment',
 if (usingDatabaseEmulator) {
     // Emulator ignores credentials entirely; a real service account isn't needed and
     // shouldn't be required to run tests (e.g. in CI where internal/keys/ doesn't exist).
-    admin.initializeApp({ databaseURL: "https://pastecal-web-default-rtdb.firebaseio.com" });
+    // The namespace follows the emulator's project: the e2e suite runs under demo-pastecal,
+    // whose triggers and client both use demo-pastecal-default-rtdb.
+    const project = process.env.GCLOUD_PROJECT || 'pastecal-web';
+    admin.initializeApp({ databaseURL: `https://${project}-default-rtdb.firebaseio.com` });
 } else if (isLocal) {
     var serviceAccount = require("../internal/keys/pastecal-web-firebase-adminsdk-scf60-24fc54f2df.json");
 

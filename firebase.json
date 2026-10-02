@@ -60,6 +60,9 @@
     "ui": {
       "enabled": true,
       "port": 5100
+    },
+    "auth": {
+      "port": 9099
     }
   },
   "remoteconfig": {

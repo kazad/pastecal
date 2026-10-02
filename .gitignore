@@ -79,3 +79,5 @@ node_modules/
 test-results/
 playwright-report/
 playwright/.cache/
+.emulator-test-*.json
+__pycache__/

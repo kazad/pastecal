@@ -4,7 +4,7 @@ const { test, expect } = require('./fixtures');
 test.describe('Calendar Creation Flow', () => {
   test('should create a new calendar with a random ID', async ({ page }) => {
     // 1. Load Homepage
-    await page.goto('http://localhost:8000/');
+    await page.goto('/');
 
     // 2. Verify Title
     await expect(page).toHaveTitle(/PasteCal/);
@@ -35,7 +35,7 @@ test.describe('Calendar Creation Flow', () => {
 
 test.describe('NativeCal Prototype', () => {
   test('should load and navigate views', async ({ page }) => {
-    await page.goto('http://localhost:8000/nativecal/');
+    await page.goto('/nativecal/');
 
     // Check Title
     await expect(page.getByText('NativeCal', { exact: true })).toBeVisible();
@@ -57,7 +57,7 @@ test.describe('Add Event Icon Visibility', () => {
 
     // Create a test calendar
     const testSlug = `test-cal-${Date.now()}`;
-    await page.goto('http://localhost:8000/');
+    await page.goto('/');
     const slugInput = page.locator('input[placeholder="your-name"]');
     await slugInput.fill(testSlug);
     await slugInput.press('Enter');
@@ -77,7 +77,7 @@ test.describe('Add Event Icon Visibility', () => {
 
     // Create a test calendar
     const testSlug = `test-cal-${Date.now()}`;
-    await page.goto('http://localhost:8000/');
+    await page.goto('/');
     const slugInput = page.locator('input[placeholder="your-name"]');
     await slugInput.fill(testSlug);
     await slugInput.press('Enter');
@@ -110,7 +110,7 @@ test.describe('Quick Add Dialog', () => {
 
     // Create a test calendar
     const testSlug = `test-quickadd-${Date.now()}`;
-    await page.goto('http://localhost:8000/');
+    await page.goto('/');
     const slugInput = page.locator('input[placeholder="your-name"]');
     await slugInput.fill(testSlug);
     await slugInput.press('Enter');

@@ -33,7 +33,7 @@ const SERVICE = fs.readFileSync(
 // path is exercised rather than a copy of it.
 function loadAnalytics() {
   const sent = [];
-  const loc = { pathname: '/', search: '', hostname: 'localhost', href: 'http://localhost/' };
+  const loc = { pathname: '/', search: '', hostname: 'localhost', href: 'http://localhost/', origin: 'http://localhost' };
   // The module reads window.location at load time, so the stub window must carry it.
   const win = { gtag: null, location: loc, addEventListener() {} };
 
@@ -137,31 +137,32 @@ test('a sink that throws does not reach the caller', () => {
 // --- The wiring -------------------------------------------------------------------------
 
 // Run app.js's real error reporter (track() and the installErrorReporting IIFE, sliced out
-// of the shipped file) against a fake window, and dispatch errors at it. These used to
-// regex-match the source for `seen.has(key)`, which passes whether or not the dedupe works.
+// of the shipped file) against a fake window and the real Analytics module, and dispatch
+// errors at it. These used to regex-match the source for `seen.has(key)`, which passes
+// whether or not the dedupe works.
 function loadErrorReporter() {
   const start = APP.indexOf('function track(');
   const iife = APP.indexOf('(function installErrorReporting');
   const end = APP.indexOf('})();', iife);
   assert.ok(start >= 0 && iife > start && end > iife,
     'app.js must define track() and then the installErrorReporting IIFE');
+  const { A, sent } = loadAnalytics();
   const listeners = {};
-  const reports = [];
   const sandbox = {
     window: { addEventListener: (type, fn) => { (listeners[type] ||= []).push(fn); } },
-    Analytics: { jsError: (kind, message, where) => reports.push({ kind, message, where }) },
-    String, Set,
+    Analytics: A, String, Set,
   };
   vm.runInNewContext(APP.slice(start, end + '})();'.length), sandbox);
   const fire = (type, e) => (listeners[type] || []).forEach(fn => fn(e));
-  return { listeners, reports, fire };
+  const reports = () => sent.filter(s => s.name === 'js_error').map(s => s.params);
+  return { reports, fire };
 }
 
 test('uncaught errors and rejected promises are reported, with message and origin', () => {
   const { reports, fire } = loadErrorReporter();
-  fire('error', { error: new Error('boom'), filename: 'https://x/app.js', lineno: 12 });
+  fire('error', { error: new Error('boom'), filename: 'http://localhost/app.js', lineno: 12 });
   fire('unhandledrejection', { reason: { code: 'PERMISSION_DENIED' } });
-  assert.deepEqual(reports, [
+  assert.deepEqual(reports().map(({ kind, message, where }) => ({ kind, message, where })), [
     { kind: 'error', message: 'boom', where: 'app.js:12' },
     { kind: 'unhandledrejection', message: 'PERMISSION_DENIED', where: 'promise' },
   ]);
@@ -171,20 +172,21 @@ test('repeated failures are reported once, not once per repaint', () => {
   // A render loop throwing every frame is one signal, not thousands of hits.
   const { reports, fire } = loadErrorReporter();
   for (let i = 0; i < 50; i++) fire('error', { message: 'same', filename: 'a.js', lineno: 1 });
-  assert.equal(reports.length, 1, 'duplicate failures are suppressed');
+  assert.equal(reports().length, 1, 'duplicate failures are suppressed');
 });
 
 test('an error storm is capped', () => {
   const { reports, fire } = loadErrorReporter();
   for (let i = 0; i < 500; i++) fire('error', { message: `distinct ${i}`, filename: 'a.js', lineno: i });
-  assert.ok(reports.length > 1 && reports.length <= 25, `capped, got ${reports.length}`);
+  const n = reports().length;
+  assert.ok(n > 1 && n <= 25, `capped, got ${n}`);
 });
 
 test('a reported error never names the calendar it happened on', () => {
   const { reports, fire } = loadErrorReporter();
   fire('unhandledrejection', { reason: new Error('permission_denied at /calendars/my-secret-slug/events') });
-  assert.equal(reports.length, 1);
-  assert.doesNotMatch(reports[0].message, /my-secret-slug/);
+  assert.equal(reports().length, 1);
+  assert.doesNotMatch(reports()[0].message, /my-secret-slug/);
 });
 
 test('the reporter survives the analytics module being absent or broken', () => {
