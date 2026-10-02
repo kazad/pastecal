@@ -18,6 +18,6 @@ test('only live functions are exported for deploy; Pro billing stays dark', () =
   const exported = Object.keys(mod).filter((k) => k !== '_internal').sort();
   assert.deepEqual(exported, [
     'createPublicLink', 'generateICSV2', 'indexReadOnlySlug', 'indexSlug',
-    'lookupCalendar', 'recordHistory', 'removePublicView', 'sweepDeviceBuckets', 'syncPublicView',
+    'lookupCalendar', 'recordHistory', 'removePublicView', 'shadowToCloudflare', 'sweepDeviceBuckets', 'syncPublicView',
   ]);
 });
