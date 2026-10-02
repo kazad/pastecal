@@ -20,6 +20,7 @@
 set -uo pipefail
 
 cd "$(dirname "$0")/.."
+source test/firebase-cli.sh
 
 # --- Java ------------------------------------------------------------------------------
 # The Database emulator is a Java program, and firebase-tools requires JDK 21+. When the
@@ -68,7 +69,30 @@ if [ -z "$JAVA_OK" ]; then
 fi
 
 LOG="$(mktemp)"
-trap 'rm -f "$LOG"' EXIT
+# --- Ports -----------------------------------------------------------------------------
+# A private emulator config on free ports, not firebase.json's fixed 9000/4400/4500. With
+# the fixed ports, any other emulator on the machine -- `firebase emulators:start` for the
+# e2e suite or local development, a second checkout's test run, a CI service -- made this
+# run fail at startup with no test output at all: a red run with no "not ok" line, which
+# reads like a flaky suite rather than "port 9000 is taken". The config lives in the repo
+# root because firebase-tools resolves the rules path relative to it.
+read -r DB_PORT HUB_PORT LOG_PORT < <(node -e '
+  const net = require("net");
+  const free = () => new Promise(r => { const s = net.createServer().listen(0, "127.0.0.1", () => { const p = s.address().port; s.close(() => r(p)); }); });
+  Promise.all([free(), free(), free()]).then(p => console.log(p.join(" ")));')
+CONFIG=".emulator-test-$$.json"
+cat > "$CONFIG" <<JSON
+{
+  "database": { "rules": "database.rules.json" },
+  "emulators": {
+    "database": { "host": "127.0.0.1", "port": $DB_PORT },
+    "hub": { "host": "127.0.0.1", "port": $HUB_PORT },
+    "logging": { "host": "127.0.0.1", "port": $LOG_PORT },
+    "ui": { "enabled": false }
+  }
+}
+JSON
+trap 'rm -f "$LOG" "$CONFIG"' EXIT
 
 # The timeout covers emulator STARTUP (~30-60s, JVM boot) plus the tests. Each test file
 # closes its Admin SDK app in a `test.after` hook, so a file's process exits as soon as its
@@ -78,6 +102,8 @@ trap 'rm -f "$LOG"' EXIT
 # here is a green-looking run that never executed.
 FILE_COUNT="$(ls test/unit/*.emulator.test.js 2>/dev/null | wc -l | tr -d ' ')"
 TIMEOUT=$((180 + FILE_COUNT * 60))
+# The first npx run downloads firebase-tools before anything starts.
+[ "${FIREBASE[0]}" = "npx" ] && TIMEOUT=$((TIMEOUT + 180))
 
 # One `node --test` for ALL files, not a loop over them: the Admin SDK holds an open RTDB
 # connection, so a per-file invocation never exits and the loop hangs on the first file.
@@ -87,8 +113,8 @@ TIMEOUT=$((180 + FILE_COUNT * 60))
 # ics-device-buckets 14, lookup-calendar 18. The wall time is therefore ~entirely drain,
 # one per file, which is why the budget scales with FILE_COUNT and why exit 124 here is
 # expected rather than a failure. The marker check below is what actually decides pass.
-timeout "$TIMEOUT" firebase emulators:exec --only database "node --test test/unit/*.emulator.test.js" \
-    > "$LOG" 2>&1
+timeout "$TIMEOUT" "${FIREBASE[@]}" --config "$CONFIG" emulators:exec --only database \
+    "node --test test/unit/*.emulator.test.js" > "$LOG" 2>&1
 emulators_exit=$?
 
 cat "$LOG"
@@ -107,6 +133,7 @@ MARKERS=(
     "slug ownership:"                 # slug-case-twins.emulator.test.js
     "lastEdit stamp:"                 # last-edit-stamp.emulator.test.js
     "author rules:"                   # author-rules.emulator.test.js
+    "public views:"                   # public-views.emulator.test.js
 )
 missing=()
 for m in "${MARKERS[@]}"; do
@@ -120,6 +147,8 @@ if [ "${#missing[@]}" -gt 0 ]; then
     echo "       $ok_count test(s) passed before the run was cut short — treating as a"
     echo "       failure, not a pass."
     [ "$emulators_exit" = "124" ] && echo "       Exit 124 is the timeout: raise TIMEOUT in this script."
+    # Say WHY when it is visible in the log, rather than leaving a bare count.
+    grep -iE "port .*(taken|in use)|could not start|EADDRINUSE|Error:" "$LOG" | head -5 | sed 's/^/       > /'
     echo "       If you added a test file, add a marker for it to MARKERS above."
     exit 1
 fi

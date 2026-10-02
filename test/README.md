@@ -1,24 +1,60 @@
 # Tests
 
-End-to-end regression tests driven by Playwright against a locally-served pastecal instance.
+Unit tests (`node --test`, plus a Python suite for the usage report), emulator-backed
+Cloud Functions tests, and Playwright e2e tests -- none of which touch production.
 
 ## Setup (one-time)
 
 ```bash
-npm install
-npm run test:e2e:install   # downloads Chromium for Playwright
+npm ci                     # also installs functions/ (postinstall) and the pinned test fixtures
+npm run test:e2e:install   # downloads Chromium for Playwright (e2e only)
 ```
+
+Needs Node 20-22, Python 3, and a JDK 21+ (the Database emulator is Java). firebase-tools is
+NOT required globally: the emulator scripts run the version pinned in `test/firebase-cli.sh`
+via npx when `firebase` is not on PATH (and always under CI).
 
 ## Running
 
 ```bash
-npm test                   # run all e2e tests (auto-starts firebase serve on :8000)
-npm run test:unit          # run all Cloud Functions unit tests (fast + emulator-backed)
-npm run test:unit:fast     # pure-logic tests only, no emulator startup (~instant)
-npm run test:unit:emulator # emulator-backed tests only (starts/stops the Database emulator)
-npm run test:e2e:ui        # interactive UI mode
+npm test                   # = npm run test:unit
+npm run test:unit          # fast + report + emulator-backed; deploy.sh refuses to deploy unless this passes
+npm run test:unit:fast     # pure-logic tests only, no emulator startup
+npm run test:report        # python3 -m unittest discover -s test/report
+npm run test:unit:emulator # emulator-backed tests only (starts/stops the Database emulator on free ports)
+npm run test:e2e           # Playwright, against the hosting/database/functions/auth emulators
+npm run test:e2e:ui        # interactive UI mode (playwright.config starts the emulators itself)
 npm run test:e2e -- -g timeformat   # run a subset by name/grep
+npm run test:all           # unit + e2e
 ```
+
+CI (`.github/workflows/test.yml`) runs `test:unit:fast` + `test:report` under four timezones
+and `test:unit:emulator` once, with `CI=1`. Under `CI` a missing fixture (the real Syncfusion
+and chrono bundles, root devDependencies pinned to the versions index.html loads) fails
+instead of skipping, and nothing is downloaded.
+
+## E2E against the emulators
+
+The e2e suite used to run against `firebase serve` with the page's hard-coded production
+config, so every test wrote real calendars into the production database. Now:
+
+- `public/utils/emulators.js` (loaded before `firebase.initializeApp` on both pages) moves
+  the database, functions and auth clients to the emulators under the `demo-pastecal`
+  project when the page is on localhost/127.0.0.1 AND served by the hosting emulator, or
+  `window.__PASTECAL_EMULATOR__` is set (the fixture sets it), or the URL has `?emulator`.
+  Plain `firebase serve` on another port still talks to production, as before.
+- `test/e2e/fixtures.js` additionally aborts every request and WebSocket to production
+  Firebase/analytics, so a broken switch fails tests instead of writing real data.
+- `npm run test:e2e` wraps Playwright in `firebase emulators:exec --project demo-pastecal
+  --only hosting,database,functions,auth`; `baseURL` is the hosting emulator.
+
+Remaining gap (why e2e is not in CI yet): verified here that pages load from the hosting
+emulator and their database writes, callables and anonymous auth all reach the emulators,
+but several specs fail for reasons unrelated to the switch -- stale selectors (e.g.
+`basic.spec.js` matches two "Claim" buttons) and timing assumptions on a slow CDN. The suite
+needs a pass to green before it can gate anything. `analytics-delivery.spec.js` deliberately
+skips the fixture (it checks real GA delivery); its data still goes to the emulators because
+it is served from the hosting emulator.
 
 **Node version for `test:unit`:** use Node 20–22 (matching `functions/engines`). Run
 `nvm use` to pick it up from `.nvmrc`.

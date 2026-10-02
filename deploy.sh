@@ -6,6 +6,11 @@
 #   ./deploy.sh functions       # deploy only functions (fastest; use after a Cloud Function change)
 #   ./deploy.sh hosting         # deploy only static assets
 #   ./deploy.sh functions,hosting
+#   ./deploy.sh --skip-tests functions   # emergency only: deploys WITHOUT running the tests
+#
+# Every deploy first runs `npm run test:unit` (fast + emulator-backed) and stops if it fails.
+# The suite used to be advisory: nothing ran it before a deploy, and bugs it would have
+# caught shipped anyway.
 #
 # Why the preflight check below: this repo lives in a Dropbox folder, and every JSON config
 # here carries a com.dropbox.attrs xattr. If Dropbox is mid-sync when firebase-tools reads
@@ -22,7 +27,17 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-TARGETS="${1:-}"
+TARGETS=""
+SKIP_TESTS=""
+for arg in "$@"; do
+    case "$arg" in
+        --skip-tests) SKIP_TESTS=1 ;;
+        -*) echo "ERROR: unknown flag $arg"; echo "usage: ./deploy.sh [--skip-tests] [targets]"; exit 2 ;;
+        *)
+            [ -z "$TARGETS" ] || { echo "ERROR: give targets as one comma-separated list"; exit 2; }
+            TARGETS="$arg" ;;
+    esac
+done
 
 # --- Preflight: verify configs are readable and well-formed before we start deploying ------
 CONFIGS=("firebase.json" "database.rules.json" ".firebaserc" "remoteconfig.template.json")
@@ -104,6 +119,24 @@ fi
 # The ICS feed and the app must read dates identically; the browser copy is synced from
 # functions/ (the source of truth) before anything is deployed. See scripts/sync-shared.sh.
 ./scripts/sync-shared.sh
+
+# --- Tests gate the deploy -----------------------------------------------------------------
+# After the Node pin above, so they run on the runtime production uses.
+if [ -n "$SKIP_TESTS" ]; then
+    echo
+    echo "################################################################################"
+    echo "#  WARNING: --skip-tests. Deploying WITHOUT running the test suite.            #"
+    echo "#  Whatever the suite would have caught is going to production unchecked.      #"
+    echo "################################################################################"
+    echo
+else
+    echo "Running npm run test:unit before deploying (use --skip-tests only in an emergency)..."
+    if ! npm run test:unit; then
+        echo
+        echo "ERROR: tests failed -- not deploying. Fix them, or (emergency only) re-run with --skip-tests."
+        exit 1
+    fi
+fi
 
 # --- Cache-bust static assets (hosting only; skip when deploying just functions) -----------
 if [ -z "$TARGETS" ] || [[ "$TARGETS" == *hosting* ]]; then

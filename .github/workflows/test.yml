@@ -1,0 +1,74 @@
+# Unit tests on every push and pull request.
+#
+# Nothing used to run the suite but a developer remembering to: deploy.sh did not gate on
+# it, network-dependent tests skipped silently when a fixture could not be fetched, and a
+# green local run said nothing about other timezones. CI=1 turns every "fixture missing"
+# skip into a failure, and the fixtures themselves come from npm (root devDependencies),
+# so nothing is downloaded at test time.
+#
+# The e2e suite (Playwright) is NOT run here yet -- see test/README.md, "E2E against the
+# emulators", for what remains before it can be.
+name: tests
+
+on:
+  push:
+  pull_request:
+
+env:
+  CI: "1"
+
+jobs:
+  unit-fast:
+    name: unit (TZ=${{ matrix.tz }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Date bugs hide in the viewer's zone: west of UTC, east of it across the date line,
+        # and a half-hour offset.
+        tz: [UTC, America/Los_Angeles, Pacific/Auckland, Asia/Kolkata]
+    env:
+      TZ: ${{ matrix.tz }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # .nvmrc (22): inside the 20-22 range test/check-node-version.js allows, the range
+          # firebase-admin's dependency chain still loads on.
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      # postinstall also runs `npm ci --prefix functions`.
+      - run: npm ci
+      - run: npm run test:unit:fast
+      - run: npm run test:report
+
+  unit-emulator:
+    name: unit (Database emulator)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            functions/package-lock.json
+      # The Database emulator is a Java program; firebase-tools needs JDK 21+.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/firebase/emulators
+          key: firebase-emulators-${{ hashFiles('test/firebase-cli.sh') }}
+      - run: npm ci
+      # Uses the firebase-tools version pinned in test/firebase-cli.sh, via npx.
+      - run: npm run test:unit:emulator

@@ -12,6 +12,17 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# Anything but exactly --dry-run or nothing is refused: a typo like --dryrun used to be
+# ignored and deploy to production. Checked first, before anything that needs a token or
+# the network, so a mistyped flag can never get as far as an upload.
+QS=""
+[ "$#" -le 1 ] || { echo "usage: scripts/deploy-rules.sh [--dry-run]"; exit 2; }
+case "${1:-}" in
+    "") ;;
+    --dry-run) QS="?dryRun=true" ;;
+    *) echo "usage: scripts/deploy-rules.sh [--dry-run]"; exit 2 ;;
+esac
+
 RULES="database.rules.json"
 DB="https://pastecal-web-default-rtdb.firebaseio.com"
 
@@ -22,15 +33,6 @@ if [ -z "${TOKEN:-}" ]; then
     echo "ERROR: no gcloud access token. Run: gcloud auth login"
     exit 1
 fi
-
-# Anything but exactly --dry-run or nothing is refused: a typo like --dryrun used to be
-# ignored and deploy to production.
-QS=""
-case "${1:-}" in
-    "") ;;
-    --dry-run) QS="?dryRun=true" ;;
-    *) echo "usage: scripts/deploy-rules.sh [--dry-run]"; exit 2 ;;
-esac
 
 echo "Uploading $RULES to $DB/.settings/rules.json$QS"
 # The token goes in through a file descriptor, not argv, where any local user could read

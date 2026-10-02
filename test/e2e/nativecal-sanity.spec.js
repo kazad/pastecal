@@ -6,7 +6,7 @@ test.describe('NativeCal Sanity Tests', () => {
   test.beforeEach(async ({ page }) => {
     // Use a unique slug for each test to ensure clean state
     const slug = `sanity-${Date.now()}`;
-    await page.goto(`http://localhost:8000/nativecal/${slug}`);
+    await page.goto(`/nativecal/${slug}`);
     
     // Wait for calendar to initialize
     await expect(page.getByTestId('month-view-grid')).toBeVisible({ timeout: 10000 });

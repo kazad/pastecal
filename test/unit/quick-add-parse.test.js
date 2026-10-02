@@ -159,14 +159,30 @@ test('quick-add: "for N days" with a time keeps the wall-clock time across DST',
 
 // The real chrono 1.4.9 (the version index.html pins), so the fake above cannot drift from
 // what the browser actually parses.
+function installedChrono(version) {
+  try {
+    const pkg = require.resolve('chrono-node/package.json');
+    if (require(pkg).version !== version) return null;
+    const file = path.join(path.dirname(pkg), 'dist', 'chrono.min.js');
+    return fs.existsSync(file) ? file : null;
+  } catch (err) {
+    return null;
+  }
+}
+
 function loadRealChrono() {
   const index = fs.readFileSync(path.join(__dirname, '../../public/index.html'), 'utf8');
   const version = (/chrono-node@([\d.]+)\/dist\/chrono\.min\.js/.exec(index) || [])[1];
   if (!version) return { reason: 'index.html no longer pins a chrono-node version' };
-  const url = `https://cdn.jsdelivr.net/npm/chrono-node@${version}/dist/chrono.min.js`;
-  const file = process.env.PASTECAL_CHRONO_PATH
+  const file = process.env.PASTECAL_CHRONO_PATH || installedChrono(version)
     || path.join(require('node:os').tmpdir(), `pastecal-chrono-${version}.min.js`);
   if (!fs.existsSync(file)) {
+    // The root devDependency is the source of truth; downloading is a local convenience
+    // only. Under CI nothing is fetched, so a missing copy fails instead of skipping.
+    if (process.env.CI) {
+      return { reason: `chrono-node@${version} is not installed (run \`npm ci\`; the root devDependency must match index.html)` };
+    }
+    const url = `https://cdn.jsdelivr.net/npm/chrono-node@${version}/dist/chrono.min.js`;
     // curl honors the HTTPS proxy settings that node's own fetch ignores.
     const tmp = `${file}.${process.pid}.part`;
     const r = require('node:child_process').spawnSync('curl', ['-sfL', '--max-time', '60', '-o', tmp, url]);

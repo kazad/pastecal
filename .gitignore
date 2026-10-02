@@ -83,3 +83,4 @@ playwright/.cache/
 # Python bytecode (scripts/report tests)
 __pycache__/
 *.pyc
+.emulator-test-*.json

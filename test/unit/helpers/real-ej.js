@@ -2,10 +2,12 @@
  * The real Syncfusion bundle (the ej2.min.js version public/index.html pins), loaded into
  * a VM so tests expand recurrence exactly as the grid does.
  *
- * Looked for locally first: PASTECAL_EJ2_PATH, then the copy cached in the OS temp dir by
- * an earlier run, then an installed @syncfusion/ej2 of the same version. Only then is it
- * downloaded (and cached). Returns { ej } or { reason } -- callers decide whether a
- * missing bundle skips (locally) or fails (under CI).
+ * Looked for in this order: PASTECAL_EJ2_PATH, the @syncfusion/ej2 root devDependency
+ * (pinned to the same version, so `npm ci` provides it), then a copy cached in the OS temp
+ * dir by an earlier run. Only outside CI is it ever downloaded: a test whose fixture depends
+ * on the network skips whenever the network is down, and a suite that skips silently is
+ * how bugs shipped green. Under CI a missing copy is a { reason } the caller turns into a
+ * failure. Returns { ej } or { reason }.
  */
 
 const fs = require('node:fs');
@@ -31,10 +33,13 @@ function locate() {
   const version = (/cdn\.syncfusion\.com\/ej2\/([\d.]+)\/dist\/ej2\.min\.js/.exec(INDEX) || [])[1];
   if (!version) return { reason: 'index.html no longer pins an ej2.min.js version' };
   if (process.env.PASTECAL_EJ2_PATH) return { file: process.env.PASTECAL_EJ2_PATH };
-  const cached = path.join(os.tmpdir(), `pastecal-ej2-${version}.min.js`);
-  if (fs.existsSync(cached)) return { file: cached };
   const installed = installedCopy(version);
   if (installed) return { file: installed };
+  const cached = path.join(os.tmpdir(), `pastecal-ej2-${version}.min.js`);
+  if (fs.existsSync(cached)) return { file: cached };
+  if (process.env.CI) {
+    return { reason: `@syncfusion/ej2@${version} is not installed (run \`npm ci\`; the root devDependency must match index.html)` };
+  }
 
   // curl honors the HTTPS proxy settings that node's own fetch ignores.
   const url = `https://cdn.syncfusion.com/ej2/${version}/dist/ej2.min.js`;
