@@ -83,6 +83,12 @@ const EventEditor = {
             this.startDate = this.dateStr(s); this.startTime = this.timeStr(s);
             this.endDate = this.dateStr(en); this.endTime = this.timeStr(en);
             this.parseRule(e.recurrencerule, s);
+            // The date an UNTIL names, not the local date of its instant (see Event.ruleUntilDate);
+            // and the rule as loaded, so saving with the repeat inputs untouched keeps it verbatim.
+            if (this.until && typeof Event.ruleUntilDate === 'function') {
+                this.until = Event.ruleUntilDate(e.recurrencerule, this.isAllDay) || this.until;
+            }
+            this._loaded = { rule: e.recurrencerule || '', sig: this.ruleSig() };
             this._lastStart = this.startStamp;   // loading an event is not "moving the start"
         },
         parseRule(rule, start) {
@@ -103,18 +109,23 @@ const EventEditor = {
             }
             else if (parts.COUNT) { this.endMode = 'count'; this.count = parseInt(parts.COUNT, 10) || 1; }
         },
+        ruleSig() { return JSON.stringify([this.freq, this.interval, [...this.byDay].sort(), this.endMode, this.until, this.count]); },
         toggleDay(d) {
             const i = this.byDay.indexOf(d);
             if (i >= 0) { if (this.byDay.length > 1) this.byDay.splice(i, 1); } else this.byDay.push(d);
         },
         buildRule() {
             if (!this.freq) return '';
+            // Untouched inputs: keep the stored rule as it was (its BYDAY, UNTIL format and all).
+            if (this._loaded && this._loaded.rule && this._loaded.sig === this.ruleSig()) return this._loaded.rule;
             let r = `FREQ=${this.freq};`;
             if (this.freq === 'WEEKLY') r += `BYDAY=${[...this.byDay].sort().map(d => ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'][d]).join(',')};`;
             r += `INTERVAL=${Math.max(1, parseInt(this.interval, 10) || 1)};`;
             if (this.endMode === 'until' && this.until) {
                 const [y, m, d] = this.until.split('-').map(Number);
-                r += `UNTIL=${new Date(y, m - 1, d, 23, 59, 59).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')};`;
+                // All-day: the grid's format (Event.ruleUntilStamp); timed: end of that day, UTC.
+                const grid = this.isAllDay && typeof Event.ruleUntilStamp === 'function' ? Event.ruleUntilStamp(this.until, true) : null;
+                r += grid ? `UNTIL=${grid};` : `UNTIL=${new Date(y, m - 1, d, 23, 59, 59).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')};`;
             } else if (this.endMode === 'count') r += `COUNT=${Math.max(1, parseInt(this.count, 10) || 1)};`;
             return r;
         },

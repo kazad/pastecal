@@ -37,6 +37,20 @@ test('the grid is filtered with the same predicate the count uses', () => {
     'the count must not index colorFilters itself — that was its own second predicate');
 });
 
+test('the count helpers that take arguments are methods, not computeds', () => {
+  // Vue 3 calls a computed getter with no arguments and caches the result, so a
+  // "computed" recurrenceOccursInRange was a boolean, and calling it threw inside
+  // hiddenEventCount the moment a hidden recurring event was in view. The behavioral
+  // tests call the extracted bodies directly, so only the wiring can catch this.
+  const methods = APP.indexOf('\n    methods: {');
+  assert.ok(methods !== -1, 'expected a methods block');
+  for (const sig of ['recurrenceOccursInRange(event, range) {', 'spansRange(start, end, range) {']) {
+    const at = APP.indexOf(sig);
+    assert.ok(at !== -1, `${sig} should exist`);
+    assert.ok(at > methods, `${sig} must live in methods`);
+  }
+});
+
 test('no second, query-shaped definition of visibility has come back', () => {
   assert.doesNotMatch(APP, /getFilteredEventsQuery/,
     'the ej.data.Query allow-list was the other source of truth');

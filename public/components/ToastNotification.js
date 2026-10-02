@@ -2,7 +2,11 @@
 // Displays toast messages with success/error/info types
 
 const ToastNotification = {
+    // The live region is always in the DOM, so screen readers are already watching it
+    // when a message appears -- a region inserted together with its text is often not
+    // announced at all.
     template: /* html */ `
+        <div aria-live="polite" aria-atomic="true">
         <transition 
             enter-active-class="transform ease-out duration-300 transition"
             enter-from-class="translate-y-2 opacity-0 sm:translate-y-0 sm:translate-x-2"
@@ -10,7 +14,9 @@ const ToastNotification = {
             leave-active-class="transition ease-in duration-100"
             leave-from-class="opacity-100"
             leave-to-class="opacity-0">
-            <div v-if="show" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-[100] w-full max-w-sm px-4">
+            <div v-if="show" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-[100] w-full max-w-sm px-4"
+                @mouseenter="hovered = true" @mouseleave="hovered = false; resumeTimer()"
+                @focusin="focused = true" @focusout="onFocusOut">
                 <div class="w-full bg-2 border border-color-default shadow-lg rounded-lg pointer-events-auto ring-1 ring-black ring-opacity-5 overflow-hidden">
                     <div class="p-4">
                         <div class="flex items-start">
@@ -51,6 +57,7 @@ const ToastNotification = {
                 </div>
             </div>
         </transition>
+        </div>
     `,
     data() {
         return {
@@ -59,7 +66,12 @@ const ToastNotification = {
             type: 'info',
             timer: null,
             actionLabel: '',
-            action: null
+            action: null,
+            // Auto-hide waits while the pointer or keyboard focus is on the toast: an
+            // Undo that vanishes as someone reaches for it is worse than none.
+            hovered: false,
+            focused: false,
+            expired: false
         }
     },
     methods: {
@@ -76,11 +88,28 @@ const ToastNotification = {
             this.actionLabel = options.actionLabel || '';
             this.action = options.action || null;
             this.show = true;
-
+            this.expired = false;
+            this.scheduleHide(options.duration || (this.actionLabel ? 8000 : 3000));
+        },
+        scheduleHide(ms) {
             if (this.timer) clearTimeout(this.timer);
             this.timer = setTimeout(() => {
+                this.timer = null;
+                if (this.hovered || this.focused) {
+                    this.expired = true;   // hide once they move away
+                    return;
+                }
                 this.hide();
-            }, options.duration || (this.actionLabel ? 8000 : 3000));
+            }, ms);
+        },
+        // Give a moment after the pointer or focus leaves, rather than vanishing instantly.
+        resumeTimer() {
+            if (this.show && this.expired && !this.hovered && !this.focused) this.scheduleHide(2000);
+        },
+        onFocusOut(e) {
+            if (e.currentTarget && e.currentTarget.contains(e.relatedTarget)) return;
+            this.focused = false;
+            this.resumeTimer();
         },
         runAction() {
             const fn = this.action;
@@ -88,7 +117,12 @@ const ToastNotification = {
             if (typeof fn === 'function') fn();
         },
         hide() {
+            if (this.timer) clearTimeout(this.timer);
+            this.timer = null;
             this.show = false;
+            this.hovered = false;
+            this.focused = false;
+            this.expired = false;
             this.actionLabel = '';
             this.action = null;
         }

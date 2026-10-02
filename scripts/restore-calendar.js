@@ -36,7 +36,11 @@ const count = (c) => { const e = c && c.events; return Array.isArray(e) ? e.filt
 
 (async () => {
     const live = (await db.ref(`calendars/${slug}`).once('value')).val();
+    // A deleted calendar's history moves to /history_archive/<slug>/<deletedAt>/ (see
+    // HistoryService.archiveOnDelete); list both, so restoring a deletion needs no digging.
     const hist = (await db.ref(`history/${slug}`).once('value')).val() || {};
+    const archive = (await db.ref(`history_archive/${slug}`).once('value')).val() || {};
+    for (const batch of Object.values(archive)) Object.assign(hist, batch);
     const entries = Object.entries(hist).sort((a, b) => a[1].savedAt - b[1].savedAt);
 
     console.log(`live /calendars/${slug}: ${live ? `${count(live)} events, title "${live.title || ''}"` : '(missing)'}`);
@@ -53,6 +57,14 @@ const count = (c) => { const e = c && c.events; return Array.isArray(e) ? e.filt
 
     const entry = hist[entryKey];
     if (!entry) { console.error(`no history entry ${entryKey} for ${slug}`); process.exit(1); }
+    // A wipe stores its prior state once, as removedEvents.
+    if (!Array.isArray(entry.events) && entry.kind === 'wiped') entry.events = entry.removedEvents;
+    if (!Array.isArray(entry.events)) {
+        // `added` and `edited` entries are deltas, not snapshots: undo them from Recent
+        // changes, which reverts exactly what they changed.
+        console.error(`entry ${entryKey} (${entry.kind}) holds no snapshot; undo it from Recent changes`);
+        process.exit(1);
+    }
 
     console.log(`snapshot ${entryKey} (${new Date(entry.savedAt).toISOString()}, ${entry.kind}):`);
     console.log(`  title   : "${entry.title || ''}"`);
@@ -66,11 +78,16 @@ const count = (c) => { const e = c && c.events; return Array.isArray(e) ? e.filt
         process.exit(0);
     }
 
-    await db.ref(`calendars/${slug}`).update({
-        events: entry.events,
-        title: entry.title ?? '',
-        options: entry.options ?? {},
-    });
+    // Options are merged key by key, never replaced: a snapshot older than the calendar's
+    // read-only link has no publicViewId, and dropping it stops syncPublicView mirroring
+    // the restore to every /view/ link already shared.
+    const options = { ...(entry.options || {}) };
+    if (live && live.options && live.options.publicViewId) options.publicViewId = live.options.publicViewId;
+    // `id` too: restoring a deleted calendar recreates the node, and one without `id` reads
+    // as nonexistent to the client and to lookupCalendar.
+    const patch = { id: slug, events: entry.events, title: entry.title ?? '' };
+    for (const [k, v] of Object.entries(options)) patch[`options/${k}`] = v;
+    await db.ref(`calendars/${slug}`).update(patch);
     const after = (await db.ref(`calendars/${slug}`).once('value')).val();
     console.log(`\nrestored. live now has ${count(after)} events, title "${after.title || ''}".`);
     process.exit(0);
