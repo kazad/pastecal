@@ -367,7 +367,7 @@ const NativeCalendar = (() => {
                 if (this.readOnly) return;
                 this.selectedCell = (hour === undefined ? 'd' : 'h' + hour) + day.getTime();
                 let start, end, isAllDay;
-                if (hour === undefined) { start = startOfDay(day); end = addDays(start, 1); isAllDay = true; }
+                if (hour === undefined) { start = startOfDay(day); end = new Date(addDays(start, 1).getTime() - 1); isAllDay = true; }   // display shape: through 23:59:59.999 (app.js toStoredEvent stores it)
                 else {
                     // v1: Syncfusion's 30-minute slot. v2: an hour, the length most events are.
                     start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), Math.floor(hour), (hour % 1) * 60);
@@ -447,7 +447,15 @@ const NativeCalendar = (() => {
                     end = new Date(start.getTime() + (d.height / HOUR_PX) * 3600000);
                 }
                 if (start.getTime() === d.occ.start.getTime() && end.getTime() === d.occ.end.getTime()) return;
-                const next = this.events.map(x => x === ev ? { ...x, start: start.toISOString(), end: end.toISOString() } : x);
+                // An all-day end goes out in the display shape (through 23:59:59.999 of the last day), the
+                // one app.js toStoredEvent expects; the grid itself works with the exclusive end above.
+                const out = d.occ.allDay ? new Date(end.getTime() - 1) : end;
+                // The row to change: the very object the drag started on, or -- if the list was rebuilt
+                // meanwhile (an all-day event is shown as a fresh copy each time, and a server snapshot can
+                // land mid-drag) -- the one row with the same id. Without this the drag was silently dropped.
+                const same = (x) => x && ev && x.id === ev.id && (x.recurrenceID || '') === (ev.recurrenceID || '');
+                const target = this.events.find(x => x === ev) || this.events.find(same);
+                const next = this.events.map(x => x === target ? { ...x, start: start.toISOString(), end: out.toISOString() } : x);
                 this.$emit('update:events', next);
             },
         },

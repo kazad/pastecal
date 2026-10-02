@@ -121,7 +121,7 @@ async function openPopup(page, title, n = 0) {
 
 // ---------------------------------------------------------------------------
 
-test('NativeCal: click a day, type a title, save -- an all-day event stored the way Syncfusion stores it', async ({ browser, page }) => {
+test('NativeCal: click a day, type a title, save -- an all-day event: local midnight .. local 23:59:59.999 of the day', async ({ browser, page }) => {
   await newCalendar(browser, page, 'quick');
   await quickCreate(page, 12, 'Picnic');
   await expect(bar(page, 'Picnic')).toBeVisible();
@@ -129,7 +129,7 @@ test('NativeCal: click a day, type a title, save -- an all-day event stored the 
   const e = await byTitle(page, 'Picnic');
   expect(e.isAllDay).toBe(true);
   expect(new Date(e.start).getTime()).toBe(await localDay(page, 12));
-  expect(new Date(e.end).getTime()).toBe(await localDay(page, 13));
+  expect(new Date(e.end).getTime()).toBe((await localDay(page, 13)) - 1);   // stored form, see Event.allDayStoredRange
 });
 
 test('NativeCal: full editor -- title, color, time, description are saved; the popup shows the color', async ({ browser, page }) => {
@@ -195,6 +195,8 @@ test('NativeCal: drag an event to another day and it moves on the server', async
   await page.mouse.up();
   const want = await localDay(page, 17);
   await serverSoon(page, (r) => r.some(e => e.title === 'Dragme' && new Date(e.start).getTime() === want));
+  // Still ONE day long: through local 23:59:59.999 of the 17th (an exclusive end was once stored a day long).
+  expect(new Date((await byTitle(page, 'Dragme')).end).getTime()).toBe((await localDay(page, 18)) - 1);
 });
 
 test('NativeCal: delete asks first; confirming removes it from the server and nothing else', async ({ browser, page }) => {

@@ -6,7 +6,8 @@
  *
  * Writes exactly what the Syncfusion app writes, because both apps edit the same
  * calendars:
- *   - all-day: LOCAL midnight, end exclusive (the day after the last day)
+ *   - all-day: edited in the display shape (local midnight .. local 23:59:59.999 of the last
+ *     day); app.js toStoredEvent writes it in the stored form (Event.allDayStoredRange)
  *   - repeat rules: "FREQ=WEEKLY;BYDAY=TU;INTERVAL=1;" -- Syncfusion's own form,
  *     UNTIL as a UTC stamp, COUNT as a number
  *   - times as ISO strings
@@ -135,7 +136,10 @@ const EventEditor = {
             let start, end;
             if (this.isAllDay) {
                 start = new Date(sy, sm - 1, sd);
-                end = new Date(ey, em - 1, ed + 1);          // exclusive, local midnight
+                // Display shape, as the grid emits it: local 23:59:59.999 of the LAST day. handleSaveEvent
+                // turns it into the stored form (Event.allDayStoredRange); an exclusive end here would be
+                // read as the last day and store the event a day too long.
+                end = new Date(ey, em - 1, ed, 23, 59, 59, 999);
             } else {
                 const [sh, smin] = this.startTime.split(':').map(Number), [eh, emin] = this.endTime.split(':').map(Number);
                 start = new Date(sy, sm - 1, sd, sh, smin); end = new Date(ey, em - 1, ed, eh, emin);
