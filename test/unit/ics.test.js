@@ -55,7 +55,7 @@ test('generateICS: the real-world bad event does not crash the feed', () => {
   const ics = ICSService.generateICS({ events: [REAL_BAD_EVENT] }, 'bht-asta-sprechzeiten');
 
   assert.match(ics, /^BEGIN:VCALENDAR/);
-  assert.match(ics, /END:VCALENDAR$/);
+  assert.match(ics, /END:VCALENDAR\r\n$/);
   assert.equal(countEvents(ics), 0, 'event missing start/end must be skipped, not emitted');
 });
 
@@ -103,7 +103,7 @@ test('generateICS: empty and absent event lists produce a valid empty calendar',
     const ics = ICSService.generateICS(data, 'empty');
     assert.equal(countEvents(ics), 0);
     assert.match(ics, /^BEGIN:VCALENDAR/);
-    assert.match(ics, /END:VCALENDAR$/);
+    assert.match(ics, /END:VCALENDAR\r\n$/);
   }
 });
 
@@ -135,7 +135,7 @@ test('generateICS: valid event output is unchanged aside from DTSTAMP/CRLF', () 
     'DESCRIPTION:',
     'END:VEVENT',
     'END:VCALENDAR',
-  ].join('\r\n'));
+  ].join('\r\n') + '\r\n');
 });
 
 // --- RFC 5545 compliance (issue #37, minor findings) ---------------------------------------
@@ -145,6 +145,8 @@ test('generateICS: lines are joined with CRLF per RFC 5545 §3.1', () => {
 
   assert.ok(ics.includes('\r\n'), 'expected CRLF line endings');
   assert.ok(!ics.replace(/\r\n/g, '').includes('\n'), 'no bare LF should remain');
+  // The last line is a content line like any other: it ends in CRLF too.
+  assert.ok(ics.endsWith('END:VCALENDAR\r\n'), 'final line must be CRLF-terminated');
 });
 
 test('generateICS: every VEVENT includes a well-formed DTSTAMP', () => {

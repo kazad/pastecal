@@ -7,6 +7,9 @@ const crypto = require('crypto');
 // Which calendar date a stored value names: shared with the browser (public/models/caldate.js
 // is a copy, see scripts/sync-shared.sh) so the grid and the feed cannot disagree.
 const CalDate = require('./caldate');
+// What a calendar or view name may be: one rule, shared with the browser and mirrored in
+// database.rules.json (see the header of slug-rules.js).
+const SlugRules = require('./slug-rules');
 
 const isLocal = process.env.FUNCTIONS_EMULATOR === 'true';
 // Set by `firebase emulators:start --only database` and by our own test harness
@@ -704,35 +707,22 @@ const ICSService = {
             "REFRESH-INTERVAL;VALUE=DURATION:PT1H",
             "X-PUBLISHED-TTL:PT1H"
         ].map(line => this.foldLine(line));
-        // Event blocks arrive already folded.
-        return [...header, ...events, "END:VCALENDAR"].join("\r\n");
+        // Event blocks arrive already folded. RFC 5545 3.1: EVERY content line ends in
+        // CRLF, the last one included -- strict parsers drop an unterminated END:VCALENDAR.
+        return [...header, ...events, "END:VCALENDAR"].join("\r\n") + "\r\n";
     }
 };
 
 // Slug Validation Service
 const SlugService = {
-    validateSlug(slug) {
-        // Allow alphanumeric characters, hyphens, and underscores
-        // Must be 3-50 characters long
-        // Cannot be 'view' or other reserved words
-        const slugRegex = /^[a-zA-Z0-9-_]{3,50}$/;
-        const reservedWords = [
-            'view', 'api', 'admin', 'administrator', 'www', 'app', 'apps', 'calendar', 'cal',
-            'about', 'account', 'accounts', 'assets', 'auth', 'bin', 'billing', 'blog', 'bot',
-            'cache', 'careers', 'cgi-bin', 'config', 'contact', 'cpanel', 'css', 'dashboard',
-            'dev', 'docs', 'download', 'downloads', 'enterprise', 'faq', 'favicon.ico', 'ftp',
-            'ghost', 'guide', 'help', 'home', 'hostmaster', 'images', 'img', 'imap', 'index',
-            'jobs', 'js', 'legal', 'login', 'logout', 'mail', 'manage', 'media', 'me',
-            'moderator', 'mx', 'news', 'ns', 'ns1', 'ns2', 'null', 'oauth', 'password', 'pop',
-            'pop3', 'postmaster', 'press', 'pricing', 'privacy', 'pro', 'profile', 'public',
-            'recover', 'register', 'reset', 'robots.txt', 'root', 'settings', 'setup', 'signin',
-            'signout', 'signup', 'sitemap.xml', 'smtp', 'ssl', 'static', 'status',
-            'subscriptions', 'superuser', 'support', 'sys', 'sysadmin', 'system', 'team',
-            'terms', 'tos', 'undefined', 'user', 'users', 'v1', 'v2', 'webhooks', 'webmail',
-            'wiki', 'wp-admin', 'wp-content', 'wp-login',
-        ];
+    // Case-insensitive, stored lowercase: "Trip-2025" claims "trip-2025".
+    checkSlug(slug) {
+        if (typeof slug !== 'string') return SlugRules.check('');
+        return SlugRules.check(slug.trim().toLowerCase());
+    },
 
-        return slugRegex.test(slug) && !reservedWords.includes(slug.toLowerCase());
+    validateSlug(slug) {
+        return this.checkSlug(slug).ok;
     },
 
     /**
@@ -926,6 +916,29 @@ const PublicViewService = {
         return true;
     },
 
+    /**
+     * Remove every view bound to calendarId except `keep`: binding first, so a
+     * syncPublicView already in flight for an old view finds it unowned and does not write
+     * it back. Only views whose binding names this calendar are touched -- the reverse map
+     * is a hint (a renamed copy may have taken a view over). Returns the ids removed.
+     */
+    async retireOthers(db, calendarId, keep) {
+        const views = (await db.ref(`${this.BY_CALENDAR}/${calendarId}`).once('value')).val() || {};
+        const retired = [];
+        for (const pvid of Object.keys(views)) {
+            if (pvid === keep) continue;
+            const binding = db.ref(`${this.BINDINGS}/${pvid}`);
+            if ((await binding.once('value')).val() !== calendarId) continue;
+            await binding.remove();
+            await db.ref().update({
+                [`/${READONLY_ROOT}/${pvid}`]: null,
+                [`${this.BY_CALENDAR}/${calendarId}/${pvid}`]: null,
+            });
+            retired.push(pvid);
+        }
+        return retired;
+    },
+
     /** Atomically bind a view id to a calendar; false if another calendar holds it. */
     async claim(db, publicViewId, calendarId) {
         const r = await db.ref(`${this.BINDINGS}/${publicViewId}`)
@@ -1103,7 +1116,10 @@ const HistoryService = {
     // someone editing the calendar, and must not read as "Edited just now".
     userOptions(cal) {
         const o = (cal && cal.options) || {};
-        const { publicViewId, ...rest } = o;
+        // Server bookkeeping, not anything a person changed: createPublicLink writes both
+        // right after a calendar is created, which read as "Edited just now" on a
+        // calendar nobody had touched.
+        const { publicViewId, publicViewSource, ...rest } = o;
         return JSON.stringify(rest);
     },
 
@@ -1115,9 +1131,11 @@ const HistoryService = {
      */
     async stampLastEdit(db, calendarId, before, after, at = Date.now()) {
         if (!after) return null;                       // deletion: nothing left to stamp
+        // Creation is not an edit. Stamping it put "Edited just now" in the header of a
+        // calendar that had only just been claimed, before anyone had changed anything.
+        if (!before) return null;
         const b = this.eventsOf(before), a = this.eventsOf(after);
-        const changed = !before
-            || b.length !== a.length
+        const changed = b.length !== a.length
             || (before.title ?? '') !== (after.title ?? '')
             || this.userOptions(before) !== this.userOptions(after)
             || a.some((e, i) => !this.sameEvent(e, b[i] ?? {}));
@@ -1485,16 +1503,20 @@ exports.createPublicLink = onCall(async (request) => {
 
         // Use custom slug if provided, otherwise generate random ID
         if (customSlug) {
-            if (!SlugService.validateSlug(customSlug)) {
-                throw new functions.https.HttpsError('invalid-argument', 'Invalid slug format. Use 3-50 alphanumeric characters, hyphens, or underscores.');
+            // The message names the actual problem ("reserved", "too short") -- it is shown
+            // to the person as-is, next to the field they typed in.
+            const verdict = SlugService.checkSlug(customSlug);
+            if (!verdict.ok) {
+                throw new functions.https.HttpsError('invalid-argument', verdict.message, { code: verdict.code });
             }
             
-            const isAvailable = await SlugService.isSlugAvailable(customSlug);
+            const wanted = customSlug.trim().toLowerCase();
+            const isAvailable = await SlugService.isSlugAvailable(wanted);
             if (!isAvailable) {
-                throw new functions.https.HttpsError('already-exists', 'Slug is already taken. Please choose a different one.');
+                throw new functions.https.HttpsError('already-exists', 'That name is already taken. Please choose another.');
             }
-            
-            publicViewId = SlugService.normalizeSlug(customSlug);
+
+            publicViewId = wanted;
         } else {
             publicViewId = await IDService.generateUniquePublicId();
         }
@@ -1503,7 +1525,7 @@ exports.createPublicLink = onCall(async (request) => {
         // separate, so two concurrent claims of one custom slug both passed and the second
         // overwrote the first's view.
         if (!await PublicViewService.claim(admin.database(), publicViewId, sourceCalendarId)) {
-            throw new functions.https.HttpsError('already-exists', 'Slug is already taken. Please choose a different one.');
+            throw new functions.https.HttpsError('already-exists', 'That name is already taken. Please choose another.');
         }
 
         await Promise.all([
@@ -1517,7 +1539,17 @@ exports.createPublicLink = onCall(async (request) => {
                 .set(PublicViewService.mirrorOf(calendarData, publicViewId)),
         ]);
 
-        return { publicViewId, created: true };
+        // A custom name REPLACES the calendar's view link rather than adding an alias. The
+        // old view used to stay live forever: syncPublicView only mirrors the id now in
+        // options.publicViewId, so the old link kept serving a frozen copy that silently
+        // diverged from the calendar, and nothing in the app listed it or could revoke it.
+        // Replacing makes "customize" also the way to revoke a view link that went too far;
+        // the share panel says so before the person confirms.
+        const retired = customSlug
+            ? await PublicViewService.retireOthers(admin.database(), sourceCalendarId, publicViewId)
+            : [];
+
+        return { publicViewId, created: true, retired };
     } catch (error) {
         throw error;
     }

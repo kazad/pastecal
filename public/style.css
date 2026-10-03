@@ -780,3 +780,41 @@ div#Schedule,
     outline: 2px solid var(--link, #3b82f6);
     outline-offset: 2px;
 }
+
+/* --- Claim & sharing (CalendarFlow, ClaimDialog, SharePanel) -----------------
+   Problem text next to a field, the edit-link warning card, and the view-only
+   chip. Own tokens so the light/dark pairs live together; contrast >= 4.5:1
+   against --bg in both themes. */
+:root {
+    --flow-danger: #b91c1c;
+    --flow-warn-bg: #fffbeb;
+    --flow-warn-border: #d97706;
+    --flow-warn-fg: #92400e;
+}
+[data-theme="dark"] {
+    --flow-danger: #fca5a5;
+    --flow-warn-bg: #2a2010;
+    --flow-warn-border: #b45309;
+    --flow-warn-fg: #fcd34d;
+}
+.pc-text-danger { color: var(--flow-danger); }
+.pc-input-group.pc-input-group-invalid { border-color: var(--flow-danger); }
+.pc-card-primary { border: 2px solid var(--link) !important; }
+.pc-card-warning {
+    background: var(--flow-warn-bg);
+    border: 1px solid var(--flow-warn-border) !important;
+}
+.pc-text-warning { color: var(--flow-warn-fg); }
+.pc-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    border: 1px solid var(--border-color);
+    background: var(--panel-bg);
+    color: var(--text-color-2);
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+}

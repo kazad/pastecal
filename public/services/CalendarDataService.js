@@ -633,7 +633,9 @@ class CalendarDataService {
                     // node is cached, so a null here means the server really has nothing.
                     if (current === null) {
                         if (known) return; // abort; reported by the completion callback
-                        return this._sanitizeForFirebase({ ...this._withoutMeta(safe), ...rest, events: safe.events });
+                        // Creating the node: only the keys the rules allow on a new calendar.
+                        return this._sanitizeForFirebase(this._calendarFields(
+                            { ...this._withoutMeta(safe), ...rest, events: safe.events }));
                     }
                     const remoteEvents = this._eventList(current.events);
                     // options is a bag of independent keys, not one field, so a shallow spread
@@ -754,8 +756,17 @@ class CalendarDataService {
      * looking at a blank calendar. lookupCalendar resolves the slug the same way the rest
      * of the app does, so it sees a twin under any casing.
      */
-    static checkExists(id, callback_yes, callback_no) {
-        this.db.child(id).once('value', async data => {
+    static checkExists(id, callback_yes, callback_no, callback_error = null) {
+        // child() throws synchronously on a key the database cannot hold ("a.b1", "x#y"),
+        // which used to escape as an uncaught error with the page stuck mid-claim. Callers
+        // validate with SlugRules first; this is the backstop, reported, never thrown.
+        const fail = (err) => {
+            console.error('[CalendarDataService] existence check failed', err);
+            if (typeof callback_error === 'function') callback_error(err);
+        };
+        let ref;
+        try { ref = this.db.child(id); } catch (err) { fail(err); return; }
+        ref.once('value', async data => {
             if (data.val()) { callback_yes(); return; }
             try {
                 const lookupCalendar = firebase.functions().httpsCallable('lookupCalendar');
@@ -767,25 +778,59 @@ class CalendarDataService {
                 console.warn('[CalendarDataService] case-insensitive existence check failed', err);
             }
             callback_no();
-        });
+        }, fail);
+    }
+
+    // The top-level keys a calendar node may hold: the allow-list database.rules.json
+    // enforces under calendars/$id (test/unit/slug-rules.test.js keeps the two equal). A
+    // NEW node is written with only these -- the rules refuse a create carrying anything
+    // else, so a draft or renamed copy with a stray key would otherwise fail as a whole.
+    static CALENDAR_KEYS = ['id', 'title', 'events', 'options', '_writer', '_undoOf', '_gesture'];
+    static _calendarFields(value) {
+        const out = {};
+        for (const k of this.CALENDAR_KEYS) if (value && value[k] !== undefined) out[k] = value[k];
+        return out;
     }
 
     /**
      * `asCreator: false` is for copies (rename): the browser writing a copy did not
      * create the original, so it is recorded as an ordinary editor of the new id.
+     *
+     * `onError(error)` hears every way the create can fail: a refused write
+     * (PERMISSION_DENIED for a name the rules reject), a key the SDK will not take, a
+     * network error. A failure used to be logged and nothing else, which left the claim
+     * page on "Loading..." forever with the person's calendar unsaved.
      */
-    static createWithId(key, value, success, { asCreator = true } = {}) {
-        const data = this._sanitizeForFirebase({ ...this._withoutMeta(value), _writer: this.writerId });
-        const plainSet = () => this.db.child(key).set(data, (error) => {
-            if (error) {
-                console.log("error creating calendar", error, key, value);
-            } else {
-                if (!asCreator && typeof AuthorSignal !== 'undefined') {
-                    AuthorSignal.touch(key);
-                }
-                success();
+    static createWithId(key, value, success, { asCreator = true, onError = null } = {}) {
+        const failed = (error) => {
+            console.error('[CalendarDataService] error creating calendar', key, error);
+            if (typeof onError === 'function') {
+                try { onError(error); } catch (e) { /* never rethrow */ }
             }
-        });
+        };
+        const data = this._sanitizeForFirebase(
+            { ...this._calendarFields(this._withoutMeta(value)), _writer: this.writerId });
+        const plainSet = () => {
+            try {
+                const p = this.db.child(key).set(data, (error) => {
+                    if (error) {
+                        failed(error);
+                    } else {
+                        if (!asCreator && typeof AuthorSignal !== 'undefined') {
+                            AuthorSignal.touch(key);
+                        }
+                        success();
+                    }
+                });
+                // Reported by the completion callback; the promise must not ALSO surface
+                // as an unhandled rejection.
+                if (p && typeof p.catch === 'function') p.catch(() => {});
+                return p;
+            } catch (error) {
+                failed(error);
+                return Promise.resolve();
+            }
+        };
 
         // The strongest ownership signal there is: whoever was present when the
         // calendar first existed. Written in the same update as the calendar because
@@ -794,14 +839,20 @@ class CalendarDataService {
             ? AuthorSignal.creationRecord(key) : null;
         if (!authorRecord) return plainSet();
 
-        return firebase.database().ref()
-            .update(Object.assign({ [`calendars/${key}`]: data }, authorRecord))
-            .then(() => success(), (error) => {
-                // The update is atomic, so a rejected author record would also drop the
-                // calendar. Authorship is observational: create it without one instead.
-                console.warn('[CalendarDataService] creating with author record failed; retrying without', error);
-                return plainSet();
-            });
+        let multi;
+        try {
+            multi = firebase.database().ref()
+                .update(Object.assign({ [`calendars/${key}`]: data }, authorRecord));
+        } catch (error) {
+            failed(error);
+            return Promise.resolve();
+        }
+        return multi.then(() => success(), (error) => {
+            // The update is atomic, so a rejected author record would also drop the
+            // calendar. Authorship is observational: create it without one instead.
+            console.warn('[CalendarDataService] creating with author record failed; retrying without', error);
+            return plainSet();
+        });
     }
 
     static update(key, value) {
