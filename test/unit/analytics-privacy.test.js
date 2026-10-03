@@ -199,7 +199,8 @@ test('calendar_created is sent synchronously, by beacon, before the redirect', (
   assert.equal(sent.length, 1);
   assert.equal(calls[0][1], 'calendar_created');
   assert.equal(calls[0][2].transport_type, 'beacon');
-  assert.match(APP, /slug_autoassigned', \{[\s\S]{0,200}\}, \{ urgent: true \}\)/,
+  // The create path lives in CalendarFlow (shared by both apps) since 2026-10.
+  assert.match(read('public/services/CalendarFlow.js'), /slug_autoassigned', \{[\s\S]{0,200}\}, \{ urgent: true \}\)/,
     'the slug events beside it are on the same redirect');
 });
 

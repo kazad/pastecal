@@ -169,6 +169,8 @@
                 renameTarget: '',
                 renameError: '',
                 renameBusy: false,
+                // Just arrived from creating this calendar: show "created, now share it".
+                justCreated: false,
             };
         },
 
@@ -311,11 +313,20 @@
                 }, (error) => failed(claimErrorMessage(error, slug)));
             },
 
-            /** Show "Calendar created!" once, on the first load after creating. */
+            /**
+             * Confirm the create once, on the first load after it, with the next step
+             * (share it) in the header notice. A toast before the redirect died with the page.
+             */
             announceIfJustCreated() {
-                if (takeCreatedFlag(window.location, window.history)) {
-                    this.$nextTick(() => this.showToast('Calendar created!', 'success'));
-                }
+                if (takeCreatedFlag(window.location, window.history)) this.justCreated = true;
+            },
+
+            onRenameInput(e) {
+                const R = Rules();
+                const v = R ? R.slugify(e.target.value) : e.target.value;
+                this.renameTarget = v;
+                if (e.target.value !== v) e.target.value = v;
+                this.renameError = '';
             },
 
             /** A /view/ link that cannot be shown: say so on the page, not in an alert(). */

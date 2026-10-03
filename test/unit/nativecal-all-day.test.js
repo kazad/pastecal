@@ -41,10 +41,11 @@ function loadNativeApp() {
   const stubs = ['CalendarTitle', 'NavigationDropdown', 'Tooltip', 'ToastNotification',
     'QuickAddButton', 'QuickAddDialog', 'NativeCalendar', 'EventEditor', 'EventPopover',
     'QuickCreatePopover', 'Icon', 'CopyIcon', 'SettingsIcon', 'HelpIcon', 'SearchIcon',
-    'ShareIcon', 'NotesIcon', 'ChevronDownIcon', 'CloseIcon', 'clickOutside'];
+    'ShareIcon', 'NotesIcon', 'ChevronDownIcon', 'CloseIcon', 'clickOutside',
+    'AppHeader', 'ClaimDialog', 'SharePanel', 'CalendarFlow'];
   const factory = new Function(...stubs, 'Event', 'window',
     `${src}; return CalendarVueApp;`);
-  return factory(...stubs.map(() => ({})), Event, {});
+  return factory(...stubs.map((n) => (n === 'CalendarFlow' ? { mixin: {} } : {})), Event, {});
 }
 
 const NativeApp = loadNativeApp();

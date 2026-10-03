@@ -74,6 +74,9 @@ function track(fn) {
 // The value is the component object defined above (e.g., CalendarTitle)
 // ============================================================
 const COMPONENT_REGISTRY = {
+    'app-header': AppHeader,                 // The one header (all widths), driven by pageMode
+    'claim-dialog': ClaimDialog,             // "Name your calendar"
+    'share-panel': SharePanel,               // Every link to this calendar, safest first
     'calendar-title': CalendarTitle,           // Mobile & desktop title component
     'navigation-dropdown': NavigationDropdown, // Recent calendars dropdown
     'custom-tooltip': Tooltip,                 // Tooltip wrapper

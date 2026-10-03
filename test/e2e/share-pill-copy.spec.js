@@ -48,7 +48,7 @@ test.describe('Header share pill', () => {
 
     // The console must NOT have opened -- that was the old behavior and the
     // whole cost this change removes.
-    await expect(page.locator('text=Sharing & Security')).toHaveCount(0);
+    await expect(page.locator('[data-testid="share-panel"]')).toHaveCount(0);
   });
 
   test('copies the read-only link, never the editable one', async ({ page, context }) => {
@@ -71,10 +71,13 @@ test.describe('Header share pill', () => {
 
     await page.locator(PILL).click();
     await expect(page.locator(COPIED)).toBeVisible();
-    // Back to showing the URL, so the header does not get stuck in a state that
-    // hides which calendar you are on.
+    // Back to showing the URL -- the one it copies (the view-only link), not the edit
+    // link it used to display while copying something else.
     await expect(page.locator(COPIED)).toHaveCount(0, { timeout: 4000 });
-    await expect(page.locator(PILL)).toContainText('rldispatch');
+    const shown = (await page.locator('[data-testid="share-pill-url"]').innerText()).replace(/\s+/g, '');
+    const copied = await page.evaluate(() => navigator.clipboard.readText());
+    expect(shown).toContain('/view/');
+    expect(copied.endsWith(shown.replace(/^pastecal\.com/, ''))).toBe(true);
   });
 
   test('the chevron still opens the full sharing console', async ({ page }) => {

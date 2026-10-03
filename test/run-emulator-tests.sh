@@ -134,6 +134,7 @@ MARKERS=(
     "lastEdit stamp:"                 # last-edit-stamp.emulator.test.js
     "author rules:"                   # author-rules.emulator.test.js
     "public views:"                   # public-views.emulator.test.js
+    "slug rules:"                     # slug-rules.emulator.test.js
 )
 missing=()
 for m in "${MARKERS[@]}"; do

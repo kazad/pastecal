@@ -113,8 +113,8 @@ const AppHeader = {
                             data-testid="recents-button">
                             <img class="h-8 w-8 flex-shrink-0 dark:brightness-150" src="/img/pastecal.logo.svg" alt="">
                             <span class="flex flex-col items-start">
-                                <span class="text-blue-500 font-medium text-sm group-hover:text-blue-600 transition-colors">pastecal</span>
-                                <span class="text-color-1 hidden lg:block -mt-0.5 text-[10px]">no-login shared calendar</span>
+                                <span class="hidden min-[360px]:inline text-blue-500 font-medium text-sm group-hover:text-blue-600 transition-colors">pastecal</span>
+                                <span class="text-color-1 hidden lg:block -mt-0.5 text-[10px] whitespace-nowrap">no-login shared calendar</span>
                             </span>
                             <icon name="chevronDown" viewBox="0 0 16 16" fill="currentColor" class="w-3 h-3 text-color-1"></icon>
                         </button>

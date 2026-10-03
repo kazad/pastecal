@@ -59,6 +59,12 @@ const SharePanel = {
             if (this.customError) return this.customError;
             return this.customSlug && !this.customCheck.ok ? this.customCheck.message : '';
         },
+        // A live example (today, this link) rather than a fixed 2024 date.
+        exampleParams() {
+            const d = new Date();
+            const ymd = [d.getFullYear(), String(d.getMonth() + 1).padStart(2, "0"), String(d.getDate()).padStart(2, "0")].join("-");
+            return "?date=" + ymd + "&view=week";
+        },
         canNativeShare() { return typeof navigator !== 'undefined' && !!navigator.share; },
     },
     beforeUnmount() { clearTimeout(this.copiedTimer); },
@@ -229,7 +235,7 @@ const SharePanel = {
                     <h3 class="font-semibold mb-1">Link to this view</h3>
                     <p class="text-xs text-color-1 mb-3">
                         Opens the dates and view on screen now, view only. Or add
-                        <code class="bg-disabled px-1 py-0.5 rounded text-xs">?date=2024-04-01&amp;view=week</code>
+                        <code class="bg-disabled px-1 py-0.5 rounded text-xs">{{ exampleParams }}</code>
                         to any link.
                     </p>
                     <div v-if="currentViewUrl" class="flex gap-2">

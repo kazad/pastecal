@@ -6,6 +6,7 @@ const CalendarTitle = {
             <!-- Show title (including "New Calendar" for new calendars) -->
             <h1 v-if="!isEditing"
                 @click="handleTitleClick"
+                :title="titleAttr || null"
                 :class="titleClasses">
                 {{ title || 'New Calendar' }}
             </h1>
@@ -33,7 +34,17 @@ const CalendarTitle = {
         inputRef: {
             type: String,
             default: 'titleInput'
-        }
+        },
+        titleAttr: { type: String, default: '' }
+    },
+    // Focus lives HERE because the input does: the parent used to focus
+    // $refs.mobileTitleInput, which is this component's ref, not the parent's -- so the
+    // field opened unfocused, typing went nowhere, and calendars kept "New Calendar".
+    watch: {
+        isEditing(now) { if (now) this.focusInput(); }
+    },
+    mounted() {
+        if (this.isEditing) this.focusInput();
     },
     emits: ['update:title', 'blur', 'enter', 'click'],
     computed: {
@@ -63,6 +74,15 @@ const CalendarTitle = {
         }
     },
     methods: {
+        focusInput() {
+            this.$nextTick(() => {
+                const el = this.$refs[this.inputRef];
+                if (el && typeof el.focus === 'function') {
+                    el.focus();
+                    if (typeof el.select === 'function') el.select();
+                }
+            });
+        },
         handleTitleClick() {
             if (!this.isReadOnly) {
                 this.$emit('click');
