@@ -143,6 +143,8 @@ interface NativeCalendarProps {
     events: PasteCalEvent[];
     timeFormat: string;
     creatingEvent: any;
+    readOnly?: boolean;
+    initialView?: 'Day' | 'Week' | 'Month' | 'Year' | 'Agenda';
 }
 
 interface EventEditorProps {

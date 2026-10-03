@@ -1,55 +1,349 @@
-/* NativeCal specific styles */
+/* NativeCal grid layout. Colours come from the shared tokens in /style.css. */
 
-/* Basic grid for month view */
-.calendar-grid {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    border-top: 1px solid var(--border-color);
-    border-left: 1px solid var(--border-color);
-    height: 100%;
+.nc-root {
+    /* ONE hour height for the time grid: rows, hour labels, event boxes, the now-line and
+       the pointer maths (NativeCalendar.js ncHourPx measures it) all derive from it, so
+       they cannot drift apart. */
+    --nc-hour-height: 48px;
+    --nc-gutter: 56px;
+    min-width: 0;
 }
-.calendar-cell {
-    min-height: 100px;
+
+/* ---------------------------------------------------------------- Toolbar */
+.nc-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 1rem;
+    padding: 0.75rem;
+    min-width: 0;
+}
+.nc-toolbar-nav {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    min-width: 0;
+}
+.nc-toolbar-title {
+    font-size: 1.25rem;
+    line-height: 1.75rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+.nc-view-switcher {
+    display: flex;
+    flex-shrink: 0;
+    max-width: 100%;
+}
+@media (max-width: 639px) {
+    .nc-toolbar { padding: 0.5rem; }
+    .nc-toolbar-nav { gap: 0.5rem; flex: 1 1 auto; }
+    .nc-toolbar-title { font-size: 1rem; line-height: 1.5rem; }
+    /* Own row, full width, buttons share it: nothing is clipped at 320px. */
+    .nc-view-switcher { flex: 1 1 100%; }
+    .nc-view-switcher > button { flex: 1 1 0; min-width: 0; padding-left: 0.25rem; padding-right: 0.25rem; }
+}
+
+/* ---------------------------------------------------------------- Month */
+/* Header and weeks share one scroll container and the same column template.
+   minmax(0, 1fr) -- not 1fr, whose minimum is the content width -- so a long title
+   can never widen its column or shift it away from the header. */
+.nc-month {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+.nc-month-head,
+.nc-week {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+.nc-month-head {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--bg-2, var(--bg));
+    border-bottom: 1px solid var(--border-color);
+    border-left: 1px solid var(--border-color);
+}
+.nc-month-head-cell {
+    padding: 0.5rem 0;
+    text-align: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-right: 1px solid transparent;
+}
+.calendar-grid.nc-month-body {
+    flex: 1 1 auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    /* Every week the same height; a busy day shows "+N more" instead of growing. */
+    grid-template-rows: repeat(6, minmax(96px, 1fr));
+    border-left: 1px solid var(--border-color);
+    min-height: 0;
+}
+.nc-week {
+    position: relative;
+    min-height: 0;
+    overflow: hidden;
+    /* grid-template-rows (date row, lanes, rest) is set inline from the measured lanes. */
+}
+.calendar-cell.nc-day {
+    grid-row: 1 / -1;
+    min-width: 0;
+    min-height: 0;
     border-right: 1px solid var(--border-color);
     border-bottom: 1px solid var(--border-color);
-    padding: 0.25rem;
     background: var(--bg);
     color: var(--fg);
+    cursor: pointer;
+    display: flex;
+    justify-content: flex-end;
+    align-items: flex-start;
+    padding: 2px 4px;
 }
-.calendar-cell:hover {
-    background: var(--bg-interactive-hover);
+.calendar-cell.nc-day.nc-day-outside { background: var(--bg-disabled, var(--bg)); }
+.calendar-cell.nc-day:hover { background: var(--bg-interactive-hover); }
+.nc-readonly .calendar-cell.nc-day { cursor: default; }
+.nc-readonly .calendar-cell.nc-day:hover { background: var(--bg); }
+.nc-day-num {
+    font-size: 0.75rem;
+    font-weight: 500;
+    width: 22px;
+    height: 22px;
+    border-radius: 9999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
-/* Time grid (Week/Day) */
-.time-grid {
+/* Bars and chips (month weeks and the time grid's all-day row) */
+.nc-bar {
+    position: relative;
+    z-index: 2;
+    min-width: 0;
+    margin: 1px 3px;
+    padding: 0 6px;
+    height: 18px;
+    line-height: 18px;
+    font-size: 0.75rem;
+    border-radius: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    user-select: none;
+}
+.nc-bar:hover { filter: brightness(0.95); }
+.nc-bar.nc-bar-timed { padding-left: 2px; }
+.nc-bar.nc-bar-timed:hover { background: var(--bg-interactive-hover); filter: none; }
+.nc-bar.nc-bar-cont-before { margin-left: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; }
+.nc-bar.nc-bar-cont-after { margin-right: 0; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.nc-bar.is-dragging { opacity: 0.5; }
+.nc-bar.nc-ghost {
+    z-index: 3;
+    border: 2px dashed #9ca3af;
+    background: var(--bg);
+    font-weight: 500;
+}
+.nc-chip-title,
+.nc-card-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.nc-chip-title { flex: 1 1 auto; }
+.nc-chip-time { flex-shrink: 0; opacity: 0.8; }
+.nc-recur { flex-shrink: 0; }
+.nc-dot { flex-shrink: 0; width: 8px; height: 8px; border-radius: 9999px; }
+.nc-more {
+    position: relative;
+    z-index: 2;
+    min-width: 0;
+    margin: 1px 3px;
+    padding: 0 6px;
+    height: 18px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-align: left;
+    border-radius: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.nc-more:hover { background: var(--bg-interactive-hover); }
+@media (max-width: 639px) {
+    /* ~50px day columns: the title matters more than the time; "+3" not "+3 m…". */
+    .nc-month .nc-chip-time,
+    .nc-more-word { display: none; }
+    .nc-bar { margin-left: 1px; margin-right: 1px; padding: 0 3px; }
+}
+
+/* ---------------------------------------------------------------- Week / Day */
+.nc-timegrid {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.nc-tg-head,
+.nc-allday,
+.nc-tg-body {
     display: grid;
-    /* Grid template columns set dynamically via inline style */
+    /* grid-template-columns: var(--nc-gutter) repeat(N, minmax(0, 1fr)), set inline. */
+    /* The body has a scrollbar and the rows above do not: reserve the same gutter on all
+       three or the day columns drift apart by the scrollbar's width. */
+    scrollbar-gutter: stable;
+    overflow-y: hidden;
+    flex-shrink: 0;
+}
+.nc-tg-head-cell {
+    padding: 0.5rem 0;
+    text-align: center;
+    min-width: 0;
+    border-left: 1px solid var(--border-color);
+}
+.nc-tg-head-num {
+    font-size: 1.25rem;
+    font-weight: 300;
+    width: 2rem;
+    height: 2rem;
+    margin: 0 auto;
+    border-radius: 9999px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.nc-allday { position: relative; min-height: 24px; }
+.nc-allday-label {
+    font-size: 10px;
+    text-align: right;
+    padding-right: 6px;
+    align-self: center;
+}
+.nc-allday-cell {
+    border-left: 1px solid var(--border-color);
+    min-width: 0;
+    cursor: pointer;
+}
+.nc-readonly .nc-allday-cell { cursor: default; }
+.nc-allday .nc-bar { margin-top: 2px; margin-bottom: 2px; }
+
+.nc-tg-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-gutter: stable;
+    position: relative;
+}
+.nc-tg-body.time-grid {
+    overflow: visible;
+    position: relative;
+}
+.nc-tg-gutter { min-width: 0; }
+.nc-tg-labels {
+    position: relative;
+    font-size: 11px;
+    border-right: 1px solid var(--border-color);
+}
+/* Each label is centred ON the line it names: the line at the top of hour h. */
+.nc-hour-label {
+    position: absolute;
+    right: 6px;
+    top: calc(var(--nc-hour-height) * var(--h));
+    transform: translateY(-50%);
+    white-space: nowrap;
+    line-height: 1;
+    user-select: none;
 }
 .time-col {
     border-right: 1px solid var(--border-color);
-    min-width: 0; 
+    min-width: 0;
     position: relative;
     background: var(--bg);
+    cursor: pointer;
 }
+.nc-readonly .time-col { cursor: default; }
 .hour-row {
-    height: 50px; /* 50px per hour */
+    height: var(--nc-hour-height);
     border-bottom: 1px solid var(--bg-interactive-hover);
     box-sizing: border-box;
+    pointer-events: none;
 }
+
+/* Timed event boxes: --top/--dur in hours, --left/--width as fractions of the column,
+   from NativeCalLayout.layoutTimedDay. */
+.nc-card {
+    position: absolute;
+    top: calc(var(--nc-hour-height) * var(--top));
+    height: calc(var(--nc-hour-height) * var(--dur) - 2px);
+    left: calc(var(--left) * 100% + 1px);
+    width: calc(var(--width) * 100% - 3px);
+    padding: 2px 4px;
+    font-size: 0.75rem;
+    line-height: 1.2;
+    border-radius: 4px;
+    border-left: 3px solid;
+    overflow: hidden;
+    box-shadow: 0 0 0 1px var(--bg);
+    cursor: pointer;
+}
+.nc-card-title { font-weight: 700; pointer-events: none; }
+.nc-card-time { opacity: 0.8; font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+.nc-card.nc-card-short { display: flex; gap: 4px; align-items: baseline; }
+.nc-card.nc-card-short .nc-card-time { flex-shrink: 1; }
+.nc-card-selected { outline: 2px solid currentColor; outline-offset: 1px; }
+.nc-readonly .nc-card { cursor: pointer; }
+.nc-card-ghost {
+    position: absolute;
+    top: calc(var(--nc-hour-height) * var(--top));
+    height: calc(var(--nc-hour-height) * var(--dur) - 2px);
+    left: 2px;
+    right: 2px;
+    z-index: 20;
+    border: 2px dashed #9ca3af;
+    border-radius: 4px;
+    background: var(--bg);
+    opacity: 0.8;
+    font-size: 0.75rem;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+.nc-now {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: calc(var(--nc-hour-height) * var(--h));
+    height: 2px;
+    background: #ef4444;
+    z-index: 30;
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+}
+.nc-now-dot { width: 8px; height: 8px; margin-left: -4px; border-radius: 9999px; background: #ef4444; }
 
 .event-card {
     transition: box-shadow 0.1s, transform 0.1s, width 0.2s ease-out, left 0.2s ease-out;
     z-index: 10;
 }
-
-.event-card:hover {
-    z-index: 50 !important;
-}
-
-.event-card.is-dragging {
-    opacity: 0.5;
-    z-index: 60 !important;
-}
+.event-card:hover { z-index: 50 !important; }
+.event-card.is-dragging { opacity: 0.5; z-index: 60 !important; }
 
 /* Active Drag State */
 .event-card.dragging-active {
@@ -57,17 +351,18 @@
     z-index: 100 !important;
     opacity: 0.9;
 }
-
-.event-card.dragging-move-active {
-    transform: rotate(3deg) scale(1.02);
-}
+.event-card.dragging-move-active { transform: rotate(3deg) scale(1.02); }
 
 .resize-handle {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 6px;
+    z-index: 20;
     cursor: ns-resize;
 }
-.resize-handle:hover {
-    background-color: rgba(0,0,0,0.1);
-}
+.resize-handle:hover { background-color: rgba(0,0,0,0.1); }
 
 /* Drag Ghost */
 .drag-ghost {
