@@ -84,9 +84,8 @@ class SlugManager {
                 where: 'readonly_link',
                 reason: error?.code || 'unknown',
             }), customSlug);
-            if (!autoCreate) {
-                alert('Failed to create read-only link: ' + (error.message || 'Please try again.'));
-            }
+            // Rethrown for the caller to show next to the field it came from (SharePanel).
+            // This used to alert(), which blocked the page and could not say WHICH field.
             throw error;
         }
     }

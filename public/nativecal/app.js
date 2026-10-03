@@ -9,6 +9,9 @@
 // The value is the component object defined above (e.g., CalendarTitle)
 // ============================================================
 const COMPONENT_REGISTRY = {
+    'app-header': AppHeader,                 // The one header (all widths), driven by pageMode
+    'claim-dialog': ClaimDialog,             // "Name your calendar"
+    'share-panel': SharePanel,               // Every link to this calendar, safest first
     'calendar-title': CalendarTitle,           // Mobile & desktop title component
     'navigation-dropdown': NavigationDropdown, // Recent calendars dropdown
     'custom-tooltip': Tooltip,                 // Tooltip wrapper
@@ -43,6 +46,9 @@ const stripBase = (path) => {
 /** @type {import('vue').ComponentOptions} */
 const CalendarVueApp = {
     components: COMPONENT_REGISTRY,
+    // Page mode, claim, rename and view-link problems: shared with the other app
+    // (public/services/CalendarFlow.js). Methods defined here would override it.
+    mixins: [CalendarFlow.mixin],
     directives: {
         'click-outside': clickOutside
     },
@@ -54,7 +60,10 @@ const CalendarVueApp = {
 
         let urlslug = normalizedPathParts[0];
 
-        if (urlslug && urlslug.match(/^[a-zA-Z0-9_\-]+$/) && urlslug.length < 40) {
+        // SlugRules.isRoutable: any key that may exist, legacy mixed-case and long ones
+        // included. This used to cap at 39 chars, so a 45-char name the database accepted
+        // reloaded as the homepage. Whether a name may be CLAIMED is SlugRules.check.
+        if (SlugRules.isRoutable(urlslug)) {
             // slug is ok, normalize for consistent lookup
             urlslug = SlugManager.normalizeSlug(urlslug);
         } else {
@@ -131,12 +140,6 @@ const CalendarVueApp = {
             showReadOnlySlug: false,
             readOnlySlugInput: '',
 
-            // Rename
-            newCalendarId: '',
-
-            // Creation flow
-            showClaimDialog: false,
-            userHasEditedSlug: false,
 
             // Mobile Menu
             showMobileMenu: false,
@@ -226,6 +229,9 @@ const CalendarVueApp = {
         this.recentManager = new RecentCalendars();
         this.recentCalendars = this.recentManager.getAll();
 
+        // "Calendar created!" from the page that created it (carried as ?created=1).
+        this.announceIfJustCreated();
+
         // Ensure calendar.options has proper defaults
         this.ensureCalendarOptionsDefaults();
 
@@ -277,18 +283,15 @@ const CalendarVueApp = {
                             this.isLoading = false;
                         });
                     } else if (result.data.found && !result.data.isReadOnly) {
-                        // Found as editable calendar - show message
-                        this.isLoading = false;
-                        alert('This calendar exists but is not shared for viewing. Ask the owner to create a read-only link.');
+                        // Found as editable calendar: never opened from a /view/ link.
+                        this.showViewProblem('not-shared');
                     } else {
                         // Calendar doesn't exist at all
-                        this.isLoading = false;
-                        alert('Calendar not found. Please check the URL and try again.');
+                        this.showViewProblem('not-found');
                     }
                 } catch (error) {
                     console.error('Calendar lookup failed:', error);
-                    this.isLoading = false;
-                    alert('Failed to load calendar. Please try again later.');
+                    this.showViewProblem('failed');
                 }
             })();
         } else if (this.urlslug) {
@@ -381,7 +384,7 @@ const CalendarVueApp = {
 
             // If still no events after loading, create default sample event
             if (this.calendar.events.length == 0) {
-                var defaultEvent = this.calendar.defaultEvent("Sample event");
+                var defaultEvent = CalendarFlow.markSample(this.calendar.defaultEvent(CalendarFlow.SAMPLE_TITLE));
                 this.calendar.setEvents([defaultEvent]);
             }
             this.updateCalendarView();
@@ -406,18 +409,6 @@ const CalendarVueApp = {
                 this.startUpdateLinkTimer();
             } else {
                 this.stopUpdateLinkTimer();
-            }
-        },
-
-        editTitle(newValue) {
-            // Auto-focus the title input when entering edit mode
-            if (newValue) {
-                this.$nextTick(() => {
-                    if (this.$refs.mobileTitleInput) {
-                        this.$refs.mobileTitleInput.focus();
-                        this.$refs.mobileTitleInput.select();
-                    }
-                });
             }
         },
 
@@ -642,7 +633,7 @@ const CalendarVueApp = {
                 defaultView: 'week'
             };
             // Add one sample event
-            var defaultEvent = this.calendar.defaultEvent("Sample event");
+            var defaultEvent = CalendarFlow.markSample(this.calendar.defaultEvent(CalendarFlow.SAMPLE_TITLE));
             this.calendar.setEvents([defaultEvent]);
             // Reset local settings to defaults
             this.initializeLocalSettings();
@@ -871,130 +862,13 @@ const CalendarVueApp = {
         // REGION: Calendar CRUD Operations
         // ============================================================
 
-        create() {
-            // If user hasn't manually edited the slug, show intervention dialog
-            if (!this.userHasEditedSlug) {
-                this.showClaimDialog = true;
-                // Focus input in dialog on next tick
-                this.$nextTick(() => {
-                    if (this.$refs.claimInput) {
-                        this.$refs.claimInput.focus();
-                        this.$refs.claimInput.select();
-                    }
-                });
-                return;
-            }
-
-            this.confirmClaim();
-        },
-
-        confirmClaim() {
-            if (this.calendar.id) {
-                // Proceed with creation
-                this._performCreate();
-                this.showClaimDialog = false;
-            }
-        },
-
-        _performCreate() {
-            let slug = this.calendar.id;
-            if (!slug) {
-                slug = Utils.randomID(8);
-                this.calendar.id = slug;
-            }
-
-            // normalize
-            slug = SlugManager.normalizeSlug(slug);
-            this.calendar.id = slug;
-
-            // check for existing
-            CalendarDataService.checkExists(slug, () => {
-                // Revert to alert for this validation as per user request
-                alert("This URL is already taken. Please choose another.");
-            }, () => {
-                // does not exist, proceed
-                this.isLoading = true;
-                CalendarDataService.createWithId(slug, this.calendar, () => {
-                    // Record in recents here rather than relying on the post-redirect
-                    // load to do it, so a calendar you just made is always in the list.
-                    // Flagged `mine` so it's stored durably and never evicted by the
-                    // recents cap — this list is the only way back without a login.
-                    // Written BEFORE the draft is cleared, so a storage failure can't
-                    // lose both.
-                    this.recentManager.add(slug, this.calendar.title, true);
-                    this.recentCalendars = this.recentManager.getAll();
-                    // success - clear localStorage so homepage starts fresh next time
-                    this.clearLocalStorage();
-                    this.showToast('Calendar created!', 'success');
-                    window.location.href = "/" + slug;
-                });
-            });
-        },
-
-        handleSlugInput() {
-            this.userHasEditedSlug = true;
-        },
-
-        randomizeId() {
-            this.calendar.id = Utils.randomID(8);
-            // Reset edited state if they randomize (treat as "auto" again, or maybe not? 
-            // Let's keep it as "not edited" so they get the review dialog if they just clicked shuffle
-            // Actually, if they clicked shuffle, they interacted. 
-            // But let's err on safe side: if they just shuffled but didn't TYPE, show dialog to confirm.
-            this.userHasEditedSlug = false;
-        },
-
-        renameCalendar() {
-            if (!this.newCalendarId || !this.newCalendarId.trim()) return;
-
-            let newId = this.newCalendarId.trim();
-            // basic validation (alphanumeric, hyphens)
-            if (!newId.match(/^[a-zA-Z0-9_\-]+$/)) {
-                alert("Invalid name. Use letters, numbers, dashes, and underscores.");
-                return;
-            }
-
-            // Check if current name is same as new name
-            if (newId.toLowerCase() === this.calendar.id.toLowerCase()) {
-                alert("New name must be different from current name.");
-                return;
-            }
-
-            CalendarDataService.checkExists(newId, () => {
-                alert("That name is already taken.");
-            }, () => {
-                // does not exist, proceed
-                if (confirm(`Move calendar to pastecal.com/${newId}?`)) {
-                    // Create copy with new ID
-                    let newCalendar = JSON.parse(JSON.stringify(this.calendar));
-                    newCalendar.id = newId;
-                    newCalendar.title = newCalendar.title || "New Calendar";
-
-                    const oldId = this.calendar.id;
-
-                    CalendarDataService.createWithId(newId, newCalendar, () => {
-                        // We don't delete the old one (safer, acts as a copy), but the
-                        // recents entry has to move: leaving both would list a stale copy
-                        // alongside the live calendar with no way to tell them apart.
-                        const previous = this.recentManager.getAll()
-                            .find(item => item.id === oldId);
-                        this.recentManager.remove(oldId);
-                        // Renaming your own calendar keeps it yours.
-                        this.recentManager.add(newId, newCalendar.title, !!previous?.mine);
-                        if (previous?.pinned) this.recentManager.togglePin(newId);
-                        this.recentCalendars = this.recentManager.getAll();
-
-                        window.location.href = "/" + newId;
-                    });
-                }
-            });
-        },
-
+        // Enter in the title field. CalendarTitle emits 'enter' with no event, so this
+        // reads the bound title rather than event.target (which threw on desktop).
         setTitle(event) {
-            if (event.target.value.trim()) {
-                this.editTitle = false;
-                this.calendar.title = event.target.value.trim();
-            }
+            const typed = event && event.target ? event.target.value : this.calendar.title;
+            const title = String(typed || '').trim();
+            if (title) this.calendar.title = title;
+            this.editTitle = false;
         },
 
         getTypes() {
@@ -1015,11 +889,9 @@ const CalendarVueApp = {
         },
 
         updateCurrentViewURL() {
-            // TODO: when implementing properly, route through SlugManager.getViewerBaseURL(this.calendar, this.isReadOnly)
-            // and append ?date=...&view=... params — see public/app.js updateCurrentViewURL.
-            // Do NOT interpolate this.calendar.id directly; that leaks the edit id in read-only mode.
-            console.log('[updateCurrentViewURL] NativeCal: Stubbed');
-            this.currentViewURL = window.location.href; // Fallback
+            // The view-only link, for editors too (see public/app.js). This used to be
+            // window.location.href -- for an editor, the EDIT link.
+            this.currentViewURL = SlugManager.getViewerBaseURL(this.calendar, true) || '';
         },
 
         // ============================================================
@@ -1174,6 +1046,14 @@ const CalendarVueApp = {
 
         toggleRecents() {
             this.showRecents = !this.showRecents;
+        },
+
+        // Desktop logo and chevron. Hover had already opened the list, so a click that
+        // toggled closed it again under the pointer -- the menu "didn't work". Opening is
+        // idempotent; Escape, a click outside and leaving with the mouse close it.
+        openRecents() {
+            clearTimeout(this.hoverTimeout);
+            this.showRecents = true;
         },
 
         closeRecents() {

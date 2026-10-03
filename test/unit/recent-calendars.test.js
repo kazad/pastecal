@@ -372,9 +372,10 @@ test('a quota error on save does not throw into the caller', () => {
   assert.doesNotThrow(() => m.add('y', 'Y', true));
 });
 
-test('app.js records the new calendar in recents before clearing the draft', () => {
-  const src = fs.readFileSync(path.join(__dirname, '../../public/app.js'), 'utf8');
-  const add = src.indexOf('this.recentManager.add(slug, this.calendar.title, true);');
+test('the create path records the new calendar in recents before clearing the draft', () => {
+  // Shared by both apps since 2026-10 (public/services/CalendarFlow.js).
+  const src = fs.readFileSync(path.join(__dirname, '../../public/services/CalendarFlow.js'), 'utf8');
+  const add = src.indexOf('this.recentManager.add(slug, toSave.title, true);');
   const clear = src.indexOf('this.clearLocalStorage();', add - 2000);
   assert.ok(add > 0 && clear > add, 'add() must precede clearLocalStorage() in the create path');
 });

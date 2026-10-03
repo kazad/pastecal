@@ -183,7 +183,7 @@ test('stress: generateICS never throws on hostile text and never breaks structur
     }, `threw on text=${label(text).slice(0, 40)}`);
 
     assert.match(ics, /^BEGIN:VCALENDAR/);
-    assert.match(ics, /END:VCALENDAR$/);
+    assert.match(ics, /END:VCALENDAR\r\n$/);
   }
 });
 
@@ -225,7 +225,7 @@ test('stress: generateICS survives a large calendar of mixed-validity events', (
   assert.equal(emitted, (ics.match(/DTSTART:/g) || []).length,
     'every emitted VEVENT must have a DTSTART even at scale');
   assert.ok(emitted > 1200, `expected the ~1333 valid events, got ${emitted}`);
-  assert.match(ics, /END:VCALENDAR$/);
+  assert.match(ics, /END:VCALENDAR\r\n$/);
 });
 
 test('stress: generateICS survives hostile calendarData wrappers', () => {

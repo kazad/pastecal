@@ -7,6 +7,8 @@
 # gets a byte-identical copy at public/models/caldate.js. functions/ is the source of
 # truth: edit it there, then run this. deploy.sh and firebase.json (hosting predeploy) run
 # it before every deploy, and test/unit/caldate.test.js fails if the copies differ.
+# functions/slug-rules.js (what a calendar or view name may be) is shared the same way;
+# test/unit/slug-rules.test.js guards that copy.
 #
 # Usage:
 #   scripts/sync-shared.sh          # copy
@@ -15,7 +17,10 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-SHARED=("functions/caldate.js:public/models/caldate.js")
+SHARED=(
+    "functions/caldate.js:public/models/caldate.js"
+    "functions/slug-rules.js:public/utils/slug-rules.js"
+)
 
 status=0
 for pair in "${SHARED[@]}"; do

@@ -5,7 +5,31 @@
     "calendars": {
       "$id": {
         ".read": true,
-        ".write": "data.exists() || !newData.exists() || ($id.matches(/^[A-Za-z0-9_-]{1,100}$/) && !root.child('calendars_readonly').child($id).exists() && !root.child('calendars_readonly').child($id.toLowerCase()).exists() && !root.child('public_views').child($id.toLowerCase()).exists())"
+        ".write": "data.exists() || !newData.exists() || ($id.matches(/^[a-z0-9_-]{3,50}$/) && !$id.matches(/^(view|nativecal|api|ics|feed|embed|new|create|claim|share|edit|calendars|history|poll|components|demo|directives|img|js-old-components|models|services|utils|admin|administrator|www|app|apps|calendar|cal|about|account|accounts|assets|auth|bin|billing|blog|bot|cache|careers|cgi-bin|config|contact|cpanel|css|dashboard|dev|docs|download|downloads|enterprise|faq|ftp|ghost|guide|help|home|hostmaster|images|imap|index|jobs|js|legal|login|logout|mail|manage|media|me|moderator|mx|news|ns|ns1|ns2|null|oauth|password|pop|pop3|postmaster|press|pricing|privacy|pro|profile|public|recover|register|reset|root|settings|setup|signin|signout|signup|smtp|ssl|static|status|subscriptions|superuser|support|sys|sysadmin|system|team|terms|tos|undefined|user|users|v1|v2|webhooks|webmail|wiki|wp-admin|wp-content|wp-login)$/) && newData.child('id').val() === $id && !root.child('calendars_readonly').child($id).exists() && !root.child('public_views').child($id).exists())",
+        "id": {
+          ".validate": true
+        },
+        "title": {
+          ".validate": true
+        },
+        "events": {
+          ".validate": true
+        },
+        "options": {
+          ".validate": true
+        },
+        "_writer": {
+          ".validate": true
+        },
+        "_undoOf": {
+          ".validate": true
+        },
+        "_gesture": {
+          ".validate": true
+        },
+        "$other": {
+          ".validate": "data.exists()"
+        }
       }
     },
     "calendars_readonly": {
