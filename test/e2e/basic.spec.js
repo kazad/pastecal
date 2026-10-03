@@ -37,8 +37,9 @@ test.describe('NativeCal Prototype', () => {
   test('should load and navigate views', async ({ page }) => {
     await page.goto('/nativecal/');
 
-    // Check Title
-    await expect(page.getByText('NativeCal', { exact: true })).toBeVisible();
+    // The page has no "NativeCal" heading (it never did); the view switcher is the
+    // stable sign the app mounted.
+    await expect(page.getByRole('button', { name: 'Month' })).toBeVisible();
 
     // Switch to Month View
     await page.getByRole('button', { name: 'Month' }).click();
