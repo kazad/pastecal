@@ -221,6 +221,12 @@ const CalendarVueApp = {
         // Homepage calendar (no slug and not an existing saved calendar)
         isHomepageCalendar() {
             return !this.urlslug && !this.isExisting;
+        },
+
+        // An unclaimed /slug with something on it, kept only in this browser (LocalDraft).
+        hasUnsavedDraft() {
+            return !!this.urlslug && !this.isExisting && !this.isReadOnly && !this.isLoading
+                && LocalDraft.hasContent(this.calendar);
         }
     },
 
@@ -321,9 +327,15 @@ const CalendarVueApp = {
                         this.applyGlobalSettingsAfterRemote();
                         this.remoteSettingsApplied = true;
                     }
+                    LocalDraft.settle(this.urlslug, c.events);
                 } else {
-                    // Calendar doesn't exist
+                    // Calendar doesn't exist: bring back this browser's draft of it, once.
                     this.isExisting = false;
+                    if (!this._draftRestored) {
+                        this._draftRestored = true;
+                        const n = LocalDraft.restoreInto(this.urlslug, this.calendar);
+                        if (n) this.showToast(`Restored ${n} unsaved event${n === 1 ? '' : 's'} from this browser. Claim this URL to keep ${n === 1 ? 'it' : 'them'}.`, 'info');
+                    }
                 }
                 this.isLoading = false;
             }, () => this.calendar);
@@ -400,6 +412,30 @@ const CalendarVueApp = {
             }
         };
         window.addEventListener('keydown', this._quickAddShortcutHandler);
+
+        // An unclaimed /slug is saved only in this browser: say so before it is closed.
+        window.addEventListener('beforeunload', (e) => {
+            if (!this.hasUnsavedDraft) return;
+            e.preventDefault();
+            e.returnValue = '';
+        });
+
+        // Cmd/Ctrl+Z undoes this tab's own last action, as in the main app (the same
+        // UndoService). Never while typing (the browser's text undo) or with a dialog up.
+        this._undoStack = [];
+        this._undoShortcutHandler = (e) => {
+            const isZ = typeof e.key === 'string' && e.key.toLowerCase() === 'z';
+            if (!((e.metaKey || e.ctrlKey) && isZ) || e.shiftKey) return;
+            const el = document.activeElement;
+            if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+            if (this.showEditor || this.showPopover || this.showQuickCreate
+                || (this.$refs.quickAddDialog && this.$refs.quickAddDialog.dialogVisible)) return;
+            const action = this._undoStack[this._undoStack.length - 1];
+            if (!action) return;
+            e.preventDefault();
+            this.undoAction(action);
+        };
+        window.addEventListener('keydown', this._undoShortcutHandler);
     },
 
     watch: {
@@ -653,10 +689,13 @@ const CalendarVueApp = {
         },
 
         saveLocalStorage() {
-            // Only save to localStorage when on homepage
-            // Named calendars should never overwrite homepage data
+            // The homepage draft and an unclaimed /slug's draft are kept apart; before,
+            // only the homepage was kept and events on an unclaimed /slug vanished on
+            // reload (see services/LocalDraft.js, shared with the main app).
             if (this.isHomepageCalendar) {
                 localStorage.setItem("calendar", JSON.stringify(this.calendar));
+            } else if (this.urlslug && !this.isExisting && !this.isReadOnly && !this.isLoading) {
+                LocalDraft.save(this.urlslug, this.calendar);
             }
         },
 
@@ -719,7 +758,7 @@ const CalendarVueApp = {
             const newEventData = {
                 start: this.quickCreateEvent.start,
                 end: this.quickCreateEvent.end,
-                title: title || '(No Title)',
+                title: title && title.trim() ? title.trim() : UndoService.UNTITLED,
                 isAllDay: this.quickCreateEvent.isAllDay,
                 type: 1
             };
@@ -742,37 +781,36 @@ const CalendarVueApp = {
             this.closeQuickCreate();
         },
 
-        handleEventClick({ event, jsEvent }) {
+        handleEventClick({ event, occurrence, jsEvent }) {
             // Close other popups
             this.closeQuickCreate();
             this.closeEditor();
 
-            this.popoverEvent = event;
-            
+            // One occurrence of a series is shown as itself -- its own date -- and carries
+            // which series and which slot it is, so delete and edit can offer "this event"
+            // without guessing. It used to be swapped for the series, so the popover showed
+            // the series' first date and the trash deleted every occurrence.
+            this.popoverEvent = occurrence
+                ? { ...event, start: occurrence.start, end: occurrence.end,
+                    occurrenceStart: occurrence.start, isRecurringInstance: true }
+                : event;
+
             // EventPopover.js widens itself past the default 320px for long descriptions
             // (see LONG_DESCRIPTION_THRESHOLD there) -- this positioning math has to use
-            // the same width the popover will actually render at, or a wide popover for a
-            // long description can get centered/bounds-checked as if it were still 320px
-            // and end up pushed off the right edge of the viewport. The popover also caps
-            // itself at 100vw - 20px on narrow viewports (see max-w- there), so mirror that
-            // clamp here too.
+            // the same width the popover will actually render at.
             const LONG_DESCRIPTION_THRESHOLD = 140;
             const isLong = (event?.description?.length || 0) > LONG_DESCRIPTION_THRESHOLD;
             const popoverWidth = isLong ? Math.min(480, window.innerWidth - 20) : 320;
 
-            // Position logic
             let top = 0, left = 0;
             if (jsEvent && jsEvent.currentTarget) {
                 const rect = jsEvent.currentTarget.getBoundingClientRect();
                 top = rect.bottom + 10;
-                left = rect.left + (rect.width / 2) - (popoverWidth / 2); // Center
-
-                // Bounds check
+                left = rect.left + (rect.width / 2) - (popoverWidth / 2);
                 if (left < 10) left = 10;
                 if (left + popoverWidth > window.innerWidth) left = window.innerWidth - popoverWidth - 10;
-                if (top + 200 > window.innerHeight) top = rect.top - 210; // Flip up if no space
+                if (top + 200 > window.innerHeight) top = rect.top - 210;
             } else {
-                // Center screen
                 top = window.innerHeight / 2 - 100;
                 left = window.innerWidth / 2 - (popoverWidth / 2);
             }
@@ -781,8 +819,18 @@ const CalendarVueApp = {
             this.showPopover = true;
         },
 
-        openEditorForEvent(event) {
-            this.editorEvent = { ...event };
+        // `scope` says what an edit of one occurrence applies to: 'this' (that occurrence
+        // alone), 'following' (it and every later one) or 'all' (the series, as stored).
+        openEditorForEvent(event, scope) {
+            if (event && event.occurrenceStart !== undefined && scope && scope !== 'all') {
+                this.editorEvent = { ...event, editScope: scope, seriesId: event.id };
+            } else {
+                const stored = event && this.calendar.events.find(e => e.id === event.id && !e.recurrenceID);
+                const shown = stored && this.displayEvents.find(e => e.id === stored.id && !e.recurrenceID);
+                this.editorEvent = { ...(shown || event) };
+                delete this.editorEvent.occurrenceStart;
+                delete this.editorEvent.isRecurringInstance;
+            }
             this.showEditor = true;
             this.closePopover();
         },
@@ -818,42 +866,95 @@ const CalendarVueApp = {
         },
 
         handleSaveEvent(eventData) {
-            // Clone existing events
+            const { editScope, seriesId, occurrenceStart } = eventData;
+            const clean = { ...eventData };
+            for (const k of ['editScope', 'seriesId', 'occurrenceStart', 'isRecurringInstance', 'originalEventId']) delete clean[k];
+            if (!clean.title || !String(clean.title).trim()) clean.title = UndoService.UNTITLED;
             const events = [...this.calendar.events];
-            
-            if (eventData.id) {
-                // Update existing
-                const index = events.findIndex(e => e.id === eventData.id);
+
+            if (editScope && seriesId) {
+                // One occurrence, or it and the rest: the stored model Syncfusion uses too
+                // (and the ICS feed reads), built from the shared Event helpers.
+                const i = events.findIndex(e => e.id === seriesId && !e.recurrenceID);
+                if (i === -1) return;
+                const series = events[i];
+                const removedKeys = [];
+                if (editScope === 'this') {
+                    events[i] = Event.withoutOccurrence(series, occurrenceStart);
+                    const row = this.toStoredEvent({ ...clean, id: undefined, recurrencerule: series.recurrencerule }, null);
+                    delete row.id;
+                    events.push(new Event({ ...row, recurrenceID: series.id,
+                        recurrenceException: Event.exceptionStampFor(series, occurrenceStart) }));
+                } else {
+                    const ended = Event.endSeriesBefore(series, occurrenceStart);
+                    // Moved occurrences from here on belong to the series being replaced.
+                    const later = events.filter(e => String(e.recurrenceID) === String(series.id)
+                        && CalDate.toMs(e.start) >= CalDate.toMs(occurrenceStart));
+                    removedKeys.push(...later.map(e => CalendarDataService._eventKey(e)));
+                    const next = new Event(this.toStoredEvent({ ...clean, id: undefined, recurrenceException: null }, null));
+                    next.id = Utils.uuidv4();
+                    const kept = events.filter(e => !later.includes(e));
+                    if (ended) kept[kept.indexOf(series)] = ended;
+                    else { kept.splice(kept.indexOf(series), 1); removedKeys.push(CalendarDataService._eventKey(series)); }
+                    events.length = 0;
+                    events.push(...kept, next);
+                }
+                this.commitAction('edit', events, { removedKeys });
+                this.closeEditor();
+                return;
+            }
+
+            if (clean.id) {
+                const index = events.findIndex(e => e.id === clean.id && !e.recurrenceID === !clean.recurrenceID);
                 if (index !== -1) {
-                    // Update fields
-                    const merged = { ...events[index], ...eventData };
+                    const merged = { ...events[index], ...clean };
                     events[index] = new Event(this.toStoredEvent(merged, events[index]));
                 }
+                this.commitAction('edit', events);
             } else {
-                // Create new
-                const newEvent = new Event(this.toStoredEvent(eventData, null));
-                events.push(newEvent);
+                events.push(new Event(this.toStoredEvent(clean, null)));
+                this.commitAction('add', events);
             }
-            
-            // Trigger update
-            this.calendar.setEvents(events);
             this.closeEditor();
         },
 
-        handleDeleteEvent(id) {
-            // Deleting a series takes its edited occurrences (rows whose recurrenceID
-            // names it) along; left behind, they would show here as stray one-off events.
+        // Delete from the popover or the editor. `target` is an id (the editor: the whole
+        // event) or { event, scope }: for one occurrence of a series, scope is 'this' (an
+        // exception date on the series), 'following' (the series ends the day before) or
+        // 'all'. Every delete says what went, with Undo -- the same UndoService as the
+        // main app. It used to delete the whole series on the trash of one occurrence,
+        // silently, with no way back.
+        handleDeleteEvent(target) {
             const all = this.calendar.events;
-            const series = all.some(e => e.id === id && !e.recurrenceID);
-            const gone = (e) => e.id === id
-                || (series && e.recurrenceID != null && String(e.recurrenceID) === String(id));
-            const removed = all.filter(gone);
-            // The write gate refuses any removal nobody declared, and undeclared it also
-            // re-saved the row on the next edit. Name exactly the rows going away.
-            if (removed.length) {
-                CalendarDataService.declareIntent(removed.map(e => CalendarDataService._eventKey(e)));
+            const event = typeof target === 'object' && target ? target.event : null;
+            const scope = (typeof target === 'object' && target && target.scope) || 'all';
+            const id = event ? event.id : target;
+            const row = event && event.recurrenceID
+                ? all.find(e => e.id === id && String(e.recurrenceID) === String(event.recurrenceID))
+                : all.find(e => e.id === id && !e.recurrenceID);
+
+            let events, removed = [];
+            if (row && !row.recurrenceID && event && event.occurrenceStart !== undefined && scope === 'this') {
+                events = all.map(e => (e === row ? Event.withoutOccurrence(row, event.occurrenceStart) : e));
+            } else if (row && !row.recurrenceID && event && event.occurrenceStart !== undefined && scope === 'following'
+                && Event.endSeriesBefore(row, event.occurrenceStart)) {
+                const later = all.filter(e => String(e.recurrenceID) === String(row.id)
+                    && CalDate.toMs(e.start) >= CalDate.toMs(event.occurrenceStart));
+                removed = later;
+                events = all.filter(e => !later.includes(e))
+                    .map(e => (e === row ? Event.endSeriesBefore(row, event.occurrenceStart) : e));
+            } else {
+                // The whole event. Deleting a series takes its edited occurrences (rows
+                // whose recurrenceID names it) along; left behind, they would show as
+                // stray one-off events.
+                const series = !!row && !row.recurrenceID && !!row.recurrencerule;
+                const gone = (e) => e === row
+                    || (series && e.recurrenceID != null && String(e.recurrenceID) === String(id));
+                removed = all.filter(gone);
+                events = all.filter(e => !gone(e));
             }
-            this.calendar.setEvents(all.filter(e => !gone(e)));
+            this.commitAction('delete', events,
+                { removedKeys: removed.map(e => CalendarDataService._eventKey(e)) });
             this.closePopover();
             this.closeEditor();
         },
@@ -963,17 +1064,41 @@ const CalendarVueApp = {
         // REGION: Events & Search Management
         // ============================================================
 
+        // Shared with the main app (services/EventSearch.js): title and notes, no crash on
+        // an untitled event, and a series listed at its next occurrence.
         searchEvents() {
-            if (this.searchQuery.trim() !== '') {
-                this.searchResults = this.displayEvents.filter(event =>
-                    event.title.toLowerCase().includes(this.searchQuery.toLowerCase())
-                );
+            this.searchResults = this.searchQuery.trim()
+                ? EventSearch.search(this.calendar.events, this.searchQuery, {
+                    occurrenceAfter: (e, ms) => this.occurrenceAfter(e, ms),
+                })
+                : [];
+        },
 
-                // sort results by newest first
-                this.searchResults.sort((a, b) => new Date(b.start) - new Date(a.start));
-            } else {
-                this.searchResults = [];
+        searchResultLabel(result) {
+            return EventSearch.describe(result);
+        },
+
+        eventName(e) {
+            return UndoService.eventName(e);
+        },
+
+        // The first occurrence of a series still in progress or to come at `fromMs`, from
+        // the grid's own expansion (Event.expandOccurrences over what displayEvents
+        // shows), a year at a time for at most ten. Null once the series is over.
+        occurrenceAfter(event, fromMs) {
+            if (!window.rrule) return null;
+            const shown = this.displayEvents.find(e => e.id === event.id && !e.recurrenceID) || event;
+            const start = CalDate.toMs(shown.start);
+            const length = Math.max(0, CalDate.toMs(shown.end) - start) || 0;
+            let from = Math.max(start, fromMs - length);
+            for (let i = 0; i < 10; i++) {
+                const to = from + 366 * 864e5;
+                const hit = Event.expandOccurrences(shown, new Date(from), new Date(to), window.rrule)
+                    .find(o => CalDate.toMs(o.end) > fromMs);
+                if (hit) return { start: CalDate.toMs(hit.start), end: CalDate.toMs(hit.end) };
+                from = to;
             }
+            return null;
         },
 
         toggleColorFilter(index) {
@@ -1037,11 +1162,9 @@ const CalendarVueApp = {
             });
         },
 
-        jumpToEvent(event) {
-            let startDate = new Date(event.start);
-            console.log('[jumpToEvent] NativeCal: Stubbed', startDate);
-            // scheduleObj.selectedDate = startDate;
-            // scheduleObj.currentView = 'Week';
+        jumpToEvent(result) {
+            const cal = this.$refs.nativeCal;
+            if (cal && typeof cal.goToDate === 'function') cal.goToDate(new Date(result.start), 'Week');
         },
 
         toggleRecents() {
@@ -1177,14 +1300,9 @@ const CalendarVueApp = {
         handleQuickAddEvent(event) {
             // A read-only (/view/) page has nothing to write to.
             if (!this.canEdit) return;
-            const newEvent = new Event({
-                title: event.subject,
-                start: event.startDateTime,
-                end: event.endDateTime,
-                isAllDay: !!event.isAllDay
-            });
-            this.calendar.events.push(newEvent);
-            this.calendar.setEvents(this.calendar.events);
+            // Event.fromQuickAdd is shared with the main app: one-hour default end, the
+            // untitled default, and a repeat ("every weekday 9am").
+            this.commitAction('add', [...this.calendar.events, Event.fromQuickAdd(event)]);
         },
 
         shareUrl(url, title) {
@@ -1612,8 +1730,41 @@ const CalendarVueApp = {
             this.isReadOnly = this.normalizeBoolean(val);
         },
 
-        showToast(message, type = 'info') {
-            this.$refs.toast.display(message, type);
+        showToast(message, type = 'info', options = {}) {
+            this.$refs.toast.display(message, type, options);
+        },
+
+        // ---- Undo: the main app's machinery (services/UndoService.js) --------------------
+
+        // Apply `events` as one user action: write it, remember how to take it back, and
+        // say what happened with an Undo button (deletes and edits; adds stay quiet).
+        // `removedKeys` are the rows the action deliberately deletes: the write gate
+        // refuses any removal nobody declared.
+        commitAction(kind, events, { removedKeys = [] } = {}) {
+            const prior = this.calendar.events.map(e => new Event(e));
+            if (removedKeys.length) CalendarDataService.declareIntent(removedKeys);
+            const gesture = CalendarDataService.actionGesture();
+            this.calendar.setEvents(events);
+            const delta = UndoService.deltaBetween(prior, this.calendar.events);
+            if (UndoService.isEmpty(delta)) return null;
+            const action = { delta, gesture, done: false };
+            this._undoStack.push(action);
+            if (this._undoStack.length > 50) this._undoStack.shift();
+            const message = kind === 'delete' ? UndoService.describeDelete(delta)
+                : kind === 'edit' ? UndoService.describeEdit(delta) : null;
+            if (message) {
+                this.showToast(message, 'info', { actionLabel: 'Undo', action: () => this.undoAction(action) });
+            }
+            return action;
+        },
+
+        undoAction(action) {
+            if (!action || action.done) return;
+            const plan = UndoService.planUndo(this.calendar.events, [action.delta]);
+            UndoService.commit(this.calendar, plan, action.gesture ? [action.gesture] : []);
+            action.done = true;
+            this._undoStack = this._undoStack.filter(a => a !== action);
+            this.showToast(UndoService.describeUndo(plan), plan.noop ? 'info' : 'success');
         },
     }
 };

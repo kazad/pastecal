@@ -43,9 +43,10 @@ function loadNativeApp() {
     'QuickCreatePopover', 'Icon', 'CopyIcon', 'SettingsIcon', 'HelpIcon', 'SearchIcon',
     'ShareIcon', 'NotesIcon', 'ChevronDownIcon', 'CloseIcon', 'clickOutside',
     'AppHeader', 'ClaimDialog', 'SharePanel', 'CalendarFlow'];
-  const factory = new Function(...stubs, 'Event', 'window',
+  const factory = new Function(...stubs, 'Event', 'window', 'UndoService',
     `${src}; return CalendarVueApp;`);
-  return factory(...stubs.map((n) => (n === 'CalendarFlow' ? { mixin: {} } : {})), Event, {});
+  return factory(...stubs.map((n) => (n === 'CalendarFlow' ? { mixin: {} } : {})), Event, {},
+    { UNTITLED: 'Untitled event' });
 }
 
 const NativeApp = loadNativeApp();
@@ -58,6 +59,9 @@ function nativeVm(events) {
       setEvents(list) { this.events = list.map(e => new Event(e)); },
     },
     closeEditor() {},
+    // The user-action wrapper (undo + toast) is covered in writer-id.test.js; here the
+    // write itself is what matters.
+    commitAction(kind, list) { this.calendar.setEvents(list); },
   };
   for (const name of ['toStoredEvent', 'handleEventsUpdate', 'handleSaveEvent']) {
     vm[name] = NativeApp.methods[name].bind(vm);

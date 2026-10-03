@@ -9,8 +9,11 @@
  *      It now adds calendar days.
  *   3. The fix for 1 keyed all-day off isCertain('hour'), but chrono 1.4.9 reports a part
  *      of day ("morning", "night", "tonight") as an IMPLIED hour, so "call tomorrow
- *      morning" became all-day. All-day now needs no time-of-day signal at all AND a bare
- *      date or a span of days; "lunch tomorrow" is the timed noon event it always was.
+ *      morning" became all-day. All-day needs no time-of-day signal at all.
+ *   4. "Titled dates stay timed" (chrono's implied noon) made "Mom birthday Oct 12" a
+ *      noon-1pm meeting. Any date with no time is all-day now; a meal word is a time
+ *      ("lunch tomorrow" is noon). And only the FIRST chrono result was read, so "1:1
+ *      with Alex Tue 2pm" was 01:01 and "interview 10am PST tomorrow" lost its date.
  *
  * chrono-node is a CDN script in the browser and not a dependency here. The bulk of the
  * file uses a fake shaped like chrono 1.4.9's results (knownValues / impliedValues /
@@ -88,15 +91,19 @@ test('quick-add: a bare date with no time is a one-day all-day event', () => {
   }
 });
 
-test('quick-add: a titled single day with no time stays the timed noon event', () => {
-  // "lunch tomorrow" was a noon-to-1pm event before all-day parsing existed, and the
-  // subject is the only hint of when; only a bare date or a span of days is all-day.
-  for (const [entry, text] of [['lunch tomorrow', 'tomorrow'], ['dentist oct 5', 'oct 5']]) {
-    const r = parse(entry, text, comp(2026, 10, 5));
-    assert.equal(r.isAllDay, false, entry);
-    assert.equal(new Date(r.startDateTime).getHours(), 12);
-    assert.equal(new Date(r.endDateTime).getHours(), 13);
-  }
+test('quick-add: a titled date with no time is all-day; a meal word is its hour', () => {
+  // "Mom birthday Oct 12" used to be a noon-to-1pm meeting (chrono's implied noon):
+  // nobody typing a date with no time means noon. A meal says when, though.
+  const bday = parse('Mom birthday Oct 12', 'Oct 12', comp(2026, 10, 12));
+  assert.equal(bday.subject, 'Mom birthday');
+  assert.equal(bday.isAllDay, true);
+  assert.equal(new Date(bday.startDateTime).toString(), new Date(2026, 9, 12).toString());
+  assert.equal(new Date(bday.endDateTime).toString(), new Date(2026, 9, 13).toString());
+
+  const lunch = parse('lunch tomorrow', 'tomorrow', comp(2026, 10, 5));
+  assert.equal(lunch.isAllDay, false);
+  assert.equal(new Date(lunch.startDateTime).getHours(), 12);
+  assert.equal(new Date(lunch.endDateTime).getHours(), 13);
 });
 
 test('quick-add: a part of day is a time, not all-day', () => {
@@ -219,7 +226,8 @@ test('quick-add with the real chrono 1.4.9: all-day only for bare dates and span
       'meet tonight': false,
       'noon tomorrow': false,
       'lunch tomorrow': false,
-      'dentist oct 5': false,
+      'dentist oct 5': true,
+      'Mom birthday Oct 12': true,
       'lunch oct 5 2pm': false,
       'call oct 5 for 1 hour': false,
       'tomorrow': true,
@@ -238,3 +246,90 @@ test('quick-add with the real chrono 1.4.9: all-day only for bare dates and span
     RealUtils.restore();
   }
 });
+
+// Every misparse a tester hit, through the real chrono. "Now" is pinned to Fri Oct 2 2026
+// 10:00 local so weekday words land on known dates.
+function withRealChrono(t, fn) {
+  const real = loadRealChrono();
+  if (!real.chrono) {
+    if (process.env.CI) assert.fail(real.reason);
+    t.skip(real.reason);
+    return;
+  }
+  const saved = fakeChrono.parse;
+  fakeChrono.parse = (...args) => real.chrono.parse(...args);
+  try { fn((s) => Utils.parseHumanWrittenCalendar(s, new Date(2026, 9, 2, 10, 0))); } finally { fakeChrono.parse = saved; }
+}
+const at = (iso) => {
+  const d = new Date(iso);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+};
+
+test('quick-add (real chrono): every result is used, not just the first', (t) => withRealChrono(t, (parse) => {
+  // "1:1" is a meeting, not 01:01; the date and time are both read.
+  const oneOnOne = parse('1:1 with Alex Tue 2pm');
+  assert.equal(oneOnOne.subject, '1:1 with Alex');
+  assert.equal(at(oneOnOne.startDateTime), '2026-10-06 14:00');
+
+  // A zoned time and a date in separate phrases: tomorrow, 10am Pacific Standard = 11am PDT.
+  const interview = parse('interview 10am PST tomorrow');
+  assert.equal(interview.subject, 'interview');
+  assert.equal(at(interview.startDateTime), '2026-10-03 11:00');
+  assert.equal(new Date(interview.startDateTime).toISOString(), '2026-10-03T18:00:00.000Z');
+}));
+
+test('quick-add (real chrono): "8pm-midnight" ends at midnight', (t) => withRealChrono(t, (parse) => {
+  for (const s of ['Party Saturday 8pm-midnight', 'Party Saturday 8pm to midnight']) {
+    const r = parse(s);
+    assert.equal(r.subject, 'Party', s);
+    assert.equal(at(r.startDateTime), '2026-10-03 20:00', s);
+    assert.equal(at(r.endDateTime), '2026-10-04 00:00', s);
+  }
+}));
+
+test('quick-add (real chrono): short durations "2h", "90m", "1h30m"', (t) => withRealChrono(t, (parse) => {
+  const cases = {
+    'dentist tomorrow 3pm for 2h': ['dentist', '2026-10-03 15:00', '2026-10-03 17:00'],
+    'call Friday 2pm 90m': ['call', '2026-10-02 14:00', '2026-10-02 15:30'],
+    'sync 1h30m tomorrow 10am': ['sync', '2026-10-03 10:00', '2026-10-03 11:30'],
+  };
+  for (const [s, [subject, start, end]] of Object.entries(cases)) {
+    const r = parse(s);
+    assert.deepEqual([r.subject, at(r.startDateTime), at(r.endDateTime)], [subject, start, end], s);
+    assert.equal(r.isAllDay, false, s);
+  }
+  assert.equal(parse('dentist tomorrow 3pm for 2h').durationMs, 7200000);
+}));
+
+test('quick-add (real chrono): repeats become an RRULE starting on a matching day', (t) => withRealChrono(t, (parse) => {
+  const weekday = parse('standup every weekday 9am');
+  assert.equal(weekday.subject, 'standup');
+  assert.equal(weekday.recurrenceRule, 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;INTERVAL=1');
+  assert.equal(at(weekday.startDateTime), '2026-10-02 09:00');
+  assert.equal(Utils.describeRecurrence(weekday.recurrenceRule), 'every weekday');
+
+  const gym = parse('gym every Monday');
+  assert.equal(gym.subject, 'gym');
+  assert.equal(gym.recurrenceRule, 'FREQ=WEEKLY;BYDAY=MO;INTERVAL=1');
+  assert.equal(gym.isAllDay, true);
+  assert.equal(at(gym.startDateTime), '2026-10-05 00:00', 'the first Monday, not today');
+
+  const daily = parse('daily standup 9:30am');
+  assert.equal(daily.recurrenceRule, 'FREQ=DAILY;INTERVAL=1');
+  assert.equal(daily.subject, 'standup');
+
+  const yoga = parse('yoga every tuesday and thursday 7am');
+  assert.equal(yoga.recurrenceRule, 'FREQ=WEEKLY;BYDAY=TU,TH;INTERVAL=1');
+  assert.equal(at(yoga.startDateTime), '2026-10-06 07:00');
+
+  assert.equal(parse('retro every other friday 4pm').recurrenceRule, 'FREQ=WEEKLY;BYDAY=FR;INTERVAL=2');
+  assert.equal(parse('lunch tomorrow 2pm').recurrenceRule, null, 'no repeat unless asked');
+}));
+
+test('quick-add (real chrono): no date found says so', (t) => withRealChrono(t, (parse) => {
+  const r = parse('hello world');
+  assert.equal(r.startDateTime, null);
+  assert.equal(r.reason, 'no-date');
+  assert.equal(parse('for 2 hours').reason, 'no-date');
+}));

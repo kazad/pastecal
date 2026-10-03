@@ -70,6 +70,17 @@ class Event {
                     this.recurrenceException, options._storedException);
             }
 
+            // A rule handed back with the same meaning is kept as stored: Syncfusion
+            // appends ';' ("FREQ=DAILY;INTERVAL=1;"), so every series the grid touched
+            // was rewritten and its history read "repeat changed" when nothing had. A
+            // rule that did change is stored in one spelling (Event.normalizeRule).
+            if (this.recurrencerule && '_storedRule' in options
+                && Event.ruleKey(this.recurrencerule) === Event.ruleKey(options._storedRule)) {
+                this.recurrencerule = options._storedRule;
+            } else if (this.recurrencerule) {
+                this.recurrencerule = Event.normalizeRule(this.recurrencerule);
+            }
+
             // An inverted range is almost always a typo or a drag gone wrong, and dropping
             // it at the write boundary would lose the user's event. Keep the start and give
             // it the default length instead (one day all-day, one hour timed) -- but only
@@ -328,6 +339,90 @@ class Event {
         return rule.replace(/(^|;)UNTIL=(\d{8}T\d{6}Z?)/i, (match, sep, value) => {
             const kept = storedUntil && Event.allDayStampToLocal(storedUntil) === value;
             return `${sep}UNTIL=${kept ? storedUntil : Event.allDayStampFromLocal(value)}`;
+        });
+    }
+
+    // ---- Rule spelling -----------------------------------------------------------------
+
+    // One spelling of an RRULE: no "RRULE:" prefix, no empty parts, no trailing ';'.
+    // Anything that is not a non-empty string comes back unchanged.
+    static normalizeRule(rule) {
+        if (typeof rule !== 'string' || !rule.trim()) return rule;
+        return rule.trim().replace(/^RRULE:/i, '').split(';').map(p => p.trim()).filter(Boolean).join(';');
+    }
+
+    // A rule's meaning, for comparison: parts in a fixed order, keys upper-cased, and the
+    // default INTERVAL=1 dropped. '' for no rule.
+    static ruleKey(rule) {
+        const r = Event.normalizeRule(rule);
+        if (typeof r !== 'string' || !r) return '';
+        return r.split(';').map(p => {
+            const i = p.indexOf('=');
+            return i < 0 ? p.toUpperCase() : `${p.slice(0, i).trim().toUpperCase()}=${p.slice(i + 1).trim().toUpperCase()}`;
+        }).filter(p => p !== 'INTERVAL=1').sort().join(';');
+    }
+
+    // ---- One occurrence of a series ------------------------------------------------------
+
+    // The exception stamp that hides the occurrence of `series` starting at
+    // `occurrenceStart` (epoch ms / Date / ISO, as shown to the viewer), in the form each
+    // reader expects: a timed series' occurrence instant as a UTC stamp (what Syncfusion
+    // writes), an all-day series' DATE as a floating stamp (CalDate.floatingStamp; see
+    // allDayStampToLocal for why).
+    static exceptionStampFor(series, occurrenceStart) {
+        if (!series) return null;
+        if (series.isAllDay) {
+            const ymd = CalDate.localYmd(occurrenceStart);
+            return ymd ? CalDate.floatingStamp(ymd) : null;
+        }
+        return CalDate.utcStamp(occurrenceStart);
+    }
+
+    // `series` with the occurrence at `occurrenceStart` hidden (its exception list
+    // gains that date; a date already there is not added twice). A new Event.
+    static withoutOccurrence(series, occurrenceStart) {
+        const stamp = Event.exceptionStampFor(series, occurrenceStart);
+        const list = String(series.recurrenceException || '').split(',').map(x => x.trim()).filter(Boolean);
+        if (stamp && !list.includes(stamp)) list.push(stamp);
+        return new Event({ ...series, recurrenceException: list.length ? list.join(',') : null });
+    }
+
+    // `series` ending the day before its occurrence at `occurrenceStart` ("delete this
+    // and following", and the first half of "edit this and following"): any UNTIL or
+    // COUNT is replaced by an UNTIL through the previous day, in the series type's form
+    // (Event.ruleUntilStamp). A new Event; null if that would leave no occurrence at all
+    // (the occurrence is the series' first), which is "the whole series".
+    static endSeriesBefore(series, occurrenceStart) {
+        const ymd = CalDate.localYmd(occurrenceStart);
+        if (!ymd || !series || !series.recurrencerule) return null;
+        const firstDay = series.isAllDay ? CalDate.allDayDates(series)?.start : CalDate.localYmd(series.start);
+        if (!firstDay || ymd <= firstDay) return null;
+        const stamp = Event.ruleUntilStamp(CalDate.addDays(ymd, -1), !!series.isAllDay);
+        const parts = Event.normalizeRule(series.recurrencerule).split(';')
+            .filter(p => !/^(UNTIL|COUNT)=/i.test(p));
+        parts.push(`UNTIL=${stamp}`);
+        return new Event({ ...series, recurrencerule: parts.join(';') });
+    }
+
+    // ---- Quick Add -------------------------------------------------------------------------
+
+    // The event Quick Add creates, in either UI, from the dialog's output
+    // ({ subject, startDateTime, endDateTime, isAllDay, recurrenceRule }). An end it
+    // could not work out is the app's one-hour default: an event with no end is dropped
+    // at the write boundary and vanishes on reload.
+    static fromQuickAdd(q) {
+        const start = q.startDateTime;
+        let end = q.endDateTime;
+        if (start && !end) {
+            const ms = new Date(start).getTime();
+            if (!isNaN(ms)) end = new Date(ms + 3600000).toISOString();
+        }
+        return new Event({
+            title: q.subject && String(q.subject).trim() ? String(q.subject).trim() : 'Untitled event',
+            start,
+            end,
+            isAllDay: !!q.isAllDay,
+            recurrencerule: q.recurrenceRule ? Event.normalizeRule(q.recurrenceRule) : '',
         });
     }
 

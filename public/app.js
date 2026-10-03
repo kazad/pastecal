@@ -353,6 +353,14 @@ const CalendarVueApp = {
         // Homepage calendar (no slug and not an existing saved calendar)
         isHomepageCalendar() {
             return !this.urlslug && !this.isExisting;
+        },
+
+        // An unclaimed /slug with something on it: kept only in this browser
+        // (LocalDraft) until the URL is claimed. The header shows "Unsaved", and closing
+        // the page asks first.
+        hasUnsavedDraft() {
+            return !!this.urlslug && !this.isExisting && !this.isReadOnly && !this.isLoading
+                && LocalDraft.hasContent(this.calendar);
         }
     },
 
@@ -484,9 +492,19 @@ const CalendarVueApp = {
                         this.applyGlobalSettingsAfterRemote();
                         this.remoteSettingsApplied = true;
                     }
+                    LocalDraft.settle(this.urlslug, c.events);
                 } else {
-                    // Calendar doesn't exist
+                    // Calendar doesn't exist: bring back what this browser added here
+                    // before (LocalDraft), once -- this callback is a live subscription.
                     this.isExisting = false;
+                    if (!this._draftRestored) {
+                        this._draftRestored = true;
+                        const n = LocalDraft.restoreInto(this.urlslug, this.calendar);
+                        if (n) {
+                            this.updateCalendarView();
+                            this.showToast(`Restored ${n} unsaved event${n === 1 ? '' : 's'} from this browser. Claim this URL to keep ${n === 1 ? 'it' : 'them'}.`, 'info');
+                        }
+                    }
                 }
                 this.isLoading = false;
             }, () => this.calendar);
@@ -636,6 +654,15 @@ const CalendarVueApp = {
 
         // live binding to events
         scheduleObj.eventSettings.dataSource = this.syncFusionEvents;
+        // Saved with an empty title, Syncfusion stores its field default, which is its
+        // placeholder text: events literally named "Add title". The default is the name
+        // the rest of the app gives an untitled event (UndoService.UNTITLED / eventName).
+        scheduleObj.eventSettings.fields.subject.default = UndoService.UNTITLED;
+        // "This and following" for a recurring event. A split is two independent series
+        // in the stored model -- the old one gains an UNTIL, the new one starts at the
+        // occurrence (Syncfusion's FollowingID link is not a stored field) -- which
+        // history, undo and the ICS feed already handle as an edit plus an add.
+        scheduleObj.eventSettings.editFollowingEvents = true;
         // One drag or resize is one gesture, from its start to its final save: every write
         // in between carries the same `_gesture` id, so the server folds exactly that
         // gesture's saves into one history entry. It used to fold any same-event edits
@@ -744,6 +771,10 @@ const CalendarVueApp = {
                 // reused across every open, so its handlers cannot rely on their own
                 // captured `args` -- they read this instead.
                 app.activeEditorData = args.data;
+
+                // The quick info popup that opened this editor stays up behind it and
+                // still shows the event as it was before the save. Close it.
+                if (typeof scheduleObj.closeQuickInfoPopup === 'function') scheduleObj.closeQuickInfoPopup();
 
                 // Configure datetime pickers with strictMode and the user's chosen date format.
                 // Syncfusion's default is en-US (M/d/yy) which is ambiguous internationally
@@ -990,6 +1021,21 @@ const CalendarVueApp = {
 
         scheduleObj.appendTo('#Schedule');
 
+        // Moving one occurrence past the next one was refused with "Two occurrences of
+        // the same event cannot occur on the same day" -- false, and the rule behind it is
+        // Syncfusion's (Outlook's) storage limit, not ours: a moved occurrence is its own
+        // row naming its original slot (recurrenceID + its exception date), which the grid
+        // draws and the ICS feed emits (RECURRENCE-ID) wherever it now is. Its
+        // misclassification is in editOccurrenceValidation; only that check is lifted.
+        // enableRecurrenceValidation would also drop the "changes to single occurrences
+        // will be lost" warning when editing a whole series, which is worth keeping.
+        try {
+            const ew = scheduleObj.eventWindow && Object.getPrototypeOf(scheduleObj.eventWindow);
+            if (ew && typeof ew.editOccurrenceValidation === 'function') ew.editOccurrenceValidation = () => false;
+        } catch (err) {
+            console.warn('[app] could not relax occurrence validation', err);
+        }
+
         // Add event listener to mark month-start dates and colorize year view dots
         scheduleObj.dataBound = function () {
             // hiddenEventCount is scoped to the dates on screen, and the scheduler's view
@@ -1198,6 +1244,12 @@ const CalendarVueApp = {
         // navigation and close; visibilitychange covers a backgrounded mobile tab, which
         // is where the process is most likely to be killed before a timer fires.
         window.addEventListener('pagehide', () => CalendarDataService.flush());
+        // An unclaimed /slug is saved only in this browser: say so before it is closed.
+        window.addEventListener('beforeunload', (e) => {
+            if (!this.hasUnsavedDraft) return;
+            e.preventDefault();
+            e.returnValue = '';
+        });
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'hidden') CalendarDataService.flush();
         });
@@ -1687,10 +1739,13 @@ const CalendarVueApp = {
         },
 
         saveLocalStorage() {
-            // Only save to localStorage when on homepage
-            // Named calendars should never overwrite homepage data
+            // The homepage draft and an unclaimed /slug's draft are separate: named
+            // calendars never overwrite homepage data. Before this, only the homepage was
+            // kept, so events added on an unclaimed /slug vanished on reload (LocalDraft).
             if (this.isHomepageCalendar) {
                 localStorage.setItem("calendar", JSON.stringify(this.calendar));
+            } else if (this.urlslug && !this.isExisting && !this.isReadOnly && !this.isLoading) {
+                LocalDraft.save(this.urlslug, this.calendar);
             }
         },
 
@@ -1822,20 +1877,15 @@ const CalendarVueApp = {
         },
 
         getTypes() {
-            // First check if we have custom labels in calendar.options.typeLabels
-            if (this.calendar?.options?.typeLabels?.length > 0) {
-                return Array(this.COLORS.length).fill().map((_, i) => {
-                    let id = i + 1;
-                    let title = this.calendar.options.typeLabels[i] || `Type ${id}`;
-                    return { text: title, value: id, iconCss: `e-color-${id}` };
-                });
-            }
+            return this.COLORS.map((_, i) => ({ text: this.typeName(i), value: i + 1, iconCss: `e-color-${i + 1}` }));
+        },
 
-            // Fallback to default labels if no custom labels are found
-            return Array(this.COLORS.length).fill().map((_, i) => {
-                let id = i + 1;
-                return { text: `Type ${id}`, value: id, iconCss: `e-color-${id}` };
-            });
+        // The name of a type, as Settings shows it and lets you change it: the stored
+        // label, else "Type N". The one source for every place a type is named.
+        typeName(index) {
+            const custom = this.calendar?.options?.typeLabels;
+            const label = custom && typeof custom[index] === 'string' && custom[index].trim();
+            return label || `Type ${index + 1}`;
         },
 
         // Apply a snapshot from the server without the calendar watcher mistaking it for a
@@ -1868,19 +1918,12 @@ const CalendarVueApp = {
             }
         },
 
-        // Human name for one color slot, for the filter dots' labels. The dots are
-        // otherwise distinguishable only by hue, which fails for colorblind users and for
-        // the near-identical colors a custom palette can contain.
-        //
-        // Most calendars never rename their types, and the stored default labels are
-        // literally "Type 1".."Type 8" -- a slot index with no referent, which read aloud
-        // sounds like information while conveying none. Fall back to the dot's own color
-        // instead, which is at least something the user can see on screen.
+        // Spoken/hover name for a filter switch. It is the type's own name (typeName, what
+        // Settings shows), so the switch and the Settings row agree. A default "Type 3"
+        // names a slot, not anything visible, so its color is added: "Type 3 (Orange)".
         typeLabelFor(index) {
-            const custom = this.calendar?.options?.typeLabels;
-            const label = custom && custom[index];
-            if (label && !/^Type \d+$/.test(label)) return label;
-            return this.colorNameFor(index);
+            const name = this.typeName(index);
+            return /^Type \d+$/.test(name) ? `${name} (${this.colorNameFor(index)})` : name;
         },
 
         // Nearest plain-English name for a palette color, so a dot has a spoken label
@@ -2051,17 +2094,54 @@ const CalendarVueApp = {
         // REGION: Events & Search Management
         // ============================================================
 
+        // Results come from EventSearch (shared with nativecal): title AND notes, no crash
+        // on an untitled event, and a series listed at its NEXT occurrence, which is
+        // where clicking it goes.
         searchEvents() {
-            if (this.searchQuery.trim() !== '') {
-                this.searchResults = this.calendar.events.filter(event =>
-                    event.title.toLowerCase().includes(this.searchQuery.toLowerCase())
-                );
+            this.searchResults = this.searchQuery.trim()
+                ? EventSearch.search(this.calendar.events, this.searchQuery, {
+                    occurrenceAfter: (e, ms) => this.occurrenceAfter(e, ms),
+                    isVisible: (e) => this.isEventVisible(e),
+                })
+                : [];
+        },
 
-                // sort results by newest first
-                this.searchResults.sort((a, b) => new Date(b.start) - new Date(a.start));
-            } else {
-                this.searchResults = [];
+        searchResultLabel(result) {
+            return EventSearch.describe(result);
+        },
+
+        // The first occurrence of a series still in progress or to come at `fromMs`, as
+        // { start, end } epoch ms, from the same expansion the grid draws with
+        // (ej.schedule.generate, given what Calendar.getSyncFusionEvents gives the grid).
+        // Null once the series is over.
+        occurrenceAfter(event, fromMs) {
+            if (typeof ej === 'undefined' || !ej.schedule || typeof ej.schedule.generate !== 'function') return null;
+            const allDay = !!event.isAllDay;
+            const days = allDay ? Event.allDayLocalRange(event) : null;
+            const start = allDay ? (days ? days.start.getTime() : NaN) : new Date(event.start).getTime();
+            if (isNaN(start)) return null;
+            const endMs = allDay ? (days ? days.end.getTime() : NaN) : new Date(event.end).getTime();
+            const duration = isNaN(endMs) ? 0 : Math.max(0, endMs - start);
+            const rule = String((allDay ? Event.allDayRuleToLocal(event.recurrencerule) : event.recurrencerule) || '');
+            const exceptions = (allDay ? Event.allDayExceptionsToLocal(event.recurrenceException)
+                : event.recurrenceException) || null;
+            const firstDay = parseInt(this.globalSettings?.firstDayOfWeek) || 0;
+            // generate() walks a window of N days from viewDate; a year at a time, ten
+            // years at most, covers every rule people write.
+            const from = new Date(Math.max(start, fromMs - duration));
+            from.setHours(0, 0, 0, 0);
+            try {
+                for (let i = 0; i < 10; i++) {
+                    const viewDate = new Date(from);
+                    viewDate.setDate(viewDate.getDate() + i * 366);
+                    const dates = ej.schedule.generate(new Date(start), rule, exceptions, firstDay, 367, viewDate);
+                    const hit = dates.find(d => d + duration > fromMs);
+                    if (hit !== undefined) return { start: hit, end: hit + duration };
+                }
+            } catch (err) {
+                console.warn('[search] could not expand', event.title, err);
             }
+            return null;
         },
 
         toggleColorFilter(index) {
@@ -2203,12 +2283,19 @@ const CalendarVueApp = {
         },
 
 
-        jumpToEvent(event) {
-            // An all-day start is a date, shown at the viewer's local midnight of it (the
-            // stored instant is the author's midnight, a day off in other zones).
-            const range = event.isAllDay ? Event.allDayLocalRange(event) : null;
-            let startDate = range ? range.start : new Date(event.start);
-            scheduleObj.selectedDate = startDate;
+        // Go to a search result: the occurrence it lists (a series' next one), not the
+        // series' first date. An event the color filter hides would land on an empty
+        // grid, so its type is shown again first, and the toast says so.
+        jumpToEvent(result) {
+            const event = result && result.event ? result.event : result;
+            const start = result && result.start !== undefined ? new Date(result.start)
+                : (event.isAllDay ? Event.allDayLocalRange(event).start : new Date(event.start));
+            if (!this.isEventVisible(event)) {
+                const slot = this.filterSlotFor(event);
+                this.colorFilters[slot] = true;
+                this.showToast(`Showing ${this.typeName(slot)} again`, 'info');
+            }
+            scheduleObj.selectedDate = start;
             scheduleObj.currentView = 'Week';
         },
 
@@ -2483,26 +2570,10 @@ const CalendarVueApp = {
             // A read-only (/view/) page has nothing to write to: an event added here
             // was a phantom on the grid plus an undo entry, gone on reload.
             if (!this.canEdit) return;
-            // Quick-add can produce a start with no end ("standup tomorrow 9am" parses a
-            // time but no duration), and the dialog's own validation only requires a start.
-            // An event with a null end is dropped at the write boundary by
-            // CalendarDataService._dropIncompleteEvents, so it would sit on the grid until
-            // the next reload and then be gone for good -- exactly the "my event vanished"
-            // report this app keeps getting. Give it the same one-hour default the rest of
-            // the app uses instead of letting it reach that boundary incomplete.
-            const start = event.startDateTime;
-            let end = event.endDateTime;
-            if (start && !end) {
-                const startMs = new Date(start).getTime();
-                if (!isNaN(startMs)) end = new Date(startMs + 3600000).toISOString();
-            }
-
-            const newEvent = new Event({
-                title: event.subject,
-                start: start,
-                end: end,
-                isAllDay: !!event.isAllDay
-            });
+            // Built by Event.fromQuickAdd, shared with nativecal: the one-hour default for a
+            // missing end (an event with no end is dropped at the write boundary and
+            // vanishes on reload), the untitled default, and a repeat ("every weekday").
+            const newEvent = Event.fromQuickAdd(event);
             // On the undo stack like a grid create: otherwise Cmd+Z right after a quick
             // add skipped it and undid an older action (e.g. restored a deleted event).
             const priorEvents = this.calendar.events.map(e => new Event(e));
@@ -2684,7 +2755,8 @@ const CalendarVueApp = {
                     };
                 });
 
-                this.undoEntries = this.collapseSessions(detailed).slice(0, 10);
+                this.undoEntries = this.collapseSessions(detailed).slice(0, 10)
+                    .map(e => ({ ...e, undone: this.isUndoneEntry(e) }));
                 // An old calendar may predate the lastEditedAt stamp; the log still knows.
                 const newest = this.undoEntries[0];
                 if (newest && newest.savedAt > (this.lastEditedAt || 0)) {
@@ -2696,6 +2768,22 @@ const CalendarVueApp = {
                 console.warn('[app] could not load undo history', err);
             }
             return this.undoEntries;
+        },
+
+        /**
+         * True if this Recent changes row has already been taken back: an undo reversed
+         * every part of it (from /history, or this session's own undo before its entry
+         * landed), or undoing it now would change nothing. Its button used to stay, and
+         * pressing it said "Nothing to undo: already as it was".
+         */
+        isUndoneEntry(entry) {
+            if (!entry.canRestore) return false;
+            const parts = entry.parts || [];
+            const reversed = parts.length && parts.every(p => p.reversed || this._undoneHistoryKeys.has(p.key)
+                || (!!p.gesture && this._undoneHistoryKeys.has(p.gesture)));
+            if (reversed) return true;
+            const plan = this.planUndo(parts.map(p => p.delta));
+            return plan.noop && !plan.skipped.length;
         },
 
         /**
@@ -2766,163 +2854,23 @@ const CalendarVueApp = {
             return Date.now() + (this.serverTimeOffset || 0);
         },
 
+        // The undo machinery (deltas, targeted reverts, and what to tell the user) lives in
+        // services/UndoService.js, shared with nativecal; these keep the names this app and
+        // its tests use.
         /** An event's identity: an occurrence exception shares its series' id. */
-        eventKey(e) {
-            return `${e.id}|${e.recurrenceID ?? ''}`;
-        },
+        eventKey(e) { return UndoService.eventKey(e); },
 
-        eventName(e) {
-            return e && e.title && e.title.trim() ? e.title.trim() : 'Untitled event';
-        },
+        eventName(e) { return UndoService.eventName(e); },
 
-        /**
-         * Two versions of an event are the same if nothing a person would see differs.
-         * Firebase drops empty values and dates can round-trip as different strings, so
-         * compare normalized rather than with JSON equality.
-         */
-        // One definition of "the same event" on the client: undo used to keep its own copy,
-        // which fell behind the service's (it ignored allDayDates, so a dates-only
-        // correction at UTC-11/UTC+14 never showed as undoable).
-        sameEvent(a, b) {
-            if (!a || !b) return false;
-            return CalendarDataService._sameEvent(a, b);
-        },
+        sameEvent(a, b) { return UndoService.sameEvent(a, b); },
 
         /** What turned `before` into `after`, in the same shape the server records. */
-        deltaBetween(before, after) {
-            const keyOf = this.eventKey;
-            const plain = (e) => JSON.parse(JSON.stringify(e));
-            const afterByKey = new Map(after.map(e => [keyOf(e), e]));
-            const beforeKeys = new Set(before.map(keyOf));
-            const delta = { removed: [], changed: [], added: [] };
-            for (const e of before) {
-                const now = afterByKey.get(keyOf(e));
-                if (!now) delta.removed.push(plain(e));
-                else if (!this.sameEvent(e, now)) delta.changed.push({ from: plain(e), to: plain(now) });
-            }
-            for (const e of after) {
-                if (!beforeKeys.has(keyOf(e))) delta.added.push(plain(e));
-            }
-            return delta;
-        },
+        deltaBetween(before, after) { return UndoService.deltaBetween(before, after); },
 
-        /**
-         * Work out what undoing these changes would do to the calendar AS IT IS NOW,
-         * without doing it. Deltas are applied in the order given (newest first).
-         *
-         * A targeted patch, never a snapshot restore: putting back an old snapshot also
-         * wiped every later add and edit, by anyone. So each part is reversed only where
-         * the calendar still shows it -- a deleted event comes back only if it is missing,
-         * an edit is reverted only if the event still holds the edited version, and an
-         * addition is removed only if it is still there untouched. Anything changed since
-         * is left alone and reported.
-         */
-        planUndo(deltas) {
-            const keyOf = this.eventKey;
-            const next = this.calendar.events.map(e => new Event(e));
-            const at = (k) => next.findIndex(e => keyOf(e) === k);
-            const plan = { next, restored: [], reverted: [], removed: [], skipped: [] };
+        /** What undoing these deltas would do to the calendar as it is now (UndoService.planUndo). */
+        planUndo(deltas) { return UndoService.planUndo(this.calendar.events, deltas); },
 
-            // Each reversal checks the calendar as it is now: 'done' (already as it was),
-            // 'skip' (changed since) or 'apply'.
-            const restoreOp = (e) => ({
-                subject: e, list: plan.restored,
-                check: () => (at(keyOf(e)) !== -1 ? 'done' : 'apply'),
-                apply: () => next.push(new Event(e)),
-            });
-            const removeOp = (e) => ({
-                subject: e, list: plan.removed,
-                check: () => {
-                    const i = at(keyOf(e));
-                    if (i === -1) return 'done';
-                    return this.sameEvent(next[i], e) ? 'apply' : 'skip';
-                },
-                apply: () => next.splice(at(keyOf(e)), 1),
-            });
-            const revertOp = ({ from, to }) => {
-                // The edit touched nothing but the series' exception dates -- what editing
-                // or deleting ONE occurrence does to the master. Reverting the whole master
-                // would also wipe exception dates added since (another occurrence edited),
-                // so only this edit's own dates are taken back out, or put back.
-                const exOnly = !from.recurrenceID && this.sameEvent(
-                    { ...from, recurrenceException: null }, { ...to, recurrenceException: null });
-                const target = (cur) => (exOnly
-                    ? new Event({ ...cur, recurrenceException: this.revertExdates(cur.recurrenceException, from, to) })
-                    : new Event(from));
-                return {
-                    subject: from, list: plan.reverted,
-                    check: () => {
-                        const i = at(keyOf(from));
-                        if (i === -1) return 'skip';
-                        if (this.sameEvent(next[i], from)) return 'done';
-                        if (this.sameEvent(next[i], to)) return 'apply';
-                        if (!exOnly) return 'skip';
-                        return this.sameEvent(next[i], target(next[i])) ? 'done' : 'apply';
-                    },
-                    apply: () => { const i = at(keyOf(from)); next[i] = target(next[i]); },
-                };
-            };
-
-            for (const d of deltas) {
-                // A series master and its occurrence exceptions are one unit: undoing an
-                // occurrence edit both hides the exception row and un-hides the date on the
-                // master. Done piecemeal, the exception could go while the master revert
-                // was skipped (its exception dates changed since), and the occurrence
-                // vanished; the reverse would show it twice. So all of a unit, or none.
-                const all = [
-                    ...(d.removed || []).map(e => ({ row: e, op: restoreOp(e) })),
-                    ...(d.changed || []).map(p => ({ row: p.from, op: revertOp(p) })),
-                    ...(d.added || []).map(e => ({ row: e, op: removeOp(e) })),
-                ];
-                const series = new Set(all.filter(x => !x.row.recurrenceID && x.row.recurrencerule)
-                    .map(x => String(x.row.id)));
-                const unitOf = (row) => {
-                    if (row.recurrenceID && series.has(String(row.recurrenceID))) return 's:' + row.recurrenceID;
-                    if (!row.recurrenceID && series.has(String(row.id))) return 's:' + row.id;
-                    return 'k:' + keyOf(row);
-                };
-                const units = new Map();
-                for (const x of all) {
-                    const u = unitOf(x.row);
-                    if (!units.has(u)) units.set(u, []);
-                    units.get(u).push(x.op);
-                }
-                for (const ops of units.values()) {
-                    const states = ops.map(op => op.check());
-                    if (states.includes('skip')) {
-                        ops.forEach((op, i) => { if (states[i] !== 'done') plan.skipped.push(op.subject); });
-                        continue;
-                    }
-                    ops.forEach((op, i) => {
-                        if (states[i] !== 'apply') return;
-                        op.apply();
-                        op.list.push(op.subject);
-                    });
-                }
-            }
-
-            const nextKeys = new Set(next.map(keyOf));
-            // What actually leaves the calendar -- the only number the write gate is told.
-            plan.removingKeys = this.calendar.events.map(keyOf).filter(k => !nextKeys.has(k));
-            plan.removing = plan.removingKeys.length;
-            plan.touched = new Set([...plan.restored, ...plan.reverted, ...plan.removed].map(keyOf));
-            plan.noop = plan.touched.size === 0;
-            return plan;
-        },
-
-        /**
-         * A series' exception dates (comma-separated EXDATEs) as they are now, with ONE
-         * edit's change (from -> to) taken back: dates it added are removed, dates it
-         * removed are put back, and anything else added since is kept.
-         */
-        revertExdates(current, from, to) {
-            const list = (v) => String(v || '').split(',').map(x => x.trim()).filter(Boolean);
-            const was = new Set(list(from.recurrenceException));
-            const became = new Set(list(to.recurrenceException));
-            const out = list(current).filter(x => !(became.has(x) && !was.has(x)));
-            for (const x of was) if (!became.has(x) && !out.includes(x)) out.push(x);
-            return out.length ? out.join(',') : null;
-        },
+        revertExdates(current, from, to) { return UndoService.revertExdates(current, from, to); },
 
         /**
          * Write a plan from planUndo. `undoOf` names what it reverses -- history entry
@@ -2931,40 +2879,15 @@ const CalendarVueApp = {
          * (see isHandledHistory). Nothing has to recognise it later by timing.
          */
         commitUndo(plan, undoOf = []) {
-            if (plan.noop) return;
-            if (plan.removingKeys.length) CalendarDataService.declareIntent(plan.removingKeys);
-            CalendarDataService.markUndo(undoOf);
+            if (!UndoService.commit(this.calendar, plan, undoOf)) return;
             for (const id of undoOf) this._undoneHistoryKeys.add(id);
-            this.calendar.setEvents(plan.next);
             if (this.showRecentChanges || this.showSettings) {
                 clearTimeout(this._undoRefreshTimer);
                 this._undoRefreshTimer = setTimeout(() => this.loadUndoEntries(), 1500);
             }
         },
 
-        /** Say what an undo actually did -- never "Restored 12 events" when it removed one. */
-        describeUndo(plan) {
-            // A collapsed drag reverts one event several times over; it is still one event,
-            // named as it ends up (the last version written for its key).
-            const phrase = (all, verb) => {
-                const list = [...new Map(all.map(e => [this.eventKey(e), e])).values()];
-                return list.length === 1
-                    ? `${verb} "${this.eventName(list[0])}"`
-                    : `${verb} ${list.length} events`;
-            };
-            const parts = [];
-            if (plan.restored.length) parts.push(phrase(plan.restored, 'Restored'));
-            if (plan.reverted.length) parts.push(phrase(plan.reverted, 'Reverted'));
-            if (plan.removed.length) parts.push(phrase(plan.removed, 'Removed'));
-            const skippedList = [...new Map(plan.skipped.map(e => [this.eventKey(e), e])).values()];
-            const skipped = skippedList.length;
-            const since = skipped === 1
-                ? `"${this.eventName(skippedList[0])}" was changed since, so it was left as is`
-                : `${skipped} events were changed since, so they were left as is`;
-            if (!parts.length) return skipped ? `Nothing undone: ${since}` : 'Nothing to undo: already as it was';
-            const text = parts.map((p, i) => i ? p.charAt(0).toLowerCase() + p.slice(1) : p).join(', ');
-            return skipped ? `${text}; ${since}` : text;
-        },
+        describeUndo(plan) { return UndoService.describeUndo(plan); },
 
         /**
          * The keys of the history entries some undo in `rows` reversed. An undo names
@@ -3030,26 +2953,8 @@ const CalendarVueApp = {
             return ad === 1 ? '1 event added' : `${ad} events added`;
         },
 
-        /**
-         * What actually changed between two versions of the same event, in the words a
-         * person would use -- "renamed", "moved to Thu, Sep 17" -- or null if nothing
-         * meaningful differs. Firebase drops empty values, so compare normalized.
-         */
-        describeEventDiff(from, to) {
-            const norm = (v) => (v === undefined || v === null || v === '') ? null : v;
-            const parts = [];
-            if (norm(from.title) !== norm(to.title)) {
-                parts.push(to.title && to.title.trim() ? `renamed to "${to.title}"` : 'title cleared');
-            }
-            if (norm(from.start) !== norm(to.start) || norm(from.end) !== norm(to.end)) {
-                parts.push(`moved to ${this.describeEventTime(to)}`);
-            }
-            if (norm(from.description) !== norm(to.description)) parts.push('notes changed');
-            if (String(from.type ?? 1) !== String(to.type ?? 1)) parts.push('color changed');
-            if (!!from.isAllDay !== !!to.isAllDay) parts.push(to.isAllDay ? 'made all-day' : 'given a time');
-            if (norm(from.recurrencerule) !== norm(to.recurrencerule)) parts.push('repeat changed');
-            return parts.length ? parts.join(', ') : null;
-        },
+        /** What changed between two versions of an event, in words, or null (UndoService). */
+        describeEventDiff(from, to) { return UndoService.describeEventDiff(from, to); },
 
         /**
          * Fold a burst of writes into one row per thing the user actually did.
@@ -3157,17 +3062,7 @@ const CalendarVueApp = {
         },
 
         /** When an event was scheduled, for the expanded detail list. */
-        describeEventTime(e) {
-            // All-day: the date the grid shows (Event.allDayLocalRange), not the local
-            // reading of the author's midnight, which labelled LA's view of a Tokyo
-            // holiday with the day before.
-            const range = e.isAllDay ? Event.allDayLocalRange(e) : null;
-            const d = range ? range.start : new Date(e.start);
-            if (!d || isNaN(d.getTime())) return '';
-            const date = d.toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
-            if (e.isAllDay) return `${date}, all day`;
-            return `${date}, ${d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
-        },
+        describeEventTime(e) { return UndoService.describeEventTime(e); },
 
         describeWhen(ts) {
             if (!ts) return '';
@@ -3696,27 +3591,26 @@ const CalendarVueApp = {
             this._sessionUndo.push(action);
             if (this._sessionUndo.length > 50) this._sessionUndo.shift();
 
-            if (requestType === 'eventRemoved') this.offerUndoForDelete(action);
-            else if (requestType === 'eventChanged') this.offerUndoForEdit(action);
+            // Deleting ONE occurrence removes no row -- the series gains an exception date
+            // -- so it is a delete by what it did, whatever the scheduler called it.
+            const hidesOccurrence = !delta.added.length && !delta.removed.length && delta.changed.length
+                && delta.changed.every(p => UndoService.isExceptionOnly(p.from, p.to));
+            // Classified by what the action did, not by the scheduler's name for it: an
+            // occurrence edit or a "this and following" split arrives with added records
+            // and was taken for a create (no toast, no Undo).
+            if (requestType === 'eventRemoved' || hidesOccurrence) this.offerUndoForDelete(action);
+            else if (delta.changed.length) this.offerUndoForEdit(action);
         },
 
         /**
          * Offer to undo a deletion at the moment it happens -- the pattern Drive, Gmail and
-         * Notion all use, and the one place a person is guaranteed to be looking. Waiting
-         * for them to find Settings afterwards is how a deletion becomes a support issue.
-         *
-         * The events come from the action itself rather than from /history, so the offer
-         * appears immediately instead of after the debounced write and the trigger have
-         * both landed.
+         * Notion all use, and the one place a person is guaranteed to be looking. The
+         * wording (one series is one thing; one occurrence says which day) is
+         * UndoService.describeDelete, shared with nativecal.
          */
         offerUndoForDelete(action) {
-            const removed = action.delta.removed;
-            if (!removed.length) return;
-            // A series and its stored occurrence exceptions share an id: one thing deleted.
-            const count = new Set(removed.map(e => e.id)).size;
-            const message = count === 1
-                ? `Deleted "${this.eventName(removed[0])}"`
-                : `Deleted ${count} events`;
+            const message = UndoService.describeDelete(action.delta);
+            if (!message) return;
             this.showToast(message, 'info', {
                 actionLabel: 'Undo',
                 action: () => this.undoLocalAction(action),
@@ -3724,23 +3618,13 @@ const CalendarVueApp = {
         },
 
         /**
-         * Offer to undo an edit, the same way a delete is offered.
-         *
-         * Edits are the likelier mistake -- a dragged event lands on the wrong day, a time
-         * is typed wrong -- and until now they were the only destructive action with no
-         * visible way back: no toast, and a history row reading "1 event edited" that named
-         * nothing. Cmd+Z covered it, but only for someone who thinks to press it.
+         * Offer to undo an edit, the same way a delete is offered, saying what changed
+         * ("Moved "Alpha" to Tue 3pm") -- "Edited "Alpha"" told nobody whether the drag
+         * landed where they meant. Wording: UndoService.describeEdit.
          */
         offerUndoForEdit(action) {
-            const { changed, added } = action.delta;
-            // Editing one occurrence changes the series (a new exception date) and adds
-            // the occurrence; it is still one edit, named after what was edited.
-            const subject = changed.length ? changed[0].from : added[0];
-            if (!subject) return;
-            const count = new Set([...changed.map(p => p.from.id), ...added.map(e => e.id)]).size;
-            const message = count === 1
-                ? `Edited "${this.eventName(subject)}"`
-                : `Edited ${count} events`;
+            const message = UndoService.describeEdit(action.delta);
+            if (!message) return;
             this.showToast(message, 'info', {
                 actionLabel: 'Undo',
                 action: () => this.undoLocalAction(action),

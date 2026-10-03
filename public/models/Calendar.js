@@ -58,7 +58,9 @@ class Calendar {
                 _storedAllDay: allDay,
                 ...(allDay ? { _storedDates: e.allDayDates } : {}),
                 _allDaySeries: allDaySeries,
-                ...(allDaySeries ? { _storedRule: e.recurrencerule, _storedException: e.recurrenceException } : {}),
+                // Every series: a rule handed back with the same meaning is kept as stored.
+                _storedRule: e.recurrencerule,
+                ...(allDaySeries ? { _storedException: e.recurrenceException } : {}),
                 Description: e.description,
                 RecurrenceRule: allDaySeries ? Event.allDayRuleToLocal(e.recurrencerule) : e.recurrencerule,
                 Type: parseInt(e.type || 1),

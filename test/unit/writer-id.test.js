@@ -72,7 +72,7 @@ test('blocked storage falls back to an in-memory id', () => {
 });
 
 test('a write that changes nothing keeps the previous writer', () => {
-  const { S, server, deliver } = loadDataService();
+  const { S, server, deliver, ctx } = loadDataService();
   server.c = { id: 'c', title: 'T', _writer: 'other', events: [ev('A', 'A')] };
   deliver('c');
 
@@ -85,7 +85,7 @@ test('a write that changes nothing keeps the previous writer', () => {
 });
 
 test('a calendar carrying someone else\'s _writer still writes ours', () => {
-  const { S, server, deliver } = loadDataService();
+  const { S, server, deliver, ctx } = loadDataService();
   server.c = { id: 'c', _writer: 'other', events: [ev('A', 'A')] };
   deliver('c');
   S.sync({ id: 'c', _writer: 'other', events: [ev('A', 'A2')] });
@@ -186,7 +186,10 @@ test('Cmd+Z with only others\' entries undoes nothing', async () => {
 
 // --- nativecal: deletes declare themselves; refusals recover --------------------------------
 
-function wireNative(S, calendarId, events) {
+function wireNative(S, calendarId, events, ctx) {
+  // The shared UndoService, in the same sandbox as the real service and Event.
+  vm.runInContext(fs.readFileSync(path.join(PUBLIC, 'services/UndoService.js'), 'utf8')
+    + ';this.UndoService = UndoService;', ctx);
   const vmApp = {
     calendar: {
       id: calendarId,
@@ -199,8 +202,12 @@ function wireNative(S, calendarId, events) {
     closePopover() {}, closeEditor() {},
   };
   // eslint-disable-next-line no-new-func
-  vmApp.handleDeleteEvent = new Function('CalendarDataService',
-    `return { ${method(NATIVE, 'handleDeleteEvent')} }.handleDeleteEvent;`)(S).bind(vmApp);
+  vmApp._undoStack = [];
+  for (const name of ['handleDeleteEvent', 'commitAction', 'undoAction']) {
+    // eslint-disable-next-line no-new-func
+    vmApp[name] = new Function('CalendarDataService', 'UndoService', 'Event', 'CalDate',
+      `return { ${method(NATIVE, name)} }.${name};`)(S, ctx.UndoService, ctx.Event, ctx.CalDate).bind(vmApp);
+  }
 
   const at = NATIVE.indexOf('CalendarDataService.onSyncRefused =');
   assert.ok(at !== -1, 'nativecal sets no onSyncRefused');
@@ -213,14 +220,15 @@ function wireNative(S, calendarId, events) {
 }
 
 test('a nativecal delete reaches the server and a later edit does not resurrect it', () => {
-  const { S, server, deliver } = loadDataService();
+  const { S, server, deliver, ctx } = loadDataService();
   server.c = { id: 'c', events: [ev('A', 'A'), ev('B', 'B'), ev('C', 'C')] };
   deliver('c');
-  const app = wireNative(S, 'c', server.c.events);
+  const app = wireNative(S, 'c', server.c.events, ctx);
 
   app.handleDeleteEvent('B');
   assert.deepEqual(serverIds(server, 'c'), ['A', 'C'], 'the delete is not refused');
-  assert.deepEqual(app.toasts, []);
+  // Not refused (no "Recovered" toast); the delete says what went, with Undo.
+  assert.deepEqual(app.toasts, ['Deleted "B"']);
   assert.equal(S._pendingDeletes.size, 0, 'the declaration was spent by that write');
 
   const events = clone(app.calendar.events);
@@ -231,12 +239,12 @@ test('a nativecal delete reaches the server and a later edit does not resurrect 
 });
 
 test('deleting a series in nativecal removes its edited occurrences too', () => {
-  const { S, server, deliver } = loadDataService();
+  const { S, server, deliver, ctx } = loadDataService();
   const master = ev('S', 'Weekly', { recurrencerule: 'FREQ=WEEKLY', recurrenceException: '20260924T100000Z' });
   const occurrence = ev('X', 'Weekly moved', { recurrenceID: 'S' });
   server.c = { id: 'c', events: [ev('A', 'A'), master, occurrence] };
   deliver('c');
-  const app = wireNative(S, 'c', server.c.events);
+  const app = wireNative(S, 'c', server.c.events, ctx);
 
   app.handleDeleteEvent('S');
   assert.deepEqual(serverIds(server, 'c'), ['A']);
@@ -244,10 +252,10 @@ test('deleting a series in nativecal removes its edited occurrences too', () => 
 });
 
 test('nativecal recovers a refused write on screen and keeps the edit that rode with it', () => {
-  const { S, server, deliver } = loadDataService();
+  const { S, server, deliver, ctx } = loadDataService();
   server.c = { id: 'c', events: [ev('A', 'A'), ev('B', 'B'), ev('C', 'C')] };
   deliver('c');
-  const app = wireNative(S, 'c', server.c.events);
+  const app = wireNative(S, 'c', server.c.events, ctx);
 
   // A buggy path loses C without declaring it, in the same write as a real edit of A.
   const events = clone(app.calendar.events).filter(e => e.id !== 'C');

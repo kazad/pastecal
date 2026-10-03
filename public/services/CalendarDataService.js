@@ -458,6 +458,11 @@ class CalendarDataService {
             // type is written as a number locally and can read back as a string.
             if (f === 'type') return String(x === null ? 1 : x) === String(y === null ? 1 : y);
             if (f === 'isAllDay') return !!x === !!y;
+            // A rule by its meaning: Syncfusion hands back "FREQ=DAILY;INTERVAL=1;" for
+            // a stored "FREQ=DAILY;INTERVAL=1".
+            if (f === 'recurrencerule' && typeof Event !== 'undefined' && Event.ruleKey) {
+                return Event.ruleKey(x) === Event.ruleKey(y);
+            }
             // Same instant, any spelling: nativecal stores epoch numbers and this app
             // rewrites them as ISO strings, so === made every nativecal event look
             // edited-by-us and a stale copy overwrote its concurrent edit.

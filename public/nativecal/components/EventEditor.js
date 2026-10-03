@@ -4,7 +4,7 @@ const EventEditor = {
             <div class="bg-1 rounded-lg shadow-xl w-full max-w-md mx-4 overflow-hidden flex flex-col max-h-[90vh]">
                 <!-- Header -->
                 <div class="px-4 py-3 border-b border-color-default flex justify-between items-center bg-2">
-                    <h3 class="font-bold text-color-2">{{ isNew ? 'New Event' : 'Edit Event' }}</h3>
+                    <h3 class="font-bold text-color-2">{{ isNew ? 'New Event' : localEvent.editScope === 'this' ? 'Edit this event' : localEvent.editScope === 'following' ? 'Edit this and following events' : 'Edit Event' }}</h3>
                     <button @click="close" data-testid="editor-close" class="text-color-1 hover:text-color-2 transition-colors">
                         <icon name="close" class="w-5 h-5"></icon>
                     </button>
@@ -13,7 +13,7 @@ const EventEditor = {
                 <!-- Body -->
                 <div class="p-4 overflow-y-auto flex-1 bg-1">
                     <div class="mb-4">
-                        <input v-model="localEvent.title" type="text" placeholder="Add title" 
+                        <input v-model="localEvent.title" type="text" placeholder="Untitled event" 
                                data-testid="editor-title"
                                class="w-full text-xl font-semibold border-b-2 border-color-default focus:border-blue-500 focus:outline-none pb-1 placeholder-gray-400 bg-1 text-color-2"
                                ref="titleInput">
@@ -41,8 +41,8 @@ const EventEditor = {
                         </div>
                     </div>
 
-                    <!-- Recurrence -->
-                    <div class="mb-4">
+                    <!-- Recurrence (not for one occurrence: it is a single event) -->
+                    <div class="mb-4" v-if="localEvent.editScope !== 'this'">
                          <div class="flex gap-4 mb-2">
                             <div class="flex-1">
                                 <label class="block text-xs font-medium text-color-1 uppercase mb-1">Repeat</label>
@@ -340,7 +340,8 @@ const EventEditor = {
                 ...localEvent.value,
                 start: startTs,
                 end: endTs,
-                title: localEvent.value.title || '(No Title)',
+                title: localEvent.value.title && localEvent.value.title.trim()
+                    ? localEvent.value.title : UndoService.UNTITLED,
                 recurrencerule: rruleStr
             });
         };
@@ -351,7 +352,9 @@ const EventEditor = {
 
         const deleteEvent = () => {
             if (confirm("Are you sure you want to delete this event?")) {
-                emit('delete', localEvent.value.id);
+                // Which row, and for one occurrence which occurrences: an id alone named
+                // the series even when the editor showed one occurrence.
+                emit('delete', { event: localEvent.value, scope: localEvent.value.editScope || 'all' });
             }
         };
 

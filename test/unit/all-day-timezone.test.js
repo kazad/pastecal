@@ -325,7 +325,8 @@ test('all-day series: a new UNTIL is stored as the floating stamp of its date', 
     // The editor's until-date picker yields local midnight of Oct 25.
     const picked = new Date(2026, 9, 25).toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
     const e = new Event({ ...r, RecurrenceRule: `FREQ=DAILY;INTERVAL=1;UNTIL=${picked};` });
-    assert.equal(e.recurrencerule, 'FREQ=DAILY;INTERVAL=1;UNTIL=20261025T000000;');
+    // A changed rule is stored in one spelling: Syncfusion's trailing ';' is dropped.
+    assert.equal(e.recurrencerule, 'FREQ=DAILY;INTERVAL=1;UNTIL=20261025T000000');
     assert.equal(e.recurrenceException, SERIES['America/Los_Angeles'].exdate);
   });
 });

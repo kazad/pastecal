@@ -404,50 +404,99 @@ Object.assign(Utils, {
         }
     },
 
-    parseHumanWrittenCalendar(entry) {
-        const parsedResults = chrono.parse(entry, new Date(), { forwardDate: true });
+    // Quick Add: one sentence -> { subject, startDateTime, endDateTime, isAllDay,
+    // recurrenceRule, durationMs, reason }. Shared by both UIs (QuickAddDialog).
+    //
+    // Why it reads ALL of chrono's results, not the first. chrono returns one result per
+    // date-ish phrase it finds, and the first one is often not the one that matters:
+    // "1:1 with Alex Tue 2pm" led with "1:1" (01:01 today); "interview 10am PST tomorrow"
+    // is two results, a zoned time and a date, and taking the first dropped "tomorrow".
+    // So: the date comes from the first result that names a day, the time from the first
+    // that names a time of day, and the two are combined (in the time's own zone when it
+    // states one).
+    //
+    // All-day is "no time of day was given": "Mom birthday Oct 12" is the birthday, not a
+    // noon-to-1pm meeting. (An earlier rule kept titled dates timed at chrono's implied
+    // noon; nobody wanted those.) A meal word is a time of day: "lunch tomorrow" is noon.
+    parseHumanWrittenCalendar(entry, now = new Date()) {
+        const raw = String(entry || '');
+        const recurrence = extractRecurrence(raw);
+        // What chrono reads. Same length as `recurrence.text`, so its indexes still point
+        // into the sentence the subject is cut from:
+        //   - "1:1" / "2:1" are meeting names, not times (a one-digit minute is never a
+        //     clock time), so their colon is swapped for a look-alike chrono ignores;
+        //   - "midnight" is unknown to chrono 1.4.9 ("8pm-midnight" parsed as 8pm on the
+        //     wrong day); "12am" means the same and is padded to the same length.
+        // A length ("for 2h", "90m", "1h30m") is cut out first: chrono reads "1h30" as
+        // 01:30 and "2h" as "2 hours ago".
+        const { text: undurated, duration, days } = extractDuration(recurrence.text);
+        const masked = undurated
+            .replace(/\b(\d{1,2}):(\d)\b(?!\d)/g, '$1∶$2')
+            .replace(/\bmidnight\b/gi, '12am    ');
 
-        if (parsedResults.length === 0) {
-            return { subject: entry, startDateTime: null, endDateTime: null };
+        const all = (typeof chrono !== 'undefined' && chrono.parse(masked, now, { forwardDate: true })) || [];
+        // "2h" and "90m" come back as "2 hours AGO": those are durations, read below.
+        const results = all.filter(r => !(r.tags && (r.tags.ENTimeAgoFormatParser || r.tags.ENTimeLaterFormatParser))
+            && r.start && Object.keys(r.start.knownValues || {}).length);
+
+        const known = (c, k) => !!(c && c.knownValues && Object.prototype.hasOwnProperty.call(c.knownValues, k));
+        // A time of day: an hour or meridiem stated, or a part of day -- chrono 1.4.9 gives
+        // "morning"/"tonight" an IMPLIED hour and meridiem, so the hour alone misses them.
+        const timeOfDay = (r, c) => !!c && (known(c, 'hour') || known(c, 'meridiem')
+            || (c.impliedValues && c.impliedValues.meridiem !== undefined)
+            || !!(r.tags && r.tags.ENCasualTimeParser));
+        const namesDay = (c) => known(c, 'day') || known(c, 'weekday');
+
+        const dateRes = results.find(r => namesDay(r.start));
+        const timeRes = results.find(r => timeOfDay(r, r.start));
+
+        // The subject: the sentence minus every phrase used, read from the unmasked text.
+        const used = [dateRes, timeRes].filter((r, i, a) => r && a.indexOf(r) === i);
+        let rest = masked;
+        for (const r of used.slice().sort((a, b) => indexOf(b, masked) - indexOf(a, masked))) {
+            const at = indexOf(r, masked);
+            if (at < 0) continue;
+            rest = rest.slice(0, at) + ' ' + rest.slice(at + r.text.length);
+        }
+        const subject = rest.replace(/\u2236/g, ':').replace(/\b12am {4}/g, 'midnight')
+            .replace(/\s+/g, ' ').trim().replace(/\s+(?:at|on|from)$/i, '').trim();
+
+        if (!dateRes && !timeRes && !recurrence.rule) {
+            return { subject: subject || Utils.UNTITLED, startDateTime: null, endDateTime: null,
+                isAllDay: false, recurrenceRule: null, durationMs: null, reason: 'no-date' };
         }
 
-        const result = parsedResults[0];
-        let startDate = result.start.date();
-        let endDate = result.end ? result.end.date() : null;
+        const meal = !timeRes && MEAL_HOURS.find(([re]) => re.test(subject));
+        const hasTime = !!timeRes || !!duration || !!meal;
+        const isAllDay = !hasTime;
 
-        const parsedText = result.text;
-        // Removing a mid-sentence date phrase leaves the spaces from both sides
-        // behind, so collapse runs of whitespace rather than only trimming ends.
-        let remainingText = entry.replace(parsedText, '').replace(/\s+/g, ' ').trim();
+        // The day: the date phrase, else the day the time phrase landed on (today, or
+        // later with forwardDate), else today (a repeat with no date starts now).
+        const dayOf = (r) => { const d = r.start.date(); return [d.getFullYear(), d.getMonth(), d.getDate()]; };
+        const [y, m, d] = dateRes ? dayOf(dateRes) : timeRes ? dayOf(timeRes)
+            : [now.getFullYear(), now.getMonth(), now.getDate()];
 
-        const { subject, duration, days } = extractDuration(remainingText);
-
-        // chrono fills a missing time with 12:00, so "vacation dec 11 - dec 15" came out
-        // as a noon-to-noon timed event. The rule for all-day:
-        //
-        //   1. No time-of-day signal at all. An explicit hour ("2pm", "at noon") is one,
-        //      and so is a part of day: chrono 1.4.9 reports "morning", "afternoon",
-        //      "evening", "night" and "tonight" as IMPLIED hours (with an implied
-        //      meridiem), so checking isCertain('hour') alone turned "call tomorrow
-        //      morning" and "dinner friday night" into all-day events. An hour or minute
-        //      duration ("for 1 hour") is one too.
-        //   2. And the input is a bare date or a span of days: nothing but the date
-        //      ("tomorrow", "dec 11"), a range ("vacation dec 11 - dec 15") or "for N
-        //      days". A titled single day with no time ("lunch tomorrow", "dentist oct
-        //      5") stays the timed event at chrono's noon it always was.
-        //
-        // All-day ends (exclusively) the day after the last date.
-        const timeOfDay = (c) => !!(c && typeof c.isCertain === 'function' && (c.isCertain('hour')
-            || c.isCertain('meridiem')
-            || (c.impliedValues && c.impliedValues.meridiem !== undefined)));
-        const partOfDay = !!(result.tags && result.tags.ENCasualTimeParser);
-        const hasTime = timeOfDay(result.start) || timeOfDay(result.end) || partOfDay || !!duration;
-        const spansDays = !!endDate || !!days || !subject;
-        const isAllDay = !hasTime && spansDays;
-        if (isAllDay) {
-            startDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
-            if (endDate) {
-                endDate = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate() + 1);
+        let startDate, endDate = null;
+        if (timeRes) {
+            const c = timeRes.start;
+            const at = (field) => (known(c, field) ? c.knownValues[field] : (c.impliedValues || {})[field]) || 0;
+            if (timeRes === dateRes) {
+                startDate = c.date();
+            } else if (known(c, 'timezoneOffset')) {
+                // A stated zone ("10am PST") is honored: that wall clock in that zone.
+                startDate = new Date(Date.UTC(y, m, d, at('hour'), at('minute')) - c.knownValues.timezoneOffset * 60000);
+            } else {
+                startDate = new Date(y, m, d, at('hour'), at('minute'));
+            }
+            if (timeRes.end) endDate = new Date(startDate.getTime() + (timeRes.end.date() - c.date()));
+        } else if (meal || duration) {
+            // A meal's hour, or for "call oct 5 for 1 hour" chrono's own noon.
+            startDate = new Date(y, m, d, meal ? meal[1] : 12, 0);
+        } else {
+            startDate = new Date(y, m, d);
+            if (dateRes && dateRes.end) {
+                const e = dateRes.end.date();
+                endDate = new Date(e.getFullYear(), e.getMonth(), e.getDate() + 1);
             }
         }
 
@@ -455,67 +504,147 @@ Object.assign(Utils, {
         // default length rather than an end before its start. Quick-add is one of the two
         // places an inverted range is repaired (Event's constructor does it for scheduler
         // edits); stored events are never repaired after the fact.
-        if (endDate && endDate < startDate) endDate = null;
+        if (endDate && endDate <= startDate) endDate = null;
 
+        // A repeat on given weekdays starts on the first of them on or after the date.
+        const rule = recurrence.rule && recurrenceRuleFor(recurrence, startDate);
+        if (rule && recurrence.byDay) {
+            const span = endDate ? endDate - startDate : null;
+            for (let i = 0; i < 7 && !recurrence.byDay.includes(startDate.getDay()); i++) {
+                startDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + 1,
+                    startDate.getHours(), startDate.getMinutes());
+            }
+            if (span !== null) endDate = new Date(startDate.getTime() + span);
+        }
+
+        let durationMs = endDate ? endDate - startDate : null;
         if (!endDate && days) {
             // Calendar-day arithmetic: N * 24h drifts an hour across a DST change.
             endDate = new Date(startDate);
             endDate.setDate(endDate.getDate() + days);
+            durationMs = endDate - startDate;
         } else if (!endDate && duration) {
             endDate = new Date(startDate.getTime() + duration);
+            durationMs = duration;
         } else if (!endDate && isAllDay) {
             endDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + 1);
         } else if (!endDate) {
-            const defaultDuration = 60 * 60 * 1000;
-            endDate = new Date(startDate.getTime() + defaultDuration);
+            endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
         }
 
         return {
-            subject: subject || 'Untitled Event',
+            subject: subject || Utils.UNTITLED,
             startDateTime: startDate.toISOString(),
-            endDateTime: endDate ? endDate.toISOString() : null,
-            isAllDay
+            endDateTime: endDate.toISOString(),
+            isAllDay,
+            recurrenceRule: rule || null,
+            // The length the sentence stated (a range, "for 2h", "for 3 days"), or null.
+            // The dialog keeps it when the user has pinned a start of their own.
+            durationMs: durationMs && durationMs > 0 ? durationMs : null,
         };
-    }
+    },
+
+    describeRecurrence,
 });
 
-// Duration helper for parseHumanWrittenCalendar
+Utils.UNTITLED = 'Untitled event';
+
+// Hours a meal word implies, when no time is given ("lunch tomorrow" is noon).
+const MEAL_HOURS = [[/\bbreakfast\b/i, 8], [/\bbrunch\b/i, 11], [/\blunch\b/i, 12], [/\bdinner\b/i, 19]];
+
+function indexOf(result, text) {
+    return typeof result.index === 'number' ? result.index : text.indexOf(result.text);
+}
+
+const WEEKDAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+const WEEKDAY_WORD = '(sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)(?:day|nesday|sday|urday|rsday)?s?';
+
+// The repeat a sentence asks for, cut out of it: { text (the sentence with the phrase
+// blanked to the same length), rule: { freq, interval }, byDay: [0-6] | null }. The
+// phrases are the ones people type: "daily", "every day", "every weekday", "weekly",
+// "every other week", "every Monday", "every Tue and Thu", "monthly", "yearly".
+function extractRecurrence(text) {
+    const patterns = [
+        [/\bevery\s+(?:week\s?day|work\s?day)s?\b|\bweekdays\b/i, () => ({ freq: 'WEEKLY', byDay: [1, 2, 3, 4, 5] })],
+        [/\b(?:daily|every\s+day|each\s+day)\b/i, () => ({ freq: 'DAILY' })],
+        [new RegExp(`\\bevery\\s+(other\\s+)?(${WEEKDAY_WORD}(?:\\s*(?:,|and|&|/|\\+)\\s*${WEEKDAY_WORD})*)\\b`, 'i'), (mm) => ({
+            freq: 'WEEKLY', interval: mm[1] ? 2 : 1,
+            byDay: [...mm[2].matchAll(new RegExp(WEEKDAY_WORD, 'gi'))].map(w => weekdayIndex(w[1])),
+        })],
+        [/\b(?:every\s+other\s+week|biweekly|every\s+2\s+weeks|fortnightly)\b/i, () => ({ freq: 'WEEKLY', interval: 2 })],
+        [/\b(?:weekly|every\s+week)\b/i, () => ({ freq: 'WEEKLY' })],
+        [/\b(?:monthly|every\s+month)\b/i, () => ({ freq: 'MONTHLY' })],
+        [/\b(?:yearly|annually|every\s+year)\b/i, () => ({ freq: 'YEARLY' })],
+    ];
+    for (const [re, make] of patterns) {
+        const mm = re.exec(text);
+        if (!mm) continue;
+        const rule = make(mm);
+        const blanked = text.slice(0, mm.index) + ' '.repeat(mm[0].length) + text.slice(mm.index + mm[0].length);
+        return { text: blanked, rule, byDay: rule.byDay || null };
+    }
+    return { text, rule: null, byDay: null };
+}
+
+function weekdayIndex(word) {
+    const w = word.toLowerCase().slice(0, 2);
+    return ['su', 'mo', 'tu', 'we', 'th', 'fr', 'sa'].indexOf(w);
+}
+
+// RRULE text for a repeat starting at `start`, in the shape Syncfusion writes (it needs
+// BYDAY on a weekly rule, and the month day on monthly/yearly ones).
+function recurrenceRuleFor({ rule, byDay }, start) {
+    const parts = [`FREQ=${rule.freq}`];
+    if (rule.freq === 'WEEKLY') {
+        const days = byDay && byDay.length ? byDay : [start.getDay()];
+        parts.push(`BYDAY=${[...new Set(days)].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7)).map(i => WEEKDAYS[i]).join(',')}`);
+    }
+    if (rule.freq === 'MONTHLY') parts.push(`BYMONTHDAY=${start.getDate()}`);
+    if (rule.freq === 'YEARLY') parts.push(`BYMONTHDAY=${start.getDate()}`, `BYMONTH=${start.getMonth() + 1}`);
+    parts.push(`INTERVAL=${rule.interval || 1}`);
+    return parts.join(';');
+}
+
+// "every weekday", "every Mon, Wed", "every 2 weeks on Tue", "daily", "monthly"... for a
+// rule string, or '' for none. Shown in the Quick Add dialog so a repeat is never silent.
+function describeRecurrence(rule) {
+    if (!rule) return '';
+    const get = (k) => ((new RegExp(`(?:^|;)${k}=([^;]+)`, 'i').exec(rule) || [])[1] || '');
+    const freq = get('FREQ').toUpperCase();
+    const interval = parseInt(get('INTERVAL'), 10) || 1;
+    const names = { SU: 'Sun', MO: 'Mon', TU: 'Tue', WE: 'Wed', TH: 'Thu', FR: 'Fri', SA: 'Sat' };
+    const days = get('BYDAY').split(',').filter(Boolean).map(s => s.toUpperCase());
+    const unit = { DAILY: 'day', WEEKLY: 'week', MONTHLY: 'month', YEARLY: 'year' }[freq];
+    if (!unit) return 'repeats';
+    if (freq === 'WEEKLY' && interval === 1 && days.join() === 'MO,TU,WE,TH,FR') return 'every weekday';
+    const every = interval === 1 ? `every ${unit}` : `every ${interval} ${unit}s`;
+    if (freq === 'WEEKLY' && days.length) {
+        const list = days.map(x => names[x] || x).join(', ');
+        return interval === 1 ? `every ${list}` : `${every} on ${list}`;
+    }
+    return interval === 1 ? { day: 'daily', week: 'weekly', month: 'monthly', year: 'yearly' }[unit] : every;
+}
+
+// Duration helper for parseHumanWrittenCalendar: "for 2 hours", "2h", "90m", "1h30m",
+// "45 min", "for 3 days". Returns { text (the phrase blanked to the same length, so
+// positions in it still line up), duration (ms), days }.
 function extractDuration(text) {
-    const durationRegex = /(?:(?:for|in)\s+)?(\d+(?:\.\d+)?)\s*(hour|hr|minute|min|day)s?/i;
-    const match = text.match(durationRegex);
-
-    if (!match) {
-        return { subject: text, duration: null, days: null };
+    const blank = (m) => text.slice(0, m.index) + ' '.repeat(m[0].length) + text.slice(m.index + m[0].length);
+    const both = /(?:\b(?:for|in)\s+)?\b(\d+)\s*(?:h|hrs?|hours?)\s*(\d+)\s*(?:m|mins?|minutes?)\b/i.exec(text);
+    if (both) {
+        return { text: blank(both), duration: (parseInt(both[1], 10) * 60 + parseInt(both[2], 10)) * 60000, days: null };
     }
+    const match = /(?:\b(?:for|in)\s+)?\b(\d+(?:\.\d+)?)\s*(hours?|hrs?|h|minutes?|mins?|m|days?|d)\b/i.exec(text);
+    if (!match) return { text, duration: null, days: null };
 
-    const [fullMatch, amount, unit] = match;
-    let durationMs;
-
-    switch (unit.toLowerCase()) {
-        case 'hour':
-        case 'hr':
-            durationMs = parseFloat(amount) * 60 * 60 * 1000;
-            break;
-        case 'minute':
-        case 'min':
-            durationMs = parseFloat(amount) * 60 * 1000;
-            break;
-        case 'day':
-            // Whole days are added as calendar days by the caller (DST-safe); a
-            // fractional day has no calendar meaning, so it stays elapsed time.
-            if (Number.isInteger(parseFloat(amount))) {
-                const subject = text.replace(fullMatch, '').replace(/\s+/g, ' ').trim();
-                return { subject, duration: null, days: parseInt(amount, 10) };
-            }
-            durationMs = parseFloat(amount) * 24 * 60 * 60 * 1000;
-            break;
-        default:
-            durationMs = 0;
-    }
-
-    const subject = text.replace(fullMatch, '').replace(/\s+/g, ' ').trim();
-
-    return { subject, duration: durationMs, days: null };
+    const amount = parseFloat(match[1]);
+    const unit = match[2].toLowerCase();
+    if (/^h/.test(unit)) return { text: blank(match), duration: amount * 3600000, days: null };
+    if (/^m/.test(unit)) return { text: blank(match), duration: amount * 60000, days: null };
+    // Whole days are added as calendar days by the caller (DST-safe); a fractional day
+    // has no calendar meaning, so it stays elapsed time.
+    if (Number.isInteger(amount)) return { text: blank(match), duration: null, days: amount };
+    return { text: blank(match), duration: amount * 86400000, days: null };
 }
 
 window.RecentCalendars = RecentCalendars;

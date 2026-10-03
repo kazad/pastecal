@@ -95,6 +95,9 @@ Copyright (c) 2025 Kalid Azad
     <script src="/services/CalendarDataService.js?v=1763769217"></script>
     <script src="/services/CalendarFlow.js?v=1"></script>
     <script src="/models/Calendar.js?v=1763769217"></script>
+    <script src="/services/UndoService.js?v=1763769217"></script>
+    <script src="/services/EventSearch.js?v=1763769217"></script>
+    <script src="/services/LocalDraft.js?v=1763769217"></script>
     <script src="/directives/clickOutside.js?v=1763769217"></script>
     <!-- Components -->
     <!-- NativeCalendar.js loaded by loader.js -->
@@ -187,12 +190,14 @@ Copyright (c) 2025 Kalid Azad
 
                     <!-- Search Results -->
                     <div v-if="searchResults.length > 0" class="max-h-64 overflow-auto">
-                        <div v-for="event in searchResults" :key="event.id" @click="jumpToEvent(event)"
-                            :style="{ borderLeft: '3px solid ' + getTypeColor(event.type) }"
+                        <div v-for="result in searchResults" :key="result.key" @click="jumpToEvent(result)"
+                            data-testid="search-result"
+                            :style="{ borderLeft: '3px solid ' + getTypeColor(result.event.type) }"
                             class="cursor-pointer p-1 pl-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors mb-1">
-                            <div class="font-semibold text-color-2">{{ event.title }}</div>
-                            <div class="text-xs text-color-1">{{ formatDate(event.start) }} - {{
-                                formatDate(event.end)}}</div>
+                            <div class="font-semibold text-color-2">{{ eventName(result.event) }}</div>
+                            <div class="text-xs text-color-1">
+                                <span v-if="result.recurring">{{ result.ended ? 'Repeated, ended · ' : 'Next: ' }}</span>{{ searchResultLabel(result) }}
+                            </div>
                         </div>
                     </div>
                 </section>
@@ -522,6 +527,7 @@ Copyright (c) 2025 Kalid Azad
 
         <div id="cal2_wrap" style="width: 100%; height: 100%;" class="flex-1 overflow-hidden">
             <native-calendar
+                ref="nativeCal"
                 :events="displayEvents"
                 :time-format="globalSettings.timeFormat"
                 :creating-event="quickCreateEvent"

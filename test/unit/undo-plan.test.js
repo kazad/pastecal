@@ -45,6 +45,9 @@ function loadApp(events) {
   vm.runInContext(fs.readFileSync(path.join(PUBLIC, 'models/Event.js'), 'utf8') + ';this.Event = Event;', ctx);
   // The real service: app.sameEvent delegates to its _sameEvent, the one client definition.
   ctx.CalendarDataService = require('./helpers/data-service-harness').loadDataService().S;
+  // The planner itself lives in the shared UndoService; app.js delegates to it.
+  vm.runInContext(fs.readFileSync(path.join(PUBLIC, 'services/UndoService.js'), 'utf8')
+    + ';this.UndoService = UndoService;', ctx);
   const names = ['planUndo', 'revertExdates', 'sameEvent', 'eventKey', 'deltaBetween',
     'isHandledHistory', 'reversedHistory'];
   vm.runInContext(`this.app = {\n${names.map(method).join(',\n')}\n}`, ctx);
@@ -168,6 +171,8 @@ test('after a reload, Cmd+Z never redoes an undo', async () => {
     const names = ['undoLastChange', 'undoLocalAction', 'commitUndo'];
     const ctx = vm.createContext({ console, JSON, Map, Set, Math, Object, Array, String, Promise,
       CalendarDataService: { writerId: 'me', declareIntent() {}, markUndo: (ids) => marked.push(...ids) } });
+    // commitUndo writes through the shared UndoService, which reads this fake service.
+    vm.runInContext(fs.readFileSync(path.join(PUBLIC, 'services/UndoService.js'), 'utf8'), ctx);
     vm.runInContext(`this.m = {\n${names.map(method).join(',\n')}\n}`, ctx);
     Object.assign(app, ctx.m, {
       _undoBusy: false, _sessionUndo: [], isExisting: true, toasts: [],

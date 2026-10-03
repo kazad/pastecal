@@ -137,6 +137,9 @@ Copyright (c) 2025 Kalid Azad
     <script src="/services/CalendarDataService.js?v=1789542977"></script>
     <script src="/services/CalendarFlow.js?v=1"></script>
     <script src="/models/Calendar.js?v=1789542977"></script>
+    <script src="/services/UndoService.js?v=1789542977"></script>
+    <script src="/services/EventSearch.js?v=1789542977"></script>
+    <script src="/services/LocalDraft.js?v=1789542977"></script>
     <script src="/directives/clickOutside.js?v=1789542977"></script>
     <!-- Components -->
     <script src="/components/icons.js?v=1789542977"></script>
@@ -232,12 +235,15 @@ Copyright (c) 2025 Kalid Azad
 
                     <!-- Search Results -->
                     <div v-if="searchResults.length > 0" class="max-h-64 overflow-auto">
-                        <div v-for="event in searchResults" :key="event.id" @click="jumpToEvent(event)"
-                            :style="{ borderLeft: '3px solid ' + getTypeColor(event.type) }"
+                        <div v-for="result in searchResults" :key="result.key" @click="jumpToEvent(result)"
+                            data-testid="search-result"
+                            :style="{ borderLeft: '3px solid ' + getTypeColor(result.event.type) }"
+                            :class="{ 'opacity-60': result.hidden }"
                             class="cursor-pointer p-1 pl-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors mb-1">
-                            <div class="font-semibold text-color-2">{{ event.title }}</div>
-                            <div class="text-xs text-color-1">{{ formatDate(event.start) }} - {{
-                                formatDate(event.end)}}</div>
+                            <div class="font-semibold text-color-2">{{ eventName(result.event) }}</div>
+                            <div class="text-xs text-color-1">
+                                <span v-if="result.recurring">{{ result.ended ? 'Repeated, ended · ' : 'Next: ' }}</span>{{ searchResultLabel(result) }}<span v-if="result.hidden"> · hidden by filter</span>
+                            </div>
                         </div>
                     </div>
                 </section>
@@ -721,7 +727,8 @@ Copyright (c) 2025 Kalid Azad
                                 <span class="text-xs text-color-1 whitespace-nowrap" :title="entry.whenExact">
                                     {{ entry.ago }}
                                 </span>
-                                <button v-if="entry.canRestore" @click="undoChange(entry)"
+                                <span v-if="entry.undone" class="text-xs text-color-1 italic">Undone</span>
+                                <button v-else-if="entry.canRestore" @click="undoChange(entry)"
                                     class="px-3 py-1 border border-color-default rounded text-xs whitespace-nowrap hover:bg-theme-hover transition-colors">
                                     {{ entry.restoreLabel }}
                                 </button>

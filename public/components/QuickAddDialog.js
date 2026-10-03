@@ -33,7 +33,7 @@ const QuickAddDialog = {
                                        type="text"
                                        v-model="fields.subject"
                                        @input="pin('subject')"
-                                       placeholder="Untitled Event"
+                                       placeholder="Untitled event"
                                        class="flex-1 min-w-0 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                             </div>
 
@@ -76,7 +76,12 @@ const QuickAddDialog = {
                             </div>
 
                             <p v-if="isAllDay" class="text-sm opacity-70">All day</p>
+                            <p v-if="recurrenceRule" class="text-sm opacity-70 flex items-center gap-2" data-testid="qa-repeat">
+                                <span>Repeats {{ repeatLabel }}</span>
+                                <button type="button" @click="clearRepeat" class="underline">Don't repeat</button>
+                            </p>
                             <p v-if="endBeforeStart" class="text-sm text-red-500">End is before start.</p>
+                            <p v-else-if="disabledReason" class="text-sm opacity-70" role="status" data-testid="qa-why">{{ disabledReason }}</p>
                         </div>
 
                         <div class="mb-4 text-sm">
@@ -126,19 +131,23 @@ const QuickAddDialog = {
             description: '',
             fields: { subject: '', startDate: '', startTime: '', endDate: '', endTime: '' },
             // A field is pinned once the user edits it directly; re-parsing skips pinned fields.
-            pinned: { subject: false, start: false, end: false },
+            pinned: { subject: false, start: false, end: false, repeat: false },
+            // The RRULE the sentence asked for ("every weekday 9am"), or ''. Shown, so a
+            // repeat is never created silently, and clearable.
+            recurrenceRule: '',
             // The length of the last timed version of this event, kept so that briefly
             // clearing a time (backspacing the hour to retype it) and setting it again
             // restores the event's length instead of collapsing it to the 1h default.
             lastTimedDurationMs: null,
             // Each shows off a distinct capability: duration, explicit range,
-            // numeric date, month-name date, multi-day span.
+            // numeric date, month-name date, multi-day span, repeat.
             examples: [
                 'lunch tomorrow 2pm for 1 hour',
                 'birthday party Sat 7pm to 11pm',
                 'appointment 9/15 at 2:30pm',
                 'workout 3pm May 20 for 90 minutes',
-                'vacation dec 11 - dec 15'
+                'vacation dec 11 - dec 15',
+                'standup every weekday 9am'
             ]
         };
     },
@@ -163,6 +172,17 @@ const QuickAddDialog = {
         },
         isValidEvent() {
             return !!(this.fields.subject.trim() && this.startDateTime && !this.endBeforeStart);
+        },
+        // Why Create is disabled, in words. A greyed-out button with no reason reads as
+        // broken: "Party next thursday-ish" just looked like the dialog had stopped working.
+        disabledReason() {
+            if (this.isValidEvent || !this.description.trim()) return '';
+            if (!this.startDateTime) return 'Couldn\'t find a date. Try "tomorrow 3pm" or "Oct 12", or pick one above.';
+            if (!this.fields.subject.trim()) return 'Add a title.';
+            return '';
+        },
+        repeatLabel() {
+            return Utils.describeRecurrence(this.recurrenceRule);
         },
         // What actually gets saved. The parser returns a null end for anything without a
         // duration ("standup tomorrow 9am"), and an event with no end is discarded at the
@@ -200,8 +220,13 @@ const QuickAddDialog = {
             this.dialogVisible = false;
             this.description = '';
             this.fields = { subject: '', startDate: '', startTime: '', endDate: '', endTime: '' };
-            this.pinned = { subject: false, start: false, end: false };
+            this.pinned = { subject: false, start: false, end: false, repeat: false };
+            this.recurrenceRule = '';
             this.lastTimedDurationMs = null;
+        },
+        clearRepeat() {
+            this.recurrenceRule = '';
+            this.pinned.repeat = true;
         },
         parseDescription() {
             const parsed = Utils.parseHumanWrittenCalendar(this.description) || {};
@@ -215,7 +240,14 @@ const QuickAddDialog = {
             if (!this.pinned.start) {
                 this.setDateTime('start', empty ? null : parsed.startDateTime, allDay);
             }
-            if (!this.pinned.end) {
+            if (!this.pinned.repeat) {
+                this.recurrenceRule = empty ? '' : (parsed.recurrenceRule || '');
+            }
+            if (!this.pinned.end && this.pinned.start && parsed.durationMs && this.startDateTime && !this.isAllDay) {
+                // "for 2 hours" typed after the user set the start by hand: the length
+                // goes on THEIR start, not on the parser's guess at one.
+                this.setDateTime('end', this.offset(this.startDateTime, parsed.durationMs), false);
+            } else if (!this.pinned.end) {
                 let end = empty ? null : parsed.endDateTime;
                 // The parser's all-day end is exclusive; show the last day instead.
                 if (allDay && end) {
@@ -256,7 +288,7 @@ const QuickAddDialog = {
         },
         useExample(text) {
             // Start clean so the example parses into every field, not just unpinned ones.
-            this.pinned = { subject: false, start: false, end: false };
+            this.pinned = { subject: false, start: false, end: false, repeat: false };
             this.description = text;
             this.$nextTick(() => {
                 const ta = this.$el.querySelector('textarea');
@@ -365,7 +397,8 @@ const QuickAddDialog = {
                 subject: this.fields.subject.trim(),
                 startDateTime: this.startDateTime,
                 endDateTime: this.effectiveEndDateTime,
-                isAllDay: this.isAllDay
+                isAllDay: this.isAllDay,
+                recurrenceRule: this.recurrenceRule || null
             });
             this.hideDialog();
         },

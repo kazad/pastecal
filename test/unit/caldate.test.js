@@ -405,16 +405,23 @@ function appMethod(name) {
 }
 
 test('app: Recent changes labels and jump-to show an all-day event on its own date', () => {
-  const describe = appMethod('describeEventTime');
+  // Both now come from the shared services (UndoService, EventSearch), which both UIs use.
+  const UndoService = new Function('Event', 'CalDate',
+    `${read('public/services/UndoService.js')}; return UndoService;`)(Event, CalDate);
+  const EventSearch = new Function('Event', 'CalDate',
+    `${read('public/services/EventSearch.js')}; return EventSearch;`)(Event, CalDate);
   const jump = appMethod('jumpToEvent');
   const e = createdIn('Asia/Tokyo');
   for (const tz of ZONES) {
     inTZ(tz, () => {
-      const label = new Function('Event', `return function(${describe.args}) {${describe.body}}`)(Event)(e);
+      const label = UndoService.describeEventTime(e);
       const expected = new Date(2026, 9, 2).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' });
       assert.equal(label, `${expected}, all day`, tz);
+      const [result] = EventSearch.search([e], e.title || 'x', { now: 0 });
+      assert.ok(result, tz);
       const scheduleObj = {};
-      new Function('Event', 'scheduleObj', `return function(${jump.args}) {${jump.body}}`)(Event, scheduleObj)(e);
+      const app = { isEventVisible: () => true };
+      new Function('Event', 'scheduleObj', `return function(${jump.args}) {${jump.body}}`)(Event, scheduleObj).call(app, result);
       assert.equal(ymd(scheduleObj.selectedDate), '2026-10-02', tz);
     });
   }

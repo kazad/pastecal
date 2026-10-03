@@ -250,6 +250,10 @@ const AppHeader = {
                             class="flex-1 md:flex-none bg-transparent border-none focus:ring-0 p-1 md:p-0 text-sm font-bold text-color-2 w-auto md:w-40 min-w-0 focus:outline-none"
                             placeholder="your-name" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="60"
                             :aria-invalid="app.slugMessage ? 'true' : 'false'" aria-describedby="slug-message">
+                        <!-- An unclaimed /slug with events: kept only in this browser (LocalDraft). -->
+                        <span v-if="app.hasUnsavedDraft" data-testid="unsaved-badge"
+                            title="Saved only in this browser. Claim the URL to keep it."
+                            class="ml-1 text-xs text-color-1 whitespace-nowrap">Unsaved</span>
                         <button type="submit" :disabled="app.claimBusy"
                             class="ml-1 px-3 py-1.5 text-white bg-blue-600 font-bold rounded-md md:rounded-full text-xs hover:bg-blue-700 transition-colors flex-shrink-0 shadow-sm disabled:opacity-60">
                             <span class="hidden sm:inline">Claim URL</span><span class="sm:hidden">Claim</span>

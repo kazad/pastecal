@@ -1023,11 +1023,14 @@ var NativeCalendar = {
 
         const selectEvent = (event, e) => {
             if (dragState.value.isDragging || dragState.value.wasDragging) return;
+            // One occurrence of a series: hand over the series AND which occurrence was
+            // clicked. Passing only the series made the popover show its first date and
+            // made delete take out every occurrence.
             if (event.isRecurringInstance && event.originalEventId) {
                 const original = (props.events || []).find(ev => ev && ev.id === event.originalEventId);
                 if (original) {
                     selectedEventId.value = original.id;
-                    emit('event-click', { event: original, jsEvent: e });
+                    emit('event-click', { event: original, occurrence: { start: event.start, end: event.end }, jsEvent: e });
                     return;
                 }
             }
@@ -1148,7 +1151,14 @@ var NativeCalendar = {
             if (mql && mql.removeEventListener) mql.removeEventListener('change', onNarrow);
         });
 
+        // Show a date (search results jump here), optionally in a given view.
+        const goToDate = (date, view) => {
+            if (view && views.includes(view)) currentView.value = view;
+            if (date && !isNaN(new Date(date).getTime())) currentDate.value = new Date(date);
+        };
+
         return {
+            goToDate,
             currentView, views, currentTitle, weekDays, monthWeeks, monthLanes, visibleDates,
             yearMonths, agendaSections, allDayLayout, timedLayout,
             prev, next, today, changeView, goToMonth, showDay,

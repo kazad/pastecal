@@ -63,12 +63,17 @@ const QuickCreatePopover = {
         }
     },
     watch: {
-        visible(val) {
-            if (val) {
-                this.localTitle = '';
-                this.$nextTick(() => {
-                    if (this.$refs.titleInput) this.$refs.titleInput.focus();
-                });
+        // immediate: the parent mounts this with v-if AND visible=true, so `visible` never
+        // CHANGES after mount and a plain watcher never ran -- the title was never focused.
+        visible: {
+            immediate: true,
+            handler(val) {
+                if (val) {
+                    this.localTitle = '';
+                    this.$nextTick(() => {
+                        if (this.$refs.titleInput) this.$refs.titleInput.focus();
+                    });
+                }
             }
         }
     },
@@ -98,12 +103,8 @@ const QuickCreatePopover = {
     },
     methods: {
         save() {
-            if (!this.localTitle.trim()) {
-                this.localTitle = 'New Event'; // Default title if empty? Or block? 
-                // Original requirement: [shows details for the default event time:1 hour duration [more details][save]]
-                // Let's allow saving with default or empty title (which usually defaults to (No Title))
-            }
-            this.$emit('save', this.localTitle);
+            // An empty title is saved as the app's one untitled name (the parent applies it).
+            this.$emit('save', this.localTitle.trim());
         }
     }
 };
