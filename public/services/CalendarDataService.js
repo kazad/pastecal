@@ -405,10 +405,30 @@ class CalendarDataService {
     // and arrays can carry null slots. Every event list this service stores or reads goes
     // through here: a raw object made the gate's count undefined (so the gate compared
     // NaN and let anything through) and made the merge throw "not iterable".
+    // Every event has an identity, including rows stored without one (written by old
+    // clients or by hand). An id-less row used to be invisible to _byKey and the merge but
+    // counted by the write gate as "undefined|" -- so it read as an unnamed removal on every
+    // save, the refusal restored it, the retry dropped it again, and the calendar could
+    // never be saved (an infinite refusal loop). Such rows now get an id derived from their
+    // content, the same on every client, at the one place stored events enter the service;
+    // the next save writes it back, healing the data.
     static _eventList(events) {
         if (!events || typeof events !== 'object') return [];
+        const seen = new Map();
         return (Array.isArray(events) ? events : Object.values(events))
-            .filter(e => e && typeof e === 'object');
+            .filter(e => e && typeof e === 'object')
+            .map(e => (e.id ? e : { ...e, id: this._contentId(e, seen) }));
+    }
+
+    static _contentId(e, seen) {
+        const text = JSON.stringify([e.title ?? '', e.start ?? '', e.end ?? '', e.description ?? '',
+            e.recurrencerule ?? '', e.recurrenceID ?? '']);
+        let h = 0x811c9dc5;                                  // FNV-1a, 32-bit
+        for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+        const base = `legacy-${h.toString(36)}`;
+        const n = seen.get(base) || 0;                       // identical rows stay distinct
+        seen.set(base, n + 1);
+        return n ? `${base}-${n}` : base;
     }
 
     static _byKey(list) {
@@ -527,7 +547,7 @@ class CalendarDataService {
     }
 
     // only sync if we have existed
-    static sync(calendar) {
+    static sync(calendar, { isRetry = false } = {}) {
         if (calendar && calendar.id && this.connected) {
             // console.log("CalendarDataService.sync()", calendar);
 
@@ -579,6 +599,16 @@ class CalendarDataService {
                         intent: gone.length > 0 && !unnamed.length });
                 } catch (e) { /* never rethrow */ }
             }
+            if (known && unnamed.length && isRetry) {
+                // The corrected re-send was refused too. It removes only declared rows, so
+                // this means the gate and the corrected list disagree about identity -- a bug,
+                // but recursing again would loop forever. Stop and say so.
+                console.error('[CalendarDataService] corrected write refused again; not retrying');
+                if (typeof this.onSyncFailed === 'function') {
+                    try { this.onSyncFailed(new Error('save refused twice')); } catch (e) { /* never rethrow */ }
+                }
+                return;
+            }
             if (known && unnamed.length) {
                 console.error(`[CalendarDataService] refused to save: this write removes ${unnamed.length} of ` +
                     `${prevEvents.length} events that no deletion named`);
@@ -606,8 +636,8 @@ class CalendarDataService {
                 // everything else typed in its debounce window (notes, title), and that
                 // must not be lost with the bad removal. The declarations were not spent
                 // (nothing committed), and the corrected list removes only named rows, so
-                // it cannot be refused again.
-                this.sync({ ...calendar, events: restore });
+                // it should not be refused again -- and if it is, isRetry stops the loop.
+                this.sync({ ...calendar, events: restore }, { isRetry: true });
                 return;
             }
 

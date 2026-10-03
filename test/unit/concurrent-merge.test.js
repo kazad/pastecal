@@ -24,34 +24,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const SRC = fs.readFileSync(
-  path.join(__dirname, '../../public/services/CalendarDataService.js'), 'utf8');
-// In the browser caldate.js is a global loaded before the service (_sameEvent uses it).
-globalThis.CalDate = require('../../public/models/caldate.js');
-
-// Extract a real static method so a drift between test and source shows up as a failure.
-function extractStatic(name) {
-  const sig = new RegExp(`static ${name}\\(([^)]*)\\)\\s*\\{`).exec(SRC);
-  assert.ok(sig, `${name} not found in CalendarDataService.js — renamed?`);
-  const open = SRC.indexOf('{', sig.index + sig[0].length - 1);
-  let depth = 0, i = open;
-  for (; i < SRC.length; i++) {
-    if (SRC[i] === '{') depth++;
-    else if (SRC[i] === '}') { depth--; if (depth === 0) break; }
-  }
-  // eslint-disable-next-line no-new-func
-  return new Function(`return function(${sig[1]}) {${SRC.slice(open + 1, i)}}`)();
-}
-
-// _mergeEvents calls this._eventKey and friends, so it needs a host carrying the real helpers --
-// also extracted from source, so a change to how rows are identified is exercised here
-// rather than silently diverging from what ships.
-const host = {};
-for (const name of ['_eventKey', '_eventList', '_byKey', '_sameEvent']) {
-  host[name] = extractStatic(name).bind(host);
-}
-const rawMerge = extractStatic('_mergeEvents');
-const mergeEvents = (...args) => rawMerge.apply(host, args);
+// The real service, loaded by the shared harness -- not methods sliced out of the source by
+// brace matching, which silently missed any helper added later (_contentId was the first).
+const { S: host } = require('./helpers/data-service-harness').loadDataService();
+// Plain JSON copies: the service runs in its own VM realm, whose Arrays deepEqual rejects.
+const mergeEvents = (...args) => JSON.parse(JSON.stringify(host._mergeEvents(...args)));
 const ev = (id, title, extra = {}) => ({ id, title, start: '2026-09-17T10:00:00.000Z',
   end: '2026-09-17T11:00:00.000Z', ...extra });
 const ids = (list) => list.map(e => e.id).sort();
@@ -186,11 +163,16 @@ test('a first write against an empty server keeps everything local', () => {
   assert.deepEqual(ids(mergeEvents([], local, [])), ['A', 'B']);
 });
 
-test('events without ids are dropped rather than duplicated on every write', () => {
-  // An id-less event cannot be matched across writes, so keeping it would append a fresh
-  // copy every time the debounce fires.
-  const merged = mergeEvents([], [{ title: 'no id' }, ev('A', 'A')], []);
-  assert.deepEqual(ids(merged), ['A']);
+test('events without ids keep a stable identity: never dropped, never duplicated', () => {
+  // Dropping an id-less row was data loss, and the write gate still counted it -- so the
+  // calendar could never be saved again. It now gets an id derived from its content, the
+  // same on every merge and every client, so repeated writes neither lose nor copy it.
+  const once = mergeEvents([], [{ title: 'no id', start: 's', end: 'e' }, ev('A', 'A')], []);
+  assert.equal(once.length, 2);
+  const legacy = once.find(e => e.title === 'no id');
+  assert.match(legacy.id, /^legacy-/);
+  const again = mergeEvents(once, once, [{ title: 'no id', start: 's', end: 'e' }, ev('A', 'A')]);
+  assert.deepEqual(again.map(e => e.id).sort(), [legacy.id, 'A'].sort(), 'the same id, once');
 });
 
 test('missing or malformed inputs do not throw', () => {

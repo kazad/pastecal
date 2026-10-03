@@ -310,3 +310,22 @@ test('the delete handler declares exactly the rows it removes, by key', () => {
   assert.doesNotMatch(branch, /declareIntent\([^)]*\d/, 'no count is declared');
   assert.match(branch, /if \(goneKeys\.length\) CalendarDataService\.declareIntent\(goneKeys\)/);
 });
+
+test('a stored event without an id no longer makes every save fail', () => {
+  // Found by the hostile-data pass: events [{id:'x'},{title:'only title'}] made the gate
+  // count the id-less row as an unnamed removal, the refusal re-sent, it was dropped again,
+  // and sync() recursed until the stack overflowed -- every later edit silently lost.
+  const { loadDataService } = require('./helpers/data-service-harness');
+  const { S, server, deliver } = loadDataService();
+  server.cal = { id: 'cal', title: 'Old', events: [{ id: 'x', title: 'x', start: '2026-09-17T10:00:00.000Z', end: '2026-09-17T11:00:00.000Z' },
+    { title: 'only title', start: '2026-09-18T10:00:00.000Z', end: '2026-09-18T11:00:00.000Z' }] };
+  deliver('cal');
+  const refused = [];
+  S.onSyncRefused = (r) => refused.push(r);
+  const local = { id: 'cal', title: 'Renamed', events: S._eventList(server.cal.events) };
+  assert.doesNotThrow(() => S.sync(local));
+  assert.equal(refused.length, 0, 'nothing was refused');
+  assert.equal(server.cal.title, 'Renamed', 'the edit reached the server');
+  assert.equal(server.cal.events.length, 2, 'the id-less row is kept');
+  assert.ok(server.cal.events.every(e => e.id), 'and now stored with its id');
+});
