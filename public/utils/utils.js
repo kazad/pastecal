@@ -295,12 +295,35 @@ class RecentCalendars {
     }
 }
 
+// Every stored-JSON read goes through here. Blocked site data makes the localStorage
+// accessor THROW (not return null), and an unguarded read in mounted() aborted the rest of
+// it before the scheduler was built: the page sat on "Loading..." forever. Corrupt JSON
+// did the same. Returns `fallback` for missing, blocked or unparseable values.
+function safeReadJSON(key, fallback = null) {
+    try {
+        const raw = localStorage.getItem(key);
+        if (raw === null || raw === undefined) return fallback;
+        const v = JSON.parse(raw);
+        return (v === null || v === undefined) ? fallback : v;
+    } catch (e) {
+        return fallback;
+    }
+}
+
+// Colors arrive from calendar options anyone with the link can write, and are spliced into
+// a <style> sheet. An unvalidated value like `red} body{display:none}` closed the rule and
+// blanked every viewer's page (or pulled a tracking URL). Only plain color syntaxes pass.
+const CSS_COLOR = /^(#[0-9a-f]{3,8}|(rgb|hsl)a?\(\s*[-0-9.%,\s/]+\)|[a-z]{3,20})$/i;
+function safeCssColor(value, fallback) {
+    return (typeof value === 'string' && CSS_COLOR.test(value.trim())) ? value.trim() : fallback;
+}
+
 // Legacy calendar helpers (localStorage-backed)
 let _calstore = (typeof window !== 'undefined' && window._calstore) ? window._calstore : {};
 
 Object.assign(Utils, {
     init() {
-        _calstore = _calstore ?? JSON.parse(localStorage.getItem("_calstore")) ?? {};
+        _calstore = _calstore ?? safeReadJSON("_calstore", {});
         _calstore.events = _calstore.events ?? [];
         Utils.sync();
         console.log(_calstore);
@@ -497,26 +520,9 @@ function extractDuration(text) {
 
 window.RecentCalendars = RecentCalendars;
 
-// Linkify utility - converts URLs and emails in text to clickable links
+// Links in user text come from one place, utils/linkify.js (see its header for why).
 const LINKIFY_LINK_STYLE = 'color:#2563eb;text-decoration:underline;';
-
-function linkify(inputText) {
-    let replacedText, replacePattern1, replacePattern2, replacePattern3;
-
-    replacePattern1 = /(\b(https?|ftp):\/\/[^<>\s"']*[-A-Z0-9+&@#\/%=~_|])/gim;
-    replacedText = inputText.replace(replacePattern1,
-        `<a href="$1" target="_blank" rel="noopener noreferrer" style="${LINKIFY_LINK_STYLE}">$1</a>`);
-
-    replacePattern2 = /(^|[^\/])(www\.[^<>\s"']+(\b|$))/gim;
-    replacedText = replacedText.replace(replacePattern2,
-        `$1<a href="http://$2" target="_blank" rel="noopener noreferrer" style="${LINKIFY_LINK_STYLE}">$2</a>`);
-
-    replacePattern3 = /(([a-zA-Z0-9\-\_\.])+@[a-zA-Z\_]+?(\.[a-zA-Z]{2,6})+)/gim;
-    replacedText = replacedText.replace(replacePattern3,
-        `<a href="mailto:$1" style="${LINKIFY_LINK_STYLE}">$1</a>`);
-
-    return replacedText;
-}
+const linkify = (text) => Linkify.toHtml(text, { linkStyle: LINKIFY_LINK_STYLE });
 
 // MutationObserver to linkify schedule descriptions
 function startLinkifyObserver() {
@@ -526,7 +532,8 @@ function startLinkifyObserver() {
                 const descriptionEl = document.querySelector(".e-event-popup .e-description-details");
                 if (descriptionEl && !descriptionEl.hasAttribute('data-processed')) {
                     descriptionEl.setAttribute('data-processed', 'true');
-                    descriptionEl.innerHTML = linkify(descriptionEl.innerHTML);
+                    // Its own TEXT, rebuilt as nodes -- never an innerHTML round-trip.
+                    Linkify.renderInto(descriptionEl, descriptionEl.textContent, { linkStyle: LINKIFY_LINK_STYLE });
                 }
             }
         });
@@ -549,4 +556,4 @@ if (typeof MutationObserver !== 'undefined' && typeof document !== 'undefined') 
     }
 }
 
-Object.assign(Utils, { linkify });
+Object.assign(Utils, { linkify, safeReadJSON, safeCssColor });

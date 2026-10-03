@@ -75,25 +75,8 @@ const EventPopover = {
         const isLongDescription = computed(() =>
             (props.event?.description?.length || 0) > LONG_DESCRIPTION_THRESHOLD);
 
-        const escapeHtml = (str) => str
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
-
-        const URL_PATTERN = /(https?:\/\/[^\s<]+)/g;
-
-        const linkifiedDescription = computed(() => {
-            const text = props.event?.description || '';
-            return escapeHtml(text).replace(URL_PATTERN, (url) => {
-                // Trim trailing punctuation that's likely sentence formatting, not part of the URL.
-                const trailing = url.match(/[)\].,!?;:]+$/);
-                const cleanUrl = trailing ? url.slice(0, -trailing[0].length) : url;
-                const suffix = trailing ? trailing[0] : '';
-                return `<a href="${cleanUrl}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:underline">${cleanUrl}</a>${suffix}`;
-            });
-        });
+        const linkifiedDescription = computed(() =>
+            Linkify.toHtml(props.event?.description || '', { linkClass: 'text-blue-600 hover:underline' }));
 
         return { formatDate, formatTime, linkifiedDescription, isLongDescription };
     }
