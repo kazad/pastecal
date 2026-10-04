@@ -1,0 +1,50 @@
+{
+  // pastecal's calendar store + live sync. One Durable Object per calendar holds its data
+  // in SQLite, applies every save in order, and pushes changes to open tabs over
+  // hibernating WebSockets. See docs/cloudflare-migration.md.
+  "name": "pastecal-sync",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-01",
+  "workers_dev": true,
+  // new.pastecal.com: the site (public/) plus /cal/*. pastecal.com itself is NOT routed here
+  // until the cutover stage.
+  "routes": [{ "pattern": "new.pastecal.com", "custom_domain": true }],
+  "assets": {
+    "directory": "../public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",   // same as Firebase's "**" -> /index.html
+    // Only these reach the Worker; everything else is served straight from the assets.
+    "run_worker_first": [
+      "/cal/*",
+      "/api/*",
+      "/lookupCalendar",
+      "/createPublicLink",
+      "/*.ics",
+      "/view/*.ics",
+      "/beta",
+      "/beta/*",
+      "/nativecal/*"
+    ]
+  },
+  "durable_objects": {
+    "bindings": [
+      { "name": "CALENDARS", "class_name": "CalendarRoom" },
+      { "name": "DIRECTORY", "class_name": "CalendarDirectory" }
+    ]
+  },
+  // New calendars from browsers (POST /cal/<id>): 10 a minute per IP.
+  "ratelimits": [{ "name": "CREATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["CalendarRoom"] },
+    { "tag": "v2", "new_sqlite_classes": ["CalendarDirectory"] }
+  ],
+  // Copy-back to Firebase (see CalendarRoom). Inert until the FIREBASE_SA secret exists.
+  // COPY_BACK is the allowlist of calendars whose saves are written back: names, or "prefix-*".
+  "vars": {
+    "FIREBASE_DB_URL": "https://pastecal-web-default-rtdb.firebaseio.com",
+    "COPY_BACK": "test-cf-*,kalid"
+  },
+  "observability": { "enabled": true }
+  // Secrets (wrangler secret put): IMPORT_SECRET -- lets the Firebase shadow copy write;
+  // FIREBASE_SA -- a service account key (JSON) that lets the room write to Firebase.
+}

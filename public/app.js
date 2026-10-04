@@ -471,8 +471,7 @@ const CalendarVueApp = {
             (async () => {
                 try {
                     console.log('Looking up calendar for /view/ route:', requestedSlug);
-                    const lookupCalendar = firebase.functions().httpsCallable('lookupCalendar');
-                    const result = await lookupCalendar({ slug: requestedSlug });
+                    const result = await CalendarDataService.lookupCalendar(requestedSlug);
 
                     if (result.data.found && result.data.isReadOnly) {
                         // Found as read-only - subscribe with the actual slug
@@ -2821,14 +2820,22 @@ const CalendarVueApp = {
                 return this.undoEntries;
             }
             try {
-                // Only the newest 20 entries are ever shown, so only they are downloaded:
-                // a calendar's history is 10-20x the calendar itself.
-                const snap = await firebase.database()
-                    .ref('/history/' + calendarId).orderByKey().limitToLast(20).once('value');
+                let rows = [];
+                if (typeof CalendarDataService.loadUndoEntries === 'function') {
+                    const cloudRows = await CalendarDataService.loadUndoEntries(calendarId);
+                    if (Array.isArray(cloudRows) && cloudRows.length) {
+                        rows = cloudRows;
+                    }
+                }
+                if (!rows.length && typeof firebase !== 'undefined' && firebase.database) {
+                    // Only the newest 20 entries are ever shown, so only they are downloaded:
+                    // a calendar's history is 10-20x the calendar itself.
+                    const snap = await firebase.database()
+                        .ref('/history/' + calendarId).orderByKey().limitToLast(20).once('value');
+                    snap.forEach(c => { rows.push({ key: c.key, ...c.val() }); });
+                }
                 if (seq !== this._undoLoadSeq || calendarId !== this.calendar.id) return this.undoEntries;
 
-                const rows = [];
-                snap.forEach(c => { rows.push({ key: c.key, ...c.val() }); });
                 rows.sort((a, b) => b.savedAt - a.savedAt);
 
                 const keyOf = this.eventKey;
