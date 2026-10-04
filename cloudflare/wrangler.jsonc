@@ -6,9 +6,12 @@
   "main": "src/index.js",
   "compatibility_date": "2026-09-01",
   "workers_dev": true,
-  // new.pastecal.com: the site (public/) plus /cal/*. pastecal.com itself is NOT routed here
-  // until the cutover stage.
-  "routes": [{ "pattern": "new.pastecal.com", "custom_domain": true }],
+  // Phase 4 cutover: pastecal.com, www.pastecal.com, and new.pastecal.com
+  "routes": [
+    { "pattern": "pastecal.com/*", "zone_name": "pastecal.com" },
+    { "pattern": "www.pastecal.com/*", "zone_name": "pastecal.com" },
+    { "pattern": "new.pastecal.com", "custom_domain": true }
+  ],
   "assets": {
     "directory": "../public",
     "binding": "ASSETS",
@@ -39,10 +42,10 @@
     { "tag": "v2", "new_sqlite_classes": ["CalendarDirectory"] }
   ],
   // Copy-back to Firebase (see CalendarRoom). Inert until the FIREBASE_SA secret exists.
-  // COPY_BACK is the allowlist of calendars whose saves are written back: names, or "prefix-*".
+  // In Phase 4, COPY_BACK="*" mirrors every save back to Firebase RTDB for zero data loss and instant rollback.
   "vars": {
     "FIREBASE_DB_URL": "https://pastecal-web-default-rtdb.firebaseio.com",
-    "COPY_BACK": "test-cf-*,kalid"
+    "COPY_BACK": "*"
   },
   "observability": { "enabled": true }
   // Secrets (wrangler secret put): IMPORT_SECRET -- lets the Firebase shadow copy write;
