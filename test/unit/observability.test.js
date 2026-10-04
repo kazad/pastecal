@@ -75,11 +75,35 @@ test('a dropped event is reported as a count, never as the event', () => {
 
 test('a merged write reports how much it reconciled', () => {
   const { A, sent } = loadAnalytics();
-  A.syncMerged({ addedByOthers: 3, removedByUs: 1 });
+  A.syncMerged({ addedByOthers: 3, removedByOthers: 1, changedByOthers: 2 });
 
   assert.equal(sent[0].name, 'sync_merged');
   assert.equal(sent[0].params.added_by_others, 3);
-  assert.equal(sent[0].params.removed_by_us, 1);
+  assert.equal(sent[0].params.removed_by_others, 1);
+  assert.equal(sent[0].params.changed_by_others, 2);
+});
+
+test('sync_merged fires only for concurrent server changes, never for our own edits', () => {
+  // It used to diff local ids against the server, so a lone user's ADD was reported as
+  // "removed_by_us" and every ordinary add/delete counted as a collision.
+  const { loadDataService, ev } = require('./helpers/data-service-harness');
+  const { S, server, deliver } = loadDataService();
+  server.c = { id: 'c', events: [ev('A', 'A'), ev('B', 'B'), ev('C', 'C')] };
+  deliver('c');
+  const merges = [];
+  S.onSyncMerged = (m) => merges.push({ ...m });
+
+  // Single client: add, then delete, then edit.
+  S.sync({ id: 'c', events: [ev('A', 'A'), ev('B', 'B'), ev('C', 'C'), ev('MINE', 'mine')] });
+  S.declareIntent(1);
+  S.sync({ id: 'c', events: [ev('A', 'A'), ev('B', 'B'), ev('MINE', 'mine')] });
+  S.sync({ id: 'c', events: [ev('A', 'A2'), ev('B', 'B'), ev('MINE', 'mine')] });
+  assert.deepEqual(merges, [], 'our own adds, deletes and edits are not collisions');
+
+  // Someone else adds X, edits B and deletes MINE before our next write lands.
+  server.c.events = [ev('A', 'A2'), ev('B', 'B by Bob'), ev('X', 'Bob')];
+  S.sync({ id: 'c', events: [ev('A', 'A3'), ev('B', 'B'), ev('MINE', 'mine')] });
+  assert.deepEqual(merges, [{ addedByOthers: 1, removedByOthers: 1, changedByOthers: 1 }]);
 });
 
 test('a JS error reports its message and origin, bounded in length', () => {

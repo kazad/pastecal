@@ -25,7 +25,14 @@ if (!process.env.FIREBASE_DATABASE_EMULATOR_HOST) {
 
 const admin = require('../../functions/node_modules/firebase-admin');
 const { _internal } = require('../../functions/index.js');
-const { recordIcsStat, deviceBucket, clientFamily, DEVICE_BUCKET_TTL_DAYS } = _internal;
+const {
+    recordIcsStat, clientFamily, clientIpOf, deviceSaltSecret, sweepAllDeviceBuckets,
+    DEVICE_BUCKET_TTL_DAYS, DEVICE_SALT_PATH, SWEEP_CURSOR_PATH, _resetDeviceSaltCache,
+} = _internal;
+
+// Pure-function tests use a fixed secret; the recordIcsStat tests use the stored one.
+const SECRET = Buffer.alloc(32, 7);
+const deviceBucket = (ua, ip, day) => _internal.deviceBucket(ua, ip, SECRET, day);
 
 const db = admin.database();
 const today = () => new Date().toISOString().slice(0, 10);
@@ -227,6 +234,115 @@ test('sweep: runs at most once a day per calendar', async () => {
         assert.ok(devices[old], 'sweep should not have re-run on the same day');
     } finally {
         await cleanup(id);
+    }
+});
+
+// --- the salt ---------------------------------------------------------------------------
+
+test('deviceBucket: the same device lands in a different bucket on a different day', () => {
+    // The daily rotation is what stops buckets from linking a device across days.
+    assert.notEqual(deviceBucket(IOS, '203.0.113.5', '2026-10-01'), deviceBucket(IOS, '203.0.113.5', '2026-10-02'));
+});
+
+test('deviceBucket: no secret, no bucket', () => {
+    // Hashing without the secret would make every bucket testable against a known IP.
+    assert.equal(_internal.deviceBucket(IOS, '203.0.113.5', null), null);
+});
+
+test('deviceBucket: a different secret gives a different bucket', () => {
+    assert.notEqual(
+        _internal.deviceBucket(IOS, '203.0.113.5', Buffer.alloc(32, 1)),
+        _internal.deviceBucket(IOS, '203.0.113.5', Buffer.alloc(32, 2)));
+});
+
+test('device salt: one device hashes to the same bucket across instances and cold starts', async () => {
+    // The per-process random salt this replaced counted one phone once per instance
+    // that served it, inflating the estimate with every scale-out.
+    const id = 'SaltStableProbe';
+    try {
+        await recordIcsStat(id, { wasNotModified: true, userAgent: IOS, ip: '203.0.113.5' });
+        _resetDeviceSaltCache();   // what a cold start on another instance looks like
+        await recordIcsStat(id, { wasNotModified: true, userAgent: IOS, ip: '203.0.113.5' });
+        const snap = await db.ref(`calendar_stats/${id}/devices/${today()}`).once('value');
+        assert.equal(Object.keys(snap.val()).length, 1, 'two instances, one device');
+    } finally {
+        await cleanup(id);
+    }
+});
+
+test('device salt: created once, stored server-side, and unreadable by clients', async () => {
+    _resetDeviceSaltCache();
+    const a = await deviceSaltSecret();
+    _resetDeviceSaltCache();
+    const b = await deviceSaltSecret();
+    assert.ok(a.equals(b), 'a second instance must reuse the stored secret, not mint its own');
+    assert.equal(a.length, 32);
+
+    const host = process.env.FIREBASE_DATABASE_EMULATOR_HOST;
+    const ns = new URL(admin.app().options.databaseURL).hostname.split('.')[0];
+    const res = await fetch(`http://${host}/${DEVICE_SALT_PATH}.json?ns=${ns}`);
+    assert.equal(res.status, 401, 'the secret must not be readable without admin access');
+});
+
+// --- client IP --------------------------------------------------------------------------
+
+test('clientIpOf: ignores a client-supplied leftmost X-Forwarded-For', () => {
+    // Google's front end appends the real peer on the right; anything left of it is
+    // whatever the client sent.
+    const req = { headers: { 'x-forwarded-for': '6.6.6.6, 203.0.113.5' } };
+    assert.equal(clientIpOf(req), '203.0.113.5');
+});
+
+test('clientIpOf: prefers the IP Hosting\'s CDN saw, since XFF then ends in CDN hops', () => {
+    const req = { headers: { 'fastly-client-ip': '203.0.113.5', 'x-forwarded-for': '6.6.6.6, 151.101.1.1' } };
+    assert.equal(clientIpOf(req), '203.0.113.5');
+});
+
+test('clientIpOf: falls back to the socket peer', () => {
+    assert.equal(clientIpOf({ headers: {}, socket: { remoteAddress: '198.51.100.2' } }), '198.51.100.2');
+});
+
+// --- the scheduled sweep ----------------------------------------------------------------
+
+test('scheduled sweep: expires buckets on calendars nobody polls any more', async () => {
+    // The opportunistic sweep only runs when a feed is requested, so an abandoned feed
+    // kept its last buckets forever.
+    const ids = ['SchedSweepA', 'SchedSweepB', 'SchedSweepC'];
+    const old = new Date(Date.now() - (DEVICE_BUCKET_TTL_DAYS + 5) * 86400000).toISOString().slice(0, 10);
+    const recent = new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10);
+    try {
+        await db.ref(SWEEP_CURSOR_PATH).remove();
+        for (const id of ids) {
+            await db.ref('calendar_stats').child(id).update({
+                icsRequestCount: 3,
+                [`devices/${old}/aaaaaaaa`]: true,
+                [`devices/${recent}/bbbbbbbb`]: true,
+                [`aggregatorHits/${old}`]: 2,
+            });
+        }
+
+        // Bounded: a run that can examine only part of the calendars stops and leaves a
+        // cursor, and the next run picks up after it.
+        let runs = 0;
+        let result;
+        do {
+            result = await sweepAllDeviceBuckets({ pageSize: 2, maxPerRun: 2 });
+            assert.ok(result.examined <= 2, 'a run must respect its bound');
+            runs++;
+        } while (!result.reachedEnd && runs < 50);
+        assert.ok(result.reachedEnd);
+        assert.equal((await db.ref(SWEEP_CURSOR_PATH).once('value')).val(), null, 'cursor wraps after the end');
+
+        for (const id of ids) {
+            const val = (await db.ref('calendar_stats').child(id).once('value')).val();
+            assert.equal(val.devices[old], undefined, `${id}: expired day must be swept`);
+            assert.ok(val.devices[recent], `${id}: in-window day must survive`);
+            assert.equal(val.aggregatorHits, undefined, `${id}: expired aggregator day must be swept`);
+            assert.equal(val.icsRequestCount, 3, `${id}: counters are not touched`);
+        }
+    } finally {
+        await Promise.all(ids.map(cleanup));
+        await db.ref(SWEEP_CURSOR_PATH).remove();
     }
 });
 

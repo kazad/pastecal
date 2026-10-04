@@ -32,7 +32,7 @@ if (!process.env.FIREBASE_DATABASE_EMULATOR_HOST) {
 
 const admin = require('../../functions/node_modules/firebase-admin');
 const { _internal } = require('../../functions/index.js');
-const { CalendarService, SlugService } = _internal;
+const { CalendarService, SlugService, PublicViewService } = _internal;
 
 const db = admin.database();
 
@@ -204,39 +204,26 @@ test('SlugService.lookupCalendar: exact-casing hit caches without needing a scan
     }
 });
 
-test('SlugService.lookupCalendar: unknown slug writes a negative-cache entry', async () => {
+test('SlugService.lookupCalendar: an unknown slug writes nothing', async () => {
+    // A miss used to cache {notFound} -- one permanent row per guessed slug, from a callable
+    // anyone can hit. With the index a miss costs two small reads, so nothing is cached.
     const slug = 'never-existed-negative-cache-smoke';
     try {
         const result = await SlugService.lookupCalendar(slug);
         assert.equal(result.found, false);
-
-        const cached = await db.ref(`slug_mappings/${slug}`).once('value');
-        const cacheData = cached.val();
-        assert.ok(cacheData, 'a not-found lookup must still write a cache entry');
-        assert.equal(cacheData.notFound, true);
-        assert.equal(typeof cacheData.cachedAt, 'number');
+        assert.equal((await db.ref(`slug_mappings/${slug}`).once('value')).val(), null);
     } finally {
         await db.ref(`slug_mappings/${slug}`).remove();
     }
 });
 
-test('SlugService.lookupCalendar: negative cache is honored even after the calendar is created (within TTL)', async () => {
-    // This is the actual regression proof: if lookupCalendar re-scanned on every miss (the
-    // original bug) instead of trusting the negative cache, it would find the calendar
-    // created between the two calls and incorrectly report found=true. Reporting found=false
-    // here is direct evidence the second call used the cache, not a live re-scan.
+test('SlugService.lookupCalendar: a calendar created right after a miss is found at once', async () => {
     const slug = 'created-after-negative-cache-smoke';
     try {
-        const first = await SlugService.lookupCalendar(slug);
-        assert.equal(first.found, false);
-
-        // __skipIndex: simulate a calendar appearing without the index being updated, which
-        // is the only way the negative cache is still the deciding factor. (With the index
-        // written, the trigger's entry correctly wins -- covered by its own test below.)
-        await seedCalendar(slug, { title: 'Created after the negative cache was written', __skipIndex: true });
-
+        assert.equal((await SlugService.lookupCalendar(slug)).found, false);
+        await seedCalendar(slug, { title: 'Created after a miss', __skipIndex: true });
         const second = await SlugService.lookupCalendar(slug);
-        assert.equal(second.found, false, 'negative cache must be trusted within its TTL, not re-scanned');
+        assert.equal(second.found, true, 'no stale miss hides a calendar created a moment ago');
     } finally {
         await cleanup(slug);
     }
@@ -445,6 +432,76 @@ test('lookupCalendar: a read-only view resolves through the index too', async ()
     } finally {
         await cleanup('ReadOnlyIndexProbe');
     }
+});
+
+
+// --- adversarial review: path injection, and read-only views ------------------------------
+
+test('SlugService.lookupCalendar: a slug with path syntax is not found, and writes nothing', async () => {
+    const before = (await db.ref('slug_mappings/pathprobe').once('value')).val();
+    for (const slug of ['/', 'pathprobe/x', 'a.b', 'a#b', 'a$b', 'a[b]']) {
+        assert.deepEqual(await SlugService.lookupCalendar(slug), { found: false }, slug);
+    }
+    assert.deepEqual((await db.ref('slug_mappings/pathprobe').once('value')).val(), before,
+        'no negative-cache entry was written under a parent of the probed path');
+});
+
+test('SlugService.lookupCalendar: PublicViewService mirror never carries the editable id', () => {
+    const mirror = PublicViewService.mirrorOf(
+        { id: 'secret-edit-slug', title: 'T', events: [{ id: 'e' }], options: { notes: 'n' }, extra: 'x' },
+        'viewid1234');
+    assert.equal(mirror.id, 'viewid1234');
+    assert.ok(!JSON.stringify(mirror).includes('secret-edit-slug'), 'editable slug leaked into the view');
+    assert.equal(mirror.extra, undefined, 'only whitelisted fields are published');
+    assert.equal(mirror.options.publicViewId, 'viewid1234');
+});
+
+test('SlugService.lookupCalendar: only the bound calendar may write a view', async () => {
+    const pv = 'pvowner' + Date.now();
+    try {
+        // A legacy view, made before bindings: its mirror names the owner in `id`.
+        await db.ref(`calendars_readonly/${pv}`).set({ id: 'OwnerCal', title: 't', options: { publicViewId: pv } });
+        assert.equal(await PublicViewService.owns(db, 'Attacker', pv), false, 'a stranger cannot claim it');
+        assert.equal(await PublicViewService.owns(db, 'OwnerCal', pv), true, 'the legacy owner claims it once');
+        assert.equal((await db.ref(`public_views/${pv}`).once('value')).val(), 'OwnerCal');
+        assert.equal(await PublicViewService.owns(db, 'Attacker', pv), false, 'and it stays theirs');
+        // A view id nobody created cannot be claimed through options.publicViewId.
+        assert.equal(await PublicViewService.owns(db, 'Attacker', pv + 'new'), false);
+    } finally {
+        await Promise.all([
+            db.ref(`calendars_readonly/${pv}`).remove(),
+            db.ref(`public_views/${pv}`).remove(),
+            db.ref('public_views_by_calendar/OwnerCal').remove(),
+        ]);
+    }
+});
+
+test('SlugService.lookupCalendar: a view follows its calendar through a rename, and only then', async () => {
+    const pv = 'pvrename' + Date.now();
+    try {
+        await db.ref(`calendars/OldName${pv}`).set({ id: `OldName${pv}`, title: 't', options: { publicViewId: pv } });
+        assert.equal(await PublicViewService.claim(db, pv, `OldName${pv}`), true);
+
+        const copy = { id: `NewName${pv}`, options: { publicViewId: pv, renamedFrom: `OldName${pv}` } };
+        const stranger = { id: 'Stranger', options: { publicViewId: pv, renamedFrom: 'SomethingElse' } };
+        assert.equal(await PublicViewService.owns(db, 'Stranger', pv, stranger), false);
+        assert.equal(await PublicViewService.owns(db, `NewName${pv}`, pv, copy), true, 'the renamed copy takes over');
+        assert.equal(await PublicViewService.owns(db, `OldName${pv}`, pv, {}), false, 'and the old copy no longer writes');
+        assert.ok(!JSON.stringify(PublicViewService.mirrorOf(copy, pv)).includes('OldName'),
+            'the previous editable id is never published');
+    } finally {
+        await Promise.all([
+            db.ref(`calendars/OldName${pv}`).remove(),
+            db.ref(`public_views/${pv}`).remove(),
+            db.ref(`public_views_by_calendar/OldName${pv}`).remove(),
+            db.ref(`public_views_by_calendar/NewName${pv}`).remove(),
+        ]);
+    }
+});
+
+test('SlugService.lookupCalendar: generated view ids are long, lowercase and unbiased in shape', () => {
+    const { IDService } = _internal;
+    for (let i = 0; i < 200; i++) assert.match(IDService.generatePublicViewId(), /^[a-z0-9]{10}$/);
 });
 
 // The Admin SDK holds its RTDB socket open, so without this the process lingers ~150s

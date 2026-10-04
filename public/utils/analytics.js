@@ -366,11 +366,16 @@ const Analytics = {
      * merging is the intended behavior -- but the rate is the only visibility into
      * how often real editing collides, and a sudden jump means the merge is
      * thrashing rather than settling.
+     *
+     * Every count is somebody else's change since this client's baseline. The old
+     * `removed_by_us` counted our own local-only ids -- i.e. our ADDS -- so an
+     * ordinary single-person edit reported a collision.
      */
     syncMerged(counts) {
         this.track('sync_merged', {
             added_by_others: counts?.addedByOthers ?? 0,
-            removed_by_us: counts?.removedByUs ?? 0,
+            removed_by_others: counts?.removedByOthers ?? 0,
+            changed_by_others: counts?.changedByOthers ?? 0,
         });
     },
 

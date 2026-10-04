@@ -27,23 +27,24 @@
     "calendar_authors": {
       "$calendarId": {
         "$uid": {
-          ".write": "auth != null && auth.uid === $uid",
+          ".write": "auth != null && auth.uid === $uid && newData.exists()",
           ".read": false,
+          ".validate": "newData.hasChildren(['firstSeen', 'lastSeen', 'editCount']) && newData.child('lastSeen').val() === now && ((!data.exists() && newData.child('editCount').val() === 1) || (data.exists() && newData.child('editCount').val() === data.child('editCount').val() + 1)) && newData.parent().parent().parent().child('calendars').child($calendarId).exists()",
           "firstSeen": {
-            ".validate": "newData.isNumber() && (!data.exists() || data.val() === newData.val())"
+            ".validate": "newData.isNumber() && ((!data.exists() && newData.val() === now) || (data.exists() && newData.val() === data.val()))"
           },
           "lastSeen": {
-            ".validate": "newData.isNumber()"
+            ".validate": "newData.val() === now"
           },
           "editCount": {
             ".validate": "newData.isNumber()"
           },
           "createdHere": {
-            ".validate": "newData.isBoolean()"
+            ".validate": "newData.val() === true && !data.parent().exists() && !root.child('calendars').child($calendarId).exists() && !root.child('history').child($calendarId).exists()"
           },
           "days": {
             "$day": {
-              ".validate": "newData.isBoolean()"
+              ".validate": "$day.matches(/^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/) && newData.val() === now"
             }
           },
           "$other": {

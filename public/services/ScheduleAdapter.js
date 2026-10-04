@@ -82,21 +82,54 @@
             return new Date(when).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
         },
 
-        /** Our events -> the records Syncfusion draws. */
+        /**
+         * Our events -> the records Syncfusion draws.
+         *
+         * All-day dates: stored as the author's local-midnight instant, shown at the VIEWER's
+         * local midnight of the date they name (Event.allDayToLocal), or Tokyo's Oct 2 showed
+         * on Oct 1 in LA. An all-day series' UNTIL and EXDATEs are dates too, mapped the same
+         * way. Each record also carries the stored values it was built from (_stored*), so
+         * fromRecord can keep a value verbatim when its meaning is unchanged.
+         */
         toView(events) {
-            return (events || []).map((e) => ({
-                Id: asText(e.id),
-                Subject: e.title,
-                StartTime: toDate(e.start),
-                EndTime: toDate(e.end),
-                Description: e.description,
-                RecurrenceRule: e.recurrencerule,
-                Type: parseInt(e.type || 1, 10),
-                IsAllDay: !!e.isAllDay,
-                Recurrence: e.repeat,
-                RecurrenceID: asText(e.recurrenceID),
-                RecurrenceException: e.recurrenceException,
-            }));
+            const list = events || [];
+            const allDayAware = typeof Event === 'function' && typeof Event.allDayToLocal === 'function';
+            const byId = new Map(list.filter((e) => e && e.recurrencerule).map((e) => [String(e.id), e]));
+            return list.map((e) => {
+                const allDay = !!e.isAllDay && allDayAware;
+                const toD = allDay ? (v) => Event.allDayToLocal(v) : toDate;
+                // An edited occurrence's exception names a slot in its PARENT's grid, so the
+                // parent's shape decides (as in ICSService.assignOccurrences).
+                const parent = !blank(e.recurrenceID) ? byId.get(String(e.recurrenceID)) : null;
+                const allDaySeries = allDayAware && (parent ? !!parent.isAllDay : !!e.isAllDay);
+                const start = toD(e.start);
+                let end = toD(e.end);
+                // A zero-length or inverted all-day range would reach the grid with
+                // EndTime == StartTime; show one day. Event keeps the stored end while this
+                // shown end comes back unchanged.
+                const shownEnd = allDay && start && (!end || end <= start)
+                    ? new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1) : null;
+                if (shownEnd) end = shownEnd;
+                return {
+                    Id: asText(e.id),
+                    Subject: e.title,
+                    StartTime: start,
+                    EndTime: end,
+                    ...(shownEnd ? { _shownEnd: shownEnd } : {}),
+                    _storedStart: e.start,
+                    _storedEnd: e.end,
+                    _allDaySeries: allDaySeries,
+                    ...(allDaySeries ? { _storedRule: e.recurrencerule, _storedException: e.recurrenceException } : {}),
+                    Description: e.description,
+                    RecurrenceRule: allDaySeries ? Event.allDayRuleToLocal(e.recurrencerule) : e.recurrencerule,
+                    Type: parseInt(e.type || 1, 10),
+                    IsAllDay: !!e.isAllDay,
+                    Recurrence: e.repeat,
+                    RecurrenceID: asText(e.recurrenceID),
+                    RecurrenceException: allDaySeries
+                        ? Event.allDayExceptionsToLocal(e.recurrenceException) : e.recurrenceException,
+                };
+            });
         },
 
         /** One Syncfusion record -> the fields of our event it describes. */
@@ -114,6 +147,19 @@
             if ('RecurrenceRule' in r) out.recurrencerule = r.RecurrenceRule || '';
             if ('RecurrenceException' in r) out.recurrenceException = r.RecurrenceException || null;
             if ('Recurrence' in r) out.repeat = r.Recurrence || '';
+            // The way back from toView's all-day display (and an inverted range's repair) is
+            // the Event model's: dates become the legacy stored form, and a value whose
+            // meaning is unchanged keeps its stored text.
+            if (('StartTime' in r || 'EndTime' in r) && typeof Event === 'function'
+                && typeof Event.allDayFromLocal === 'function') {
+                const ev = new Event(r);
+                if ('StartTime' in r) out.start = ev.start;
+                if ('EndTime' in r) out.end = ev.end;
+                if ('_allDaySeries' in r ? r._allDaySeries : r.IsAllDay) {
+                    if ('RecurrenceRule' in r) out.recurrencerule = ev.recurrencerule || '';
+                    if ('RecurrenceException' in r) out.recurrenceException = ev.recurrenceException || null;
+                }
+            }
             return out;
         },
 
@@ -139,7 +185,11 @@
                 const master = r && store.find({ id: r.RecurrenceID ?? r.Id, recurrenceID: null });
                 const when = context.occurrenceStart || (r && r.StartTime);
                 if (master && when && (!store.find(keyOf(r)) || action === 'DeleteOccurrence')) {
-                    const stamp = ScheduleAdapter.stamp(when);
+                    // The grid shows an all-day occurrence at the viewer's local midnight; the
+                    // series stores its dates in the author's (see Event.allDayStampFromLocal).
+                    const shown = ScheduleAdapter.stamp(when);
+                    const stamp = master.isAllDay && typeof Event === 'function' && typeof Event.allDayStampFromLocal === 'function'
+                        ? Event.allDayStampFromLocal(shown) : shown;
                     const list = String(master.recurrenceException || '').split(',').map((x) => x.trim()).filter(Boolean);
                     if (!list.includes(stamp)) list.push(stamp);
                     commands.push({ type: 'update', key: master, changes: { recurrenceException: list.join(',') } });

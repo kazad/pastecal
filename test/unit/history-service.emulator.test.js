@@ -27,7 +27,7 @@ if (!process.env.FIREBASE_DATABASE_EMULATOR_HOST) {
 
 const admin = require('../../functions/node_modules/firebase-admin');
 const { _internal } = require('../../functions/index.js');
-const { HistoryService, HISTORY_ROOT, HISTORY_KEEP } = _internal;
+const { HistoryService, HISTORY_ROOT, HISTORY_KEEP, HISTORY_ADDED_KEEP, HISTORY_HARD_CAP, HISTORY_PROTECT_MS } = _internal;
 
 const db = admin.database();
 
@@ -46,6 +46,9 @@ async function cleanup(...ids) {
     await Promise.all(ids.flatMap(id => [
         db.ref('calendars').child(id).remove(),
         db.ref(HISTORY_ROOT).child(id).remove(),
+        db.ref(`${HISTORY_ROOT}_index`).child(id).remove(),
+        db.ref(`${HISTORY_ROOT}_meta`).child(id).remove(),
+        db.ref(`${HISTORY_ROOT}_archive`).child(id).remove(),
     ]));
 }
 
@@ -109,21 +112,25 @@ test('HistoryService.record: wiping a calendar stores its full prior state', asy
         assert.equal(entry.eventCount, 3);
         assert.equal(entry.title, 'History Test');
         assert.deepEqual(entry.options, { defaultView: 'week' });
-        assert.deepEqual(entry.events.map(e => e.title), ['Standup', 'Review', 'Retro']);
+        // A wipe's removedEvents IS the prior state; it is not stored twice.
+        assert.deepEqual(entry.removedEvents.map(e => e.title), ['Standup', 'Review', 'Retro']);
+        assert.equal(entry.events, undefined);
         assert.ok(typeof entry.savedAt === 'number' && entry.savedAt > 0);
     } finally {
         await cleanup(id);
     }
 });
 
-test('HistoryService.record: deleting the whole calendar node is recorded too', async () => {
+test('HistoryService.record: deleting the whole calendar node is recorded, in the archive', async () => {
     const id = 'hist-delete-' + Date.now();
     await cleanup(id);
     try {
         await HistoryService.record(db, id, cal(id, [ev('A', 'a')]), null);
-        const [entry] = await historyOf(id);
-        assert.equal(entry.kind, 'deleted');
-        assert.equal(entry.events.length, 1);
+        assert.deepEqual(await historyOf(id), [], 'nothing left where a newcomer at this slug would read');
+        const archived = (await db.ref(`${HISTORY_ROOT}_archive/${id}`).once('value')).val();
+        const entries = Object.values(Object.values(archived)[0]);
+        const del = entries.find(e => e.kind === 'deleted');
+        assert.equal(del.events.length, 1);
     } finally {
         await cleanup(id);
     }
@@ -158,23 +165,184 @@ test('HistoryService.record: a genuine no-op still records nothing', async () =>
     }
 });
 
-test(`HistoryService.record: history is trimmed to the newest ${HISTORY_KEEP}`, async () => {
-    const id = 'hist-trim-' + Date.now();
+test('HistoryService.toTrim: destructive and added entries have separate budgets', () => {
+    const now = 10 * HISTORY_PROTECT_MS;
+    const old = now - 2 * HISTORY_PROTECT_MS;
+    const destructive = Array.from({ length: HISTORY_KEEP + 5 }, (_, i) => ({ key: 'd' + i, k: 'shrunk', t: old + i }));
+    const adds = Array.from({ length: HISTORY_ADDED_KEEP + 30 }, (_, i) => ({ key: 'a' + i, k: 'added', t: now - i }));
+    const drop = new Set(HistoryService.toTrim([...destructive, ...adds], now));
+
+    // A flood of additions, all newer than every destructive entry, evicts none of them.
+    assert.equal(destructive.filter(e => drop.has(e.key)).length, 5, 'only the 5 oldest destructive entries go');
+    assert.ok(!drop.has('d' + (HISTORY_KEEP + 4)), 'the newest destructive entry survives');
+    assert.equal(adds.filter(e => !drop.has(e.key)).length, HISTORY_ADDED_KEEP);
+});
+
+test('HistoryService.toTrim: recent destructive entries survive a burst, up to the hard cap', () => {
+    const now = 10 * HISTORY_PROTECT_MS;
+    const recent = Array.from({ length: HISTORY_HARD_CAP + 10 }, (_, i) => ({ key: 'r' + i, k: 'edited', t: now - i }));
+    const drop = HistoryService.toTrim(recent, now);
+    assert.equal(drop.length, 10, 'everything inside the protection window is kept up to the cap');
+    assert.ok(drop.every(k => Number(k.slice(1)) >= HISTORY_HARD_CAP), 'the oldest are the ones dropped');
+});
+
+test('HistoryService.record: twenty additions do not evict the snapshot of a wipe', async () => {
+    const id = 'hist-flood-' + Date.now();
     await cleanup(id);
     try {
-        // Each iteration removes one event, so every write is a recordable shrink.
-        let events = Array.from({ length: HISTORY_KEEP + 6 }, (_, i) => ev('E' + i, 'e' + i));
+        const original = [ev('A', 'Precious'), ev('B', 'Also precious')];
+        await HistoryService.record(db, id, cal(id, original), cal(id, []));
+        let events = [];
         for (let i = 0; i < HISTORY_KEEP + 5; i++) {
-            const next = events.slice(1);
+            const next = [...events, ev('N' + i, 'noise ' + i)];
             await HistoryService.record(db, id, cal(id, events), cal(id, next));
             events = next;
         }
         const entries = await historyOf(id);
-        assert.equal(entries.length, HISTORY_KEEP);
-        // Newest kept: the last write had the fewest events before it.
-        const counts = entries.map(e => e.eventCount);
-        assert.equal(Math.min(...counts), 2, 'the most recent (smallest) snapshot survived');
-        assert.equal(Math.max(...counts), HISTORY_KEEP + 1, 'the oldest surviving snapshot is the (KEEP)th newest');
+        const wipe = entries.find(e => e.kind === 'wiped');
+        assert.ok(wipe, 'the wipe is still on file');
+        assert.deepEqual(wipe.removedEvents.map(e => e.title), ['Precious', 'Also precious']);
+        // Additions carry no snapshot: nothing was lost, and a copy per add is the cost.
+        assert.ok(entries.filter(e => e.kind === 'added').every(e => e.events === undefined));
+    } finally {
+        await cleanup(id);
+    }
+});
+
+test('HistoryService.record: entries are deltas naming what was removed and changed', async () => {
+    const id = 'hist-delta-' + Date.now();
+    await cleanup(id);
+    try {
+        const a = ev('A', 'Keep'), b = ev('B', 'Gone'), c = ev('C', 'Before');
+        await HistoryService.record(db, id, cal(id, [a, b, c]), cal(id, [a, { ...c, title: 'After' }]));
+        const [entry] = await historyOf(id);
+        assert.deepEqual(entry.removedEvents.map(e => e.title), ['Gone']);
+        assert.equal(entry.changedEvents.length, 1);
+        assert.equal(entry.changedEvents[0].from.title, 'Before');
+        assert.equal(entry.changedEvents[0].to.title, 'After');
+    } finally {
+        await cleanup(id);
+    }
+});
+
+test('HistoryService.record: a drag is one entry, keeping the pre-gesture state', async () => {
+    const id = 'hist-drag-' + Date.now();
+    await cleanup(id);
+    try {
+        const at = (h) => ({ ...ev('A', 'Dragged'), start: `2026-09-17T${h}:00:00.000Z`, end: `2026-09-17T${h}:30:00.000Z` });
+        await HistoryService.record(db, id, cal(id, [at('10')]), cal(id, [at('11')], { _writer: 'w1' }));
+        await HistoryService.record(db, id, cal(id, [at('11')]), cal(id, [at('12')], { _writer: 'w1' }));
+        await HistoryService.record(db, id, cal(id, [at('12')]), cal(id, [at('13')], { _writer: 'w1' }));
+        const entries = await historyOf(id);
+        assert.equal(entries.length, 1, 'three saves of one drag are one entry');
+        assert.equal(entries[0].changedEvents[0].from.start, at('10').start, 'undo returns to before the drag');
+        assert.equal(entries[0].changedEvents[0].to.start, at('13').start);
+    } finally {
+        await cleanup(id);
+    }
+});
+
+test('HistoryService.record: a collaborator\'s edit is never folded into my drag', async () => {
+    const id = 'hist-drag-two-' + Date.now();
+    await cleanup(id);
+    try {
+        const at = (h) => ({ ...ev('A', 'Dragged'), start: `2026-09-17T${h}:00:00.000Z`, end: `2026-09-17T${h}:30:00.000Z` });
+        const t0 = Date.now();
+        await HistoryService.record(db, id, cal(id, [at('10')]), cal(id, [at('11')], { _writer: 'alice' }), t0);
+        await HistoryService.record(db, id, cal(id, [at('11')]), cal(id, [at('14')], { _writer: 'bob' }), t0 + 1000);
+        const entries = (await historyOf(id)).sort((x, y) => x.savedAt - y.savedAt);
+        assert.equal(entries.length, 2, 'two people, two entries');
+        assert.deepEqual(entries.map(e => e.writer), ['alice', 'bob']);
+        assert.equal(entries[0].changedEvents[0].to.start, at('11').start, 'my entry ends where I left it');
+    } finally {
+        await cleanup(id);
+    }
+});
+
+test('HistoryService.record: a save that also adds rows is never folded away', async () => {
+    const id = 'hist-drag-add-' + Date.now();
+    await cleanup(id);
+    try {
+        const at = (h) => ({ ...ev('A', 'Weekly'), start: `2026-09-17T${h}:00:00.000Z`, end: `2026-09-17T${h}:30:00.000Z` });
+        const t0 = Date.now();
+        await HistoryService.record(db, id, cal(id, [at('10')]), cal(id, [at('11')], { _writer: 'w1' }), t0);
+        await HistoryService.record(db, id, cal(id, [at('11')]),
+            cal(id, [at('12'), ev('X', 'Moved occurrence')], { _writer: 'w1' }), t0 + 1000);
+        const entries = await historyOf(id);
+        assert.equal(entries.length, 2);
+        assert.ok(entries.some(e => (e.addedEvents || []).some(x => x.title === 'Moved occurrence')),
+            'the added row is on record');
+    } finally {
+        await cleanup(id);
+    }
+});
+
+test('HistoryService.record: a calendar recreated at a deleted id does not inherit its history', async () => {
+    const id = 'hist-reuse-' + Date.now();
+    await cleanup(id);
+    try {
+        const t0 = Date.now();
+        await HistoryService.record(db, id, cal(id, [ev('A', 'a'), ev('B', 'b')]), cal(id, [ev('A', 'a')]), t0);
+
+        // Triggers arrive out of order: the newcomer's first edit is processed BEFORE the
+        // old owner's deletion, which happened earlier.
+        await HistoryService.record(db, id, cal(id, [ev('N', 'new')]), cal(id, []), t0 + 2000);
+        await HistoryService.record(db, id, cal(id, [ev('A', 'Private to the first owner')]), null, t0 + 1000);
+
+        const left = await historyOf(id);
+        assert.equal(left.length, 1, 'only the newcomer\'s own entry remains');
+        assert.ok(!JSON.stringify(left).includes('Private to the first owner'));
+        assert.deepEqual(left[0].removedEvents.map(e => e.title), ['new']);
+
+        const archived = (await db.ref(`${HISTORY_ROOT}_archive/${id}`).once('value')).val();
+        const entries = Object.values(Object.values(archived)[0]);
+        assert.ok(entries.some(e => e.kind === 'deleted'), 'kept for the operator');
+        assert.ok(entries.some(e => e.kind === 'shrunk'), 'with the history before it');
+    } finally {
+        await cleanup(id);
+    }
+});
+
+test('HistoryService.record: drag saves processed out of order keep the final position', async () => {
+    const id = 'hist-drag-order-' + Date.now();
+    await cleanup(id);
+    try {
+        const at = (h) => ({ ...ev('A', 'Dragged'), start: `2026-09-17T${h}:00:00.000Z`, end: `2026-09-17T${h}:30:00.000Z` });
+        const t0 = Date.now();
+        await HistoryService.record(db, id, cal(id, [at('10')]), cal(id, [at('11')], { _writer: 'w1' }), t0);
+        await HistoryService.record(db, id, cal(id, [at('12')]), cal(id, [at('13')], { _writer: 'w1' }), t0 + 1000);
+        await HistoryService.record(db, id, cal(id, [at('11')]), cal(id, [at('12')], { _writer: 'w1' }), t0 + 500);   // late
+        const [entry] = await historyOf(id);
+        assert.equal(entry.changedEvents[0].from.start, at('10').start);
+        assert.equal(entry.changedEvents[0].to.start, at('13').start, 'the late save did not rewind `to`');
+    } finally {
+        await cleanup(id);
+    }
+});
+
+test('HistoryService.record: an edit undone within the gesture window leaves no dead row', async () => {
+    const id = 'hist-drag-back-' + Date.now();
+    await cleanup(id);
+    try {
+        const at = (h) => ({ ...ev('A', 'Dragged'), start: `2026-09-17T${h}:00:00.000Z`, end: `2026-09-17T${h}:30:00.000Z` });
+        const t0 = Date.now();
+        await HistoryService.record(db, id, cal(id, [at('10')]), cal(id, [at('11')], { _writer: 'w1' }), t0);
+        await HistoryService.record(db, id, cal(id, [at('11')]), cal(id, [at('10')], { _writer: 'w1' }), t0 + 1000);
+        assert.deepEqual(await historyOf(id), [], 'a change that ended where it began is not a change');
+    } finally {
+        await cleanup(id);
+    }
+});
+
+test('HistoryService.record: trimming reads the index, not the snapshots', async () => {
+    const id = 'hist-bounded-' + Date.now();
+    await cleanup(id);
+    try {
+        await HistoryService.record(db, id, cal(id, [ev('A', 'a'), ev('B', 'b')]), cal(id, [ev('A', 'a')]));
+        const index = (await db.ref(`${HISTORY_ROOT}_index/${id}`).once('value')).val();
+        const [row] = Object.values(index);
+        assert.equal(row.k, 'shrunk');
+        assert.ok(!('events' in row), 'the index carries no payload');
     } finally {
         await cleanup(id);
     }
@@ -264,26 +432,6 @@ test('HistoryService.changeKind: a real edit is still caught', () => {
     const a = { id: 'a', title: 'T', start: 'S', end: 'E', type: 1 };
     assert.equal(HistoryService.changeKind(cal('x', [a]), cal('x', [{ ...a, title: 'CHANGED' }])).kind, 'edited');
     assert.equal(HistoryService.changeKind(cal('x', [a]), cal('x', [{ ...a, start: 'OTHER' }])).kind, 'edited');
-});
-
-test('HistoryService.record: trimming does not read the whole node', async () => {
-    // Regression guard for cost, not correctness: the trim used to `once('value')` the
-    // entire history node -- every retained snapshot's full event array -- on every write.
-    const id = 'hist-bounded-' + Date.now();
-    await cleanup(id);
-    try {
-        let events = Array.from({ length: HISTORY_KEEP + 4 }, (_, i) => ev('E' + i, 'e' + i));
-        for (let i = 0; i < HISTORY_KEEP + 3; i++) {
-            const next = events.slice(1);
-            await HistoryService.record(db, id, cal(id, events), cal(id, next));
-            events = next;
-        }
-        const entries = await historyOf(id);
-        assert.ok(entries.length <= HISTORY_KEEP, `kept ${entries.length}, expected <= ${HISTORY_KEEP}`);
-        assert.ok(entries.length >= HISTORY_KEEP - 1, 'did not over-trim');
-    } finally {
-        await cleanup(id);
-    }
 });
 
 // The Admin SDK holds its RTDB socket open, so without this the process lingers ~150s

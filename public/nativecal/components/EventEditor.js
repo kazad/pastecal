@@ -6,7 +6,8 @@
  *
  * Writes exactly what the Syncfusion app writes, because both apps edit the same
  * calendars:
- *   - all-day: LOCAL midnight, end exclusive (the day after the last day)
+ *   - all-day: edited in the display shape (local midnight .. local 23:59:59.999 of the last
+ *     day); app.js toStoredEvent writes it in the stored form (Event.allDayStoredRange)
  *   - repeat rules: "FREQ=WEEKLY;BYDAY=TU;INTERVAL=1;" -- Syncfusion's own form,
  *     UNTIL as a UTC stamp, COUNT as a number
  *   - times as ISO strings
@@ -83,6 +84,12 @@ const EventEditor = {
             this.startDate = this.dateStr(s); this.startTime = this.timeStr(s);
             this.endDate = this.dateStr(en); this.endTime = this.timeStr(en);
             this.parseRule(e.recurrencerule, s);
+            // The date an UNTIL names, not the local date of its instant (see Event.ruleUntilDate);
+            // and the rule as loaded, so saving with the repeat inputs untouched keeps it verbatim.
+            if (this.until && typeof Event.ruleUntilDate === 'function') {
+                this.until = Event.ruleUntilDate(e.recurrencerule, this.isAllDay) || this.until;
+            }
+            this._loaded = { rule: e.recurrencerule || '', sig: this.ruleSig() };
             this._lastStart = this.startStamp;   // loading an event is not "moving the start"
         },
         parseRule(rule, start) {
@@ -103,18 +110,23 @@ const EventEditor = {
             }
             else if (parts.COUNT) { this.endMode = 'count'; this.count = parseInt(parts.COUNT, 10) || 1; }
         },
+        ruleSig() { return JSON.stringify([this.freq, this.interval, [...this.byDay].sort(), this.endMode, this.until, this.count]); },
         toggleDay(d) {
             const i = this.byDay.indexOf(d);
             if (i >= 0) { if (this.byDay.length > 1) this.byDay.splice(i, 1); } else this.byDay.push(d);
         },
         buildRule() {
             if (!this.freq) return '';
+            // Untouched inputs: keep the stored rule as it was (its BYDAY, UNTIL format and all).
+            if (this._loaded && this._loaded.rule && this._loaded.sig === this.ruleSig()) return this._loaded.rule;
             let r = `FREQ=${this.freq};`;
             if (this.freq === 'WEEKLY') r += `BYDAY=${[...this.byDay].sort().map(d => ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'][d]).join(',')};`;
             r += `INTERVAL=${Math.max(1, parseInt(this.interval, 10) || 1)};`;
             if (this.endMode === 'until' && this.until) {
                 const [y, m, d] = this.until.split('-').map(Number);
-                r += `UNTIL=${new Date(y, m - 1, d, 23, 59, 59).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')};`;
+                // All-day: the grid's format (Event.ruleUntilStamp); timed: end of that day, UTC.
+                const grid = this.isAllDay && typeof Event.ruleUntilStamp === 'function' ? Event.ruleUntilStamp(this.until, true) : null;
+                r += grid ? `UNTIL=${grid};` : `UNTIL=${new Date(y, m - 1, d, 23, 59, 59).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')};`;
             } else if (this.endMode === 'count') r += `COUNT=${Math.max(1, parseInt(this.count, 10) || 1)};`;
             return r;
         },
@@ -124,7 +136,10 @@ const EventEditor = {
             let start, end;
             if (this.isAllDay) {
                 start = new Date(sy, sm - 1, sd);
-                end = new Date(ey, em - 1, ed + 1);          // exclusive, local midnight
+                // Display shape, as the grid emits it: local 23:59:59.999 of the LAST day. handleSaveEvent
+                // turns it into the stored form (Event.allDayStoredRange); an exclusive end here would be
+                // read as the last day and store the event a day too long.
+                end = new Date(ey, em - 1, ed, 23, 59, 59, 999);
             } else {
                 const [sh, smin] = this.startTime.split(':').map(Number), [eh, emin] = this.endTime.split(':').map(Number);
                 start = new Date(sy, sm - 1, sd, sh, smin); end = new Date(ey, em - 1, ed, eh, emin);

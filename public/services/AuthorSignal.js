@@ -10,6 +10,8 @@
  * is a number the client claims about itself, so anyone could send someone else's and the
  * records would be worthless as evidence precisely when they mattered. `auth.uid` is
  * asserted by Firebase, and the security rules only let a browser write under its own uid.
+ * The rules also pin every timestamp to the server clock and every write to one edit --
+ * see docs/author-signal.md for exactly what that does and does not prevent.
  *
  * What this can and cannot show, stated plainly because it decides how much weight the
  * output deserves:
@@ -27,7 +29,7 @@ const AuthorSignal = {
     THROTTLE_MS: 5 * 60 * 1000,
 
     _lastWrite: {},   // calendarId -> timestamp of our last write
-    _seeded: {},      // calendarId -> true once firstSeen has been established
+    _seeded: {},      // calendarId -> true once firstSeen has been attempted this page load
 
     /** The current browser's Firebase uid, or null if sign-in has not completed/failed. */
     uid() {
@@ -39,68 +41,100 @@ const AuthorSignal = {
         }
     },
 
+    /** Today's key under `days/`. Informational only: the rules cannot check a key, so
+     *  distinct days are counted from the server timestamp stored as its value. */
+    _dayKey() {
+        return new Date().toISOString().slice(0, 10);
+    },
+
+    /** The uid to record under, or null when nothing should be recorded. */
+    _recordingUid(calendarId) {
+        if (!calendarId) return null;
+        // The e2e suite creates and edits throwaway calendars on every run. Recording
+        // those would fill the ownership data with browsers that are not people --
+        // and this data exists to be read by a human during an incident, so noise in
+        // it is worse than a gap. Same gate analytics.js already uses.
+        if (typeof window !== 'undefined' && window.__TEST__) return null;
+        return this.uid(); // null if not signed in yet; the next edit will catch it
+    },
+
     /**
-     * Note that this browser touched a calendar.
+     * The author record to write in the SAME multi-path update that creates a calendar,
+     * keyed by path from the database root, or null if nothing should be recorded.
      *
-     * `created` marks the one call that happens at creation time, which is the strongest
-     * signal available -- whoever was present when the calendar first existed is the
-     * best owner candidate by a wide margin.
+     * Presence at creation is the strongest signal available, so it is the one most
+     * worth forging. The rules only accept `createdHere` in the write that brings the
+     * calendar into existence (and only if it never had history), which is why this is
+     * part of that write rather than a follow-up touch.
+     */
+    creationRecord(calendarId) {
+        try {
+            const uid = this._recordingUid(calendarId);
+            if (!uid) return null;
+            const TS = firebase.database.ServerValue.TIMESTAMP;
+            this._lastWrite[calendarId] = Date.now();
+            this._seeded[calendarId] = true;
+            return {
+                [`calendar_authors/${calendarId}/${uid}`]: {
+                    firstSeen: TS,
+                    lastSeen: TS,
+                    editCount: 1,
+                    createdHere: true,
+                    days: { [this._dayKey()]: TS },
+                },
+            };
+        } catch (err) {
+            return null;
+        }
+    },
+
+    /**
+     * Note that this browser edited a calendar that exists on the server.
      *
      * Never throws and never blocks: this is observational, and a calendar edit must
      * succeed whether or not the signal is recorded.
      */
-    touch(calendarId, { created = false } = {}) {
+    touch(calendarId) {
         try {
-            if (!calendarId) return;
-
-            // The e2e suite creates and edits throwaway calendars on every run. Recording
-            // those would fill the ownership data with browsers that are not people --
-            // and this data exists to be read by a human during an incident, so noise in
-            // it is worse than a gap. Same gate analytics.js already uses.
-            if (typeof window !== 'undefined' && window.__TEST__) return;
-
-            const uid = this.uid();
-            if (!uid) return; // not signed in yet; the next edit will catch it
+            const uid = this._recordingUid(calendarId);
+            if (!uid) return;
 
             const now = Date.now();
-            // `created` bypasses the throttle: it happens once and must not be dropped.
-            if (!created && this._lastWrite[calendarId] &&
+            if (this._lastWrite[calendarId] &&
                 now - this._lastWrite[calendarId] < this.THROTTLE_MS) {
                 return;
             }
             this._lastWrite[calendarId] = now;
 
             const ref = firebase.database().ref(`calendar_authors/${calendarId}/${uid}`);
-            const day = new Date().toISOString().slice(0, 10);
+            const TS = firebase.database.ServerValue.TIMESTAMP;
 
-            // Distinct DAYS is the metric that separates an owner from a drive-by editor:
-            // 400 edits in one afternoon is a busy visitor, 400 edits across 90 days is
-            // whoever runs the calendar. Stored as a set of date keys so it cannot be
-            // inflated by editing rapidly.
+            // Server values throughout: the rules require lastSeen and each day's stamp
+            // to equal the server's `now` and editCount to move by exactly 1, so nothing
+            // here can claim a past this browser did not have. Distinct DAYS is the metric
+            // that separates an owner from a drive-by editor -- 400 edits in one afternoon
+            // is a busy visitor, 400 across 90 days is whoever runs the calendar -- and
+            // counting it from server stamps means it takes real days to earn.
             const update = {
-                lastSeen: now,
+                lastSeen: TS,
                 editCount: firebase.database.ServerValue.increment(1),
-                [`days/${day}`]: true,
+                [`days/${this._dayKey()}`]: TS,
             };
-            if (created) update.createdHere = true;
 
-            // firstSeen must never move, or an owner's start date could be overwritten by
-            // their own later visit.
-            //
-            // A transaction would be the obvious way to write-once, but transactions READ
-            // before they write and this node is deliberately unreadable from the client
-            // (a public calendar_authors would be a list of who edits what). So instead:
-            // write firstSeen ONLY on the first touch of a session, and let the rules'
-            // `firstSeenImmutable` validation reject it if a value already exists. The
-            // rejection is expected and harmless -- the rest of the update still lands.
+            // firstSeen is set once, to the server clock, and never moves. The record is
+            // unreadable from the client (a public calendar_authors would be a list of who
+            // edits what), so it cannot ask whether one exists: the first touch of a page
+            // load sends firstSeen too, and if the rules reject that because a record
+            // already exists, the plain touch follows. Two writes at most, once per load.
             if (!this._seeded[calendarId]) {
                 this._seeded[calendarId] = true;
-                ref.child('firstSeen').set(now).catch(function () {
-                    /* already set by an earlier session: exactly what we want */
+                ref.update(Object.assign({ firstSeen: TS }, update)).catch(function () {
+                    ref.update(update).catch(function () { /* observational only */ });
                 });
+                return;
             }
 
-            ref.update(update);
+            ref.update(update).catch(function () { /* observational only */ });
         } catch (err) {
             /* observational only: never surface, never rethrow */
         }

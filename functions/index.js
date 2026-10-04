@@ -1,6 +1,7 @@
 const functions = require('firebase-functions');
 const { onRequest, onCall } = require('firebase-functions/v2/https');
-const { onValueUpdated, onValueWritten } = require("firebase-functions/v2/database");
+const { onValueUpdated, onValueWritten, onValueDeleted } = require("firebase-functions/v2/database");
+const { onSchedule } = require('firebase-functions/v2/scheduler');
 const admin = require('firebase-admin');
 const crypto = require('crypto');
 
@@ -39,47 +40,84 @@ const STATS_ROOT = "calendar_stats";
 // that motivated this — RTDB egress jumped ~15x with no matching rise in request counts, and
 // there was no per-calendar breakdown anywhere to narrow it down).
 //
-// Must be awaited before the response is sent, not fire-and-forget: this function's instances
-// get frozen/recycled immediately after the HTTP response completes (observed directly —
-// "Container terminated on signal 6" landed right after a served response, and the write
-// initiated alongside it never reached the database), so anything not awaited can be silently
-// dropped. A failure here is logged but swallowed — a stats write must never fail the request.
-// A per-process salt, regenerated every time an instance starts and never stored.
-// It makes the device hashes below un-reversible even by us: without the salt no
-// IP can be tested against a stored hash, and the salt does not outlive the
-// process. This is the difference between "an estimate of how many devices poll
-// this feed" and "a log of who reads this calendar."
-const DEVICE_SALT = crypto.randomBytes(32);
+// Recorded AFTER the response is sent: a subscriber's poll must not wait on our bookkeeping.
+// The cost is that an instance recycled right after responding (observed: "Container
+// terminated on signal 6" right after a served response) can drop that one write. For a
+// popularity estimate an occasional lost increment is fine; slower feeds for everyone are
+// not. A failure here is logged and swallowed — a stats write must never fail the request.
+
+// A server-only secret, created once and stored where no client can read it (the root
+// rules deny everything not explicitly opened). Shared by every instance, so one device
+// hashes to the same bucket no matter which instance or cold start serves it -- a
+// per-process random salt counted one phone as several. Never logged.
+const DEVICE_SALT_PATH = 'internal/device_salt';
+let deviceSaltSecretPromise = null;
+
+/** The stored secret, created on first use with a transaction so concurrent cold starts agree. */
+function deviceSaltSecret() {
+    if (!deviceSaltSecretPromise) {
+        deviceSaltSecretPromise = admin.database().ref(DEVICE_SALT_PATH)
+            .transaction((current) => current || crypto.randomBytes(32).toString('base64'))
+            .then((result) => Buffer.from(result.snapshot.val(), 'base64'))
+            .catch((err) => {
+                // Not cached: the next request retries instead of counting nothing for
+                // the life of the instance.
+                deviceSaltSecretPromise = null;
+                throw err;
+            });
+    }
+    return deviceSaltSecretPromise;
+}
 
 /**
  * A coarse, deliberately lossy device bucket for counting ICS subscribers.
  *
  * The ICS protocol has no client id -- polling is anonymous by design -- so the
  * only available signal is user-agent plus IP. Both are personal data, so neither
- * is stored: they are hashed together with a per-process salt and the UTC date,
- * then truncated to 8 hex chars, and only the resulting bucket name is written.
+ * is stored: they are hashed with a DAILY salt (an HMAC of the UTC date under the
+ * server-only secret above), truncated to 8 hex chars, and only the resulting
+ * bucket name is written.
  *
  * Consequences of that design, all intentional:
- *   - the hash cannot be reversed or matched against a known IP
- *   - it rotates daily, so nothing tracks a device across days
+ *   - without the secret, no IP can be tested against a stored bucket
+ *   - the salt changes every day, so nothing links a device's buckets across days
  *   - 8 hex chars will collide occasionally at scale, which biases the estimate
  *     DOWN. Undercounting is the right failure direction for a vanity metric.
  *
  * Returns null for aggregators (see AGGREGATOR_UA): Google fetches feeds
  * server-side on behalf of every subscriber, so one Google IP may represent one
  * person or five hundred. Counting those as one device would be a lie; they are
- * tallied separately as "unknown reach" instead.
+ * tallied separately as "unknown reach" instead. Also null without a secret, so a
+ * failed salt read skips the estimate rather than hashing with something guessable.
  */
 const AGGREGATOR_UA = /Google-Calendar-Importer|WordPress|Microsoft Exchange|Outlook-iOS|feedburner|Yahoo/i;
 
-function deviceBucket(userAgent, ip) {
-    if (!userAgent || AGGREGATOR_UA.test(userAgent)) return null;
-    const day = new Date().toISOString().slice(0, 10);
-    return crypto.createHash('sha256')
-        .update(DEVICE_SALT)
-        .update(`${day}|${userAgent}|${ip || ''}`)
+function deviceBucket(userAgent, ip, secret, day = new Date().toISOString().slice(0, 10)) {
+    if (!userAgent || AGGREGATOR_UA.test(userAgent) || !secret) return null;
+    const dailySalt = crypto.createHmac('sha256', secret).update(day).digest();
+    return crypto.createHmac('sha256', dailySalt)
+        .update(`${userAgent}|${ip || ''}`)
         .digest('hex')
         .slice(0, 8);
+}
+
+/**
+ * The subscriber's IP, for deviceBucket() only.
+ *
+ * The leftmost X-Forwarded-For entry (and so Express's req.ip under trust proxy) is
+ * whatever the client sent, so one poller could pose as any number of devices.
+ * Through the Hosting rewrite, Hosting's CDN sets Fastly-Client-IP from the TCP peer
+ * and the XFF entries Google adds are CDN addresses; called directly, Google's front
+ * end appends the real peer as the RIGHTMOST XFF entry. A direct caller can still
+ * send its own Fastly-Client-IP -- that only adds noise to a vanity estimate, which
+ * any caller can do anyway by varying its user-agent.
+ */
+function clientIpOf(req) {
+    const fastly = String(req.headers['fastly-client-ip'] || '').trim();
+    if (fastly) return fastly;
+    const hops = String(req.headers['x-forwarded-for'] || '').split(',')
+        .map((s) => s.trim()).filter(Boolean);
+    return hops.length ? hops[hops.length - 1] : (req.socket?.remoteAddress || '');
 }
 
 /** Which family of client this is, for a breakdown that needs no identity at all. */
@@ -101,34 +139,40 @@ function clientFamily(userAgent) {
 const DEVICE_BUCKET_TTL_DAYS = 35;
 
 async function recordIcsStat(id, { bytes, wasNotModified, userAgent, ip }) {
-    const update = {
-        lastServedAt: admin.database.ServerValue.TIMESTAMP,
-        icsRequestCount: admin.database.ServerValue.increment(1),
-    };
-    if (wasNotModified) {
-        update.ics304Count = admin.database.ServerValue.increment(1);
-    } else {
-        update.bytesServedTotal = admin.database.ServerValue.increment(bytes);
-    }
-
-    const day = new Date().toISOString().slice(0, 10);
-    const family = clientFamily(userAgent);
-    const bucket = deviceBucket(userAgent, ip);
-
-    // Client mix, which carries no identity -- just which apps subscribe.
-    update[`clients/${family}`] = admin.database.ServerValue.increment(1);
-
-    if (bucket) {
-        // Presence only. The value is the day, so a sweep can drop stale buckets
-        // without reading anything else, and repeated polls from the same device
-        // collapse into one key rather than accumulating.
-        update[`devices/${day}/${bucket}`] = true;
-    } else {
-        // An aggregator stands in for an unknown number of real people.
-        update[`aggregatorHits/${day}`] = admin.database.ServerValue.increment(1);
-    }
-
     try {
+        const update = {
+            lastServedAt: admin.database.ServerValue.TIMESTAMP,
+            icsRequestCount: admin.database.ServerValue.increment(1),
+        };
+        if (wasNotModified) {
+            update.ics304Count = admin.database.ServerValue.increment(1);
+        } else {
+            update.bytesServedTotal = admin.database.ServerValue.increment(bytes);
+        }
+
+        const day = new Date().toISOString().slice(0, 10);
+        const family = clientFamily(userAgent);
+
+        // Client mix, which carries no identity -- just which apps subscribe.
+        update[`clients/${family}`] = admin.database.ServerValue.increment(1);
+
+        if (AGGREGATOR_UA.test(userAgent || '')) {
+            // An aggregator stands in for an unknown number of real people.
+            update[`aggregatorHits/${day}`] = admin.database.ServerValue.increment(1);
+        } else {
+            let secret = null;
+            try {
+                secret = await deviceSaltSecret();
+            } catch (err) {
+                console.error('Device salt unavailable; skipping device bucket:', err.message);
+            }
+            const bucket = deviceBucket(userAgent, ip, secret, day);
+            // Presence only. The value is the day, so a sweep can drop stale buckets
+            // without reading anything else, and repeated polls from the same device
+            // collapse into one key rather than accumulating.
+            if (bucket) update[`devices/${day}/${bucket}`] = true;
+        }
+
         await admin.database().ref(STATS_ROOT).child(id).update(update);
         await sweepOldDeviceBuckets(id, day);
     } catch (err) {
@@ -136,41 +180,104 @@ async function recordIcsStat(id, { bytes, wasNotModified, userAgent, ip }) {
     }
 }
 
+const expiredBefore = () => new Date(Date.now() - DEVICE_BUCKET_TTL_DAYS * 86400000)
+    .toISOString().slice(0, 10);
+
+// Calendars this instance has already confirmed swept today. A busy feed is polled
+// thousands of times a day; without this every poll paid a marker read. Reset when
+// the day changes, so it holds at most one day's worth of calendar ids.
+let sweptOnDay = null;
+let sweptIds = new Set();
+
 /**
- * Drop device buckets older than the TTL.
+ * Drop device buckets older than the TTL, opportunistically, as a calendar is polled.
  *
- * Opportunistic rather than scheduled: a busy feed is polled every few hours, so
- * its own traffic keeps it swept, and a feed nobody polls has nothing arriving to
- * expire. That avoids standing up Cloud Scheduler for a job with no deadline.
- *
- * Rate-limited to one sweep per calendar per day via a marker, so a feed polled
- * 8,000 times does not pay for 8,000 range reads. Failure is swallowed: retention
- * housekeeping must never break serving a calendar.
+ * Rate-limited to one sweep per calendar per day: in memory per instance first, then
+ * via a marker in the database so other instances skip it too. sweepAllDeviceBuckets
+ * covers feeds nobody polls any more. Failure is swallowed: retention housekeeping must
+ * never break serving a calendar.
  */
 async function sweepOldDeviceBuckets(id, today) {
     try {
+        if (sweptOnDay !== today) { sweptOnDay = today; sweptIds = new Set(); }
+        if (sweptIds.has(id)) return;
+
         const ref = admin.database().ref(STATS_ROOT).child(id);
         const marker = await ref.child('devicesSweptOn').once('value');
-        if (marker.val() === today) return;
+        if (marker.val() !== today) {
+            const cutoff = expiredBefore();
 
-        const cutoff = new Date(Date.now() - DEVICE_BUCKET_TTL_DAYS * 86400000)
-            .toISOString().slice(0, 10);
+            // Keys are ISO dates, so lexical ordering is chronological -- endBefore
+            // gives exactly the expired days without reading the live ones.
+            const stale = await ref.child('devices').orderByKey().endBefore(cutoff).once('value');
 
-        // Keys are ISO dates, so lexical ordering is chronological -- endBefore
-        // gives exactly the expired days without reading the live ones.
-        const stale = await ref.child('devices').orderByKey().endBefore(cutoff).once('value');
+            const updates = { devicesSweptOn: today };
+            stale.forEach((child) => { updates[`devices/${child.key}`] = null; });
 
-        const updates = { devicesSweptOn: today };
-        stale.forEach((child) => { updates[`devices/${child.key}`] = null; });
+            const aggStale = await ref.child('aggregatorHits').orderByKey().endBefore(cutoff).once('value');
+            aggStale.forEach((child) => { updates[`aggregatorHits/${child.key}`] = null; });
 
-        const aggStale = await ref.child('aggregatorHits').orderByKey().endBefore(cutoff).once('value');
-        aggStale.forEach((child) => { updates[`aggregatorHits/${child.key}`] = null; });
-
-        await ref.update(updates);
+            await ref.update(updates);
+        }
+        sweptIds.add(id);
     } catch (err) {
         console.error(`Device bucket sweep failed for ${id}:`, err);
     }
 }
+
+// The scheduled sweep reads calendars in pages and stops after this many per run,
+// resuming from a cursor the next day, so its cost stays flat as calendars grow.
+const SWEEP_PAGE_SIZE = 200;
+const SWEEP_MAX_PER_RUN = 2000;
+const SWEEP_CURSOR_PATH = 'internal/device_sweep_cursor';
+
+/**
+ * Enforce the TTL for every calendar, including ones no longer polled -- the
+ * opportunistic sweep only runs when a feed is requested, so a feed dropped by its
+ * subscribers kept its last 35 days of buckets forever. Bounded per run; returns how
+ * many calendars it examined and whether it reached the end.
+ */
+async function sweepAllDeviceBuckets({ pageSize = SWEEP_PAGE_SIZE, maxPerRun = SWEEP_MAX_PER_RUN } = {}) {
+    const db = admin.database();
+    const cutoff = expiredBefore();
+    let cursor = (await db.ref(SWEEP_CURSOR_PATH).once('value')).val() || null;
+    let examined = 0;
+    let reachedEnd = false;
+
+    while (examined < maxPerRun) {
+        let query = db.ref(STATS_ROOT).orderByKey();
+        if (cursor) query = query.startAfter(cursor);
+        const limit = Math.min(pageSize, maxPerRun - examined);
+        const page = await query.limitToFirst(limit).once('value');
+
+        const updates = {};
+        let count = 0;
+        page.forEach((cal) => {
+            count++;
+            cursor = cal.key;
+            // The page already holds each calendar's buckets, so expired days are found
+            // without a second read per calendar.
+            for (const field of ['devices', 'aggregatorHits']) {
+                Object.keys(cal.child(field).val() || {}).forEach((dayKey) => {
+                    if (dayKey < cutoff) updates[`${cal.key}/${field}/${dayKey}`] = null;
+                });
+            }
+        });
+        if (Object.keys(updates).length) await db.ref(STATS_ROOT).update(updates);
+        examined += count;
+
+        if (count < limit) { reachedEnd = true; break; }
+    }
+
+    // Wrap to the start once the end is reached, so every calendar is visited in turn.
+    await db.ref(SWEEP_CURSOR_PATH).set(reachedEnd ? null : cursor);
+    return { examined, reachedEnd };
+}
+
+exports.sweepDeviceBuckets = onSchedule({ schedule: 'every day 03:17', timeZone: 'UTC' }, async () => {
+    const { examined, reachedEnd } = await sweepAllDeviceBuckets();
+    console.log(`Device bucket sweep: examined=${examined} reachedEnd=${reachedEnd}`);
+});
 
 // Calendar Data Service
 const CalendarService = {
@@ -203,12 +310,53 @@ const CalendarService = {
 };
 
 // ICS Generation Service
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
+
 const ICSService = {
+    // Line breaks are normalized to LF before escaping. A CR (bare, or the first half of a
+    // pasted CRLF) would otherwise reach the feed raw, and a CR inside a content line ends
+    // it early for strict parsers, truncating the text and garbling the next property.
     escapeText(text) {
-        return String(text ?? '').replace(/\\/g, '\\\\')
+        return String(text ?? '').replace(/\r\n?/g, '\n')
+            .replace(/\\/g, '\\\\')
             .replace(/;/g, '\\;')
             .replace(/,/g, '\\,')
             .replace(/\n/g, '\\n');
+    },
+
+    // RFC 5545 3.1: content lines longer than 75 octets are folded with CRLF + a space.
+    // Counted in UTF-8 octets, not characters, and split only between code points --
+    // cutting a multibyte character in half leaves invalid UTF-8 on both lines.
+    foldLine(line) {
+        if (Buffer.byteLength(line, 'utf8') <= 75) return line;
+        const parts = [];
+        let current = '', size = 0, limit = 75;
+        for (const ch of line) {
+            const n = Buffer.byteLength(ch, 'utf8');
+            if (size + n > limit) {
+                parts.push(current);
+                // The leading space of a continuation line counts toward its 75 octets.
+                current = ''; size = 0; limit = 74;
+            }
+            current += ch; size += n;
+        }
+        parts.push(current);
+        return parts.join('\r\n ');
+    },
+
+    // Epoch ms for a stored date or an ICS stamp (20260921T170000Z or 20260921), or NaN.
+    toMs(value) {
+        if (value === null || value === undefined || value === '') return NaN;
+        if (typeof value === 'string' && /^\d{8}T\d{6}Z$/.test(value)) {
+            return Date.parse(`${value.slice(0, 4)}-${value.slice(4, 6)}-${value.slice(6, 8)}T` +
+                `${value.slice(9, 11)}:${value.slice(11, 13)}:${value.slice(13, 15)}Z`);
+        }
+        if (typeof value === 'string' && /^\d{8}$/.test(value)) {
+            return Date.UTC(+value.slice(0, 4), +value.slice(4, 6) - 1, +value.slice(6, 8));
+        }
+        const d = value instanceof Date ? value : new Date(value);
+        return d.getTime();
     },
 
     // Normalize a stored date into ICS basic format (YYYYMMDDTHHMMSSZ), or null if the
@@ -239,38 +387,31 @@ const ICSService = {
     // emitting a DATE-TIME instead means a deleted all-day occurrence never matches its
     // EXDATE and keeps appearing for subscribers.
     //
-    // The day is the NEAREST UTC midnight, not the UTC date of the instant. The app
-    // stores an all-day event as the user's LOCAL midnight, and this server does not know
-    // their timezone: in Paris, "18 September, all day" is stored as 17 Sep 22:00Z, whose
-    // UTC date is the 17th -- so every subscriber east of UTC (all of Europe, Asia and
-    // Australia) saw all-day events a day early. Local midnight in any zone from UTC-11
-    // to UTC+12 lies within 12 hours of the intended day's UTC midnight, so rounding
-    // recovers the day the user picked. (UTC+13/+14 -- Tonga, Samoa, NZ summer -- are
-    // still a day early; fixing those needs the calendar's timezone, which is not stored.)
-    // Values already at UTC midnight, as NativeCal writes them, round to themselves.
+    // The app stores an all-day date as the user's LOCAL midnight converted to UTC, so
+    // Sep 7 in Berlin arrives as 2026-09-06T22:00:00Z, and taking its UTC date moved every
+    // all-day event a day early east of UTC. The server never learns the user's zone, but
+    // local midnight falls in a known window around UTC midnight, so we take the date that
+    // window points at. Populated offsets span 25 hours (UTC-11 to UTC+14) and a day holds
+    // 24, so one end must give: the window runs from just east of UTC-11 through UTC+13,
+    // covering New Zealand summer time, Samoa and Tonga at the cost of American Samoa and
+    // Niue (UTC-11) and Kiribati's Line Islands (UTC+14), which have far fewer people.
     formatDate(dateTime) {
-        if (dateTime === null || dateTime === undefined || dateTime === '') return null;
-        const d = dateTime instanceof Date ? dateTime : new Date(dateTime);
+        const ms = this.toMs(dateTime);
+        if (isNaN(ms)) return null;
+        // The extra second reads nativecal's inclusive all-day end (local 23:59:59.999 of
+        // the last day) as the next date even at UTC+13. Must match Event.allDayDateUTC.
+        const d = new Date(Math.floor((ms + 13 * HOUR_MS + 1000) / DAY_MS) * DAY_MS);
         if (isNaN(d.getTime())) return null;
-        const nearest = new Date(d.getTime() + 12 * 60 * 60 * 1000);
-        const out = nearest.toISOString().slice(0, 10).replace(/-/g, '');
+        const out = d.toISOString().slice(0, 10).replace(/-/g, '');
         return /^\d{8}$/.test(out) ? out : null;
-    },
-
-    // A stored UTC stamp (20260917T220000Z) as the all-day DATE it stands for. Exception
-    // dates for all-day series need the same rounding as DTSTART, or a deleted occurrence
-    // in a UTC-positive zone names the wrong day and never matches.
-    stampToDate(stamp) {
-        const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(stamp || '');
-        if (!m) return stamp ? stamp.slice(0, 8) : stamp;
-        return this.formatDate(new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6])));
     },
 
     // An event is only renderable if BOTH endpoints normalize to a real date. A truthiness
     // check is not enough: a Date object, an epoch number, or `{}` are all truthy but blow
     // up (or silently corrupt) downstream. Events missing dates entirely were written by
     // past client bugs; one such record used to throw in formatDateTime and take down the
-    // whole feed, so unusable events are skipped individually instead.
+    // whole feed, so unusable events are skipped individually instead. An end at or before
+    // the start is repaired in createEventBlock rather than skipped: the event is real.
     isRenderable(event) {
         if (!event) return false;
         return this.formatDateTime(event.start) !== null
@@ -290,28 +431,67 @@ const ICSService = {
             .map(s => (s.endsWith("Z") ? s : `${s}Z`));
     },
 
-    // Which instance a moved occurrence replaces. Syncfusion accumulates the parent's whole
-    // exception list onto each child, so the first entry is not necessarily this child's own
-    // original slot -- using it made every child after the first emit the SAME
-    // RECURRENCE-ID, and a duplicate (UID, RECURRENCE-ID) pair makes clients keep one and
-    // discard the rest. That deletes meetings, which is worse than the duplication it
-    // replaced. Pick the exception whose time-of-day matches this occurrence, falling back
-    // to the one nearest its start.
+    // What a series' own expansion produces: DATE instances for an all-day series, and
+    // otherwise DATE-TIMEs that all share DTSTART's UTC time of day.
+    seriesShape(event) {
+        return { allDay: !!event.isAllDay, anchorMs: this.toMs(event.start) };
+    },
+
+    // Rewrite one exception stamp as the instance of `shape` it refers to, so EXDATE and
+    // RECURRENCE-ID actually match something. The RRULE expands from a UTC DTSTART, so
+    // every instance keeps the same UTC time of day -- but the app records an exception at
+    // the occurrence's LOCAL wall-clock time, which after a DST change is an hour off from
+    // the expanded instance. Unmatched, a deleted occurrence stays and a moved one shows up
+    // twice. So snap to the nearest instance time (always within 12h); a series without a
+    // usable anchor is left as recorded.
+    seriesSlot(stamp, shape) {
+        let ms = this.toMs(stamp);
+        if (isNaN(ms)) return null;
+        if (shape.allDay) return this.formatDate(ms);
+        if (!isNaN(shape.anchorMs)) {
+            const timeOfDay = ((shape.anchorMs % DAY_MS) + DAY_MS) % DAY_MS;
+            const sameDay = Math.floor(ms / DAY_MS) * DAY_MS + timeOfDay;
+            const nearest = [sameDay - DAY_MS, sameDay, sameDay + DAY_MS]
+                .reduce((a, b) => (Math.abs(b - ms) < Math.abs(a - ms) ? b : a));
+            if (Math.abs(nearest - ms) < 12 * HOUR_MS) ms = nearest;
+        }
+        return this.formatDateTime(new Date(ms));
+    },
+
+    // UNTIL must share DTSTART's value type (RFC 5545 3.3.10). The app writes a DATE-TIME
+    // UNTIL even for all-day series, which strict clients reject, so convert it the same
+    // way the all-day DTSTART is converted.
+    seriesRule(rule, allDay) {
+        if (!allDay) return rule;
+        return rule.replace(/(^|;)UNTIL=(\d{8}T\d{6}Z?)/i, (match, sep, value) => {
+            const date = this.allDayStampDate(value);
+            return date ? `${sep}UNTIL=${date}` : match;
+        });
+    },
+
+    // The DATE an all-day series' stamp names. A floating stamp (no Z) is a wall-clock
+    // time, so its Y-M-D is the date: nativecal's editor writes UNTIL=20261025T235959 for
+    // "through Oct 25", which the instant window read as Oct 26. Must match
+    // Event.allDayStampDate in public/models/Event.js.
+    allDayStampDate(value) {
+        if (/^\d{8}T\d{6}$/i.test(value)) return value.slice(0, 8);
+        return this.formatDate(/Z$/i.test(value) ? value : `${value}Z`);
+    },
+
+    // Best guess at which instance a moved occurrence replaces, from the event alone. Only
+    // used when createEventBlock is called outside a feed; generateICS assigns slots across
+    // a whole series (assignOccurrences) so that no two occurrences claim the same one.
     occurrenceOriginal(event) {
         const candidates = this.exceptionDates(event);
         if (!candidates.length) return null;
         if (candidates.length === 1) return candidates[0];
 
-        const startMs = new Date(event.start).getTime();
+        const startMs = this.toMs(event.start);
         if (isNaN(startMs)) return candidates[0];
-
-        const toMs = (stamp) => Date.parse(
-            `${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)}T` +
-            `${stamp.slice(9, 11)}:${stamp.slice(11, 13)}:${stamp.slice(13, 15)}Z`);
 
         let best = candidates[0], bestDelta = Infinity;
         for (const c of candidates) {
-            const ms = toMs(c);
+            const ms = this.toMs(c);
             if (isNaN(ms)) continue;
             const delta = Math.abs(ms - startMs);
             if (delta < bestDelta) { bestDelta = delta; best = c; }
@@ -319,7 +499,67 @@ const ICSService = {
         return best;
     },
 
-    createEventBlock(event, dtstamp, overriddenSlots) {
+    // Which instance each moved occurrence replaces, one-to-one within each series. Returns
+    // Map(child event -> { slot, allDay }); a child left out becomes a standalone event.
+    //
+    // A child records its original slot only in recurrenceException. Syncfusion's
+    // EditOccurrence writes exactly one stamp there (the occurrence's own start), but
+    // records saved through other paths carry the parent's accumulated list, so a child
+    // with several candidates is ambiguous. Choosing each child's nearest candidate on its
+    // own let two children claim one slot (9/21 -> 9/26 and 9/28 -> 9/23 both chose 9/21),
+    // and a duplicate (UID, RECURRENCE-ID) makes clients drop one of the meetings. So
+    // unambiguous children claim their slot first, then the remaining (child, slot) pairs
+    // are taken greedily by distance, each slot used at most once.
+    assignOccurrences(events) {
+        const seriesById = new Map();
+        const childrenOf = new Map();
+        for (const event of events) {
+            if (event.recurrenceID) {
+                if (!childrenOf.has(event.recurrenceID)) childrenOf.set(event.recurrenceID, []);
+                childrenOf.get(event.recurrenceID).push(event);
+            } else if (event.recurrencerule) {
+                seriesById.set(event.id, event);
+            }
+        }
+
+        const assigned = new Map();
+        for (const [seriesId, children] of childrenOf) {
+            // RECURRENCE-ID takes the PARENT's value type and instance grid; the child's own
+            // isAllDay or start time says nothing about the slot it came from.
+            const parent = seriesById.get(seriesId);
+            const parentShape = parent ? this.seriesShape(parent) : null;
+
+            const pairs = [];
+            children.forEach((child, index) => {
+                const shape = parentShape || { allDay: !!child.isAllDay, anchorMs: NaN };
+                const slots = [...new Set(this.exceptionDates(child)
+                    .map(stamp => this.seriesSlot(stamp, shape))
+                    .filter(Boolean))];
+                const startMs = this.toMs(child.start);
+                for (const slot of slots) {
+                    const distance = Math.abs(this.toMs(slot) - startMs);
+                    pairs.push({ child, index, slot, allDay: shape.allDay,
+                        ambiguous: slots.length > 1 ? 1 : 0,
+                        distance: isNaN(distance) ? Infinity : distance });
+                }
+            });
+            pairs.sort((a, b) => a.ambiguous - b.ambiguous
+                || a.distance - b.distance || a.index - b.index);
+
+            const usedSlots = new Set();
+            for (const pair of pairs) {
+                if (assigned.has(pair.child) || usedSlots.has(pair.slot)) continue;
+                assigned.set(pair.child, { slot: pair.slot, allDay: pair.allDay });
+                usedSlots.add(pair.slot);
+            }
+        }
+        return assigned;
+    },
+
+    // `occurrence` is the slot generateICS assigned this event ({ slot, allDay }), or null
+    // if it assigned none. Left undefined (a block built outside a feed), the event's own
+    // best guess is used.
+    createEventBlock(event, dtstamp, overriddenSlots, occurrence) {
         // An edited occurrence is stored as its own record pointing at its parent through
         // recurrenceID, and it inherits the parent's RecurrenceRule in the process. Emitting
         // that rule would turn one moved occurrence into a second full series.
@@ -328,17 +568,39 @@ const ICSService = {
         // instance this replaces. Without one, two VEVENTs share a UID and a client treats
         // the second as a redefinition of the series -- collapsing every other occurrence.
         // So a child with no usable exception date falls back to being a standalone event.
-        const original = event.recurrenceID ? this.occurrenceOriginal(event) : null;
-        const isOccurrence = !!event.recurrenceID && !!original;
+        if (occurrence === undefined && event.recurrenceID) {
+            const stamp = this.occurrenceOriginal(event);
+            const shape = { allDay: !!event.isAllDay, anchorMs: NaN };
+            const slot = stamp ? this.seriesSlot(stamp, shape) : null;
+            occurrence = slot ? { slot, allDay: shape.allDay } : null;
+        }
+        const isOccurrence = !!event.recurrenceID && !!occurrence;
 
         const allDay = !!event.isAllDay;
         const start = allDay ? this.formatDate(event.start) : this.formatDateTime(event.start);
-        const end = allDay ? this.formatDate(event.end) : this.formatDateTime(event.end);
+        let end = allDay ? this.formatDate(event.end) : this.formatDateTime(event.end);
         const dateParam = allDay ? ";VALUE=DATE" : "";
+
+        // An end before the start makes a negative-length event that strict clients reject,
+        // and a clamped all-day DTEND equal to DTSTART spans no day at all. So an all-day
+        // event lasts at least its own day, and a timed one becomes a zero-length event at
+        // its start: DTEND equal to DTSTART is the form clients broadly accept for that (an
+        // omitted DTEND is valid too, but Outlook reads it unpredictably).
+        if (allDay && (!end || end <= start)) {
+            end = this.formatDate(this.toMs(start) + DAY_MS);
+        } else if (!allDay && this.toMs(end) < this.toMs(start)) {
+            end = start;
+        }
+
+        // Syncfusion gives a moved occurrence the same id as its series, so a child that
+        // falls back to standalone needs a UID of its own, or it redefines the series.
+        let uid = event.id;
+        if (isOccurrence) uid = event.recurrenceID;
+        else if (event.recurrenceID && event.id === event.recurrenceID) uid = `${event.id}-${start}`;
 
         const eventLines = [
             "BEGIN:VEVENT",
-            `UID:${isOccurrence ? event.recurrenceID : event.id}`,
+            `UID:${uid}`,
             `DTSTAMP:${dtstamp}`,
             `DTSTART${dateParam}:${start}`,
             `DTEND${dateParam}:${end}`,
@@ -346,28 +608,26 @@ const ICSService = {
             `DESCRIPTION:${this.escapeText(event.description)}`
         ];
 
-        // EXDATE must use the same value type as DTSTART, or it matches no instance and the
-        // exclusion is silently ignored.
-        const asValue = (stamp) => allDay ? this.stampToDate(stamp) : stamp;
-
         if (isOccurrence) {
-            eventLines.push(`RECURRENCE-ID${dateParam}:${asValue(original)}`);
-        } else if (event.recurrencerule) {
-            eventLines.push(`RRULE:${event.recurrencerule}`);
+            eventLines.push(`RECURRENCE-ID${occurrence.allDay ? ";VALUE=DATE" : ""}:${occurrence.slot}`);
+        } else if (event.recurrencerule && !event.recurrenceID) {
+            eventLines.push(`RRULE:${this.seriesRule(event.recurrencerule, allDay)}`);
 
             // Without EXDATE, an occurrence the user deleted in the app is still generated
             // by the rule, so every subscriber keeps seeing a meeting that was canceled.
             // Slots that a moved occurrence overrides are excluded from this list: those
             // instances are replaced, not removed, and EXDATE'ing one deletes the slot its
-            // override was meant to fill.
-            const exdates = this.exceptionDates(event)
-                .filter(stamp => !(overriddenSlots && overriddenSlots.has(stamp)))
-                .map(asValue);
+            // override was meant to fill. Each date must also take DTSTART's value type and
+            // land on a real instance, or it matches nothing and is silently ignored.
+            const shape = this.seriesShape(event);
+            const exdates = [...new Set(this.exceptionDates(event)
+                .map(stamp => this.seriesSlot(stamp, shape))
+                .filter(slot => slot && !(overriddenSlots && overriddenSlots.has(slot))))];
             if (exdates.length) eventLines.push(`EXDATE${dateParam}:${exdates.join(",")}`);
         }
 
         eventLines.push("END:VEVENT");
-        return eventLines.join("\r\n");
+        return eventLines.map(line => this.foldLine(line)).join("\r\n");
     },
 
     generateICS(calendarData, id) {
@@ -397,17 +657,16 @@ const ICSService = {
         // disappears from the feed entirely. Verified against a real iCalendar parser:
         // with the EXDATE present the occurrence is gone; without it, it resolves at its
         // new time. So EXDATE must carry only the genuinely deleted dates.
+        const occurrences = this.assignOccurrences(renderable);
         const overridden = new Map();
-        for (const event of renderable) {
-            if (!event.recurrenceID) continue;
-            const slot = this.occurrenceOriginal(event);
-            if (!slot) continue;
+        for (const [event, { slot }] of occurrences) {
             if (!overridden.has(event.recurrenceID)) overridden.set(event.recurrenceID, new Set());
             overridden.get(event.recurrenceID).add(slot);
         }
 
-        const events = renderable.map(event =>
-            this.createEventBlock(event, dtstamp, overridden.get(event.id)));
+        const events = renderable.map(event => this.createEventBlock(event, dtstamp,
+            event.recurrenceID ? null : overridden.get(event.id),
+            event.recurrenceID ? (occurrences.get(event) || null) : undefined));
 
         // Without X-WR-CALNAME a subscription shows up in the user's calendar list
         // as the raw feed URL, or as "Untitled" -- so a shared roster is unlabelled
@@ -416,10 +675,10 @@ const ICSService = {
         const name = this.escapeText(calendarData?.title || id);
 
         // REFRESH-INTERVAL is the RFC 7986 hint; X-PUBLISHED-TTL is the older
-        // Microsoft equivalent that Outlook still honours. Clients that read
+        // Microsoft equivalent that Outlook still honors. Clients that read
         // neither pick their own interval, and some default to once a day, which
         // makes a shared calendar feel broken when an edit doesn't show up.
-        return [
+        const header = [
             "BEGIN:VCALENDAR",
             "VERSION:2.0",
             `PRODID:-//PasteCal//${id}//EN`,
@@ -428,10 +687,10 @@ const ICSService = {
             `X-WR-CALNAME:${name}`,
             `NAME:${name}`,
             "REFRESH-INTERVAL;VALUE=DURATION:PT1H",
-            "X-PUBLISHED-TTL:PT1H",
-            ...events,
-            "END:VCALENDAR"
-        ].join("\r\n");
+            "X-PUBLISHED-TTL:PT1H"
+        ].map(line => this.foldLine(line));
+        // Event blocks arrive already folded.
+        return [...header, ...events, "END:VCALENDAR"].join("\r\n");
     }
 };
 
@@ -461,18 +720,44 @@ const SlugService = {
         return slugRegex.test(slug) && !reservedWords.includes(slug.toLowerCase());
     },
 
+    /**
+     * Whether a calendar holds anything its owner would miss: events, a title of their own,
+     * or notes. A calendar used purely for notes is as much someone's as one full of events.
+     * Reads at most one event, not the list -- this runs on every create of a case-twin.
+     */
+    async holdsData(db, actualSlug) {
+        const root = db.ref(`/${DEFAULT_ROOT}/${actualSlug}`);
+        const [events, title, notes] = await Promise.all([
+            root.child('events').limitToFirst(1).once('value'),
+            root.child('title').once('value'),
+            root.child('options/notes').once('value'),
+        ]);
+        const t = title.val();
+        return events.hasChildren()
+            || (typeof t === 'string' && t.trim() !== '' && t !== 'New Calendar')
+            || (typeof notes.val() === 'string' && notes.val().trim() !== '');
+    },
+
     normalizeSlug(slug) {
         // Convert to lowercase for consistent storage and lookup
         return slug.toLowerCase();
     },
 
+    // Free means nothing resolves to it: no view, no binding, and no mapping to an editable
+    // calendar -- otherwise a view could be created at a name that already opens someone's
+    // calendar, and one of the two would become unreachable.
     async isSlugAvailable(slug) {
-        // Check if normalized slug exists in readonly calendars
         const normalizedSlug = this.normalizeSlug(slug);
-        const slugRef = admin.database().ref(READONLY_ROOT).child(normalizedSlug);
-        const snapshot = await slugRef.once('value');
-        return !snapshot.exists();
+        const db = admin.database();
+        const [view, binding, mapping] = await Promise.all([
+            db.ref(READONLY_ROOT).child(normalizedSlug).child('id').once('value'),
+            db.ref(`/public_views/${normalizedSlug}`).once('value'),
+            db.ref(`/slug_mappings/${normalizedSlug}`).once('value'),
+        ]);
+        const m = mapping.val();
+        return !view.exists() && !binding.exists() && !(m && !m.notFound);
     },
+
 
     // A not-found result is cached for this long, then re-checked with a real lookup. Short
     // relative to how long a slug stays unclaimed, but long enough that a burst of requests
@@ -480,7 +765,16 @@ const SlugService = {
     // for one full scan instead of one per request.
     NOT_FOUND_CACHE_MS: 10 * 60 * 1000,
 
+    // Characters that are path syntax or illegal in an RTDB key. A slug containing `/` used
+    // to be read as a path: "/" read the entire index, and "foo/x" wrote a negative-cache
+    // entry under slug_mappings/foo that made `foo` look taken forever.
+    isLookupable(slug) {
+        return typeof slug === 'string' && slug.length > 0 && slug.length <= 100
+            && !/[\/.#$\[\]\x00-\x1f\x7f]/.test(slug);
+    },
+
     async lookupCalendar(requestedSlug) {
+        if (!this.isLookupable(requestedSlug)) return { found: false };
         const normalizedSlug = this.normalizeSlug(requestedSlug);
 
         // Check cache first
@@ -544,9 +838,87 @@ const SlugService = {
         // (verified 2026-08-25: nonexistent slugs returned HTTP 500/503, existing ones 200).
         // Paging or shallow-reading the scan would only have made an O(all-calendars)
         // operation cheaper; the index makes it O(1).
-        await cacheRef.set({ notFound: true, cachedAt: Date.now() });
+        //
+        // No negative-cache write any more. It existed because a miss used to cost a full
+        // scan; with the index a miss is two tiny reads, and caching it wrote one permanent
+        // row per guessed slug -- unbounded growth from an unauthenticated callable -- and
+        // could overwrite a mapping indexSlug wrote meanwhile. Entries already cached still
+        // expire through the branch above.
         return { found: false };
     }
+};
+
+// Read-only views
+//
+// /calendars_readonly/<publicViewId> is world-readable, so what goes into it is published.
+// It used to be a verbatim copy of the calendar, `id` included -- and `id` IS the editable
+// slug, so anyone holding a view-only link could read it and get full edit access. The
+// mirror is now built from a whitelist and carries the view's own id.
+//
+// Which calendar may write a view is recorded in /public_views/<publicViewId>, a node only
+// the Admin SDK can write. The calendar's own options.publicViewId cannot be the authority:
+// anyone can write it, so pointing it at someone else's view used to make syncPublicView
+// overwrite that view with the attacker's events.
+const PublicViewService = {
+    BINDINGS: '/public_views',                 // publicViewId -> calendarId
+    BY_CALENDAR: '/public_views_by_calendar',  // calendarId -> { publicViewId: true }, for cleanup
+
+    mirrorOf(cal, publicViewId) {
+        // renamedFrom names the previous EDITABLE id, so it must never be published.
+        const { renamedFrom, ...options } = cal.options || {};
+        return {
+            id: publicViewId,
+            title: cal.title ?? '',
+            events: cal.events ?? [],
+            options: { ...options, publicViewId },
+        };
+    },
+
+    /**
+     * Whether calendarId may write the view. A view created before bindings existed is
+     * claimed once, by the calendar its legacy mirror names in `id` -- the one place that
+     * still records who made it. Everything else is refused.
+     */
+    async owns(db, calendarId, publicViewId, cal = null) {
+        if (!/^[A-Za-z0-9_-]{1,100}$/.test(publicViewId)) return false;
+        const binding = db.ref(`${this.BINDINGS}/${publicViewId}`);
+        const bound = (await binding.once('value')).val();
+        if (bound === calendarId) return true;
+        if (bound) return this.followRename(db, bound, calendarId, publicViewId, cal);
+        const legacyOwner = (await db.ref(`/${READONLY_ROOT}/${publicViewId}/id`).once('value')).val();
+        if (legacyOwner !== calendarId) return false;
+        return this.claim(db, publicViewId, calendarId);
+    },
+
+    /**
+     * Renaming copies a calendar to a new id, options.publicViewId included, so the view
+     * has to follow the copy or its link and ICS feed freeze. The copy proves it came from
+     * the bound calendar by naming it in options.renamedFrom -- an id only someone with edit
+     * access to that calendar knows, now that views no longer publish it -- and the source
+     * must still point at this view.
+     */
+    async followRename(db, bound, calendarId, publicViewId, cal) {
+        if (!cal || !cal.options || cal.options.renamedFrom !== bound) return false;
+        const source = (await db.ref(`/${DEFAULT_ROOT}/${bound}/options/publicViewId`).once('value')).val();
+        if (source !== publicViewId) return false;
+        const r = await db.ref(`${this.BINDINGS}/${publicViewId}`)
+            .transaction(cur => cur === null ? null : cur === bound ? calendarId : undefined);
+        if (!r.committed) return false;
+        await db.ref().update({
+            [`${this.BY_CALENDAR}/${bound}/${publicViewId}`]: null,
+            [`${this.BY_CALENDAR}/${calendarId}/${publicViewId}`]: true,
+        });
+        return true;
+    },
+
+    /** Atomically bind a view id to a calendar; false if another calendar holds it. */
+    async claim(db, publicViewId, calendarId) {
+        const r = await db.ref(`${this.BINDINGS}/${publicViewId}`)
+            .transaction(cur => cur === null ? calendarId : undefined);
+        if (!r.committed && r.snapshot.val() !== calendarId) return false;
+        await db.ref(`${this.BY_CALENDAR}/${calendarId}/${publicViewId}`).set(true);
+        return true;
+    },
 };
 
 // ID Generation Service
@@ -564,15 +936,24 @@ const IDService = {
             .join('');
     },
 
+    // Lowercase only: views resolve case-insensitively through /slug_mappings, so mixed case
+    // added no real entropy and let a new id collide with an existing one differing in case.
+    // Ten characters (36^10) where five (effectively 36^5, ~6e7) was enumerable.
+    generatePublicViewId(length = 10) {
+        const alphabet = 'abcdefghijklmnopqrstuvwxyz0123456789';
+        const out = [];
+        while (out.length < length) {
+            for (const b of crypto.getRandomValues(new Uint8Array(length))) {
+                if (b < 252 && out.length < length) out.push(alphabet[b % 36]);  // no modulo bias
+            }
+        }
+        return out.join('');
+    },
+
     async generateUniquePublicId(attempts = 5) {
         for (let i = 0; i < attempts; i++) {
-            const publicViewId = this.generateNanoId(5);
-            try {
-                await CalendarService.getCalendarData(publicViewId, true);
-            } catch (error) {
-                if (error.code === 'not-found') return publicViewId;
-                throw error;
-            }
+            const publicViewId = this.generatePublicViewId();
+            if (await SlugService.isSlugAvailable(publicViewId)) return publicViewId;
         }
         throw new functions.https.HttpsError('internal', 'Failed to generate a unique public view ID');
     }
@@ -592,15 +973,26 @@ const IDService = {
 //
 // So the recovery data is produced here, by the Admin SDK, into /history -- a node the
 // security rules make unwritable by clients. No client, buggy or hostile, can prevent its
-// own destructive write from being recorded, and none can erase the record afterwards.
-// That is the property that makes data loss recoverable rather than merely unlikely.
+// own destructive write from being recorded, or write to /history directly.
 //
-// Only writes that could have LOST something are recorded (an event removed or changed,
-// a title cleared, the calendar deleted). Adds and notes edits are not: nothing was lost,
-// and recording them would bury the entries that matter.
+// What it does NOT guarantee: a hostile client can still push old entries out by making
+// many recordable writes, because retention is bounded. Destructive entries younger than
+// HISTORY_PROTECT_MS are kept up to HISTORY_HARD_CAP, which makes that a sustained effort
+// rather than a 20-write script; past that, the daily backup (docs/backups.md) is the floor.
+//
+// Every entry is a DELTA -- the events it removed, the before/after of the ones it changed,
+// the ones it added -- so the client can undo exactly that change without rolling the
+// whole calendar back over everything done since. Writes that lost something also carry
+// the full prior snapshot (`events`) for the operator's restore script. Additions carry no
+// snapshot: nothing was lost, and a full copy per add is what let a burst of adds evict
+// the snapshot that mattered.
 // ---------------------------------------------------------------------------------------
 const HISTORY_ROOT = "history";
-const HISTORY_KEEP = 20;   // per calendar; older entries are trimmed
+const HISTORY_KEEP = 20;                         // destructive entries always kept, per calendar
+const HISTORY_ADDED_KEEP = 20;                   // `added` entries kept, budgeted separately
+const HISTORY_PROTECT_MS = 24 * 60 * 60 * 1000;  // destructive entries this young survive trimming...
+const HISTORY_HARD_CAP = 100;                    // ...up to this many
+const HISTORY_COALESCE_MS = 60 * 1000;           // a drag is one gesture, not one entry per save
 
 const HistoryService = {
     eventsOf(cal) {
@@ -634,6 +1026,21 @@ const HistoryService = {
         });
     },
 
+    // The events this write removed, changed and added. Pure.
+    diff(before, after) {
+        const b = this.eventsOf(before), a = this.eventsOf(after);
+        const beforeByKey = new Map(b.map(e => [this.key(e), e]));
+        const afterByKey = new Map(a.map(e => [this.key(e), e]));
+        const removed = [], changed = [];
+        for (const e of b) {
+            const x = afterByKey.get(this.key(e));
+            if (!x) removed.push(e);
+            else if (!this.sameEvent(x, e)) changed.push({ from: e, to: x });
+        }
+        const added = a.filter(e => !beforeByKey.has(this.key(e)));
+        return { removed, changed, added };
+    },
+
     // What this write did, or null if it did nothing. Pure, so it is unit-testable
     // without a database.
     //
@@ -646,17 +1053,8 @@ const HistoryService = {
         const b = this.eventsOf(before);
         if (!after) return { kind: 'deleted', removed: b.length, changed: 0, added: 0 };
 
-        const beforeKeys = new Map(b.map(e => [this.key(e), e]));
-        const afterEvents = this.eventsOf(after);
-        const a = new Map(afterEvents.map(e => [this.key(e), e]));
-
-        let removed = 0, changed = 0;
-        for (const e of b) {
-            const x = a.get(this.key(e));
-            if (!x) removed++;
-            else if (!this.sameEvent(x, e)) changed++;
-        }
-        const added = afterEvents.filter(e => !beforeKeys.has(this.key(e))).length;
+        const d = this.diff(before, after);
+        const removed = d.removed.length, changed = d.changed.length, added = d.added.length;
 
         const titleLost = !!before.title && !after.title;
         if (!removed && !changed && !added && !titleLost) return null;
@@ -668,17 +1066,20 @@ const HistoryService = {
         return { kind, removed, changed, added };
     },
 
+    // Options minus the keys the app writes on its own. A visitor opening a legacy
+    // calendar makes the client mint options.publicViewId; that is housekeeping, not
+    // someone editing the calendar, and must not read as "Edited just now".
+    userOptions(cal) {
+        const o = (cal && cal.options) || {};
+        const { publicViewId, ...rest } = o;
+        return JSON.stringify(rest);
+    },
+
     /**
      * Stamp when the calendar last changed at all -- including pure additions.
      *
-     * Separate from the snapshot log below because the two answer different questions.
-     * /history exists to RESTORE, so it only records writes that lost something; recording
-     * every add would bloat it with full event arrays and bury the entries worth
-     * recovering. But "Edited N ago" is asking whether anything happened, and adding an
-     * event is plainly editing the calendar -- a user who adds two events and sees the
-     * label unchanged has been told something false.
-     *
      * One number per calendar, overwritten in place, so it costs nothing to keep current.
+     * The client watches it directly, so the "Edited N ago" label needs no /history read.
      */
     async stampLastEdit(db, calendarId, before, after) {
         if (!after) return null;                       // deletion: nothing left to stamp
@@ -686,58 +1087,208 @@ const HistoryService = {
         const changed = !before
             || b.length !== a.length
             || (before.title ?? '') !== (after.title ?? '')
-            || JSON.stringify(before.options ?? null) !== JSON.stringify(after.options ?? null)
+            || this.userOptions(before) !== this.userOptions(after)
             || a.some((e, i) => !this.sameEvent(e, b[i] ?? {}));
         if (!changed) return null;
         return db.ref(`/${HISTORY_ROOT}_meta/${calendarId}/lastEditedAt`).set(Date.now());
     },
 
-    async record(db, calendarId, before, after) {
+    /**
+     * A deleted calendar's history leaves /history with it, into an archive only the Admin
+     * SDK can read. Otherwise whoever next creates a calendar at the same slug would see the
+     * old owner's events in Recent changes, with Restore buttons. Kept, not dropped: "I
+     * deleted my calendar by mistake" is what the operator restore exists for.
+     *
+     * Done here, at deletion, and in ONE multi-path update. Archiving on re-creation instead
+     * lost to trigger ordering -- Firebase does not deliver triggers in order, so a delayed
+     * delete could push its full snapshot into the newcomer's history after the archive ran.
+     * Only entries up to the deletion move, so a newcomer's own entries are never swept up.
+     */
+    async archiveOnDelete(db, calendarId, before, at) {
+        const batch = `/${HISTORY_ROOT}_archive/${calendarId}/${at}`;
+        const removed = this.eventsOf(before);
+        await db.ref(`${batch}/${db.ref().push().key}`).set({
+            savedAt: at, kind: 'deleted', removed: removed.length, changed: 0, added: 0,
+            removedEvents: removed, changedEvents: [], addedEvents: [],
+            eventCount: removed.length, title: before.title ?? null, options: before.options ?? null,
+            events: removed,
+        });
+
+        // One entry at a time, chosen from the index: a single read of the whole log could
+        // hold a hundred calendar-sized snapshots in memory and fail, leaving the log where
+        // a newcomer at this slug would read it. Each move is one multi-path update, so an
+        // entry is always in exactly one place.
+        const index = await this.loadIndex(db, calendarId);
+        for (const row of index) {
+            if ((row.s ?? row.t) > at) continue;             // a newcomer's own entry
+            const entry = (await db.ref(`/${HISTORY_ROOT}/${calendarId}/${row.key}`).once('value')).val();
+            await db.ref().update({
+                [`${batch}/${row.key}`]: entry,
+                [`/${HISTORY_ROOT}/${calendarId}/${row.key}`]: null,
+                [`/${HISTORY_ROOT}_index/${calendarId}/${row.key}`]: null,
+            });
+        }
+        const meta = await db.ref(`/${HISTORY_ROOT}_meta/${calendarId}/lastEditedAt`).once('value');
+        if ((meta.val() || 0) <= at) await db.ref(`/${HISTORY_ROOT}_meta/${calendarId}`).remove();
+        return batch;
+    },
+
+    restorable(kind) { return kind !== 'added'; },
+
+    // `at` is when the write happened (the trigger's event time), not when this invocation
+    // runs: triggers arrive late and out of order, and ordering decisions must use the former.
+    async record(db, calendarId, before, after, at = Date.now()) {
+        if (!before) return null;                                   // brand-new calendar
+        if (!after) return this.archiveOnDelete(db, calendarId, before, at);
         const why = this.changeKind(before, after);
         if (!why) return null;
 
+        const d = this.diff(before, after);
         const ref = db.ref(`/${HISTORY_ROOT}/${calendarId}`);
-        // For an addition, name what arrived -- the snapshot in `events` is the state
-        // BEFORE, so it cannot answer "what was added" on its own.
-        const beforeKeys = new Set(this.eventsOf(before).map(e => this.key(e)));
-        const addedEvents = after
-            ? this.eventsOf(after).filter(e => !beforeKeys.has(this.key(e)))
-            : [];
+        const indexRef = db.ref(`/${HISTORY_ROOT}_index/${calendarId}`);
+        const index = await this.loadIndex(db, calendarId);
+        const now = at;
+        const changedKeys = d.changed.map(c => this.key(c.from)).sort().join(',');
 
-        const pushed = await ref.push({
-            savedAt: Date.now(),
+        // Which browser made this write (CalendarDataService stamps `_writer`). Only that
+        // browser's later saves may fold into its entry, and its Cmd+Z only undoes its own.
+        const writer = typeof after._writer === 'string' ? after._writer.slice(0, 64) : null;
+
+        // A drag or resize saves every 500ms, and each save is an edit of the same events.
+        // Fold it into the entry the gesture started: that entry's `from` is the state
+        // before the gesture, which is what undo should return to; only `to` moves on.
+        //
+        // Only a pure edit, by the same writer: folding a collaborator's move into my drag
+        // made "undo" revert their work, and folding a write that also ADDED rows (an
+        // occurrence edit adds an exception row) dropped those rows from history.
+        // The window runs from the gesture's START, so one entry cannot absorb edits forever.
+        // `to` is replaced in a transaction and only by a LATER write, so saves processed out
+        // of order cannot leave it at an intermediate position.
+        const newest = index.sort((x, y) => y.t - x.t)[0];
+        if (why.kind === 'edited' && !why.added && writer && newest && newest.k === 'edited'
+            && newest.w === writer && newest.ck === changedKeys
+            && now - (newest.s ?? newest.t) < HISTORY_COALESCE_MS) {
+            const folded = await this.fold(db, calendarId, newest, d, now);
+            if (folded !== undefined) return folded;
+            // The entry vanished under us (a concurrent save returned the gesture to its
+            // start and removed it): record this write on its own instead of losing it.
+        }
+
+        const entry = {
+            savedAt: now,
             kind: why.kind,
             removed: why.removed,
             changed: why.changed,
             added: why.added || 0,
-            addedEvents,
+            removedEvents: d.removed,
+            changedEvents: d.changed.map(c => ({ ...c, at: now })),
+            addedEvents: d.added,
             eventCount: this.eventsOf(before).length,
             title: before.title ?? null,
             options: before.options ?? null,
-            events: this.eventsOf(before),
-        });
+            writer,
+        };
+        // The full prior state, for the operator's restore -- only where the delta does not
+        // already hold it. A wipe's removedEvents IS the prior state, and an edit's `from`
+        // values are what restoring it needs, so storing `events` too made each entry two or
+        // three copies of the calendar; with up to HISTORY_HARD_CAP entries a day, that let
+        // one writer multiply a calendar's storage a few hundredfold.
+        if (why.kind === 'shrunk' || why.kind === 'title-cleared') entry.events = this.eventsOf(before);
 
-        // Trim to the newest HISTORY_KEEP. Push ids are time-ordered, so key order is
-        // savedAt order without needing an index.
-        //
-        // Ask only for the OLDEST few keys rather than the whole node. Reading every
-        // retained entry just to count them would pull ~14.5MB into the function on the
-        // largest real calendar, on every recorded write -- the payloads are full event
-        // arrays. limitToFirst caps that at the handful that might need deleting.
-        //
-        // Only the keys are used, so a concurrent trigger trimming at the same time is
-        // harmless: deletes are by explicit push key and idempotent, and the newest
-        // entries are never in this window. The window is wider than one write's growth,
-        // so any backlog drains over the next few writes rather than persisting.
-        const oldest = await ref.orderByKey().limitToFirst(HISTORY_KEEP * 2).once('value');
-        const keys = [];
-        oldest.forEach(c => { keys.push(c.key); });
-        if (keys.length > HISTORY_KEEP) {
-            const del = {};
-            for (const k of keys.slice(0, keys.length - HISTORY_KEEP)) del[k] = null;
-            await ref.update(del);
-        }
+        const pushed = await ref.push(entry);
+        const row = { k: why.kind, t: now, s: now, ck: changedKeys, ...(writer ? { w: writer } : {}) };
+        index.push({ key: pushed.key, ...row });
+        await indexRef.child(pushed.key).set(row);
+        await this.trim(db, calendarId, index, now);
         return pushed.key;
+    },
+
+    /**
+     * Fold one more save of a gesture into its entry. Returns the entry key, null when the
+     * gesture ended where it began (the entry is removed), or undefined when the entry no
+     * longer exists and the caller should record the write on its own.
+     */
+    async fold(db, calendarId, newest, d, now) {
+        const ref = db.ref(`/${HISTORY_ROOT}/${calendarId}/${newest.key}`);
+        const indexRef = db.ref(`/${HISTORY_ROOT}_index/${calendarId}/${newest.key}`);
+        const toByKey = new Map(d.changed.map(c => [this.key(c.to), c.to]));
+        // A transaction's first pass sees the local cache, which is empty here: return that
+        // null (not undefined, which aborts) so it re-runs on the server's value.
+        const r = await ref.child('changedEvents').transaction(cur => {
+            if (cur === null) return null;
+            if (!Array.isArray(cur)) return undefined;
+            return cur.map(c => {
+                const next = toByKey.get(this.key(c.from));
+                return next && (c.at ?? 0) <= now ? { ...c, to: next, at: now } : c;
+            });
+        });
+        const merged = r.snapshot.val();
+        if (!Array.isArray(merged) || !merged.length) {
+            // Gone. Drop the index row too, or a row with no kind would count as a
+            // destructive entry in toTrim forever.
+            await indexRef.remove();
+            return undefined;
+        }
+        // Back where the gesture started -- a drag returned to its origin, or an undo of
+        // this very edit. A row reading "1 event edited" whose undo does nothing is noise.
+        if (merged.every(c => this.sameEvent(c.from, c.to))) {
+            await Promise.all([ref.remove(), indexRef.remove()]);
+            return null;
+        }
+        // Only touch an index row that still exists: update() on a removed one would
+        // recreate it without a kind.
+        await indexRef.transaction(cur => cur === null ? null : { ...cur, t: Math.max(cur.t || 0, now) });
+        return newest.key;
+    },
+
+    /**
+     * The index is a few bytes per entry, so trimming never downloads the snapshots it is
+     * deciding about. Entries written before the index existed are folded in once, on the
+     * first write that finds the index missing.
+     */
+    async loadIndex(db, calendarId) {
+        const indexRef = db.ref(`/${HISTORY_ROOT}_index/${calendarId}`);
+        const snap = await indexRef.once('value');
+        const out = [];
+        snap.forEach(c => { out.push({ key: c.key, ...c.val() }); });
+        if (out.length) return out;
+
+        const legacy = await db.ref(`/${HISTORY_ROOT}/${calendarId}`).once('value');
+        if (!legacy.exists()) return out;
+        const fill = {};
+        legacy.forEach(c => {
+            const v = c.val() || {};
+            const row = { k: v.kind || 'edited', t: v.savedAt || 0, ck: '' };
+            fill[c.key] = row;
+            out.push({ key: c.key, ...row });
+        });
+        await indexRef.update(fill);
+        return out;
+    },
+
+    // Which entries to delete. Pure.
+    //   - `added` entries: the newest HISTORY_ADDED_KEEP. They never cost a destructive slot.
+    //   - destructive entries: the newest HISTORY_KEEP, plus any younger than
+    //     HISTORY_PROTECT_MS, up to HISTORY_HARD_CAP in all.
+    toTrim(index, now) {
+        const newestFirst = [...index].filter(e => e.k).sort((x, y) => y.t - x.t);
+        const adds = newestFirst.filter(e => !this.restorable(e.k));
+        const destructive = newestFirst.filter(e => this.restorable(e.k));
+        const drop = adds.slice(HISTORY_ADDED_KEEP);
+        destructive.forEach((e, i) => {
+            const keep = i < HISTORY_KEEP || (i < HISTORY_HARD_CAP && now - e.t < HISTORY_PROTECT_MS);
+            if (!keep) drop.push(e);
+        });
+        return drop.map(e => e.key);
+    },
+
+    async trim(db, calendarId, index, now) {
+        const drop = this.toTrim(index, now);
+        if (!drop.length) return;
+        const del = {}, delIndex = {};
+        for (const k of drop) { del[k] = null; delIndex[k] = null; }
+        await db.ref(`/${HISTORY_ROOT}/${calendarId}`).update(del);
+        await db.ref(`/${HISTORY_ROOT}_index/${calendarId}`).update(delIndex);
     },
 };
 
@@ -766,30 +1317,31 @@ exports.generateICSV2 = onRequest({ cors: true }, async (req, res) => {
         // full feed every few minutes (the previous bandwidth spike investigation showed this
         // route had no caching at all).
         const etag = '"' + crypto.createHash('sha1').update(JSON.stringify(calendarData?.events ?? null)).digest('hex') + '"';
-        const userAgent = req.headers['user-agent'] || 'unknown';
+        // The raw user-agent and IP are only ever passed to recordIcsStat, which hashes
+        // them into a device bucket. Neither is stored or logged: a full UA carries OS
+        // build numbers, which together with a calendar id is close to identifying.
+        const userAgent = req.headers['user-agent'] || '';
+        const clientIp = clientIpOf(req);
+        const family = clientFamily(userAgent);
 
-        // Only ever passed to deviceBucket(), which salts and hashes it. Never stored,
-        // never logged -- see the comment on DEVICE_SALT.
-        const clientIp = (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip || '';
-
+        // Stats are recorded after responding; see the comment on recordIcsStat.
         if (req.headers['if-none-match'] === etag) {
-            console.log(`ICS 304: id=${cleanId} readonly=${isReadOnly} ua="${userAgent}"`);
-            await recordIcsStat(cleanId, { wasNotModified: true, userAgent, ip: clientIp });
+            console.log(`ICS 304: id=${cleanId} readonly=${isReadOnly} client=${family}`);
             res.set('ETag', etag).set('Cache-Control', 'public, max-age=300').status(304).end();
+            await recordIcsStat(cleanId, { wasNotModified: true, userAgent, ip: clientIp });
             return;
         }
 
         const icsData = ICSService.generateICS(calendarData, cleanId);
 
-        console.log(`ICS served: id=${cleanId} readonly=${isReadOnly} bytes=${icsData.length} ua="${userAgent}"`);
-        await recordIcsStat(cleanId, {
-            bytes: icsData.length, wasNotModified: false, userAgent, ip: clientIp,
-        });
-
+        console.log(`ICS served: id=${cleanId} readonly=${isReadOnly} bytes=${icsData.length} client=${family}`);
         res.set('Content-Type', 'text/calendar')
             .set('ETag', etag)
             .set('Cache-Control', 'public, max-age=300')
             .send(icsData);
+        await recordIcsStat(cleanId, {
+            bytes: icsData.length, wasNotModified: false, userAgent, ip: clientIp,
+        });
     } catch (err) {
         // A missing calendar is a client error, not a server fault. Returning 500 here made
         // subscribed calendar apps retry a deleted feed forever; 404 tells them to stop.
@@ -819,7 +1371,13 @@ exports.generateICSV2 = onRequest({ cors: true }, async (req, res) => {
 });
 
 exports.createPublicLink = onCall(async (request) => {
-    const { sourceCalendarId, customSlug } = request.data;
+    const { sourceCalendarId, customSlug } = request.data || {};
+    // A calendar id, never a path. "atk/<view id>" used to plant a binding under
+    // public_views_by_calendar/atk/<view id>, which removePublicView then read as one of
+    // atk's views -- deleting someone else's view so its URL and feed could be re-claimed.
+    if (typeof sourceCalendarId !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(sourceCalendarId)) {
+        throw new functions.https.HttpsError('invalid-argument', 'Invalid calendar id.');
+    }
 
     try {
         const { data: calendarData, ref: sourceCalRef } = await CalendarService.getCalendarData(sourceCalendarId);
@@ -841,16 +1399,17 @@ exports.createPublicLink = onCall(async (request) => {
             publicViewId = await IDService.generateUniquePublicId();
         }
 
-        const publicCalData = JSON.parse(JSON.stringify(calendarData));
-        // Embed publicViewId in the mirror at creation so a viewer who arrives before
-        // the next syncPublicView fires can still resolve the read-only path. Without
-        // this, the client's getViewerBasePath would fall through to /${calendar.id}.
-        publicCalData.options = publicCalData.options || {};
-        publicCalData.options.publicViewId = publicViewId;
+        // Claimed atomically: the availability check above and this write used to be
+        // separate, so two concurrent claims of one custom slug both passed and the second
+        // overwrote the first's view.
+        if (!await PublicViewService.claim(admin.database(), publicViewId, sourceCalendarId)) {
+            throw new functions.https.HttpsError('already-exists', 'Slug is already taken. Please choose a different one.');
+        }
 
         await Promise.all([
             sourceCalRef.child('options/publicViewId').set(publicViewId),
-            admin.database().ref(`${READONLY_ROOT}/${publicViewId}`).set(publicCalData)
+            admin.database().ref(`${READONLY_ROOT}/${publicViewId}`)
+                .set(PublicViewService.mirrorOf(calendarData, publicViewId)),
         ]);
 
         return { publicViewId };
@@ -904,18 +1463,18 @@ exports.indexSlug = onValueWritten(`/${DEFAULT_ROOT}/{calendarId}/id`, async (ev
     // a user with a full calendar ended up looking at a blank one -- somebody opened the
     // other casing, an empty calendar was created there, and the mapping followed it.
     //
-    // Ownership belongs to whoever has the events, not whoever wrote last. An empty
-    // incumbent is still replaced, so a genuinely abandoned placeholder does not hold a
+    // Ownership belongs to whoever has the data -- events, a title, or notes -- not whoever
+    // wrote last. An empty incumbent is still replaced, so a genuinely abandoned placeholder does not hold a
     // slug hostage. The delete branch above already reasons this way; this is the same
     // rule applied to creation.
-    if (current && current.actualSlug && current.actualSlug !== calendarId) {
-        const incumbent = await admin.database()
-            .ref(`/${DEFAULT_ROOT}/${current.actualSlug}/events`).once('value');
-        if (incumbent.exists() && incumbent.numChildren() > 0) {
-            console.log(`indexSlug: ${calendarId} not taking /${normalized} from ` +
-                `${current.actualSlug}, which has ${incumbent.numChildren()} event(s)`);
-            return null;
-        }
+    // A read-only view holds its slug too: without this, writing /calendars/<view id>/id
+    // was enough to take a shared view's URL and its ICS feed.
+    if (current && current.actualSlug && current.actualSlug !== calendarId
+        && (current.isReadOnly
+            ? (await admin.database().ref(`/${READONLY_ROOT}/${current.actualSlug}/id`).once('value')).exists()
+            : await SlugService.holdsData(admin.database(), current.actualSlug))) {
+        console.log(`indexSlug: ${calendarId} not taking /${normalized} from ${current.actualSlug}, which holds data`);
+        return null;
     }
 
     // Overwrites any negative-cache entry, so a slug that was looked up before it existed
@@ -949,14 +1508,46 @@ exports.indexReadOnlySlug = onValueWritten(`/${READONLY_ROOT}/{calendarId}/id`, 
     return mappingRef.set({ actualSlug: calendarId, isReadOnly: true });
 });
 
-exports.syncPublicView = onValueUpdated(`/${DEFAULT_ROOT}/{calendarId}`, (event) => {
+// onValueWritten, not onValueUpdated: a rename creates the copy as a NEW node, and the view
+// has to move to it at once -- otherwise it stays bound to the old id until the copy's first
+// edit, and deleting the old calendar in that window deletes the view.
+exports.syncPublicView = onValueWritten(`/${DEFAULT_ROOT}/{calendarId}`, async (event) => {
     const afterData = event.data.after.val();
-    const publicViewId = afterData.options?.publicViewId;
-
+    const publicViewId = afterData && afterData.options?.publicViewId;
     if (!publicViewId) return null;
 
-    const updatedData = JSON.parse(JSON.stringify(afterData));
-    return admin.database().ref(`/${READONLY_ROOT}/${publicViewId}`).update(updatedData);
+    const db = admin.database();
+    if (!await PublicViewService.owns(db, event.params.calendarId, publicViewId, afterData)) {
+        console.warn(`syncPublicView: ${event.params.calendarId} does not own view ${publicViewId}; not syncing`);
+        return null;
+    }
+    // set(), not update(): update() only replaces keys present in the payload, and RTDB
+    // drops empty arrays, so deleting every event left them all live on the view and its
+    // ICS feed indefinitely.
+    return db.ref(`/${READONLY_ROOT}/${publicViewId}`).set(PublicViewService.mirrorOf(afterData, publicViewId));
+});
+
+// A deleted calendar's view would otherwise keep serving its last state forever. Scoped to
+// /id for the same payload reason as indexSlug; the binding names the view to remove.
+exports.removePublicView = onValueDeleted(`/${DEFAULT_ROOT}/{calendarId}/id`, async (event) => {
+    const db = admin.database();
+    const calendarId = event.params.calendarId;
+    const byCalendar = db.ref(`${PublicViewService.BY_CALENDAR}/${calendarId}`);
+    const views = (await byCalendar.once('value')).val() || {};
+    // The reverse map is a hint, not the authority: remove only views whose binding still
+    // names this calendar (a renamed copy may have taken one over).
+    const owned = [];
+    for (const pvid of Object.keys(views)) {
+        const bound = (await db.ref(`${PublicViewService.BINDINGS}/${pvid}`).once('value')).val();
+        if (bound === calendarId) owned.push(pvid);
+    }
+    return Promise.all([
+        ...owned.flatMap(pvid => [
+            db.ref(`/${READONLY_ROOT}/${pvid}`).remove(),
+            db.ref(`${PublicViewService.BINDINGS}/${pvid}`).remove(),
+        ]),
+        byCalendar.remove(),
+    ]);
 });
 
 // Record the prior state of any calendar write that removed or changed events. Fires on
@@ -969,85 +1560,33 @@ exports.recordHistory = onValueWritten(`/${DEFAULT_ROOT}/{calendarId}`, async (e
     const after = event.data.after.val();
     // Stamped for every change, snapshotted only for the destructive ones.
     await HistoryService.stampLastEdit(db, id, before, after);
-    return HistoryService.record(db, id, before, after);
+    const at = Date.parse(event.time);
+    return HistoryService.record(db, id, before, after, Number.isFinite(at) ? at : Date.now());
 });
-
-// Keep the Cloudflare copy (Worker `pastecal-sync`, docs/cloudflare-migration.md) current.
-// Firebase is still the source of truth; the Worker merges each write onto its own state and
-// ignores a write that changes nothing, so a retry or a replay is harmless. Reads only the
-// after-value (same payload recordHistory already receives); small instance, capped
-// concurrency, so a burst of writes cannot turn into a burst of cost. Secret:
-//   firebase functions:secrets:set CLOUDFLARE_IMPORT_SECRET   (same value as the Worker's IMPORT_SECRET)
-const CLOUDFLARE_SYNC_URL = 'https://pastecal-sync.instacalc.workers.dev';
-exports.shadowToCloudflare = onValueWritten(
-    { ref: `/${DEFAULT_ROOT}/{calendarId}`, secrets: ['CLOUDFLARE_IMPORT_SECRET'], memory: '256MiB', timeoutSeconds: 60, maxInstances: 10 },
-    async (event) => {
-        const id = event.params.calendarId;
-        if (!event.data.after.exists()) { console.log(`shadowToCloudflare: ${id} deleted; Cloudflare copy left as is`); return null; }
-        if (isLocal) return null;
-        const body = JSON.stringify({ ...event.data.after.val(), id });
-        let lastError;
-        for (let attempt = 1; attempt <= 3; attempt++) {
-            try {
-                const res = await fetch(`${CLOUDFLARE_SYNC_URL}/cal/${encodeURIComponent(id)}/from-firebase`, {
-                    method: 'PUT', body, headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_IMPORT_SECRET}` },
-                    signal: AbortSignal.timeout(15000),
-                });
-                const out = await res.json().catch(() => ({}));
-                if (res.ok && out.ok) return null;
-                lastError = `HTTP ${res.status} ${out.error || ''}`;
-                if (res.status === 403 || out.error) break;      // retrying will not help (bad secret, refused by a limit)
-            } catch (e) { lastError = e.message; }
-            if (attempt < 3) await new Promise((r) => setTimeout(r, 500 * 4 ** (attempt - 1)));
-        }
-        console.error(`shadowToCloudflare FAILED for calendar ${id}: ${lastError}`);
-        return null;
-    });
 
 // Case-insensitive calendar lookup function
 exports.lookupCalendar = onCall(async (request) => {
+    const requestedSlug = request.data?.slug;
+    if (!requestedSlug) {
+        throw new functions.https.HttpsError('invalid-argument', 'Slug is required.');
+    }
     try {
-        console.log('lookupCalendar called with request.data:', request.data);
-        console.log('Request context auth:', request.auth ? 'authenticated' : 'unauthenticated');
-        
-        const requestedSlug = request.data?.slug;
-        
-        if (!requestedSlug) {
-            const errorMsg = `Slug is required. Received slug: ${request.data?.slug}`;
-            console.error(errorMsg);
-            throw new functions.https.HttpsError('invalid-argument', errorMsg);
-        }
-        
-        console.log('Looking up calendar for slug:', requestedSlug);
-        const result = await SlugService.lookupCalendar(requestedSlug);
-        console.log('Lookup result:', JSON.stringify(result));
-        
-        return result;
+        return await SlugService.lookupCalendar(requestedSlug);
     } catch (error) {
-        console.error('Calendar lookup error:', error);
-        
-        // If it's already an HttpsError, re-throw it
-        if (error instanceof functions.https.HttpsError) {
-            throw error;
-        }
-        
-        // Otherwise, wrap it in an HttpsError with details
-        throw new functions.https.HttpsError('internal', 
-            `Failed to lookup calendar: ${error.message}`, 
-            { 
-                originalError: error.message || error.toString(), 
-                slug: request.data?.slug,
-                errorName: error.name
-            }
-        );
+        // Logged here, not returned: the message names database paths, and the caller is
+        // anyone on the internet.
+        console.error('lookupCalendar failed for', JSON.stringify(String(requestedSlug).slice(0, 100)), error);
+        throw new functions.https.HttpsError('internal', 'Failed to look up calendar.');
     }
 });
 
 // Exported for unit tests (test/unit/ics.test.js). Not used by deployed functions.
 exports._internal = {
-    ICSService, CalendarService, SlugService, HistoryService,
-    recordIcsStat, deviceBucket, clientFamily, sweepOldDeviceBuckets,
-    DEVICE_BUCKET_TTL_DAYS, HISTORY_ROOT, HISTORY_KEEP,
+    ICSService, CalendarService, SlugService, HistoryService, PublicViewService, IDService,
+    recordIcsStat, deviceBucket, clientFamily, clientIpOf, sweepOldDeviceBuckets,
+    deviceSaltSecret, sweepAllDeviceBuckets, DEVICE_SALT_PATH, SWEEP_CURSOR_PATH,
+    _resetDeviceSaltCache: () => { deviceSaltSecretPromise = null; },
+    DEVICE_BUCKET_TTL_DAYS, HISTORY_ROOT, HISTORY_KEEP, HISTORY_ADDED_KEEP, HISTORY_HARD_CAP, HISTORY_PROTECT_MS,
 };
 
 /*
@@ -1263,3 +1802,35 @@ if (process.env.PRO_BILLING === 'on') {
     exports.getProStatus = getProStatus;
     exports.stripeWebhook = stripeWebhook;
 }
+
+// Keep the Cloudflare copy (Worker `pastecal-sync`, docs/cloudflare-migration.md) current.
+// Firebase is still the source of truth; the Worker merges each write onto its own state and
+// ignores a write that changes nothing, so a retry or a replay is harmless. Reads only the
+// after-value (same payload recordHistory already receives); small instance, capped
+// concurrency, so a burst of writes cannot turn into a burst of cost. Secret:
+//   firebase functions:secrets:set CLOUDFLARE_IMPORT_SECRET   (same value as the Worker's IMPORT_SECRET)
+const CLOUDFLARE_SYNC_URL = 'https://pastecal-sync.instacalc.workers.dev';
+exports.shadowToCloudflare = onValueWritten(
+    { ref: `/${DEFAULT_ROOT}/{calendarId}`, secrets: ['CLOUDFLARE_IMPORT_SECRET'], memory: '256MiB', timeoutSeconds: 60, maxInstances: 10 },
+    async (event) => {
+        const id = event.params.calendarId;
+        if (!event.data.after.exists()) { console.log(`shadowToCloudflare: ${id} deleted; Cloudflare copy left as is`); return null; }
+        if (isLocal) return null;
+        const body = JSON.stringify({ ...event.data.after.val(), id });
+        let lastError;
+        for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+                const res = await fetch(`${CLOUDFLARE_SYNC_URL}/cal/${encodeURIComponent(id)}/from-firebase`, {
+                    method: 'PUT', body, headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_IMPORT_SECRET}` },
+                    signal: AbortSignal.timeout(15000),
+                });
+                const out = await res.json().catch(() => ({}));
+                if (res.ok && out.ok) return null;
+                lastError = `HTTP ${res.status} ${out.error || ''}`;
+                if (res.status === 403 || out.error) break;      // retrying will not help (bad secret, refused by a limit)
+            } catch (e) { lastError = e.message; }
+            if (attempt < 3) await new Promise((r) => setTimeout(r, 500 * 4 ** (attempt - 1)));
+        }
+        console.error(`shadowToCloudflare FAILED for calendar ${id}: ${lastError}`);
+        return null;
+    });
