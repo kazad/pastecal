@@ -33,8 +33,27 @@ function getDirectory(env) {
     return env.DIRECTORY ? env.DIRECTORY.get(env.DIRECTORY.idFromName('global')) : null;
 }
 
+function withCors(response) {
+    if (!response || response.status === 101) return response;
+    const res = new Response(response.body, response);
+    res.headers.set('Access-Control-Allow-Origin', '*');
+    return res;
+}
+
 export default {
     async fetch(request, env) {
+        if (request.method === 'OPTIONS') {
+            return new Response(null, {
+                status: 204,
+                headers: {
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-View-Id, If-None-Match',
+                    'Access-Control-Expose-Headers': 'ETag',
+                    'Access-Control-Max-Age': '86400',
+                }
+            });
+        }
         const url = new URL(request.url);
         const path = url.pathname;
 
@@ -91,18 +110,18 @@ export default {
         // 2. Directory lookup API: /api/lookup and callable /lookupCalendar
         if ((request.method === 'GET' || request.method === 'POST') && path === '/api/lookup') {
             const dir = getDirectory(env);
-            if (!dir) return Response.json({ found: false });
-            return dir.fetch(request);
+            if (!dir) return withCors(Response.json({ found: false }));
+            return withCors(await dir.fetch(request));
         }
 
         if (request.method === 'POST' && path === '/lookupCalendar') {
             const body = await request.json().catch(() => ({}));
             const slug = body?.data?.slug || body?.slug;
             const dir = getDirectory(env);
-            if (!dir || !slug) return Response.json({ data: { found: false }, result: { found: false } });
+            if (!dir || !slug) return withCors(Response.json({ data: { found: false }, result: { found: false } }));
             const res = await dir.fetch(`http://internal/lookup?slug=${encodeURIComponent(slug)}`);
             const out = await res.json();
-            return Response.json({ data: out, result: out });
+            return withCors(Response.json({ data: out, result: out }));
         }
 
         // 3. View creation API: /api/create-view and callable /createPublicLink
@@ -147,9 +166,9 @@ export default {
             }
 
             if (path === '/createPublicLink') {
-                return Response.json({ data: { publicViewId: out.publicViewId }, result: { publicViewId: out.publicViewId } });
+                return withCors(Response.json({ data: { publicViewId: out.publicViewId }, result: { publicViewId: out.publicViewId } }));
             }
-            return Response.json(out);
+            return withCors(Response.json(out));
         }
 
         // 4. Directory maintenance: /api/directory/*
@@ -164,8 +183,8 @@ export default {
 
         if (path === '/api/directory/stats') {
             const dir = getDirectory(env);
-            if (!dir) return Response.json({ total: 0 });
-            return dir.fetch('http://internal/stats');
+            if (!dir) return withCors(Response.json({ total: 0 }));
+            return withCors(await dir.fetch('http://internal/stats'));
         }
 
         // 5. Read-only views routing: /cal/view/:viewId/ws and /cal/view/:viewId
@@ -188,7 +207,7 @@ export default {
             const subPath = viewMatch[2] === '/ws' ? '/ws' : '';
             const roomUrl = new URL(`http://internal/cal/${encodeURIComponent(targetId)}${subPath}`);
             roomUrl.searchParams.set('view', viewId);
-            return room.fetch(new Request(roomUrl, request));
+            return withCors(await room.fetch(new Request(roomUrl, request)));
         }
 
         // 6. Regular /cal/<id> endpoints
@@ -209,11 +228,11 @@ export default {
             }
             if (request.method === 'POST' && !m[2] && env.CREATE_LIMITER) {
                 const { success } = await env.CREATE_LIMITER.limit({ key: request.headers.get('CF-Connecting-IP') || 'unknown' });
-                if (!success) return Response.json({ ok: false, error: 'too many new calendars from here; try again in a minute' }, { status: 429 });
+                if (!success) return withCors(Response.json({ ok: false, error: 'too many new calendars from here; try again in a minute' }, { status: 429 }));
             }
 
             const room = env.CALENDARS.get(env.CALENDARS.idFromName(id));
-            return room.fetch(request);
+            return withCors(await room.fetch(request));
         }
 
         // 7. Static assets & Single Page App rewrites
