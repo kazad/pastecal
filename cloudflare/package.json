@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "check": "wrangler deploy --dry-run --outdir .dry-run",
-    "test": "node test/sync.test.mjs && node test/cloud-service.test.mjs"
+    "test": "node test/sync.test.mjs && node test/cloud-service.test.mjs && node test/phase3.test.mjs"
   },
   "devDependencies": {
     "wrangler": "4.142.0"

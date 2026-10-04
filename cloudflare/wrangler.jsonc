@@ -14,14 +14,30 @@
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",   // same as Firebase's "**" -> /index.html
     // Only these reach the Worker; everything else is served straight from the assets.
-    "run_worker_first": ["/cal/*", "/beta", "/beta/*", "/nativecal/*"]
+    "run_worker_first": [
+      "/cal/*",
+      "/api/*",
+      "/lookupCalendar",
+      "/createPublicLink",
+      "/*.ics",
+      "/view/*.ics",
+      "/beta",
+      "/beta/*",
+      "/nativecal/*"
+    ]
   },
   "durable_objects": {
-    "bindings": [{ "name": "CALENDARS", "class_name": "CalendarRoom" }]
+    "bindings": [
+      { "name": "CALENDARS", "class_name": "CalendarRoom" },
+      { "name": "DIRECTORY", "class_name": "CalendarDirectory" }
+    ]
   },
   // New calendars from browsers (POST /cal/<id>): 10 a minute per IP.
   "ratelimits": [{ "name": "CREATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }],
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["CalendarRoom"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["CalendarRoom"] },
+    { "tag": "v2", "new_sqlite_classes": ["CalendarDirectory"] }
+  ],
   // Copy-back to Firebase (see CalendarRoom). Inert until the FIREBASE_SA secret exists.
   // COPY_BACK is the allowlist of calendars whose saves are written back: names, or "prefix-*".
   "vars": {

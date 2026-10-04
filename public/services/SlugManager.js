@@ -21,15 +21,13 @@ class SlugManager {
     // Core method - handles all read-only link creation scenarios
     static async createReadOnlyLink(calendar, options = {}) {
         const { customSlug = null, autoCreate = false } = options;
-        const createPublicLink = firebase.functions().httpsCallable('createPublicLink');
-
         try {
             const params = { sourceCalendarId: calendar.id };
             if (customSlug) {
                 params.customSlug = customSlug.trim();
             }
 
-            const result = await createPublicLink(params);
+            const result = await CalendarDataService.createPublicLink(params);
             const { publicViewId } = result.data;
 
             // Update calendar options

@@ -55,7 +55,9 @@ export class CalendarRoom extends DurableObject {
         ctx.blockConcurrencyWhile(async () => {
             this.sql.exec(`CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT)`);
             this.sql.exec(`CREATE TABLE IF NOT EXISTS events (k TEXT PRIMARY KEY, pos INTEGER, data TEXT)`);
-            this.sql.exec(`CREATE TABLE IF NOT EXISTS history (v INTEGER PRIMARY KEY, at INTEGER, source TEXT, commands TEXT)`);
+            this.sql.exec(`CREATE TABLE IF NOT EXISTS history (v INTEGER PRIMARY KEY, at INTEGER, source TEXT, commands TEXT, entry TEXT)`);
+            try { this.sql.exec(`ALTER TABLE history ADD COLUMN entry TEXT`); } catch (_) {}
+            this.sql.exec(`CREATE TABLE IF NOT EXISTS authors (uid TEXT PRIMARY KEY, first_seen INTEGER, last_seen INTEGER, edit_count INTEGER, created_here INTEGER, days TEXT)`);
             this.load();
         });
     }
@@ -78,6 +80,62 @@ export class CalendarRoom extends DurableObject {
         const s = this.state;
         return { id: s.id, title: s.title, options: s.options, lastEditedAt: s.lastEditedAt, events: s.events };
     }
+    viewCalendar(viewId) {
+        const s = this.state;
+        const options = { ...s.options };
+        delete options.publicViewId;
+        return { id: viewId, title: s.title, options, lastEditedAt: s.lastEditedAt, events: s.events };
+    }
+
+    async registerInDirectory(actualSlug, isReadOnly = false, targetId = null) {
+        if (!this.env.DIRECTORY || !actualSlug) return;
+        try {
+            const dir = this.env.DIRECTORY.get(this.env.DIRECTORY.idFromName('global'));
+            await dir.fetch('http://internal/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: json({
+                    actualSlug,
+                    isReadOnly: !!isReadOnly,
+                    targetId: targetId || actualSlug
+                })
+            });
+        } catch (e) {
+            console.error(`[CalendarRoom] registerInDirectory failed for ${actualSlug}:`, e.message);
+        }
+    }
+
+    recordAuthor(uid, isCreation = false) {
+        if (!uid || typeof uid !== 'string') return;
+        const cleanUid = uid.slice(0, 128);
+        const now = Date.now();
+        const today = new Date(now).toISOString().slice(0, 10);
+        const rows = this.sql.exec(`SELECT first_seen, last_seen, edit_count, created_here, days FROM authors WHERE uid = ?`, cleanUid).toArray();
+        if (!rows.length) {
+            this.sql.exec(`INSERT INTO authors (uid, first_seen, last_seen, edit_count, created_here, days) VALUES (?, ?, ?, 1, ?, ?)`,
+                cleanUid, now, now, isCreation ? 1 : 0, json([today]));
+        } else {
+            const r = rows[0];
+            let days = [];
+            try { days = JSON.parse(r.days); } catch {}
+            if (!days.includes(today)) days.push(today);
+            this.sql.exec(`UPDATE authors SET last_seen = ?, edit_count = edit_count + 1, days = ? WHERE uid = ?`,
+                now, json(days), cleanUid);
+        }
+    }
+
+    static sameEvent(a, b) {
+        if (!a || !b) return false;
+        const norm = (v) => (v === undefined || v === null || v === '') ? null : v;
+        const FIELDS = ['title', 'description', 'start', 'end', 'type', 'isAllDay',
+            'repeat', 'recurrencerule', 'recurrenceID', 'recurrenceException'];
+        return FIELDS.every((f) => {
+            const x = norm(a[f]), y = norm(b[f]);
+            if (f === 'type') return String(x === null ? 1 : x) === String(y === null ? 1 : y);
+            if (f === 'isAllDay') return !!x === !!y;
+            return x === y;
+        });
+    }
 
     // Store a new event list: only the rows that changed are written.
     storeEvents(events, touched) {
@@ -95,13 +153,53 @@ export class CalendarRoom extends DurableObject {
         this.state.events = events;
     }
 
-    bump(source, commands) {
+    bump(source, commands, { beforeEvents, beforeTitle, beforeOptions, writer } = {}) {
         const s = this.state;
         s.v += 1;
         s.lastEditedAt = Date.now();
         this.setMeta('v', s.v);
         this.setMeta('lastEditedAt', s.lastEditedAt);
-        this.sql.exec(`INSERT INTO history (v, at, source, commands) VALUES (?, ?, ?, ?)`, s.v, s.lastEditedAt, source, json(commands));
+
+        const before = beforeEvents || [];
+        const after = s.events;
+        const keyOf = EventStore.keyOf;
+        const beforeByKey = new Map(before.map((e) => [keyOf(e), e]));
+        const afterByKey = new Map(after.map((e) => [keyOf(e), e]));
+        const removedEvents = [], changedEvents = [];
+        for (const e of before) {
+            const x = afterByKey.get(keyOf(e));
+            if (!x) removedEvents.push(e);
+            else if (!CalendarRoom.sameEvent(x, e)) changedEvents.push({ from: e, to: x, at: s.lastEditedAt });
+        }
+        const addedEvents = after.filter((e) => !beforeByKey.has(keyOf(e)));
+
+        const kind = (source === 'create' || !before.length) ? 'created'
+            : (before.length > 0 && removedEvents.length === before.length) ? 'wiped'
+            : removedEvents.length ? 'shrunk'
+            : changedEvents.length ? 'edited'
+            : addedEvents.length ? 'added'
+            : (beforeTitle && !s.title) ? 'title-cleared'
+            : 'edited';
+
+        const entry = {
+            savedAt: s.lastEditedAt,
+            kind,
+            removed: removedEvents.length,
+            changed: changedEvents.length,
+            added: addedEvents.length,
+            removedEvents,
+            changedEvents,
+            addedEvents,
+            eventCount: before.length,
+            title: beforeTitle ?? s.title ?? null,
+            options: beforeOptions ?? s.options ?? null,
+            writer: writer || null,
+        };
+        if (kind === 'shrunk' || kind === 'title-cleared') entry.events = before;
+
+        this.sql.exec(`INSERT INTO history (v, at, source, commands, entry) VALUES (?, ?, ?, ?, ?)`,
+            s.v, s.lastEditedAt, source, json(commands), json(entry));
+        this.sql.exec(`DELETE FROM history WHERE v NOT IN (SELECT v FROM history ORDER BY v DESC LIMIT 50)`);
     }
 
     // ---- limits ---------------------------------------------------------------------------
@@ -130,17 +228,59 @@ export class CalendarRoom extends DurableObject {
     // ---- HTTP: WebSocket upgrade, snapshot, import -----------------------------------------
     async fetch(request) {
         const url = new URL(request.url);
+        const viewId = url.searchParams.get('view') || request.headers.get('X-View-Id');
+        const isViewOnly = !!viewId;
         if (request.headers.get('Upgrade') === 'websocket') {
             const [client, server] = Object.values(new WebSocketPair());
             this.ctx.acceptWebSocket(server);
-            server.serializeAttachment({ saves: [] });
-            server.send(json({ t: 'snapshot', v: this.state.v, calendar: this.calendar() }));
+            const author = url.searchParams.get('author');
+            server.serializeAttachment({ saves: [], isViewOnly, viewId, author });
+            if (author && !isViewOnly) this.recordAuthor(author, false);
+            const cal = isViewOnly ? this.viewCalendar(viewId) : this.calendar();
+            server.send(json({ t: 'snapshot', v: this.state.v, calendar: cal }));
             return new Response(null, { status: 101, webSocket: client });
         }
         if (request.method === 'HEAD') return new Response(null, { status: this.state.id ? 200 : 404 });
         if (request.method === 'GET') {
+            if (url.pathname.endsWith('/history')) {
+                const rows = this.sql.exec(`SELECT v, at, source, commands, entry FROM history ORDER BY v DESC LIMIT 20`).toArray();
+                const entries = rows.map((r) => {
+                    if (r.entry) {
+                        try {
+                            const parsed = JSON.parse(r.entry);
+                            return { key: String(r.v), ...parsed };
+                        } catch {}
+                    }
+                    return {
+                        key: String(r.v),
+                        savedAt: r.at,
+                        kind: r.source || 'edited',
+                        commands: r.commands ? JSON.parse(r.commands) : [],
+                    };
+                });
+                return Response.json(entries);
+            }
+            if (url.pathname.endsWith('/authors')) {
+                const rows = this.sql.exec(`SELECT uid, first_seen, last_seen, edit_count, created_here, days FROM authors`).toArray();
+                const authors = rows.map((r) => ({
+                    uid: r.uid,
+                    firstSeen: r.first_seen,
+                    lastSeen: r.last_seen,
+                    editCount: r.edit_count,
+                    createdHere: !!r.created_here,
+                    days: (() => { try { return JSON.parse(r.days); } catch { return []; } })(),
+                }));
+                authors.sort((a, b) => {
+                    if (a.createdHere !== b.createdHere) return b.createdHere ? 1 : -1;
+                    if (a.days.length !== b.days.length) return b.days.length - a.days.length;
+                    if (a.firstSeen !== b.firstSeen) return a.firstSeen - b.firstSeen;
+                    return b.editCount - a.editCount;
+                });
+                return Response.json(authors);
+            }
             if (!this.state.id) return Response.json({ error: 'not found' }, { status: 404 });
-            return Response.json({ v: this.state.v, calendar: this.calendar() });
+            const cal = isViewOnly ? this.viewCalendar(viewId) : this.calendar();
+            return Response.json({ v: this.state.v, calendar: cal });
         }
         if (request.method === 'POST' && !url.pathname.endsWith('/import')) {
             const text = await request.text();
@@ -204,7 +344,12 @@ export class CalendarRoom extends DurableObject {
         let events;
         try { events = EventStore.apply([], { type: 'batch', commands: raw.map((event) => ({ type: 'add', event })) }).events; }
         catch (e) { return { ok: false, status: 400, error: e.message }; }
+        if (cal.author) this.recordAuthor(cal.author, true);
         const r = this.importCalendar({ id, title, options, events }, 'create');
+        if (r.ok) {
+            this.ctx.waitUntil(this.registerInDirectory(id));
+            if (options?.publicViewId) this.ctx.waitUntil(this.registerInDirectory(options.publicViewId, true, id));
+        }
         return r.ok ? { ...r, calendar: this.calendar() } : { ...r, status: 413 };
     }
 
@@ -219,13 +364,18 @@ export class CalendarRoom extends DurableObject {
             this.setMirrored(title, options, events);
             return { ok: true, unchanged: true, v: s.v, events: events.length, renamedDuplicates: renamed };
         }
+        const beforeEvents = s.events;
+        const beforeTitle = s.title;
+        const beforeOptions = s.options;
         this.sql.exec(`DELETE FROM events`);
         this.state.events = [];
         this.storeEvents(events, 'all');
         this.state.id = cal.id; this.state.title = title; this.state.options = options;
         this.setMeta('id', cal.id); this.setMeta('title', title); this.setMeta('options', options);
         this.setMirrored(title, options, events);
-        this.bump(source, [{ type: source, events: events.length }]);
+        this.bump(source, [{ type: source, events: events.length }], { beforeEvents, beforeTitle, beforeOptions });
+        this.ctx.waitUntil(this.registerInDirectory(cal.id));
+        if (options?.publicViewId) this.ctx.waitUntil(this.registerInDirectory(options.publicViewId, true, cal.id));
         this.broadcast({ t: 'snapshot', v: this.state.v, calendar: this.calendar() });
         return { ok: true, v: this.state.v, events: events.length, renamedDuplicates: renamed };
     }
@@ -293,11 +443,14 @@ export class CalendarRoom extends DurableObject {
         }
         const why = this.tooBig(list) || (nextTitle.length > LIMITS.maxTitle ? 'title too long' : null);
         if (why) return { ok: false, error: why };                             // nothing stored
+        const beforeEvents = s.events;
+        const beforeTitle = s.title;
+        const beforeOptions = s.options;
         if (nextTitle !== s.title) { s.title = nextTitle; this.setMeta('title', nextTitle); }
         if (json(nextOptions) !== json(s.options)) { s.options = nextOptions; this.setMeta('options', nextOptions); }
         if (applied.length) this.storeEvents(list, touched);
         this.setMirrored(title, options, incoming);
-        this.bump('firebase', applied.length ? applied : [{ type: 'meta' }]);
+        this.bump('firebase', applied.length ? applied : [{ type: 'meta' }], { beforeEvents, beforeTitle, beforeOptions });
         if (applied.length) this.broadcast({ t: 'change', v: s.v, commands: applied });
         if (metaChanged) this.broadcast({ t: 'meta', v: s.v, title: s.title, options: s.options });
         return done({ v: s.v });
@@ -394,6 +547,14 @@ export class CalendarRoom extends DurableObject {
         let m; try { m = JSON.parse(message); } catch { return ws.send(json({ t: 'error', code: 'bad_json' })); }
         const refuse = (code, message) => ws.send(json({ t: 'error', id: m.id, code, message }));
 
+        const tab = ws.deserializeAttachment() || {};
+        if (tab.isViewOnly && (m.t === 'save' || m.t === 'meta')) {
+            return refuse('read_only', 'this link is read-only');
+        }
+
+        const author = m.author || tab.author;
+        if (author && !tab.isViewOnly) this.recordAuthor(author, false);
+
         if (m.t === 'save' || m.t === 'meta') {
             const rate = this.overRate(ws);
             if (rate) return refuse('rate_limited', rate);
@@ -414,9 +575,12 @@ export class CalendarRoom extends DurableObject {
             }
             const why = this.tooBig(result.events);
             if (why) return refuse('too_big', why);
+            const beforeEvents = this.state.events;
+            const beforeTitle = this.state.title;
+            const beforeOptions = this.state.options;
             const touched = new Set([...result.added, ...result.changed].map(EventStore.keyOf));
             this.storeEvents(result.events, touched);
-            this.bump('save', m.commands);
+            this.bump('save', m.commands, { beforeEvents, beforeTitle, beforeOptions, writer: m.writer || author });
             ws.send(json({ t: 'ack', id: m.id, v: this.state.v }));
             this.broadcast({ t: 'change', v: this.state.v, commands: m.commands }, ws);
             await this.scheduleCopyBack();
@@ -424,6 +588,9 @@ export class CalendarRoom extends DurableObject {
         }
         if (m.t === 'meta') {
             const s = this.state; let changed = false;
+            const beforeEvents = s.events;
+            const beforeTitle = s.title;
+            const beforeOptions = s.options;
             if (typeof m.title === 'string' && m.title !== s.title) {
                 if (m.title.length > LIMITS.maxTitle) return refuse('too_big', 'title too long');
                 s.title = m.title; this.setMeta('title', s.title); changed = true;
@@ -434,7 +601,7 @@ export class CalendarRoom extends DurableObject {
                 if (json(next) !== json(s.options)) { s.options = next; this.setMeta('options', next); changed = true; }
             }
             if (!changed) return ws.send(json({ t: 'ack', id: m.id, v: s.v, unchanged: true }));
-            this.bump('meta', [{ type: 'meta', title: m.title, options: m.options }]);
+            this.bump('meta', [{ type: 'meta', title: m.title, options: m.options }], { beforeEvents, beforeTitle, beforeOptions, writer: m.writer || author });
             ws.send(json({ t: 'ack', id: m.id, v: s.v }));
             this.broadcast({ t: 'meta', v: s.v, title: s.title, options: s.options }, ws);
             await this.scheduleCopyBack();
@@ -443,7 +610,8 @@ export class CalendarRoom extends DurableObject {
         if (m.t === 'hello') {
             // A reconnecting tab says which version it has; the snapshot was already sent on
             // connect, so this is only for the future "changes since v" optimization.
-            return ws.send(json({ t: 'snapshot', v: this.state.v, calendar: this.calendar() }));
+            const cal = tab.isViewOnly ? this.viewCalendar(tab.viewId) : this.calendar();
+            return ws.send(json({ t: 'snapshot', v: this.state.v, calendar: cal }));
         }
         refuse('unknown', `unknown message ${m.t}`);
     }
@@ -456,7 +624,24 @@ export class CalendarRoom extends DurableObject {
     }
 
     broadcast(msg, except) {
-        const text = json(msg);
-        for (const s of this.ctx.getWebSockets()) if (s !== except) { try { s.send(text); } catch { /* gone */ } }
+        for (const s of this.ctx.getWebSockets()) {
+            if (s === except) continue;
+            try {
+                const att = s.deserializeAttachment() || {};
+                if (att.isViewOnly) {
+                    if (msg.t === 'snapshot') {
+                        s.send(json({ ...msg, calendar: this.viewCalendar(att.viewId) }));
+                    } else if (msg.t === 'meta') {
+                        const options = { ...(msg.options || {}) };
+                        delete options.publicViewId;
+                        s.send(json({ ...msg, options }));
+                    } else {
+                        s.send(json(msg));
+                    }
+                } else {
+                    s.send(json(msg));
+                }
+            } catch { /* gone */ }
+        }
     }
 }

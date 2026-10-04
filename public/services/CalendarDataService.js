@@ -220,10 +220,9 @@ class CalendarDataService {
                 try {
                     console.log('Fallback lookup for slug:', slug);
                     console.log('Calling function with data:', { slug: slug });
-                    const lookupCalendar = firebase.functions().httpsCallable('lookupCalendar');
-                    const result = await lookupCalendar({ slug: slug });
+                    const result = await this.lookupCalendar(slug);
 
-                    if (result.data.found && !result.data.isReadOnly) {
+                    if (result.data?.found && !result.data.isReadOnly) {
                         // Found as editable calendar - subscribe with correct case
                         this._subscribeExact(result.data.actualSlug, callback);
                     } else {
@@ -290,11 +289,10 @@ class CalendarDataService {
         try {
             console.log('Looking up calendar for slug:', slug);
             console.log('Calling function with data:', { slug: slug });
-            const lookupCalendar = firebase.functions().httpsCallable('lookupCalendar');
-            const result = await lookupCalendar({ slug: slug });
+            const result = await this.lookupCalendar(slug);
             console.log('Function result:', result);
 
-            if (result.data.found) {
+            if (result.data?.found) {
                 if (result.data.isReadOnly) {
                     // Found as read-only calendar - redirect to view URL
                     window.location.href = `/view/${result.data.actualSlug}`;
@@ -856,8 +854,7 @@ class CalendarDataService {
         this.db.child(id).once('value', async data => {
             if (data.val()) { callback_yes(); return; }
             try {
-                const lookupCalendar = firebase.functions().httpsCallable('lookupCalendar');
-                const result = await lookupCalendar({ slug: id });
+                const result = await this.lookupCalendar(id);
                 if (result?.data?.found) { callback_yes(); return; }
             } catch (err) {
                 // A lookup failure must not block a legitimate claim: fall through to the
@@ -909,5 +906,28 @@ class CalendarDataService {
 
     static delete(key) {
         return this.db.child(key).remove();
+    }
+
+    static async lookupCalendar(slug) {
+        if (typeof CloudCalendarService !== 'undefined' && CloudCalendarService.enabled()) {
+            return await CloudCalendarService.lookupCalendar(slug);
+        }
+        const fn = firebase.functions().httpsCallable('lookupCalendar');
+        return await fn({ slug });
+    }
+
+    static async createPublicLink(params) {
+        if (typeof CloudCalendarService !== 'undefined' && CloudCalendarService.enabled()) {
+            return await CloudCalendarService.createPublicLink(params);
+        }
+        const fn = firebase.functions().httpsCallable('createPublicLink');
+        return await fn(params);
+    }
+
+    static async loadUndoEntries(calendarId) {
+        if (typeof CloudCalendarService !== 'undefined' && CloudCalendarService.enabled()) {
+            return await CloudCalendarService.loadUndoEntries(calendarId);
+        }
+        return null;
     }
 }

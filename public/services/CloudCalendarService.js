@@ -57,7 +57,16 @@ class CloudCalendarService extends CalendarDataService {
     static baseUrl = null;
     static _base() { return this.baseUrl || (typeof location !== 'undefined' ? location.origin : 'http://localhost:8787'); }
     static _url(id, suffix = '') { return `${this._base()}/cal/${encodeURIComponent(id)}${suffix}`; }
-    static _wsUrl(id) { return this._url(id, '/ws').replace(/^http/, 'ws'); }
+    static _wsUrl(id) {
+        let authorParam = '';
+        try {
+            if (typeof AuthorSignal !== 'undefined' && typeof AuthorSignal.uid === 'function') {
+                const uid = AuthorSignal.uid();
+                if (uid) authorParam = `?author=${encodeURIComponent(uid)}`;
+            }
+        } catch (e) {}
+        return this._url(id, '/ws' + authorParam).replace(/^http/, 'ws');
+    }
 
     static RECONNECT = { baseMs: 500, maxMs: 30000 };
     static READONLY_POLL_MS = 15000;
@@ -125,10 +134,29 @@ class CloudCalendarService extends CalendarDataService {
 
     // ---- live subscription ------------------------------------------------------------------
 
-    // Open a calendar by its exact id. callback(calendar) on every snapshot/change; callback(null) if it does not exist.
+    // Open a calendar. Resolves case differences and read-only views via directory.
     static findAndSubscribe(slug, callback) {
         if (!slug) { console.warn('findAndSubscribe called with empty slug'); callback(null); return; }
         this.subscribe(slug, callback);
+        (async () => {
+            try {
+                const lookup = await this.lookupCalendar(slug);
+                if (lookup.data?.found) {
+                    if (lookup.data.isReadOnly) {
+                        if (typeof window !== 'undefined' && window.location) {
+                            window.location.href = `/view/${lookup.data.actualSlug}`;
+                            return;
+                        }
+                    }
+                    if (lookup.data.actualSlug && lookup.data.actualSlug !== slug) {
+                        this.close(slug);
+                        this.subscribe(lookup.data.actualSlug, callback);
+                    }
+                }
+            } catch (e) {
+                console.warn('[CloudCalendarService] lookup in findAndSubscribe failed', e);
+            }
+        })();
     }
     static _subscribeExact(slug, callback) { this.subscribe(slug, callback); }
 
@@ -284,17 +312,30 @@ class CloudCalendarService extends CalendarDataService {
         else this._sendMeta(room, meta, opts);
     }
 
+    static _authorUid() {
+        try {
+            if (typeof AuthorSignal !== 'undefined' && typeof AuthorSignal.uid === 'function') {
+                return AuthorSignal.uid();
+            }
+        } catch (e) {}
+        return null;
+    }
+
     static _sendSave(room, commands, { journalT, replay = false, localEvents } = {}) {
         if (replay && this._overWriteBudget()) return;
         const id = `s${++room.seq}`;
+        const author = this._authorUid();
+        const writer = this.writerId || author;
         room.inflight = { id, kind: 'save', v: room.v, commands, journalT, replay, localEvents };
-        if (!this._send(room, { t: 'save', id, v: room.v, commands })) { room.inflight = null; room.unsent = true; }
+        if (!this._send(room, { t: 'save', id, v: room.v, commands, author, writer })) { room.inflight = null; room.unsent = true; }
     }
 
     static _sendMeta(room, meta, opts = {}) {
         const id = `m${++room.seq}`;
+        const author = this._authorUid();
+        const writer = this.writerId || author;
         room.inflight = { id, kind: 'meta', v: room.v, meta, journalT: opts.journalT };
-        if (!this._send(room, { t: 'meta', id, ...meta })) { room.inflight = null; room.unsent = true; }
+        if (!this._send(room, { t: 'meta', id, ...meta, author, writer })) { room.inflight = null; room.unsent = true; }
     }
 
     static _onAck(room, m) {
@@ -362,9 +403,13 @@ class CloudCalendarService extends CalendarDataService {
 
     // ---- creating and checking --------------------------------------------------------------
 
-    /** Is this name taken? HEAD /cal/<id>: 404 = free. Exact id only (TODO phase 3: case-insensitive). */
-    static checkExists(id, callback_yes, callback_no) {
+    /** Is this name taken? First check directory, then HEAD /cal/<id>: 404 = free. */
+    static async checkExists(id, callback_yes, callback_no) {
         if (['beta', 'nativecal', 'view', 'dev'].includes(String(id || '').toLowerCase())) { callback_yes(); return; }
+        try {
+            const lookup = await this.lookupCalendar(id);
+            if (lookup.data?.found) { callback_yes(); return; }
+        } catch (e) {}
         fetch(this._url(id), { method: 'HEAD' }).then((r) => (r.status === 404 ? callback_no() : callback_yes()), (err) => {
             // Unreachable is not "free": claiming on a failed check could overwrite nothing (the server
             // refuses a non-empty room) but would tell the user a lie. Say taken-or-unknown as taken.
@@ -386,7 +431,7 @@ class CloudCalendarService extends CalendarDataService {
 
     // ---- read-only views --------------------------------------------------------------------
 
-    /** Polls GET /cal/<id> and calls back when the version changes. See the privacy caveat above. */
+    /** Polls GET /cal/view/<slug> (or /cal/<slug>) and calls back when the version changes. */
     static subscribe_readonly(slug, callback) {
         if (!slug) return;
         let v = -1, stopped = false;
@@ -394,7 +439,8 @@ class CloudCalendarService extends CalendarDataService {
             if (stopped) return;
             try {
                 if (typeof document === 'undefined' || document.visibilityState !== 'hidden') {
-                    const r = await fetch(this._url(slug));
+                    let r = await fetch(`${this._base()}/cal/view/${encodeURIComponent(slug)}`);
+                    if (r.status === 404) r = await fetch(this._url(slug));
                     if (r.ok) {
                         const out = await r.json();
                         if (out.v !== v && out.calendar && out.calendar.id) { v = out.v; callback({ ...out.calendar, events: out.calendar.events }); }
@@ -405,6 +451,48 @@ class CloudCalendarService extends CalendarDataService {
         };
         tick();
         return () => { stopped = true; };
+    }
+
+    // ---- directory & history APIs -----------------------------------------------------------
+
+    static async lookupCalendar(slug) {
+        if (!slug) return { data: { found: false } };
+        try {
+            const res = await fetch(`${this._base()}/api/lookup?slug=${encodeURIComponent(slug)}`);
+            if (!res.ok) return { data: { found: false } };
+            const data = await res.json();
+            return { data };
+        } catch (e) {
+            console.warn('[CloudCalendarService] lookupCalendar failed', e);
+            return { data: { found: false } };
+        }
+    }
+
+    static async createPublicLink(params) {
+        const res = await fetch(`${this._base()}/api/create-view`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(params)
+        });
+        const out = await res.json().catch(() => ({}));
+        if (!res.ok || !out.ok) {
+            const err = new Error(out.message || 'Failed to create read-only link');
+            err.code = out.error || 'internal';
+            throw err;
+        }
+        return { data: { publicViewId: out.publicViewId } };
+    }
+
+    static async loadUndoEntries(calendarId) {
+        if (!calendarId) return [];
+        try {
+            const res = await fetch(this._url(calendarId, '/history'));
+            if (!res.ok) return [];
+            return await res.json();
+        } catch (e) {
+            console.warn('[CloudCalendarService] loadUndoEntries failed', e);
+            return [];
+        }
     }
 }
 

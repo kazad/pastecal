@@ -317,8 +317,7 @@ const CalendarVueApp = {
             (async () => {
                 try {
                     console.log('Looking up calendar for /view/ route:', requestedSlug);
-                    const lookupCalendar = firebase.functions().httpsCallable('lookupCalendar');
-                    const result = await lookupCalendar({ slug: requestedSlug });
+                    const result = await CalendarDataService.lookupCalendar(requestedSlug);
 
                     if (result.data.found && result.data.isReadOnly) {
                         // Found as read-only - subscribe with the actual slug
