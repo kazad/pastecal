@@ -47,6 +47,15 @@
     "FIREBASE_DB_URL": "https://pastecal-web-default-rtdb.firebaseio.com",
     "COPY_BACK": "*"
   },
+  "r2_buckets": [
+    {
+      "binding": "BACKUPS",
+      "bucket_name": "pastecal-backups"
+    }
+  ],
+  "triggers": {
+    "crons": ["0 * * * *"]
+  },
   "observability": { "enabled": true }
   // Secrets (wrangler secret put): IMPORT_SECRET -- lets the Firebase shadow copy write;
   // FIREBASE_SA -- a service account key (JSON) that lets the room write to Firebase.

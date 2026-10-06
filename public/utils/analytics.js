@@ -424,11 +424,15 @@ const Analytics = {
     },
 
     /**
-     * The write gate refused to empty a calendar. Should be ~zero; any rate at all means
-     * a save path is producing empty arrays again.
+     * The write gate refused to empty a calendar, or the server rejected a save.
      */
     syncRefused(shape) {
-        this.track('sync_refused', { before: shape?.before ?? 0, removing: shape?.removing ?? 0 });
+        this.track('sync_refused', {
+            before: shape?.before ?? 0,
+            removing: shape?.removing ?? 0,
+            code: shape?.code || 'intent_mismatch',
+            ...(shape?.message ? { message: String(shape.message).slice(0, 100) } : shape?.reason ? { reason: String(shape.reason).slice(0, 100) } : {})
+        });
     },
 
     // Generated ids come from IDService.generateNanoId(5): 5 alphanumeric chars.

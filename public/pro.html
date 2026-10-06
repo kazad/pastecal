@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pastecal Pro — Dedicated Publisher Controls for Teams & Organizations</title>
+    <meta name="description" content="Pastecal is free and collaborative by default. Upgrade your calendar to Pro for publisher controls, draft events, website embeds, and shift sign-ups.">
+
+    <link rel="icon" type="image/png" href="/img/icons/favicon-96x96.png" sizes="96x96" />
+    <link rel="icon" type="image/svg+xml" href="/img/icons/favicon.svg" />
+    <link rel="shortcut icon" href="/img/icons/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/img/icons/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/tokens.css">
+
+    <style>
+        :root {
+            --brand-primary: #3f51b5;
+            --brand-primary-hover: #303f9f;
+            --brand-soft: #eef2ff;
+            --brand-dark: #121826;
+            --brand-muted: #4b5563;
+            --brand-border: #e5e7eb;
+            --card-bg: #ffffff;
+            --page-bg: #fafbfc;
+            --font-main: 'Plus Jakarta Sans', var(--pc-font, sans-serif);
+            --font-mono: 'JetBrains Mono', var(--pc-font-mono, monospace);
+        }
+
+        [data-theme="dark"] {
+            --brand-dark: #f9fafb;
+            --brand-muted: #9ca3af;
+            --brand-border: #2e3545;
+            --card-bg: #181f2c;
+            --page-bg: #0f141e;
+            --brand-soft: #1e1b4b;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-main);
+            background-color: var(--page-bg);
+            color: var(--brand-dark);
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .container {
+            max-width: 1120px;
+            margin: 0 auto;
+            padding: 0 24px;
+        }
+
+        /* Nav */
+        header {
+            border-bottom: 1px solid var(--brand-border);
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+        [data-theme="dark"] header {
+            background: rgba(15, 20, 30, 0.85);
+        }
+
+        .nav-inner {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 68px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 800;
+            font-size: 20px;
+            letter-spacing: -0.02em;
+        }
+
+        .brand-badge {
+            background: var(--brand-soft);
+            color: var(--brand-primary);
+            font-size: 11px;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 999px;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            border: 1px solid rgba(214, 18, 79, 0.2);
+        }
+
+        .nav-cta {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.15s ease-in-out;
+            cursor: pointer;
+            border: none;
+        }
+
+        .btn-primary {
+            background: var(--brand-primary);
+            color: #ffffff;
+            box-shadow: 0 2px 10px rgba(214, 18, 79, 0.25);
+        }
+        .btn-primary:hover {
+            background: var(--brand-primary-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 16px rgba(214, 18, 79, 0.35);
+        }
+
+        .btn-ghost {
+            color: var(--brand-muted);
+            background: transparent;
+        }
+        .btn-ghost:hover {
+            color: var(--brand-dark);
+            background: var(--brand-border);
+        }
+
+        /* Hero */
+        .hero {
+            padding: 80px 0 64px;
+            text-align: center;
+        }
+
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--brand-soft);
+            color: var(--brand-primary);
+            padding: 6px 14px;
+            border-radius: 999px;
+            font-size: 12.5px;
+            font-weight: 700;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            margin-bottom: 24px;
+            border: 1px solid rgba(214, 18, 79, 0.15);
+        }
+
+        .hero h1 {
+            font-size: clamp(34px, 5.5vw, 54px);
+            font-weight: 800;
+            letter-spacing: -0.035em;
+            line-height: 1.15;
+            max-width: 820px;
+            margin: 0 auto 20px;
+        }
+
+        .hero-lead {
+            font-size: clamp(17px, 2.2vw, 20px);
+            color: var(--brand-muted);
+            max-width: 680px;
+            margin: 0 auto 36px;
+            line-height: 1.55;
+        }
+
+        .hero-actions {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .hero-note {
+            margin-top: 14px;
+            font-size: 13px;
+            color: var(--brand-muted);
+        }
+
+        /* The Core Philosophy Banner */
+        .philosophy-card {
+            background: var(--card-bg);
+            border: 1px solid var(--brand-border);
+            border-radius: 18px;
+            padding: 28px 36px;
+            margin: 36px auto 72px;
+            max-width: 840px;
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+            text-align: left;
+        }
+
+        .philosophy-icon {
+            flex-shrink: 0;
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            background: var(--brand-soft);
+            color: var(--brand-primary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+
+        .philosophy-text h4 {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .philosophy-text p {
+            font-size: 14px;
+            color: var(--brand-muted);
+            line-height: 1.5;
+        }
+
+        /* Feature Grid */
+        .section-header {
+            text-align: center;
+            max-width: 640px;
+            margin: 0 auto 52px;
+        }
+
+        .section-header h2 {
+            font-size: 32px;
+            font-weight: 800;
+            letter-spacing: -0.025em;
+            margin-bottom: 12px;
+        }
+
+        .section-header p {
+            color: var(--brand-muted);
+            font-size: 16px;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 24px;
+            margin-bottom: 96px;
+        }
+
+        .feature-card {
+            background: var(--card-bg);
+            border: 1px solid var(--brand-border);
+            border-radius: 18px;
+            padding: 32px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.02);
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.06);
+        }
+
+        .feature-icon-badge {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            margin-bottom: 20px;
+        }
+
+        .badge-draft { background: #eef2ff; color: #4f46e5; }
+        .badge-lock { background: #fef2f2; color: #dc2626; }
+        .badge-shift { background: #ecfdf5; color: #059669; }
+        .badge-print { background: #fffbeb; color: #d97706; }
+        .badge-embed { background: #fdf2f8; color: #db2777; }
+        .badge-filter { background: #f0fdfa; color: #0d9488; }
+        .badge-restore { background: #f5f3ff; color: #7c3aed; }
+
+        .feature-card h3 {
+            font-size: 19px;
+            font-weight: 700;
+            margin-bottom: 10px;
+            letter-spacing: -0.015em;
+        }
+
+        .feature-card p {
+            font-size: 14.5px;
+            color: var(--brand-muted);
+            margin-bottom: 20px;
+            flex-grow: 1;
+        }
+
+        /* Mockup Snippets in Cards */
+        .ui-mockup {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 12px 14px;
+            font-size: 12.5px;
+            font-family: var(--font-mono);
+            color: #334155;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        [data-theme="dark"] .ui-mockup {
+            background: #111723;
+            border-color: #242c3d;
+            color: #cbd5e1;
+        }
+
+        .ui-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .chip-draft {
+            background: #e0e7ff;
+            color: #3730a3;
+            padding: 2px 7px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .chip-pill {
+            background: #dcfce7;
+            color: #166534;
+            padding: 2px 8px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        /* Comparison Table */
+        .comparison-section {
+            margin-bottom: 96px;
+        }
+
+        .table-wrap {
+            background: var(--card-bg);
+            border: 1px solid var(--brand-border);
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.03);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        th, td {
+            padding: 18px 24px;
+            font-size: 14.5px;
+            border-bottom: 1px solid var(--brand-border);
+        }
+
+        th {
+            background: #f8fafc;
+            font-weight: 700;
+            font-size: 15px;
+        }
+        [data-theme="dark"] th {
+            background: #151b27;
+        }
+
+        th:nth-child(2), td:nth-child(2),
+        th:nth-child(3), td:nth-child(3) {
+            text-align: center;
+        }
+
+        th:nth-child(3) {
+            color: var(--brand-primary);
+            background: var(--brand-soft);
+        }
+
+        td:nth-child(3) {
+            background: rgba(214, 18, 79, 0.02);
+            font-weight: 600;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .check {
+            color: #059669;
+            font-weight: 800;
+            font-size: 16px;
+        }
+
+        .cross {
+            color: #9ca3af;
+        }
+
+        /* Pricing Card */
+        .pricing-section {
+            max-width: 680px;
+            margin: 0 auto 96px;
+            text-align: center;
+        }
+
+        .pricing-card {
+            background: var(--card-bg);
+            border: 2px solid var(--brand-primary);
+            border-radius: 24px;
+            padding: 48px 40px;
+            position: relative;
+            box-shadow: 0 12px 40px rgba(214, 18, 79, 0.12);
+        }
+
+        .pricing-ribbon {
+            position: absolute;
+            top: -14px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--brand-primary);
+            color: #ffffff;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            padding: 4px 16px;
+            border-radius: 999px;
+            box-shadow: 0 2px 8px rgba(214, 18, 79, 0.3);
+        }
+
+        .price-big {
+            font-size: 58px;
+            font-weight: 800;
+            letter-spacing: -0.04em;
+            line-height: 1;
+            margin: 16px 0 6px;
+        }
+
+        .price-period {
+            font-size: 16px;
+            color: var(--brand-muted);
+            margin-bottom: 24px;
+        }
+
+        .price-bullets {
+            list-style: none;
+            text-align: left;
+            margin: 28px 0 36px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .price-bullets li {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 15px;
+        }
+
+        .bullet-icon {
+            flex-shrink: 0;
+            width: 20px;
+            height: 20px;
+            border-radius: 999px;
+            background: #ecfdf5;
+            color: #059669;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 12px;
+        }
+
+        /* FAQ */
+        .faq-section {
+            max-width: 760px;
+            margin: 0 auto 96px;
+        }
+
+        .faq-item {
+            border-bottom: 1px solid var(--brand-border);
+            padding: 22px 0;
+        }
+
+        .faq-question {
+            font-size: 17px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .faq-answer {
+            color: var(--brand-muted);
+            font-size: 15px;
+            line-height: 1.6;
+        }
+
+        /* Footer */
+        footer {
+            border-top: 1px solid var(--brand-border);
+            padding: 48px 0;
+            text-align: center;
+            font-size: 14px;
+            color: var(--brand-muted);
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            margin-bottom: 16px;
+        }
+
+        .footer-links a:hover {
+            color: var(--brand-primary);
+        }
+
+        @media (max-width: 640px) {
+            .hero { padding: 48px 0 40px; }
+            .philosophy-card { flex-direction: column; text-align: center; padding: 24px; }
+            .pricing-card { padding: 36px 20px; }
+            .price-big { font-size: 46px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header Navigation -->
+    <header>
+        <div class="container nav-inner">
+            <a href="/" class="brand">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="3" y="4" width="18" height="17" rx="3" stroke="var(--brand-primary)" stroke-width="2"/>
+                    <line x1="3" y1="9" x2="21" y2="9" stroke="var(--brand-primary)" stroke-width="2"/>
+                    <circle cx="8" cy="14" r="1.5" fill="var(--brand-primary)"/>
+                    <circle cx="12" cy="14" r="1.5" fill="var(--brand-primary)"/>
+                    <circle cx="16" cy="14" r="1.5" fill="var(--brand-primary)"/>
+                </svg>
+                <span>pastecal</span>
+                <span class="brand-badge">PRO</span>
+            </a>
+            <div class="nav-cta">
+                <a href="/" class="btn btn-ghost">Back to Calendar</a>
+                <a href="#pricing" class="btn btn-primary">Upgrade Your Calendar</a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <main>
+        <section class="hero container">
+            <div class="eyebrow">
+                <span>✨ Pastecal for Teams & Organizations</span>
+            </div>
+            <h1>An open calendar for anyone.<br>Dedicated publisher controls for you.</h1>
+            <p class="hero-lead">
+                Pastecal is free, fast, and open by default. When your dance studio, volunteer group, or club needs official publisher controls, private drafts, and clean website embeds, upgrade your calendar to Pro.
+            </p>
+            <div class="hero-actions">
+                <a href="#pricing" class="btn btn-primary" style="padding: 14px 32px; font-size: 16px;">Upgrade a Calendar — $79/year</a>
+                <a href="#features" class="btn btn-ghost" style="padding: 14px 24px; font-size: 16px;">Explore Features ↓</a>
+            </div>
+            <p class="hero-note">30-day money-back guarantee · No accounts required for your viewers · Instant setup</p>
+
+            <!-- Honest Community Philosophy -->
+            <div class="philosophy-card">
+                <div class="philosophy-icon">🤝</div>
+                <div class="philosophy-text">
+                    <h4>The Pastecal Pledge: Zero Ransomware</h4>
+                    <p>Free Pastecal remains free, fast, and collaborative forever. Pro exists for groups that outgrow open whiteboards and need dedicated administration. 100% of Pro revenue funds servers, database backups, and keeps the core service ad-free.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Feature Showcase Grid -->
+        <section id="features" class="container">
+            <div class="section-header">
+                <h2>Built for real-world coordinators</h2>
+                <p>Everything you need to run an organized schedule without forcing everyone to download yet another app or create a password.</p>
+            </div>
+
+            <div class="features-grid">
+                <!-- Feature 1: Draft Events -->
+                <div class="feature-card">
+                    <div class="feature-icon-badge badge-draft">🕵️</div>
+                    <h3>Staff-Only & Draft Events</h3>
+                    <p>Plan upcoming rehearsals, supervisor notes, or tentative game slots without revealing them to public viewers. Only people with your admin key can see drafts.</p>
+                    <div class="ui-mockup">
+                        <div class="ui-row">
+                            <span>10:00 AM Rehearsal A</span>
+                            <span class="chip-pill">Public</span>
+                        </div>
+                        <div class="ui-row" style="opacity: 0.75;">
+                            <span>🔒 1:30 PM Instructor Prep</span>
+                            <span class="chip-draft">Admin Only</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Feature 2: Official Read-Only Link -->
+                <div class="feature-card">
+                    <div class="feature-icon-badge badge-lock">🔒</div>
+                    <h3>Official View-Only Links</h3>
+                    <p>Publish a clean, read-only schedule for members while keeping the edit key for your staff. Never worry about someone accidentally wiping out or moving a schedule.</p>
+                    <div class="ui-mockup">
+                        <span style="color: #64748b;">Public Link (Viewers):</span>
+                        <code style="color: var(--brand-primary);">pastecal.com/view/durango-dance</code>
+                        <span style="color: #64748b; margin-top: 4px;">Staff Link (Editor):</span>
+                        <code>pastecal.com/admin/durango-dance?key=•••</code>
+                    </div>
+                </div>
+
+                <!-- Feature 3: Shift Claiming -->
+                <div class="feature-card">
+                    <div class="feature-icon-badge badge-shift">🙋</div>
+                    <h3>1-Click Shift & Volunteer Claiming</h3>
+                    <p>Add events with signup slots (e.g. <em>"Snack Duty: 2 needed"</em>). Volunteers click once, enter their name, and claim the spot—no login or signup required.</p>
+                    <div class="ui-mockup">
+                        <div class="ui-row">
+                            <span>Saturday Setup (3 spots)</span>
+                            <span style="color: #059669; font-weight: 600;">2 Claimed</span>
+                        </div>
+                        <div class="ui-row" style="margin-top: 4px;">
+                            <span style="color: #64748b;">Sarah M., David K.</span>
+                            <button style="border: 1px solid #cbd5e1; border-radius: 4px; padding: 2px 6px; font-size: 11px; background: white; cursor: pointer;">Claim last spot</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Feature 4: 1-Page Poster Print -->
+                <div class="feature-card">
+                    <div class="feature-icon-badge badge-print">🖨️</div>
+                    <h3>1-Page Poster Print & PDF</h3>
+                    <p>Tape your schedule to the gym wall or studio door. Generate high-contrast, perfectly scaled 1-page PDF calendars formatted for real-world bulletin boards.</p>
+                    <div class="ui-mockup">
+                        <div class="ui-row">
+                            <span>📄 October 2026 Schedule.pdf</span>
+                            <span style="color: #d97706; font-weight: 600;">Letter / A4</span>
+                        </div>
+                        <span style="color: #64748b; font-size: 11px;">High contrast · No clipped events · Custom notes</span>
+                    </div>
+                </div>
+
+                <!-- Feature 5: Category iCal Feeds -->
+                <div class="feature-card">
+                    <div class="feature-icon-badge badge-filter">🎯</div>
+                    <h3>Filtered iCal Sync for Members</h3>
+                    <p>Parents and members can sync <em>only</em> the categories they care about (e.g. just Ballet, or just Team A) straight to their iPhone or Google Calendar.</p>
+                    <div class="ui-mockup">
+                        <div class="ui-row">
+                            <span>Apple / Google Cal Sync</span>
+                            <span class="chip-pill">Syncing</span>
+                        </div>
+                        <span style="color: #64748b; font-size: 11px;">Selected feed: <b>Only "Ballet 2"</b> (4 events/wk)</span>
+                    </div>
+                </div>
+
+                <!-- Feature 6: Clean Website Embeds -->
+                <div class="feature-card">
+                    <div class="feature-icon-badge badge-embed">🎨</div>
+                    <h3>Clean Website Embeds</h3>
+                    <p>Embed your live calendar into Squarespace, Wix, or WordPress with zero Pastecal branding and your custom studio colors.</p>
+                    <div class="ui-mockup">
+                        <code>&lt;iframe src="pastecal.com/embed/dance"&gt;</code>
+                        <span style="color: #64748b; font-size: 11px;">Responsive · Dark / Light auto · Fast 0ms load</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Side-by-Side Comparison -->
+        <section class="container comparison-section">
+            <div class="section-header">
+                <h2>Free vs. Pro: Transparent Comparison</h2>
+                <p>Choose the level of control that fits your organization.</p>
+            </div>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 48%;">Feature</th>
+                            <th style="width: 26%;">Free Community</th>
+                            <th style="width: 26%;">Pastecal Pro</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Unlimited Viewers & Events</strong></td>
+                            <td><span class="check">✓</span> Yes</td>
+                            <td><span class="check">✓</span> Yes</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Zero-Login Mobile Access</strong></td>
+                            <td><span class="check">✓</span> Yes</td>
+                            <td><span class="check">✓</span> Yes</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Collaboration Mode</strong></td>
+                            <td>Open Whiteboard (Anyone can edit)</td>
+                            <td><strong>Protected Publisher Key</strong></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Staff-Only & Draft Events</strong></td>
+                            <td><span class="cross">—</span></td>
+                            <td><span class="check">✓</span> Private to admins</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Shift / Volunteer Claiming</strong></td>
+                            <td><span class="cross">—</span></td>
+                            <td><span class="check">✓</span> 1-click spot claim</td>
+                        </tr>
+                        <tr>
+                            <td><strong>1-Page Poster Print (PDF)</strong></td>
+                            <td>Standard browser print</td>
+                            <td><span class="check">✓</span> Crisp 1-page formatted</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Filtered iCal Subscriptions</strong></td>
+                            <td>Full calendar only</td>
+                            <td><span class="check">✓</span> Per-category sync</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Custom Website Embeds</strong></td>
+                            <td>Standard with logo</td>
+                            <td><span class="check">✓</span> Brand-free & custom colors</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Permanent URL Reservation</strong></td>
+                            <td>Reclaimed if idle</td>
+                            <td><span class="check">✓</span> Guaranteed yours forever</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Disaster Recovery & History</strong></td>
+                            <td>Recent history</td>
+                            <td><span class="check">✓</span> 1-Click snapshot restore</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Pricing Section -->
+        <section id="pricing" class="container pricing-section">
+            <div class="section-header">
+                <h2>Simple, Honest Pricing</h2>
+                <p>One flat price per calendar. No per-seat penalties, no hidden fees.</p>
+            </div>
+
+            <div class="pricing-card">
+                <div class="pricing-ribbon">Most Popular for Organizations</div>
+                <h3 style="font-size: 22px; font-weight: 700;">Pastecal Pro Annual</h3>
+                <div class="price-big">$79</div>
+                <div class="price-period">per calendar / year (just $6.58 / month)</div>
+
+                <ul class="price-bullets">
+                    <li><span class="bullet-icon">✓</span> <strong>Official Publisher Key</strong> (Viewers cannot alter events)</li>
+                    <li><span class="bullet-icon">✓</span> <strong>Staff-Only Draft Events</strong> (Hidden from public)</li>
+                    <li><span class="bullet-icon">✓</span> <strong>Volunteer & Shift Sign-Ups</strong> (Zero-login claiming)</li>
+                    <li><span class="bullet-icon">✓</span> <strong>Clean Website Embeds</strong> (Squarespace, Wix, WordPress)</li>
+                    <li><span class="bullet-icon">✓</span> <strong>Permanent Custom URL</strong> reservation</li>
+                    <li><span class="bullet-icon">✓</span> <strong>30-day money-back guarantee</strong>, no questions asked</li>
+                </ul>
+
+                <button class="btn btn-primary" style="width: 100%; padding: 16px; font-size: 16px; font-weight: 700;" onclick="handleUpgradeClick()">
+                    Upgrade Your Calendar Now
+                </button>
+                <p style="font-size: 13px; color: var(--brand-muted); margin-top: 14px;">
+                    Or <a href="mailto:support@pastecal.com?subject=Pastecal%20Monthly%20Pro" style="text-decoration: underline;">pay $9 monthly</a>. Cancel anytime with 1 click.
+                </p>
+            </div>
+        </section>
+
+        <!-- FAQ Section -->
+        <section class="container faq-section">
+            <div class="section-header">
+                <h2>Frequently Asked Questions</h2>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">Do my viewers or members need a Pastecal account?</div>
+                <div class="faq-answer">Never. That is the whole point of Pastecal. Your members simply open the link on their phone or laptop. They see your live schedule instantly without remembering a password or downloading an app.</div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">Can multiple staff members or instructors edit?</div>
+                <div class="faq-answer">Yes! You can share your private publisher link or admin PIN with any fellow coordinators or instructors. Everyone else who visits sees the clean, read-only version.</div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">How does embedding on Squarespace or Wix work?</div>
+                <div class="faq-answer">It’s as easy as copying one line of HTML code into your site's embed block. Pro embeds are 100% responsive, load in milliseconds, and adapt to light/dark themes.</div>
+            </div>
+
+            <div class="faq-item">
+                <div class="faq-question">What happens if I cancel or my subscription ends?</div>
+                <div class="faq-answer">We will never delete your events or take down your calendar. If you ever cancel, your calendar simply reverts to an open collaborative calendar. You always own your schedule.</div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <div class="footer-links">
+                <a href="/">Home</a>
+                <a href="/#about">About</a>
+                <a href="mailto:support@pastecal.com">Contact</a>
+                <a href="/pro">Pastecal Pro</a>
+            </div>
+            <p>© 2026 Pastecal · Fast, respectful software for teams and groups.</p>
+        </div>
+    </footer>
+
+    <script>
+        function handleUpgradeClick() {
+            // If they are on an existing calendar or came from one:
+            const calId = new URLSearchParams(window.location.search).get('cal') || '';
+            const email = prompt("Enter your calendar address or ID to upgrade (e.g. 'durango-dance'):", calId);
+            if (email) {
+                // In production, this redirects to Stripe Checkout with client_reference_id
+                alert("Thank you! Connecting your calendar to Stripe Checkout for '" + email + "'...");
+            }
+        }
+    </script>
+</body>
+</html>

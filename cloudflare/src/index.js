@@ -17,6 +17,7 @@
  */
 import { ICSService } from './ICSService.js';
 import { SlugService } from './SlugService.js';
+import { BackupService } from './BackupService.js';
 export { CalendarRoom } from './CalendarRoom.js';
 export { CalendarDirectory } from './CalendarDirectory.js';
 
@@ -42,20 +43,21 @@ function withCors(response) {
 
 export default {
     async fetch(request, env) {
-        if (request.method === 'OPTIONS') {
-            return new Response(null, {
-                status: 204,
-                headers: {
-                    'Access-Control-Allow-Origin': '*',
-                    'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
-                    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-View-Id, If-None-Match',
-                    'Access-Control-Expose-Headers': 'ETag',
-                    'Access-Control-Max-Age': '86400',
-                }
-            });
-        }
-        const url = new URL(request.url);
-        const path = url.pathname;
+        try {
+            if (request.method === 'OPTIONS') {
+                return new Response(null, {
+                    status: 204,
+                    headers: {
+                        'Access-Control-Allow-Origin': '*',
+                        'Access-Control-Allow-Methods': 'GET, HEAD, POST, PUT, DELETE, OPTIONS',
+                        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-View-Id, If-None-Match',
+                        'Access-Control-Expose-Headers': 'ETag',
+                        'Access-Control-Max-Age': '86400',
+                    }
+                });
+            }
+            const url = new URL(request.url);
+            const path = url.pathname;
 
         // 1. ICS Feed: /:slug.ics and /view/:slug.ics
         const icsMatch = path.match(/^(\/view)?\/([^/]+)\.ics$/i);
@@ -187,6 +189,31 @@ export default {
             return withCors(await dir.fetch('http://internal/stats'));
         }
 
+        // 4b. Automated R2 Backups API (manual run or list)
+        if (path === '/api/backup/run' && request.method === 'POST') {
+            if (!env.IMPORT_SECRET || request.headers.get('Authorization') !== `Bearer ${env.IMPORT_SECRET}`) {
+                return new Response('forbidden', { status: 403 });
+            }
+            const body = await request.json().catch(() => ({}));
+            const res = await BackupService.run(env, body.tier || null);
+            return withCors(Response.json(res));
+        }
+
+        if (path === '/api/backup/list' && request.method === 'GET') {
+            if (!env.IMPORT_SECRET || request.headers.get('Authorization') !== `Bearer ${env.IMPORT_SECRET}`) {
+                return new Response('forbidden', { status: 403 });
+            }
+            if (!env.BACKUPS) return withCors(Response.json({ objects: [] }));
+            const list = await env.BACKUPS.list({ limit: 100 });
+            const objects = (list.objects || []).map((o) => ({
+                key: o.key,
+                size: o.size,
+                uploaded: o.uploaded,
+                customMetadata: o.customMetadata
+            }));
+            return withCors(Response.json({ objects }));
+        }
+
         // 5. Read-only views routing: /cal/view/:viewId/ws and /cal/view/:viewId
         const viewMatch = path.match(/^\/cal\/view\/([^/]+)(\/ws)?$/);
         if (viewMatch) {
@@ -243,5 +270,29 @@ export default {
         out.headers.set('X-Robots-Tag', 'noindex');
         if (/\.(js|css|json)$/.test(path) || beta) out.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
         return out;
+    } catch (err) {
+        console.error('[Worker:unhandledError]', JSON.stringify({
+            url: request.url,
+            method: request.method,
+            error: err.message,
+            stack: err.stack,
+            ip: request.headers.get('cf-connecting-ip'),
+            ray: request.headers.get('cf-ray')
+        }));
+        return withCors(new Response('Internal Server Error', { status: 500 }));
+    }
+},
+
+    // Cloudflare Cron Trigger (crons = ["0 * * * *"])
+    async scheduled(event, env, ctx) {
+        ctx.waitUntil((async () => {
+            console.log(`[BackupService:cron] Cron trigger fired at ${new Date().toISOString()} (cron: "${event.cron}")`);
+            try {
+                const res = await BackupService.run(env);
+                console.log('[BackupService:cron] Backup complete:', JSON.stringify(res));
+            } catch (err) {
+                console.error('[BackupService:cron] Backup failed:', err);
+            }
+        })());
     },
 };

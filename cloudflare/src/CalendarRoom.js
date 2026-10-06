@@ -101,8 +101,25 @@ export class CalendarRoom extends DurableObject {
                 })
             });
         } catch (e) {
-            console.error(`[CalendarRoom] registerInDirectory failed for ${actualSlug}:`, e.message);
+            console.error('[CalendarRoom:registerInDirectoryFailed]', json({
+                actualSlug,
+                isReadOnly: !!isReadOnly,
+                targetId: targetId || actualSlug,
+                error: e.message
+            }));
         }
+    }
+
+    async touchDirectory() {
+        if (!this.env.DIRECTORY || !this.state.id) return;
+        try {
+            const dir = this.env.DIRECTORY.get(this.env.DIRECTORY.idFromName('global'));
+            await dir.fetch('http://internal/touch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: json({ targetId: this.state.id })
+            });
+        } catch {}
     }
 
     recordAuthor(uid, isCreation = false) {
@@ -200,6 +217,7 @@ export class CalendarRoom extends DurableObject {
         this.sql.exec(`INSERT INTO history (v, at, source, commands, entry) VALUES (?, ?, ?, ?, ?)`,
             s.v, s.lastEditedAt, source, json(commands), json(entry));
         this.sql.exec(`DELETE FROM history WHERE v NOT IN (SELECT v FROM history ORDER BY v DESC LIMIT 50)`);
+        this.ctx.waitUntil(this.touchDirectory());
     }
 
     // ---- limits ---------------------------------------------------------------------------
@@ -531,10 +549,15 @@ export class CalendarRoom extends DurableObject {
                 if (put.ok) return;
                 this.mirrored = before; this.setMeta('mirrored', before);
                 if (put.status !== 412) throw new Error(`write HTTP ${put.status}`);
+                console.warn('[CalendarRoom:copyBackRetry]', json({ calendarId: id, attempt, status: put.status }));
             }
             throw new Error('Firebase kept changing; gave up after 4 tries');
         } catch (e) {
-            console.error(`copyBack FAILED for ${id}: ${e.message}`);
+            console.error('[CalendarRoom:copyBackFailed]', json({
+                calendarId: id,
+                error: e.message,
+                stack: e.stack
+            }));
             await this.ctx.storage.setAlarm(Date.now() + 30000);                // try again; the state is safe here meanwhile
         }
     }
@@ -542,17 +565,41 @@ export class CalendarRoom extends DurableObject {
     // ---- WebSocket messages ---------------------------------------------------------------
     async webSocketMessage(ws, message) {
         if (typeof message !== 'string' || message.length > LIMITS.maxMessage) {
+            console.warn('[CalendarRoom:refuse]', json({
+                calendarId: this.state.id || this.id,
+                code: 'too_big',
+                message: 'message too large',
+                length: typeof message === 'string' ? message.length : typeof message
+            }));
             return ws.send(json({ t: 'error', code: 'too_big', message: 'message too large' }));
         }
-        let m; try { m = JSON.parse(message); } catch { return ws.send(json({ t: 'error', code: 'bad_json' })); }
-        const refuse = (code, message) => ws.send(json({ t: 'error', id: m.id, code, message }));
-
+        let m;
+        try { m = JSON.parse(message); } catch {
+            console.warn('[CalendarRoom:refuse]', json({
+                calendarId: this.state.id || this.id,
+                code: 'bad_json'
+            }));
+            return ws.send(json({ t: 'error', code: 'bad_json' }));
+        }
         const tab = ws.deserializeAttachment() || {};
+        const author = m.author || tab.author;
+        const refuse = (code, message) => {
+            console.warn('[CalendarRoom:refuse]', json({
+                calendarId: this.state.id || this.id,
+                code,
+                message,
+                writer: m.writer || author,
+                t: m.t,
+                commandsCount: Array.isArray(m.commands) ? m.commands.length : 0,
+                seq: m.v ?? m.id
+            }));
+            return ws.send(json({ t: 'error', id: m.id, code, message }));
+        };
+
         if (tab.isViewOnly && (m.t === 'save' || m.t === 'meta')) {
             return refuse('read_only', 'this link is read-only');
         }
 
-        const author = m.author || tab.author;
         if (author && !tab.isViewOnly) this.recordAuthor(author, false);
 
         if (m.t === 'save' || m.t === 'meta') {
@@ -616,10 +663,15 @@ export class CalendarRoom extends DurableObject {
         refuse('unknown', `unknown message ${m.t}`);
     }
 
-    // Answer the close. A tab that calls close() with no code arrives as 1005, which is not a code
-    // close() accepts: it threw, so the close was never answered and the tab sat in CLOSING.
     webSocketClose(ws, code) {
         const ok = code >= 1000 && code < 5000 && ![1004, 1005, 1006, 1015].includes(code);
+        if (!ok && code !== 1000 && code !== 1001 && code !== 1005) {
+            console.warn('[CalendarRoom:webSocketClose]', json({
+                calendarId: this.state.id || this.id,
+                code,
+                wasClean: ok
+            }));
+        }
         try { ws.close(ok ? code : 1000, 'bye'); } catch { /* already closed */ }
     }
 

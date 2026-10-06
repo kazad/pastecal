@@ -15,6 +15,8 @@ export class CalendarDirectory extends DurableObject {
             )`);
             this.sql.exec(`CREATE INDEX IF NOT EXISTS idx_actual ON directory (actual_slug)`);
             this.sql.exec(`CREATE INDEX IF NOT EXISTS idx_target ON directory (target_id)`);
+            try { this.sql.exec(`ALTER TABLE directory ADD COLUMN last_edited_at INTEGER`); } catch {}
+            this.sql.exec(`CREATE INDEX IF NOT EXISTS idx_last_edited ON directory (last_edited_at)`);
         });
     }
 
@@ -165,6 +167,30 @@ export class CalendarDirectory extends DurableObject {
             const total = this.sql.exec(`SELECT count(*) as c FROM directory`).toArray()[0]?.c || 0;
             const readOnly = this.sql.exec(`SELECT count(*) as c FROM directory WHERE is_readonly = 1`).toArray()[0]?.c || 0;
             return Response.json({ total, readOnly, editable: total - readOnly });
+        }
+
+        if (request.method === 'POST' && path === '/touch') {
+            const body = await request.json().catch(() => ({}));
+            const id = body.targetId ? String(body.targetId).trim() : null;
+            if (id) {
+                const now = Date.now();
+                this.sql.exec(`UPDATE directory SET last_edited_at = ? WHERE target_id = ? OR actual_slug = ?`, now, id, id);
+            }
+            return Response.json({ ok: true });
+        }
+
+        if (request.method === 'GET' && path === '/recent-edited') {
+            const since = parseInt(url.searchParams.get('since') || '0', 10);
+            const limit = parseInt(url.searchParams.get('limit') || '500', 10);
+            const rows = this.sql.exec(`SELECT actual_slug, target_id, last_edited_at FROM directory WHERE is_readonly = 0 AND last_edited_at >= ? ORDER BY last_edited_at DESC LIMIT ?`, since, limit).toArray();
+            return Response.json(rows);
+        }
+
+        if (request.method === 'GET' && path === '/list-all') {
+            const limit = parseInt(url.searchParams.get('limit') || '1000', 10);
+            const offset = parseInt(url.searchParams.get('offset') || '0', 10);
+            const rows = this.sql.exec(`SELECT actual_slug, target_id, last_edited_at FROM directory WHERE is_readonly = 0 ORDER BY normalized ASC LIMIT ? OFFSET ?`, limit, offset).toArray();
+            return Response.json(rows);
         }
 
         return new Response('not found', { status: 404 });

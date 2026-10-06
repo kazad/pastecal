@@ -1232,12 +1232,17 @@ const CalendarVueApp = {
         // refused until a reload. The list keeps this write's own additions and edits,
         // and the service re-sends them along with any deletion the user named, so local
         // and server converge on the same list.
-        CalendarDataService.onSyncRefused = ({ before, removing, recovered, events }) => {
-            // The rows put back, not the net shrink: an addition in the same write offsets
-            // the count without making the loss any smaller.
-            const n = recovered ?? removing;
-            this.showToast(`Recovered ${n} event${n === 1 ? '' : 's'} that were about to be lost`, 'error');
-            track(a => a.syncRefused({ before, removing }));
+        CalendarDataService.onSyncRefused = ({ before, removing, recovered, events, code, message }) => {
+            if (code) {
+                this.showToast(`Server refused update: ${message || code}`, 'error');
+                track(a => a.syncRefused({ before, removing: 0, code, message }));
+            } else {
+                // The rows put back, not the net shrink: an addition in the same write offsets
+                // the count without making the loss any smaller.
+                const n = recovered ?? removing;
+                this.showToast(`Recovered ${n} event${n === 1 ? '' : 's'} that were about to be lost`, 'error');
+                track(a => a.syncRefused({ before, removing, code: 'undeclared_removal' }));
+            }
             if (Array.isArray(events)) {
                 this.applyRemoteCalendar({ ...this.calendar, events: JSON.parse(JSON.stringify(events)) },
                     { replace: true });

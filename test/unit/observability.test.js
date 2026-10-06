@@ -28,6 +28,12 @@ const SERVICE = fs.readFileSync(
   path.join(__dirname, '../../public/services/CalendarDataService.js'), 'utf8');
 const FUNCTIONS = fs.readFileSync(
   path.join(__dirname, '../../functions/index.js'), 'utf8');
+const CLOUD_SERVICE = fs.readFileSync(
+  path.join(__dirname, '../../public/services/CloudCalendarService.js'), 'utf8');
+const CALENDAR_ROOM = fs.readFileSync(
+  path.join(__dirname, '../../cloudflare/src/CalendarRoom.js'), 'utf8');
+const WORKER_INDEX = fs.readFileSync(
+  path.join(__dirname, '../../cloudflare/src/index.js'), 'utf8');
 
 // Load the Analytics object with its sinks replaced by a recorder, so the real track()
 // path is exercised rather than a copy of it.
@@ -178,3 +184,30 @@ test('an ICS failure is logged as a queryable structured line', () => {
   assert.doesNotMatch(block, /calendar:\s*id\b/,
     'cleanId is scoped to the try block and is not available in the catch');
 });
+
+test('syncRefused records server refusal code and message without leaking calendar data', () => {
+  const { A, sent } = loadAnalytics();
+  A.syncRefused({ before: 5, removing: 0, code: 'rate_limited', message: 'too often' });
+
+  assert.equal(sent[0].name, 'sync_refused');
+  assert.equal(sent[0].params.before, 5);
+  assert.equal(sent[0].params.removing, 0);
+  assert.equal(sent[0].params.code, 'rate_limited');
+  assert.equal(sent[0].params.message, 'too often');
+
+  const blob = JSON.stringify(sent[0].params);
+  assert.doesNotMatch(blob, /title|start|end|description/);
+});
+
+test('CloudCalendarService reports refusal and reconnect attempts to Analytics', () => {
+  assert.match(CLOUD_SERVICE, /window\.Analytics\.track\('cloud_sync_refused'/);
+  assert.match(CLOUD_SERVICE, /window\.Analytics\.track\('cloud_reconnect_retry'/);
+});
+
+test('CalendarRoom and Worker index emit structured JSON logging for refusals, copyBack and unhandled errors', () => {
+  assert.match(CALENDAR_ROOM, /\[CalendarRoom:refuse\]/);
+  assert.match(CALENDAR_ROOM, /\[CalendarRoom:copyBackFailed\]/);
+  assert.match(CALENDAR_ROOM, /\[CalendarRoom:webSocketClose\]/);
+  assert.match(WORKER_INDEX, /\[Worker:unhandledError\]/);
+});
+

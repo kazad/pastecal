@@ -1,0 +1,2834 @@
+<!-- 
+Open sourced under the MIT License: https://opensource.org/licenses/MIT
+Copyright (c) 2025 Kalid Azad
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Pastecal Lab Preview — 100/100 UX In-Between Header & Subcalendars</title>
+    <meta name="description" content="Live preview of Pastecal with Integrated Command Bar, Subcalendars, and Syncfusion theming.">
+
+    <!-- Favicons -->
+    <link rel="icon" type="image/svg+xml" href="/img/icons/favicon.svg" />
+    <link rel="shortcut icon" href="/img/icons/favicon.ico" />
+
+    <!-- Preconnects & Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Syncfusion & Base Styles -->
+    <link id="syncfusion-theme" href="/vendor/syncfusion-23.2.6/material.css?v=1790553083" rel="stylesheet" type="text/css" />
+    <link rel="stylesheet" href="/tokens.css?v=1790553083">
+    <link rel="stylesheet" href="/style.css?v=1790553083">
+    <link rel="stylesheet" href="/tailwind.css?v=1790553083">
+
+    <!-- Third-party libraries -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="/vendor/syncfusion-23.2.6/ej2-calendar.min.js?v=1790553083" type="text/javascript"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-functions-compat.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js"></script>
+
+    <!-- Firebase config -->
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyCZ9U1FflAFcdDLgxJscs2BwV_PrXqmzKw",
+            authDomain: "pastecal-web.firebaseapp.com",
+            databaseURL: "https://pastecal-web-default-rtdb.firebaseio.com",
+            projectId: "pastecal-web",
+            storageBucket: "pastecal-web.appspot.com",
+            messagingSenderId: "912998627577",
+            appId: "1:912998627577:web:aa652846c2618a986d8a28",
+            measurementId: "G-4J99GY9KE6"
+        };
+        firebase.initializeApp(firebaseConfig);
+        firebase.auth().signInAnonymously().catch(function (err) {
+            console.warn('[auth] anonymous sign-in unavailable:', err && err.code);
+        });
+        ej.base.registerLicense('Ngo9BigBOggjHTQxAR8/V1NHaF1cW2hIfEx1RHxQdld5ZFRHallYTnNWUj0eQnxTdEZiW39fcXJXR2JUV0NyWg==');
+    </script>
+
+    <!-- App scripts -->
+    <script src="/utils/analytics.js?v=1790553083"></script>
+    <script src="/utils/utils.js?v=1790553083"></script>
+    <script src="/models/Event.js?v=1790553083"></script>
+    <script src="/services/SlugManager.js?v=1790553083"></script>
+    <script src="/services/AuthorSignal.js?v=1790553083"></script>
+    <script src="/services/CalendarDataService.js?v=1790553083"></script>
+    <script src="/models/Calendar.js?v=1790553083"></script>
+    <script src="/services/EventStore.js?v=1790553083"></script>
+    <script src="/services/CloudCalendarService.js?v=1790553083"></script>
+    <script src="/services/ScheduleAdapter.js?v=1790553083"></script>
+    <script src="/directives/clickOutside.js?v=1790553083"></script>
+    <script src="/components/icons.js?v=1790553083"></script>
+    <script src="/components/ToastNotification.js?v=1790553083"></script>
+    <script src="/components/QuickAddButton.js?v=1790553083"></script>
+    <script src="/components/Tooltip.js?v=1790553083"></script>
+    <script src="/components/QuickAddDialog.js?v=1790553083"></script>
+    <script src="/components/CalendarTitle.js?v=1790553083"></script>
+    <script src="/components/NavigationDropdown.js?v=1790553083"></script>
+    <script src="/components/WelcomeDock.js?v=1790553083"></script>
+
+    <!-- Configure CAL_BASE for preview routing BEFORE app.js runs -->
+    <script>
+        window.CAL_BASE = '/preview';
+    </script>
+
+    <!-- PREVIEW THEME SYSTEM STYLES -->
+    <style id="preview-theme-css">
+        /* Typography overrides */
+        body.font-jakarta,
+        body.font-jakarta #Schedule,
+        body.font-jakarta .e-control,
+        body.font-jakarta .e-toolbar,
+        body.font-jakarta .e-tbar-btn-text,
+        body.font-jakarta .e-appointment,
+        body.font-jakarta input,
+        body.font-jakarta button {
+            font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif !important;
+        }
+
+        /* Protect Syncfusion glyph icons from font override */
+        body.font-jakarta .e-icons,
+        body.font-jakarta [class*="e-icon"] {
+            font-family: 'e-icons' !important;
+        }
+
+        /* Tabular mono font for schedule times */
+        body.font-jakarta .e-schedule .e-time-cells-wrap td,
+        body.font-jakarta .e-schedule .e-appointment .e-time,
+        .mono-time {
+            font-family: 'JetBrains Mono', ui-monospace, monospace !important;
+            font-feature-settings: "tnum" 1;
+        }
+
+        /* ============================================================
+           EDGE-TO-EDGE DESKTOP LAYOUT (100% Full-Bleed Viewport)
+           ============================================================ */
+        html, body {
+            height: 100vh !important;
+            width: 100vw !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+        }
+
+        body {
+            display: flex !important;
+            flex-direction: column !important;
+            transition: background-color 0.2s ease, color 0.2s ease;
+        }
+
+        #app {
+            display: flex !important;
+            flex-direction: column !important;
+            width: 100vw !important;
+            height: 100vh !important;
+            overflow: hidden !important;
+        }
+
+        /* Master Calendar Container (Full-Bleed Edge-to-Edge) */
+        .calendar-workspace-card {
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            border-radius: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+            overflow: hidden !important;
+            display: flex !important;
+            flex-direction: column !important;
+            flex: 1 1 0% !important;
+            min-height: 0 !important;
+            transition: all 0.2s ease;
+        }
+
+        /* ============================================================
+           THEME PRESET 1: STUDIO CONTRAST (Mockup Exact: Dark Bar + White Grid)
+           ============================================================ */
+        body.theme-contrast {
+            background-color: #111827 !important;
+            color: #0f172a !important;
+        }
+
+        body.theme-contrast .calendar-workspace-card {
+            background-color: #ffffff !important;
+            border: none !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+        }
+
+        /* ============================================================
+           THEME PRESET 2: MODERN PURE LIGHT
+           ============================================================ */
+        body.theme-modern {
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+        }
+
+        body.theme-modern .calendar-workspace-card {
+            background-color: #ffffff !important;
+            border: none !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+        }
+
+        /* ============================================================
+           THEME PRESET 3: MIDNIGHT STUDIO DARK
+           ============================================================ */
+        body.theme-dark {
+            background-color: #090d16 !important;
+            color: #f8fafc !important;
+        }
+
+        body.theme-dark .calendar-workspace-card {
+            background-color: #0f172a !important;
+            border: none !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+        }
+
+        /* ============================================================
+           THEME PRESET 4: SOFT PASTEL
+           ============================================================ */
+        body.theme-pastel {
+            background-color: #f6f8fb !important;
+            color: #0f172a !important;
+        }
+
+        body.theme-pastel .calendar-workspace-card {
+            background-color: #ffffff !important;
+            border: none !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+        }
+
+        /* ============================================================
+           SEASONAL THEME 1: 🍂 AUTUMN EMBER (October / Fall)
+           ============================================================ */
+        body.theme-autumn {
+            background: #180f08 !important;
+            color: #0f172a !important;
+        }
+
+        body.theme-autumn .calendar-workspace-card {
+            background-color: #ffffff !important;
+            border: none !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+        }
+
+        /* ============================================================
+           SEASONAL THEME 2: ❄️ FROST & MIDNIGHT (December / Winter)
+           ============================================================ */
+        body.theme-frost {
+            background: #070e1c !important;
+            color: #0f172a !important;
+        }
+
+        body.theme-frost .calendar-workspace-card {
+            background-color: #ffffff !important;
+            border: none !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+        }
+
+        /* ============================================================
+           SEASONAL THEME 3: 🌸 SAKURA SPRING (April / Spring)
+           ============================================================ */
+        body.theme-sakura {
+            background: #fbf5f6 !important;
+            color: #0f172a !important;
+        }
+
+        body.theme-sakura .calendar-workspace-card {
+            background-color: #ffffff !important;
+            border: none !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+        }
+
+        /* ============================================================
+           SEASONAL THEME 4: ☀️ SOLAR SUNSET (July / Summer)
+           ============================================================ */
+        body.theme-sunset {
+            background: #140d21 !important;
+            color: #0f172a !important;
+        }
+
+        body.theme-sunset .calendar-workspace-card {
+            background-color: #ffffff !important;
+            border: none !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+        }
+
+        /* ============================================================
+           HEADER VARIETY 1: INTEGRATED DOCK (In-Between - Default)
+           ============================================================ */
+        body.header-integrated topbar {
+            position: relative !important;
+            margin: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            padding: 9px 24px !important;
+            border-radius: 0 !important;
+            border: none !important;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            box-shadow: none !important;
+            z-index: 50 !important;
+            flex-shrink: 0 !important;
+        }
+
+        body.theme-contrast.header-integrated topbar,
+        body.theme-dark.header-integrated topbar {
+            background: #111827 !important;
+            border-bottom-color: #1f2937 !important;
+            color: #f8fafc !important;
+        }
+
+        body.theme-autumn.header-integrated topbar {
+            background: #25150a !important;
+            border-bottom: 1px solid #452414 !important;
+            color: #ffedd5 !important;
+        }
+
+        body.theme-frost.header-integrated topbar {
+            background: #0b172d !important;
+            border-bottom: 1px solid #1c2e4f !important;
+            color: #f0f9ff !important;
+        }
+
+        body.theme-sunset.header-integrated topbar {
+            background: #1d1230 !important;
+            border-bottom: 1px solid #3b2259 !important;
+            color: #fff7ed !important;
+        }
+
+        body.theme-modern.header-integrated topbar,
+        body.theme-pastel.header-integrated topbar,
+        body.theme-sakura.header-integrated topbar {
+            background: #ffffff !important;
+            border-bottom: 1px solid #e2e8f0 !important;
+            color: #0f172a !important;
+        }
+
+        /* ============================================================
+           HEADER VARIETY 2: FLOATING CAPSULE
+           ============================================================ */
+        body.header-floating topbar {
+            position: sticky !important;
+            top: 12px !important;
+            z-index: 80 !important;
+            margin: 0 auto 14px auto !important;
+            max-width: 1380px !important;
+            background: rgba(255, 255, 255, 0.94) !important;
+            backdrop-filter: blur(16px) !important;
+            -webkit-backdrop-filter: blur(16px) !important;
+            border: 1px solid rgba(226, 232, 240, 0.9) !important;
+            border-radius: 9999px !important;
+            padding: 8px 20px !important;
+            box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.1), 0 4px 6px -2px rgba(15, 23, 42, 0.03) !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+        }
+
+        body.theme-contrast.header-floating topbar,
+        body.theme-dark.header-floating topbar {
+            background: rgba(17, 24, 39, 0.94) !important;
+            border-color: rgba(55, 65, 81, 0.8) !important;
+            color: #f8fafc !important;
+            box-shadow: 0 16px 36px rgba(0, 0, 0, 0.5) !important;
+        }
+
+        /* ============================================================
+           HEADER VARIETY 3: WORKSPACE BREADCRUMB
+           ============================================================ */
+        body.header-breadcrumbs topbar {
+            margin: 0 !important;
+            padding: 8px 18px !important;
+            border-radius: 16px 16px 0 0 !important;
+            background: #0f172a !important;
+            color: #f8fafc !important;
+            border-bottom: 1px solid #1e293b !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+        }
+
+        body.theme-modern.header-breadcrumbs topbar {
+            background: #ffffff !important;
+            color: #0f172a !important;
+            border-bottom: 1px solid #e2e8f0 !important;
+        }
+
+        /* ============================================================
+           HEADER VARIETY 4: CLASSIC TOPBAR
+           ============================================================ */
+        body.header-classic topbar {
+            margin-bottom: 8px !important;
+            padding: 8px 4px !important;
+            border: none !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+        }
+
+        /* ============================================================
+           HEADER CONTROLS & PILLS (Mockup Exact)
+           ============================================================ */
+        .brand-squircle {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            background: rgba(79, 70, 229, 0.15);
+            border: 1px solid rgba(79, 70, 229, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #818cf8;
+            flex-shrink: 0;
+        }
+
+        .brand-subtitle {
+            font-size: 10px;
+            letter-spacing: 0.02em;
+            color: #94a3b8;
+            font-weight: 500;
+            line-height: 1;
+            margin-top: 1px;
+        }
+
+        .header-sep {
+            width: 1px;
+            height: 22px;
+            background: rgba(255, 255, 255, 0.12);
+            margin: 0 10px;
+        }
+
+        body.theme-modern .header-sep,
+        body.theme-pastel .header-sep {
+            background: #e2e8f0;
+        }
+
+        .header-tool-capsule {
+            display: inline-flex;
+            align-items: center;
+            gap: 2px;
+            padding: 3px 6px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        body.theme-modern .header-tool-capsule,
+        body.theme-pastel .header-tool-capsule {
+            background: #f1f5f9;
+            border-color: #e2e8f0;
+        }
+
+        .header-tool-btn {
+            padding: 5px 7px;
+            border-radius: 6px;
+            color: #94a3b8;
+            transition: all 0.12s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+        }
+
+        .header-tool-btn:hover {
+            color: #ffffff;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        body.theme-modern .header-tool-btn:hover,
+        body.theme-pastel .header-tool-btn:hover {
+            color: #0f172a;
+            background: #e2e8f0;
+        }
+
+        .btn-new-event-elevated {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: #4f46e5;
+            color: #ffffff !important;
+            font-weight: 700;
+            font-size: 12.5px;
+            padding: 6px 14px;
+            border-radius: 9px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4), 0 1px 2px rgba(0, 0, 0, 0.1);
+            transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+            cursor: pointer;
+        }
+
+        .btn-new-event-elevated:hover {
+            background: #4338ca;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(79, 70, 229, 0.5);
+        }
+
+        .btn-shortcut-badge {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 1px 5px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+        }
+
+        .calendar-title-display {
+            font-size: 15px;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+        }
+
+        body.theme-contrast topbar .calendar-title-display,
+        body.theme-dark topbar .calendar-title-display {
+            color: #ffffff;
+        }
+
+        body.theme-modern topbar .calendar-title-display,
+        body.theme-pastel topbar .calendar-title-display {
+            color: #0f172a;
+        }
+
+        .btn-notes-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            border-radius: 7px;
+            font-size: 12px;
+            font-weight: 600;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #cbd5e1;
+            cursor: pointer;
+            transition: all 0.12s ease;
+        }
+
+        body.theme-modern .btn-notes-pill,
+        body.theme-pastel .btn-notes-pill {
+            background: #f8fafc;
+            border-color: #e2e8f0;
+            color: #475569;
+        }
+
+        .btn-notes-pill:hover {
+            background: rgba(255, 255, 255, 0.12);
+            color: #ffffff;
+        }
+
+        body.theme-modern .btn-notes-pill:hover,
+        body.theme-pastel .btn-notes-pill:hover {
+            background: #f1f5f9;
+            color: #0f172a;
+        }
+
+        .share-pill-container {
+            display: inline-flex;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 2px 4px 2px 10px;
+            font-size: 12px;
+            font-family: 'JetBrains Mono', monospace;
+            color: #94a3b8;
+        }
+
+        body.theme-modern .share-pill-container,
+        body.theme-pastel .share-pill-container {
+            background: #f8fafc;
+            border-color: #e2e8f0;
+            color: #64748b;
+        }
+
+        .share-pill-btn {
+            margin-left: 8px;
+            padding: 3px 8px;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            color: #f8fafc;
+            font-weight: 600;
+            font-size: 11.5px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            transition: all 0.12s ease;
+        }
+
+        body.theme-modern .share-pill-btn,
+        body.theme-pastel .share-pill-btn {
+            background: #ffffff;
+            border-color: #cbd5e1;
+            color: #0f172a;
+        }
+
+        .share-pill-btn:hover {
+            background: #4f46e5;
+            border-color: #4f46e5;
+            color: #ffffff;
+        }
+
+        .badge-pro {
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.06em;
+            padding: 3px 7px;
+            border-radius: 9999px;
+            background: rgba(124, 58, 237, 0.16);
+            border: 1px solid #8b5cf6;
+            color: #c4b5fd;
+            text-transform: uppercase;
+        }
+
+        body.theme-modern .badge-pro,
+        body.theme-pastel .badge-pro {
+            background: #f5f3ff;
+            border-color: #c4b5fd;
+            color: #6d28d9;
+        }
+
+        /* ============================================================
+           SUBCALENDAR / LAYERS TOOLBAR (Pastecal Pro Feature)
+           ============================================================ */
+        .subcalendar-layers-bar {
+            padding: 8px 18px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            border-bottom: 1px solid #e2e8f0;
+            background: #f8fafc;
+            transition: all 0.2s ease;
+        }
+
+        body.theme-contrast .subcalendar-layers-bar {
+            background: #172033;
+            border-bottom: 1px solid #253046;
+            color: #e2e8f0;
+        }
+
+        body.theme-dark .subcalendar-layers-bar {
+            background: #131b2e;
+            border-bottom: 1px solid #1e293b;
+            color: #e2e8f0;
+        }
+
+        .subcal-root-tag {
+            font-size: 12px;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: #475569;
+        }
+
+        body.theme-contrast .subcal-root-tag,
+        body.theme-dark .subcal-root-tag {
+            color: #cbd5e1;
+        }
+
+        .layer-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 9999px;
+            font-size: 11.5px;
+            font-weight: 600;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            color: #475569;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            user-select: none;
+        }
+
+        body.theme-contrast .layer-chip {
+            background: #1e293b;
+            border-color: #334155;
+            color: #cbd5e1;
+        }
+
+        body.theme-dark .layer-chip {
+            background: #1e293b;
+            border-color: #334155;
+            color: #cbd5e1;
+        }
+
+        .layer-chip:hover {
+            border-color: #94a3b8;
+            transform: translateY(-1px);
+        }
+
+        .layer-chip.active {
+            background: #4f46e5 !important;
+            border-color: #4f46e5 !important;
+            color: #ffffff !important;
+            box-shadow: 0 2px 8px rgba(79, 70, 229, 0.35);
+        }
+
+        .layer-chip-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 9999px;
+            display: inline-block;
+        }
+
+        .perspective-switch-wrap {
+            display: inline-flex;
+            align-items: center;
+            padding: 2px;
+            background: #e2e8f0;
+            border-radius: 9999px;
+        }
+
+        body.theme-contrast .perspective-switch-wrap,
+        body.theme-dark .perspective-switch-wrap {
+            background: #1e293b;
+            border: 1px solid #334155;
+        }
+
+        body.theme-autumn .subcalendar-layers-bar {
+            background: #1c110a;
+            border-bottom: 1px solid #381f13;
+            color: #ffedd5;
+        }
+        body.theme-autumn .subcal-root-tag { color: #fdba74; }
+        body.theme-autumn .layer-chip {
+            background: #2d180c;
+            border-color: #4a2714;
+            color: #fed7aa;
+        }
+        body.theme-autumn .layer-chip.active {
+            background: #ea580c !important;
+            border-color: #ea580c !important;
+            color: #ffffff !important;
+            box-shadow: 0 2px 8px rgba(234, 88, 12, 0.4);
+        }
+        body.theme-autumn .perspective-switch-wrap {
+            background: #2d180c;
+            border: 1px solid #4a2714;
+        }
+        body.theme-autumn .perspective-btn { color: #fed7aa; }
+        body.theme-autumn .perspective-btn.active {
+            background: #ea580c;
+            color: #ffffff;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+        }
+
+        body.theme-frost .subcalendar-layers-bar {
+            background: #081224;
+            border-bottom: 1px solid #16294a;
+            color: #f0f9ff;
+        }
+        body.theme-frost .subcal-root-tag { color: #7dd3fc; }
+        body.theme-frost .layer-chip {
+            background: #0f1f3d;
+            border-color: #1e3a6b;
+            color: #bae6fd;
+        }
+        body.theme-frost .layer-chip.active {
+            background: #0284c7 !important;
+            border-color: #0284c7 !important;
+            color: #ffffff !important;
+            box-shadow: 0 2px 8px rgba(2, 132, 199, 0.4);
+        }
+        body.theme-frost .perspective-switch-wrap {
+            background: #0f1f3d;
+            border: 1px solid #1e3a6b;
+        }
+        body.theme-frost .perspective-btn { color: #bae6fd; }
+        body.theme-frost .perspective-btn.active {
+            background: #0284c7;
+            color: #ffffff;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+        }
+
+        body.theme-sakura .subcalendar-layers-bar {
+            background: #220b17;
+            border-bottom: 1px solid #43172f;
+            color: #ffe4e6;
+        }
+        body.theme-sakura .subcal-root-tag { color: #fda4af; }
+        body.theme-sakura .layer-chip {
+            background: #361225;
+            border-color: #591e3e;
+            color: #fecdd3;
+        }
+        body.theme-sakura .layer-chip.active {
+            background: #e11d48 !important;
+            border-color: #e11d48 !important;
+            color: #ffffff !important;
+            box-shadow: 0 2px 8px rgba(225, 29, 72, 0.4);
+        }
+        body.theme-sakura .perspective-switch-wrap {
+            background: #361225;
+            border: 1px solid #591e3e;
+        }
+        body.theme-sakura .perspective-btn { color: #fecdd3; }
+        body.theme-sakura .perspective-btn.active {
+            background: #e11d48;
+            color: #ffffff;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+        }
+
+        body.theme-sunset .subcalendar-layers-bar {
+            background: #160c23;
+            border-bottom: 1px solid #331a52;
+            color: #fef3c7;
+        }
+        body.theme-sunset .subcal-root-tag { color: #fcd34d; }
+        body.theme-sunset .layer-chip {
+            background: #25143a;
+            border-color: #44246b;
+            color: #fde68a;
+        }
+        body.theme-sunset .layer-chip.active {
+            background: #ea580c !important;
+            border-color: #ea580c !important;
+            color: #ffffff !important;
+            box-shadow: 0 2px 8px rgba(234, 88, 12, 0.4);
+        }
+        body.theme-sunset .perspective-switch-wrap {
+            background: #25143a;
+            border: 1px solid #44246b;
+        }
+        body.theme-sunset .perspective-btn { color: #fde68a; }
+        body.theme-sunset .perspective-btn.active {
+            background: #ea580c;
+            color: #ffffff;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+        }
+
+        .perspective-btn {
+            padding: 4px 11px;
+            font-size: 11px;
+            font-weight: 700;
+            border-radius: 9999px;
+            border: none;
+            background: transparent;
+            color: #64748b;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        body.theme-contrast .perspective-btn,
+        body.theme-dark .perspective-btn {
+            color: #94a3b8;
+        }
+
+        .perspective-btn.active {
+            background: #ffffff;
+            color: #0f172a;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+        }
+
+        body.theme-contrast .perspective-btn.active,
+        body.theme-dark .perspective-btn.active {
+            background: #334155;
+            color: #ffffff;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        .public-viewer-banner {
+            padding: 6px 18px;
+            background: #fffbeb;
+            border-bottom: 1px solid #fde68a;
+            color: #92400e;
+            font-size: 12px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        body.theme-contrast .public-viewer-banner,
+        body.theme-dark .public-viewer-banner {
+            background: #2b1f13;
+            border-bottom: 1px solid #573312;
+            color: #fcd34d;
+        }
+
+        /* ============================================================
+           SYNCFUSION CALENDAR GRID & CELLS THEME (Edge-to-Edge)
+           ============================================================ */
+        #cal2_wrap {
+            width: 100% !important;
+            flex: 1 1 0% !important;
+            height: 100% !important;
+            min-height: 0 !important;
+            overflow: hidden !important;
+            display: flex !important;
+            flex-direction: column !important;
+        }
+
+        #Schedule {
+            width: 100% !important;
+            height: 100% !important;
+            flex: 1 1 0% !important;
+            border: none !important;
+            border-radius: 0 !important;
+            overflow: hidden !important;
+        }
+
+        #calendar-plan-footer {
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            border-radius: 0 !important;
+            border-left: none !important;
+            border-right: none !important;
+            border-bottom: none !important;
+            padding: 6px 24px !important;
+            height: 34px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            flex-shrink: 0 !important;
+            z-index: 40 !important;
+        }
+
+        body.theme-contrast #calendar-plan-footer,
+        body.theme-dark #calendar-plan-footer {
+            background: #111827 !important;
+            border-top: 1px solid #1f2937 !important;
+            color: #94a3b8 !important;
+        }
+
+        body.theme-autumn #calendar-plan-footer {
+            background: #25150a !important;
+            border-top: 1px solid #452414 !important;
+            color: #ffedd5 !important;
+        }
+
+        body.theme-frost #calendar-plan-footer {
+            background: #0b172d !important;
+            border-top: 1px solid #1c2e4f !important;
+            color: #f0f9ff !important;
+        }
+
+        body.theme-sunset #calendar-plan-footer {
+            background: #1d1230 !important;
+            border-top: 1px solid #3b2259 !important;
+            color: #fff7ed !important;
+        }
+
+        body.theme-modern #calendar-plan-footer,
+        body.theme-pastel #calendar-plan-footer,
+        body.theme-sakura #calendar-plan-footer {
+            background: #ffffff !important;
+            border-top: 1px solid #e2e8f0 !important;
+            color: #64748b !important;
+        }
+
+        .e-schedule .e-work-cells,
+        .e-schedule .e-table-container,
+        .e-schedule .e-content-wrap {
+            border-color: #eef2f6 !important;
+        }
+
+        body.theme-contrast .e-schedule,
+        body.theme-contrast .e-schedule table td,
+        body.theme-modern .e-schedule,
+        body.theme-modern .e-schedule table td,
+        body.theme-pastel .e-schedule,
+        body.theme-pastel .e-schedule table td,
+        body.theme-autumn .e-schedule,
+        body.theme-autumn .e-schedule table td,
+        body.theme-frost .e-schedule,
+        body.theme-frost .e-schedule table td,
+        body.theme-sakura .e-schedule,
+        body.theme-sakura .e-schedule table td,
+        body.theme-sunset .e-schedule,
+        body.theme-sunset .e-schedule table td {
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+        }
+
+        body.theme-dark .e-schedule,
+        body.theme-dark .e-schedule table td {
+            background-color: #0f172a !important;
+            border-color: #1e293b !important;
+            color: #f8fafc !important;
+        }
+
+        /* ============================================================
+           TODAY COLUMN TINT (Soft Lavender Wash matching mockup)
+           ============================================================ */
+        .e-schedule .e-header-cells.e-current-day {
+            background-color: #edf1fe !important;
+            border-bottom: 2px solid #4f46e5 !important;
+        }
+
+        body.theme-dark .e-schedule .e-header-cells.e-current-day {
+            background-color: rgba(99, 102, 241, 0.15) !important;
+            border-bottom: 2px solid #818cf8 !important;
+        }
+
+        body.theme-autumn .e-schedule .e-header-cells.e-current-day {
+            background-color: #ffedd5 !important;
+            border-bottom: 2px solid #ea580c !important;
+        }
+
+        body.theme-frost .e-schedule .e-header-cells.e-current-day {
+            background-color: #e0f2fe !important;
+            border-bottom: 2px solid #0284c7 !important;
+        }
+
+        body.theme-sakura .e-schedule .e-header-cells.e-current-day {
+            background-color: #ffe4e6 !important;
+            border-bottom: 2px solid #e11d48 !important;
+        }
+
+        body.theme-sunset .e-schedule .e-header-cells.e-current-day {
+            background-color: #fef3c7 !important;
+            border-bottom: 2px solid #ea580c !important;
+        }
+
+        /* Dynamic today column classes */
+        #Schedule.today-col-1 .e-work-cells:nth-child(1),
+        #Schedule.today-col-2 .e-work-cells:nth-child(2),
+        #Schedule.today-col-3 .e-work-cells:nth-child(3),
+        #Schedule.today-col-4 .e-work-cells:nth-child(4),
+        #Schedule.today-col-5 .e-work-cells:nth-child(5),
+        #Schedule.today-col-6 .e-work-cells:nth-child(6),
+        #Schedule.today-col-7 .e-work-cells:nth-child(7) {
+            background-color: #edf1fe !important;
+        }
+
+        body.theme-dark #Schedule.today-col-1 .e-work-cells:nth-child(1),
+        body.theme-dark #Schedule.today-col-2 .e-work-cells:nth-child(2),
+        body.theme-dark #Schedule.today-col-3 .e-work-cells:nth-child(3),
+        body.theme-dark #Schedule.today-col-4 .e-work-cells:nth-child(4),
+        body.theme-dark #Schedule.today-col-5 .e-work-cells:nth-child(5),
+        body.theme-dark #Schedule.today-col-6 .e-work-cells:nth-child(6),
+        body.theme-dark #Schedule.today-col-7 .e-work-cells:nth-child(7) {
+            background-color: rgba(99, 102, 241, 0.12) !important;
+        }
+
+        body.theme-autumn #Schedule.today-col-1 .e-work-cells:nth-child(1),
+        body.theme-autumn #Schedule.today-col-2 .e-work-cells:nth-child(2),
+        body.theme-autumn #Schedule.today-col-3 .e-work-cells:nth-child(3),
+        body.theme-autumn #Schedule.today-col-4 .e-work-cells:nth-child(4),
+        body.theme-autumn #Schedule.today-col-5 .e-work-cells:nth-child(5),
+        body.theme-autumn #Schedule.today-col-6 .e-work-cells:nth-child(6),
+        body.theme-autumn #Schedule.today-col-7 .e-work-cells:nth-child(7) {
+            background-color: #fff7ed !important;
+        }
+
+        body.theme-frost #Schedule.today-col-1 .e-work-cells:nth-child(1),
+        body.theme-frost #Schedule.today-col-2 .e-work-cells:nth-child(2),
+        body.theme-frost #Schedule.today-col-3 .e-work-cells:nth-child(3),
+        body.theme-frost #Schedule.today-col-4 .e-work-cells:nth-child(4),
+        body.theme-frost #Schedule.today-col-5 .e-work-cells:nth-child(5),
+        body.theme-frost #Schedule.today-col-6 .e-work-cells:nth-child(6),
+        body.theme-frost #Schedule.today-col-7 .e-work-cells:nth-child(7) {
+            background-color: #f0f9ff !important;
+        }
+
+        body.theme-sakura #Schedule.today-col-1 .e-work-cells:nth-child(1),
+        body.theme-sakura #Schedule.today-col-2 .e-work-cells:nth-child(2),
+        body.theme-sakura #Schedule.today-col-3 .e-work-cells:nth-child(3),
+        body.theme-sakura #Schedule.today-col-4 .e-work-cells:nth-child(4),
+        body.theme-sakura #Schedule.today-col-5 .e-work-cells:nth-child(5),
+        body.theme-sakura #Schedule.today-col-6 .e-work-cells:nth-child(6),
+        body.theme-sakura #Schedule.today-col-7 .e-work-cells:nth-child(7) {
+            background-color: #fff1f2 !important;
+        }
+
+        body.theme-sunset #Schedule.today-col-1 .e-work-cells:nth-child(1),
+        body.theme-sunset #Schedule.today-col-2 .e-work-cells:nth-child(2),
+        body.theme-sunset #Schedule.today-col-3 .e-work-cells:nth-child(3),
+        body.theme-sunset #Schedule.today-col-4 .e-work-cells:nth-child(4),
+        body.theme-sunset #Schedule.today-col-5 .e-work-cells:nth-child(5),
+        body.theme-sunset #Schedule.today-col-6 .e-work-cells:nth-child(6),
+        body.theme-sunset #Schedule.today-col-7 .e-work-cells:nth-child(7) {
+            background-color: #fffbeb !important;
+        }
+
+        /* Time Axis Numbers */
+        .e-schedule .e-time-cells-wrap td {
+            font-size: 11px !important;
+            font-weight: 600 !important;
+            color: #94a3b8 !important;
+            padding-right: 10px !important;
+        }
+
+        body.theme-dark .e-schedule .e-time-cells-wrap td {
+            color: #64748b !important;
+        }
+
+        /* Current Time Line Indicator */
+        .e-schedule .e-current-time-indicator {
+            background-color: #4f46e5 !important;
+            height: 2px !important;
+            z-index: 25 !important;
+        }
+
+        .e-schedule .e-current-time-indicator::before {
+            content: '' !important;
+            position: absolute !important;
+            left: -5px !important;
+            top: -4px !important;
+            width: 10px !important;
+            height: 10px !important;
+            border-radius: 50% !important;
+            background-color: #4f46e5 !important;
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.25) !important;
+        }
+
+        /* Syncfusion internal toolbar */
+        .e-schedule .e-schedule-toolbar {
+            background: #ffffff !important;
+            border-bottom: 1px solid #f1f5f9 !important;
+            padding: 6px 14px !important;
+        }
+
+        body.theme-dark .e-schedule .e-schedule-toolbar {
+            background: #0f172a !important;
+            border-bottom-color: #1e293b !important;
+        }
+
+        .e-schedule .e-toolbar-item.e-active-view .e-tbar-btn {
+            background: #eef2ff !important;
+            color: #4f46e5 !important;
+            border-radius: 9999px !important;
+            font-weight: 700 !important;
+        }
+
+        body.theme-dark .e-schedule .e-toolbar-item.e-active-view .e-tbar-btn {
+            background: #1e1b4b !important;
+            color: #a5b4fc !important;
+        }
+
+        /* ============================================================
+           EVENT CARDS & PILLS (Mockup Exact Aesthetics)
+           ============================================================ */
+        /* 1. Pill Card (Mockup Style) */
+        body.card-modern .e-schedule .e-appointment {
+            border-radius: 7px !important;
+            border: none !important;
+            box-shadow: 0 2px 6px -1px rgba(0, 0, 0, 0.16), 0 1px 2px rgba(0, 0, 0, 0.08) !important;
+            padding: 4px 8px !important;
+            transition: transform 0.15s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.15s ease !important;
+        }
+
+        body.card-modern .e-schedule .e-appointment:hover {
+            transform: translateY(-1.5px) scale(1.01) !important;
+            box-shadow: 0 8px 18px -2px rgba(0, 0, 0, 0.22) !important;
+            z-index: 100 !important;
+        }
+
+        body.card-modern .e-schedule .e-appointment .e-subject {
+            font-weight: 700 !important;
+            font-size: 12.5px !important;
+            letter-spacing: -0.01em !important;
+            color: #ffffff !important;
+            text-shadow: 0 1px 2px rgba(0, 0, 0, 0.18) !important;
+        }
+
+        body.card-modern .e-schedule .e-appointment .e-time {
+            font-size: 11px !important;
+            color: rgba(255, 255, 255, 0.95) !important;
+            font-weight: 600 !important;
+        }
+
+        /* 2. Left Stripe Style */
+        body.card-accent-bar .e-schedule .e-appointment {
+            border-radius: 7px !important;
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+            border: 1px solid #e2e8f0 !important;
+            border-left-width: 5px !important;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
+            padding: 4px 8px !important;
+        }
+
+        body.theme-dark.card-accent-bar .e-schedule .e-appointment {
+            background-color: #1e293b !important;
+            border-color: #334155 !important;
+            color: #f8fafc !important;
+        }
+
+        body.card-accent-bar .e-schedule .e-appointment .e-subject {
+            color: #0f172a !important;
+            font-weight: 700 !important;
+            font-size: 12.5px !important;
+        }
+
+        body.theme-dark.card-accent-bar .e-schedule .e-appointment .e-subject {
+            color: #f8fafc !important;
+        }
+
+        body.card-accent-bar .e-schedule .e-appointment .e-time {
+            color: #64748b !important;
+            font-size: 11px !important;
+        }
+
+        body.theme-dark.card-accent-bar .e-schedule .e-appointment .e-time {
+            color: #94a3b8 !important;
+        }
+
+        /* 3. Flat Box */
+        body.card-flat .e-schedule .e-appointment {
+            border-radius: 3px !important;
+            box-shadow: none !important;
+        }
+
+        /* Staff Only Badge on Appointments */
+        .staff-pill-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 3px;
+            background: rgba(0, 0, 0, 0.28);
+            backdrop-filter: blur(4px);
+            color: #ffffff;
+            font-size: 9.5px;
+            font-weight: 700;
+            padding: 1px 6px;
+            border-radius: 9999px;
+            margin-left: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            vertical-align: middle;
+        }
+
+        /* RSVP Indicator Pill on Appointments */
+        .rsvp-indicator-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: rgba(255, 255, 255, 0.25);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            color: #ffffff;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 7px;
+            border-radius: 9999px;
+            margin-top: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            cursor: pointer;
+            transition: all 0.12s ease;
+        }
+
+        .e-schedule .e-month-view .rsvp-indicator-pill {
+            display: none !important;
+        }
+
+        body.card-accent-bar .rsvp-indicator-pill {
+            background: #f1f5f9;
+            color: #334155;
+            border-color: #cbd5e1;
+        }
+
+        body.theme-dark.card-accent-bar .rsvp-indicator-pill {
+            background: #334155;
+            color: #f1f5f9;
+            border-color: #475569;
+        }
+
+        .rsvp-indicator-pill:hover {
+            transform: scale(1.05);
+            background: rgba(255, 255, 255, 0.38);
+        }
+
+        /* 4. Glowing Pill Style (Pro Exclusive) */
+        body.card-glow .e-schedule .e-appointment {
+            border-radius: 8px !important;
+            border: 1px solid rgba(255, 255, 255, 0.45) !important;
+            box-shadow: 0 0 14px rgba(79, 70, 229, 0.45), 0 2px 6px rgba(0, 0, 0, 0.15) !important;
+            padding: 4px 8px !important;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        }
+
+        body.card-glow .e-schedule .e-appointment:hover {
+            box-shadow: 0 0 24px rgba(79, 70, 229, 0.8), 0 4px 12px rgba(0, 0, 0, 0.25) !important;
+            transform: translateY(-2px) scale(1.02) !important;
+            z-index: 100 !important;
+        }
+
+        body.card-glow .e-schedule .e-appointment .e-subject {
+            font-weight: 700 !important;
+            font-size: 12.5px !important;
+            color: #ffffff !important;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35) !important;
+        }
+
+        /* Tier Badges in Header */
+        .badge-plan {
+            font-size: 10.5px;
+            font-weight: 800;
+            letter-spacing: 0.04em;
+            padding: 3px 9px;
+            border-radius: 9999px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            text-transform: uppercase;
+            user-select: none;
+        }
+
+        .badge-free-pill {
+            background: #f1f5f9;
+            border: 1px solid #cbd5e1;
+            color: #64748b;
+        }
+
+        .badge-starter-pill {
+            background: rgba(79, 70, 229, 0.12);
+            border: 1px solid #818cf8;
+            color: #6366f1;
+        }
+
+        .badge-studio-pill {
+            background: rgba(124, 58, 237, 0.16);
+            border: 1px solid #a855f7;
+            color: #9333ea;
+            box-shadow: 0 0 12px rgba(168, 85, 247, 0.25);
+        }
+
+        body.theme-dark .badge-studio-pill,
+        body.theme-contrast .badge-studio-pill,
+        body.theme-autumn .badge-studio-pill,
+        body.theme-frost .badge-studio-pill,
+        body.theme-sunset .badge-studio-pill {
+            color: #c4b5fd;
+        }
+
+        .badge-unlimited-pill {
+            background: linear-gradient(135deg, rgba(234, 88, 12, 0.15), rgba(225, 29, 72, 0.15));
+            border: 1px solid #f97316;
+            color: #ea580c;
+            box-shadow: 0 0 14px rgba(249, 115, 22, 0.3);
+        }
+
+        body.theme-dark .badge-unlimited-pill,
+        body.theme-contrast .badge-unlimited-pill,
+        body.theme-autumn .badge-unlimited-pill,
+        body.theme-frost .badge-unlimited-pill,
+        body.theme-sunset .badge-unlimited-pill {
+            color: #fdba74;
+        }
+
+        /* ============================================================
+           EXPERIMENT LAB OVERLAY DOCK (Floating Control Panel)
+           ============================================================ */
+        .lab-overlay-dock {
+            position: fixed;
+            bottom: 44px;
+            right: 24px;
+            z-index: 99999;
+            font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+        }
+
+        /* ============================================================
+           PRICING MODAL (Side-by-Side 4-Column Grid)
+           ============================================================ */
+        .pricing-modal-box {
+            max-width: 1120px !important;
+            width: 95vw !important;
+            box-sizing: border-box !important;
+        }
+
+        .pricing-cards-grid {
+            display: grid !important;
+            grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+            gap: 16px !important;
+            align-items: stretch !important;
+            width: 100% !important;
+        }
+
+        @media (max-width: 960px) {
+            .pricing-cards-grid {
+                grid-template-columns: 1fr !important;
+            }
+        }
+
+        .btn-price-free {
+            background: #ffffff !important;
+            border: 1px solid #cbd5e1 !important;
+            color: #1e293b !important;
+        }
+        .btn-price-free:hover {
+            background: #f1f5f9 !important;
+        }
+        .btn-price-starter {
+            background: #4f46e5 !important;
+            border: 1px solid #4338ca !important;
+            color: #ffffff !important;
+            box-shadow: 0 2px 8px rgba(79, 70, 229, 0.35) !important;
+        }
+        .btn-price-starter:hover {
+            background: #4338ca !important;
+        }
+        .btn-price-studio {
+            background: linear-gradient(135deg, #7c3aed, #4f46e5) !important;
+            border: none !important;
+            color: #ffffff !important;
+            box-shadow: 0 4px 12px rgba(124, 58, 237, 0.4) !important;
+        }
+        .btn-price-studio:hover {
+            filter: brightness(1.08) !important;
+        }
+        .btn-price-unlimited {
+            background: linear-gradient(135deg, #d97706, #ea580c) !important;
+            border: none !important;
+            color: #ffffff !important;
+            box-shadow: 0 4px 12px rgba(217, 119, 6, 0.4) !important;
+        }
+        .btn-price-unlimited:hover {
+            filter: brightness(1.08) !important;
+        }
+        .pricing-popular-badge {
+            background: linear-gradient(135deg, #7c3aed, #4f46e5) !important;
+            color: #ffffff !important;
+            box-shadow: 0 2px 6px rgba(124, 58, 237, 0.4) !important;
+            font-size: 10px !important;
+            font-weight: 800 !important;
+            letter-spacing: 0.05em !important;
+            padding: 3px 12px !important;
+            border-radius: 9999px !important;
+            text-transform: uppercase !important;
+            position: absolute !important;
+            top: -12px !important;
+            left: 50% !important;
+            transform: translateX(-50%) !important;
+            white-space: nowrap !important;
+            z-index: 10 !important;
+        }
+
+        /* Elevate toast notification cleanly above edge-to-edge footer dock */
+        div[aria-live="polite"] .fixed.bottom-4 {
+            bottom: 50px !important;
+        }
+
+        .lab-panel {
+            background: rgba(255, 255, 255, 0.96);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(226, 232, 240, 0.95);
+            box-shadow: 0 25px 50px -12px rgba(15, 23, 42, 0.22), 0 0 0 1px rgba(79, 70, 229, 0.1);
+            border-radius: 20px;
+            width: 410px;
+            max-width: calc(100vw - 32px);
+            max-height: 85vh;
+            overflow-y: auto;
+            padding: 16px 20px;
+            color: #0f172a;
+            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        body.theme-dark .lab-panel,
+        body.theme-contrast .lab-panel {
+            background: rgba(17, 24, 39, 0.96);
+            border-color: rgba(55, 65, 81, 0.85);
+            color: #f8fafc;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.7);
+        }
+
+        #lab-slug-input {
+            background-color: #ffffff !important;
+            color: #0f172a !important;
+            border: 1px solid #cbd5e1 !important;
+        }
+
+        body.theme-dark #lab-slug-input,
+        body.theme-contrast #lab-slug-input {
+            background-color: #1f2937 !important;
+            color: #f8fafc !important;
+            border: 1px solid #374151 !important;
+        }
+
+        .lab-pill-btn {
+            padding: 5px 10px;
+            font-size: 11px;
+            font-weight: 600;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            background: #ffffff;
+            color: #475569;
+            cursor: pointer;
+            transition: all 0.12s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        body.theme-dark .lab-pill-btn,
+        body.theme-contrast .lab-pill-btn {
+            background: #1f2937;
+            border-color: #374151;
+            color: #cbd5e1;
+        }
+
+        .lab-pill-btn:hover {
+            border-color: #cbd5e1;
+            background: #f8fafc;
+            color: #0f172a;
+        }
+
+        body.theme-dark .lab-pill-btn:hover,
+        body.theme-contrast .lab-pill-btn:hover {
+            background: #374151;
+            color: #ffffff;
+        }
+
+        .lab-pill-btn.active {
+            background: #4f46e5 !important;
+            border-color: #4f46e5 !important;
+            color: #ffffff !important;
+            box-shadow: 0 2px 8px rgba(79, 70, 229, 0.35) !important;
+        }
+
+        .lab-trigger-capsule {
+            background: #4f46e5;
+            color: #ffffff;
+            padding: 10px 18px;
+            border-radius: 9999px;
+            box-shadow: 0 8px 24px rgba(79, 70, 229, 0.45), 0 2px 6px rgba(0, 0, 0, 0.1);
+            font-weight: 700;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .lab-trigger-capsule:hover {
+            background: #4338ca;
+            transform: translateY(-2px) scale(1.02);
+            box-shadow: 0 12px 28px rgba(79, 70, 229, 0.55);
+        }
+    </style>
+</head>
+
+<body class="font-jakarta theme-autumn header-integrated card-modern">
+
+    <!-- FLOATING EXPERIMENT LAB DOCK (Live Controls) -->
+    <div id="pastecal-lab-dock" class="lab-overlay-dock">
+        <!-- Minimized Trigger -->
+        <button id="lab-open-btn" class="lab-trigger-capsule" onclick="toggleLabDock(true)">
+            <span>✨</span>
+            <span>Design Lab</span>
+            <span class="text-xs opacity-80 ml-1">100/100 UX</span>
+        </button>
+
+        <!-- Expanded Control Panel (Minimized by default so user sees full calendar) -->
+        <div id="lab-panel-body" class="lab-panel" style="display: none;">
+            <!-- Header -->
+            <div class="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-200 dark:border-slate-700">
+                <div class="flex items-center gap-2">
+                    <span class="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center text-xs font-bold shadow-sm">✨</span>
+                    <div>
+                        <h4 class="font-bold text-sm tracking-tight leading-none text-slate-900 dark:text-white">Pastecal Design Lab</h4>
+                        <span class="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium">100/100 UX Polish Studio</span>
+                    </div>
+                </div>
+                <div class="flex items-center gap-1">
+                    <button onclick="toggleLabDock(false)" class="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 rounded-md text-xs font-bold" title="Minimize Dock">
+                        ✕
+                    </button>
+                </div>
+            </div>
+
+            <!-- Section 1: Header Variety (4 Distinct Options) -->
+            <div class="mb-3">
+                <div class="flex items-center justify-between mb-1.5">
+                    <label class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Header Layout</label>
+                    <span class="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold">In-Between Active</span>
+                </div>
+                <div class="grid grid-cols-2 gap-1.5">
+                    <button id="btn-hdr-integrated" onclick="setHeaderMode('integrated')" class="lab-pill-btn active justify-center font-bold">
+                        ✨ Integrated Dock
+                    </button>
+                    <button id="btn-hdr-floating" onclick="setHeaderMode('floating')" class="lab-pill-btn justify-center">
+                        🫧 Floating Capsule
+                    </button>
+                    <button id="btn-hdr-breadcrumbs" onclick="setHeaderMode('breadcrumbs')" class="lab-pill-btn justify-center">
+                        📁 Breadcrumbs
+                    </button>
+                    <button id="btn-hdr-classic" onclick="setHeaderMode('classic')" class="lab-pill-btn justify-center">
+                        📋 Classic Topbar
+                    </button>
+                </div>
+            </div>
+
+            <!-- Section 2: Pro Subcalendars & Perspective Switcher -->
+            <div class="mb-3 bg-indigo-50/70 dark:bg-indigo-950/40 p-2.5 rounded-xl border border-indigo-100 dark:border-indigo-900/50">
+                <div class="flex items-center justify-between mb-1.5">
+                    <div class="flex items-center gap-1.5">
+                        <span class="badge-pro text-[9px] py-0.5 px-1.5">PRO</span>
+                        <span class="text-[11px] font-bold text-indigo-900 dark:text-indigo-200">Subcalendar Perspective</span>
+                    </div>
+                    <span id="lab-event-count" class="text-[10.5px] font-bold text-indigo-600 dark:text-indigo-400">15 events</span>
+                </div>
+                <div class="grid grid-cols-2 gap-1.5 mb-2">
+                    <button id="btn-view-admin" onclick="setPerspective('admin')" class="lab-pill-btn active justify-center text-[11px]">
+                        👁️ Pro Admin View
+                    </button>
+                    <button id="btn-view-public" onclick="setPerspective('public')" class="lab-pill-btn justify-center text-[11px]">
+                        🌐 Public Viewer
+                    </button>
+                </div>
+                <button onclick="reloadDanceDemo()" class="w-full py-1 px-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-[11px] font-bold transition-colors flex items-center justify-center gap-1.5">
+                    <span>✨ Reload Dance Academy Sample (15 Events)</span>
+                </button>
+            </div>
+
+            <!-- Section 2: Pro Tier Ramp-Up Simulator -->
+            <div class="mb-3 bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-950/40 dark:to-indigo-950/40 p-2.5 rounded-xl border border-purple-200 dark:border-purple-800/60">
+                <div class="flex items-center justify-between mb-1.5">
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-xs">👑</span>
+                        <label class="block text-[11px] font-bold text-purple-950 dark:text-purple-200 uppercase tracking-wider">Plan Simulator</label>
+                    </div>
+                    <span id="lab-tier-indicator" class="text-[10px] font-extrabold text-purple-700 dark:text-purple-300 uppercase tracking-wide">Studio $49 Active</span>
+                </div>
+                <div class="grid grid-cols-2 gap-1.5 mb-1.5">
+                    <button id="btn-tier-free" onclick="setProTier('free')" class="lab-pill-btn justify-center text-[11px]">
+                        Free ($0)
+                    </button>
+                    <button id="btn-tier-starter" onclick="setProTier('starter')" class="lab-pill-btn justify-center text-[11px]">
+                        Starter ($20)
+                    </button>
+                    <button id="btn-tier-studio" onclick="setProTier('studio')" class="lab-pill-btn active justify-center font-bold text-[11px]">
+                        Studio ($49) ⭐
+                    </button>
+                    <button id="btn-tier-unlimited" onclick="setProTier('unlimited')" class="lab-pill-btn justify-center text-[11px]">
+                        Unlimited ($99) 👑
+                    </button>
+                </div>
+                <button onclick="openPricingModal()" class="w-full py-1 px-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-lg text-[11px] font-bold transition-all shadow-sm flex items-center justify-center gap-1.5">
+                    <span>✨ Open Full Pro Tiers Modal</span>
+                </button>
+            </div>
+
+            <!-- Section 3: Seasonal & Dynamic Themes (Pro Perk) -->
+            <div class="mb-3">
+                <div class="flex items-center justify-between mb-1.5">
+                    <label class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Theme Palette</label>
+                    <span class="text-[10px] text-amber-600 dark:text-amber-400 font-bold" id="seasonal-mode-tag">🍂 Seasonal Active</span>
+                </div>
+                
+                <!-- Seasonal Themes (Pro Feature) -->
+                <div class="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1 flex items-center justify-between">
+                    <span>🍂 DYNAMIC SEASONAL (AUTO-MONTH)</span>
+                    <span class="badge-pro text-[8.5px] py-0 px-1">STUDIO</span>
+                </div>
+                <div class="grid grid-cols-2 gap-1.5 mb-2">
+                    <button id="btn-thm-autumn" onclick="setThemePreset('autumn')" class="lab-pill-btn active justify-center font-bold">
+                        🍂 Autumn (Oct)
+                    </button>
+                    <button id="btn-thm-frost" onclick="setThemePreset('frost')" class="lab-pill-btn justify-center">
+                        ❄️ Frost & Ice (Dec)
+                    </button>
+                    <button id="btn-thm-sakura" onclick="setThemePreset('sakura')" class="lab-pill-btn justify-center">
+                        🌸 Sakura (Apr)
+                    </button>
+                    <button id="btn-thm-sunset" onclick="setThemePreset('sunset')" class="lab-pill-btn justify-center">
+                        ☀️ Sunset (Jul)
+                    </button>
+                </div>
+                <button id="btn-thm-auto" onclick="toggleAutoMonthlyTheme()" class="w-full mb-2 py-1 px-2 rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 text-[11px] font-bold flex items-center justify-center gap-1.5">
+                    <span>🗓️ Auto-Month Dynamic: Active (October 🍂)</span>
+                </button>
+
+                <!-- Standard Themes -->
+                <div class="text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1">STANDARD THEMES (FREE)</div>
+                <div class="grid grid-cols-2 gap-1.5">
+                    <button id="btn-thm-contrast" onclick="setThemePreset('contrast')" class="lab-pill-btn justify-center">
+                        ✨ Studio Contrast
+                    </button>
+                    <button id="btn-thm-modern" onclick="setThemePreset('modern')" class="lab-pill-btn justify-center">
+                        ☀️ Modern Light
+                    </button>
+                    <button id="btn-thm-dark" onclick="setThemePreset('dark')" class="lab-pill-btn justify-center">
+                        🔮 Midnight Dark
+                    </button>
+                    <button id="btn-thm-pastel" onclick="setThemePreset('pastel')" class="lab-pill-btn justify-center">
+                        🍃 Soft Pastel
+                    </button>
+                </div>
+            </div>
+
+            <!-- Section 4: Cosmetic Studio Icon & Branding (Pro Perk) -->
+            <div class="mb-3">
+                <div class="flex items-center justify-between mb-1.5">
+                    <label class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Studio Avatar Icon</label>
+                    <span class="badge-pro text-[8.5px] py-0 px-1">PRO</span>
+                </div>
+                <div class="grid grid-cols-5 gap-1">
+                    <button id="btn-ico-dance" onclick="setStudioIcon('🩰', 'Durango Dance', 'dance academy')" class="lab-pill-btn active justify-center text-sm p-1.5" title="Dance Academy">
+                        🩰
+                    </button>
+                    <button id="btn-ico-studio" onclick="setStudioIcon('🏢', 'Durango Arts Center', 'performing arts')" class="lab-pill-btn justify-center text-sm p-1.5" title="Studio Building">
+                        🏢
+                    </button>
+                    <button id="btn-ico-yoga" onclick="setStudioIcon('🧘', 'Lotus Yoga Studio', 'mindful movement')" class="lab-pill-btn justify-center text-sm p-1.5" title="Yoga / Wellness">
+                        🧘
+                    </button>
+                    <button id="btn-ico-sports" onclick="setStudioIcon('⚽', 'Durango United FC', 'youth soccer league')" class="lab-pill-btn justify-center text-sm p-1.5" title="Sports Club">
+                        ⚽
+                    </button>
+                    <button id="btn-ico-music" onclick="setStudioIcon('🎵', 'SoundWave Music Hall', 'conservatory')" class="lab-pill-btn justify-center text-sm p-1.5" title="Music School">
+                        🎵
+                    </button>
+                </div>
+            </div>
+
+            <!-- Section 5: Whitelabeling & Domain Mode (Unlimited Perk) -->
+            <div class="mb-3">
+                <div class="flex items-center justify-between mb-1.5">
+                    <label class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Branding & Whitelabel</label>
+                    <span class="badge-pro text-[8.5px] py-0 px-1">WHITELABEL</span>
+                </div>
+                <div class="grid grid-cols-2 gap-1.5">
+                    <button id="btn-white-default" onclick="setWhitelabelMode('default')" class="lab-pill-btn justify-center text-[10.5px]">
+                        ⚡ Pastecal Badge
+                    </button>
+                    <button id="btn-white-verified" onclick="setWhitelabelMode('verified')" class="lab-pill-btn justify-center text-[10.5px]">
+                        ✓ Verified Lock
+                    </button>
+                    <button id="btn-white-vanity" onclick="setWhitelabelMode('vanity')" class="lab-pill-btn active justify-center text-[10.5px] font-bold">
+                        🏢 Vanity Slug
+                    </button>
+                    <button id="btn-white-clean" onclick="setWhitelabelMode('clean')" class="lab-pill-btn justify-center text-[10.5px]">
+                        👑 100% Whitelabel
+                    </button>
+                </div>
+            </div>
+
+            <!-- Section 6: Event Card Styles -->
+            <div class="mb-3">
+                <label class="block text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">Event Card Style</label>
+                <div class="grid grid-cols-2 gap-1.5">
+                    <button id="btn-card-modern" onclick="setCardStyle('modern')" class="lab-pill-btn active justify-center font-bold text-[11px]">
+                        Pill Card
+                    </button>
+                    <button id="btn-card-accent" onclick="setCardStyle('accent-bar')" class="lab-pill-btn justify-center text-[11px]">
+                        Left Stripe
+                    </button>
+                    <button id="btn-card-flat" onclick="setCardStyle('flat')" class="lab-pill-btn justify-center text-[11px]">
+                        Flat Box
+                    </button>
+                    <button id="btn-card-glow" onclick="setCardStyle('glow')" class="lab-pill-btn justify-center text-[11px]">
+                        ✨ Glowing Pill
+                    </button>
+                </div>
+            </div>
+
+            <!-- Section 7: Slug Navigation -->
+            <div class="pt-2 border-t border-slate-200 dark:border-slate-700 flex items-center gap-1.5">
+                <input id="lab-slug-input" type="text" placeholder="e.g. durango-dance" value="durango-dance"
+                    class="flex-1 text-xs px-2.5 py-1.5 rounded-lg border border-slate-300 font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500" />
+                <button onclick="jumpToCalendar()" class="px-3 py-1.5 bg-slate-800 text-white dark:bg-slate-700 rounded-lg text-xs font-bold hover:bg-slate-900 transition-colors">
+                    Load
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PASTEAL PRO TIERS & MONETIZATION MODAL -->
+    <div id="pricing-modal" style="display: none; z-index: 9999999;" class="fixed inset-0 bg-slate-950/70 backdrop-blur-md items-center justify-center p-4 overflow-y-auto">
+        <div style="background-color: #ffffff !important;" class="pricing-modal-box rounded-3xl w-full p-6 md:p-8 border border-slate-200 shadow-2xl relative my-auto">
+            <!-- Close Button -->
+            <button onclick="closePricingModal()" class="absolute top-5 right-5 text-slate-400 hover:text-slate-800 p-2 rounded-xl text-lg font-bold">✕</button>
+
+            <!-- Header -->
+            <div class="text-center max-w-xl mx-auto mb-6">
+                <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-100 text-purple-700 text-xs font-bold mb-2">
+                    <span>⭐</span>
+                    <span>Pastecal Pro Pricing</span>
+                </div>
+                <h2 class="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">Supercharge Your Schedules</h2>
+                <p class="text-xs md:text-sm text-slate-500 mt-1">From a quick personal scratchpad to a fully-branded studio powerhouse. Test drive any plan right now below.</p>
+                
+                <!-- Billing Toggle -->
+                <div class="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-xl mt-4 border border-slate-200 text-xs font-bold">
+                    <button id="btn-bill-annual" onclick="toggleBillingCycle('annual')" class="py-1 px-3 rounded-lg bg-white shadow-sm text-slate-900">
+                        Billed Annually <span class="text-purple-600 font-extrabold text-[10.5px]">Save 20%</span>
+                    </button>
+                    <button id="btn-bill-monthly" onclick="toggleBillingCycle('monthly')" class="py-1 px-3 rounded-lg text-slate-500 hover:text-slate-900">
+                        Monthly
+                    </button>
+                </div>
+            </div>
+
+            <!-- 4 Pricing Cards Grid -->
+            <div class="pricing-cards-grid items-stretch">
+                <!-- 1: Free -->
+                <div class="rounded-2xl border border-slate-200 bg-slate-50/50 p-4 flex flex-col justify-between hover:border-slate-300 transition-all">
+                    <div>
+                        <span class="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider block">Free</span>
+                        <div class="mt-2 mb-3">
+                            <span class="text-3xl font-extrabold text-slate-900">$0</span>
+                            <span class="text-xs text-slate-500">/ forever</span>
+                        </div>
+                        <p class="text-[11.5px] text-slate-600 mb-4">Essential scratchpad calendar for quick links.</p>
+                        <div class="space-y-2 text-xs text-slate-700">
+                            <div class="flex items-center gap-2"><span>✓</span><span>1 Shared Calendar</span></div>
+                            <div class="flex items-center gap-2"><span>✓</span><span>Standard Light & Dark</span></div>
+                            <div class="flex items-center gap-2"><span>✓</span><span>3 Standard Colors</span></div>
+                            <div class="flex items-center gap-2 text-slate-400"><span>✕</span><span>No Subcalendars</span></div>
+                            <div class="flex items-center gap-2 text-slate-400"><span>✕</span><span>No Seasonal Themes</span></div>
+                            <div class="flex items-center gap-2 text-slate-400"><span>✕</span><span>Pastecal Badge</span></div>
+                        </div>
+                    </div>
+                    <button onclick="setProTier('free'); closePricingModal();" class="mt-6 w-full py-2.5 px-3 rounded-xl btn-price-free font-bold text-xs transition-colors cursor-pointer">
+                        Test Free Plan
+                    </button>
+                </div>
+
+                <!-- 2: Pro Starter ($20/yr) -->
+                <div class="rounded-2xl border border-indigo-200 bg-indigo-50/30 p-4 flex flex-col justify-between hover:border-indigo-300 transition-all">
+                    <div>
+                        <span class="text-[11px] font-extrabold text-indigo-600 uppercase tracking-wider block">Pro Starter</span>
+                        <div class="mt-2 mb-3">
+                            <span id="price-starter" class="text-3xl font-extrabold text-slate-900">$20</span>
+                            <span id="period-starter" class="text-xs text-slate-500">/ year ($3/mo)</span>
+                        </div>
+                        <p class="text-[11.5px] text-slate-600 mb-4">For solo instructors, coaches, & organizers.</p>
+                        <div class="space-y-2 text-xs text-slate-700">
+                            <div class="flex items-center gap-2 text-indigo-900 font-semibold"><span>✓</span><span>1 Pro Calendar</span></div>
+                            <div class="flex items-center gap-2 text-indigo-900 font-semibold"><span>✓</span><span>3 Subcalendars</span></div>
+                            <div class="flex items-center gap-2"><span>✓</span><span>Verified Publisher Lock</span></div>
+                            <div class="flex items-center gap-2"><span>✓</span><span>RSVP Polling & Votes</span></div>
+                            <div class="flex items-center gap-2"><span>✓</span><span>Custom Hex Colors</span></div>
+                            <div class="flex items-center gap-2"><span>✓</span><span>Pill & Stripe Styles</span></div>
+                        </div>
+                    </div>
+                    <button onclick="setProTier('starter'); closePricingModal();" class="mt-6 w-full py-2.5 px-3 rounded-xl btn-price-starter font-bold text-xs transition-colors shadow-sm cursor-pointer">
+                        ⚡ Test Pro Starter
+                    </button>
+                </div>
+
+                <!-- 3: Pro Studio ($49/yr) - Highlighted -->
+                <div class="rounded-2xl border-2 border-purple-500 bg-purple-50/50 p-4 flex flex-col justify-between relative shadow-lg">
+                    <div class="pricing-popular-badge">
+                        ⭐ Most Popular
+                    </div>
+                    <div>
+                        <span class="text-[11px] font-extrabold text-purple-700 uppercase tracking-wider block mt-1">Pro Studio</span>
+                        <div class="mt-2 mb-3">
+                            <span id="price-studio" class="text-3xl font-extrabold text-slate-900">$49</span>
+                            <span id="period-studio" class="text-xs text-slate-500">/ year ($5/mo)</span>
+                        </div>
+                        <p class="text-[11.5px] text-purple-900 mb-4 font-medium">For studios, gyms, schools, & teams.</p>
+                        <div class="space-y-2 text-xs text-slate-800">
+                            <div class="flex items-center gap-2 font-bold text-purple-950"><span>✓</span><span>5 Pro Calendars</span></div>
+                            <div class="flex items-center gap-2 font-bold text-purple-950"><span>✓</span><span>Unlimited Subcalendars</span></div>
+                            <div class="flex items-center gap-2 text-purple-900 font-semibold"><span>✓</span><span>🍂 Seasonal Themes (Auto)</span></div>
+                            <div class="flex items-center gap-2 text-purple-900 font-semibold"><span>✓</span><span>Custom Studio Logo & Avatar</span></div>
+                            <div class="flex items-center gap-2"><span>✓</span><span>Vanity Slug (dance.pastecal.com)</span></div>
+                            <div class="flex items-center gap-2"><span>✓</span><span>Attendee CSV Export</span></div>
+                        </div>
+                    </div>
+                    <button onclick="setProTier('studio'); closePricingModal();" class="mt-6 w-full py-2.5 px-3 rounded-xl btn-price-studio font-extrabold text-xs transition-all shadow-md cursor-pointer">
+                        ⚡ Test Pro Studio
+                    </button>
+                </div>
+
+                <!-- 4: Pro Unlimited ($99/yr) -->
+                <div class="rounded-2xl border border-amber-300 bg-amber-50/30 p-4 flex flex-col justify-between hover:border-amber-400 transition-all">
+                    <div>
+                        <span class="text-[11px] font-extrabold text-amber-700 uppercase tracking-wider block">Pro Unlimited</span>
+                        <div class="mt-2 mb-3">
+                            <span id="price-unlimited" class="text-3xl font-extrabold text-slate-900">$99</span>
+                            <span id="period-unlimited" class="text-xs text-slate-500">/ year ($10/mo)</span>
+                        </div>
+                        <p class="text-[11.5px] text-slate-600 mb-4">Multi-location & enterprise academies.</p>
+                        <div class="space-y-2 text-xs text-slate-700">
+                            <div class="flex items-center gap-2 text-amber-950 font-bold"><span>✓</span><span>10+ Pro Calendars</span></div>
+                            <div class="flex items-center gap-2 text-amber-950 font-bold"><span>✓</span><span>Unlimited Subcalendars</span></div>
+                            <div class="flex items-center gap-2 text-amber-900 font-semibold"><span>✓</span><span>100% Whitelabel (Zero Badge)</span></div>
+                            <div class="flex items-center gap-2 text-amber-900 font-semibold"><span>✓</span><span>Custom Domain (cal.studio.com)</span></div>
+                            <div class="flex items-center gap-2"><span>✓</span><span>✨ Glowing Pill Cards</span></div>
+                            <div class="flex items-center gap-2"><span>✓</span><span>Priority VIP SLA Support</span></div>
+                        </div>
+                    </div>
+                    <button onclick="setProTier('unlimited'); closePricingModal();" class="mt-6 w-full py-2.5 px-3 rounded-xl btn-price-unlimited font-bold text-xs transition-colors shadow-sm cursor-pointer">
+                        ⚡ Test Pro Unlimited
+                    </button>
+                </div>
+            </div>
+
+            <!-- Footer note -->
+            <div class="mt-6 text-center text-xs text-slate-400 border-t border-slate-100 pt-4">
+                <span>All plans include free SSL, zero-maintenance instant sync, and unlimited viewer access.</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- RSVP Interactive Modal for Event Polling -->
+    <div id="rsvp-modal" style="display: none; z-index: 999999;" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm items-center justify-center p-4">
+        <div style="background-color: #ffffff !important; box-shadow: 0 25px 60px -15px rgba(0,0,0,0.3) !important;" class="rounded-2xl max-w-sm w-full p-6 border border-slate-200">
+            <div class="flex items-start justify-between mb-3">
+                <div>
+                    <span class="text-[10px] font-bold uppercase tracking-wider text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">Event RSVP Poll</span>
+                    <h3 id="rsvp-modal-title" class="text-base font-bold text-slate-900 mt-1">Ballet Rehearsal</h3>
+                    <p id="rsvp-modal-time" class="text-xs text-slate-500 font-mono mt-0.5">Today · 4:00 PM - 5:30 PM</p>
+                </div>
+                <button onclick="closeRSVPModal()" class="text-slate-400 hover:text-slate-600 text-lg font-bold">✕</button>
+            </div>
+
+            <div class="my-4">
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Your Name</label>
+                <input id="rsvp-user-name" type="text" placeholder="e.g. Alex M." value="Kalid" 
+                    class="w-full text-xs px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-xs font-semibold text-slate-700 mb-2">Can you make it?</label>
+                <div class="grid grid-cols-3 gap-2">
+                    <button onclick="castRSVPVote('going')" class="p-2.5 rounded-xl border border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-center transition-all cursor-pointer">
+                        <div class="text-base">👍</div>
+                        <div class="text-[11px] font-bold text-emerald-800 mt-0.5">Going</div>
+                    </button>
+                    <button onclick="castRSVPVote('maybe')" class="p-2.5 rounded-xl border border-amber-200 bg-amber-50 hover:bg-amber-100 text-center transition-all cursor-pointer">
+                        <div class="text-base">✋</div>
+                        <div class="text-[11px] font-bold text-amber-800 mt-0.5">Maybe</div>
+                    </button>
+                    <button onclick="castRSVPVote('cant')" class="p-2.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-center transition-all cursor-pointer">
+                        <div class="text-base">👎</div>
+                        <div class="text-[11px] font-bold text-rose-800 mt-0.5">Can't</div>
+                    </button>
+                </div>
+            </div>
+
+            <div class="pt-3 border-t border-slate-100">
+                <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">Who's Coming (5)</span>
+                <div id="rsvp-attendees-list" class="space-y-1 text-xs text-slate-600 max-h-24 overflow-y-auto">
+                    <div class="flex items-center justify-between">
+                        <span>Elena R.</span>
+                        <span class="text-emerald-600 font-bold text-[10px]">👍 Going</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span>Marcus Chen</span>
+                        <span class="text-emerald-600 font-bold text-[10px]">👍 Going</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span>Sarah Jenkins</span>
+                        <span class="text-amber-600 font-bold text-[10px]">✋ Maybe</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN APP WRAPPER -->
+    <div id="app" data-testid="app-root">
+        <quick-add-dialog ref="quickAddDialog" :colors="COLORS" :labels="localSettings.typeLabels" @event-created="handleQuickAddEvent"></quick-add-dialog>
+
+        <!-- UNIFIED CALENDAR WORKSPACE CARD (Edge-to-Edge Integrated Dock) -->
+        <div id="calendar-app-card" class="calendar-workspace-card">
+
+            <!-- COMMAND BAR / TOPBAR -->
+            <topbar class="flex justify-between items-center text-sm">
+                <!-- Left Section: Squircle Logo & Actions -->
+                <section class="flex items-center space-x-2 min-w-0">
+                    <logo class="flex items-center text-sm relative">
+                        <div class="relative flex items-center" v-click-outside="closeRecents">
+                            <a @click.prevent="toggleRecents" class="flex items-center group cursor-pointer gap-2">
+                                <div class="brand-squircle" id="topbar-squircle-icon">
+                                    <span id="topbar-icon-display" class="text-sm">🩰</span>
+                                </div>
+                                <div class="flex flex-col text-left">
+                                    <div class="flex items-center gap-1">
+                                        <span id="topbar-brand-name" class="font-bold text-sm tracking-tight text-slate-900 dark:text-white group-hover:text-indigo-400 transition-colors">Durango Dance</span>
+                                        <svg class="w-3 h-3 text-slate-400" fill="currentColor" viewBox="0 0 16 16">
+                                            <path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/>
+                                        </svg>
+                                    </div>
+                                    <span id="topbar-brand-sub" class="brand-subtitle">dance academy · pro studio</span>
+                                </div>
+                            </a>
+
+                            <navigation-dropdown v-if="showRecents" :recent-calendars="recentCalendars"
+                                @go-homepage="goToHomepage" @toggle-pin="togglePin" @remove-recent="removeRecent" v-cloak></navigation-dropdown>
+                        </div>
+                    </logo>
+
+                    <div class="header-sep"></div>
+
+                    <!-- Tool Capsule: Search, Settings, Help -->
+                    <div class="header-tool-capsule">
+                        <button v-on:click="toggleSearch" class="header-tool-btn" title="Search events">
+                            <icon name="search" class="w-3.5 h-3.5"></icon>
+                        </button>
+                        <button v-on:click="toggleSettings" class="header-tool-btn" title="Settings">
+                            <icon name="settings" class="w-3.5 h-3.5"></icon>
+                        </button>
+                        <button v-on:click="toggleHelp" class="header-tool-btn" title="Help">
+                            <icon name="help" class="w-3.5 h-3.5"></icon>
+                        </button>
+                    </div>
+
+                    <!-- Elevated Indigo "+ New Event ⌘E" CTA Button -->
+                    <button v-if="canEdit" @click="$refs.quickAddDialog && $refs.quickAddDialog.showDialog()" class="btn-new-event-elevated ml-1">
+                        <span>+ New Event</span>
+                        <span class="btn-shortcut-badge">⌘E</span>
+                    </button>
+                </section>
+
+                <!-- Center Section: Calendar Title & Notes -->
+                <section class="flex items-center justify-center space-x-3 min-w-0" v-cloak v-if="!isLoading">
+                    <div class="calendar-title-display" @click="editTitle = true">
+                        <calendar-title :title="calendar.title || 'Fall Dance Rehearsals'" :is-editing="editTitle" :is-read-only="isReadOnly"
+                            mode="desktop" input-ref="desktopTitleInput" @update:title="calendar.title = $event"
+                            @blur="editTitle = false" @enter="setTitle($event)">
+                        </calendar-title>
+                        <svg class="w-3.5 h-3.5 text-slate-400 hover:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                    </div>
+
+                    <button v-on:click="toggleNotes" class="btn-notes-pill">
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                        </svg>
+                        <span>Notes</span>
+                    </button>
+                </section>
+
+                <!-- Right Section: Timestamp, Share Pill, PRO Badge -->
+                <section class="flex items-center space-x-3 text-xs min-w-0" v-cloak>
+                    <span class="text-slate-400 text-[11px] hidden xl:inline">Edited 3m ago</span>
+
+                    <!-- Share Container -->
+                    <div class="share-pill-container" id="topbar-share-pill">
+                        <span id="topbar-domain-display">dance.pastecal.com</span>
+                        <button class="share-pill-btn" @click.stop="toggleShare">
+                            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                            </svg>
+                            <span>Share</span>
+                        </button>
+                    </div>
+
+                    <!-- PRO Badge Pill (Clickable -> Opens Pricing Modal) -->
+                    <button id="topbar-plan-badge" onclick="openPricingModal()" class="badge-plan badge-studio-pill" title="Click to view Pastecal Pro tiers">
+                        <span>⭐ STUDIO $49</span>
+                    </button>
+                </section>
+            </topbar>
+
+            <!-- SUBCALENDAR / LAYERS TOOLBAR (Pastecal Pro Feature) -->
+            <div id="subcalendar-layer-bar" class="subcalendar-layers-bar">
+                <!-- Left: Hierarchy / Subcalendar Label -->
+                <div class="flex items-center gap-2">
+                    <span class="subcal-root-tag">
+                        <span>🏢 Durango Dance</span>
+                        <span class="text-slate-400">/</span>
+                        <span id="active-layer-title" class="text-indigo-600 dark:text-indigo-400 font-bold">All Layers</span>
+                    </span>
+                </div>
+
+                <!-- Center: Clickable Layer Filter Chips -->
+                <div class="flex items-center gap-1.5 flex-wrap">
+                    <button id="chip-layer-all" onclick="filterByLayer('all')" class="layer-chip active">
+                        <span class="layer-chip-dot bg-indigo-500"></span>
+                        <span>All Layers</span>
+                        <span id="badge-count-all" class="text-[10px] opacity-80">(15)</span>
+                    </button>
+                    <button id="chip-layer-public" onclick="filterByLayer('public')" class="layer-chip">
+                        <span class="layer-chip-dot bg-indigo-600"></span>
+                        <span>Public Classes</span>
+                        <span class="text-[10px] opacity-80">(6)</span>
+                    </button>
+                    <button id="chip-layer-staff" onclick="filterByLayer('staff')" class="layer-chip">
+                        <span class="layer-chip-dot bg-amber-500"></span>
+                        <span>Staff Shifts 🔒</span>
+                        <span class="text-[10px] opacity-80">(4)</span>
+                    </button>
+                    <button id="chip-layer-rentals" onclick="filterByLayer('rentals')" class="layer-chip">
+                        <span class="layer-chip-dot bg-sky-500"></span>
+                        <span>Studio Rentals</span>
+                        <span class="text-[10px] opacity-80">(3)</span>
+                    </button>
+                    <button id="chip-layer-showcase" onclick="filterByLayer('showcase')" class="layer-chip">
+                        <span class="layer-chip-dot bg-rose-500"></span>
+                        <span>Performances</span>
+                        <span class="text-[10px] opacity-80">(2)</span>
+                    </button>
+                </div>
+
+                <!-- Right: Perspective Switcher (Admin vs Public) -->
+                <div class="perspective-switch-wrap">
+                    <button id="btn-persp-admin" onclick="setPerspective('admin')" class="perspective-btn active">
+                        <span>👁️ Admin View</span>
+                    </button>
+                    <button id="btn-persp-public" onclick="setPerspective('public')" class="perspective-btn">
+                        <span>🌐 Public View</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Public Viewer Banner (Shown when public view is active) -->
+            <div id="public-viewer-notice" class="public-viewer-banner" style="display: none;">
+                <div class="flex items-center gap-2">
+                    <span>🔒</span>
+                    <span>Viewing as <strong>Public Visitor</strong> — 4 internal staff-only events are hidden from the schedule.</span>
+                </div>
+                <button onclick="setPerspective('admin')" class="text-xs underline hover:text-amber-900 dark:hover:text-white font-bold">
+                    Switch to Admin View
+                </button>
+            </div>
+
+            <!-- Panels (Share, Settings, Notes, Search) -->
+            <panel class="flex bg-1 p-2 md:p-3 rounded-sm border border-color-default relative w-full" v-if="isPanelOpen()" v-cloak>
+                <button id="closeAllPanels" class="absolute top-0 right-0 m-2 md:m-3 text-color-1 hover:text-red-500 transition-colors" @click="closeAllPanels">
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+
+                <div v-if="showNotes" class="flex-1 w-full md:w-1/2 md:min-w-[460px] h-[220px] mx-auto p-2" v-cloak>
+                    <textarea v-if="canEdit" aria-label="Calendar notes" class="border border-color-default resize-none w-full h-full p-2 bg-1 text-sm rounded"
+                        v-model="calendar.options.notes" @input="saveCalendarNotes" placeholder="Type quick notes, studio codes, or phone numbers..."></textarea>
+                </div>
+                
+                <div v-if="showSearch" class="flex-1 w-full md:w-1/2 md:min-w-[460px] mx-auto p-2" v-cloak>
+                    <input type="text" v-model="searchQuery" placeholder="Search events..." class="w-full p-2 border border-color-default rounded bg-1 text-sm">
+                </div>
+            </panel>
+
+            <!-- SYNCFUSION SCHEDULE COMPONENT -->
+            <div id="cal2_wrap">
+                <div id="Schedule" data-testid="schedule-container"></div>
+            </div>
+
+            <!-- CALENDAR STATUS & WHITELABEL FOOTER (Edge-to-Edge Bottom Dock) -->
+            <div id="calendar-plan-footer">
+                <div class="flex items-center gap-2">
+                    <span id="footer-status-icon">🏢</span>
+                    <span id="footer-status-text" class="text-slate-600 dark:text-slate-300 font-semibold">Durango Dance Academy • 5 Subcalendars Active • 🍂 Autumn Ember Theme</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span id="footer-verified-badge" class="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                        <span>✓</span><span>Verified Publisher</span>
+                    </span>
+                    <button id="footer-plan-cta" onclick="openPricingModal()" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 font-bold underline cursor-pointer text-xs">
+                        Explore Pro Plans
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <toast-notification ref="toast"></toast-notification>
+    </div>
+
+    <!-- App runtime script -->
+    <script src="/app.js?v=1790553083"></script>
+
+    <!-- PREVIEW INTERACTION LOGIC & SUBCALENDAR ENGINE -->
+    <script>
+        let masterDanceEvents = [];
+        let currentPerspective = 'admin'; // 'admin' | 'public'
+        let currentLayerFilter = 'all';   // 'all' | 'public' | 'staff' | 'rentals' | 'showcase'
+
+        function getVueProxy() {
+            const el = document.getElementById('app');
+            return el?.__vue_app__?._container?._vnode?.component?.proxy || window.app;
+        }
+
+        function generateDanceAcademyData() {
+            let dates = [];
+            if (window.scheduleObj && typeof window.scheduleObj.getCurrentViewDates === 'function') {
+                dates = window.scheduleObj.getCurrentViewDates();
+            }
+            if (!dates || dates.length < 7) {
+                const now = new Date();
+                const start = new Date(now);
+                start.setDate(now.getDate() - now.getDay());
+                dates = [0, 1, 2, 3, 4, 5, 6].map(i => {
+                    const d = new Date(start);
+                    d.setDate(start.getDate() + i);
+                    return d;
+                });
+            }
+
+            const sun = new Date(dates[0]);
+            const mon = new Date(dates[1]);
+            const tue = new Date(dates[2]);
+            const wed = new Date(dates[3]);
+            const thu = new Date(dates[4]);
+            const fri = new Date(dates[5]);
+            const sat = new Date(dates[6]);
+
+            function at(d, h, m) {
+                const res = new Date(d);
+                res.setHours(h, m, 0, 0);
+                return res.toISOString();
+            }
+
+            return [
+                // Layer 1: Public Classes (Type 1: Indigo #4f46e5 & Type 2: Emerald #059669)
+                { id: "e1", title: "10:00 AM Community Showcase", start: at(sun, 10, 0), end: at(sun, 12, 0), type: 6, subcal: "showcase", isStaffOnly: false },
+                { id: "e2", title: "3:00 PM Open Studio Stretch", start: at(sun, 15, 0), end: at(sun, 16, 30), type: 1, subcal: "public", isStaffOnly: false },
+                { id: "e3", title: "9:00 AM Morning Flow Yoga", start: at(mon, 9, 0), end: at(mon, 10, 15), type: 1, subcal: "public", isStaffOnly: false },
+                { id: "e4", title: "4:00 PM Warmup & Rehearsal", start: at(mon, 16, 0), end: at(mon, 17, 30), type: 1, subcal: "public", isStaffOnly: false },
+                { id: "e5", title: "10:00 AM Contemporary Masterclass", start: at(tue, 10, 0), end: at(tue, 11, 30), type: 1, subcal: "public", isStaffOnly: false },
+                { id: "e6", title: "5:30 PM Ballet I Technique", start: at(tue, 17, 30), end: at(tue, 19, 0), type: 2, subcal: "public", isStaffOnly: false },
+                { id: "e7", title: "4:30 PM Youth Jazz Fusion", start: at(wed, 16, 30), end: at(wed, 18, 0), type: 2, subcal: "public", isStaffOnly: false },
+                { id: "e8", title: "11:00 AM Weekend Hip-Hop Intensive", start: at(sat, 11, 0), end: at(sat, 13, 0), type: 2, subcal: "public", isStaffOnly: false },
+
+                // Layer 2: Staff Only Shifts 🔒 (Type 4: Warm Amber #d97706)
+                { id: "e9", title: "12:00 PM Instructors Weekly Sync 🔒", start: at(mon, 12, 0), end: at(mon, 13, 0), type: 4, subcal: "staff", isStaffOnly: true },
+                { id: "e10", title: "1:00 PM Payroll & Studio Admin 🔒", start: at(tue, 13, 0), end: at(tue, 14, 30), type: 4, subcal: "staff", isStaffOnly: true },
+                { id: "e11", title: "7:30 PM Staff Debrief 🔒", start: at(thu, 19, 30), end: at(thu, 21, 0), type: 4, subcal: "staff", isStaffOnly: true },
+                { id: "e12", title: "8:00 AM Facility Maintenance 🔒", start: at(fri, 8, 0), end: at(fri, 9, 30), type: 4, subcal: "staff", isStaffOnly: true },
+
+                // Layer 3: Studio Rentals (Type 5: Sky Cyan #0284c7)
+                { id: "e13", title: "7:00 PM Salsa Club Social Rental", start: at(wed, 19, 0), end: at(wed, 21, 0), type: 5, subcal: "rentals", isStaffOnly: false },
+                { id: "e14", title: "2:00 PM Indie Film Audition Booking", start: at(fri, 14, 0), end: at(fri, 17, 0), type: 5, subcal: "rentals", isStaffOnly: false },
+
+                // Layer 4: Performances (Type 3: Royal Purple #7c3aed)
+                { id: "e15", title: "6:00 PM Dress Rehearsal", start: at(thu, 18, 0), end: at(thu, 19, 30), type: 3, subcal: "showcase", isStaffOnly: false }
+            ];
+        }
+
+        function applySubcalendarFilters() {
+            const vm = getVueProxy();
+            if (!vm || !vm.calendar) return;
+
+            let filtered = masterDanceEvents.slice();
+
+            // Perspective filter
+            if (currentPerspective === 'public') {
+                filtered = filtered.filter(ev => !ev.isStaffOnly);
+            }
+
+            // Layer filter
+            if (currentLayerFilter !== 'all') {
+                filtered = filtered.filter(ev => ev.subcal === currentLayerFilter);
+            }
+
+            // Set events in Vue calendar
+            vm.calendar.events = filtered.map(item => new Event({
+                id: item.id,
+                title: item.title,
+                start: item.start,
+                end: item.end,
+                type: item.type
+            }));
+
+            // Sync with Vue scheduler
+            vm.updateCalendarView();
+
+            // Update stats
+            const countEl = document.getElementById('lab-event-count');
+            if (countEl) countEl.textContent = `${filtered.length} events`;
+
+            setTimeout(injectBadgesAndRSVP, 300);
+        }
+
+        function setPerspective(perspective) {
+            currentPerspective = perspective;
+
+            const btnAdmin = document.getElementById('btn-persp-admin');
+            const btnPublic = document.getElementById('btn-persp-public');
+            const labAdmin = document.getElementById('btn-view-admin');
+            const labPublic = document.getElementById('btn-view-public');
+            const banner = document.getElementById('public-viewer-notice');
+
+            if (perspective === 'admin') {
+                if (btnAdmin) btnAdmin.classList.add('active');
+                if (btnPublic) btnPublic.classList.remove('active');
+                if (labAdmin) labAdmin.classList.add('active');
+                if (labPublic) labPublic.classList.remove('active');
+                if (banner) banner.style.display = 'none';
+            } else {
+                if (btnAdmin) btnAdmin.classList.remove('active');
+                if (btnPublic) btnPublic.classList.add('active');
+                if (labAdmin) labAdmin.classList.remove('active');
+                if (labPublic) labPublic.classList.add('active');
+                if (banner) banner.style.display = 'flex';
+            }
+
+            applySubcalendarFilters();
+        }
+
+        function filterByLayer(layer) {
+            currentLayerFilter = layer;
+
+            ['all', 'public', 'staff', 'rentals', 'showcase'].forEach(l => {
+                const chip = document.getElementById('chip-layer-' + l);
+                if (chip) chip.classList.remove('active');
+            });
+
+            const activeChip = document.getElementById('chip-layer-' + layer);
+            if (activeChip) activeChip.classList.add('active');
+
+            const titleMap = {
+                'all': 'All Layers',
+                'public': 'Public Classes',
+                'staff': 'Staff Shifts 🔒',
+                'rentals': 'Studio Rentals',
+                'showcase': 'Performances'
+            };
+            const labelEl = document.getElementById('active-layer-title');
+            if (labelEl) labelEl.textContent = titleMap[layer] || 'All Layers';
+
+            applySubcalendarFilters();
+        }
+
+        function reloadDanceDemo() {
+            masterDanceEvents = generateDanceAcademyData();
+            applySubcalendarFilters();
+            const vm = getVueProxy();
+            if (vm && vm.showToast) {
+                vm.showToast('Reloaded 15 Dance Academy events across 4 layers!', 'success');
+            }
+        }
+
+        function setHeaderMode(mode) {
+            document.body.classList.remove('header-integrated', 'header-floating', 'header-breadcrumbs', 'header-classic');
+            ['integrated', 'floating', 'breadcrumbs', 'classic'].forEach(m => {
+                const btn = document.getElementById('btn-hdr-' + m);
+                if (btn) btn.classList.remove('active');
+            });
+
+            document.body.classList.add('header-' + mode);
+            const activeBtn = document.getElementById('btn-hdr-' + mode);
+            if (activeBtn) activeBtn.classList.add('active');
+        }
+
+        let currentProTier = 'studio'; // 'free' | 'starter' | 'studio' | 'unlimited'
+        let autoMonthlyThemeActive = true;
+
+        function setThemePreset(theme) {
+            window.__previewTheme = theme;
+            const isDark = (theme === 'dark');
+
+            document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+            if (document.documentElement.style) {
+                document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
+            }
+
+            const syncThemeEl = document.getElementById('syncfusion-theme');
+            if (syncThemeEl) {
+                syncThemeEl.href = isDark 
+                    ? '/vendor/syncfusion-23.2.6/material-dark.css'
+                    : '/vendor/syncfusion-23.2.6/material.css';
+            }
+
+            document.body.classList.remove(
+                'theme-contrast', 'theme-modern', 'theme-dark', 'theme-pastel',
+                'theme-autumn', 'theme-frost', 'theme-sakura', 'theme-sunset'
+            );
+            
+            ['contrast', 'modern', 'dark', 'pastel', 'autumn', 'frost', 'sakura', 'sunset'].forEach(t => {
+                const btn = document.getElementById('btn-thm-' + t);
+                if (btn) btn.classList.remove('active', 'font-bold');
+            });
+
+            document.body.classList.add('theme-' + theme);
+            const activeBtn = document.getElementById('btn-thm-' + theme);
+            if (activeBtn) activeBtn.classList.add('active', 'font-bold');
+
+            const seasonalTag = document.getElementById('seasonal-mode-tag');
+            if (seasonalTag) {
+                if (['autumn', 'frost', 'sakura', 'sunset'].includes(theme)) {
+                    seasonalTag.textContent = '🍂 Seasonal Active';
+                    seasonalTag.className = 'text-[10px] text-amber-600 dark:text-amber-400 font-bold';
+                } else {
+                    seasonalTag.textContent = 'Standard Active';
+                    seasonalTag.className = 'text-[10px] text-slate-500 font-medium';
+                }
+            }
+
+            updateTodayColumnHighlight();
+        }
+
+        function setCardStyle(style) {
+            document.body.classList.remove('card-modern', 'card-accent-bar', 'card-flat', 'card-glow');
+            ['modern', 'accent-bar', 'flat', 'glow'].forEach(s => {
+                const btnId = s === 'accent-bar' ? 'btn-card-accent' : ('btn-card-' + s);
+                const btn = document.getElementById(btnId);
+                if (btn) btn.classList.remove('active', 'font-bold');
+            });
+
+            document.body.classList.add('card-' + style);
+            const activeBtnId = style === 'accent-bar' ? 'btn-card-accent' : ('btn-card-' + style);
+            const activeBtn = document.getElementById(activeBtnId);
+            if (activeBtn) activeBtn.classList.add('active', 'font-bold');
+        }
+
+        function setProTier(tier) {
+            currentProTier = tier;
+            
+            // Highlight tier button in Lab Dock
+            ['free', 'starter', 'studio', 'unlimited'].forEach(t => {
+                const btn = document.getElementById('btn-tier-' + t);
+                if (btn) btn.classList.remove('active', 'font-bold');
+            });
+            const activeTierBtn = document.getElementById('btn-tier-' + tier);
+            if (activeTierBtn) activeTierBtn.classList.add('active', 'font-bold');
+
+            const labIndicator = document.getElementById('lab-tier-indicator');
+            const topbarBadge = document.getElementById('topbar-plan-badge');
+            const footerBadge = document.getElementById('footer-verified-badge');
+            const footerStatusText = document.getElementById('footer-status-text');
+            const footerStatusIcon = document.getElementById('footer-status-icon');
+            const chipRentals = document.getElementById('chip-layer-rentals');
+            const chipShowcase = document.getElementById('chip-layer-showcase');
+            const chipStaff = document.getElementById('chip-layer-staff');
+
+            if (tier === 'free') {
+                if (labIndicator) labIndicator.textContent = 'Free $0 Active';
+                if (topbarBadge) {
+                    topbarBadge.className = 'badge-plan badge-free-pill';
+                    topbarBadge.innerHTML = '<span>FREE PLAN</span>';
+                }
+                // Subcalendars: disabled / hidden in free
+                if (chipRentals) chipRentals.style.display = 'none';
+                if (chipShowcase) chipShowcase.style.display = 'none';
+                if (chipStaff) chipStaff.style.display = 'none';
+                filterByLayer('public');
+
+                setWhitelabelMode('default');
+                setThemePreset('modern');
+
+                if (footerStatusIcon) footerStatusIcon.textContent = '⚡';
+                if (footerStatusText) footerStatusText.innerHTML = '<strong>Free Calendar</strong> • Made with Pastecal · 1 flat calendar · Standard Light/Dark';
+                if (footerBadge) {
+                    footerBadge.className = 'inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200';
+                    footerBadge.innerHTML = '<span>⚡ Free Tier</span>';
+                }
+            } else if (tier === 'starter') {
+                if (labIndicator) labIndicator.textContent = 'Starter $20 Active';
+                if (topbarBadge) {
+                    topbarBadge.className = 'badge-plan badge-starter-pill';
+                    topbarBadge.innerHTML = '<span>PRO $20/YR</span>';
+                }
+                // Subcalendars: 3 layers active
+                if (chipStaff) chipStaff.style.display = 'inline-flex';
+                if (chipRentals) chipRentals.style.display = 'none';
+                if (chipShowcase) chipShowcase.style.display = 'none';
+                filterByLayer('all');
+
+                setWhitelabelMode('verified');
+                setThemePreset('contrast');
+
+                if (footerStatusIcon) footerStatusIcon.textContent = '✓';
+                if (footerStatusText) footerStatusText.innerHTML = '<strong>Durango Dance Academy</strong> • 3 Subcalendars Active • Verified Publisher Lock';
+                if (footerBadge) {
+                    footerBadge.className = 'inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-200';
+                    footerBadge.innerHTML = '<span>✓ Verified Publisher</span>';
+                }
+            } else if (tier === 'studio') {
+                if (labIndicator) labIndicator.textContent = 'Studio $49 Active';
+                if (topbarBadge) {
+                    topbarBadge.className = 'badge-plan badge-studio-pill';
+                    topbarBadge.innerHTML = '<span>⭐ STUDIO $49</span>';
+                }
+                // Subcalendars: all 5 layers active
+                if (chipStaff) chipStaff.style.display = 'inline-flex';
+                if (chipRentals) chipRentals.style.display = 'inline-flex';
+                if (chipShowcase) chipShowcase.style.display = 'inline-flex';
+                filterByLayer('all');
+
+                setWhitelabelMode('vanity');
+                setThemePreset('autumn');
+
+                if (footerStatusIcon) footerStatusIcon.textContent = '🏢';
+                if (footerStatusText) footerStatusText.innerHTML = '<strong>Durango Dance Studio</strong> • 5 Subcalendars Active • 🍂 Autumn Ember Theme';
+                if (footerBadge) {
+                    footerBadge.className = 'inline-flex items-center gap-1 text-[11px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200';
+                    footerBadge.innerHTML = '<span>⭐ Studio Pro</span>';
+                }
+            } else if (tier === 'unlimited') {
+                if (labIndicator) labIndicator.textContent = 'Unlimited $99 Active';
+                if (topbarBadge) {
+                    topbarBadge.className = 'badge-plan badge-unlimited-pill';
+                    topbarBadge.innerHTML = '<span>👑 UNLIMITED $99</span>';
+                }
+                // Subcalendars: unlimited layers
+                if (chipStaff) chipStaff.style.display = 'inline-flex';
+                if (chipRentals) chipRentals.style.display = 'inline-flex';
+                if (chipShowcase) chipShowcase.style.display = 'inline-flex';
+                filterByLayer('all');
+
+                setWhitelabelMode('clean');
+                setThemePreset('autumn');
+                setCardStyle('glow');
+
+                if (footerStatusIcon) footerStatusIcon.textContent = '👑';
+                if (footerStatusText) footerStatusText.innerHTML = '<strong>Official Calendar for Durango Dance LLC</strong> • cal.durangodance.com • 100% Whitelabeled';
+                if (footerBadge) {
+                    footerBadge.className = 'inline-flex items-center gap-1 text-[11px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200';
+                    footerBadge.innerHTML = '<span>👑 Enterprise Whitelabel</span>';
+                }
+            }
+
+            const vm = getVueProxy();
+            if (vm && vm.showToast) {
+                const labels = {
+                    free: 'Switched to Free Plan ($0) — Standard theme & 1 calendar',
+                    starter: 'Switched to Pro Starter ($20/yr) — 3 subcalendars & verified publisher lock',
+                    studio: 'Switched to Pro Studio ($49/yr) — Seasonal themes, 5 subcalendars & custom branding!',
+                    unlimited: 'Switched to Pro Unlimited ($99/yr) — 100% Whitelabeling & custom domain!'
+                };
+                vm.showToast(labels[tier] || 'Plan updated', 'success');
+            }
+        }
+
+        function setWhitelabelMode(mode) {
+            ['default', 'verified', 'vanity', 'clean'].forEach(m => {
+                const btn = document.getElementById('btn-white-' + m);
+                if (btn) btn.classList.remove('active', 'font-bold');
+            });
+            const activeBtn = document.getElementById('btn-white-' + mode);
+            if (activeBtn) activeBtn.classList.add('active', 'font-bold');
+
+            const domainDisplay = document.getElementById('topbar-domain-display');
+            const brandName = document.getElementById('topbar-brand-name');
+            const brandSub = document.getElementById('topbar-brand-sub');
+
+            if (mode === 'default') {
+                if (domainDisplay) domainDisplay.textContent = 'pastecal.com/dance';
+                if (brandName) brandName.textContent = 'pastecal';
+                if (brandSub) brandSub.textContent = 'shared calendar';
+            } else if (mode === 'verified') {
+                if (domainDisplay) domainDisplay.textContent = 'pastecal.com/durango-dance';
+                if (brandName) brandName.textContent = 'Durango Dance';
+                if (brandSub) brandSub.textContent = 'verified publisher ✓';
+            } else if (mode === 'vanity') {
+                if (domainDisplay) domainDisplay.textContent = 'dance.pastecal.com';
+                if (brandName) brandName.textContent = 'Durango Dance';
+                if (brandSub) brandSub.textContent = 'dance academy · pro studio';
+            } else if (mode === 'clean') {
+                if (domainDisplay) domainDisplay.textContent = 'cal.durangodance.com';
+                if (brandName) brandName.textContent = 'Durango Dance Academy';
+                if (brandSub) brandSub.textContent = 'official schedule';
+            }
+        }
+
+        function setStudioIcon(icon, title, subtitle) {
+            ['dance', 'studio', 'yoga', 'sports', 'music'].forEach(k => {
+                const btn = document.getElementById('btn-ico-' + k);
+                if (btn) btn.classList.remove('active');
+            });
+            
+            const iconMap = { '🩰': 'dance', '🏢': 'studio', '🧘': 'yoga', '⚽': 'sports', '🎵': 'music' };
+            const activeKey = iconMap[icon];
+            if (activeKey) {
+                const activeBtn = document.getElementById('btn-ico-' + activeKey);
+                if (activeBtn) activeBtn.classList.add('active');
+            }
+
+            const iconDisplay = document.getElementById('topbar-icon-display');
+            const brandName = document.getElementById('topbar-brand-name');
+            const brandSub = document.getElementById('topbar-brand-sub');
+            const footerText = document.getElementById('footer-status-text');
+
+            if (iconDisplay) iconDisplay.textContent = icon;
+            if (brandName) brandName.textContent = title;
+            if (brandSub) brandSub.textContent = subtitle;
+            if (footerText) {
+                footerText.innerHTML = `<strong>${title}</strong> • 5 Subcalendars Active • ${document.body.classList.contains('theme-autumn') ? '🍂 Autumn Ember' : 'Dynamic Season'}`;
+            }
+
+            const vm = getVueProxy();
+            if (vm && vm.calendar) {
+                vm.calendar.title = title + ' Schedule';
+            }
+        }
+
+        function toggleAutoMonthlyTheme() {
+            const month = new Date().getMonth(); // 0-indexed: 9 is October
+            let season = 'autumn';
+            let monthName = 'October';
+            if (month === 11 || month === 0 || month === 1) {
+                season = 'frost';
+                monthName = 'Winter';
+            } else if (month >= 2 && month <= 4) {
+                season = 'sakura';
+                monthName = 'Spring';
+            } else if (month >= 5 && month <= 7) {
+                season = 'sunset';
+                monthName = 'Summer';
+            } else {
+                season = 'autumn';
+                monthName = 'October';
+            }
+
+            setThemePreset(season);
+            const autoBtn = document.getElementById('btn-thm-auto');
+            if (autoBtn) {
+                autoBtn.innerHTML = `<span>🗓️ Auto-Month Dynamic: Active (${monthName} ${season === 'autumn' ? '🍂' : (season === 'frost' ? '❄️' : (season === 'sakura' ? '🌸' : '☀️'))})</span>`;
+            }
+            const tag = document.getElementById('seasonal-mode-tag');
+            if (tag) tag.textContent = '🗓️ Auto-Month Active';
+
+            const vm = getVueProxy();
+            if (vm && vm.showToast) {
+                vm.showToast(`Auto-detected ${monthName}: Applied dynamic seasonal theme!`, 'success');
+            }
+        }
+
+        function openPricingModal() {
+            const modal = document.getElementById('pricing-modal');
+            if (modal) modal.style.display = 'flex';
+        }
+
+        function closePricingModal() {
+            const modal = document.getElementById('pricing-modal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        function toggleBillingCycle(cycle) {
+            const btnAnn = document.getElementById('btn-bill-annual');
+            const btnMon = document.getElementById('btn-bill-monthly');
+            const priceStarter = document.getElementById('price-starter');
+            const periodStarter = document.getElementById('period-starter');
+            const priceStudio = document.getElementById('price-studio');
+            const periodStudio = document.getElementById('period-studio');
+            const priceUnlimited = document.getElementById('price-unlimited');
+            const periodUnlimited = document.getElementById('period-unlimited');
+
+            if (cycle === 'annual') {
+                if (btnAnn) { btnAnn.className = 'py-1 px-3 rounded-lg bg-white shadow-sm text-slate-900'; }
+                if (btnMon) { btnMon.className = 'py-1 px-3 rounded-lg text-slate-500 hover:text-slate-900'; }
+                if (priceStarter) priceStarter.textContent = '$20';
+                if (periodStarter) periodStarter.textContent = '/ year ($3/mo)';
+                if (priceStudio) priceStudio.textContent = '$49';
+                if (periodStudio) periodStudio.textContent = '/ year ($5/mo)';
+                if (priceUnlimited) priceUnlimited.textContent = '$99';
+                if (periodUnlimited) periodUnlimited.textContent = '/ year ($10/mo)';
+            } else {
+                if (btnAnn) { btnAnn.className = 'py-1 px-3 rounded-lg text-slate-500 hover:text-slate-900'; }
+                if (btnMon) { btnMon.className = 'py-1 px-3 rounded-lg bg-white shadow-sm text-slate-900'; }
+                if (priceStarter) priceStarter.textContent = '$3';
+                if (periodStarter) periodStarter.textContent = '/ month';
+                if (priceStudio) priceStudio.textContent = '$5';
+                if (periodStudio) periodStudio.textContent = '/ month';
+                if (priceUnlimited) priceUnlimited.textContent = '$10';
+                if (periodUnlimited) periodUnlimited.textContent = '/ month';
+            }
+        }
+
+        function toggleLabDock(open) {
+            const body = document.getElementById('lab-panel-body');
+            const openBtn = document.getElementById('lab-open-btn');
+            if (open) {
+                body.style.display = 'block';
+                openBtn.style.display = 'none';
+            } else {
+                body.style.display = 'none';
+                openBtn.style.display = 'flex';
+            }
+        }
+
+        function jumpToCalendar() {
+            const input = document.getElementById('lab-slug-input');
+            const slug = (input.value || '').trim();
+            if (slug) window.location.href = '/preview/' + slug;
+        }
+
+        function updateTodayColumnHighlight() {
+            const scheduleEl = document.getElementById('Schedule');
+            if (!scheduleEl) return;
+
+            // Remove existing today column classes
+            for (let i = 1; i <= 7; i++) {
+                scheduleEl.classList.remove('today-col-' + i);
+            }
+
+            // Find current day column index
+            const headers = Array.from(document.querySelectorAll('.e-date-header-wrap .e-header-cells'));
+            const todayIdx = headers.findIndex(h => h.classList.contains('e-current-day'));
+            if (todayIdx !== -1) {
+                scheduleEl.classList.add('today-col-' + (todayIdx + 1));
+            }
+        }
+
+        function injectBadgesAndRSVP() {
+            updateTodayColumnHighlight();
+
+            const appointments = document.querySelectorAll('.e-appointment');
+            appointments.forEach((appt, idx) => {
+                const subjectEl = appt.querySelector('.e-subject');
+                const subjectText = subjectEl ? subjectEl.textContent : '';
+
+                // Staff indicator
+                if (subjectText.includes('🔒') && !appt.querySelector('.staff-pill-badge')) {
+                    const badge = document.createElement('span');
+                    badge.className = 'staff-pill-badge';
+                    badge.textContent = '🔒 Staff';
+                    if (subjectEl) subjectEl.appendChild(badge);
+                }
+
+                // RSVP indicator pill
+                if (!appt.querySelector('.rsvp-indicator-pill')) {
+                    const counts = ['👍 8 · ✋ 1', '👍 6', '👍 4 · ✋ 2', '👍 5'][idx % 4];
+                    const pill = document.createElement('div');
+                    pill.className = 'rsvp-indicator-pill';
+                    pill.innerHTML = counts;
+                    pill.onclick = (e) => {
+                        e.stopPropagation();
+                        openRSVPModal(appt);
+                    };
+                    appt.appendChild(pill);
+                }
+            });
+        }
+
+        let currentRSVPAppt = null;
+        function openRSVPModal(appt) {
+            currentRSVPAppt = appt;
+            const subject = appt.querySelector('.e-subject')?.textContent || 'Calendar Event';
+            const time = appt.querySelector('.e-time')?.textContent || 'Upcoming';
+            document.getElementById('rsvp-modal-title').textContent = subject.replace('🔒 Staff', '').trim();
+            document.getElementById('rsvp-modal-time').textContent = time;
+            const modal = document.getElementById('rsvp-modal');
+            if (modal) modal.style.display = 'flex';
+        }
+
+        function closeRSVPModal() {
+            const modal = document.getElementById('rsvp-modal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        function castRSVPVote(choice) {
+            const name = document.getElementById('rsvp-user-name').value || 'You';
+            const list = document.getElementById('rsvp-attendees-list');
+            const row = document.createElement('div');
+            row.className = 'flex items-center justify-between text-indigo-700 font-semibold';
+            const icon = choice === 'going' ? '👍 Going' : (choice === 'maybe' ? '✋ Maybe' : '👎 Can\'t');
+            row.innerHTML = `<span>${name}</span><span class="text-[10px]">${icon}</span>`;
+            list.prepend(row);
+
+            if (currentRSVPAppt) {
+                const pill = currentRSVPAppt.querySelector('.rsvp-indicator-pill');
+                if (pill) {
+                    pill.innerHTML = `👍 You + 4`;
+                    pill.style.background = '#eef2ff';
+                    pill.style.borderColor = '#c7d2fe';
+                    pill.style.color = '#4f46e5';
+                }
+            }
+
+            setTimeout(closeRSVPModal, 400);
+        }
+
+        let calendarObserver = null;
+        function startCalendarObserver() {
+            if (calendarObserver) return;
+            const schedule = document.getElementById('Schedule');
+            if (!schedule) return;
+            calendarObserver = new MutationObserver(() => {
+                injectBadgesAndRSVP();
+            });
+            calendarObserver.observe(schedule, { childList: true, subtree: true });
+        }
+
+        function initPreviewSession() {
+            const vm = getVueProxy();
+            if (vm) {
+                if (vm.calendar) vm.calendar.title = 'Fall Dance Rehearsals';
+                vm.COLORS = [
+                    "#4f46e5", // 1: Indigo
+                    "#059669", // 2: Emerald
+                    "#7c3aed", // 3: Royal Purple
+                    "#d97706", // 4: Amber (Staff 🔒)
+                    "#0284c7", // 5: Sky Cyan
+                    "#e11d48", // 6: Rose
+                    "#8b5cf6",
+                    "#06b6d4"
+                ];
+                if (typeof vm.updateColorCSS === 'function') vm.updateColorCSS();
+
+                // Bulletproof interceptor: keep demo data when Firebase responds
+                if (vm.applyRemoteCalendar && !vm._previewIntercepted) {
+                    vm._previewIntercepted = true;
+                    const origApply = vm.applyRemoteCalendar.bind(vm);
+                    vm.applyRemoteCalendar = function(c, opts) {
+                        origApply(c, opts);
+                        if (!vm.calendar.events || vm.calendar.events.length === 0) {
+                            applySubcalendarFilters();
+                        }
+                    };
+                }
+            }
+
+            if (window.scheduleObj) {
+                window.scheduleObj.currentView = 'Week';
+                window.scheduleObj.dateHeaderTemplate = function(props) {
+                    const d = props.date;
+                    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+                    const dayStr = dayNames[d.getDay()];
+                    const num = d.getDate();
+                    const isToday = d.toDateString() === new Date().toDateString();
+                    return `<div style="text-align: center; font-weight: 700; padding: 4px 0;">
+                        <span style="font-size: 13px; color: ${isToday ? '#4f46e5' : '#334155'}">${dayStr} ${num}</span>
+                        ${isToday ? `<span style="font-size: 11px; color: #4f46e5; margin-left: 2px;">(Today)</span>` : ''}
+                    </div>`;
+                };
+                window.scheduleObj.scrollTo('08:30');
+            }
+
+            masterDanceEvents = generateDanceAcademyData();
+            applySubcalendarFilters();
+            startCalendarObserver();
+            updateTodayColumnHighlight();
+            setProTier('studio');
+
+            window.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    closePricingModal();
+                    closeRSVPModal();
+                }
+            });
+
+            window.addEventListener('resize', () => {
+                if (window.scheduleObj && typeof window.scheduleObj.refresh === 'function') {
+                    window.scheduleObj.refresh();
+                }
+                updateTodayColumnHighlight();
+            });
+        }
+
+        window.addEventListener('load', () => {
+            setTimeout(initPreviewSession, 600);
+            setTimeout(initPreviewSession, 1200);
+        });
+    </script>
+</body>
+
+</html>

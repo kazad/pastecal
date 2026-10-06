@@ -188,7 +188,16 @@ class CloudCalendarService extends CalendarDataService {
     static _scheduleReconnect(room) {
         if (room.closed || room.timer) return;
         const { baseMs, maxMs } = this.RECONNECT;
-        const delay = Math.min(maxMs, baseMs * 2 ** room.retries++) * (0.75 + Math.random() * 0.5);
+        const attempt = room.retries++;
+        if ((attempt === 3 || attempt === 6) && typeof window !== 'undefined' && window.Analytics && typeof window.Analytics.track === 'function') {
+            try {
+                window.Analytics.track('cloud_reconnect_retry', {
+                    calendar_id: room.id,
+                    attempt
+                });
+            } catch (e) { /* analytics must never throw */ }
+        }
+        const delay = Math.min(maxMs, baseMs * 2 ** attempt) * (0.75 + Math.random() * 0.5);
         room.timer = setTimeout(() => { room.timer = null; this._open(room); }, delay);
     }
 
@@ -367,6 +376,15 @@ class CloudCalendarService extends CalendarDataService {
         room.inflight = null;
         const message = m.message || m.code;
         console.error(`[CloudCalendarService] server refused: ${m.code} ${message || ''}`);
+        if (typeof window !== 'undefined' && window.Analytics && typeof window.Analytics.track === 'function') {
+            try {
+                window.Analytics.track('cloud_sync_refused', {
+                    calendar_id: room.id,
+                    code: m.code,
+                    message: message ? String(message).slice(0, 100) : null
+                });
+            } catch (e) { /* analytics must never throw */ }
+        }
         if (this.errorKind(m.code) === 'paused') {
             // The server's own rate limit: stop saving until reload. Nothing is lost: the journal has it.
             this._paused = true;
@@ -496,6 +514,5 @@ class CloudCalendarService extends CalendarDataService {
     }
 }
 
-// The ONE place the backend is chosen: from here on, every `CalendarDataService` in the apps
-// is this class. With the flag off nothing changes.
+if (typeof window !== 'undefined') window.CloudCalendarService = CloudCalendarService;
 if (CloudCalendarService.enabled()) CalendarDataService = CloudCalendarService;
