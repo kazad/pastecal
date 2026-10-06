@@ -267,7 +267,9 @@ export default {
         const beta = path === '/beta' || path.startsWith('/beta/') || (path.startsWith('/nativecal/') && !isFile);
         const res = await env.ASSETS.fetch(beta ? new Request(new URL('/nativecal/', url), request) : request);
         const out = new Response(res.body, res);
-        out.headers.set('X-Robots-Tag', 'noindex');
+        // Only the test site is kept out of search. (This once ran on every hostname, so pastecal.com
+        // itself told Google not to index it.)
+        if (url.hostname === 'new.pastecal.com') out.headers.set('X-Robots-Tag', 'noindex'); else out.headers.delete('X-Robots-Tag');
         if (/\.(js|css|json)$/.test(path) || beta) out.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
         return out;
     } catch (err) {
