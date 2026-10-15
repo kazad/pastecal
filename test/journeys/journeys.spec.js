@@ -112,7 +112,10 @@ async function tap(page, locator) {
 async function openNewEventEditor(page, cellIndex) {
   const cell = page.locator('.e-work-cells').nth(cellIndex);
   const b = await cell.boundingBox();
-  const x = b.x + b.width / 2, y = b.y + b.height / 2;
+  // The lower part of the cell, not its center: a new calendar's Sample event sits on today's
+  // date, near the top of its cell, so on the day a test's fixed cell happens to be today the
+  // center tap opened that event's popup instead of the editor (failed Oct 15, Paris time).
+  const x = b.x + b.width / 2, y = b.y + b.height - 12;
   if (isPhone(page)) {
     await page.touchscreen.tap(x, y);
     await page.waitForTimeout(400);
