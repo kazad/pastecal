@@ -581,6 +581,14 @@ div#Schedule,
     display: none !important;
 }
 
+/* The root is hidden with visibility, not display: Vue mounts (and the Schedule is
+   appended) while v-cloak is still on, and Syncfusion sizes its cells and event chips
+   from measured widths -- display:none would measure 0 and collapse every chip. */
+#app[v-cloak] {
+    display: block !important;
+    visibility: hidden;
+}
+
 /* Event popup: cap height to the viewport and let the body scroll instead of pushing
    long descriptions off-screen with no way to reach the rest of the content. */
 .e-quick-popup-wrapper {

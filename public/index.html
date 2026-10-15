@@ -88,7 +88,22 @@ Copyright (c) 2025 Kalid Azad
     <!-- Syncfusion, calendar subset only, self-hosted and pinned (scripts/build-vendor.sh).
          Replaced the full 50-package bundle (4.4 MB over the wire) and an UNVERSIONED
          theme that tracked Syncfusion's latest release while the JS stayed on 23.2.6. -->
-    <link id="syncfusion-theme" href="/vendor/syncfusion-23.2.6/material.css?v=1790553083" rel="stylesheet" type="text/css" />
+    <!-- The theme sheet is chosen HERE, before first paint, from the saved setting (same
+         rule as app.js applyTheme). It used to be hard-coded light and then swapped by
+         app.js at mount to an unversioned URL: the browser drops the old sheet while the
+         new one is fetched, so the page was briefly unstyled (the FOUC) and any event chip
+         Syncfusion laid out in that gap was sized against a shrink-wrapped grid (16px wide
+         chips that stayed wrong until an edit). Dark-mode users also got a light flash. -->
+    <script>
+        (function () {
+            var mode = 'auto';
+            try { mode = (JSON.parse(localStorage.getItem('pastecal_global_settings')) || {}).darkMode || 'auto'; } catch (e) { }
+            var dark = mode === 'dark' || (mode === 'auto' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+            document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+            document.write('<link id="syncfusion-theme" rel="stylesheet" type="text/css" href="/vendor/syncfusion-23.2.6/' +
+                (dark ? 'material-dark' : 'material') + '.css?v=1790553083">');
+        })();
+    </script>
     <link rel="stylesheet" href="/tokens.css?v=1790553083">
     <link rel="stylesheet" href="/style.css?v=1790553083">
     <!-- Tailwind, prebuilt by scripts/build-css.sh (was a 124 KB in-browser compiler). After style.css, as the compiler's output was. -->
@@ -202,7 +217,7 @@ Copyright (c) 2025 Kalid Azad
 </head>
 
 <body class="p-1 m-1">
-    <div id="app" data-testid="app-root">
+    <div id="app" data-testid="app-root" v-cloak>
         <!-- Mobile Header -->
         <div class="md:hidden flex flex-col mb-2 pt-3 space-y-3" data-testid="mobile-header">
             <!-- Row 1: Logo, Title, Menu -->

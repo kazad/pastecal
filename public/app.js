@@ -1042,6 +1042,38 @@ const CalendarVueApp = {
 
         scheduleObj.appendTo('#Schedule');
 
+        // Syncfusion sizes month-view event chips in pixels from the cell widths it measures
+        // while it renders. On first load the grid is still being built (and fonts/styles may
+        // still be landing) when events are laid out, so chips can come out ~30px wide until
+        // something forces a layout (an edit did). Re-lay-out once after the first events
+        // render has settled, and whenever the container's width changes.
+        let settleTimer;
+        const relayout = () => {
+            clearTimeout(settleTimer);
+            settleTimer = setTimeout(() => scheduleObj.refreshLayout(), 50);
+        };
+        // A month-view chip is never narrower than one cell, so a narrower one is stale.
+        // Checked after every render (not on a timer, which was a guess about when the grid
+        // is done); capped so a view that can't satisfy it can't loop.
+        let staleRetries = 0;
+        scheduleObj.addEventListener('dataBound', () => {
+            requestAnimationFrame(() => {
+                const cell = document.querySelector('.e-schedule .e-month-view .e-work-cells');
+                const chip = document.querySelector('.e-schedule .e-month-view .e-appointment');
+                if (!cell || !chip) { staleRetries = 0; return; }
+                if (chip.getBoundingClientRect().width >= cell.getBoundingClientRect().width * 0.9) { staleRetries = 0; return; }
+                if (staleRetries++ < 3) relayout();
+            });
+        });
+        const calWrap = document.getElementById('cal2_wrap');
+        if (calWrap && window.ResizeObserver) {
+            let lastWidth = calWrap.offsetWidth;
+            new ResizeObserver(() => {
+                const w = calWrap.offsetWidth;
+                if (w && w !== lastWidth) { lastWidth = w; relayout(); }
+            }).observe(calWrap);
+        }
+
         // Add event listener to mark month-start dates and colorize year view dots
         scheduleObj.dataBound = function () {
             // hiddenEventCount is scoped to the dates on screen, and the scheduler's view
@@ -1629,10 +1661,27 @@ const CalendarVueApp = {
         },
         swapSyncfusionTheme(dark) {
             // One self-hosted stylesheet per theme (scripts/build-vendor.sh), pinned to the
-            // same Syncfusion version as the JS.
-            document.getElementById('syncfusion-theme').href = dark
-                ? '/vendor/syncfusion-23.2.6/material-dark.css'
-                : '/vendor/syncfusion-23.2.6/material.css';
+            // same Syncfusion version as the JS. index.html already loaded the right one
+            // before first paint, so this is normally a no-op; it only works when the user
+            // changes the setting. The new sheet is added and the old removed once it has
+            // loaded: pointing the existing <link> at a new href drops the old rules first,
+            // leaving the page unstyled (and Syncfusion measuring a collapsed grid) until
+            // the new file arrives.
+            const link = document.getElementById('syncfusion-theme');
+            if (!link) return;
+            const file = dark ? 'material-dark.css' : 'material.css';
+            const url = new URL(link.href, location.href);
+            if (url.pathname.endsWith('/' + file)) return;
+            url.pathname = url.pathname.replace(/[^/]+$/, file);
+            const next = link.cloneNode();
+            next.removeAttribute('id');
+            next.href = url.href;
+            next.onload = () => {
+                link.remove();
+                next.id = 'syncfusion-theme';
+                if (window.scheduleObj) window.scheduleObj.refreshLayout();
+            };
+            link.after(next);
         },
 
         // Validate custom view configuration
