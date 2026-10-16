@@ -94,8 +94,16 @@ class RecentCalendars {
     load() {
         // Calendars you created live under their own key and are never evicted.
         // Calendars you merely visited stay in the capped `recentCalendars` list.
-        const mine = JSON.parse(localStorage.getItem('myCalendars')) || [];
-        const visited = JSON.parse(localStorage.getItem('recentCalendars')) || [];
+        // Storage can be blocked (some private/embedded browsers) or hold garbage; the list
+        // is a convenience, so an unreadable one is an empty one, never a failed page load.
+        const read = (key) => {
+            try {
+                const v = JSON.parse(localStorage.getItem(key));
+                return Array.isArray(v) ? v.filter(item => item && typeof item === 'object' && item.id) : [];
+            } catch (e) { return []; }
+        };
+        const mine = read('myCalendars');
+        const visited = read('recentCalendars');
 
         // Older builds stored everything in `recentCalendars`. Anything already
         // flagged `mine` there is migrated across on first load so upgrading
@@ -114,8 +122,10 @@ class RecentCalendars {
     save() {
         const mine = this.items.filter(item => item.mine);
         const visited = this.items.filter(item => !item.mine);
-        localStorage.setItem('myCalendars', JSON.stringify(mine));
-        localStorage.setItem('recentCalendars', JSON.stringify(visited));
+        try {
+            localStorage.setItem('myCalendars', JSON.stringify(mine));
+            localStorage.setItem('recentCalendars', JSON.stringify(visited));
+        } catch (e) { /* storage blocked or full: the list lives in memory this session */ }
     }
 
     add(id, title, mine = false) {

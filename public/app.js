@@ -1807,8 +1807,13 @@ const CalendarVueApp = {
         },
 
         loadLocalStorage() {
-            var c = JSON.parse(localStorage.getItem("calendar"));
-            if (c) {
+            var c = null;
+            try {
+                c = JSON.parse(localStorage.getItem("calendar"));
+            } catch (e) {
+                console.warn('Ignoring unreadable saved draft:', e && e.message);
+            }
+            if (c && typeof c === 'object' && !Array.isArray(c)) {
                 // Load ALL draft data from localStorage (ID, title, events, settings, colors, notes, etc.)
                 this.calendar.import(c);
                 // Keep the draft's events/settings but not its URL name: a name typed on an
@@ -3575,8 +3580,15 @@ const CalendarVueApp = {
 
         // Global Settings methods (device-specific, stored in localStorage)
         loadGlobalSettings() {
-            const settings = JSON.parse(localStorage.getItem('pastecal_global_settings'));
-            if (settings) {
+            // Storage can be unreadable (blocked in private/embedded browsers) or hold garbage
+            // from an old build; either threw here and left the app on "Loading..." for good.
+            let settings = null;
+            try {
+                settings = JSON.parse(localStorage.getItem('pastecal_global_settings'));
+            } catch (e) {
+                console.warn('Ignoring unreadable saved settings:', e && e.message);
+            }
+            if (settings && typeof settings === 'object' && !Array.isArray(settings)) {
                 this.globalSettings = { ...this.globalSettings, ...settings };
 
                 // Ensure custom view properties exist for backwards compatibility

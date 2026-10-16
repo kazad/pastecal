@@ -741,3 +741,25 @@ test('slow stylesheet: month chips still fill their day cell, with one theme req
   expect(box.width, `chip ${box.width}px vs day cell ${cell.width}px`).toBeGreaterThanOrEqual(cell.width * 0.9);
   expect(themeRequests.length, `theme sheet requested ${themeRequests.join(', ')}`).toBe(1);
 });
+
+// ---------------------------------------------------------------------------
+// Oct 2026 adversarial pass: a garbage `pastecal_global_settings` (or storage that
+// throws on access, as in some private/embedded browsers) threw inside mount and left
+// the app on "Loading..." forever -- permanently, for that browser. Storage is a
+// convenience; the calendar must open without it.
+for (const [label, init] of [
+  ['settings are corrupt', () => { localStorage.setItem('pastecal_global_settings', '}}}'); }],
+  ['the saved home-page draft is corrupt', () => { localStorage.setItem('calendar', '{not json'); }],
+  ['storage throws on every access', () => { Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('denied', 'SecurityError'); } }); }],
+]) {
+  test(`the calendar still opens when ${label}`, async ({ browser, page }) => {
+    const slug = await newCalendar(browser, page, 'badstore');
+    const ctx = await browser.newContext();
+    await ctx.addInitScript(() => { window.__TEST__ = true; });
+    await ctx.addInitScript(init);
+    const p = await ctx.newPage();
+    await openCalendar(p, slug);
+    await expect(p.locator('.e-appointment').first()).toBeVisible();
+    await ctx.close();
+  });
+}
