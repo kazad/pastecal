@@ -18,6 +18,26 @@ class SlugManager {
         return slug?.toLowerCase();
     }
 
+    // Alternatives to offer when a chosen name is taken, best first. Pure: the caller checks
+    // which are actually free. A trailing number counts up ("team-2" -> "team-3"); otherwise
+    // the usual ways people disambiguate (-2, -<year>, -team, -calendar).
+    static suggestSlugs(slug, year = new Date().getFullYear()) {
+        const base = String(slug || '').trim().toLowerCase().replace(/-+$/, '');
+        if (!base) return [];
+        const out = [];
+        const counted = base.match(/^(.*)-(\d{1,3})$/);
+        if (counted) {
+            const n = parseInt(counted[2], 10);
+            out.push(`${counted[1]}-${n + 1}`, `${counted[1]}-${n + 2}`);
+        } else {
+            out.push(`${base}-2`);
+        }
+        for (const tail of [String(year), 'team', 'calendar']) {
+            if (!base.endsWith(`-${tail}`)) out.push(`${base}-${tail}`);
+        }
+        return [...new Set(out)].filter(c => c !== base && c.length <= 60);
+    }
+
     // Core method - handles all read-only link creation scenarios
     static async createReadOnlyLink(calendar, options = {}) {
         const { customSlug = null, autoCreate = false } = options;

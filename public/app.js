@@ -245,6 +245,7 @@ const CalendarVueApp = {
 
             // Creation flow
             showClaimDialog: false,
+            slugTaken: null,   // { slug, options: [free alternatives] } after a claim hits a taken name
             userHasEditedSlug: false,
 
             // Mobile Menu
@@ -1810,15 +1811,15 @@ const CalendarVueApp = {
             if (c) {
                 // Load ALL draft data from localStorage (ID, title, events, settings, colors, notes, etc.)
                 this.calendar.import(c);
+                // Keep the draft's events/settings but not its URL name: a name typed on an
+                // earlier visit (maybe taken, maybe abandoned) shouldn't come back as the suggestion.
+                this.calendar.id = Utils.randomID(8);
                 // Re-initialize local settings to load custom colors and labels
                 this.initializeLocalSettings();
             } else {
                 // No localStorage data (fresh start after save, or first visit)
                 this.resetToDefaults();
             }
-                // Keep the draft's events/settings but not its URL name: a name typed on an
-                // earlier visit (maybe taken, maybe abandoned) shouldn't come back as the suggestion.
-                this.calendar.id = Utils.randomID(8);
         },
 
         saveLocalStorage() {
@@ -2015,8 +2016,9 @@ const CalendarVueApp = {
                     where: 'calendar_url',
                     reason: 'taken',
                 }));
-                // Revert to alert for this validation as per user request
-                alert("This URL is already taken. Please choose another.");
+                // Say so without a blocking alert, and offer names that are free (60 of
+                // the 83 failed claims in 30 days were "taken": a dead end with no way on).
+                this.offerSlugAlternatives(slug);
             }, () => {
                 // does not exist, proceed
                 this.isLoading = true;
@@ -2057,6 +2059,36 @@ const CalendarVueApp = {
 
         handleSlugInput() {
             this.userHasEditedSlug = true;
+            this.slugTaken = null;
+        },
+
+        // Show "taken" and up to 3 alternatives that are actually free. The message is up
+        // at once; the options fill in when the (parallel) existence checks come back.
+        offerSlugAlternatives(slug) {
+            this.slugTaken = { slug, options: [] };
+            const candidates = SlugManager.suggestSlugs(slug);
+            const free = new Array(candidates.length).fill(false);
+            let pending = candidates.length;
+            const settle = () => {
+                if (--pending > 0) return;
+                // Through this.slugTaken (Vue's reactive copy), and only if it is still the
+                // same name: the user may have typed on or dismissed it meanwhile.
+                if (!this.slugTaken || this.slugTaken.slug !== slug) return;
+                this.slugTaken.options = candidates.filter((_, i) => free[i]).slice(0, 3);
+                track(a => a.track('slug_suggestion_shown', { count: this.slugTaken.options.length }));
+            };
+            if (!pending) return;
+            candidates.forEach((c, i) => {
+                CalendarDataService.checkExists(c, settle, () => { free[i] = true; settle(); });
+            });
+        },
+
+        pickSlugAlternative(slug) {
+            track(a => a.track('slug_suggestion_used', {}));
+            this.calendar.id = slug;
+            this.userHasEditedSlug = true;
+            this.slugTaken = null;
+            this.create();
         },
 
         randomizeId() {

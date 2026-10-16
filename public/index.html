@@ -1271,6 +1271,18 @@ Copyright (c) 2025 Kalid Azad
             <div id="Schedule" data-testid="schedule-container"></div>
         </div>
 
+        <!-- A claimed name is taken: say so and offer free ones (replaces a blocking alert) -->
+        <div v-if="slugTaken" class="pc-slug-taken" role="alert" data-testid="slug-taken" v-cloak>
+            <span><strong v-text="'pastecal.com/' + slugTaken.slug"></strong> is taken.</span>
+            <template v-if="slugTaken.options.length">
+                <span>Try:</span>
+                <button v-for="o in slugTaken.options" :key="o" type="button" @click="pickSlugAlternative(o)"
+                    class="pc-slug-taken-option" v-text="o"></button>
+            </template>
+            <span v-else>Pick another name.</span>
+            <button type="button" @click="slugTaken = null" class="pc-slug-taken-close" aria-label="Dismiss">&times;</button>
+        </div>
+
         <!-- Claim Intervention Modal -->
         <div v-if="showClaimDialog" class="pc-modal" v-cloak>
             <div class="pc-modal-panel">

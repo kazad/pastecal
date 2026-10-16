@@ -782,3 +782,37 @@ div#Schedule,
     outline: 2px solid var(--link, #3b82f6);
     outline-offset: 2px;
 }
+
+/* "That name is taken" + free alternatives, shown under the header after a claim fails. */
+.pc-slug-taken {
+    position: fixed;
+    top: 56px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 60;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+    max-width: calc(100vw - 24px);
+    padding: 8px 10px 8px 12px;
+    font-size: 13px;
+    color: var(--text-color-2);
+    background: var(--bg-color-1, #fff);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+}
+.pc-slug-taken-option {
+    padding: 2px 10px;
+    font-weight: 600;
+    color: #fff;
+    background: #2563eb;
+    border-radius: 999px;
+}
+.pc-slug-taken-option:hover { background: #1d4ed8; }
+.pc-slug-taken-close { padding: 0 4px; font-size: 18px; line-height: 1; color: var(--text-color-1); }
+@media (max-width: 767px) {
+    /* Below the claim row, not over it: they need to see the name they typed. */
+    .pc-slug-taken { top: 122px; }
+}
