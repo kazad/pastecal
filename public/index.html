@@ -39,7 +39,6 @@ Copyright (c) 2025 Kalid Azad
 
     <!-- Preconnects for faster third-party fetches -->
     <link rel="preconnect" href="https://www.gstatic.com">
-    <link rel="preconnect" href="https://unpkg.com">
     <link rel="preconnect" href="https://cdn.jsdelivr.net">
 
     <!-- Google Tag Manager -->
@@ -110,7 +109,9 @@ Copyright (c) 2025 Kalid Azad
     <link rel="stylesheet" href="/tailwind.css?v=1790553083">
 
     <!-- Third-party libraries -->
-    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <!-- Vue, self-hosted and pinned: it was unpkg's floating vue@3 (a third-party hop, and a new minor could ship to
+         production unseen). Same-origin also lets it be cached for a year (public/_headers /vendor/*). -->
+    <script src="/vendor/vue-3.5.44/vue.global.prod.js"></script>
     <script src="/vendor/syncfusion-23.2.6/ej2-calendar.min.js?v=1790553083" type="text/javascript"></script>
     <!-- Only the Firebase services the app uses (92 KB), not firebase-compat.js, which
          bundles every service (224 KB). Same version, same compat API; app must load first. -->
@@ -220,6 +221,17 @@ Copyright (c) 2025 Kalid Azad
 </head>
 
 <body class="p-1 m-1">
+    <script>
+        // #app is hidden until Vue mounts (v-cloak). If the app never mounts (a script failed
+        // to load or threw), don't leave a blank page: say so.
+        setTimeout(function () {
+            var app = document.getElementById('app');
+            if (app && app.hasAttribute('v-cloak')) {  // Vue removes v-cloak on mount
+                app.removeAttribute('v-cloak');
+                app.insertAdjacentHTML('afterbegin', '<p style="padding:16px;font:16px system-ui">PasteCal didn\'t finish loading. <a href="">Reload</a></p>');
+            }
+        }, 10000);
+    </script>
     <div id="app" data-testid="app-root" v-cloak>
         <!-- Mobile Header -->
         <div class="md:hidden flex flex-col mb-2 pt-3 space-y-3" data-testid="mobile-header">

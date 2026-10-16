@@ -718,3 +718,26 @@ test('+Event: a number that belongs to the title stays in the title', async ({ b
   await expect.poll(() => byTitle(page, 'Shift 2'), { timeout: 10_000 }).toBeTruthy();
   expect(await localHM(page, (await byTitle(page, 'Shift 2')).start)).toBe('15:00');
 });
+
+// ---------------------------------------------------------------------------
+// Oct 2026: on a slow connection the month grid was laid out before its stylesheet
+// arrived, so every event chip came out ~16px wide and stayed that way until an edit,
+// and the page flashed unstyled. Nothing checked a chip's width; this does, with the
+// theme stylesheet held back like a slow network would.
+test('slow stylesheet: month chips still fill their day cell, with one theme request', async ({ browser, page }) => {
+  const slug = await newCalendar(browser, page, 'slowcss');
+  const themeRequests = [];
+  await page.route('**/vendor/syncfusion-*/material*.css*', async (route) => {
+    themeRequests.push(new URL(route.request().url()).pathname);
+    await new Promise(r => setTimeout(r, 1500));
+    await route.continue();
+  });
+  await page.goto('/' + slug);
+  const chip = page.locator('.e-month-view .e-appointment').first();
+  await expect(chip).toBeVisible({ timeout: 20_000 });
+  await page.waitForTimeout(1500);   // the safety net re-lays out up to 3 times
+  const cell = await page.locator('.e-month-view .e-work-cells').first().boundingBox();
+  const box = await chip.boundingBox();
+  expect(box.width, `chip ${box.width}px vs day cell ${cell.width}px`).toBeGreaterThanOrEqual(cell.width * 0.9);
+  expect(themeRequests.length, `theme sheet requested ${themeRequests.join(', ')}`).toBe(1);
+});

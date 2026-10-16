@@ -424,8 +424,7 @@ const Analytics = {
     },
 
     /**
-     * The write gate refused to empty a calendar. Should be ~zero; any rate at all means
-     * a save path is producing empty arrays again.
+     * The write gate refused to empty a calendar, or the server rejected a save.
      */
     syncRefused(shape) {
         this.track('sync_refused', { before: shape?.before ?? 0, removing: shape?.removing ?? 0 });
@@ -461,7 +460,6 @@ if (typeof window !== 'undefined') {
     }
 
     window.Analytics = Analytics;
-}
 
     // Real-user page speed, one `page_perf` event per page view, sent when the page is
     // first hidden so LCP/CLS have settled. Lets us see the slow tail by browser/device.
@@ -480,7 +478,16 @@ if (typeof window !== 'undefined') {
             const ua = navigator.userAgent;
             const browser = /Edg\//.test(ua) ? 'edge' : /Firefox\//.test(ua) ? 'firefox' : /Chrome\/|CriOS/.test(ua) ? 'chrome' : /Safari\//.test(ua) ? 'safari' : 'other';
             const ms = (v) => (v > 0 ? Math.round(v) : undefined);
-            Analytics.track('page_perf', {
+            // Straight to the sinks, not via track()'s requestIdleCallback: a hidden page
+            // (iOS Safari especially) may never run the idle callback.
+            const send = (name, params) => {
+                let enriched; try { enriched = Object.assign({}, Analytics.baseParams(), params); } catch (e) { enriched = params; }
+                if (!Analytics.enabled) return;
+                for (const key of Analytics.active) {
+                    try { Analytics.SINKS[key](name, enriched); } catch (e) { /* sinks must not throw */ }
+                }
+            };
+            send('page_perf', {
                 ttfb_ms: ms(nav && nav.responseStart),
                 fcp_ms: ms(fcp && fcp.startTime),
                 lcp_ms: ms(lcp),
@@ -497,3 +504,4 @@ if (typeof window !== 'undefined') {
     } catch (err) {
         /* perf reporting must never break page load */
     }
+}
