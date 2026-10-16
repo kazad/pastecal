@@ -1816,6 +1816,9 @@ const CalendarVueApp = {
                 // No localStorage data (fresh start after save, or first visit)
                 this.resetToDefaults();
             }
+                // Keep the draft's events/settings but not its URL name: a name typed on an
+                // earlier visit (maybe taken, maybe abandoned) shouldn't come back as the suggestion.
+                this.calendar.id = Utils.randomID(8);
         },
 
         saveLocalStorage() {
