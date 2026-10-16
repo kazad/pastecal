@@ -462,3 +462,38 @@ if (typeof window !== 'undefined') {
 
     window.Analytics = Analytics;
 }
+
+    // Real-user page speed, one `page_perf` event per page view, sent when the page is
+    // first hidden so LCP/CLS have settled. Lets us see the slow tail by browser/device.
+    try {
+        let lcp = 0, cls = 0, sent = false;
+        const observe = (type, cb) => {
+            try { new PerformanceObserver((l) => l.getEntries().forEach(cb)).observe({ type, buffered: true }); } catch (e) { /* unsupported (older Safari) */ }
+        };
+        observe('largest-contentful-paint', (e) => { lcp = e.startTime; });
+        observe('layout-shift', (e) => { if (!e.hadRecentInput) cls += e.value; });
+        const sendPerf = (force) => {
+            if (sent || (force !== true && document.visibilityState !== 'hidden')) return;
+            sent = true;
+            const nav = performance.getEntriesByType('navigation')[0];
+            const fcp = performance.getEntriesByName('first-contentful-paint')[0];
+            const ua = navigator.userAgent;
+            const browser = /Edg\//.test(ua) ? 'edge' : /Firefox\//.test(ua) ? 'firefox' : /Chrome\/|CriOS/.test(ua) ? 'chrome' : /Safari\//.test(ua) ? 'safari' : 'other';
+            const ms = (v) => (v > 0 ? Math.round(v) : undefined);
+            Analytics.track('page_perf', {
+                ttfb_ms: ms(nav && nav.responseStart),
+                fcp_ms: ms(fcp && fcp.startTime),
+                lcp_ms: ms(lcp),
+                load_ms: ms(nav && nav.loadEventEnd),
+                cls: Math.round(cls * 1000) / 1000,
+                browser,
+                cached: nav && nav.transferSize === 0 ? 'yes' : 'no',
+                device: window.matchMedia('(max-width: 767px)').matches ? 'phone' : 'desktop',
+            });
+            Analytics.flush(true); // the page-hide flush above already ran, before this was queued
+        };
+        document.addEventListener('visibilitychange', () => sendPerf());
+        window.addEventListener('pagehide', () => sendPerf(true));
+    } catch (err) {
+        /* perf reporting must never break page load */
+    }

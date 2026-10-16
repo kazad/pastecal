@@ -156,6 +156,9 @@ Copyright (c) 2025 Kalid Azad
         }
     </script>
 
+    <!-- Cloudflare Web Analytics (real-user load times; auto-injection wasn't reaching Worker-served HTML) -->
+    <script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "4212c72302dd4948ae468380054149b2"}'></script>
+
     <!-- App scripts (order matters: Utils → models/services → directives → components) -->
     <script src="/utils/analytics.js?v=1790553083"></script>
     <script src="/utils/utils.js?v=1790553083"></script>
