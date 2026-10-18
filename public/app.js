@@ -1338,7 +1338,11 @@ const CalendarVueApp = {
             // Nor while a dialog is open: focus there is often on a button, not an input,
             // and an undo landing under the scheduler's open editor changes the event it
             // is about to save. Tooltips are popups too but block nothing.
-            const dialogOpen = !!document.querySelector('.e-popup-open:not(.e-tooltip-wrap), .pc-modal, [aria-modal="true"]')
+            // aria-modal only counts while the dialog is showing: Syncfusion leaves it set on
+            // dialogs it has closed (hidden), which used to disable this shortcut for good.
+            const modalShowing = [...document.querySelectorAll('[aria-modal="true"]')]
+                .some((m) => m.getClientRects().length > 0 && getComputedStyle(m).visibility !== 'hidden');
+            const dialogOpen = modalShowing || !!document.querySelector('.e-popup-open:not(.e-tooltip-wrap), .pc-modal')
                 || !!(this.$refs.quickAddDialog && this.$refs.quickAddDialog.dialogVisible)
                 || this.showRecentChanges;
             if (dialogOpen) return;
@@ -2321,7 +2325,9 @@ const CalendarVueApp = {
          * editable feed would spread write access further than anyone intended.
          */
         getSubscribeICSURL() {
-            return this.getReadOnlyICSURL() || this.getEditableICSURL();
+            // No fallback to the editable feed: these URLs go to Google, Microsoft and the OS,
+            // so without a read-only link the subscribe buttons hide (their v-if) instead.
+            return this.getReadOnlyICSURL();
         },
 
         /**
