@@ -74,9 +74,9 @@ const Analytics = {
     },
 
     // Which sinks are live. Order is irrelevant; all are best-effort.
-    active: ['ga4', 'console'],
+    active: ['ga4', 'http', 'console'],
 
-    COLLECTOR_URL: null,
+    COLLECTOR_URL: '/api/collect',
     debug: false,
 
     // ---- core ----------------------------------------------------------------
@@ -306,10 +306,19 @@ const Analytics = {
 
     /** An event was added, with the path that created it. */
     eventAdded(source, calendar) {
+        // Seconds from page load to the first event this session: how long the first minute takes.
+        const first = !this._firstEventSent && typeof performance !== 'undefined';
+        this._firstEventSent = true;
         this.track('event_added', {
+            ...(first ? { first_event_seconds: Math.round(performance.now() / 1000) } : {}),
             source, // 'quick_add' | 'grid' | 'popup' | 'paste'
             event_count_bucket: this.bucketEvents(calendar?.events?.length),
         });
+    },
+
+    /** The event editor was closed without saving. */
+    editorAbandoned() {
+        this.track('editor_abandoned', {});
     },
 
     /** The calendar was shared or its link copied — precedes most multi-user use. */

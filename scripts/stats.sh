@@ -12,6 +12,7 @@
 #   ./scripts/stats.sh weekly          # THE Monday read: survivors, retention, creators, owners
 #   ./scripts/stats.sh northstar       # THE number: weekly active shared calendars (2+ people)
 #   ./scripts/stats.sh cohorts         # per birth week: reached a 2nd person? alive 4 weeks on?
+#   ./scripts/stats.sh ux              # UX scorecard from Cloudflare Analytics Engine (scripts/ux.sh)
 #   ./scripts/stats.sh raw <json>      # any runReport body, printed as JSON
 #   ./scripts/stats.sh setup           # check GA4 is configured to answer all of the above
 #   ./scripts/stats.sh setup --create  # create the missing custom dimensions
@@ -350,6 +351,10 @@ if [ "$REALTIME" = "1" ]; then
 fi
 
 case "$CMD" in
+
+ux)
+    exec "$(dirname "$0")/ux.sh" "$DAYS"
+    ;;
 
 summary)
     users="$(report "$(mk 'date' 'totalUsers' '' 1)" | jq -r '[(.rows//[])[].metricValues[0].value|tonumber] | add // 0')"

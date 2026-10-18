@@ -17,6 +17,7 @@
  */
 import { ICSService } from './ICSService.js';
 import { SlugService } from './SlugService.js';
+import { handleCollect } from './Collector.js';
 export { CalendarRoom } from './CalendarRoom.js';
 export { CalendarDirectory } from './CalendarDirectory.js';
 
@@ -106,6 +107,9 @@ export default {
                 }
             });
         }
+
+        // Telemetry: POST /api/collect -> Analytics Engine
+        if (request.method === 'POST' && path === '/api/collect') return handleCollect(request, env);
 
         // 2. Directory lookup API: /api/lookup and callable /lookupCalendar
         if ((request.method === 'GET' || request.method === 'POST') && path === '/api/lookup') {

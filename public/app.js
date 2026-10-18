@@ -738,7 +738,14 @@ const CalendarVueApp = {
         scheduleObj.actionBegin = (args) => {
             if (!['eventCreate', 'eventChange', 'eventRemove'].includes(args.requestType)) return;
             args.cancel = true;
+            this.editorSaved = true;
             this.applyScheduleAction(args);
+        };
+        // An editor that closes without a save is the "this was confusing or fiddly" signal.
+        scheduleObj.popupClose = (args) => {
+            if (args.type !== 'Editor') return;
+            if (!this.editorSaved) track(a => a.editorAbandoned());
+            this.editorSaved = false;
         };
         // The user's change is measured from the event as it was when they started (see
         // ScheduleAdapter.noteStart), so a field someone else changed meanwhile is kept.
@@ -781,6 +788,7 @@ const CalendarVueApp = {
             }
 
             if (args.type === 'Editor') {
+                this.editorSaved = false;
                 ScheduleAdapter.noteStart(args.data);
 
                 // Configure datetime pickers with strictMode and the user's chosen date format.
