@@ -220,3 +220,15 @@ test('Event: a scheduler record of an untouched inverted row is not repaired', (
   assert.equal(dragged.start, '2026-05-28T13:00:00.000Z');
   assert.equal(dragged.end, '2026-05-28T14:00:00.000Z');
 });
+
+// --- The class shadows the DOM Event; library `new Event('input')` must still work ---------
+
+test('Event: new Event("input") builds the browser Event instead of throwing', () => {
+  // Vue's v-model fires this on compositionend (IME / dead-key input); it used to throw
+  // "cannot use 'in' operator to search for 'StartTime' in 'input'".
+  let e;
+  assert.doesNotThrow(() => { e = new Event('input', { bubbles: true }); });
+  assert.ok(e instanceof globalThis.Event);
+  assert.equal(e.type, 'input');
+  assert.equal(e.bubbles, true);
+});

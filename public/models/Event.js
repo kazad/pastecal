@@ -3,6 +3,11 @@
 
 class Event {
     constructor(options) {
+        // This class shadows the browser's global Event, so library code calling
+        // `new Event('input')` (Vue's v-model on compositionend, wallet extensions) lands
+        // here and used to throw at the `in` checks below. A string is a DOM event type,
+        // never calendar data: build the real one.
+        if (typeof options === 'string') return Reflect.construct(globalThis.Event, arguments);
         this.id = options.Id || options.id || Utils.uuidv4();
         this.title = options.Subject || options.text || options.title || "";
         this.description = options.Description || options.description || "";

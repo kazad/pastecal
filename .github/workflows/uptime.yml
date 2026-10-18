@@ -1,0 +1,25 @@
+# Synthetic uptime check. GitHub emails the repo owner when a scheduled run fails,
+# so a failing check here is the outage alert. Runs every 5 minutes (GitHub may delay slightly).
+name: uptime
+on:
+  schedule: [{ cron: '*/5 * * * *' }]
+  workflow_dispatch:
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Probe pastecal
+        run: |
+          fail=0
+          probe() { # name url must-contain
+            body=$(curl -sS -m 15 --retry 2 --retry-delay 3 -w '\n%{http_code}' "$2") || { echo "FAIL $1: curl error"; fail=1; return; }
+            code=${body##*$'\n'}; body=${body%$'\n'*}
+            if [ "$code" != 200 ]; then echo "FAIL $1: HTTP $code"; fail=1
+            elif [ -n "$3" ] && ! grep -q "$3" <<<"$body"; then echo "FAIL $1: missing '$3'"; fail=1
+            else echo "ok   $1"; fi
+          }
+          probe home      https://pastecal.com/                    'PasteCal'
+          probe vue       https://pastecal.com/vendor/vue-3.5.44/vue.global.prod.js 'Vue'
+          probe app       https://pastecal.com/app.js              'Analytics'
+          exit $fail
