@@ -244,7 +244,9 @@ export default {
         const beta = path === '/beta' || path.startsWith('/beta/') || (path.startsWith('/nativecal/') && !isFile);
         const res = await env.ASSETS.fetch(beta ? new Request(new URL('/nativecal/', url), request) : request);
         const out = new Response(res.body, res);
-        out.headers.set('X-Robots-Tag', 'noindex');
+        // Only the test site stays out of search. Sending this on every hostname told Google to drop
+        // pastecal.com itself (Oct 2026: organic visitors fell from ~110/week to ~5).
+        if (url.hostname === 'new.pastecal.com') out.headers.set('X-Robots-Tag', 'noindex'); else out.headers.delete('X-Robots-Tag');
         if (/\.(js|css|json)$/.test(path) || beta) out.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
         return out;
     },
