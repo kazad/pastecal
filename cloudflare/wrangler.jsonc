@@ -48,6 +48,8 @@
     "COPY_BACK": "*"
   },
   // First-party event collector (POST /api/collect). Query with scripts/stats.sh ux.
+  // Backups: each calendar writes its own snapshot here after a change (CalendarRoom.backupToR2).
+  "r2_buckets": [{ "binding": "BACKUPS", "bucket_name": "pastecal-backups" }],
   "analytics_engine_datasets": [{ "binding": "EVENTS", "dataset": "pastecal_events" }],
   "observability": { "enabled": true }
   // Secrets (wrangler secret put): IMPORT_SECRET -- lets the Firebase shadow copy write;

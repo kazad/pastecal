@@ -159,6 +159,7 @@ export class CalendarRoom extends DurableObject {
         s.lastEditedAt = Date.now();
         this.setMeta('v', s.v);
         this.setMeta('lastEditedAt', s.lastEditedAt);
+        if (this.env.BACKUPS) this.ctx.waitUntil(this.scheduleAlarm());   // every change is backed up (see backupToR2)
 
         const before = beforeEvents || [];
         const after = s.events;
@@ -478,7 +479,28 @@ export class CalendarRoom extends DurableObject {
 
     async scheduleCopyBack() {
         if (!this.copyBackAllowed()) return;
+        await this.scheduleAlarm();
+    }
+    // One alarm a few seconds after the last change runs both the backup and the copy-back, so a
+    // burst of saves is one of each.
+    async scheduleAlarm() {
         if (await this.ctx.storage.getAlarm() == null) await this.ctx.storage.setAlarm(Date.now() + LIMITS.copyBackDelayMs);
+    }
+
+    // ---- backups --------------------------------------------------------------------------
+    // Each calendar backs itself up: after a change, its full state goes to R2 at
+    // snapshots/<encoded id>/<UTC date>.json -- one object per calendar per day it changed (a later
+    // change that day overwrites it). No cron and no list of calendars to walk: the old nightly job
+    // that read every calendar in one run never completed once (Oct 2026). A calendar nobody edits
+    // never changes, so its newest snapshot (or the last full snapshot) stays valid.
+    async backupToR2() {
+        const s = this.state;
+        if (!this.env.BACKUPS || !s.id) return;
+        const key = `snapshots/${encodeURIComponent(s.id)}/${new Date().toISOString().slice(0, 10)}.json`;
+        await this.env.BACKUPS.put(key, json({ v: s.v, savedAt: new Date().toISOString(), calendar: this.calendar() }), {
+            httpMetadata: { contentType: 'application/json' },
+            customMetadata: { id: s.id, v: String(s.v) },
+        });
     }
 
     async firebaseToken() {
@@ -511,6 +533,9 @@ export class CalendarRoom extends DurableObject {
 
     async alarm() {
         const id = this.state.id;
+        // Separate from the copy-back: a failed backup must not stop it, nor the reverse.
+        try { await this.backupToR2(); }
+        catch (e) { console.error(`backup FAILED for ${id}: ${e.message}`); await this.ctx.storage.setAlarm(Date.now() + 60000); }   // try again
         if (!id || !this.copyBackAllowed()) return;
         try {
             for (let attempt = 1; attempt <= 4; attempt++) {
