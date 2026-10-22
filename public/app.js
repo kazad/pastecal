@@ -105,20 +105,9 @@ const CalendarVueApp = {
         'click-outside': clickOutside
     },
     data() {
-        const normalizedPathParts = (() => {
-            const path = stripBase(window.location.pathname);
-            return path.split('/').filter(Boolean);
-        })();
-
-        let urlslug = normalizedPathParts[0];
-
-        if (urlslug && urlslug.match(/^[a-zA-Z0-9_\-]+$/) && urlslug.length < 40) {
-            // slug is ok, normalize for consistent lookup
-            urlslug = SlugManager.normalizeSlug(urlslug);
-        } else {
-            // should redirect back to homepage if we have a bad url;
-            urlslug = null;
-        }
+        // Normalized for the case-insensitive lookup; null for the homepage or a bad path.
+        let urlslug = SlugManager.slugFromPath(stripBase(window.location.pathname));
+        if (urlslug) urlslug = SlugManager.normalizeSlug(urlslug);
 
         let id = urlslug ?? Utils.randomID(8);
         let cal = new Calendar(id, "New Calendar", []);

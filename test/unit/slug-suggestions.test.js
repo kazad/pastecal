@@ -39,3 +39,20 @@ test('every suggestion is a valid, bounded slug', () => {
     assert.ok(s.length <= 60 && !/[.#$\[\]\/\s]/.test(s), s);
   }
 });
+
+// Links to calendars whose names are not plain ASCII opened a blank new calendar: the page
+// accepted only [a-zA-Z0-9_-] (Oct 2026: 24 real calendars ending in a space, "TEAM NUÑEZ", ...).
+test('slugFromPath reads any real calendar name from the path, decoded', () => {
+  assert.equal(SlugManager.slugFromPath('/kalid'), 'kalid');
+  assert.equal(SlugManager.slugFromPath('/royal%20city%20'), 'royal city ');
+  assert.equal(SlugManager.slugFromPath('/TEAM%20NU%C3%91EZ'), 'TEAM NUÑEZ');
+  assert.equal(SlugManager.slugFromPath('/d%26d8'), 'd&d8');
+  assert.equal(SlugManager.slugFromPath('/%EA%B0%95%EC%95%84%EC%A7%80%EB%B4%89%EC%82%AC'), '강아지봉사');
+  assert.equal(SlugManager.slugFromPath('/a-very-long-calendar-name-that-is-over-forty-characters'), 'a-very-long-calendar-name-that-is-over-forty-characters');
+});
+
+test('slugFromPath returns null for the homepage and for paths that cannot be a name', () => {
+  for (const p of ['/', '', null, '/index.html', '/%20%20', '/bad%E0%A4%A', '/a%23b', '/' + 'x'.repeat(201)]) {
+    assert.equal(SlugManager.slugFromPath(p), null, String(p));
+  }
+});
