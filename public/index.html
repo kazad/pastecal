@@ -1282,10 +1282,6 @@ Copyright (c) 2025 Kalid Azad
             </button>
         </div>
 
-        <!-- Homepage only: what this is. Experiment: above the calendar or just below it. -->
-        <p v-if="isHomepageCalendar && tourVariant === 'above'" class="pc-hero-line" data-testid="hero-line" v-cloak>
-            <strong>No-login shared calendars</strong> that keep everyone on the same schedule. <a href="#how">How it works&nbsp;↓</a>
-        </p>
         <div id="cal2_wrap" style="width: 100%; height: 100%; position: relative;">
             <div id="Schedule" data-testid="schedule-container"></div>
             <!-- Homepage: one tip on the grid itself until the first event. Clicks pass through it. -->
@@ -1293,12 +1289,9 @@ Copyright (c) 2025 Kalid Azad
                 Click any day to add your first event
             </div>
         </div>
-        <p v-if="isHomepageCalendar && tourVariant === 'below'" class="pc-hero-line pc-hero-below" data-testid="hero-line" v-cloak>
-            <strong>No-login shared calendars</strong> that keep everyone on the same schedule. <a href="#how">How it works&nbsp;↓</a>
-        </p>
         <p v-if="isHomepageCalendar" class="pc-draft-note" v-cloak>
             <span>This calendar is a draft, saved only in this browser. Press <b>Share</b> to get a link anyone can open.</span>
-            <a v-if="tourVariant !== 'below'" href="#how">How pastecal works ↓</a>
+            <a href="#how">How pastecal works ↓</a>
         </p>
 
                 <!-- Homepage only: what pastecal is, for people who scroll past the calendar. -->
@@ -1375,7 +1368,7 @@ Copyright (c) 2025 Kalid Azad
                 <h3 class="pc-tour-label">Pricing</h3>
                 <div class="pc-tour-plans">
                     <div><h4>Free <span>always</span></h4><p>Everything on this page: unlimited calendars, all three links, undo and daily backups. Nobody you share with pays or signs up.</p></div>
-                    <div class="pc-tour-plan-pro"><h4>Pro <span>coming soon · $24 per calendar a year</span></h4><p>For calendars you run: lock who can edit, approve suggested events, keep every change, and use your own name and colors.</p><a href="/pricing">See plans and join the waitlist →</a></div>
+                    <div class="pc-tour-plan-pro"><h4>Pro <span>coming soon · $24 per calendar a year</span></h4><p>For calendars you run: lock who can edit, approve suggested events, keep every change, and use your own name and colors.</p><a href="/pricing?from=home-plans">See plans and join the waitlist →</a></div>
                 </div>
                 </div>
 
@@ -1385,14 +1378,14 @@ Copyright (c) 2025 Kalid Azad
                     <details><summary>Is it private?</summary><p>Anyone with a link can open it, so give a private calendar a hard-to-guess name. Read/write links are never listed in search engines.</p></details>
                     <details><summary>Can I undo a change?</summary><p>Yes. Click "Edited … ago" at the top to see recent changes and put any of them back.</p></details>
                     <details><summary>Does it work on phones?</summary><p>Yes, in any phone browser. There is nothing to install.</p></details>
-                    <details><summary>Is it free?</summary><p>Yes. Making, editing and sharing calendars is free, with no trial and no card. A Pro plan with extras is in the works: <a href="/pricing">see what's planned and join the waitlist</a>.</p></details>
+                    <details><summary>Is it free?</summary><p>Yes. Making, editing and sharing calendars is free, with no trial and no card. A Pro plan with extras is in the works: <a href="/pricing?from=home-faq">see what's planned and join the waitlist</a>.</p></details>
                     <details><summary>Can I put it on my website?</summary><p>Yes. Put the read-only link in an iframe and visitors see your calendar as it changes:</p><code class="pc-tour-snippet">&lt;iframe src="https://pastecal.com/view/k3n8q2xw" width="100%" height="600" style="border:0"&gt;&lt;/iframe&gt;</code></details>
                 </div>
 
                 <p class="pc-tour-end">Your calendar is ready at the top of this page. <a href="#">Back to the calendar ↑</a></p>
                 <p class="pc-tour-maker">pastecal is made by <a href="https://betterexplained.com" target="_blank" rel="noopener">Kalid Azad</a>, creator of BetterExplained.</p>
                 <nav class="pc-tour-footer" aria-label="About pastecal">
-                    <a href="/pricing">Pricing</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="https://github.com/kazad/pastecal/issues" target="_blank" rel="noopener">Feedback</a>
+                    <a href="/pricing?from=home-footer">Pricing</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="https://github.com/kazad/pastecal/issues" target="_blank" rel="noopener">Feedback</a>
                 </nav>
             </div>
         </section>

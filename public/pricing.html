@@ -112,7 +112,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
         <li>Read/write, read-only and calendar app links</li>
         <li>Undo and 7 days of backups</li>
       </ul>
-      <a class="cta" href="/">Make a calendar</a>
+      <a class="cta" href="/" data-plan="free">Make a calendar</a>
     </div>
 
     <div class="plan pro">
@@ -130,7 +130,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
         <li>See how many people view and follow it</li>
         <li>Your logo, name and theme, not ours</li>
       </ul>
-      <a class="cta primary" href="#waitlist">Join the waitlist</a>
+      <a class="cta primary" href="#waitlist" data-plan="pro">Join the waitlist</a>
     </div>
 
     <div class="plan">
@@ -144,7 +144,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
         <li>Move Pro between calendars anytime</li>
         <li>Shared admins across calendars</li>
       </ul>
-      <a class="cta" href="#waitlist">Join the waitlist</a>
+      <a class="cta" href="#waitlist" data-plan="teams">Join the waitlist</a>
     </div>
   </div>
 
@@ -240,6 +240,14 @@ details p { color: var(--muted); margin: 8px 0 0 }
   </div>
 </div>
 
+<script src="/utils/analytics.js"></script>
+<script>
+// Pro interest, first-party only (/api/collect): who looks at pricing and from where, which
+// plan they reach for, and who joins. The homepage variant (hv) rides along on each event.
+const pcTrack = (name, params) => { try { window.Analytics && Analytics.track(name, params); } catch (e) {} };
+pcTrack('pricing_viewed', { where: new URLSearchParams(location.search).get('from') || (document.referrer ? 'link' : 'direct') });
+document.querySelectorAll('[data-plan]').forEach(a => a.addEventListener('click', () => pcTrack('pricing_plan_clicked', { kind: a.dataset.plan })));
+</script>
 <script>
 (() => {
   const form = document.getElementById('waitForm'), done = document.getElementById('done'), btn = document.getElementById('waitBtn');
@@ -254,6 +262,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
       const out = await r.json().catch(() => ({}));
       if (!r.ok || !out.ok) throw new Error(out.error || "That didn't save. Please try again in a moment.");
       done.textContent = out.returning ? "Updated. You're still on the list." : "You're on the list. We'll email you when Pro opens.";
+      pcTrack('waitlist_joined', { kind: body.plan, returning: !!out.returning });
       form.reset();
     } catch (err) { done.style.color = 'var(--soon)'; done.textContent = err.message; }
     btn.disabled = false;

@@ -239,7 +239,7 @@ const CalendarVueApp = {
             // Homepage flow: a tip on the grid until the first event of your own, then Share pulses once.
             userAddedEvent: false,
             sharePulse: false,
-            tourVariant: 'above',
+            tourVariant: 'a',
 
             // Mobile Menu
             showMobileMenu: false,

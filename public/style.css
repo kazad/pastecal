@@ -914,11 +914,6 @@ div#Schedule,
 .pc-tour-plans a { display: inline-block; margin-top: 10px; font-weight: 600; color: var(--pc-link) }
 .pc-tour-plan-pro { border-color: var(--pc-link) !important }
 @media (max-width: 640px) { .pc-tour-plans { grid-template-columns: minmax(0, 1fr) } }
-.pc-hero-line { margin: 0 0 8px; padding: 2px 2px 0; font-size: 15px; line-height: 1.4; color: var(--pc-text-muted) }
-.pc-hero-line strong { color: var(--pc-text); font-weight: 650 }
-.pc-hero-line a { color: var(--pc-link); white-space: nowrap; margin-left: 4px }
-@media (max-width: 640px) { .pc-hero-line { font-size: 14px; padding-inline: 4px } }
-.pc-hero-below { margin: 10px 0 2px }
 /* Phone week view: day columns are ~48px wide, so titles wrap instead of clipping (Syncfusion
    sets an inline max-height of one line), and the time, already shown by the grid, gives way. */
 @media (max-width: 640px) {

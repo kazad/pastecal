@@ -199,13 +199,13 @@ const Analytics = {
 
     // ---- homepage experiment -------------------------------------------------
     //
-    // One experiment at a time. Now: whether the one-line pitch above the homepage calendar,
-    // or just below it, leads more people to make and share a calendar. A
+    // One experiment at a time, to see which homepage leads more people to make and share a
+    // calendar. None is running now; the next test adds a letter below. A
     // browser is put in a variant once and stays there, and every later event carries
     // it as `hv` -- so a calendar made under variant B still reports hv=b when its owner
     // comes back weeks later. That is what makes retention, not just clicks, comparable.
-    // ?hv=below previews a variant without changing the stored one.
-    HOMEPAGE_VARIANTS: ['above', 'below'], // where the one-line pitch sits, relative to the calendar
+    // ?hv=<letter> previews a variant without changing the stored one.
+    HOMEPAGE_VARIANTS: ['a'], // one homepage for now; add letters to run the next test
     _hv: null,
 
     homepageVariant() {
