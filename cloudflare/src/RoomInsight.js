@@ -37,8 +37,10 @@ export const STATS = {
     top: 20,
 };
 export const INSIGHT_ROUTES = new Set(['stats', 'stats-dump', 'restore-version']);
-// A version is a daily snapshot (2026-10-23) or a restore point written just before a restore (2026-10-23T140509Z).
-export const VERSION_RE = /^\d{4}-\d{2}-\d{2}(T\d{6}Z)?$/;
+// A version is a daily snapshot (2026-10-23) or a restore point written just before a restore:
+// 2026-10-23T140509123Z-3fa9c1 (to the millisecond, plus a random suffix), or 2026-10-23T140509Z from
+// before that change. Kept tight: R2 keys are built from it.
+export const VERSION_RE = /^\d{4}-\d{2}-\d{2}(T\d{6}Z|T\d{9}Z-[0-9a-f]{6})?$/;
 
 const json = (x) => JSON.stringify(x);
 const dayOf = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -51,6 +53,8 @@ export function initInsight(sql) {
     // Today only: deleted, with the salt, when the day rolls over.
     sql.exec(`CREATE TABLE IF NOT EXISTS stats_seen (kind TEXT NOT NULL, hash TEXT NOT NULL, last_at INTEGER, PRIMARY KEY (kind, hash))`);
     sql.exec(`CREATE TABLE IF NOT EXISTS stats_salt (k INTEGER PRIMARY KEY CHECK (k = 1), day TEXT NOT NULL, salt TEXT NOT NULL)`);
+    // Start times of the last hour's restores (RESTORE limits).
+    sql.exec(`CREATE TABLE IF NOT EXISTS restore_log (at INTEGER NOT NULL)`);
 }
 
 // Today's salt, rolling the day over first if needed: a new day drops yesterday's salt and hash set
@@ -168,35 +172,82 @@ export function statsDump(room) {
 
 // ---- restore an earlier version -------------------------------------------------------------
 
+export const RESTORE = {
+    minGapMs: 5000,               // a restore starting within this of the previous one: 429 too-soon
+    perHour: 10,                  // restores per calendar per rolling hour: 429 too-many-restores
+    keepPoints: 20,               // restore points kept per calendar (the current owner's); older ones are deleted
+};
 export const snapshotPrefix = (id) => `snapshots/${encodeURIComponent(id)}/`;
 const versionLabel = (version) => version.length > 10 ? `${version.slice(0, 10)} ${version.slice(11, 13)}:${version.slice(13, 15)} UTC` : version;
-const restorePointName = (ms) => new Date(ms).toISOString().replace(/[-:]/g, '').replace(/^(\d{4})(\d{2})(\d{2})T(\d{6})\.\d{3}Z$/, '$1-$2-$3T$4Z');
+// 2026-10-23T140509123Z-3fa9c1: milliseconds plus a random suffix, so two restores in the same
+// second (or millisecond) never share a name. Older points are named to the second (2026-10-23T140509Z).
+const restorePointName = (ms) => new Date(ms).toISOString().replace(/[-:]/g, '').replace(/^(\d{4})(\d{2})(\d{2})T(\d{6})\.(\d{3})Z$/, '$1-$2-$3T$4$5Z')
+    + '-' + hex(crypto.getRandomValues(new Uint8Array(3)));
+
+// When an R2 snapshot was saved (ms): the body's savedAt, else its metadata's, else the upload time.
+export function savedAtMs(snap, obj) {
+    for (const s of [snap && snap.savedAt, obj && obj.customMetadata && obj.customMetadata.savedAt]) {
+        const t = typeof s === 'string' ? Date.parse(s) : NaN;
+        if (!Number.isNaN(t)) return t;
+    }
+    return obj && obj.uploaded ? new Date(obj.uploaded).getTime() : 0;
+}
+
+// Restore rate state, in SQLite (it must survive the object being evicted between two requests).
+function restoreRefusal(room, now) {
+    room.sql.exec(`DELETE FROM restore_log WHERE at < ?`, now - 3600000);
+    const rows = room.sql.exec(`SELECT at FROM restore_log ORDER BY at DESC`).toArray();
+    if (rows.length && now - rows[0].at < RESTORE.minGapMs) return 'too-soon';
+    if (rows.length >= RESTORE.perHour) return 'too-many-restores';
+    return null;
+}
 
 // Replace the calendar's events, title and notes with a snapshot's. Everything else stays: the lock
 // (its own table), every other option (Pro settings, publicViewId, ...). One history entry (counts and
 // a label only), and -- first -- the pre-restore state goes to R2 as a restore point: that is the undo,
 // since the day's backup is about to be overwritten with the restored state.
-// Runs inside blockConcurrencyWhile, so no save can land between reading the state and replacing it;
-// errors are caught there, because a throw out of it resets the object (and drops every open tab).
-export function restoreVersion(room, version) {
-    return room.ctx.blockConcurrencyWhile(async () => {
-        try { return await restoreNow(room, version); }
-        catch (e) {
-            console.error('[restore] failed:', e && e.message);
-            room.load();                                       // memory back in step with what SQLite holds
-            return { ok: false, status: 502, error: 'unavailable' };
-        }
-    });
+//
+// Only versions saved at or after the current lock's lockedAt can be restored (see Insight.js: a new
+// owner starts with a clean history). The Worker checks this too; the room is the authority, since
+// the lock can change between the Worker's check and this request.
+//
+// Consistency, with the R2 calls kept out of blockConcurrencyWhile (a slow R2 call there would stall
+// every tab of the calendar):
+//   1. R2 get of the snapshot, then validation.               (awaits; saves may land meanwhile: fine)
+//   2. Rate check + record, synchronously, with no await between: two concurrent restores can both get
+//      past step 1, but only the first to resume records; the second sees too-soon.
+//   3. Capture the current state (as JSON, with its v), then R2 put of the restore point, conditional
+//      on the key not existing (never overwrite an earlier point).
+//   4. Inside blockConcurrencyWhile, synchronously: if v is still the captured one, nothing changed
+//      since step 3, so the restore point holds exactly the state being replaced: apply (in one SQLite
+//      transaction). If a save landed during the put, go back to 3 (a fresh capture, a new name), up
+//      to 3 times, then 409 busy. A stale extra point is harmless: it is a real earlier state, and
+//      pruning drops it in time.
+//   5. Prune restore points past the newest keepPoints, outside the block, best effort.
+export async function restoreVersion(room, version) {
+    let recorded = null;
+    try {
+        const r = await restoreNow(room, version, (at) => { recorded = at; });
+        if (recorded !== null && !r.applied) room.sql.exec(`DELETE FROM restore_log WHERE at = ?`, recorded);   // nothing restored: don't count it
+        if (r.applied) { await pruneRestorePoints(room).catch((e) => console.error('[restore] prune failed:', e && e.message)); delete r.applied; }
+        return r;
+    } catch (e) {
+        console.error('[restore] failed:', e && e.message);
+        if (recorded !== null) try { room.sql.exec(`DELETE FROM restore_log WHERE at = ?`, recorded); } catch { /* ignore */ }
+        return { ok: false, status: 502, error: 'unavailable' };
+    }
 }
-async function restoreNow(room, version) {
+async function restoreNow(room, version, onRecord) {
     const s = room.state, env = room.env;
     const no = (status, error) => ({ ok: false, status, error });
     if (!s.id) return no(404, 'not-found');
     if (!env.BACKUPS) return no(503, 'no-backups');
     if (typeof version !== 'string' || !VERSION_RE.test(version)) return no(400, 'bad-version');
-    const obj = await env.BACKUPS.get(`${snapshotPrefix(s.id)}${version}.json`);
+    const prefix = snapshotPrefix(s.id);
+    const obj = await env.BACKUPS.get(`${prefix}${version}.json`);
     if (!obj) return no(404, 'no-such-version');
     let snap; try { snap = await obj.json(); } catch { return no(422, 'bad-snapshot'); }
+    if (room.lock && savedAtMs(snap, obj) < (room.lock.lockedAt || 0)) return no(404, 'no-such-version');
     const cal = snap && snap.calendar;
     if (!cal || typeof cal !== 'object') return no(422, 'bad-snapshot');
     const { events } = room.dedupe(cal);
@@ -204,28 +255,82 @@ async function restoreNow(room, version) {
     const title = typeof cal.title === 'string' ? cal.title : '';
     if (why || title.length > 2000) return no(422, why || 'title too long');
     const notes = cal.options && typeof cal.options === 'object' ? cal.options.notes : undefined;
-    const options = { ...s.options };
-    if (notes === undefined || notes === null) delete options.notes; else options.notes = notes;
-    if (title === s.title && json(options) === json(s.options) && json(events) === json(s.events)) return { ok: true, unchanged: true, v: s.v };
+    const optionsFrom = (cur) => { const o = { ...cur }; if (notes === undefined || notes === null) delete o.notes; else o.notes = notes; return o; };
+    const unchanged = () => title === s.title && json(optionsFrom(s.options)) === json(s.options) && json(events) === json(s.events);
+    if (unchanged()) return { ok: true, unchanged: true, v: s.v };
 
+    // Step 2: check and record with no await in between.
     const now = Date.now();
-    await env.BACKUPS.put(`${snapshotPrefix(s.id)}${restorePointName(now)}.json`,
-        json({ v: s.v, savedAt: new Date(now).toISOString(), restorePointFor: version, calendar: room.calendar() }), {
-            httpMetadata: { contentType: 'application/json' },
-            customMetadata: { id: s.id, v: String(s.v), events: String(s.events.length), savedAt: new Date(now).toISOString(), kind: 'restore-point' },
-        });
+    const refusal = restoreRefusal(room, now);
+    if (refusal) return no(429, refusal);
+    room.sql.exec(`INSERT INTO restore_log (at) VALUES (?)`, now);
+    onRecord(now);
 
+    for (let attempt = 0; attempt < 3; attempt++) {
+        if (unchanged()) return { ok: true, unchanged: true, v: s.v };
+        const v0 = s.v, at = Date.now(), savedAt = new Date(at).toISOString();
+        const body = json({ v: v0, savedAt, restorePointFor: version, calendar: room.calendar() });
+        const put = await env.BACKUPS.put(`${prefix}${restorePointName(at)}.json`, body, {
+            onlyIf: { etagDoesNotMatch: '*' },                     // refuse to overwrite an existing point
+            httpMetadata: { contentType: 'application/json' },
+            customMetadata: { id: s.id, v: String(v0), events: String(s.events.length), savedAt, kind: 'restore-point' },
+        });
+        if (!put) continue;                                        // that name exists (never expected): a new name
+        const r = await room.ctx.blockConcurrencyWhile(async () => {
+            if (s.v !== v0) return null;                           // a save landed during the put: capture again
+            try { return applyRestore(room, version, events, title, optionsFrom(s.options)); }
+            catch (e) {
+                console.error('[restore] apply failed:', e && e.message);
+                room.load();                                       // memory back in step with what SQLite holds
+                return no(502, 'unavailable');
+            }
+        });
+        if (r) {
+            if (r.ok) { room.broadcast({ t: 'snapshot', v: s.v, calendar: room.calendar() }); await room.scheduleCopyBack(); }
+            return r;
+        }
+    }
+    return no(409, 'busy');
+}
+// Synchronous, in one SQLite transaction: a throw part-way rolls every row back (and the caller reloads
+// memory from SQLite). No await inside, so no message can land in the middle.
+function applyRestore(room, version, events, title, options) {
+    const s = room.state;
     const beforeEvents = s.events, beforeTitle = s.title, beforeOptions = s.options;
-    room.sql.exec(`DELETE FROM events`);
-    s.events = [];
-    room.storeEvents(events, 'all');
-    s.title = title; room.setMeta('title', title);
-    s.options = options; room.setMeta('options', options);
-    room.bump('restore', [{ type: 'restore', version, events: events.length }],
-        { beforeEvents, beforeTitle, beforeOptions, kind: 'restored', label: `Restored the version from ${versionLabel(version)}`, countsOnly: true });
-    room.broadcast({ t: 'snapshot', v: s.v, calendar: room.calendar() });
-    await room.scheduleCopyBack();                         // a no-op while locked; kept for symmetry with other writes
-    return { ok: true, v: s.v, events: events.length };
+    room.ctx.storage.transactionSync(() => {
+        room.sql.exec(`DELETE FROM events`);
+        s.events = [];
+        room.storeEvents(events, 'all');
+        s.title = title; room.setMeta('title', title);
+        s.options = options; room.setMeta('options', options);
+        room.bump('restore', [{ type: 'restore', version, events: events.length }],
+            { beforeEvents, beforeTitle, beforeOptions, kind: 'restored', label: `Restored the version from ${versionLabel(version)}`, countsOnly: true });
+    });
+    return { ok: true, applied: true, v: s.v, events: events.length };
+}
+
+// Keep the newest RESTORE.keepPoints restore points saved under the current lock; delete older ones.
+// Daily snapshots (10-character names) are never touched, nor are restore points saved before the
+// current lock's lockedAt: those are an earlier owner's history, hidden from Pro routes but kept as
+// backups. Sorted by savedAt, not by name: a to-the-second name (...140509Z) sorts after a
+// to-the-millisecond one from the same second (...140509123Z-...).
+async function pruneRestorePoints(room) {
+    const env = room.env, prefix = snapshotPrefix(room.state.id), since = room.lock ? room.lock.lockedAt || 0 : 0;
+    const points = [];
+    let cursor;
+    do {
+        const page = await env.BACKUPS.list({ prefix, cursor, include: ['customMetadata'] });
+        for (const o of page.objects) {
+            const name = o.key.slice(prefix.length).replace(/\.json$/, '');
+            if (name.length <= 10 || !VERSION_RE.test(name)) continue;
+            const at = savedAtMs(null, o);
+            if (at >= since) points.push({ key: o.key, at, name });
+        }
+        cursor = page.truncated ? page.cursor : undefined;
+    } while (cursor);
+    points.sort((a, b) => b.at - a.at || b.name.localeCompare(a.name));
+    const drop = points.slice(RESTORE.keepPoints).map((p) => p.key);
+    for (let i = 0; i < drop.length; i += 1000) await env.BACKUPS.delete(drop.slice(i, i + 1000));
 }
 
 export async function insightRoute(room, op, request) {

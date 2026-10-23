@@ -15,15 +15,26 @@
  * Errors: 400 {error:'bad-calendar'|'bad-days'|'bad-version'}, 401 {error:'signed-out'},
  * 403 {error:'pro-only'} (calendar not on Pro), 403 {error:'not-owner'}, 403 {error:'forbidden-origin'},
  * 404 {error:'no-calendar'|'no-such-version'}, 503 {error:'no-backups'}.
+ * Restore also: 429 {error:'too-soon'} (within 5 s of the previous restore), 429 {error:'too-many-restores'}
+ * (10 per calendar per hour), 409 {error:'busy'} (the calendar kept changing during the restore).
  * `date` names a version: a daily snapshot (YYYY-MM-DD) or a restore point written just before a
- * restore (YYYY-MM-DDTHHMMSSZ, UTC). `day` is its YYYY-MM-DD. Pass `date` back to preview/restore.
+ * restore (YYYY-MM-DDTHHMMSSmmmZ-xxxxxx, UTC, or YYYY-MM-DDTHHMMSSZ for older ones). `day` is its
+ * YYYY-MM-DD. Pass `date` back to preview/restore.
+ *
+ * Whose history. Only versions saved at or after the current lock's lockedAt are listed, previewed or
+ * restored, so a calendar reassigned to someone else, or bought by a new owner after the previous
+ * subscription ended, starts with a clean history: the new owner never sees what the calendar held
+ * under the previous one. Earlier snapshots stay in R2 as backups; Pro routes just don't expose them.
+ * lockedAt is per lock, not per owner: an owner who unlocks (or whose subscription ends) and locks
+ * again also starts over, seeing only versions saved since the new lock -- anyone could have edited
+ * the calendar while it was unlocked, so the gap is not theirs to browse either.
  *
  * Also here, because the Worker is the only one that may say so: hitHeaders(), which marks a
  * forwarded calendar read as a countable hit for RoomInsight.countHit.
  */
 import { LockClient } from './LockClient.js';
 import { sameSite } from './Accounts.js';
-import { VERSION_RE, snapshotPrefix } from './RoomInsight.js';
+import { VERSION_RE, snapshotPrefix, savedAtMs } from './RoomInsight.js';
 
 const validId = (id) => typeof id === 'string' && id.length >= 1 && id.length <= 200 && !/[.#$\[\]\/\u0000-\u001f\u007f]/.test(id);
 const json = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
@@ -58,15 +69,17 @@ async function ownerOnly(request, env, id, sessionUserId) {
     if (!st.locked) return { res: json({ error: 'pro-only' }, 403) };
     if (!userId) return { res: json({ error: 'signed-out' }, 401) };
     if (st.ownerId !== userId) return { res: json({ error: 'not-owner' }, 403) };
-    return { userId };
+    return { userId, lockedAt: typeof st.lockedAt === 'number' ? st.lockedAt : 0 };   // no lockedAt (an old lock): all history
 }
 const room = (env, id) => env.CALENDARS.get(env.CALENDARS.idFromName(id));
 const roomUrl = (id, op) => `http://internal/cal/${encodeURIComponent(id)}/${op}`;
 
-// Every snapshot of a calendar in R2, newest first (by day, then save time), from the listing's
-// metadata. Objects written before `events`/`savedAt` were in the metadata are read (up to 20) to
-// fill them in; past that, events is null and savedAt is the upload time.
-async function listVersions(env, id) {
+// Every snapshot of a calendar in R2 saved at or after `since` (the lock's lockedAt), newest first
+// (by day, then save time), from the listing's metadata. Objects written before `events`/`savedAt`
+// were in the metadata are read (up to 20) to fill them in; past that, events is null and savedAt is
+// the upload time. A body's savedAt is never later than its upload, so an object uploaded before
+// `since` is skipped without reading it.
+async function listVersions(env, id, since) {
     const prefix = snapshotPrefix(id), out = [];
     let cursor;
     do {
@@ -75,6 +88,7 @@ async function listVersions(env, id) {
             const version = o.key.slice(prefix.length).replace(/\.json$/, '');
             if (!VERSION_RE.test(version)) continue;
             const m = o.customMetadata || {};
+            if (savedAtMs(null, o) < since || (o.uploaded && new Date(o.uploaded).getTime() < since)) continue;
             out.push({
                 date: version, day: version.slice(0, 10), kind: version.length > 10 ? 'restore-point' : 'daily',
                 v: m.v !== undefined ? Number(m.v) : null,
@@ -93,7 +107,7 @@ async function listVersions(env, id) {
         if (x.v === null && snap && typeof snap.v === 'number') x.v = snap.v;
         if (snap && typeof snap.savedAt === 'string') x.savedAt = snap.savedAt;
     }));
-    return out.sort(newestFirst);
+    return out.filter((x) => (x.savedAt ? Date.parse(x.savedAt) : 0) >= since).sort(newestFirst);
 }
 
 // Returns a Response for the routes above, or null for every other path. `sessionUserId` is the
@@ -137,7 +151,7 @@ export async function handleInsight(request, env, url, sessionUserId) {
             return json(await r.json(), r.status);
         }
         if (!env.BACKUPS) return json({ error: 'no-backups' }, 503);
-        if (path === '/api/pro/versions') return json(await listVersions(env, id));
+        if (path === '/api/pro/versions') return json(await listVersions(env, id, gate.lockedAt));
         // preview
         const version = url.searchParams.get('date') || '';
         if (!VERSION_RE.test(version)) return json({ error: 'bad-version' }, 400);
@@ -145,6 +159,7 @@ export async function handleInsight(request, env, url, sessionUserId) {
         if (!obj) return json({ error: 'no-such-version' }, 404);
         const snap = await obj.json().catch(() => null);
         if (!snap || !snap.calendar) return json({ error: 'bad-snapshot' }, 422);
+        if (savedAtMs(snap, obj) < gate.lockedAt) return json({ error: 'no-such-version' }, 404);   // before this lock: not this owner's
         return json({ date: version, day: version.slice(0, 10), kind: version.length > 10 ? 'restore-point' : 'daily',
             v: typeof snap.v === 'number' ? snap.v : null, savedAt: snap.savedAt || null, calendar: snap.calendar });
     } catch (err) {
