@@ -192,9 +192,46 @@ const Analytics = {
     // Params attached to every event, so segmentation works without the call
     // sites having to remember to pass them.
     baseParams() {
-        return {
-            surface: window.__TEST__ ? 'test' : 'web',
-        };
+        const base = { surface: window.__TEST__ ? 'test' : 'web' };
+        if (this._hv) base.hv = this._hv;
+        return base;
+    },
+
+    // ---- homepage experiment -------------------------------------------------
+    //
+    // One experiment at a time: which pitch under the homepage calendar works. A
+    // browser is put in a variant once and stays there, and every later event carries
+    // it as `hv` -- so a calendar made under variant B still reports hv=b when its owner
+    // comes back weeks later. That is what makes retention, not just clicks, comparable.
+    // ?hv=b previews a variant without changing the stored one.
+    HOMEPAGE_VARIANTS: ['a', 'b', 'c'],
+    _hv: null,
+
+    homepageVariant() {
+        try {
+            if (this._hv) return this._hv;
+            const forced = new URLSearchParams(location.search).get('hv');
+            if (this.HOMEPAGE_VARIANTS.includes(forced)) return forced;
+            let v = null;
+            try { v = localStorage.getItem('pc_hv'); } catch (e) { /* storage blocked */ }
+            if (!this.HOMEPAGE_VARIANTS.includes(v)) {
+                v = this.HOMEPAGE_VARIANTS[Math.floor(Math.random() * this.HOMEPAGE_VARIANTS.length)];
+                try { localStorage.setItem('pc_hv', v); } catch (e) { /* in-memory for this visit */ }
+            }
+            this._hv = v;
+            if (typeof window.gtag === 'function') window.gtag('set', 'user_properties', { homepage_variant: v });
+            return v;
+        } catch (err) {
+            return 'a';
+        }
+    },
+
+    // Read the stored variant on every page, so returning owners keep reporting it.
+    loadHomepageVariant() {
+        try {
+            const v = localStorage.getItem('pc_hv');
+            if (this.HOMEPAGE_VARIANTS.includes(v)) this._hv = v;
+        } catch (e) { /* storage blocked */ }
     },
 
     // ---- bucketing -----------------------------------------------------------
@@ -335,6 +372,11 @@ const Analytics = {
      * this one answers "how many calendars exist", and the read-only-link flow
      * reuses the slug event names for something that is NOT a new calendar.
      */
+    /** The homepage pitch was shown, and which section of it scrolled into view. */
+    tourSeen(section) {
+        this.track('tour_seen', { where: section });
+    },
+
     calendarCreated(named, calendar) {
         this.track('calendar_created', {
             named: !!named,
@@ -468,6 +510,7 @@ if (typeof window !== 'undefined') {
         /* listener registration must never break page load */
     }
 
+    Analytics.loadHomepageVariant();
     window.Analytics = Analytics;
 
     // Real-user page speed, one `page_perf` event per page view, sent when the page is

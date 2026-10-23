@@ -239,6 +239,7 @@ const CalendarVueApp = {
             // Homepage flow: a tip on the grid until the first event of your own, then Share pulses once.
             userAddedEvent: false,
             sharePulse: false,
+            tourVariant: 'a',
 
             // Mobile Menu
             showMobileMenu: false,
@@ -419,6 +420,19 @@ const CalendarVueApp = {
         // Homepage calendar (no slug and not an existing saved calendar)
         isHomepageCalendar() {
             return !this.urlslug && !this.isExisting;
+        },
+
+        // Headline and lead for the homepage pitch, by experiment variant.
+        tourCopy() {
+            const copy = {
+                a: { title: 'A shared calendar in one link',
+                     lead: 'No account, nothing to install. Add your events, send the link, and everyone sees the same schedule.' },
+                b: { title: 'Sign-ups, rotas and bookings in one shared calendar',
+                     lead: 'People add their name to a slot, book the room, or mark when they are away. Everyone sees the same schedule from one link.' },
+                c: { title: 'Everyone on the same schedule',
+                     lead: 'Make a calendar, send one link, and your group sees every change. No accounts, for you or for them.' },
+            };
+            return copy[this.tourVariant] || copy.a;
         }
     },
 
@@ -1391,6 +1405,17 @@ const CalendarVueApp = {
     },
 
     watch: {
+        // The homepage pitch is an experiment: pick (or recall) this browser's variant
+        // once the page is known to be the homepage, then report which parts of it are read.
+        isHomepageCalendar: {
+            immediate: true,
+            handler(home) {
+                if (!home || this._tourStarted) return;
+                this._tourStarted = true;
+                track(a => { this.tourVariant = a.homepageVariant(); });
+                this.$nextTick(() => this.observeTour());
+            },
+        },
         // Move focus into the Recent changes dialog when it opens and give it back to
         // whatever opened it on close, so keyboard and screen-reader users are not left
         // stranded on the page behind a modal.
@@ -1987,6 +2012,25 @@ const CalendarVueApp = {
         // ============================================================
         // REGION: Calendar CRUD Operations
         // ============================================================
+
+        // One tour_seen per section per page view, when half of it is on screen.
+        observeTour() {
+            try {
+                const root = document.getElementById('how');
+                if (!root || typeof IntersectionObserver === 'undefined') return;
+                const seen = new Set();
+                const io = new IntersectionObserver((entries) => {
+                    for (const e of entries) {
+                        const section = e.target.dataset.tour;
+                        if (!e.isIntersecting || seen.has(section)) continue;
+                        seen.add(section);
+                        io.unobserve(e.target);
+                        track(a => a.tourSeen(section));
+                    }
+                }, { threshold: 0.5 });
+                root.querySelectorAll('[data-tour]').forEach(el => io.observe(el));
+            } catch (e) { /* observational only */ }
+        },
 
         // The first event someone adds on the homepage: the tip has done its job, and Share
         // gets one gentle pulse, because now a link is worth having.

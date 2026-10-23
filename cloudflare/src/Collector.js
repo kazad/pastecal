@@ -9,7 +9,7 @@
 //
 // Column layout (keep in sync with scripts/stats.sh ux; Analytics Engine columns are positional):
 //   index1 = event name
-//   blob1 name | blob2 ui | blob3 browser | blob4 device | blob5 country | blob6 detail | blob7 cached
+//   blob1 name | blob2 ui | blob3 browser | blob4 device | blob5 country | blob6 detail | blob7 cached | blob8 homepage variant
 //   double1 ttfb_ms | double2 fcp_ms | double3 lcp_ms | double4 load_ms | double5 cls | double6 first_event_seconds | double7 count
 
 export const MAX_BODY_BYTES = 16 * 1024;
@@ -39,6 +39,7 @@ export function toDataPoints(body, country = '') {
                 str(country, 4),
                 str(p.source ?? p.method ?? p.code ?? p.kind ?? p.reason ?? p.where, 40),
                 str(p.cached, 4),
+                str(p.hv, 4),
             ],
             doubles: [num(p.ttfb_ms), num(p.fcp_ms), num(p.lcp_ms), num(p.load_ms), num(p.cls), num(p.first_event_seconds), 1],
         });

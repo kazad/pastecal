@@ -849,8 +849,12 @@ div#Schedule,
 .pc-tour-links h4 { margin: 0; font-size: 16px; font-weight: 700; color: var(--pc-text) }
 .pc-tour-links code { display: inline-block; margin: 6px 0; font-size: 12.5px; padding: 2px 7px; border-radius: 6px; border: 1px solid var(--pc-line); background: var(--pc-soft); color: var(--pc-text); overflow-wrap: anywhere }
 .pc-tour-links p { margin: 0; font-size: 15px }
-.pc-tour-uses { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px }
-.pc-tour-uses li { border: 1px solid var(--pc-line); border-radius: 999px; background: var(--pc-surface); padding: 5px 13px; font-size: 14px; color: var(--pc-text) }
+.pc-tour-uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--pc-line); border: 1px solid var(--pc-line); border-radius: 12px; overflow: hidden }
+.pc-tour-uses > div { background: var(--pc-surface); padding: 14px 16px }
+.pc-tour-uses h4 { margin: 0 0 4px; font-size: 15px; font-weight: 600; color: var(--pc-text) }
+.pc-tour-uses p { margin: 0; font-size: 14px; color: var(--pc-text-muted); line-height: 1.45 }
+@media (max-width: 760px) { .pc-tour-uses { grid-template-columns: repeat(2, minmax(0, 1fr)) } }
+@media (max-width: 480px) { .pc-tour-uses { grid-template-columns: 1fr } }
 .pc-tour-facts { display: flex; flex-wrap: wrap; gap: 14px 44px; margin-top: 36px; padding-block: 18px; border-block: 1px solid var(--pc-line) }
 .pc-tour-facts div { display: flex; flex-direction: column }
 .pc-tour-facts strong { font-size: 24px; color: var(--pc-text) }

@@ -1295,12 +1295,14 @@ Copyright (c) 2025 Kalid Azad
         </p>
 
                 <!-- Homepage only: what pastecal is, for people who scroll past the calendar. -->
-        <section v-if="isHomepageCalendar" id="how" class="pc-tour" aria-labelledby="pc-tour-title" data-testid="homepage-tour" v-cloak>
+        <section v-if="isHomepageCalendar" id="how" class="pc-tour" aria-labelledby="pc-tour-title" data-testid="homepage-tour" :data-variant="tourVariant" v-cloak>
             <div class="pc-tour-inner">
-                <h2 id="pc-tour-title">A shared calendar in one link</h2>
-                <p class="pc-tour-lead">No account, nothing to install. Add your events, send the link, and everyone sees the same schedule.</p>
+                <div data-tour="intro">
+                <h2 id="pc-tour-title">{{ tourCopy.title }}</h2>
+                <p class="pc-tour-lead">{{ tourCopy.lead }}</p>
+                </div>
 
-                <ol class="pc-tour-steps">
+                <ol class="pc-tour-steps" data-tour="steps">
                     <li>
                         <div class="pc-tour-art" aria-hidden="true">
                             <div class="pc-tour-mini">
@@ -1329,21 +1331,29 @@ Copyright (c) 2025 Kalid Azad
                 </ol>
 
                 <h3 class="pc-tour-label">How to share it</h3>
-                <div class="pc-tour-links">
+                <div class="pc-tour-links" data-tour="share">
                     <div class="pc-tour-link-main"><h4>View-only link <span>for everyone</span></h4><code>pastecal.com/view/k3n8q2xw</code><p>Send this to the group chat, post it, or embed it. People see every change but can't edit, and never see your edit link.</p></div>
                     <div><h4>Calendar app link</h4><code>pastecal.com/view/k3n8q2xw.ics</code><p>For Google, Apple or Outlook Calendar. Read-only, and it stays up to date. Google can take a few hours to refresh.</p></div>
                     <div><h4>Edit link <span>for helpers</span></h4><code>pastecal.com/soccer-fall</code><p>Only for people who help run the calendar. Anyone with it can add and change events.</p></div>
                 </div>
 
-                <h3 class="pc-tour-label">People use it for</h3>
-                <ul class="pc-tour-uses">
-                    <li>Volunteer and shift sign-ups</li><li>Booking a shared room, studio or parking spot</li><li>Who's away or working from home</li>
-                    <li>Club, faith and community events</li><li>Caring for a family member</li><li>Class and exam dates</li>
-                    <li>Group trips and weddings</li><li>Rehearsals, jams and gigs</li><li>When everyone's free</li>
-                </ul>
-                <p class="pc-tour-uses-note">Put sign-up or booking rules in Notes, give each person or team its own color, and everyone sees at a glance who's where. People use pastecal in more than a dozen languages.</p>
+                <div data-tour="uses">
+                <h3 class="pc-tour-label">What people use it for</h3>
+                <div class="pc-tour-uses">
+                    <div><h4>Sign-up sheets and volunteer rotas</h4><p>People put their name on a slot: shifts, cover, chores, rides.</p></div>
+                    <div><h4>Booking a shared space</h4><p>Meeting rooms, studios, halls, parking. Rules go in the notes.</p></div>
+                    <div><h4>Who's away or working from home</h4><p>Leave and remote days, one color per person or team.</p></div>
+                    <div><h4>Club, faith and community events</h4><p>One public calendar for members, with a view-only link.</p></div>
+                    <div><h4>Caring for a family member</h4><p>Who visits when, who covers which day.</p></div>
+                    <div><h4>School and classes</h4><p>Exams, homework, games and concerts.</p></div>
+                    <div><h4>Group trips and weddings</h4><p>Itineraries everyone can check from their phone.</p></div>
+                    <div><h4>Bands, studios and gigs</h4><p>Rehearsals, jam-room slots and shows.</p></div>
+                    <div><h4>Small business schedules</h4><p>Appointments by staff member, deliveries, promotions.</p></div>
+                </div>
+                <p class="pc-tour-uses-note">People use pastecal in more than a dozen languages.</p>
+                </div>
 
-                <div class="pc-tour-facts">
+                <div class="pc-tour-facts" data-tour="facts">
                     <div><strong>Since 2021</strong><span>and still simple</span></div>
                     <div><strong>3,000+</strong><span>calendars made</span></div>
                     <div><strong>No accounts</strong><span>for you or anyone you share with</span></div>
@@ -1355,7 +1365,7 @@ Copyright (c) 2025 Kalid Azad
                 </ul>
 
                 <h3 class="pc-tour-label">Questions</h3>
-                <div class="pc-tour-faq">
+                <div class="pc-tour-faq" data-tour="faq">
                     <details><summary>Who can change my calendar?</summary><p>Anyone with the edit link. Send the view-only link to people who only need to look.</p></details>
                     <details><summary>Is it private?</summary><p>Anyone with a link can open it, so give a private calendar a hard-to-guess name. Edit links are never listed in search engines.</p></details>
                     <details><summary>Can I undo a change?</summary><p>Yes. Click "Edited … ago" at the top to see recent changes and put any of them back.</p></details>

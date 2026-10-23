@@ -6,7 +6,7 @@ const ev = (name, params = {}, path = '/abc') => ({ name, params, path });
 // shape + privacy
 const [a] = toDataPoints({ events: [ev('page_perf', { ttfb_ms: 120, lcp_ms: 900, cls: 0.01, browser: 'safari', device: 'phone', cached: 'no' }, '/secretcal')] }, 'US');
 assert.deepEqual(a.indexes, ['page_perf']);
-assert.deepEqual(a.blobs, ['page_perf', 'classic', 'safari', 'phone', 'US', '', 'no']);
+assert.deepEqual(a.blobs, ['page_perf', 'classic', 'safari', 'phone', 'US', '', 'no', '']);
 assert.deepEqual(a.doubles, [120, 0, 900, 0, 0.01, 0, 1]);
 assert.ok(!JSON.stringify(a).includes('secretcal'), 'calendar path must never be stored');
 
@@ -36,3 +36,6 @@ assert.equal((await handleCollect(post('x'.repeat(20000)), env)).status, 204);
 assert.equal(written.length, 2);
 assert.equal((await handleCollect(post('{}'), {})).status, 204);
 console.log('collector tests passed');
+
+// The homepage experiment variant rides along so conversion and returns can be split by it.
+assert.equal(toDataPoints({ events: [ev('event_added', { hv: 'b' })] })[0].blobs[7], 'b');
