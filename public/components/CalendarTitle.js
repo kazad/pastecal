@@ -3,16 +3,16 @@
 const CalendarTitle = {
     template: /* html */ `
         <div class="w-full text-center">
-            <!-- Show title (including "New Calendar" for new calendars) -->
+            <!-- Show title ("New calendar" for new calendars; see Calendar.displayTitle) -->
             <h1 v-if="!isEditing"
                 @click="handleTitleClick"
                 :class="titleClasses">
-                {{ title || 'New Calendar' }}
+                {{ displayTitle }}
             </h1>
             <!-- Edit mode input -->
             <input v-if="isEditing"
                 type="text"
-                :value="title"
+                :value="title === 'New Calendar' ? displayTitle : title"
                 @input="$emit('update:title', $event.target.value)"
                 @blur="$emit('blur')"
                 @keyup.enter="$emit('enter')"
@@ -37,6 +37,9 @@ const CalendarTitle = {
     },
     emits: ['update:title', 'blur', 'enter', 'click'],
     computed: {
+        displayTitle() {
+            return Calendar.displayTitle(this.title);
+        },
         brandingClass() {
             return this.mode === 'mobile'
                 ? 'text-base font-bold text-color-2 leading-tight'

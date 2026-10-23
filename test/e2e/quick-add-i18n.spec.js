@@ -44,7 +44,7 @@ const onServer = (page) => page.evaluate(`(async () => {
 })()`);
 
 async function openQuickAdd(page) {
-  await page.locator('text=+Event').locator('visible=true').first().click();
+  await page.locator('[data-testid="desktop-add-event-button"]').locator('visible=true').first().click();
   await expect(page.getByText('Add Event by Typing')).toBeVisible();
 }
 

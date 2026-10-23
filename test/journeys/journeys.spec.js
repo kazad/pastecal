@@ -205,7 +205,7 @@ async function openQuickAdd(page) {
     await tap(page, page.getByRole('button', { name: 'Open menu' }));
     await tap(page, page.getByText('Quick Add Event').locator('visible=true').first());
   } else {
-    await tap(page, page.locator('text=+Event').locator('visible=true').first());
+    await tap(page, page.locator('[data-testid="desktop-add-event-button"]').locator('visible=true').first());
   }
   await expect(page.getByText('Add Event by Typing')).toBeVisible();
 }
@@ -690,7 +690,7 @@ test('an event survives quitting the browser right after creating it', async ({ 
     await p.waitForFunction(`${VM_SAFE}?.isExisting === true`, null, { timeout: 20_000 });
     await p.waitForTimeout(1500);
 
-    await p.locator('text=+Event').locator('visible=true').first().click();
+    await p.locator('[data-testid="desktop-add-event-button"]').locator('visible=true').first().click();
     await p.keyboard.type('Survives the quit tomorrow at 9:00', { delay: TYPE_DELAY_MS });
     await p.keyboard.press('Enter');
     await ctx.close();                                    // quit, immediately

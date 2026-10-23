@@ -347,7 +347,7 @@ Copyright (c) 2025 Kalid Azad
         <!-- Mobile FAB removed - mobile menu will open the central quick-add dialog directly -->
 
         <!-- Single dialog instance used by button triggers -->
-        <quick-add-dialog ref="quickAddDialog" :colors="COLORS" :labels="localSettings.typeLabels" @event-created="handleQuickAddEvent"></quick-add-dialog>
+        <quick-add-dialog ref="quickAddDialog" :colors="COLORS" :labels="displayTypeLabels" @event-created="handleQuickAddEvent"></quick-add-dialog>
 
         <topbar class="hidden md:flex justify-between items-center pb-1 md:pb-3 text-sm">
             <!-- Left section -->
@@ -1147,7 +1147,7 @@ Copyright (c) 2025 Kalid Azad
 
                     <!-- Calendar-specific Settings -->
                     <div class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
-                        <h3 class="font-bold text-color-2 mb-3">Settings for '{{calendar.title}}' </h3>
+                        <h3 class="font-bold text-color-2 mb-3">Settings for '{{ displayCalendarTitle }}' </h3>
                         <p class="text-xs text-color-1 mb-4 italic">Default settings for everyone viewing this calendar.
                         </p>
 
@@ -1167,16 +1167,18 @@ Copyright (c) 2025 Kalid Azad
                                         <input type="color" :id="'color-picker-' + index"
                                             :value="localSettings.colors[index]"
                                             @change="updateEventColor(index, $event.target.value)"
-                                            :aria-label="'Color picker for ' + (localSettings.typeLabels[index] || 'event type ' + (index + 1))"
+                                            :aria-label="'Color picker for ' + displayTypeLabels[index]"
                                             class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
                                         <div class="w-5 h-5 rounded-full mr-2 cursor-pointer hover:ring-2 hover:ring-offset-1 hover:ring-link transition-all"
                                             :style="{backgroundColor: getTypeColor(index+1)}"></div>
                                     </div>
-                                    <input :value="label" @input="updateTypeLabel(index+1, $event.target.value)"
+                                    <!-- An untouched "Type N" shows empty, with the color's name as
+                                         the placeholder; clearing a label goes back to that. -->
+                                    <input :value="/^Type \d+$/.test(label) ? '' : label" @input="updateTypeLabel(index+1, $event.target.value)"
                                         :aria-label="'Label for type ' + (index + 1)"
                                         :data-category-label="index"
                                         class="flex-1 p-2 border border-color-default rounded text-sm"
-                                        :placeholder="`Type ${index+1}`">
+                                        :placeholder="displayTypeLabels[index]">
                                 </div>
 
                                 <!-- Adding is offered, removing is not: deleting a category

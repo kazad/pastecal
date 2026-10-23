@@ -294,6 +294,12 @@ div#Schedule {
     /* can be short on agenda view */
 }
 
+/* Month grids (Month, 3 months, Year) have a fixed height; the 80vh floor only left an
+   empty block under them. */
+div#Schedule:has(.e-month-view, .e-year-view) {
+    min-height: 0;
+}
+
 .e-toolbar-item.e-today {
     display: none !important;
 }
@@ -314,9 +320,13 @@ div#Schedule {
 
 
 
+/* Week/Day: the corner above the time column shows or hides the hours before the start
+   hour. The text and its tooltip come from app.js (earlyHoursLabel, set in renderCell). */
 td.e-header-cells.e-disable-dates::before {
 
-    content: '12-4 AM';
+    content: attr(data-pc-label);
+
+    font-size: var(--pc-fs-small);
 
     width: 100%;
 
@@ -328,14 +338,14 @@ td.e-header-cells.e-disable-dates::before {
 
     display: inline-block;
 
-    color: #36b1f6;
+    color: var(--pc-link);
 
     cursor: pointer;
 
 }
 
 td.e-header-cells.e-disable-dates:hover {
-    background-color: #fafafa !important;
+    background-color: var(--pc-hover) !important;
 }
 
 
@@ -460,11 +470,15 @@ div#Schedule,
 
 .e-schedule-dialog.e-device .e-save-icon::before {
 
-    content: 'SAVE';
+    content: 'Save';
 
-    color: #e3165b;
+    color: var(--pc-link);
+
+    font-family: var(--pc-font);
 
     font-size: 16px;
+
+    font-weight: var(--pc-fw-semibold);
 
 }
 
@@ -1018,4 +1032,200 @@ div#Schedule,
   .e-schedule .e-month-view .e-appointment .e-subject { font-size: 10.5px !important; padding-inline: 1px }
   .e-schedule .e-month-view .e-header-cells span[data-short] { font-size: 0 }
   .e-schedule .e-month-view .e-header-cells span[data-short]::after { content: attr(data-short); font-size: 12px }
+}
+
+/* View switcher and the +Event button: sentence case, like the rest of the app. */
+.e-schedule .e-schedule-toolbar .e-toolbar-item .e-tbar-btn-text { text-transform: none !important }
+
+.pc-add-event {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+    padding: 4px 12px 4px 10px;
+    border: 1px solid color-mix(in srgb, var(--pc-link) 45%, transparent);
+    border-radius: var(--pc-radius-pill);
+    color: var(--pc-link);
+    background: transparent;
+    font-size: var(--pc-fs-small);
+    font-weight: var(--pc-fw-semibold);
+    line-height: var(--pc-lh-tight);
+    transition: background var(--pc-dur-fast) var(--pc-ease), border-color var(--pc-dur-fast) var(--pc-ease);
+}
+.pc-add-event-plus { font-size: 15px; font-weight: var(--pc-fw-medium); line-height: 1 }
+button:hover > .pc-add-event {
+    background: color-mix(in srgb, var(--pc-link) 10%, transparent);
+    border-color: var(--pc-link);
+}
+
+/* --- Event popups, the editor and its confirm dialogs: pastecal, not stock Material ---
+   Syncfusion's Material theme accents everything in pink (#e3165b; #00b0ff in dark) with
+   ALL-CAPS text buttons. Everything here swaps that for pastecal blue, sentence case
+   (the words themselves come from the L10n strings in app.js), a filled primary button
+   and a quiet secondary one. Colors and layout of events are untouched. */
+.e-schedule-dialog.e-dialog,
+.e-quick-dialog.e-dialog {
+    border-radius: var(--pc-radius-lg);
+    box-shadow: var(--pc-shadow-xl);
+}
+.e-quick-popup-wrapper {
+    border-radius: var(--pc-radius-lg);
+    box-shadow: var(--pc-shadow-lg);
+}
+.e-schedule-dialog:not(.e-device) .e-dlg-header-content,
+.e-quick-dialog .e-dlg-header-content { padding: 20px 24px 6px }
+.e-schedule-dialog:not(.e-device) .e-dlg-content { padding: 6px 24px 4px }
+.e-schedule-dialog .e-footer-content,
+.e-quick-dialog .e-footer-content { padding: 12px 24px 20px }
+.e-quick-dialog .e-dlg-content { padding: 4px 24px 8px; color: var(--pc-text-2) }
+.e-schedule-dialog .e-dlg-header,
+.e-schedule-dialog .e-title-text,
+.e-quick-dialog .e-dlg-header {
+    font-size: var(--pc-fs-heading);
+    font-weight: var(--pc-fw-semibold);
+    letter-spacing: var(--pc-tracking-tight);
+}
+.e-quick-popup-wrapper .e-popup-footer { padding: 4px 16px 16px }
+
+/* Buttons. Specific enough to beat Syncfusion's e-flat/e-primary rules and the global
+   .e-btn radius above. */
+.e-quick-popup-wrapper .e-popup-footer .e-btn,
+.e-schedule-dialog .e-footer-content .e-btn,
+.e-quick-dialog .e-footer-content .e-btn {
+    text-transform: none;
+    font-size: var(--pc-fs-body);
+    font-weight: var(--pc-fw-semibold);
+    line-height: var(--pc-lh-tight);
+    height: auto;
+    min-height: 36px;
+    padding: 8px 16px;
+    border: 1px solid transparent;
+    border-radius: var(--pc-radius-md) !important;
+    box-shadow: none !important;
+    letter-spacing: normal;
+}
+/* Primary: Save, and the "this event / entire series" choice */
+.e-quick-popup-wrapper .e-popup-footer .e-btn.e-event-create,
+.e-schedule-dialog .e-footer-content .e-btn.e-event-save,
+.e-quick-dialog .e-footer-content .e-btn.e-quick-alertok:not(.e-quick-dialog-delete) {
+    background: var(--pc-link);
+    border-color: var(--pc-link);
+    color: var(--pc-on-accent);
+}
+.e-quick-popup-wrapper .e-popup-footer .e-btn.e-event-create:hover,
+.e-schedule-dialog .e-footer-content .e-btn.e-event-save:hover,
+.e-quick-dialog .e-footer-content .e-btn.e-quick-alertok:not(.e-quick-dialog-delete):hover {
+    background: var(--pc-link-hover);
+    border-color: var(--pc-link-hover);
+    color: var(--pc-on-accent);
+}
+/* Secondary: More details, Cancel */
+.e-quick-popup-wrapper .e-popup-footer .e-btn.e-event-details,
+.e-schedule-dialog .e-footer-content .e-btn.e-event-cancel,
+.e-quick-dialog .e-footer-content .e-btn:not(.e-quick-alertok) {
+    background: transparent;
+    border-color: var(--pc-field);
+    color: var(--pc-text-2);
+}
+.e-quick-popup-wrapper .e-popup-footer .e-btn.e-event-details:hover,
+.e-schedule-dialog .e-footer-content .e-btn.e-event-cancel:hover,
+.e-quick-dialog .e-footer-content .e-btn:not(.e-quick-alertok):hover {
+    background: var(--pc-hover);
+    color: var(--pc-text);
+}
+/* Destructive: the confirm's Delete is filled red; the editor's Delete is a quiet red link */
+.e-quick-dialog .e-footer-content .e-btn.e-quick-dialog-delete {
+    background: var(--pc-danger);
+    border-color: var(--pc-danger);
+    color: var(--pc-on-accent);
+}
+.e-quick-dialog .e-footer-content .e-btn.e-quick-dialog-delete:hover {
+    background: color-mix(in srgb, var(--pc-danger) 88%, var(--pc-text));
+}
+.e-schedule-dialog .e-footer-content .e-btn.e-event-delete {
+    background: transparent;
+    color: var(--pc-danger);
+    padding-inline: 8px;
+}
+.e-schedule-dialog .e-footer-content .e-btn.e-event-delete:hover {
+    background: var(--pc-danger-soft);
+}
+.e-quick-popup-wrapper .e-popup-footer .e-btn + .e-btn,
+.e-schedule-dialog .e-footer-content .e-btn + .e-btn,
+.e-quick-dialog .e-footer-content .e-btn + .e-btn { margin-left: 8px }
+.e-quick-popup-wrapper .e-popup-footer .e-btn:focus-visible,
+.e-schedule-dialog .e-footer-content .e-btn:focus-visible,
+.e-quick-dialog .e-footer-content .e-btn:focus-visible {
+    outline: 2px solid var(--pc-link);
+    outline-offset: 2px;
+}
+
+/* Fields: the focus underline, focused label and selection in blue, not pink */
+.e-float-input .e-float-line::before,
+.e-float-input .e-float-line::after,
+.e-input-group:not(.e-float-input)::before,
+.e-input-group:not(.e-float-input)::after,
+.e-input-group .e-input-in-wrap::before,
+.e-input-group .e-input-in-wrap::after { background: var(--pc-link) !important }
+.e-float-input.e-input-focus label.e-float-text,
+.e-float-input input:focus ~ label.e-float-text,
+.e-float-input textarea:focus ~ label.e-float-text { color: var(--pc-link) !important }
+.e-input:focus:not(.e-error),
+.e-float-input:not(.e-error):not(.e-input-group) input:focus,
+.e-float-input:not(.e-error):not(.e-input-group) textarea:focus,
+.e-float-input:not(.e-error):not(.e-input-group).e-input-focus input { border-color: var(--pc-link) !important }
+.e-input::selection,
+.e-input-group input::selection,
+.e-float-input input::selection,
+.e-float-input textarea::selection {
+    background: color-mix(in srgb, var(--pc-link) 30%, transparent) !important;
+    color: inherit !important;
+}
+.e-schedule-dialog .e-float-input label.e-float-text,
+.e-schedule-dialog .e-week-expander-label,
+.e-schedule-dialog .e-month-expander-label,
+.e-schedule-dialog .e-end-on-label { color: var(--pc-text-muted) }
+
+/* Checkboxes (All day, Repeat, Timezone) */
+.e-checkbox-wrapper .e-frame { border-radius: var(--pc-radius-xs) }
+.e-checkbox-wrapper .e-frame.e-check,
+.e-checkbox-wrapper:hover .e-frame.e-check,
+.e-checkbox-wrapper .e-checkbox:focus + .e-frame.e-check,
+.e-checkbox-wrapper .e-checkbox:active + .e-frame.e-check {
+    background-color: var(--pc-link) !important;
+    border-color: var(--pc-link) !important;
+    color: var(--pc-on-accent) !important;
+}
+
+/* Recurrence editor: the weekday toggles */
+.e-recurrenceeditor .e-days .e-btn.e-round {
+    box-shadow: none !important;
+    border: 1px solid var(--pc-field);
+    background: transparent;
+    color: var(--pc-text-2);
+    font-weight: var(--pc-fw-medium);
+}
+.e-recurrenceeditor .e-days .e-btn.e-round:hover { background: var(--pc-hover) }
+.e-recurrenceeditor .e-days .e-btn.e-round.e-active {
+    background: var(--pc-link) !important;
+    border-color: var(--pc-link) !important;
+    color: var(--pc-on-accent) !important;
+}
+
+/* Pickers and dropdown lists opened from the editor */
+.e-calendar .e-content td.e-today span.e-day,
+.e-calendar .e-content td.e-focused-date.e-today span.e-day { border-color: var(--pc-link) !important; color: var(--pc-link) }
+.e-calendar .e-content td.e-selected span.e-day,
+.e-calendar .e-content td.e-selected:hover span.e-day,
+.e-calendar .e-content td.e-selected.e-today span.e-day { background-color: var(--pc-link) !important; color: var(--pc-on-accent) !important }
+/* Any other flat primary button (the pickers' Today/Now); the dialog buttons above keep their own colors. */
+.e-btn.e-flat.e-primary:not(.e-event-save):not(.e-event-create):not(.e-quick-alertok),
+.e-btn.e-flat.e-primary:not(.e-event-save):not(.e-event-create):not(.e-quick-alertok):hover,
+.e-btn.e-flat.e-primary:not(.e-event-save):not(.e-event-create):not(.e-quick-alertok):focus { color: var(--pc-link) }
+.e-dropdownbase .e-list-item.e-active,
+.e-dropdownbase .e-list-item.e-active.e-hover { color: var(--pc-link) !important }
+.e-calendar .e-footer-container .e-btn { text-transform: none }
+/* Phones: the time column is ~36px wide; keep the early-hours toggle readable in it. */
+@media (max-width: 640px) {
+    td.e-header-cells.e-disable-dates::before { font-size: 10px; letter-spacing: -0.02em; white-space: nowrap }
 }

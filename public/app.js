@@ -203,6 +203,9 @@ const CalendarVueApp = {
             // Store COLORS as a component property for consistent reference
             COLORS: COLORS,
             DEFAULT_COLORS: DEFAULT_COLORS,
+            // What an unnamed category is called in the editor, the quick-add swatches,
+            // Settings and the filter dots, while its color is still the default.
+            DEFAULT_COLOR_NAMES: ['Blue', 'Pink', 'Coral', 'Green', 'Orange', 'Sky', 'Gray', 'Charcoal'],
             EXTRA_COLORS: EXTRA_COLORS,
             MAX_COLORS: MAX_COLORS,
             colorFilters: COLORS.map(() => true), // allow all color types by default
@@ -248,6 +251,17 @@ const CalendarVueApp = {
     },
 
     computed: {
+        // Shown wherever the title is: the stored default "New Calendar" in sentence case.
+        displayCalendarTitle() {
+            return Calendar.displayTitle(this.calendar.title);
+        },
+
+        // Category names as shown: a label someone set, else the color's name (see
+        // typeLabelFor). Stored labels are never rewritten.
+        displayTypeLabels() {
+            return this.COLORS.map((_, i) => this.typeLabelFor(i));
+        },
+
         /**
          * The changes list, grouped by calendar day.
          *
@@ -612,6 +626,23 @@ const CalendarVueApp = {
             track(a => a.slugPromptShown('homepage_bar', this.calendar));
         }
 
+        // Sentence case for Syncfusion's own words ("More Details", "New Event", "Repeat
+        // On"...), like the rest of pastecal. Keys missing here keep Syncfusion's text.
+        ej.base.L10n.load({
+            'en-US': {
+                schedule: {
+                    newEvent: 'New event', editEvent: 'Edit event', deleteEvent: 'Delete event',
+                    deleteTitle: 'Delete event', editTitle: 'Edit event',
+                    deleteMultipleEvent: 'Delete multiple events', moreDetails: 'More details',
+                    editSeries: 'Entire series', deleteSeries: 'Entire series',
+                    editFollowingEvent: 'Following events', recurringEvent: 'Recurring event',
+                    editRecurrence: 'Edit recurrence', startTimezone: 'Start timezone',
+                    endTimezone: 'End timezone', searchTimezone: 'Search timezone',
+                    beginFrom: 'Begin from', endAt: 'Ends at', noTitle: '(No title)',
+                },
+                recurrenceeditor: { on: 'Repeat on' },
+            },
+        });
         const scheduleObj = window.scheduleObj = new ej.schedule.Schedule();
         const scheduleInitTimestamp = performance.now();
         console.log('[schedule-init] Schedule constructed at', scheduleInitTimestamp.toFixed(1), 'ms');
@@ -773,6 +804,16 @@ const CalendarVueApp = {
         // Month view day names ("Monday") get a short form ("Mon") that phones show instead
         // (style.css swaps them); the full name was clipped to "Mond..." at phone width.
         scheduleObj.renderCell = (args) => {
+            // Week/Day: the corner above the time column toggles the hours before the
+            // start hour (calendar.options.extended; click handler below). It used to say
+            // "12-4 AM" whatever the start hour was, and the same when they were showing.
+            if (args.elementType === 'emptyCells' && args.element
+                && args.element.classList.contains('e-header-cells')) {
+                const label = this.earlyHoursLabel();
+                args.element.setAttribute('data-pc-label', label.text);
+                if (label.title) args.element.title = label.title;
+                return;
+            }
             if (args.elementType !== 'monthDay' || !args.element) return;
             const label = args.element.querySelector('span') || args.element;
             const full = (label.textContent || '').trim();
@@ -2294,18 +2335,10 @@ const CalendarVueApp = {
 
         getTypes() {
             // First check if we have custom labels in calendar.options.typeLabels
-            if (this.calendar?.options?.typeLabels?.length > 0) {
-                return Array(this.COLORS.length).fill().map((_, i) => {
-                    let id = i + 1;
-                    let title = this.calendar.options.typeLabels[i] || `Type ${id}`;
-                    return { text: title, value: id, iconCss: `e-color-${id}` };
-                });
-            }
-
-            // Fallback to default labels if no custom labels are found
+            // An untouched "Type N" label shows as its color's name (typeLabelFor).
             return Array(this.COLORS.length).fill().map((_, i) => {
                 let id = i + 1;
-                return { text: `Type ${id}`, value: id, iconCss: `e-color-${id}` };
+                return { text: this.typeLabelFor(i), value: id, iconCss: `e-color-${id}` };
             });
         },
 
@@ -2365,10 +2398,28 @@ const CalendarVueApp = {
             return this.colorNameFor(index);
         },
 
+        // The Week/Day corner toggle for the hours before the start hour (see renderCell).
+        earlyHoursLabel() {
+            const start = this.globalSettings.startHour || '05:00';
+            const hour = parseInt(start, 10) || 0;
+            if (!hour) return { text: '', title: '' };   // nothing is hidden
+            const at = this.globalSettings.timeFormat === '24'
+                ? start : `${hour % 12 || 12} ${hour < 12 ? 'AM' : 'PM'}`;
+            return this.calendar?.options?.extended
+                ? { text: 'Hide early', title: `Hide the hours before ${at}` }
+                : { text: 'Earlier', title: `Show the hours before ${at}` };
+        },
+
         // Nearest plain-English name for a palette color, so a dot has a spoken label
         // even when its type was never given one.
         colorNameFor(index) {
-            const hex = (this.COLORS[index] || '').replace('#', '');
+            // The default palette has fixed names (the hue math below would call #ff6652
+            // "Red" next to #e3165b's "Pink", and #27282f "Black"). Only while the slot
+            // still has its default color -- a recolored slot is named by its new color.
+            const color = (this.COLORS[index] || '').toLowerCase();
+            const fixed = this.DEFAULT_COLOR_NAMES[index];
+            if (fixed && color === (this.DEFAULT_COLORS[index] || '').toLowerCase()) return fixed;
+            const hex = color.replace('#', '');
             if (hex.length !== 6) return `Type ${index + 1}`;
             const r = parseInt(hex.slice(0, 2), 16);
             const g = parseInt(hex.slice(2, 4), 16);
