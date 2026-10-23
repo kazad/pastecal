@@ -850,7 +850,8 @@ div#Schedule,
 .pc-tour-links code { display: inline-block; margin: 6px 0; font-size: 12.5px; padding: 2px 7px; border-radius: 6px; border: 1px solid var(--pc-line); background: var(--pc-soft); color: var(--pc-text); overflow-wrap: anywhere }
 .pc-tour-links p { margin: 0; font-size: 15px }
 .pc-tour-uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--pc-line); border: 1px solid var(--pc-line); border-radius: 12px; overflow: hidden }
-.pc-tour-uses > div { background: var(--pc-surface); padding: 14px 16px }
+.pc-tour-uses > div { background: var(--pc-surface); padding: 14px 16px; display: grid; grid-template-columns: 20px minmax(0, 1fr); column-gap: 10px; align-items: start; align-content: start }
+.pc-tour-uses > div > p { grid-column: 2 }
 .pc-tour-uses h4 { margin: 0 0 4px; font-size: 15px; font-weight: 600; color: var(--pc-text) }
 .pc-tour-uses p { margin: 0; font-size: 14px; color: var(--pc-text-muted); line-height: 1.45 }
 @media (max-width: 760px) { .pc-tour-uses { grid-template-columns: repeat(2, minmax(0, 1fr)) } }
@@ -904,7 +905,7 @@ div#Schedule,
 .pc-share-art .ev { fill: var(--pc-link); stroke: none; opacity: .85 }
 .pc-share-art .ev2 { fill: #f59e0b; stroke: none; opacity: .85 }
 .pc-share-art .pen { color: var(--pc-link); stroke: var(--pc-link) }
-.pc-tour-uses .pc-ico { width: 22px; height: 22px; color: var(--pc-link); margin-bottom: 8px; display: block }
+.pc-tour-uses .pc-ico { width: 20px; height: 20px; color: var(--pc-link); display: block; margin-top: 1px }
 .pc-tour-faq .pc-tour-snippet { display: block; margin-top: 8px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--pc-line); background: var(--pc-soft); font-size: 12.5px; overflow-wrap: anywhere; color: var(--pc-text) }
 .pc-tour-plans { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px }
 .pc-tour-plans > div { border: 1px solid var(--pc-line); border-radius: 12px; background: var(--pc-surface); padding: 16px 18px }
@@ -932,9 +933,9 @@ div#Schedule,
   .pc-home-line a { color: var(--pc-link); white-space: nowrap }
 }
 @media (min-width: 1100px) {
-  .pc-home-split { display: grid; grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); gap: 16px; align-items: stretch }
+  .pc-home-split { display: grid; grid-template-columns: minmax(0, 1fr) clamp(320px, 28vw, 420px); gap: 16px; align-items: stretch }
   .pc-home-split .pc-draft-note { display: none }
-  .pc-home-aside { display: flex; flex-direction: column; max-width: 460px; border: 1px solid var(--pc-line); border-radius: 8px; background: var(--pc-soft); overflow: hidden }
+  .pc-home-aside { display: flex; flex-direction: column; border: 1px solid var(--pc-line); border-radius: 8px; background: var(--pc-soft); overflow: hidden }
   /* The aside carries the headline on wide screens, so the section below starts at the steps. */
   .pc-home-split ~ .pc-tour .pc-intro-full { display: none }
   .pc-home-split ~ .pc-tour .pc-intro-short { display: block }
@@ -958,6 +959,8 @@ div#Schedule,
 /* In the split, the event popup can open past the calendar's right edge (the library only keeps
    it inside the window), so let it overlap the side column instead of being clipped. */
 .pc-home-split #Schedule.e-schedule { overflow: visible }
+/* The month grid is 5-6 fixed-height rows; 80vh left a dead block under it on tall screens */
+.pc-home-split div#Schedule { min-height: 0 }
 .pc-home-split .e-quick-popup-wrapper { z-index: 20 }
 .pc-home-bar { display: flex; align-items: center; justify-content: space-between; padding: 6px 6px 6px 16px; border-bottom: 1px solid var(--pc-line); background: var(--pc-surface); font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--pc-text-muted) }
 .pc-home-body { padding: 20px 22px 24px; overflow: auto }
