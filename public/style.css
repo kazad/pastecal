@@ -892,3 +892,4 @@ div#Schedule,
 .pc-tour-footer { display: flex; gap: 18px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--pc-line); font-size: 14px }
 .pc-tour-footer a { color: var(--pc-text-muted) }
 .pc-tour-footer a:hover { color: var(--pc-link) }
+.pc-tour-uses-note { margin: 12px 0 0; font-size: 15px }
