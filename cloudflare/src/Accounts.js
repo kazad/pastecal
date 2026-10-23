@@ -257,7 +257,7 @@ export class Accounts extends DurableObject {
 const accounts = (env) => env.ACCOUNTS.get(env.ACCOUNTS.idFromName('global'));
 const json = (data, status = 200, headers = {}) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store', ...headers } });
 const devMode = (env) => env.ACCOUNTS_DEV_MODE === '1';
-const isAdmin = (request, env) => !!env.IMPORT_SECRET && request.headers.get('Authorization') === `Bearer ${env.IMPORT_SECRET}`;
+const isAdmin = (request, env) => !!env.IMPORT_SECRET && timingSafeEqual(request.headers.get('Authorization') || '', `Bearer ${env.IMPORT_SECRET}`);
 
 function cookieToken(request) {
     const m = (request.headers.get('Cookie') || '').match(/(?:^|;\s*)pc_session=([^;]+)/);

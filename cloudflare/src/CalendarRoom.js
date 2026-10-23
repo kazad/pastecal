@@ -146,6 +146,8 @@ export function mergeProSettings(current, patch) {
             out.branding.name = name || null;
         }
         if ('logoUrl' in b) {
+            // TODO(before the branding UI ships): a logo URL loads from the owner's server in every
+            // viewer's browser, a tracking pixel. Logos must be uploaded or proxied through pastecal first.
             if (b.logoUrl === null || b.logoUrl === '') out.branding.logoUrl = null;
             else {
                 if (typeof b.logoUrl !== 'string' || b.logoUrl.length > 500) return bad('branding.logoUrl must be an https URL (500 characters at most)');
@@ -934,6 +936,7 @@ export class CalendarRoom extends DurableObject {
         const s = this.state;
         if (!s.id) return { ok: true, missing: true };
         if (!/^test/i.test(s.id)) return { ok: false, error: 'only test calendars can be archived' };
+        if (this.lock) return { ok: false, error: 'locked' };          // a paid calendar is never archived this way
         if (!this.env.BACKUPS) return { ok: false, error: 'no backup bucket' };
         const id = s.id;
         await this.env.BACKUPS.put(`archive/test-calendars/${encodeURIComponent(id)}.json`,

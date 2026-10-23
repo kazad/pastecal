@@ -28,6 +28,10 @@ export { Waitlist } from './Waitlist.js';
 export { Accounts } from './Accounts.js';
 import { handleAccounts, sessionUserId as accountsSessionUserId } from './Accounts.js';
 import { PLANS } from './Waitlist.js';
+import { timingSafeEqual } from './Stripe.js';
+
+// Admin routes: Authorization: Bearer <IMPORT_SECRET>, compared in constant time. Callers check IMPORT_SECRET is set.
+const bearerIsSecret = (request, env) => timingSafeEqual(request.headers.get('Authorization') || '', `Bearer ${env.IMPORT_SECRET}`);
 
 // Any name Firebase allowed: real calendars include "TEAM NUÑEZ", "d&d8", "강아지봉사" and
 // trailing spaces. Firebase keys cannot hold . # $ [ ] / or control chars.
@@ -207,7 +211,7 @@ export default {
             return withCors(await wl.fetch('http://internal/add', { method: 'POST', body: JSON.stringify(entry) }));
         }
         if (path === '/api/waitlist/export' && request.method === 'GET') {
-            if (!env.WAITLIST || !env.IMPORT_SECRET || request.headers.get('Authorization') !== `Bearer ${env.IMPORT_SECRET}`) {
+            if (!env.WAITLIST || !env.IMPORT_SECRET || !bearerIsSecret(request, env)) {
                 return new Response('forbidden', { status: 403 });
             }
             return env.WAITLIST.get(env.WAITLIST.idFromName('pro')).fetch('http://internal/export');
@@ -276,7 +280,7 @@ export default {
         // Pro lock admin: what the billing code does internally, for support ("lost key", disputes) and tests.
         const adminLock = path.match(/^\/api\/admin\/cal\/([^/]+)\/([a-z-]+)$/);
         if (adminLock) {
-            if (!env.IMPORT_SECRET || request.headers.get('Authorization') !== `Bearer ${env.IMPORT_SECRET}`) {
+            if (!env.IMPORT_SECRET || !bearerIsSecret(request, env)) {
                 return new Response('forbidden', { status: 403 });
             }
             let id = null;
@@ -293,7 +297,7 @@ export default {
 
         // 4. Directory maintenance: /api/directory/*
         if (path === '/api/directory/backfill' && request.method === 'POST') {
-            if (!env.IMPORT_SECRET || request.headers.get('Authorization') !== `Bearer ${env.IMPORT_SECRET}`) {
+            if (!env.IMPORT_SECRET || !bearerIsSecret(request, env)) {
                 return new Response('forbidden', { status: 403 });
             }
             const dir = getDirectory(env);
@@ -337,12 +341,12 @@ export default {
             try { id = m && decodeURIComponent(m[1]); } catch { /* bad escape */ }
             if (!id || !validId(id)) return new Response('not found', { status: 404 });
 
-            if (m[2] === '/archive' && (request.method !== 'POST' || !env.IMPORT_SECRET || request.headers.get('Authorization') !== `Bearer ${env.IMPORT_SECRET}`)) {
+            if (m[2] === '/archive' && (request.method !== 'POST' || !env.IMPORT_SECRET || !bearerIsSecret(request, env))) {
                 return new Response('forbidden', { status: 403 });
             }
             if (m[2] === '/import' || m[2] === '/from-firebase') {
                 if (request.method !== 'PUT' || !env.IMPORT_SECRET
-                    || request.headers.get('Authorization') !== `Bearer ${env.IMPORT_SECRET}`) {
+                    || !bearerIsSecret(request, env)) {
                     return new Response('forbidden', { status: 403 });
                 }
             }

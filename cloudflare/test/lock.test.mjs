@@ -185,6 +185,9 @@ assert.equal((await (await fetch(`${BASE}/api/lookup?slug=${enc(claim)}`)).json(
 assert.equal((await admin(claim, 'lock', { ownerId: OWNER })).status, 200);
 await sleep(300);
 assert.equal((await (await fetch(`${BASE}/api/lookup?slug=${enc(claim)}`)).json()).actualSlug, claim, 'locking claims the name back');
+r = await fetch(`${BASE}/cal/${enc(claim)}/archive`, { method: 'POST', headers: auth });
+assert.deepEqual(await r.json(), { ok: false, error: 'locked' }, 'a locked calendar is never archived');
+assert.equal((await get(claim)).calendar.title, 'real');
 await admin(claim, 'unlock', {});
 step('a new calendar carrying a locked calendar\'s publicViewId (the rename path), or a case variant of its name, does not re-point the view link or the name; locking claims the name back from an earlier variant');
 
