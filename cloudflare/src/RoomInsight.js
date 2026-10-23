@@ -14,26 +14,51 @@
  *
  * Privacy. Stored: counts, a country tally and a city tally per day. Never stored: IPs, user agents,
  * names, or which visitor saw what. To tell "the same visitor again today" from "someone new" the
- * room keeps, for the current UTC day only, a set of SHA-256(dailySalt + IP + UA) truncated to
- * 8 bytes. The salt is random, made the first time the room is reached on a new day, and deleted
- * with that set when the day rolls over -- so yesterday's hashes can't be reversed or linked to
- * today's. (The roll-over runs on the room's next request: an idle calendar keeps its last active
- * day's salt and hash set until someone reaches it again.)
+ * room keeps, for the current UTC day only, a set of 8-byte hashes: 4 bytes of SHA-256(dailySalt +
+ * network) then 4 bytes of SHA-256(dailySalt + network + UA). The salt is random, made the first time
+ * the room is reached on a new day, and deleted with that set when the day rolls over -- so
+ * yesterday's hashes can't be reversed or linked to today's. (The roll-over runs on the room's next
+ * request: an idle calendar keeps its last active day's salt and hash set until someone reaches it again.)
+ *
+ * Who is a visitor. The network is the IP's prefix (IPv4 /24, IPv6 /64; an IPv4-mapped IPv6 address is
+ * read as IPv4): one person can rotate user agents freely, and an IPv6 address within their /64, but
+ * rarely their network. The user agent only tells apart up to maxUasPerPrefix people on one network
+ * per day (a household, an office); past that, a new UA on that network counts as one of the people
+ * already seen there (same view gap, same view cap). So 200 requests from one IP with 200 user agents
+ * are at most 3 visitors, and at most 3 views per 30 minutes. Followers (ICS) are told apart the same way.
+ * The cost: more than 3 real people behind one office NAT or carrier /24 on one day count as 3.
  *
  * A "view" is a visitor reaching the calendar (WebSocket connect, GET of the data, read-only link),
  * counted at most once per visitor per VIEW_GAP_MS: read-only tabs poll GET /cal/view/<id> every
  * few seconds and sockets reconnect after a network blip, so counting every request would count
- * one person dozens of times. A "follower" is a distinct (salted IP + UA) fetching the ICS feed
- * that day: roughly one per calendar app subscribed (apps that fetch from shared servers, like
- * Google Calendar, count once per server).
+ * one person dozens of times. And at most maxViewsPerVisitor views per visitor per day. A "follower"
+ * is a distinct visitor (as above) fetching the ICS feed that day: roughly one per calendar app
+ * subscribed (apps that fetch from shared servers, like Google Calendar, count once per network).
+ *
+ * The daily cap. Past maxSeenPerDay visitors in a day, the visitors number stops growing (the owner
+ * sees a floor), but people keep being tracked up to maxTrackedPerDay hashes, so their views are still
+ * deduplicated and capped like anyone's, and their country/city still counts once per new network.
+ * Past maxTrackedPerDay (an attack, or a calendar far beyond any real one), new people's views are
+ * not counted at all: counting them with no dedup would let a reload loop inflate views without bound.
+ *
+ * Places are shown only above a threshold of distinct visitors over the requested range (city 5,
+ * country 3), so a place can't single out a handful of people. Distinct visitors can't be counted
+ * across days without a cross-day identifier (which would make the hashes linkable), so the check uses
+ * a conservative lower bound: the largest single-day count for that place in the range (distinct
+ * networks that day). A place is shown only if some one day reached the threshold; the count shown is
+ * the sum of daily counts (visitor-days).
  */
 
 export const STATS = {
     keepDays: 400,
-    maxSeenPerDay: 5000,          // per kind ('v' visitors, 'f' followers); past it, new people aren't told apart
+    maxSeenPerDay: 5000,          // per kind ('v' visitors, 'f' followers): the daily count stops growing here
+    maxTrackedPerDay: 20000,      // hashes kept per kind per day; past it, new people aren't counted at all
+    maxUasPerPrefix: 3,           // people told apart (by user agent) on one network (/24, /64) per day
+    maxViewsPerVisitor: 50,       // views counted per visitor per day
     viewGapMs: 30 * 60 * 1000,    // the same visitor again within this counts as the same view
     maxCitiesPerDay: 200,         // distinct cities stored per day; later new ones are dropped
-    minCityCount: 3,              // a city is shown only with at least this many visitor-days in the range
+    minCityVisitors: 5,           // a city is shown only if one day in the range had this many distinct visitors from it
+    minCountryVisitors: 3,        // the same for a country
     top: 20,
 };
 export const INSIGHT_ROUTES = new Set(['stats', 'stats-dump', 'restore-version']);
@@ -53,6 +78,8 @@ export function initInsight(sql) {
     // Today only: deleted, with the salt, when the day rolls over.
     sql.exec(`CREATE TABLE IF NOT EXISTS stats_seen (kind TEXT NOT NULL, hash TEXT NOT NULL, last_at INTEGER, PRIMARY KEY (kind, hash))`);
     sql.exec(`CREATE TABLE IF NOT EXISTS stats_salt (k INTEGER PRIMARY KEY CHECK (k = 1), day TEXT NOT NULL, salt TEXT NOT NULL)`);
+    // Per-visitor views today (capped at STATS.maxViewsPerVisitor); added after the table existed.
+    try { sql.exec(`ALTER TABLE stats_seen ADD COLUMN views INTEGER NOT NULL DEFAULT 0`); } catch { /* already there */ }
     // Start times of the last hour's restores (RESTORE limits).
     sql.exec(`CREATE TABLE IF NOT EXISTS restore_log (at INTEGER NOT NULL)`);
 }
@@ -75,6 +102,19 @@ function saltFor(room, today) {
 // Roll over without counting anything (on reads, so a stats read also discards an old salt).
 function rollover(room) { saltFor(room, dayOf(Date.now())); }
 
+// The network an IP belongs to: "a.b.c" for IPv4 (/24), the first 4 groups for IPv6 (/64).
+export function ipPrefix(ip) {
+    ip = String(ip || '').trim().toLowerCase();
+    const v4 = ip.match(/^(?:::ffff:)?(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.\d{1,3}$/);
+    if (v4) return `${v4[1]}.${v4[2]}.${v4[3]}`;
+    if (!ip.includes(':') || !/^[0-9a-f:]+$/.test(ip)) return ip;
+    let [head, tail] = ip.split('::');
+    const h = head ? head.split(':') : [], t = tail !== undefined && tail ? tail.split(':') : [];
+    const groups = tail === undefined ? h : [...h, ...Array(Math.max(0, 8 - h.length - t.length)).fill('0'), ...t];
+    return groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, '')).join(':') + '::/64';
+}
+const sha = async (s) => hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)));
+
 // Called by CalendarRoom.fetch when the Worker marked the request as a hit (X-PC-Hit: view|follow).
 // The Worker strips any X-PC-* a client sent, sets the marker only on calendar reads by non-bots, and
 // passes country/city as headers. IP and UA are read here, hashed, and dropped.
@@ -83,36 +123,46 @@ export async function countHit(room, request) {
     if (!kind || !room.state.id) return;                     // no stats rows for names nobody created
     const now = Date.now(), today = dayOf(now);
     const salt = saltFor(room, today);
-    const ip = request.headers.get('CF-Connecting-IP') || '';
+    const net = ipPrefix(request.headers.get('CF-Connecting-IP'));
     const ua = request.headers.get('User-Agent') || '';
-    const hash = hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${salt}\n${ip}\n${ua}`))).slice(0, 16);
+    const netHash = (await sha(`${salt}\n${net}`)).slice(0, 8);
+    let hash = netHash + (await sha(`${salt}\n${net}\n${ua}`)).slice(0, 8);
     // From here on nothing awaits: the seen-check and the write can't interleave with another hit.
     if (room.statsSalt?.salt !== salt) return;               // the day rolled over while hashing
     const sql = room.sql;
-    const seen = sql.exec(`SELECT last_at FROM stats_seen WHERE kind = ? AND hash = ?`, kind, hash).toArray()[0];
+    let seen = sql.exec(`SELECT hash, last_at, views FROM stats_seen WHERE kind = ? AND hash = ?`, kind, hash).toArray()[0];
+    let newNetwork = false;
+    if (!seen) {
+        const onNet = sql.exec(`SELECT hash, last_at, views FROM stats_seen WHERE kind = ? AND substr(hash, 1, 8) = ? ORDER BY hash LIMIT ?`,
+            kind, netHash, STATS.maxUasPerPrefix).toArray();
+        if (onNet.length >= STATS.maxUasPerPrefix) { seen = onNet[0]; hash = seen.hash; }   // a 4th UA here: one of those already seen
+        newNetwork = onNet.length === 0;
+    }
+    const tracked = () => sql.exec(`SELECT COUNT(*) AS n FROM stats_seen WHERE kind = ?`, kind).one().n;
     let views = 0, visitors = 0, followers = 0;
     if (kind === 'f') {
         if (seen) return;                                     // this subscriber already counted today
-        if (todayCount(sql, today, 'followers') >= STATS.maxSeenPerDay) return;
-        sql.exec(`INSERT INTO stats_seen (kind, hash, last_at) VALUES ('f', ?, ?)`, hash, now);
-        followers = 1;
+        if (tracked() >= STATS.maxTrackedPerDay) return;
+        sql.exec(`INSERT INTO stats_seen (kind, hash, last_at, views) VALUES ('f', ?, ?, 0)`, hash, now);
+        followers = todayCount(sql, today, 'followers') < STATS.maxSeenPerDay ? 1 : 0;
+        if (!followers) return;
     } else if (seen) {
         if (now - seen.last_at < STATS.viewGapMs) return;     // the same visit: a poll, a reconnect, a reload
-        sql.exec(`UPDATE stats_seen SET last_at = ? WHERE kind = 'v' AND hash = ?`, now, hash);
+        if ((seen.views || 0) >= STATS.maxViewsPerVisitor) return;
+        sql.exec(`UPDATE stats_seen SET last_at = ?, views = views + 1 WHERE kind = 'v' AND hash = ?`, now, hash);
         views = 1;
     } else {
+        if (tracked() >= STATS.maxTrackedPerDay) return;      // see "The daily cap" above
+        sql.exec(`INSERT INTO stats_seen (kind, hash, last_at, views) VALUES ('v', ?, ?, 1)`, hash, now);
         views = 1;
-        if (todayCount(sql, today, 'visitors') < STATS.maxSeenPerDay) {
-            sql.exec(`INSERT INTO stats_seen (kind, hash, last_at) VALUES ('v', ?, ?)`, hash, now);
-            visitors = 1;
-        }
+        visitors = todayCount(sql, today, 'visitors') < STATS.maxSeenPerDay ? 1 : 0;
     }
     sql.exec(`INSERT INTO stats_daily (day, views, visitors, followers) VALUES (?, ?, ?, ?)
         ON CONFLICT(day) DO UPDATE SET views = views + excluded.views, visitors = visitors + excluded.visitors, followers = followers + excluded.followers`,
         today, views, visitors, followers);
-    if (!visitors) return;
-    // Places are tallied per new visitor, not per view: one person reloading must not reach the
-    // city threshold alone.
+    if (kind !== 'v' || !newNetwork) return;
+    // Places are tallied once per network per day, not per view or per user agent: one person
+    // reloading, or switching browsers, must not move a city toward the threshold alone.
     const country = clean(request.headers.get('X-PC-Geo-Country'), 2).toUpperCase();
     let city = ''; try { city = clean(decodeURIComponent(request.headers.get('X-PC-Geo-City') || ''), 80); } catch { /* bad escape */ }
     if (!country && !city) return;
@@ -125,31 +175,33 @@ export async function countHit(room, request) {
     }
     sql.exec(`UPDATE stats_daily SET countries_json = ?, cities_json = ? WHERE day = ?`, json(countries), json(cities), today);
 }
-// Today's visitors/followers equal the rows of that kind in stats_seen (one is added with each).
+// Today's visitors/followers so far (the rows of that kind in stats_seen, up to maxSeenPerDay).
 const todayCount = (sql, day, col) => sql.exec(`SELECT ${col} AS n FROM stats_daily WHERE day = ?`, day).toArray()[0]?.n || 0;
 const clean = (s, n) => String(s || '').replace(/[\u0000-\u001f\u007f|]/g, '').trim().slice(0, n);
 
 // What the owner sees: one row per day (oldest first, days with no visits as zeros), the top
-// countries, and the top cities that reached minCityCount over the whole range.
+// countries and cities that passed their thresholds (see "Places" at the top).
 export function statsReport(room, days) {
     rollover(room);
     const today = dayOf(Date.now());
     const from = dayOf(Date.parse(today) - (days - 1) * 86400000);
     const rows = room.sql.exec(`SELECT day, views, visitors, followers, countries_json, cities_json FROM stats_daily WHERE day >= ? ORDER BY day`, from).toArray();
     const byDay = new Map(rows.map((r) => [r.day, r]));
-    const out = [], countries = {}, cities = {};
+    const out = [], countries = {}, cities = {}, countryPeak = {}, cityPeak = {};
     for (let i = days - 1; i >= 0; i--) {
         const day = dayOf(Date.parse(today) - i * 86400000), r = byDay.get(day);
         out.push({ day, views: r ? r.views : 0, visitors: r ? r.visitors : 0, followers: r ? r.followers : 0 });
         if (!r) continue;
-        for (const [k, n] of Object.entries(parseObj(r.countries_json))) countries[k] = (countries[k] || 0) + n;
-        for (const [k, n] of Object.entries(parseObj(r.cities_json))) cities[k] = (cities[k] || 0) + n;
+        for (const [k, n] of Object.entries(parseObj(r.countries_json))) { countries[k] = (countries[k] || 0) + n; countryPeak[k] = Math.max(countryPeak[k] || 0, n); }
+        for (const [k, n] of Object.entries(parseObj(r.cities_json))) { cities[k] = (cities[k] || 0) + n; cityPeak[k] = Math.max(cityPeak[k] || 0, n); }
     }
+    // Distinct visitors over the range >= the largest one-day count (each day counts distinct networks).
+    const shown = (o, peak, min) => Object.fromEntries(Object.entries(o).filter(([k]) => peak[k] >= min));
     const top = (o) => Object.entries(o).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).slice(0, STATS.top);
     return {
         days: out,
-        countries: top(countries).map(([code, count]) => ({ code, count })),
-        cities: top(Object.fromEntries(Object.entries(cities).filter(([, n]) => n >= STATS.minCityCount)))
+        countries: top(shown(countries, countryPeak, STATS.minCountryVisitors)).map(([code, count]) => ({ code, count })),
+        cities: top(shown(cities, cityPeak, STATS.minCityVisitors))
             .map(([k, count]) => { const [name, country] = k.split('|'); return { name, country: country || null, count }; }),
         totals: {
             views: out.reduce((a, d) => a + d.views, 0),

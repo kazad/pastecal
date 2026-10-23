@@ -28,12 +28,13 @@ async function signIn(email) {
     return { cookie: r.headers.get('set-cookie').split(';')[0], userId };
 }
 
-// ---- visitors: an IP + a user agent
+// ---- visitors: an IP + a user agent. A visitor is a network (IPv4 /24, IPv6 /64) plus, for up to 3
+// people per network per day, the user agent: so the four people here are on four different /24s.
 const person = (ip, ua) => ({ 'CF-Connecting-IP': ip, 'User-Agent': ua });
 const A = person('203.0.113.11', `Mozilla/5.0 (Macintosh) statsA-${run}`);
-const B = person('203.0.113.12', `Mozilla/5.0 (iPhone) statsB-${run}`);
-const C = person('203.0.113.13', `Mozilla/5.0 (Windows) statsC-${run}`);
-const D = person('203.0.113.14', `Mozilla/5.0 (Linux) statsD-${run}`);
+const B = person('198.51.100.12', `Mozilla/5.0 (iPhone) statsB-${run}`);
+const C = person('192.0.2.13', `Mozilla/5.0 (Windows) statsC-${run}`);
+const D = person('100.64.7.14', `Mozilla/5.0 (Linux) statsD-${run}`);
 const get = (path, headers) => fetch(BASE + path, { headers });
 async function connect(id, headers) {
     const ws = new WebSocket(BASE.replace(/^http/, 'ws') + `/cal/${enc(id)}/ws`, { headers });
@@ -92,8 +93,8 @@ const gcal = person('66.249.0.1', 'Google-Calendar-Importer');
 for (let i = 0; i < 3; i++) assert.equal((await get(`/${enc(id)}.ics`, gcal)).status, 200);
 await get(`/${enc(id)}.ics`, person('40.0.0.9', 'Microsoft Office/16.0 (Windows NT 10.0; Microsoft Outlook 16.0)'));
 await get(`/view/${enc(viewId)}.ics`, person('17.0.0.5', 'iOS/18.0 (22A) dataaccessd/1.0'));
-const etagRes = await get(`/${enc(id)}.ics`, person('17.0.0.6', 'iOS/18.0 (22A) dataaccessd/1.0'));
-await get(`/${enc(id)}.ics`, { ...person('17.0.0.6', 'iOS/18.0 (22A) dataaccessd/1.0'), 'If-None-Match': etagRes.headers.get('etag') });
+const etagRes = await get(`/${enc(id)}.ics`, person('17.0.1.6', 'iOS/18.0 (22A) dataaccessd/1.0'));
+await get(`/${enc(id)}.ics`, { ...person('17.0.1.6', 'iOS/18.0 (22A) dataaccessd/1.0'), 'If-None-Match': etagRes.headers.get('etag') });
 assert.deepEqual(await counts(id), [3, 3, 4], 'ICS fetches are follows, never views');
 step('ICS: one app fetching 3 times counts once; 4 distinct apps (edit and view feeds, 304s included) = 4 followers; views unchanged');
 
@@ -110,23 +111,37 @@ for (const days of [90, 365]) { const x = await (await stats(id, owner.cookie, d
 assert.equal((await stats(id, owner.cookie, 7)).status, 400);
 step('GET /api/pro/stats: 30 days oldest first (90 and 365 too, anything else 400), today 3/3/4, totals {views, visitors, followers, followersToday}');
 
-// 7. Places: countries tallied per visitor; a city only once 3 visitors came from it.
+// 7. Places: shown only once enough distinct visitors came from them (country 3, city 5), counted
+// once per network per day (reloads and extra browsers on one network don't add).
 const place = (twoVisitors.cities_json && Object.keys(JSON.parse(twoVisitors.cities_json))[0]) || null;
 if (place) {
     const [city, cc] = place.split('|');
-    // A second calendar where only 2 people came (one of them reloading): its city stays hidden.
+    assert.deepEqual(s.cities, [], `"${city}" with 3 visitors is hidden (needs 5)`);
+    if (cc) assert.deepEqual(s.countries, [{ code: cc, count: 3 }], 'a country with 3 visitors is shown');
+    // A calendar where only 2 people came (one of them reloading): its country stays hidden too.
     const id2 = `test-stats-two-${run}`;
     await fetch(`${BASE}/cal/${enc(id2)}`, { method: 'POST', body: JSON.stringify({ title: 'Two', events: [] }) });
     await fetch(`${BASE}/api/admin/cal/${enc(id2)}/lock`, { method: 'POST', headers: auth, body: JSON.stringify({ ownerId: owner.userId }) });
     await get(`/cal/${enc(id2)}`, A); await get(`/cal/${enc(id2)}`, B);
-    for (let i = 0; i < 5; i++) await get(`/cal/${enc(id2)}`, A);              // one person reloading must not reach 3
+    for (let i = 0; i < 5; i++) await get(`/cal/${enc(id2)}`, A);              // one person reloading adds nothing
+    for (let i = 0; i < 3; i++) await get(`/cal/${enc(id2)}`, person('203.0.113.11', `Mozilla/5.0 other browser ${i} ${run}`));   // A's network, more browsers
     await sleep(150);
     const two = await (await stats(id2, owner.cookie)).json();
-    assert.deepEqual(two.cities, [], 'a city with 2 visitors is hidden');
-    assert.deepEqual(two.countries, cc ? [{ code: cc, count: 2 }] : []);
-    assert.deepEqual(s.cities, [{ name: city, country: cc || null, count: 3 }]);
-    if (cc) assert.deepEqual(s.countries, [{ code: cc, count: 3 }]);
-    step(`places: countries counted per visitor (${cc}: 3); "${city}" hidden at 2 visitors (reloads don't add), shown at 3`);
+    assert.deepEqual([two.cities, two.countries], [[], []], 'a country and a city with 2 distinct networks are hidden');
+    // A calendar visited from 4, then 5 networks: the city appears at 5.
+    const id5 = `test-stats-five-${run}`;
+    await fetch(`${BASE}/cal/${enc(id5)}`, { method: 'POST', body: JSON.stringify({ title: 'Five', events: [] }) });
+    await fetch(`${BASE}/api/admin/cal/${enc(id5)}/lock`, { method: 'POST', headers: auth, body: JSON.stringify({ ownerId: owner.userId }) });
+    for (let i = 1; i <= 4; i++) await get(`/cal/${enc(id5)}`, person(`100.80.${i}.9`, `Mozilla/5.0 five-${i}-${run}`));
+    await sleep(150);
+    let five = await (await stats(id5, owner.cookie)).json();
+    assert.deepEqual(five.cities, [], 'hidden at 4');
+    if (cc) assert.deepEqual(five.countries, [{ code: cc, count: 4 }]);
+    await get(`/cal/${enc(id5)}`, person('100.80.5.9', `Mozilla/5.0 five-5-${run}`));
+    await sleep(150);
+    five = await (await stats(id5, owner.cookie)).json();
+    assert.deepEqual(five.cities, [{ name: city, country: cc || null, count: 5 }], 'shown at 5');
+    step(`places: "${city}" hidden at 3 and 4 distinct visitors, shown at 5; ${cc || 'the country'} shown at 3, hidden at 2; one network's reloads and extra browsers count once`);
 } else {
     step('SKIPPED places: wrangler dev gave no request.cf.city on this machine');
 }
@@ -155,6 +170,20 @@ const afterD = await todayRow(id);
 assert.deepEqual([afterD.views, afterD.visitors, afterD.followers], [4, 4, 4], 'counted as the view it was, not a follow');
 assert.ok(!afterD.cities_json.includes('Forged') && !afterD.countries_json.includes('ZZ'), 'client geo headers are ignored');
 step('X-PC-Hit / X-PC-Geo-* from a client are stripped: /history and HEAD count nothing, a forged "follow" counts as the view it was, forged places are ignored');
+
+// 9b. Rotating user agents (or IPv6 addresses within one /64) doesn't make more visitors.
+{
+    const idr = `test-stats-rotate-${run}`;
+    await fetch(`${BASE}/cal/${enc(idr)}`, { method: 'POST', body: JSON.stringify({ title: 'Rotate', events: [] }) });
+    for (let i = 0; i < 200; i += 20) await Promise.all(Array.from({ length: 20 }, (_, j) => get(`/cal/${enc(idr)}`, person('198.18.4.20', `Mozilla/5.0 (rotating ${i + j}) ${run}`))));
+    assert.deepEqual(await counts(idr), [3, 3, 0], '200 user agents from one IP: 3 visitors, 3 views');
+    for (let i = 0; i < 50; i++) await get(`/cal/${enc(idr)}`, person(`2001:db8:77:1:${(i + 1).toString(16)}::${i + 1}`, `Mozilla/5.0 (v6) ${run}`));
+    await get(`/cal/${enc(idr)}`, person('2001:0db8:0077:0001:ffff:0:0:1', `Mozilla/5.0 (v6) ${run}`));
+    assert.deepEqual(await counts(idr), [4, 4, 0], '51 addresses in one IPv6 /64, one user agent: 1 visitor');
+    await get(`/cal/${enc(idr)}`, person('::ffff:198.18.4.99', `Mozilla/5.0 (rotating 0) ${run}`));
+    assert.deepEqual(await counts(idr), [4, 4, 0], 'an IPv4-mapped IPv6 address is its IPv4 network');
+    step('200 requests from one IP with 200 user agents count as 3 visitors (3 views); 51 addresses in one IPv6 /64 as 1; ::ffff:a.b.c.d as its IPv4 /24');
+}
 
 // 10. No IP or user agent stored anywhere.
 const d = await dump(id);
