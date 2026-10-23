@@ -4,6 +4,17 @@
 //                      STRIPE_PRICE_PRO_YEARLY:price_fake_yearly STRIPE_PRICE_PRO_MONTHLY:price_fake_monthly
 //                      STRIPE_API_BASE:http://127.0.0.1:8832/stripe
 //   NOKEYS_BASE (8823) with no Stripe vars at all
+// Setup (both files). cloudflare/.dev.vars (gitignored), fake values only:
+//   IMPORT_SECRET=dev-secret
+//   ACCOUNTS_DEV_MODE=1
+//   LOCK_API_BASE=http://127.0.0.1:8832/lockfake
+// Then, from cloudflare/, two `wrangler dev` instances:
+//   node node_modules/.bin/wrangler dev --port 8822 --inspector-port 9241 --persist-to /tmp/pc-billing-state --var COPY_BACK: \
+//     --var STRIPE_SECRET_KEY:fake-stripe-key --var STRIPE_WEBHOOK_SECRET:fake-webhook-secret \
+//     --var STRIPE_PRICE_PRO_YEARLY:price_fake_yearly --var STRIPE_PRICE_PRO_MONTHLY:price_fake_monthly \
+//     --var STRIPE_API_BASE:http://127.0.0.1:8832/stripe
+//   node node_modules/.bin/wrangler dev --port 8823 --inspector-port 9242 --persist-to /tmp/pc-billing-state-nokeys --var COPY_BACK:
+//   node test/accounts.test.mjs && node test/billing.test.mjs
 // This file runs the fake Stripe + fake lock API on 8832 (test/fake-stripe.mjs).
 import assert from 'node:assert/strict';
 import { startFakeStripe, signStripe } from './fake-stripe.mjs';

@@ -1,6 +1,16 @@
 // Pro accounts: magic-link sign-in, sessions, CSRF, admin lookup, against `wrangler dev` with
-// ACCOUNTS_DEV_MODE=1 (sign-in emails land in an outbox the test reads; see .dev.vars).
-//   BASE=http://localhost:8822 node test/accounts.test.mjs
+// ACCOUNTS_DEV_MODE=1 (sign-in emails land in an outbox the test reads).
+// Setup (both files). cloudflare/.dev.vars (gitignored), fake values only:
+//   IMPORT_SECRET=dev-secret
+//   ACCOUNTS_DEV_MODE=1
+//   LOCK_API_BASE=http://127.0.0.1:8832/lockfake
+// Then, from cloudflare/, two `wrangler dev` instances:
+//   node node_modules/.bin/wrangler dev --port 8822 --inspector-port 9241 --persist-to /tmp/pc-billing-state --var COPY_BACK: \
+//     --var STRIPE_SECRET_KEY:fake-stripe-key --var STRIPE_WEBHOOK_SECRET:fake-webhook-secret \
+//     --var STRIPE_PRICE_PRO_YEARLY:price_fake_yearly --var STRIPE_PRICE_PRO_MONTHLY:price_fake_monthly \
+//     --var STRIPE_API_BASE:http://127.0.0.1:8832/stripe
+//   node node_modules/.bin/wrangler dev --port 8823 --inspector-port 9242 --persist-to /tmp/pc-billing-state-nokeys --var COPY_BACK:
+//   node test/accounts.test.mjs && node test/billing.test.mjs
 import assert from 'node:assert/strict';
 const BASE = process.env.BASE || 'http://localhost:8822', SECRET = process.env.IMPORT_SECRET || 'dev-secret';
 let n = 0; const step = (s) => console.log(`  ok ${++n} - ${s}`);

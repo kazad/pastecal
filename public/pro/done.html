@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Stripe Checkout's success page (?session_id=...#<calendar>). No analytics here and no referrer
+     sent on, so the Checkout session id is never recorded; the query is cleared on load. -->
+<meta name="referrer" content="no-referrer">
+<meta name="robots" content="noindex">
+<title>Pro is on · pastecal</title>
+<link rel="icon" href="/favicon.ico">
+<script>
+  var proCalendar = null;
+  try { proCalendar = decodeURIComponent(location.hash.slice(1)) || null; } catch (e) { proCalendar = null; }
+  history.replaceState(null, '', location.pathname);
+</script>
+<style>
+:root { --bg: #f5f6f8; --surface: #ffffff; --ink: #141a24; --muted: #5c6577; --line: #e2e6ed; --blue: #2563eb; --bad: #b42318;
+  --ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+@media (prefers-color-scheme: dark) { :root { --bg: #0f131a; --surface: #171c25; --ink: #e8ecf3; --muted: #9aa4b5; --line: #2a3140; --blue: #6b9bff; --bad: #ff8a80; } }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 var(--ui); }
+main { max-width: 420px; margin: 12vh auto 0; padding: 32px 24px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+h1 { font-size: 22px; margin: 0 0 8px; }
+p { margin: 8px 0; color: var(--muted); }
+p.bad { color: var(--bad); }
+a.btn { display: inline-block; margin-top: 16px; padding: 10px 16px; border-radius: 8px; background: var(--blue); color: #fff; text-decoration: none; font-weight: 600; }
+@media (max-width: 480px) { main { margin: 24px 16px; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Thanks, Pro is on</h1>
+  <p id="msg">Your payment went through. Locking your calendar can take a few seconds.</p>
+  <p>Only you, and people you give the editor key to, can change it. You can manage billing from your calendar at any time.</p>
+  <a class="btn" id="go" href="/">Back to your calendar</a>
+</main>
+<script>
+  if (proCalendar) document.getElementById('go').href = '/' + encodeURIComponent(proCalendar);
+  else document.getElementById('go').textContent = 'Back to pastecal';
+</script>
+</body>
+</html>
