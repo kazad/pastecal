@@ -18,7 +18,7 @@ const ev = (id, title, d = 1, extra = {}) => ({ id, title, start: at(d, 9), end:
 const { Cloud, EventStore } = loadTab();
 const plain = (x) => JSON.parse(JSON.stringify(x));
 
-test('the flag: ?backend=cf turns it on and is remembered; ?backend=firebase turns it off; pastecal.com and new.pastecal.com are on by default', () => {
+test('the flag: ?backend=cf turns it on and is remembered; ?backend=firebase turns it off (not on pastecal.com); pastecal.com and new.pastecal.com are always on', () => {
     const mem = () => { const s = {}; return { getItem: (k) => s[k] ?? null, setItem: (k, v) => { s[k] = v; }, removeItem: (k) => { delete s[k]; } }; };
     const store = mem();
     assert.equal(Cloud.enabled({ search: '', hostname: 'localhost' }, store), false);
@@ -27,7 +27,8 @@ test('the flag: ?backend=cf turns it on and is remembered; ?backend=firebase tur
     assert.equal(Cloud.enabled({ search: '?backend=firebase', hostname: 'localhost' }, store), false);
     assert.equal(Cloud.enabled({ search: '', hostname: 'localhost' }, store), false, 'forgotten');
     assert.equal(Cloud.enabled({ search: '', hostname: 'pastecal.com' }, mem()), true);
-    assert.equal(Cloud.enabled({ search: '?backend=firebase', hostname: 'pastecal.com' }, mem()), false);
+    assert.equal(Cloud.enabled({ search: '?backend=firebase', hostname: 'pastecal.com' }, mem()), true, 'no way back to the stale Firebase copy on the live site');
+    assert.equal(Cloud.enabled({ search: '?backend=firebase', hostname: 'www.pastecal.com' }, mem()), true);
     assert.equal(Cloud.enabled({ search: '', hostname: 'new.pastecal.com' }, mem()), true);
 });
 

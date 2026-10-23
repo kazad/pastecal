@@ -51,11 +51,13 @@
 class CloudCalendarService extends CalendarDataService {
     // ---- the flag ---------------------------------------------------------------------------
     static enabled(loc = (typeof location !== 'undefined' ? location : null), store = CloudCalendarService._store()) {
+        // On the live site it is always on: ?backend=firebase would open Firebase's stale, world-writable
+        // copy, a way around a Pro lock. The query flag works only elsewhere (localhost, dev).
+        if (loc && (loc.hostname === 'pastecal.com' || loc.hostname === 'www.pastecal.com' || loc.hostname === 'new.pastecal.com')) return true;
         let q = null;
         try { q = loc && new URLSearchParams(loc.search).get('backend'); } catch (e) { /* no query */ }
         if (q === 'firebase') { try { store && store.removeItem('pastecal_backend'); } catch (e) { /* ignore */ } return false; }
         if (q === 'cf') { try { store && store.setItem('pastecal_backend', 'cf'); } catch (e) { /* ignore */ } return true; }
-        if (loc && (loc.hostname === 'pastecal.com' || loc.hostname === 'www.pastecal.com' || loc.hostname === 'new.pastecal.com')) return true;
         try { return !!store && store.getItem('pastecal_backend') === 'cf'; } catch (e) { return false; }
     }
     static _store() { try { return typeof localStorage !== 'undefined' ? localStorage : null; } catch (e) { return null; } }
