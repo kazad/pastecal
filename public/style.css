@@ -816,3 +816,10 @@ div#Schedule,
     /* Below the claim row, not over it: they need to see the name they typed. */
     .pc-slug-taken { top: 122px; }
 }
+
+/* Subtle polish on the Syncfusion grid (Oct 2026 homepage work). Colors come from tokens.css so
+   dark mode follows; event backgrounds are left alone so category colors keep working. */
+.e-schedule .e-schedule-toolbar .e-toolbar-items { background: var(--pc-soft) !important }
+.e-schedule .e-month-view .e-date-header-container .e-header-cells { font-weight: 500 }
+.e-schedule .e-appointment .e-subject { font-weight: 600 }
+.e-schedule .e-month-view .e-work-cells:hover { background: var(--pc-hover) !important }
