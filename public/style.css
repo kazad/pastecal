@@ -1309,3 +1309,116 @@ button:hover > .pc-add-event {
 .pc-pro-note { margin-top: 6px; font-size: 12.5px }
 .pc-lock-copy { display: block; margin-top: 6px; color: var(--pc-link); font-weight: 600; text-decoration: none }
 .pc-lock-copy:hover { text-decoration: underline }
+
+/* ---- Pro stats and history (components/ProInsight.js) ------------------------------------ */
+.pc-pro-insight { margin: 0 0 12px }
+.pc-pro--flash { box-shadow: 0 0 0 2px var(--pc-link); transition: box-shadow var(--pc-dur) var(--pc-ease) }
+.pc-teaser { display: flex; align-items: center; gap: var(--pc-space-2); width: 100%; margin: 0 0 var(--pc-space-4); padding: var(--pc-space-2) var(--pc-space-3); border: 1px solid var(--pc-line); border-radius: var(--pc-radius-md); background: var(--pc-surface); color: var(--pc-text-2); font: var(--pc-fw-medium) var(--pc-fs-small) var(--pc-font); text-align: left; cursor: pointer }
+.pc-teaser:hover { border-color: var(--pc-field); color: var(--pc-text) }
+.pc-teaser:hover .pc-teaser-go { transform: translateX(2px) }
+.pc-teaser:focus-visible { outline: 2px solid var(--pc-link); outline-offset: 2px }
+.pc-teaser-icon { flex: none; width: 16px; height: 16px; color: var(--pc-link) }
+.pc-teaser-go { margin-left: auto; color: var(--pc-link); transition: transform var(--pc-dur-fast) var(--pc-ease) }
+.pc-changes-foot { margin: var(--pc-space-2) 0 0; color: var(--pc-text-muted); font-size: var(--pc-fs-small); line-height: var(--pc-lh-body) }
+.pc-changes-foot .pc-pro-link, .pc-insight-switch .pc-pro-link, .pc-prev-more { padding: 0; border: 0; background: none; cursor: pointer; font-family: var(--pc-font) }
+
+.pc-modal-panel--wide { max-width: 44rem }
+.pc-insight { --pro-btn: #2563eb; font-family: var(--pc-font); color: var(--pc-text); font-variant-numeric: tabular-nums }
+.pc-insight-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--pc-space-3); margin: 0 calc(var(--pc-space-8) + var(--pc-space-2)) var(--pc-space-4) 0 }
+.pc-insight-title { margin: 0; font-size: var(--pc-fs-heading); font-weight: var(--pc-fw-bold); color: var(--pc-text) }
+.pc-insight-head .pc-insight-title { margin-right: auto }
+#pro-history-title { margin-bottom: var(--pc-space-1) }
+.pc-insight-muted { margin: 0; color: var(--pc-text-muted); font-size: var(--pc-fs-small); line-height: var(--pc-lh-body) }
+.pc-insight-lead { margin-bottom: var(--pc-space-4); max-width: 34rem }
+.pc-insight-err { margin: var(--pc-space-3) 0; color: var(--pc-danger); font-size: var(--pc-fs-body) }
+.pc-insight-h { margin: 0 0 var(--pc-space-2); color: var(--pc-text-muted); font-size: var(--pc-fs-caption); font-weight: var(--pc-fw-semibold); letter-spacing: var(--pc-tracking-caps); text-transform: uppercase }
+.pc-insight-privacy { margin: var(--pc-space-5) 0 0; padding-top: var(--pc-space-3); border-top: 1px solid var(--pc-line); color: var(--pc-text-muted); font-size: var(--pc-fs-small) }
+.pc-insight-fine { margin-top: var(--pc-space-2) }
+.pc-insight-switch { margin: var(--pc-space-3) 0 0; font-size: var(--pc-fs-small) }
+.pc-insight-empty { padding: var(--pc-space-6) var(--pc-space-4); border: 1px dashed var(--pc-field); border-radius: var(--pc-radius-lg); text-align: center }
+.pc-insight-empty-title { margin: 0 0 var(--pc-space-1); color: var(--pc-text); font-size: var(--pc-fs-lead); font-weight: var(--pc-fw-semibold) }
+
+/* Segmented range switch */
+.pc-seg { display: inline-flex; padding: 2px; border-radius: var(--pc-radius-md); background: var(--pc-soft) }
+.pc-seg-btn { min-height: 30px; padding: 0 var(--pc-space-3); border: 0; border-radius: var(--pc-radius-sm); background: transparent; color: var(--pc-text-muted); font: var(--pc-fw-medium) var(--pc-fs-small) var(--pc-font); cursor: pointer; white-space: nowrap }
+.pc-seg-btn.on { background: var(--pc-bg); color: var(--pc-text); box-shadow: var(--pc-shadow-sm) }
+.pc-seg-btn:focus-visible { outline: 2px solid var(--pc-link); outline-offset: 1px }
+
+/* Headline cards (also choose what the chart shows) */
+.pc-stat-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--pc-space-2) }
+.pc-stat-card { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; padding: var(--pc-space-3); border: 1px solid var(--pc-line); border-radius: var(--pc-radius-lg); background: var(--pc-bg); color: var(--pc-text); font-family: var(--pc-font); text-align: left; cursor: pointer }
+.pc-stat-card:hover { border-color: var(--pc-field) }
+.pc-stat-card.on { border-color: var(--pc-link); box-shadow: inset 0 0 0 1px var(--pc-link) }
+.pc-stat-card:focus-visible { outline: 2px solid var(--pc-link); outline-offset: 2px }
+.pc-stat-label { color: var(--pc-text-2); font-size: var(--pc-fs-small); font-weight: var(--pc-fw-semibold) }
+.pc-stat-num { font-size: 26px; font-weight: var(--pc-fw-bold); line-height: var(--pc-lh-tight); letter-spacing: var(--pc-tracking-tight) }
+.pc-stat-note { color: var(--pc-text-muted); font-size: var(--pc-fs-caption); line-height: var(--pc-lh-tight) }
+.pc-stat-delta { margin-top: var(--pc-space-1); font-size: var(--pc-fs-caption); font-weight: var(--pc-fw-semibold) }
+.pc-stat-delta--up { color: var(--pc-success) }
+.pc-stat-delta--down { color: var(--pc-text-2) }
+.pc-stat-delta--flat { color: var(--pc-text-muted) }
+.pc-stat-vs { color: var(--pc-text-muted); font-weight: var(--pc-fw-regular) }
+
+/* Daily bars, drawn as inline SVG */
+.pc-chart { margin: var(--pc-space-4) 0 0 }
+.pc-chart-plot { display: flex; gap: var(--pc-space-2); height: 150px }
+.pc-chart-y { display: flex; flex-direction: column; justify-content: space-between; min-width: 2ch; color: var(--pc-text-muted); font-size: var(--pc-fs-caption); text-align: right; line-height: 1; margin: -2px 0 }
+.pc-chart-svg { flex: 1; min-width: 0; height: 100%; overflow: visible }
+.pc-chart-grid { stroke: var(--pc-line); stroke-width: 1; stroke-dasharray: 3 3 }
+.pc-chart-base { stroke: var(--pc-field); stroke-width: 1 }
+.pc-chart-bar { fill: var(--pc-link); opacity: .78 }
+.pc-chart-bar.today { opacity: 1 }
+.pc-chart-bar:hover { opacity: 1; fill: var(--pc-link-hover) }
+.pc-chart-x { display: flex; justify-content: space-between; margin: var(--pc-space-1) 0 0 calc(2ch + var(--pc-space-2)); color: var(--pc-text-muted); font-size: var(--pc-fs-caption) }
+.pc-chart-cap { margin-top: var(--pc-space-2) }
+
+/* Countries and cities */
+.pc-places { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--pc-space-6); margin-top: var(--pc-space-5) }
+.pc-place-list { margin: 0; padding: 0; list-style: none }
+.pc-place-list li { display: grid; grid-template-columns: minmax(0, 1fr) 64px 3.5ch; align-items: center; gap: var(--pc-space-2); padding: 5px 0; font-size: var(--pc-fs-body) }
+.pc-place-list li + li { border-top: 1px solid var(--pc-line) }
+.pc-place-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.pc-flag { margin-right: var(--pc-space-2) }
+.pc-place-cc { margin-left: var(--pc-space-2); padding: 0 5px; border-radius: var(--pc-radius-xs); background: var(--pc-soft); color: var(--pc-text-muted); font-size: var(--pc-fs-caption); font-weight: var(--pc-fw-semibold) }
+.pc-place-bar { height: 6px; border-radius: var(--pc-radius-pill); background: var(--pc-soft); overflow: hidden }
+.pc-place-bar i { display: block; height: 100%; border-radius: inherit; background: var(--pc-link); opacity: .7 }
+.pc-place-num { color: var(--pc-text-2); text-align: right }
+
+/* History: versions by day */
+.pc-ver-group { margin-top: var(--pc-space-4) }
+.pc-ver-list { margin: 0; padding: 0; list-style: none; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-lg) }
+.pc-ver { display: flex; flex-wrap: wrap; align-items: center; gap: var(--pc-space-2) var(--pc-space-3); padding: var(--pc-space-3) }
+.pc-ver + .pc-ver { border-top: 1px solid var(--pc-line) }
+.pc-ver-main { display: flex; flex-direction: column; flex: 1 1 12rem; min-width: 0 }
+.pc-ver-kind { font-size: var(--pc-fs-body); font-weight: var(--pc-fw-medium) }
+.pc-ver-actions { display: flex; gap: var(--pc-space-2) }
+.pc-confirm { flex-basis: 100%; margin: var(--pc-space-1) 0 0; padding: var(--pc-space-3); border-radius: var(--pc-radius-md); background: var(--pc-warning-soft); border: 1px solid color-mix(in srgb, var(--pc-warning) 30%, transparent) }
+.pc-confirm-title { margin: 0 0 var(--pc-space-1); font-size: var(--pc-fs-body); font-weight: var(--pc-fw-semibold); color: var(--pc-text) }
+.pc-confirm .pc-insight-muted { color: var(--pc-text-2) }
+.pc-confirm-row { display: flex; flex-wrap: wrap; gap: var(--pc-space-2); margin-top: var(--pc-space-3) }
+
+/* History: one version, read-only */
+.pc-preview-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--pc-space-2) var(--pc-space-3); margin: 0 var(--pc-space-8) var(--pc-space-3) 0; padding: var(--pc-space-3); border-radius: var(--pc-radius-md); background: var(--pc-soft) }
+.pc-preview-label { flex: 1 1 14rem; font-weight: var(--pc-fw-semibold) }
+.pc-preview-actions { display: flex; flex-wrap: wrap; gap: var(--pc-space-2) }
+.pc-preview-bar + .pc-confirm { margin-bottom: var(--pc-space-3) }
+.pc-preview-cal { margin: var(--pc-space-2) 0 var(--pc-space-3); font-size: var(--pc-fs-lead); font-weight: var(--pc-fw-semibold) }
+.pc-prev-day { margin-top: var(--pc-space-3) }
+.pc-prev-list { margin: 0; padding: 0; list-style: none }
+.pc-prev-list li { display: flex; gap: var(--pc-space-3); padding: 3px 0; font-size: var(--pc-fs-body) }
+.pc-prev-time { flex: none; width: 5.5rem; color: var(--pc-text-muted); font-size: var(--pc-fs-small); line-height: 1.6 }
+.pc-prev-title { min-width: 0; overflow-wrap: anywhere }
+.pc-prev-more { margin-top: var(--pc-space-3); color: var(--pc-link); font-size: var(--pc-fs-small) }
+
+@media (max-width: 560px) {
+    .pc-stat-cards { grid-template-columns: 1fr; }
+    .pc-stat-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--pc-space-3); align-items: baseline }
+    .pc-stat-card .pc-stat-num { grid-column: 2; grid-row: 1 / span 2; font-size: 22px }
+    .pc-stat-card .pc-stat-delta { grid-column: 1 / -1 }
+    .pc-places { grid-template-columns: 1fr; gap: var(--pc-space-4) }
+    .pc-chart-plot { height: 120px }
+}
+/* The logo menu's Pro calendar row, with Stats beside it */
+.pc-acct-cal-row { display: flex; align-items: center; gap: var(--pc-space-2) }
+.pc-acct-cal-row .pc-acct-cal { flex: 1; min-width: 0 }
+.pc-acct-stats { flex: none; min-height: 28px; padding: 0 10px }

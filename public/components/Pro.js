@@ -135,6 +135,12 @@ const ProPanel = {
                 <p class="pc-pro-lead">Only you and people with your editor link can change it. Everyone else can view.
                     <span v-if="renewal" data-testid="pro-renewal">{{ renewal }}</span></p>
 
+                <div class="pc-pro-row pc-pro-insight" data-testid="pro-insight-row">
+                    <button type="button" class="pc-pro-btn pc-pro-btn--quiet" @click="$emit('open-insight', 'stats')" data-testid="pro-stats-btn">Stats</button>
+                    <button type="button" class="pc-pro-btn pc-pro-btn--quiet" @click="$emit('open-insight', 'history')" data-testid="pro-history-btn">History</button>
+                    <span class="pc-pro-muted">Who’s following, where they’re from, and every saved version.</span>
+                </div>
+
                 <div class="pc-pro-sub">
                     <h5>Editor link</h5>
                     <p class="pc-pro-muted">Share it with people who should be able to edit.</p>
@@ -167,6 +173,9 @@ const ProPanel = {
         locked: Boolean,      // from the live snapshot
         canEdit: Boolean,     // this tab may change the calendar
     },
+    // open-insight: 'stats' | 'history' (owner only). owner: whether this browser owns the calendar,
+    // so the app can offer History from Recent changes.
+    emits: ['open-insight', 'owner'],
     data() {
         return {
             svg: PRO_LOCK_SVG,
@@ -203,6 +212,7 @@ const ProPanel = {
                 if (m === old) return;
                 if (m === 'offer') proTrack((a) => a.proLockShown('share_panel'));
                 if (m === 'owner') this.editorLink = this.storedLink();
+                this.$emit('owner', m === 'owner');
             },
             immediate: true,
         },

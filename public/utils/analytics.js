@@ -415,6 +415,14 @@ const Analytics = {
     accountSignInSent() { this.track('pro_signin_sent', { where: 'logo_menu' }); },
     accountPortalOpened() { this.track('pro_portal_opened', { where: 'logo_menu' }); },
     accountSignedOut() { this.track('account_signed_out', { where: 'logo_menu' }); },
+    // Pro stats and history (owner only), and the free calendar's teaser. Counts and surfaces only:
+    // never the calendar name, a version date, or anything about visitors.
+    proStatsViewed(where, days) { this.track('pro_stats_viewed', { where: String(where).slice(0, 20), days: [30, 90, 365].includes(days) ? days : 30 }); },
+    proHistoryViewed(where) { this.track('pro_history_viewed', { where: String(where).slice(0, 20) }); },
+    proVersionPreviewed(kind) { this.track('pro_version_previewed', { kind: kind === 'restore-point' ? 'restore-point' : 'daily' }); },
+    proVersionRestored(kind, unchanged) { this.track('pro_version_restored', { kind: kind === 'restore-point' ? 'restore-point' : 'daily', unchanged: !!unchanged }); },
+    proStatsTeaserShown() { this.track('pro_stats_teaser_shown', { where: 'share_panel' }); },
+    proStatsTeaserClicked() { this.track('pro_stats_teaser_clicked', { where: 'share_panel' }); },
 
     featureUsed(feature, detail) {
         this.track('feature_used', {
