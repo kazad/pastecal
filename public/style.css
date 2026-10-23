@@ -897,3 +897,11 @@ div#Schedule,
 .pc-tour-footer a { color: var(--pc-text-muted) }
 .pc-tour-footer a:hover { color: var(--pc-link) }
 .pc-tour-uses-note { margin: 12px 0 0; font-size: 15px }
+
+/* Tour illustrations: line art in the link color, soft fills from the theme tokens. */
+.pc-share-art { display: block; width: 120px; height: 64px; margin: 2px 0 10px; color: var(--pc-text-muted) }
+.pc-share-art .f { fill: var(--pc-soft) }
+.pc-share-art .ev { fill: var(--pc-link); stroke: none; opacity: .85 }
+.pc-share-art .ev2 { fill: #f59e0b; stroke: none; opacity: .85 }
+.pc-share-art .pen { color: var(--pc-link); stroke: var(--pc-link) }
+.pc-tour-uses .pc-ico { width: 22px; height: 22px; color: var(--pc-link); margin-bottom: 8px; display: block }
