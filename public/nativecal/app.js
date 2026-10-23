@@ -1339,28 +1339,8 @@ const CalendarVueApp = {
         },
 
         getReadOnlyNotes() {
-            let notes = this.calendar.options?.notes || '';
-
-            // Escape HTML special characters
-            notes = notes.replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#039;");
-
-            // Convert URLs to hyperlinks safely
-            // Match URLs starting with http://, https://, or ftp://
-            notes = notes.replace(/(\b(https?|ftp):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/ig,
-                '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
-
-            // Match URLs starting with "www." not preceded by '://'
-            notes = notes.replace(/(^|\s)(www\.[\S]+(\b|$))/ig,
-                '$1<a href="http://$2" target="_blank" rel="noopener noreferrer">$2</a>');
-
-            // Convert line breaks to <br> tags
-            notes = notes.replace(/\n/g, "<br>");
-
-            return notes;
+            // Escaped, then only http(s)/www/email become links (Utils.linkify), then line breaks.
+            return Utils.linkify(this.calendar.options?.notes || '', { style: false }).replace(/\n/g, "<br>");
         },
 
         startUpdateLinkTimer() {

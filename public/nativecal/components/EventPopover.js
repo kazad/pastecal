@@ -50,9 +50,8 @@ const EventPopover = {
             return s;
         },
         linkified() {
-            const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-            return esc(this.event?.description || '').replace(/(https?:\/\/[^\s<]+?)([).,!?;:]*(?=\s|$))/g,
-                '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>$2');
+            // Escaped, and only http(s)/www/email become links (Utils.linkify).
+            return Utils.linkify(this.event?.description || '', { style: false });
         },
     },
     template: /* html */ `
