@@ -823,3 +823,45 @@ div#Schedule,
 .e-schedule .e-month-view .e-date-header-container .e-header-cells { font-weight: 500 }
 .e-schedule .e-appointment .e-subject { font-weight: 600 }
 .e-schedule .e-month-view .e-work-cells:hover { background: var(--pc-hover) !important }
+
+/* ---- Homepage tour: below the calendar, homepage only (index.html .pc-tour) ---- */
+.pc-tour { margin-top: 28px; border-top: 1px solid var(--pc-line); background: var(--pc-soft) }
+.pc-tour-inner { max-width: 1040px; margin: 0 auto; padding: 48px 16px 56px }
+.pc-tour h2 { margin: 0; font-size: clamp(26px, 3.6vw, 38px); line-height: 1.15; font-weight: 800; color: var(--pc-text); text-wrap: balance }
+.pc-tour-lead { margin: 10px 0 0; max-width: 58ch; font-size: 18px; color: var(--pc-text-muted) }
+.pc-tour h3 { margin: 0 0 4px; font-size: 17px; font-weight: 700; color: var(--pc-text) }
+.pc-tour p { color: var(--pc-text-muted) }
+.pc-tour-steps { list-style: none; padding: 0; margin: 32px 0 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; counter-reset: pc-step }
+.pc-tour-steps li { counter-increment: pc-step }
+.pc-tour-steps h3::before { content: counter(pc-step) ". "; color: var(--pc-link) }
+.pc-tour-steps p { margin: 0 }
+.pc-tour-art { height: 116px; margin-bottom: 12px; border: 1px solid var(--pc-line); border-radius: 12px; background: var(--pc-surface); display: flex; align-items: center; justify-content: center; gap: 14px; overflow: hidden }
+.pc-tour-mini { display: grid; grid-template-columns: repeat(7, 40px); gap: 4px }
+.pc-tour-mini span { height: 24px; border-radius: 4px; background: var(--pc-soft); color: #fff; font-size: 8px; font-weight: 700; display: grid; place-items: center }
+.pc-tour-mini .on { background: #3f51b5 } .pc-tour-mini .alt { background: #e0245e }
+.pc-tour-chip { border: 1px solid var(--pc-line); border-radius: 999px; padding: 6px 14px; font-size: 14px; color: var(--pc-text-muted); background: var(--pc-soft) }
+.pc-tour-chip b { color: var(--pc-text) }
+.pc-tour-phone { width: 70px; height: 96px; border: 2px solid var(--pc-line); border-radius: 12px; background: var(--pc-soft); padding: 14px 6px 6px }
+.pc-tour-phone span { display: block; background: #3f51b5; color: #fff; font-size: 9px; font-weight: 700; border-radius: 4px; padding: 3px 4px; line-height: 1.2 }
+.pc-tour-label { margin-top: 40px !important; margin-bottom: 12px !important; font-size: 13px !important; text-transform: uppercase; letter-spacing: .08em; color: var(--pc-link) !important }
+.pc-tour-links { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px }
+.pc-tour-links > div { border: 1px solid var(--pc-line); border-radius: 12px; background: var(--pc-surface); padding: 14px 16px }
+.pc-tour-links h4 { margin: 0; font-size: 16px; font-weight: 700; color: var(--pc-text) }
+.pc-tour-links code { display: inline-block; margin: 6px 0; font-size: 12.5px; padding: 2px 7px; border-radius: 6px; border: 1px solid var(--pc-line); background: var(--pc-soft); color: var(--pc-text); overflow-wrap: anywhere }
+.pc-tour-links p { margin: 0; font-size: 15px }
+.pc-tour-uses { list-style: none; padding: 0; margin: 0; display: flex; flex-wrap: wrap; gap: 8px }
+.pc-tour-uses li { border: 1px solid var(--pc-line); border-radius: 999px; background: var(--pc-surface); padding: 5px 13px; font-size: 14px; color: var(--pc-text) }
+.pc-tour-facts { display: flex; flex-wrap: wrap; gap: 14px 44px; margin-top: 36px; padding-block: 18px; border-block: 1px solid var(--pc-line) }
+.pc-tour-facts div { display: flex; flex-direction: column }
+.pc-tour-facts strong { font-size: 24px; color: var(--pc-text) }
+.pc-tour-facts span { font-size: 14px; color: var(--pc-text-muted) }
+.pc-tour-faq { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 32px }
+.pc-tour-faq details { border-bottom: 1px solid var(--pc-line); padding-block: 12px }
+.pc-tour-faq summary { cursor: pointer; font-weight: 600; color: var(--pc-text) }
+.pc-tour-faq p { margin: 8px 0 0 }
+.pc-tour-end { margin: 36px 0 0; font-size: 16px }
+.pc-tour-end a { font-weight: 600; color: var(--pc-link) }
+@media (max-width: 760px) {
+  .pc-tour-steps, .pc-tour-links, .pc-tour-faq { grid-template-columns: minmax(0, 1fr) }
+  .pc-tour-inner { padding: 36px 16px 44px }
+}

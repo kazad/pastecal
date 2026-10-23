@@ -1283,6 +1283,71 @@ Copyright (c) 2025 Kalid Azad
             <div id="Schedule" data-testid="schedule-container"></div>
         </div>
 
+        <!-- Homepage only: what pastecal is, for people who scroll past the calendar. -->
+        <section v-if="isHomepageCalendar" class="pc-tour" aria-labelledby="pc-tour-title" data-testid="homepage-tour" v-cloak>
+            <div class="pc-tour-inner">
+                <h2 id="pc-tour-title">A shared calendar in one link</h2>
+                <p class="pc-tour-lead">No account, nothing to install. Add your events, send the link, and everyone sees the same schedule.</p>
+
+                <ol class="pc-tour-steps">
+                    <li>
+                        <div class="pc-tour-art" aria-hidden="true">
+                            <div class="pc-tour-mini">
+                                <span></span><span></span><span class="on">Practice</span><span></span><span></span><span></span><span></span>
+                                <span></span><span></span><span class="on">Practice</span><span></span><span></span><span class="on alt">Game</span><span></span>
+                            </div>
+                        </div>
+                        <h3>Add events</h3>
+                        <p>Click any day and type.</p>
+                    </li>
+                    <li>
+                        <div class="pc-tour-art" aria-hidden="true">
+                            <span class="pc-tour-chip">pastecal.com/<b>soccer-fall</b></span>
+                        </div>
+                        <h3>Send the link</h3>
+                        <p>Pick a name, then share it in your group chat or email.</p>
+                    </li>
+                    <li>
+                        <div class="pc-tour-art" aria-hidden="true">
+                            <div class="pc-tour-phone"><span>Game at 10am</span></div>
+                            <div class="pc-tour-phone"><span>Game at 10am</span></div>
+                        </div>
+                        <h3>Stay in sync</h3>
+                        <p>When anyone changes an event, everyone sees it.</p>
+                    </li>
+                </ol>
+
+                <h3 class="pc-tour-label">Three ways to share</h3>
+                <div class="pc-tour-links">
+                    <div><h4>Edit link</h4><code>pastecal.com/soccer-fall</code><p>Anyone with it can add and change events.</p></div>
+                    <div><h4>View-only link</h4><code>pastecal.com/view/…</code><p>People can see the calendar but not change it.</p></div>
+                    <div><h4>Calendar app link</h4><code>pastecal.com/soccer-fall.ics</code><p>Subscribe in Google, Apple or Outlook Calendar. It updates on its own.</p></div>
+                </div>
+
+                <h3 class="pc-tour-label">People use it for</h3>
+                <ul class="pc-tour-uses">
+                    <li>Kids' sports seasons</li><li>Shift schedules</li><li>Shared custody weeks</li>
+                    <li>Band and club rehearsals</li><li>Room and car bookings</li><li>Trips</li>
+                </ul>
+
+                <div class="pc-tour-facts">
+                    <div><strong>3,000+</strong><span>calendars in use</span></div>
+                    <div><strong>Free</strong><span>no trial, no card</span></div>
+                    <div><strong>No accounts</strong><span>for you or anyone you share with</span></div>
+                </div>
+
+                <h3 class="pc-tour-label">Questions</h3>
+                <div class="pc-tour-faq">
+                    <details><summary>Who can change my calendar?</summary><p>Anyone with the edit link. Send the view-only link to people who only need to look.</p></details>
+                    <details><summary>Is it private?</summary><p>Only people with a link can open your calendar. Edit links are never listed in search engines.</p></details>
+                    <details><summary>Can I undo a change?</summary><p>Yes. Click "Edited … ago" at the top to see recent changes and put any of them back.</p></details>
+                    <details><summary>Does it work on phones?</summary><p>Yes, in any phone browser. There is nothing to install.</p></details>
+                </div>
+
+                <p class="pc-tour-end">Your calendar is ready at the top of this page. <a href="#">Back to the calendar ↑</a></p>
+            </div>
+        </section>
+
         <!-- A claimed name is taken: say so and offer free ones (replaces a blocking alert) -->
         <div v-if="slugTaken" class="pc-slug-taken" role="alert" data-testid="slug-taken" v-cloak>
             <span><strong v-text="'pastecal.com/' + slugTaken.slug"></strong> is taken.</span>
@@ -1476,7 +1541,8 @@ Copyright (c) 2025 Kalid Azad
         <toast-notification ref="toast"></toast-notification>
 
         <!-- First-run explainer; gated by shouldShowWelcome() in app.js -->
-        <welcome-dock v-if="showWelcome" @dismissed="dismissWelcome"
+        <!-- The homepage tour below the calendar now does this card's job, so it is not shown there. -->
+        <welcome-dock v-if="showWelcome && !isHomepageCalendar" @dismissed="dismissWelcome"
             @show-help="welcomeShowHelp"></welcome-dock>
     </div>
 
