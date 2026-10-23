@@ -216,11 +216,14 @@ export default {
 
         // 6. Regular /cal/<id> endpoints
         if (path.startsWith('/cal/')) {
-            const m = path.match(/^\/cal\/([^/]+)(\/ws|\/import|\/from-firebase|\/history|\/authors)?$/);
+            const m = path.match(/^\/cal\/([^/]+)(\/ws|\/import|\/from-firebase|\/archive|\/history|\/authors)?$/);
             let id = null;
             try { id = m && decodeURIComponent(m[1]); } catch { /* bad escape */ }
             if (!id || !validId(id)) return new Response('not found', { status: 404 });
 
+            if (m[2] === '/archive' && (request.method !== 'POST' || !env.IMPORT_SECRET || request.headers.get('Authorization') !== `Bearer ${env.IMPORT_SECRET}`)) {
+                return new Response('forbidden', { status: 403 });
+            }
             if (m[2] === '/import' || m[2] === '/from-firebase') {
                 if (request.method !== 'PUT' || !env.IMPORT_SECRET
                     || request.headers.get('Authorization') !== `Bearer ${env.IMPORT_SECRET}`) {

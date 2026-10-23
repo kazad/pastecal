@@ -241,6 +241,7 @@ export class CalendarRoom extends DurableObject {
             server.send(json({ t: 'snapshot', v: this.state.v, calendar: cal }));
             return new Response(null, { status: 101, webSocket: client });
         }
+        if (request.method === 'POST' && url.pathname.endsWith('/archive')) return Response.json(await this.archiveTestCalendar());
         if (request.method === 'HEAD') return new Response(null, { status: this.state.id ? 200 : 404 });
         if (request.method === 'GET') {
             if (url.pathname.endsWith('/history')) {
@@ -485,6 +486,32 @@ export class CalendarRoom extends DurableObject {
     // burst of saves is one of each.
     async scheduleAlarm() {
         if (await this.ctx.storage.getAlarm() == null) await this.ctx.storage.setAlarm(Date.now() + LIMITS.copyBackDelayMs);
+    }
+
+    // ---- archiving test calendars ---------------------------------------------------------
+    // Automated tests used to create calendars on the live site (4,000+ by Oct 2026). This takes one
+    // out of service: its full state is written to R2 FIRST, and only once that write succeeded is
+    // the calendar emptied and its name dropped from the directory. Only names starting "test" are
+    // accepted, so even a leaked secret cannot archive a real calendar this way.
+    async archiveTestCalendar() {
+        const s = this.state;
+        if (!s.id) return { ok: true, missing: true };
+        if (!/^test/i.test(s.id)) return { ok: false, error: 'only test calendars can be archived' };
+        if (!this.env.BACKUPS) return { ok: false, error: 'no backup bucket' };
+        const id = s.id;
+        await this.env.BACKUPS.put(`archive/test-calendars/${encodeURIComponent(id)}.json`,
+            json({ archivedAt: new Date().toISOString(), v: s.v, calendar: this.calendar() }),
+            { httpMetadata: { contentType: 'application/json' }, customMetadata: { id } });
+        for (const ws of this.ctx.getWebSockets()) { try { ws.close(1000, 'archived'); } catch { /* gone */ } }
+        await this.ctx.storage.deleteAlarm();
+        this.sql.exec('DELETE FROM events'); this.sql.exec('DELETE FROM meta'); this.sql.exec('DELETE FROM history');
+        this.mirrored = null;
+        this.load();                                                    // now empty: GET answers 404
+        if (this.env.DIRECTORY) {
+            const dir = this.env.DIRECTORY.get(this.env.DIRECTORY.idFromName('global'));
+            await dir.fetch('http://internal/remove', { method: 'POST', body: json({ slug: id, actualSlug: id }) }).catch(() => {});
+        }
+        return { ok: true, archived: id };
     }
 
     // ---- backups --------------------------------------------------------------------------
