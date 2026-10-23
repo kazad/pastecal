@@ -426,7 +426,8 @@ const CalendarVueApp = {
         // The homepage panel's shortcut list for returning visitors: most recently opened first.
         homeRecents() {
             const time = (item) => Date.parse(item.lastVisited || item.createdAt || 0) || 0;
-            return [...(this.recentCalendars || [])].sort((a, b) => time(b) - time(a)).slice(0, 6);
+            return [...(this.recentCalendars || [])].sort((a, b) => time(b) - time(a)).slice(0, 6)
+                .map(item => ({ ...item, ...RecentCalendars.display(item) }));
         },
 
         // Headline and lead for the homepage pitch. One version for now; a later test adds more,
@@ -497,7 +498,7 @@ const CalendarVueApp = {
                             if (c.title) {
                                 // A read-only calendar you were linked to is a visit,
                                 // not something you created.
-                                this.recentManager.add(actualSlug, `${c.title} (View Only)`);
+                                this.recentManager.add(actualSlug, c.title, false, true);
                                 this.recentCalendars = this.recentManager.getAll();
                             }
 

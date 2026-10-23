@@ -1313,9 +1313,9 @@ Copyright (c) 2025 Kalid Azad
                 <template v-if="homeRecents.length">
                     <ul class="pc-home-recents" data-testid="home-recents">
                         <li v-for="item in homeRecents" :key="item.id">
-                            <a :href="'/' + item.id">
-                                <span class="pc-recent-title">{{ item.title || item.id }}</span>
-                                <span class="pc-recent-meta">pastecal.com/{{ item.id }}<template v-if="item.mine"> · yours</template></span>
+                            <a :href="item.path">
+                                <span class="pc-recent-title">{{ item.title }}</span>
+                                <span class="pc-recent-meta">{{ item.address }}<template v-if="item.mine"> · yours</template><template v-else-if="item.view"> · view only</template></span>
                             </a>
                         </li>
                     </ul>

@@ -128,7 +128,17 @@ class RecentCalendars {
         } catch (e) { /* storage blocked or full: the list lives in memory this session */ }
     }
 
-    add(id, title, mine = false) {
+    // How a recent entry is shown and linked. Read-only visits open at /view/<id>; older
+    // entries marked that only with a " (View Only)" title suffix are read the same way.
+    static display(item) {
+        const raw = item.title || item.id;
+        const view = !!item.view || / \(View Only\)$/.test(raw);
+        const title = raw.replace(/ \(View Only\)$/, '');
+        const path = (view ? '/view/' : '/') + item.id;
+        return { title, view, path, address: 'pastecal.com' + path };
+    }
+
+    add(id, title, mine = false, view = false) {
         const existingItem = this.items.find(item => item.id === id);
         const wasPinned = existingItem ? existingItem.pinned : false;
         // `mine` is sticky: visiting a calendar you created must never demote it
@@ -151,6 +161,7 @@ class RecentCalendars {
             title: title || id,
             pinned: wasPinned,
             mine: isMine,
+            ...(view || existingItem?.view ? { view: true } : {}),
             visitCount: visitCount,
             ...(createdAt ? { createdAt } : {}),
             lastVisited: new Date().toISOString()

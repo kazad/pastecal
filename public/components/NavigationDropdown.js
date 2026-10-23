@@ -25,12 +25,12 @@ const NavigationDropdown = {
                 <div>
                     <div v-for="item in group.items" :key="item.id"
                         class="pc-nav-row flex justify-between items-center hover:bg-theme-hover transition-colors group">
-                        <a :href="'/' + item.id" class="flex-1 min-w-0 mr-3">
+                        <a :href="item.path" class="flex-1 min-w-0 mr-3">
                             <div class="text-color-2 font-medium truncate group-hover:text-blue-500 transition-colors">
                                 {{ item.title }}
                             </div>
                             <div class="text-xs text-color-1 truncate">
-                                pastecal.com/{{ item.id }}
+                                {{ item.address }}<template v-if="item.view"> · view only</template>
                             </div>
                         </a>
                         <div class="flex items-center gap-1 transition-opacity"
@@ -75,7 +75,7 @@ const NavigationDropdown = {
         // Calendars you created are listed separately from ones you merely visited:
         // in a no-login product this list is the only route back to your own work.
         groups() {
-            const all = this.recentCalendars || [];
+            const all = (this.recentCalendars || []).map(item => ({ ...item, ...RecentCalendars.display(item) }));
             return [
                 { label: 'Your calendars', items: all.filter(item => item.mine) },
                 { label: 'Recently visited', items: all.filter(item => !item.mine) },
