@@ -61,12 +61,14 @@
  *
  * Storage (this object's own SQLite): meta(k, v), events(k, pos, data), history(v, at,
  * source, commands), lock(owner, plan, locked_at, key_hash, key_id), editor_links(id, label,
- * key_hash, created_at, last_used_at, revoked_at), pro_settings(owner, data, updated_at). The lock
+ * key_hash, created_at, last_used_at, revoked_at), pro_settings(owner, data, updated_at), and the
+ * stats_* tables (counts only; see RoomInsight.js, which also restores earlier versions). The lock
  * lives apart from `options` because any tab can write options; owner ids and key hashes never leave
  * these tables. lock.key_hash/key_id are the legacy single key, moved into editor_links on load.
  */
 import { DurableObject } from 'cloudflare:workers';
 import EventStore from '../../public/services/EventStore.js';
+import { initInsight, countHit, insightRoute, INSIGHT_ROUTES } from './RoomInsight.js';
 
 export const LIMITS = {
     savesPerMinute: 60,          // per calendar: far above people, far below a loop
@@ -187,6 +189,7 @@ export class CalendarRoom extends DurableObject {
             this.sql.exec(`CREATE TABLE IF NOT EXISTS lock (k INTEGER PRIMARY KEY CHECK (k = 1), owner TEXT NOT NULL, plan TEXT, locked_at INTEGER, key_hash TEXT, key_id TEXT)`);
             this.sql.exec(`CREATE TABLE IF NOT EXISTS editor_links (id TEXT PRIMARY KEY, label TEXT NOT NULL, key_hash TEXT NOT NULL, created_at INTEGER, last_used_at INTEGER, revoked_at INTEGER)`);
             this.sql.exec(`CREATE TABLE IF NOT EXISTS pro_settings (k INTEGER PRIMARY KEY CHECK (k = 1), owner TEXT, data TEXT, updated_at INTEGER)`);
+            initInsight(this.sql);       // stats + restore (RoomInsight.js)
             this.load();
         });
     }
@@ -516,7 +519,7 @@ export class CalendarRoom extends DurableObject {
         this.state.events = events;
     }
 
-    bump(source, commands, { beforeEvents, beforeTitle, beforeOptions, writer } = {}) {
+    bump(source, commands, { beforeEvents, beforeTitle, beforeOptions, writer, kind: kindOverride, label, countsOnly } = {}) {
         const s = this.state;
         s.v += 1;
         s.lastEditedAt = Date.now();
@@ -537,7 +540,8 @@ export class CalendarRoom extends DurableObject {
         }
         const addedEvents = after.filter((e) => !beforeByKey.has(keyOf(e)));
 
-        const kind = (source === 'create' || !before.length) ? 'created'
+        const kind = kindOverride ? kindOverride
+            : (source === 'create' || !before.length) ? 'created'
             : (before.length > 0 && removedEvents.length === before.length) ? 'wiped'
             : removedEvents.length ? 'shrunk'
             : changedEvents.length ? 'edited'
@@ -559,7 +563,11 @@ export class CalendarRoom extends DurableObject {
             options: beforeOptions ?? s.options ?? null,
             writer: writer || null,
         };
-        if (kind === 'shrunk' || kind === 'title-cleared') entry.events = before;
+        if (label) entry.label = label;
+        // A whole-calendar replace (restore) keeps counts only: two full event lists in one row could
+        // pass SQLite's 2 MB row limit. Its undo is the R2 restore point (RoomInsight.restoreVersion).
+        if (countsOnly) { entry.removedEvents = []; entry.changedEvents = []; entry.addedEvents = []; }
+        else if (kind === 'shrunk' || kind === 'title-cleared') entry.events = before;
 
         this.sql.exec(`INSERT INTO history (v, at, source, commands, entry) VALUES (?, ?, ?, ?, ?)`,
             s.v, s.lastEditedAt, source, json(commands), json(entry));
@@ -598,6 +606,12 @@ export class CalendarRoom extends DurableObject {
         // "import" (PUT /cal/import replaced it with no secret), and would do the same for "lock".
         const [, , , suffix = '', ...rest] = url.pathname.split('/');
         if (rest.length) return new Response('not found', { status: 404 });
+        // Stats and restore (RoomInsight.js): internal-only, like the lock routes below.
+        if (INSIGHT_ROUTES.has(suffix)) {
+            if (url.hostname !== 'internal' || isViewOnly) return new Response('not found', { status: 404 });
+            return insightRoute(this, suffix, request);
+        }
+        if (request.headers.get('X-PC-Hit')) countHit(this, request).catch(() => { /* stats never fail a request */ });
         if (LOCK_ROUTES.has(suffix)) {
             // Only Worker code calls these (stub.fetch('http://internal/...')). Public requests are
             // forwarded with their real host, and the Worker's allowlist never forwards these
@@ -919,9 +933,10 @@ export class CalendarRoom extends DurableObject {
         const s = this.state;
         if (!this.env.BACKUPS || !s.id) return;
         const key = `snapshots/${encodeURIComponent(s.id)}/${new Date().toISOString().slice(0, 10)}.json`;
-        await this.env.BACKUPS.put(key, json({ v: s.v, savedAt: new Date().toISOString(), calendar: this.calendar() }), {
+        const savedAt = new Date().toISOString();
+        await this.env.BACKUPS.put(key, json({ v: s.v, savedAt, calendar: this.calendar() }), {
             httpMetadata: { contentType: 'application/json' },
-            customMetadata: { id: s.id, v: String(s.v) },
+            customMetadata: { id: s.id, v: String(s.v), events: String(s.events.length), savedAt, kind: 'daily' },   // read by GET /api/pro/versions
         });
     }
 

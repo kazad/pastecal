@@ -217,7 +217,7 @@ export async function sessionUserId(request, env) {
 
 // CSRF: a cross-site form can't send application/json without a preflight, and browsers always
 // send Origin on POST. Production accepts only pastecal.com; dev mode also accepts localhost.
-function sameSite(request, env) {
+export function sameSite(request, env) {
     if (!(request.headers.get('Content-Type') || '').toLowerCase().startsWith('application/json')) return false;
     const origin = request.headers.get('Origin') || '';
     if (origin === SITE || origin === 'https://www.pastecal.com') return true;

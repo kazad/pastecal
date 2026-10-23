@@ -15,6 +15,7 @@
  *   PUT  /cal/<id>/import         Full calendar replace (Bearer IMPORT_SECRET)
  *   PUT  /cal/<id>/from-firebase  Firebase sync write (same auth)
  *   /api/auth/*, /api/me, /api/pro/*, /api/stripe/webhook   Pro accounts + billing (Accounts.js)
+ *   /api/pro/stats, /api/pro/versions[/preview|/restore]     Pro stats + restore (Insight.js)
  *   POST /api/admin/cal/<id>/{lock,unlock,rotate-editor-key}, GET .../lock-status
  *                                 Pro lock, for support and tests (Bearer IMPORT_SECRET)
  *                                 (+ dev-legacy-key with ACCOUNTS_DEV_MODE=1: a test hook for the key migration)
@@ -28,6 +29,7 @@ export { Waitlist } from './Waitlist.js';
 export { Accounts } from './Accounts.js';
 import { handleAccounts, sessionUserId as accountsSessionUserId } from './Accounts.js';
 import { PLANS } from './Waitlist.js';
+import { handleInsight, hitHeaders } from './Insight.js';
 
 // Any name Firebase allowed: real calendars include "TEAM NUÑEZ", "d&d8", "강아지봉사" and
 // trailing spaces. Firebase keys cannot hold . # $ [ ] / or control chars.
@@ -60,12 +62,13 @@ async function sessionUserId(request, env) {
     return accountsSessionUserId(request, env);   // the pc_session cookie (magic-link sign-in)
 }
 
-// A request to forward to a room, without any X-PC-User the client sent (rooms trust that header).
-// `userId` is set only from sessionUserId.
-function forRoom(request, url = request.url, userId = null) {
+// A request to forward to a room, without any X-PC-* header the client sent (rooms trust them).
+// `userId` is set only from sessionUserId; `hit` only from hitHeaders (stats, Insight.js).
+function forRoom(request, url = request.url, userId = null, hit = null) {
     const headers = new Headers(request.headers);
-    headers.delete('X-PC-User');
+    for (const k of [...headers.keys()]) if (k.toLowerCase().startsWith('x-pc-')) headers.delete(k);
     if (userId) headers.set('X-PC-User', userId);
+    if (hit) for (const [k, v] of Object.entries(hit)) headers.set(k, v);
     return new Request(url, new Request(request, { headers }));
 }
 
@@ -123,7 +126,10 @@ export default {
             }
 
             const room = env.CALENDARS.get(env.CALENDARS.idFromName(targetId));
-            const roomRes = await room.fetch(new Request(`http://internal/cal/${encodeURIComponent(targetId)}`));
+            // Counted as a follow inside the room, during the read it already does (Insight.js hitHeaders).
+            const hit = hitHeaders(request, env, 'follow');
+            const roomRes = await room.fetch(new Request(`http://internal/cal/${encodeURIComponent(targetId)}`, hit ? { headers: {
+                ...hit, 'CF-Connecting-IP': request.headers.get('CF-Connecting-IP') || '', 'User-Agent': request.headers.get('User-Agent') || '' } } : {}));
             if (!roomRes.ok) return new Response('Calendar not found', { status: 404 });
             const roomData = await roomRes.json();
             const cal = roomData?.calendar;
@@ -148,6 +154,10 @@ export default {
                 }
             });
         }
+
+        // Pro stats and restore (before the accounts handler, which owns the rest of /api/pro/*).
+        const insightRes = await handleInsight(request, env, url, sessionUserId);
+        if (insightRes) return insightRes;
 
         // Pro accounts and billing: /api/auth/*, /api/me, /api/pro/*, /api/stripe/webhook, /api/admin/accounts/*
         const accountsRes = await handleAccounts(request, env, url);
@@ -310,7 +320,7 @@ export default {
             const subPath = viewMatch[2] === '/ws' ? '/ws' : '';
             const roomUrl = new URL(`http://internal/cal/${encodeURIComponent(targetId)}${subPath}`);
             roomUrl.searchParams.set('view', viewId);
-            return withCors(await room.fetch(forRoom(request, roomUrl)));
+            return withCors(await room.fetch(forRoom(request, roomUrl, null, request.method === 'GET' ? hitHeaders(request, env, 'view') : null)));
         }
 
         // 6. Regular /cal/<id> endpoints
@@ -340,7 +350,8 @@ export default {
             const room = env.CALENDARS.get(env.CALENDARS.idFromName(id));
             // Never pass on a client's X-PC-User; on the WebSocket, set it from the session.
             const userId = m[2] === '/ws' ? await sessionUserId(request, env) : null;
-            return withCors(await room.fetch(forRoom(request, request.url, userId)));
+            const hit = request.method === 'GET' && (!m[2] || m[2] === '/ws') ? hitHeaders(request, env, 'view') : null;
+            return withCors(await room.fetch(forRoom(request, request.url, userId, hit)));
         }
 
         // 7. Static assets & Single Page App rewrites
