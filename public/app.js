@@ -429,8 +429,8 @@ const CalendarVueApp = {
                      lead: 'No account, nothing to install. Add your events, send the link, and everyone sees the same schedule.' },
                 b: { title: 'Sign-ups, rotas and bookings in one shared calendar',
                      lead: 'People add their name to a slot, book the room, or mark when they are away. Everyone sees the same schedule from one link.' },
-                c: { title: 'Everyone on the same schedule',
-                     lead: 'Make a calendar, send one link, and your group sees every change. No accounts, for you or for them.' },
+                c: { title: 'Keep everyone on the same schedule',
+                     lead: 'A simple shared calendar. No accounts, nothing to install: add events, send one link, and everyone sees every change.' },
             };
             return copy[this.tourVariant] || copy.a;
         }
