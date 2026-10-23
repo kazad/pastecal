@@ -160,6 +160,9 @@ export class CalendarRoom extends DurableObject {
     async lockRoute(op, request) {
         const body = request.method === 'POST' ? await request.json().catch(() => ({})) : {};
         const ownerId = typeof body?.ownerId === 'string' ? body.ownerId.trim() : '';
+        // Any key is made BEFORE the lock is read: from here on nothing awaits, so two lock calls
+        // cannot both see "unlocked".
+        const k = op === 'lock' || op === 'rotate-editor-key' ? await this.newEditorKey() : null;
         const l = this.lock;
         const no = (status, error) => Response.json({ ok: false, error }, { status });
         if (op === 'lock-status') {
@@ -189,7 +192,12 @@ export class CalendarRoom extends DurableObject {
             if (!l) return Response.json({ ok: true, alreadyUnlocked: true });
             if (ownerId && ownerId !== l.ownerId) return no(409, 'locked-by-other');
             this.sql.exec(`DELETE FROM lock`); this.lock = null;
+            // Firebase kept its pre-lock copy, and anyone may have edited (or emptied) it since.
+            // Merging that against the pre-lock baseline would replay those edits here, so the next
+            // exchange adopts Firebase's copy as the baseline, applies none of it, and writes ours over it.
+            this.setMeta('firebaseUntrusted', true);
             this.recordLockChange('unlocked', 'Unlocked');
+            await this.scheduleCopyBack();
             return Response.json({ ok: true });
         }
         if (!ownerId || ownerId.length > 200) return no(400, 'ownerId required');
@@ -197,9 +205,9 @@ export class CalendarRoom extends DurableObject {
             if (!this.state.id) return no(404, 'not-found');
             if (l && l.ownerId !== ownerId) return no(409, 'locked-by-other');
             if (l && !body.rotate) return Response.json({ ok: true, alreadyLocked: true });   // only the hash is kept: no key to return
-            if (l) return this.rotateKey();
+            if (l) return this.rotateKey(k);
             const plan = typeof body.plan === 'string' && body.plan ? body.plan.slice(0, 32) : 'pro';
-            const k = await this.newEditorKey(), at = Date.now();
+            const at = Date.now();
             this.sql.exec(`INSERT INTO lock (k, owner, plan, locked_at, key_hash, key_id) VALUES (1, ?, ?, ?, ?, ?)`, ownerId, plan, at, k.keyHash, k.keyId);
             this.lock = { ownerId, plan, lockedAt: at, keyHash: k.keyHash, keyId: k.keyId };
             this.recordLockChange('locked', 'Locked with Pro');
@@ -208,13 +216,13 @@ export class CalendarRoom extends DurableObject {
         if (op === 'rotate-editor-key') {
             if (!l) return no(409, 'not-locked');
             if (l.ownerId !== ownerId) return no(403, 'not-owner');
-            return this.rotateKey();
+            return this.rotateKey(k);
         }
         return no(404, 'not found');
     }
     // New key; the old one stops working now. Sockets that used it are told, and drop to read-only.
-    async rotateKey() {
-        const k = await this.newEditorKey(), oldId = this.lock.keyId;
+    rotateKey(k) {
+        const oldId = this.lock.keyId;
         this.sql.exec(`UPDATE lock SET key_hash = ?, key_id = ?`, k.keyHash, k.keyId);
         this.lock = { ...this.lock, keyHash: k.keyHash, keyId: k.keyId };
         for (const ws of this.ctx.getWebSockets()) {
@@ -564,6 +572,14 @@ export class CalendarRoom extends DurableObject {
         if (!s.id) return this.importCalendar(cal);                      // first sight: a plain copy
         cal = { ...cal, options: clientOptions(cal.options) };
         const { events: incoming, renamed } = this.dedupe(cal);
+        if (this.sql.exec(`SELECT 1 FROM meta WHERE k = 'firebaseUntrusted'`).toArray().length) {
+            // First exchange since an unlock (see lockRoute): Firebase's copy becomes the baseline and
+            // nothing of it is applied; the copy-back then writes this calendar over it.
+            this.setMirrored(cal.title ?? '', cal.options || {}, incoming);
+            this.sql.exec(`DELETE FROM meta WHERE k = 'firebaseUntrusted'`);
+            this.ctx.waitUntil(this.scheduleCopyBack());
+            return { ok: true, unchanged: true, untrusted: true, v: s.v, events: s.events.length, renamedDuplicates: renamed };
+        }
         const title = cal.title ?? '', options = cal.options || {};
         // Rooms imported before `mirrored` existed: the import is the baseline.
         const m = this.mirrored || { title: s.title, options: s.options, events: s.events };
