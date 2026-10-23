@@ -1283,8 +1283,24 @@ Copyright (c) 2025 Kalid Azad
             <div id="Schedule" data-testid="schedule-container"></div>
         </div>
 
+                <!-- Calendar pages: a small "what is this?" for people who were sent a link. Not on the
+             homepage (it has the tour), not inside embeds, and gone once dismissed. -->
+        <div v-if="!isHomepageCalendar && !aboutPillHidden" class="pc-about" data-testid="about-pill" v-cloak>
+            <div v-if="aboutPillOpen" class="pc-about-card" role="dialog" aria-labelledby="pc-about-title">
+                <button type="button" class="pc-about-x" @click="aboutPillOpen = false" aria-label="Close">&times;</button>
+                <h3 id="pc-about-title">A shared calendar in one link</h3>
+                <p>Someone made this calendar on pastecal and shared the link. You can make your own the same way, with no account.</p>
+                <div class="pc-about-actions">
+                    <a class="pc-about-make" href="/">Make your own calendar</a>
+                    <a href="/#how">How it works</a>
+                </div>
+                <button type="button" class="pc-about-hide" @click="dismissAboutPill">Don't show this again</button>
+            </div>
+            <button v-else type="button" class="pc-about-pill" @click="aboutPillOpen = true">Made with pastecal</button>
+        </div>
+
         <!-- Homepage only: what pastecal is, for people who scroll past the calendar. -->
-        <section v-if="isHomepageCalendar" class="pc-tour" aria-labelledby="pc-tour-title" data-testid="homepage-tour" v-cloak>
+        <section v-if="isHomepageCalendar" id="how" class="pc-tour" aria-labelledby="pc-tour-title" data-testid="homepage-tour" v-cloak>
             <div class="pc-tour-inner">
                 <h2 id="pc-tour-title">A shared calendar in one link</h2>
                 <p class="pc-tour-lead">No account, nothing to install. Add your events, send the link, and everyone sees the same schedule.</p>
@@ -1331,10 +1347,15 @@ Copyright (c) 2025 Kalid Azad
                 </ul>
 
                 <div class="pc-tour-facts">
+                    <div><strong>Since 2021</strong><span>and still simple</span></div>
                     <div><strong>3,000+</strong><span>calendars in use</span></div>
-                    <div><strong>Free</strong><span>no trial, no card</span></div>
                     <div><strong>No accounts</strong><span>for you or anyone you share with</span></div>
                 </div>
+                <ul class="pc-tour-trust">
+                    <li>Every change can be undone.</li>
+                    <li>Calendars are backed up after every change.</li>
+                    <li>Only people with a link can see your calendar.</li>
+                </ul>
 
                 <h3 class="pc-tour-label">Questions</h3>
                 <div class="pc-tour-faq">
@@ -1342,9 +1363,12 @@ Copyright (c) 2025 Kalid Azad
                     <details><summary>Is it private?</summary><p>Only people with a link can open your calendar. Edit links are never listed in search engines.</p></details>
                     <details><summary>Can I undo a change?</summary><p>Yes. Click "Edited … ago" at the top to see recent changes and put any of them back.</p></details>
                     <details><summary>Does it work on phones?</summary><p>Yes, in any phone browser. There is nothing to install.</p></details>
+                    <details><summary>Is it free?</summary><p>Yes. There is no trial and no card to enter.</p></details>
+                    <details><summary>Can I put it on my website?</summary><p>Yes. Use the view-only link in an embed, and visitors see your calendar as it changes.</p></details>
                 </div>
 
                 <p class="pc-tour-end">Your calendar is ready at the top of this page. <a href="#">Back to the calendar ↑</a></p>
+                <p class="pc-tour-maker">pastecal is made by <a href="https://betterexplained.com" target="_blank" rel="noopener">Kalid Azad</a>, creator of BetterExplained.</p>
             </div>
         </section>
 

@@ -865,3 +865,21 @@ div#Schedule,
   .pc-tour-steps, .pc-tour-links, .pc-tour-faq { grid-template-columns: minmax(0, 1fr) }
   .pc-tour-inner { padding: 36px 16px 44px }
 }
+.pc-tour-trust { list-style: none; padding: 0; margin: 14px 0 0; display: flex; flex-wrap: wrap; gap: 6px 22px; font-size: 15px; color: var(--pc-text-muted) }
+.pc-tour-trust li::before { content: "✓ "; color: var(--pc-success) }
+.pc-tour-maker { margin: 18px 0 0; font-size: 14px }
+.pc-tour-maker a { color: var(--pc-link) }
+
+/* ---- "Made with pastecal" pill on calendar pages (index.html .pc-about) ---- */
+.pc-about { position: fixed; z-index: 40; right: calc(14px + env(safe-area-inset-right, 0px)); bottom: calc(14px + env(safe-area-inset-bottom, 0px)) }
+.pc-about-pill { border: 1px solid var(--pc-line); background: var(--pc-surface); color: var(--pc-text-muted); border-radius: 999px; padding: 6px 13px; font-size: 13px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.08) }
+.pc-about-pill:hover { color: var(--pc-text) }
+.pc-about-card { width: min(300px, calc(100vw - 28px)); background: var(--pc-surface); border: 1px solid var(--pc-line); border-radius: 12px; padding: 16px; box-shadow: 0 12px 32px rgba(0,0,0,.18); position: relative }
+.pc-about-card h3 { margin: 0 24px 6px 0; font-size: 16px; font-weight: 700; color: var(--pc-text) }
+.pc-about-card p { margin: 0; font-size: 14px; color: var(--pc-text-muted) }
+.pc-about-actions { display: flex; gap: 12px; align-items: center; margin-top: 12px; flex-wrap: wrap; font-size: 14px }
+.pc-about-actions a { color: var(--pc-link) }
+.pc-about-make { background: var(--pc-link); color: var(--pc-on-accent) !important; border-radius: 8px; padding: 6px 12px; font-weight: 600; text-decoration: none }
+.pc-about-x { position: absolute; top: 8px; right: 10px; border: 0; background: none; font-size: 20px; line-height: 1; cursor: pointer; color: var(--pc-text-muted) }
+.pc-about-hide { margin-top: 10px; border: 0; background: none; padding: 0; font-size: 12px; color: var(--pc-text-muted); cursor: pointer; text-decoration: underline }
+@media print { .pc-about { display: none } }
