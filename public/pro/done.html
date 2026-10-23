@@ -83,7 +83,9 @@ a.btn { margin-top: 24px }
     msg.textContent = ''; msg.append(span, ' is locked. Only you and people with your editor link can change it.');
     // This page never turns off a link the owner may already have sent out: it makes the first
     // link only when the calendar has none, and otherwise points to Share.
-    var storeName = 'pastecal_editor_link:' + proCalendar.toLowerCase();
+    // pastecal_editor_link:<cal> is the plain link the Share panel shows; pastecal_done_link:<cal> also
+    // keeps its id, so this page re-shows a link only while it is still live.
+    var shareName = 'pastecal_editor_link:' + proCalendar.toLowerCase(), storeName = 'pastecal_done_link:' + proCalendar.toLowerCase();
     function show(link) { $('link').value = link; $('linkbox').hidden = false; }
     function signInHint(r) {
       if (r.status === 401) msg.append(' Sign in from your calendar’s Share panel to make an editor link.');
@@ -92,16 +94,21 @@ a.btn { margin-top: 24px }
     api('GET', '/api/pro/editor-links?calendar=' + encodeURIComponent(proCalendar)).then(function (r) {
       if (r.status !== 200 || !Array.isArray(r.data)) return signInHint(r);
       if (r.data.length) {
-        var shown = null;
-        try { shown = localStorage.getItem(storeName); } catch (e) { shown = null; }
-        if (shown) return show(shown);          // made by this page earlier, in this browser
+        // Made by this page earlier in this browser, and still live (not revoked since): show it again.
+        var saved = null;
+        try { saved = JSON.parse(localStorage.getItem(storeName) || 'null'); } catch (e) { saved = null; }
+        var live = saved && saved.id && r.data.some(function (l) { return l.id === saved.id; });
+        if (live && typeof saved.link === 'string') return show(saved.link);
         msg.append(' Your editor links are in Share on your calendar.');
         return;
       }
       api('POST', '/api/pro/editor-links', { calendarId: proCalendar, label: 'Editors' }).then(function (c) {
         if (c.status !== 200 || !c.data.url_fragment_key) return signInHint(c);
         var link = 'https://pastecal.com' + calPath + '#k=' + c.data.url_fragment_key;
-        try { localStorage.setItem(storeName, link); } catch (e) { /* shown here anyway */ }
+        try {
+          localStorage.setItem(shareName, link);
+          localStorage.setItem(storeName, JSON.stringify({ id: c.data.id, link: link }));
+        } catch (e) { /* shown here anyway */ }
         show(link);
       });
     });

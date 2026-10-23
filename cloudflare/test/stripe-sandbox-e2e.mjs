@@ -3,7 +3,8 @@
 // Needs: wrangler dev on BASE with .dev.vars.e2e + .dev.vars.stripe (sandbox sk_test key, price
 // ids, the `stripe listen` signing secret, ACCOUNTS_DEV_MODE=1), and
 //   stripe listen --forward-to localhost:8850/api/stripe/webhook --events checkout.session.completed,
-//     customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.payment_failed
+//     customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.payment_failed,
+//     charge.refunded,charge.dispute.created
 // Run: NODE_PATH=<repo>/node_modules node test/stripe-sandbox-e2e.mjs   (never against production)
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
