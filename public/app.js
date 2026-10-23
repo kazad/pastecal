@@ -240,6 +240,7 @@ const CalendarVueApp = {
             userAddedEvent: false,
             sharePulse: false,
             tourVariant: 'a',
+            homeAsideHidden: (() => { try { return localStorage.getItem('pc_home_aside') === 'hidden'; } catch (e) { return false; } })(),
 
             // Mobile Menu
             showMobileMenu: false,
@@ -2008,6 +2009,16 @@ const CalendarVueApp = {
         // ============================================================
         // REGION: Calendar CRUD Operations
         // ============================================================
+
+        // Hide or show the homepage pitch column. Remembered in this browser, so someone who
+        // comes back to make another calendar keeps the full-width calendar.
+        toggleHomeAside() {
+            this.homeAsideHidden = !this.homeAsideHidden;
+            try { localStorage.setItem('pc_home_aside', this.homeAsideHidden ? 'hidden' : 'shown'); } catch (e) { /* this visit only */ }
+            track(a => a.track('feature_used', { feature: this.homeAsideHidden ? 'home_aside_hidden' : 'home_aside_shown' }));
+            // The calendar measures its width only on window resize; tell it the column moved.
+            this.$nextTick(() => { try { scheduleObj.refreshLayout(); } catch (e) { /* not rendered yet */ } });
+        },
 
         // One tour_seen per section per page view, when half of it is on screen.
         observeTour() {
