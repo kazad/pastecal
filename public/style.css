@@ -900,11 +900,18 @@ div#Schedule,
 .pc-tour-uses-note { margin: 12px 0 0; font-size: 15px }
 
 /* Tour illustrations: line art in the link color, soft fills from the theme tokens. */
-.pc-share-art { display: block; width: 120px; height: 64px; margin: 2px 0 10px; color: var(--pc-text-muted) }
-.pc-share-art .f { fill: var(--pc-soft) }
-.pc-share-art .ev { fill: var(--pc-link); stroke: none; opacity: .85 }
-.pc-share-art .ev2 { fill: #f59e0b; stroke: none; opacity: .85 }
-.pc-share-art .pen { color: var(--pc-link); stroke: var(--pc-link) }
+.pc-share-art { --stage: color-mix(in srgb, var(--pc-link) 8%, var(--pc-surface)); display: block; width: 100%; height: 120px; margin: 0 0 14px; padding: 10px 0; box-sizing: border-box; border-radius: 10px; background: var(--stage); fill: none; stroke-linecap: round; stroke-linejoin: round }
+.pc-share-art .c { fill: var(--pc-surface); stroke: var(--pc-line); stroke-width: 1.5 }
+.pc-share-art .h { fill: color-mix(in srgb, var(--pc-link) 16%, var(--pc-surface)) }
+.pc-share-art .k { fill: var(--pc-text-muted) }
+.pc-share-art .d { fill: var(--pc-line) }
+.pc-share-art .st { stroke: var(--pc-text-muted); stroke-width: 2 }
+.pc-share-art .e1 { fill: var(--pc-link) }
+.pc-share-art .e2 { fill: #f59e0b }
+.pc-share-art .e3 { fill: #10b981 }
+.pc-share-art .new { fill: color-mix(in srgb, var(--pc-link) 10%, transparent); stroke: var(--pc-link); stroke-width: 1.5; stroke-dasharray: 3 3 }
+.pc-share-art .b { fill: var(--pc-link); stroke: var(--stage); stroke-width: 4 }
+.pc-share-art .bi { stroke: #fff; stroke-width: 2.25; fill: none; overflow: visible }
 .pc-tour-uses .pc-ico { width: 20px; height: 20px; color: var(--pc-link); display: block; margin-top: 1px }
 .pc-tour-faq .pc-tour-snippet { display: block; margin-top: 8px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--pc-line); background: var(--pc-soft); font-size: 12.5px; overflow-wrap: anywhere; color: var(--pc-text) }
 .pc-tour-plans { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px }
