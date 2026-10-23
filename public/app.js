@@ -239,7 +239,7 @@ const CalendarVueApp = {
             // Homepage flow: a tip on the grid until the first event of your own, then Share pulses once.
             userAddedEvent: false,
             sharePulse: false,
-            tourVariant: 'a',
+            tourVariant: 'above',
 
             // Mobile Menu
             showMobileMenu: false,
@@ -1324,12 +1324,11 @@ const CalendarVueApp = {
         if (this.isHomepageCalendar && this.calendar.events.length == 0) {
             // Load homepage data from localStorage
             this.loadLocalStorage();
-            if ((this.calendar.events || []).some(e => e && (e.title || e.Subject) && (e.title || e.Subject) !== 'Sample event')) this.userAddedEvent = true;
+            if ((this.calendar.events || []).some(e => e && (e.title || e.Subject) && !Calendar.isSampleTitle(e.title || e.Subject))) this.userAddedEvent = true;
 
-            // If still no events after loading, create default sample event
+            // If still no events after loading, show the example event
             if (this.calendar.events.length == 0) {
-                var defaultEvent = this.calendar.defaultEvent("Sample event");
-                this.calendar.setEvents([defaultEvent]);
+                this.calendar.setEvents(this.calendar.sampleEvents());
             }
             this.updateCalendarView();
         }
@@ -1608,8 +1607,13 @@ const CalendarVueApp = {
 
         // Apply default view to schedule (if no URL override)
         applyDefaultView() {
-            if (!window.location.search.includes('view=') && !window.location.search.includes('v=')) {
-                const defaultView = this.calendar?.options?.defaultView || this.globalSettings.defaultView || 'Month';
+            // Parsed, not substring-matched: "?hv=below" contains "v=" but is not a view.
+            const params = new URLSearchParams(window.location.search);
+            if (!params.has('view') && !params.has('v')) {
+                let defaultView = this.calendar?.options?.defaultView || this.globalSettings.defaultView || 'Month';
+                // On a phone the month grid cuts every event to its start time, so a new
+                // homepage calendar opens on the week, where events can be read.
+                if (this.isHomepageCalendar && !this.userAddedEvent && window.innerWidth < 640) defaultView = 'Week';
                 const actualViewName = this.getActualViewName(defaultView);
 
                 const viewIndex = scheduleObj.views.findIndex(v => {
@@ -1832,9 +1836,7 @@ const CalendarVueApp = {
                 notes: '',
                 defaultView: 'week'
             };
-            // Add one sample event
-            var defaultEvent = this.calendar.defaultEvent("Sample event");
-            this.calendar.setEvents([defaultEvent]);
+            this.calendar.setEvents(this.calendar.sampleEvents());
             // Reset local settings to defaults
             this.initializeLocalSettings();
         },
@@ -2028,17 +2030,34 @@ const CalendarVueApp = {
 
         // The first event someone adds on the homepage: the tip has done its job, and Share
         // gets one gentle pulse, because now a link is worth having.
+        // The example event makes room for it at the same moment.
         noteHomepageEvent() {
             if (!this.isHomepageCalendar || this.userAddedEvent) return;
             this.userAddedEvent = true;
             this.sharePulse = true;
             setTimeout(() => { this.sharePulse = false; }, 3500);
+            // After Syncfusion finishes the add that called us.
+            setTimeout(() => {
+                if (this.dropSampleEvents()) {
+                    this.updateCalendarView();
+                    this.saveLocalStorage();
+                }
+            }, 0);
+        },
+
+        // Remove the untouched example event. True when it was removed.
+        dropSampleEvents() {
+            const events = this.calendar.events || [];
+            const kept = events.filter(e => !(e && Calendar.isSampleTitle(e.title || e.Subject)));
+            if (!kept.length || kept.length === events.length) return false;
+            this.calendar.setEvents(kept);
+            return true;
         },
 
         // A link name from the calendar's title, else its first event: "Soccer Fall 2026" ->
         // "soccer-fall-2026". Null when there is nothing better than the random name.
         suggestedSlug() {
-            const own = (this.calendar.events || []).find(e => e && (e.title || e.Subject) && (e.title || e.Subject) !== 'Sample event');
+            const own = (this.calendar.events || []).find(e => e && (e.title || e.Subject) && !Calendar.isSampleTitle(e.title || e.Subject));
             const source = (this.calendar.title && this.calendar.title !== 'New Calendar') ? this.calendar.title : (own && (own.title || own.Subject));
             if (!source) return null;
             const slug = String(source).toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
@@ -2076,12 +2095,9 @@ const CalendarVueApp = {
         },
 
         create() {
-            // The starter "Sample event" is only there to show what an event looks like. Once
-            // someone has added their own, it is not part of their calendar; one they edited stays.
-            if (this.isHomepageCalendar && this.userAddedEvent) {
-                const kept = (this.calendar.events || []).filter(e => !(e && (e.title || e.Subject) === 'Sample event'));
-                if (kept.length && kept.length < this.calendar.events.length) this.calendar.setEvents(kept);
-            }
+            // The example event only shows what a calendar looks like; it is never part of
+            // someone's real calendar. One they edited has a new title, so it stays.
+            if (this.isHomepageCalendar && this.userAddedEvent) this.dropSampleEvents();
             let slug = this.calendar.id;
             if (!slug) {
                 slug = Utils.randomID(8);

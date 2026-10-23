@@ -37,6 +37,18 @@ class Calendar {
         return e;
     }
 
+    // A brand-new homepage calendar shows one example so the grid isn't empty. It is
+    // dropped as soon as someone adds an event of their own; one they edited stays.
+    static SAMPLE_TITLES = ['Sample event'];
+
+    static isSampleTitle(title) {
+        return Calendar.SAMPLE_TITLES.includes(title);
+    }
+
+    sampleEvents() {
+        return [this.defaultEvent('Sample event')];
+    }
+
     import(c) {
         Object.assign(this, c);
     }

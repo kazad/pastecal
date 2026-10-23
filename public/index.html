@@ -1282,6 +1282,10 @@ Copyright (c) 2025 Kalid Azad
             </button>
         </div>
 
+        <!-- Homepage only: what this is. Experiment: above the calendar or just below it. -->
+        <p v-if="isHomepageCalendar && tourVariant === 'above'" class="pc-hero-line" data-testid="hero-line" v-cloak>
+            <strong>No-login shared calendars</strong> that keep everyone on the same schedule. <a href="#how">How it works&nbsp;↓</a>
+        </p>
         <div id="cal2_wrap" style="width: 100%; height: 100%; position: relative;">
             <div id="Schedule" data-testid="schedule-container"></div>
             <!-- Homepage: one tip on the grid itself until the first event. Clicks pass through it. -->
@@ -1289,9 +1293,12 @@ Copyright (c) 2025 Kalid Azad
                 Click any day to add your first event
             </div>
         </div>
+        <p v-if="isHomepageCalendar && tourVariant === 'below'" class="pc-hero-line pc-hero-below" data-testid="hero-line" v-cloak>
+            <strong>No-login shared calendars</strong> that keep everyone on the same schedule. <a href="#how">How it works&nbsp;↓</a>
+        </p>
         <p v-if="isHomepageCalendar" class="pc-draft-note" v-cloak>
             <span>This calendar is a draft, saved only in this browser. Press <b>Share</b> to get a link anyone can open.</span>
-            <a href="#how">How pastecal works ↓</a>
+            <a v-if="tourVariant !== 'below'" href="#how">How pastecal works ↓</a>
         </p>
 
                 <!-- Homepage only: what pastecal is, for people who scroll past the calendar. -->

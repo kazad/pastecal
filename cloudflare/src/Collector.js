@@ -39,7 +39,7 @@ export function toDataPoints(body, country = '') {
                 str(country, 4),
                 str(p.source ?? p.method ?? p.code ?? p.kind ?? p.reason ?? p.where, 40),
                 str(p.cached, 4),
-                str(p.hv, 4),
+                str(p.hv, 8),
             ],
             doubles: [num(p.ttfb_ms), num(p.fcp_ms), num(p.lcp_ms), num(p.load_ms), num(p.cls), num(p.first_event_seconds), 1],
         });
