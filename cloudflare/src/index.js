@@ -111,7 +111,8 @@ export default {
                 status: 200,
                 headers: {
                     'Content-Type': 'text/calendar; charset=utf-8',
-                    'Content-Disposition': `inline; filename="${actualSlug}.ics"`,
+                    // The name may hold quotes or non-ASCII ("TEAM NUÑEZ"): an ASCII fallback plus the RFC 5987 form.
+                    'Content-Disposition': `inline; filename="${actualSlug.replace(/[^A-Za-z0-9._-]/g, '_')}.ics"; filename*=UTF-8''${encodeURIComponent(actualSlug)}.ics`,
                     'ETag': etag,
                     'Cache-Control': 'public, max-age=300'
                 }
