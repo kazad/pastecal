@@ -1300,11 +1300,12 @@ Copyright (c) 2025 Kalid Azad
             </div>
             <p v-if="isHomepageCalendar" class="pc-draft-note" v-cloak>
                 <span>This calendar is a draft, saved only in this browser. Press <b>Share</b> to get a link anyone can open.</span>
-                <span class="pc-draft-links"><button v-if="homeAsideHidden" type="button" class="pc-show-guide" @click="toggleHomeAside">Show guide</button><a href="#how">How pastecal works ↓</a></span>
+                <span class="pc-draft-links"><button v-if="homeAsideHidden" type="button" class="pc-show-guide" @click="toggleHomeAside"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m10 15-3-3 3-3"/></svg>Show guide</button><a href="#how">How pastecal works ↓</a></span>
             </p>
             </div>
             <aside v-if="isHomepageCalendar && !homeAsideHidden" class="pc-home-aside" data-testid="home-aside" v-cloak>
-                <button type="button" class="pc-home-hide" @click="toggleHomeAside" aria-label="Hide this guide">Hide</button>
+                <div class="pc-home-bar"><span>Getting started</span><button type="button" class="pc-home-hide" @click="toggleHomeAside" aria-label="Hide guide" title="Hide guide"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m8 9 3 3-3 3"/></svg></button></div>
+                <div class="pc-home-body">
                 <h1>No-login shared calendars that keep everyone on the same schedule</h1>
                 <p class="pc-home-lead">Add events, send one link, and everyone sees every change.</p>
                 <ol class="pc-home-steps">
@@ -1317,6 +1318,7 @@ Copyright (c) 2025 Kalid Azad
                 </ul>
                 <p class="pc-home-draft">This calendar is a draft, saved only in this browser until you press Share.</p>
                 <a class="pc-home-more" href="#how">How pastecal works ↓</a>
+                </div>
             </aside>
         </div>
 
@@ -1324,8 +1326,11 @@ Copyright (c) 2025 Kalid Azad
         <section v-if="isHomepageCalendar" id="how" class="pc-tour" aria-labelledby="pc-tour-title" data-testid="homepage-tour" :data-variant="tourVariant" v-cloak>
             <div class="pc-tour-inner">
                 <div data-tour="intro">
-                <h2 id="pc-tour-title">{{ tourCopy.title }}</h2>
-                <p class="pc-tour-lead">{{ tourCopy.lead }}</p>
+                <!-- With the side column showing (wide screens), it carries the headline, so this
+                     section opens with its own plain title instead of repeating it. -->
+                <h2 id="pc-tour-title" class="pc-intro-full">{{ tourCopy.title }}</h2>
+                <p class="pc-tour-lead pc-intro-full">{{ tourCopy.lead }}</p>
+                <h2 class="pc-intro-short">How pastecal works</h2>
                 </div>
 
                 <ol class="pc-tour-steps" data-tour="steps">

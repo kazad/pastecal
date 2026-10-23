@@ -932,14 +932,14 @@ div#Schedule,
   .pc-home-line a { color: var(--pc-link); white-space: nowrap }
 }
 @media (min-width: 1100px) {
-  .pc-home-split { display: grid; grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); gap: 32px; align-items: start }
+  .pc-home-split { display: grid; grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr); gap: 16px; align-items: stretch }
   .pc-home-split .pc-draft-note { display: none }
-  .pc-home-aside { display: block; padding: 28px 8px 0 0; max-width: 440px }
+  .pc-home-aside { display: flex; flex-direction: column; max-width: 460px; border: 1px solid var(--pc-line); border-radius: 8px; background: var(--pc-soft); overflow: hidden }
   /* The aside carries the headline on wide screens, so the section below starts at the steps. */
-  .pc-home-split ~ .pc-tour [data-tour="intro"] { display: none }
-  .pc-home-aside { position: relative }
+  .pc-home-split ~ .pc-tour .pc-intro-full { display: none }
+  .pc-home-split ~ .pc-tour .pc-intro-short { display: block }
 }
-.pc-home-aside h1 { margin: 0 0 10px; font-size: 28px; line-height: 1.18; font-weight: 750; letter-spacing: -.01em; color: var(--pc-text); text-wrap: balance }
+.pc-home-aside h1 { margin: 0 0 10px; font-size: 25px; line-height: 1.18; font-weight: 750; letter-spacing: -.01em; color: var(--pc-text); text-wrap: balance }
 .pc-home-lead { margin: 0 0 18px; font-size: 16px; line-height: 1.5; color: var(--pc-text-muted) }
 .pc-home-steps { list-style: none; margin: 0 0 18px; padding: 0; display: grid; gap: 10px }
 .pc-home-steps li { display: grid; grid-template-columns: 24px 1fr; gap: 10px; align-items: center; font-size: 15px; color: var(--pc-text) }
@@ -948,9 +948,18 @@ div#Schedule,
 .pc-home-nots li::before { content: "✕"; color: #c2410c; font-size: 11px; margin-right: 7px }
 .pc-home-draft { margin: 0 0 14px; padding: 10px 12px; border: 1px solid var(--pc-line); border-radius: 10px; background: var(--pc-surface); font-size: 13.5px; line-height: 1.45; color: var(--pc-text-muted) }
 .pc-home-more { font-size: 15px; font-weight: 600; color: var(--pc-link) }
-.pc-home-hide { position: absolute; top: 4px; right: 0; font-size: 13px; color: var(--pc-text-muted); background: none; border: 0; padding: 4px 6px; border-radius: 6px; cursor: pointer }
+.pc-intro-short { display: none }
+.pc-home-hide { display: grid; place-items: center; width: 32px; height: 32px; color: var(--pc-text-muted); background: none; border: 0; border-radius: 8px; cursor: pointer }
 .pc-home-hide:hover, .pc-home-hide:focus-visible { color: var(--pc-text); background: var(--pc-soft) }
 .pc-draft-links { display: inline-flex; gap: 14px; margin-left: auto }
-.pc-show-guide { display: none; background: none; border: 0; padding: 0; color: var(--pc-link); font: inherit; cursor: pointer }
-@media (min-width: 1100px) { .pc-show-guide { display: inline } }
-.pc-home-aside h1 { padding-right: 48px }
+.pc-show-guide { display: none; align-items: center; gap: 5px; background: none; border: 0; padding: 0; color: var(--pc-link); font: inherit; cursor: pointer }
+.pc-show-guide svg { width: 15px; height: 15px }
+@media (min-width: 1100px) { .pc-show-guide { display: inline-flex } }
+/* In the split, the event popup can open past the calendar's right edge (the library only keeps
+   it inside the window), so let it overlap the side column instead of being clipped. */
+.pc-home-split #Schedule.e-schedule { overflow: visible }
+.pc-home-split .e-quick-popup-wrapper { z-index: 20 }
+.pc-home-bar { display: flex; align-items: center; justify-content: space-between; padding: 6px 6px 6px 16px; border-bottom: 1px solid var(--pc-line); background: var(--pc-surface); font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--pc-text-muted) }
+.pc-home-body { padding: 20px 22px 24px; overflow: auto }
+.pc-home-aside .pc-home-draft { background: var(--pc-surface) }
+.pc-home-aside .pc-home-steps b { background: var(--pc-surface); border: 1px solid var(--pc-line) }
