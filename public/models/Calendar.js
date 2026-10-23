@@ -45,8 +45,24 @@ class Calendar {
         return Calendar.SAMPLE_TITLES.includes(title);
     }
 
+    // All day, today: a timed sample showed in the month grid as "12:00 PM Your even...".
+    // Stored the way the editor stores an all-day event: local midnight to the next one.
     sampleEvents() {
-        return [this.defaultEvent(Calendar.SAMPLE_TITLES[0])];
+        const e = new Event({ title: Calendar.SAMPLE_TITLES[0], isAllDay: true });
+        const d = new Date();
+        d.setHours(0, 0, 0, 0);
+        e.start = d.toISOString();
+        d.setDate(d.getDate() + 1);
+        e.end = d.toISOString();
+        return [e];
+    }
+
+    // The default title is stored as "New Calendar" (the server and health checks treat
+    // that exact string as "no title yet"); it is shown in sentence case.
+    static DEFAULT_TITLE = 'New Calendar';
+
+    static displayTitle(title) {
+        return (!title || title === Calendar.DEFAULT_TITLE) ? 'New calendar' : title;
     }
 
     import(c) {

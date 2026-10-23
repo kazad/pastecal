@@ -72,3 +72,31 @@ test('getSyncFusionEvents: missing/invalid start or end becomes null rather than
   assert.equal(garbage.StartTime, null);
   assert.equal(garbage.EndTime, null);
 });
+
+test('sampleEvents: the homepage example is one all-day event today, so its whole title shows', () => {
+  const Event = new Function('Utils', `${fs.readFileSync(
+    path.join(__dirname, '../../public/models/Event.js'), 'utf8')}; return Event;`)({ uuidv4: () => 'generated-uuid' });
+  const src = fs.readFileSync(path.join(__dirname, '../../public/models/Calendar.js'), 'utf8');
+  const RealCalendar = new Function('Event', 'ScheduleAdapter', `${src}; return Calendar;`)(
+    Event, require('../../public/services/ScheduleAdapter.js'));
+  const [e] = new RealCalendar('slug', 'Title', []).sampleEvents();
+
+  assert.equal(e.title, RealCalendar.SAMPLE_TITLES[0]);
+  assert.ok(RealCalendar.isSampleTitle(e.title));
+  assert.equal(e.isAllDay, true);
+  const start = new Date(e.start), end = new Date(e.end);
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  assert.equal(start.getTime(), today.getTime(), 'starts at local midnight today');
+  const next = new Date(today); next.setDate(next.getDate() + 1);
+  assert.equal(end.getTime(), next.getTime(), 'ends at the next local midnight (exclusive)');
+  const [shown] = new RealCalendar('slug', 'Title', [e]).getSyncFusionEvents();
+  assert.equal(shown.IsAllDay, true);
+});
+
+test('displayTitle: the stored default title is shown in sentence case; real titles are untouched', () => {
+  assert.equal(Calendar.displayTitle('New Calendar'), 'New calendar');
+  assert.equal(Calendar.displayTitle(''), 'New calendar');
+  assert.equal(Calendar.displayTitle(undefined), 'New calendar');
+  assert.equal(Calendar.displayTitle('Soccer'), 'Soccer');
+  assert.equal(Calendar.displayTitle('New Calendar Ideas'), 'New Calendar Ideas');
+});
