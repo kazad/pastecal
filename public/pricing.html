@@ -22,7 +22,15 @@
   --blue: #6b9bff; --blue-ink: #0b1220; --blue-soft: #1b2436; --ok: #34d399; --soon: #f5c451; --soon-bg: #3a300f; color-scheme: dark }
 * { box-sizing: border-box }
 body { background: var(--bg); color: var(--ink); font: 16px/1.55 var(--ui); margin: 0 }
-.col { max-width: 1080px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 40px 64px }
+.site { display: flex; align-items: center; justify-content: space-between; gap: 12px; max-width: 1080px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 14px }
+.brand { display: inline-flex; align-items: center; gap: 8px; color: var(--blue); font-weight: 700; font-size: 18px; text-decoration: none }
+.site nav { display: flex; align-items: center; gap: 16px; font-size: 15px }
+.site nav a { color: var(--muted); text-decoration: none; font-weight: 600 }
+.site nav a:hover { color: var(--ink) }
+.site nav .make { color: var(--blue-ink); background: var(--blue); border-radius: 999px; padding: 7px 14px }
+.site nav .make:hover { color: var(--blue-ink); filter: brightness(1.08) }
+@media (max-width: 420px) { .site nav a:not(.make) { display: none } }
+.col { max-width: 1080px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 16px 64px }
 .mock { background: var(--blue-soft); color: var(--muted); font-size: 13px; text-align: center; padding-block: 6px }
 h1 { margin: 0; font-size: clamp(30px, 4.4vw, 44px); line-height: 1.1; text-wrap: balance }
 .lead { color: var(--muted); font-size: 18px; max-width: 60ch; margin: 12px 0 0 }
@@ -100,7 +108,10 @@ details p { color: var(--muted); margin: 8px 0 0 }
 </style>
 </head>
 <body>
-
+<header class="site">
+  <a class="brand" href="/?from=pricing-header"><img src="/img/pastecal.logo.svg" alt="" width="26" height="26">pastecal</a>
+  <nav><a href="/view/demo?from=pricing-header">See a demo</a><a class="make" href="/?from=pricing-header">Make a calendar</a></nav>
+</header>
 
 <div class="col">
   <h1>Free for everyone you share with. Pro when it matters.</h1>
