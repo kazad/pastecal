@@ -10,13 +10,13 @@ Copyright (c) 2025 Kalid Azad
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <!-- HTML Meta Tags -->
-    <title>PasteCal: A shared calendar in one link</title>
+    <title>pastecal: A shared calendar in one link</title>
     <meta name="description" content="Make a shared calendar, send one link, and everyone sees the same schedule. No accounts and nothing to install.">
 
     <!-- Facebook Meta Tags -->
     <meta property="og:url" content="https://pastecal.com/">
     <meta property="og:type" content="website">
-    <meta property="og:title" content="PasteCal: A shared calendar in one link">
+    <meta property="og:title" content="pastecal: A shared calendar in one link">
     <meta property="og:description" content="Make a shared calendar, send one link, and everyone sees the same schedule. No accounts and nothing to install.">
     <meta property="og:image" content="https://pastecal.com/img/screenshot.png">
 
@@ -24,7 +24,7 @@ Copyright (c) 2025 Kalid Azad
     <meta name="twitter:card" content="summary_large_image">
     <meta property="twitter:domain" content="pastecal.com">
     <meta property="twitter:url" content="https://pastecal.com/">
-    <meta name="twitter:title" content="PasteCal: Shareable, no-login calendar">
+    <meta name="twitter:title" content="pastecal: Shareable, no-login calendar">
     <meta name="twitter:description" content="Create a public shared calendar link, no signups needed.">
     <meta name="twitter:image" content="https://pastecal.com/img/screenshot.png">
 
@@ -228,7 +228,7 @@ Copyright (c) 2025 Kalid Azad
             var app = document.getElementById('app');
             if (app && app.hasAttribute('v-cloak')) {  // Vue removes v-cloak on mount
                 app.removeAttribute('v-cloak');
-                app.insertAdjacentHTML('afterbegin', '<p style="padding:16px;font:16px system-ui">PasteCal didn\'t finish loading. <a href="">Reload</a></p>');
+                app.insertAdjacentHTML('afterbegin', '<p style="padding:16px;font:16px system-ui">pastecal didn\'t finish loading. <a href="">Reload</a></p>');
             }
         }, 10000);
     </script>
@@ -241,7 +241,7 @@ Copyright (c) 2025 Kalid Azad
                 <div class="relative z-40 flex-shrink-0" v-click-outside="closeRecents">
                     <div @click.stop="toggleRecents" class="cursor-pointer flex items-center gap-1">
                         <div class="flex items-center gap-1.5">
-                            <img class="h-8 w-8 dark:brightness-150" src="/img/pastecal.logo.svg" alt="PasteCal Logo">
+                            <img class="h-8 w-8 dark:brightness-150" src="/img/pastecal.logo.svg" alt="pastecal">
                             <span
                                 class="text-sm font-medium text-blue-500 hover:text-blue-600 transition-colors">pastecal</span>
                         </div>
@@ -356,7 +356,7 @@ Copyright (c) 2025 Kalid Azad
                         <div class="flex items-center space-x-2">
                             <a @click.prevent="toggleRecents" class="flex items-center group cursor-pointer">
                                 <img class="h-8 w-8 mr-1.5 flex-shrink-0 dark:brightness-150"
-                                    src="/img/pastecal.logo.svg" alt="PasteCal Logo">
+                                    src="/img/pastecal.logo.svg" alt="pastecal">
                                 <div class="flex flex-col">
                                     <span
                                         class="text-blue-500 font-medium text-sm hover:text-blue-600 transition-colors">pastecal</span>
@@ -785,7 +785,7 @@ Copyright (c) 2025 Kalid Azad
                                 </svg>
                                 How do I manage multiple calendars?
                             </div>
-                            <p class="text-sm text-color-1">Hover over the <strong>PasteCal logo</strong>
+                            <p class="text-sm text-color-1">Hover over the <strong>pastecal logo</strong>
                                 to jump between your calendars. Make a few!</p>
                         </div>
                     </div>
@@ -1363,6 +1363,14 @@ Copyright (c) 2025 Kalid Azad
                     <li>Calendars are backed up every day they change.</li>
                     <li>Read/write links are kept out of search engines.</li>
                 </ul>
+
+                <div data-tour="pricing">
+                <h3 class="pc-tour-label">Pricing</h3>
+                <div class="pc-tour-plans">
+                    <div><h4>Free <span>always</span></h4><p>Everything on this page: unlimited calendars, all three links, undo and daily backups. Nobody you share with pays or signs up.</p></div>
+                    <div class="pc-tour-plan-pro"><h4>Pro <span>coming soon · $24 per calendar a year</span></h4><p>For calendars you run: lock who can edit, approve suggested events, keep every change, and use your own name and colors.</p><a href="/pricing">See plans and join the waitlist →</a></div>
+                </div>
+                </div>
 
                 <h3 class="pc-tour-label">Questions</h3>
                 <div class="pc-tour-faq" data-tour="faq">

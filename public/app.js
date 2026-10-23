@@ -2434,7 +2434,7 @@ const CalendarVueApp = {
             if (!url) return null;
             return 'https://outlook.live.com/calendar/0/addfromweb?url='
                 + encodeURIComponent(url)
-                + '&name=' + encodeURIComponent(this.calendar.title || 'PasteCal');
+                + '&name=' + encodeURIComponent(this.calendar.title || 'pastecal');
         },
 
         /** Records which subscribe path was used, so the rate is measurable. */
@@ -2960,7 +2960,7 @@ const CalendarVueApp = {
             if (navigator.share) {
                 track(a => a.calendarShared('native'));
                 navigator.share({
-                    title: 'PasteCal Calendar',
+                    title: 'pastecal calendar',
                     text: title,
                     url: url
                 }).catch(err => {

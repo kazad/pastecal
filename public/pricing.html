@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pricing · PasteCal</title>
+<title>Pricing · pastecal</title>
 <meta name="description" content="pastecal is free to use. Pro adds full backup history, subcalendars, no branding and more. Join the waitlist.">
 <link rel="icon" href="/favicon.ico">
 <style>
@@ -243,18 +243,16 @@ details p { color: var(--muted); margin: 8px 0 0 }
 <script>
 (() => {
   const form = document.getElementById('waitForm'), done = document.getElementById('done'), btn = document.getElementById('waitBtn');
-  const live = /(^|\.)pastecal\.com$/.test(location.hostname);   // on the real site it saves; here it is a demo
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const email = document.getElementById('email');
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim())) { done.style.color = 'var(--soon)'; done.textContent = 'Enter an email address, like you@example.com.'; email.focus(); return; }
     const body = Object.fromEntries(new FormData(form)); body.page = location.pathname;
-    if (!live) { done.style.color = ''; done.textContent = "Preview only: on pastecal.com this would be saved."; return; }
     btn.disabled = true; done.style.color = ''; done.textContent = 'Sending…';
     try {
       const r = await fetch('/api/waitlist', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const out = await r.json().catch(() => ({}));
-      if (!r.ok || !out.ok) throw new Error(out.error || 'Something went wrong. Please try again.');
+      if (!r.ok || !out.ok) throw new Error(out.error || "That didn't save. Please try again in a moment.");
       done.textContent = out.returning ? "Updated. You're still on the list." : "You're on the list. We'll email you when Pro opens.";
       form.reset();
     } catch (err) { done.style.color = 'var(--soon)'; done.textContent = err.message; }

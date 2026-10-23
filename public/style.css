@@ -906,3 +906,11 @@ div#Schedule,
 .pc-share-art .pen { color: var(--pc-link); stroke: var(--pc-link) }
 .pc-tour-uses .pc-ico { width: 22px; height: 22px; color: var(--pc-link); margin-bottom: 8px; display: block }
 .pc-tour-faq .pc-tour-snippet { display: block; margin-top: 8px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--pc-line); background: var(--pc-soft); font-size: 12.5px; overflow-wrap: anywhere; color: var(--pc-text) }
+.pc-tour-plans { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px }
+.pc-tour-plans > div { border: 1px solid var(--pc-line); border-radius: 12px; background: var(--pc-surface); padding: 16px 18px }
+.pc-tour-plans h4 { margin: 0 0 6px; font-size: 17px; font-weight: 700; color: var(--pc-text) }
+.pc-tour-plans h4 span { font-size: 13px; font-weight: 600; color: var(--pc-text-muted); margin-left: 6px }
+.pc-tour-plans p { margin: 0; font-size: 15px }
+.pc-tour-plans a { display: inline-block; margin-top: 10px; font-weight: 600; color: var(--pc-link) }
+.pc-tour-plan-pro { border-color: var(--pc-link) !important }
+@media (max-width: 640px) { .pc-tour-plans { grid-template-columns: minmax(0, 1fr) } }
