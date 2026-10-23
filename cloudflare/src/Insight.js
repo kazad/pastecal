@@ -1,0 +1,153 @@
+/**
+ * Insight -- the Worker half of Pro stats and "restore an earlier version" (the room half is
+ * RoomInsight.js). Every route is for a Pro calendar's signed-in owner only.
+ *
+ *   GET  /api/pro/stats?calendar=<id>&days=30|90|365
+ *        -> {days:[{day, views, visitors, followers}], countries:[{code, count}],
+ *            cities:[{name, country, count}], totals:{views, visitors, followers, followersToday}}
+ *   GET  /api/pro/versions?calendar=<id>
+ *        -> {versions:[{version, date, kind:'daily'|'restore-point', v, events, savedAt}]}  newest first
+ *   GET  /api/pro/versions/preview?calendar=<id>&date=<version>
+ *        -> {version, date, kind, v, savedAt, calendar:{id, title, options, events, ...}}
+ *   POST /api/pro/versions/restore {calendarId, date}   (session + CSRF, like other /api/pro POSTs)
+ *        -> {ok:true, v, events} | {ok:true, unchanged:true, v}
+ *
+ * Errors: 400 {error:'bad-calendar'|'bad-days'|'bad-version'}, 401 {error:'signed-out'},
+ * 403 {error:'pro-only'} (calendar not on Pro), 403 {error:'not-owner'}, 403 {error:'forbidden-origin'},
+ * 404 {error:'no-calendar'|'no-such-version'}, 503 {error:'no-backups'}.
+ * `date` is a version name: a daily snapshot (YYYY-MM-DD) or a restore point (YYYY-MM-DDTHHMMSSZ).
+ *
+ * Also here, because the Worker is the only one that may say so: hitHeaders(), which marks a
+ * forwarded calendar read as a countable hit for RoomInsight.countHit.
+ */
+import { LockClient } from './LockClient.js';
+import { sameSite } from './Accounts.js';
+import { VERSION_RE, snapshotPrefix } from './RoomInsight.js';
+
+const validId = (id) => typeof id === 'string' && id.length >= 1 && id.length <= 200 && !/[.#$\[\]\/\u0000-\u001f\u007f]/.test(id);
+const json = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
+const devMode = (env) => env.ACCOUNTS_DEV_MODE === '1';
+const DAYS = new Set([30, 90, 365]);
+
+// Crawlers, link previews, monitors, scripts. Calendar apps (Google-Calendar-Importer, Outlook,
+// iOS dataaccessd) don't match. The uptime check and GitHub Actions use curl.
+const BOT_UA = /bot\b|bot\/|crawler|spider|preview|monitor|uptime|headless|lighthouse|curl\/|wget|python-requests|go-http-client|github/i;
+export function isBot(request) {
+    const bm = request.cf && request.cf.botManagement;
+    if (bm && (bm.verifiedBot === true || (typeof bm.score === 'number' && bm.score > 0 && bm.score < 30))) return true;
+    const ua = request.headers.get('User-Agent') || '';
+    return !ua || BOT_UA.test(ua);
+}
+
+// Headers that mark a forwarded calendar read as a hit ('view' or 'follow'), with the place it came
+// from (request.cf; wrangler dev fills it with this machine's place). null for bots. City is
+// URI-encoded: header values must be Latin-1.
+export function hitHeaders(request, env, kind) {
+    if (isBot(request)) return null;
+    const country = (request.cf && request.cf.country) || '', city = (request.cf && request.cf.city) || '';
+    return { 'X-PC-Hit': kind, 'X-PC-Geo-Country': String(country).slice(0, 2), 'X-PC-Geo-City': encodeURIComponent(String(city).slice(0, 80)) };
+}
+
+// Who may read: a Pro calendar's owner. Returns {userId} or {res} (a refusal).
+async function ownerOnly(request, env, id, sessionUserId) {
+    if (!validId(id)) return { res: json({ error: 'bad-calendar' }, 400) };
+    const [st, userId] = await Promise.all([LockClient.lockStatus(env, id), sessionUserId(request, env)]);
+    if (st.status === 404) return { res: json({ error: 'no-calendar' }, 404) };
+    if (!st.ok && st.status >= 500) return { res: json({ error: 'unavailable' }, 502) };
+    if (!st.locked) return { res: json({ error: 'pro-only' }, 403) };
+    if (!userId) return { res: json({ error: 'signed-out' }, 401) };
+    if (st.ownerId !== userId) return { res: json({ error: 'not-owner' }, 403) };
+    return { userId };
+}
+const room = (env, id) => env.CALENDARS.get(env.CALENDARS.idFromName(id));
+const roomUrl = (id, op) => `http://internal/cal/${encodeURIComponent(id)}/${op}`;
+
+// Every snapshot of a calendar in R2, newest first (by day, then save time), from the listing's
+// metadata. Objects written before `events`/`savedAt` were in the metadata are read (up to 20) to
+// fill them in; past that, events is null and savedAt is the upload time.
+async function listVersions(env, id) {
+    const prefix = snapshotPrefix(id), out = [];
+    let cursor;
+    do {
+        const page = await env.BACKUPS.list({ prefix, cursor, include: ['customMetadata'] });
+        for (const o of page.objects) {
+            const version = o.key.slice(prefix.length).replace(/\.json$/, '');
+            if (!VERSION_RE.test(version)) continue;
+            const m = o.customMetadata || {};
+            out.push({
+                version, date: version.slice(0, 10), kind: version.length > 10 ? 'restore-point' : 'daily',
+                v: m.v !== undefined ? Number(m.v) : null,
+                events: m.events !== undefined ? Number(m.events) : null,
+                savedAt: m.savedAt || (o.uploaded ? new Date(o.uploaded).toISOString() : null),
+            });
+        }
+        cursor = page.truncated ? page.cursor : undefined;
+    } while (cursor);
+    const newestFirst = (a, b) => b.date.localeCompare(a.date) || (b.savedAt || '').localeCompare(a.savedAt || '') || b.version.localeCompare(a.version);
+    out.sort(newestFirst);
+    await Promise.all(out.filter((x) => x.events === null).slice(0, 20).map(async (x) => {
+        const snap = await (await env.BACKUPS.get(`${prefix}${x.version}.json`))?.json().catch(() => null);
+        const ev = snap && snap.calendar && snap.calendar.events;
+        if (ev) x.events = Array.isArray(ev) ? ev.length : Object.keys(ev).length;
+        if (x.v === null && snap && typeof snap.v === 'number') x.v = snap.v;
+        if (snap && typeof snap.savedAt === 'string') x.savedAt = snap.savedAt;
+    }));
+    return out.sort(newestFirst);
+}
+
+// Returns a Response for the routes above, or null for every other path. `sessionUserId` is the
+// Worker's (index.js), so the dev session header works in tests exactly as for the lock routes.
+export async function handleInsight(request, env, url, sessionUserId) {
+    const path = url.pathname, m = request.method;
+
+    // Test hook (dev mode + admin secret): everything a room's stats tables hold.
+    const dump = path.match(/^\/api\/admin\/cal\/([^/]+)\/stats-dump$/);
+    if (dump) {
+        if (!devMode(env) || !env.IMPORT_SECRET || request.headers.get('Authorization') !== `Bearer ${env.IMPORT_SECRET}`) return new Response('forbidden', { status: 403 });
+        let id = null; try { id = decodeURIComponent(dump[1]); } catch { /* bad escape */ }
+        if (!validId(id)) return new Response('not found', { status: 404 });
+        return room(env, id).fetch(roomUrl(id, 'stats-dump'));
+    }
+
+    if (path !== '/api/pro/stats' && path !== '/api/pro/versions' && path !== '/api/pro/versions/preview' && path !== '/api/pro/versions/restore') return null;
+    try {
+        if (path === '/api/pro/versions/restore') {
+            if (m !== 'POST') return json({ error: 'method' }, 405);
+            if (!sameSite(request, env)) return json({ error: 'forbidden-origin' }, 403);
+            const body = await request.json().catch(() => null) || {};
+            const gate = await ownerOnly(request, env, body.calendarId, sessionUserId);
+            if (gate.res) return gate.res;
+            if (typeof body.date !== 'string' || !VERSION_RE.test(body.date)) return json({ error: 'bad-version' }, 400);
+            if (!env.BACKUPS) return json({ error: 'no-backups' }, 503);
+            const r = await room(env, body.calendarId).fetch(roomUrl(body.calendarId, 'restore-version'), { method: 'POST', body: JSON.stringify({ version: body.date }) });
+            const out = await r.json().catch(() => ({ ok: false, error: 'unavailable' }));
+            delete out.status;
+            return json(out, r.status);
+        }
+        if (m !== 'GET') return json({ error: 'method' }, 405);
+        const id = url.searchParams.get('calendar');
+        const gate = await ownerOnly(request, env, id, sessionUserId);
+        if (gate.res) return gate.res;
+
+        if (path === '/api/pro/stats') {
+            const days = url.searchParams.has('days') ? Number(url.searchParams.get('days')) : 30;
+            if (!DAYS.has(days)) return json({ error: 'bad-days' }, 400);
+            const r = await room(env, id).fetch(`${roomUrl(id, 'stats')}?days=${days}`);
+            return json(await r.json(), r.status);
+        }
+        if (!env.BACKUPS) return json({ error: 'no-backups' }, 503);
+        if (path === '/api/pro/versions') return json({ versions: await listVersions(env, id) });
+        // preview
+        const version = url.searchParams.get('date') || '';
+        if (!VERSION_RE.test(version)) return json({ error: 'bad-version' }, 400);
+        const obj = await env.BACKUPS.get(`${snapshotPrefix(id)}${version}.json`);
+        if (!obj) return json({ error: 'no-such-version' }, 404);
+        const snap = await obj.json().catch(() => null);
+        if (!snap || !snap.calendar) return json({ error: 'bad-snapshot' }, 422);
+        return json({ version, date: version.slice(0, 10), kind: version.length > 10 ? 'restore-point' : 'daily',
+            v: typeof snap.v === 'number' ? snap.v : null, savedAt: snap.savedAt || null, calendar: snap.calendar });
+    } catch (err) {
+        console.error('[insight]', path, err && err.message);
+        return json({ error: 'internal' }, 500);
+    }
+}
