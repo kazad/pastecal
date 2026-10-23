@@ -3,6 +3,8 @@
  * Durable Object's SQLite. Only a calendar's paying owner ever has an account; helpers never do.
  *
  *   POST /api/auth/start      {email, next?}     -> {ok:true} always (never says if the email is known)
+ *   POST /api/auth/peek       {token}            -> {ok, email} without using the link up (the sign-in page asks
+ *                                                   "Sign in as <email>?" and verifies only on a click: no login CSRF)
  *   POST /api/auth/verify     {token}            -> {ok, email, next} + Set-Cookie pc_session (30 days)
  *   POST /api/auth/signout                       -> {ok:true}, cookie cleared
  *   GET  /api/me                                 -> {email, calendars:[{id, status, plan, interval, currentPeriodEnd}]} | 401
@@ -100,6 +102,14 @@ export class Accounts extends DurableObject {
         this.sql.exec(`INSERT INTO login_tokens (hash, email, next, created_at, expires_at, used) VALUES (?, ?, ?, ?, ?, 0)`,
             await sha256(token), email, next || null, now, now + LOGIN_TTL);
         return token;
+    }
+
+    // Which email a sign-in link is for, without using it up; null when it would not sign in.
+    async peekLoginToken(token) {
+        const hash = await sha256(token);
+        const row = this.sql.exec(`SELECT hash, email, used, expires_at FROM login_tokens WHERE hash = ?`, hash).toArray()[0];
+        if (!row || !timingSafeEqual(row.hash, hash) || row.used || row.expires_at <= Date.now()) return null;
+        return row.email;
     }
 
     // Uses up a sign-in link: the user (created on first sign-in) and a new session token.
@@ -320,6 +330,17 @@ async function route(request, env, url, path) {
         const token = await accounts(env).issueLoginToken(email, next);
         if (token) await sendSignInEmail(env, email, token);
         return json({ ok: true });
+    }
+    if (path === '/api/auth/peek') {
+        // Same answer for a made-up, used or expired link: it only says the email of a link that works.
+        const bad = () => json({ ok: false, error: 'This sign-in link has expired or was already used. Ask for a new one.' }, 400);
+        if (env.CREATE_LIMITER) {
+            const { success } = await env.CREATE_LIMITER.limit({ key: 'peek:' + (request.headers.get('CF-Connecting-IP') || 'unknown') });
+            if (!success) return json({ ok: false, error: 'Too many tries. Wait a minute and open the link again.' }, 429);
+        }
+        if (!looksLikeToken(body.token)) return bad();
+        const email = await accounts(env).peekLoginToken(body.token);
+        return email ? json({ ok: true, email }) : bad();
     }
     if (path === '/api/auth/verify') {
         if (!looksLikeToken(body.token)) return json({ ok: false, error: 'This sign-in link is not valid. Ask for a new one.' }, 400);

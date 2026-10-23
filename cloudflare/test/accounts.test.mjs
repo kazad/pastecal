@@ -36,6 +36,15 @@ assert.match(mail.text, /expires in 15 minutes/); assert.match(mail.text, /ignor
 step('start: generic ok, one email (lowercased address) with the token in the #fragment');
 
 const token = await lastToken(ann);
+r = await post('/api/auth/peek', { token });
+assert.equal(r.status, 200); assert.deepEqual(await r.json(), { ok: true, email: ann });
+assert.equal(r.headers.get('set-cookie'), null, 'peek signs no one in');
+assert.equal((await post('/api/auth/peek', { token }, { origin: 'https://evil.example' })).status, 403);
+r = await post('/api/auth/peek', { token: 'A'.repeat(22) });
+assert.equal(r.status, 400);
+const madeUp = (await r.json()).error;
+step('peek names the email of a working link without using it up or setting a cookie (same-site only)');
+
 r = await post('/api/auth/verify', { token });
 assert.equal(r.status, 200);
 const v = await r.json();
@@ -49,7 +58,9 @@ step('verify sets a 30-day HttpOnly Secure SameSite=Lax cookie; /api/me knows th
 
 r = await post('/api/auth/verify', { token });
 assert.equal(r.status, 400); assert.match((await r.json()).error, /expired or was already used/); assert.equal(r.headers.get('set-cookie'), null);
-step('a used link is refused');
+r = await post('/api/auth/peek', { token });
+assert.equal(r.status, 400); assert.equal((await r.json()).error, madeUp, 'a used link and a made-up one look the same');
+step('a used link is refused (verify and peek)');
 
 const bob = `bob-${run}@example.com`;
 await post('/api/auth/start', { email: bob });
