@@ -335,8 +335,8 @@ Copyright (c) 2025 Kalid Azad
                 <button @click="share"
                     :class="{ 'pc-share-pulse': sharePulse }"
                     class="bg-blue-600 text-white text-sm font-bold px-4 py-1.5 rounded-md shadow-sm whitespace-nowrap"
-                    aria-label="Share this calendar">
-                    Share
+                    data-testid="share-new-mobile" aria-label="Save and share this calendar">
+                    Save &amp; share
                 </button>
             </div>
         </div> <!-- Closing div for md:hidden -->
@@ -360,7 +360,7 @@ Copyright (c) 2025 Kalid Azad
                                 <div class="flex flex-col">
                                     <span
                                         class="text-blue-500 font-medium text-sm hover:text-blue-600 transition-colors">pastecal</span>
-                                    <span class="text-color-1 hidden lg:block -mt-0.5 text-[10px]">no-login
+                                    <span class="text-color-1 hidden xl:block -mt-0.5 text-[10px] whitespace-nowrap">no-login
                                         shared calendar</span>
                                 </div>
                             </a>
@@ -615,14 +615,14 @@ Copyright (c) 2025 Kalid Azad
 
                                     <!-- Input -->
                                     <input id="slug"
-                                        class="bg-transparent border-none focus:ring-0 p-0 text-sm font-bold text-color-2 w-24 md:w-40 focus:outline-none placeholder-gray-400 min-w-0"
+                                        class="bg-transparent border-none focus:ring-0 p-0 text-sm font-bold text-color-2 w-24 md:w-28 lg:w-40 focus:outline-none placeholder-gray-400 min-w-0"
                                         type="text" :disabled="isExisting" v-model="calendar.id" @keyup.enter="create"
                                         @input="handleSlugInput" placeholder="your-name">
 
-                                    <!-- Claim Button (Integrated) -->
+                                    <!-- Save & share: turns the draft into a real calendar and shows its links -->
                                     <button @click="share" :class="{ 'pc-share-pulse': sharePulse }" data-testid="share-new"
-                                        class="ml-0.5 sm:ml-1 px-2 sm:px-3 py-1 sm:py-1.5 text-white bg-blue-600 font-bold rounded-full text-xs hover:bg-blue-700 transition-colors flex-shrink-0 shadow-sm">
-                                        Share
+                                        class="ml-0.5 sm:ml-1 px-2 sm:px-3 py-1 sm:py-1.5 text-white bg-blue-600 font-bold rounded-full text-xs hover:bg-blue-700 transition-colors flex-shrink-0 shadow-sm whitespace-nowrap">
+                                        Save &amp; share
                                     </button>
                                 </div>
                             </template>
@@ -1284,7 +1284,7 @@ Copyright (c) 2025 Kalid Azad
 
         <!-- Homepage only, narrow screens: what this is, before the calendar. -->
         <p v-if="isHomepageCalendar" class="pc-home-line" v-cloak>
-            <strong>No-login shared calendars.</strong> Tap a day to add an event, then press Share for the link. <a href="#how">How it works&nbsp;↓</a>
+            <strong>No-login shared calendars.</strong> Tap a day to add an event, then press Save &amp; share for the link. <a href="#how">How it works&nbsp;↓</a>
         </p>
 
         <!-- On the homepage at 1100px+, the calendar takes two thirds and the pitch the rest. Elsewhere
@@ -1299,7 +1299,7 @@ Copyright (c) 2025 Kalid Azad
                 </div>
             </div>
             <p v-if="isHomepageCalendar" class="pc-draft-note" v-cloak>
-                <span>This calendar is a draft, saved only in this browser. Press <b>Share</b> to get a link anyone can open.</span>
+                <span>This calendar is a draft, saved only in this browser. Press <b>Save &amp; share</b> to get a link anyone can open.</span>
                 <span class="pc-draft-links"><button v-if="homeAsideHidden" type="button" class="pc-show-guide" @click="toggleHomeAside"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m10 15-3-3 3-3"/></svg>Show guide</button><a href="#how">How pastecal works ↓</a></span>
             </p>
             </div>
@@ -1310,13 +1310,13 @@ Copyright (c) 2025 Kalid Azad
                 <p class="pc-home-lead">Add events, send one link, and everyone sees every change.</p>
                 <ol class="pc-home-steps">
                     <li><b>1</b><span>Click a day and type an event.</span></li>
-                    <li><b>2</b><span>Press <strong>Share</strong> to get your links.</span></li>
+                    <li><b>2</b><span>Press <strong>Save &amp; share</strong> to get your links.</span></li>
                     <li><b>3</b><span>Send the read-only link to your group.</span></li>
                 </ol>
                 <ul class="pc-home-nots" aria-label="What you skip">
                     <li>Nothing to install</li><li>No sign-up</li><li>No password to reset</li><li>No permissions to set</li>
                 </ul>
-                <p class="pc-home-draft">This calendar is a draft, saved only in this browser until you press Share.</p>
+                <p class="pc-home-draft">This calendar is a draft, saved only in this browser until you press Save &amp; share.</p>
                 <a class="pc-home-more" href="#how">How pastecal works ↓</a>
                 </div>
             </aside>
@@ -1349,7 +1349,7 @@ Copyright (c) 2025 Kalid Azad
                             <span class="pc-tour-chip">pastecal.com/<b>soccer-fall</b></span>
                         </div>
                         <h3>Send the link</h3>
-                        <p>Press Share and send the link to your group chat or email.</p>
+                        <p>Press Save &amp; share, then send the link to your group chat or email.</p>
                     </li>
                     <li>
                         <div class="pc-tour-art" aria-hidden="true">
