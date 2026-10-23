@@ -158,13 +158,6 @@ const CalendarVueApp = {
             shareCopied: false,
             shareCopiedTimer: null,
             showWelcome: false,
-            // "Made with pastecal" pill on calendar pages: never inside someone else's page
-            // (an embed), and gone for good once dismissed in this browser.
-            aboutPillOpen: false,
-            aboutPillHidden: (() => {
-                try { if (window.self !== window.top) return true; } catch (e) { return true; }
-                try { return localStorage.getItem('pastecal_about_pill_dismissed') === '1'; } catch (e) { return false; }
-            })(),
             showHelp: false,
             showNotes: false,
             showShare: false,
@@ -2708,11 +2701,6 @@ const CalendarVueApp = {
             }
         },
 
-        dismissAboutPill() {
-            this.aboutPillHidden = true;
-            this.aboutPillOpen = false;
-            try { localStorage.setItem('pastecal_about_pill_dismissed', '1'); } catch (e) { /* private mode: hidden for this visit */ }
-        },
 
         welcomeShowHelp() {
             this.dismissWelcome();

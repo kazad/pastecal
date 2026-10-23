@@ -515,7 +515,7 @@ Copyright (c) 2025 Kalid Azad
                     </div>
                 </div>
 
-                <div v-if="!isLoading && isReadOnly">
+                <div v-if="!isLoading && isReadOnly" class="flex items-center">
                     <custom-tooltip align="right">
                         <template #trigger>
                             <div class="flex items-center bg-1 border border-color-default rounded-full p-1 pl-3 pr-3 shadow-sm cursor-pointer select-none hover:border-blue-500 hover:bg-[var(--bg-interactive-hover)] transition-all"
@@ -537,6 +537,9 @@ Copyright (c) 2025 Kalid Azad
                             </p>
                         </template>
                     </custom-tooltip>
+                    <!-- People sent a view-only link are the best future users: one quiet invitation.
+                         Also shown inside embeds, as the free plan's small credit (Pro removes it). -->
+                    <a href="https://pastecal.com/" target="_top" class="pc-make-own" data-testid="make-own">Make your own calendar</a>
                 </div>
 
                 <div v-if="!isLoading && !isReadOnly">
@@ -1291,23 +1294,7 @@ Copyright (c) 2025 Kalid Azad
             <a href="#how">New here? How pastecal works ↓</a>
         </p>
 
-                <!-- Calendar pages: a small "what is this?" for people who were sent a link. Not on the
-             homepage (it has the tour), not inside embeds, and gone once dismissed. -->
-        <div v-if="!isHomepageCalendar && !aboutPillHidden" class="pc-about" data-testid="about-pill" v-cloak>
-            <div v-if="aboutPillOpen" class="pc-about-card" role="dialog" aria-labelledby="pc-about-title">
-                <button type="button" class="pc-about-x" @click="aboutPillOpen = false" aria-label="Close">&times;</button>
-                <h3 id="pc-about-title">A shared calendar in one link</h3>
-                <p>Someone made this calendar on pastecal and shared the link. You can make your own the same way, with no account.</p>
-                <div class="pc-about-actions">
-                    <a class="pc-about-make" href="/">Make your own calendar</a>
-                    <a href="/#how">How it works</a>
-                </div>
-                <button type="button" class="pc-about-hide" @click="dismissAboutPill">Don't show this again</button>
-            </div>
-            <button v-else type="button" class="pc-about-pill" @click="aboutPillOpen = true">Made with pastecal</button>
-        </div>
-
-        <!-- Homepage only: what pastecal is, for people who scroll past the calendar. -->
+                <!-- Homepage only: what pastecal is, for people who scroll past the calendar. -->
         <section v-if="isHomepageCalendar" id="how" class="pc-tour" aria-labelledby="pc-tour-title" data-testid="homepage-tour" v-cloak>
             <div class="pc-tour-inner">
                 <h2 id="pc-tour-title">A shared calendar in one link</h2>
@@ -1344,8 +1331,8 @@ Copyright (c) 2025 Kalid Azad
                 <h3 class="pc-tour-label">Three ways to share</h3>
                 <div class="pc-tour-links">
                     <div><h4>Edit link</h4><code>pastecal.com/soccer-fall</code><p>Anyone with it can add and change events.</p></div>
-                    <div><h4>View-only link</h4><code>pastecal.com/view/…</code><p>People can see the calendar but not change it.</p></div>
-                    <div><h4>Calendar app link</h4><code>pastecal.com/soccer-fall.ics</code><p>Subscribe in Google, Apple or Outlook Calendar. It updates on its own.</p></div>
+                    <div><h4>View-only link</h4><code>pastecal.com/view/soccer-fall-parents</code><p>People can see the calendar but not change it, and they never see the edit link. Pick any name for it.</p></div>
+                    <div><h4>Calendar app link</h4><code>pastecal.com/soccer-fall.ics</code><p>Subscribe in Google, Apple or Outlook Calendar and it stays up to date. Google can take a few hours to refresh.</p></div>
                 </div>
 
                 <h3 class="pc-tour-label">People use it for</h3>
@@ -1356,19 +1343,19 @@ Copyright (c) 2025 Kalid Azad
 
                 <div class="pc-tour-facts">
                     <div><strong>Since 2021</strong><span>and still simple</span></div>
-                    <div><strong>3,000+</strong><span>calendars in use</span></div>
+                    <div><strong>3,000+</strong><span>calendars made</span></div>
                     <div><strong>No accounts</strong><span>for you or anyone you share with</span></div>
                 </div>
                 <ul class="pc-tour-trust">
-                    <li>Every change can be undone.</li>
-                    <li>Calendars are backed up after every change.</li>
-                    <li>Only people with a link can see your calendar.</li>
+                    <li>Recent changes can be undone.</li>
+                    <li>Calendars are backed up every day they change.</li>
+                    <li>Edit links are kept out of search engines.</li>
                 </ul>
 
                 <h3 class="pc-tour-label">Questions</h3>
                 <div class="pc-tour-faq">
                     <details><summary>Who can change my calendar?</summary><p>Anyone with the edit link. Send the view-only link to people who only need to look.</p></details>
-                    <details><summary>Is it private?</summary><p>Only people with a link can open your calendar. Edit links are never listed in search engines.</p></details>
+                    <details><summary>Is it private?</summary><p>Anyone with a link can open it, so give a private calendar a hard-to-guess name. Edit links are never listed in search engines.</p></details>
                     <details><summary>Can I undo a change?</summary><p>Yes. Click "Edited … ago" at the top to see recent changes and put any of them back.</p></details>
                     <details><summary>Does it work on phones?</summary><p>Yes, in any phone browser. There is nothing to install.</p></details>
                     <details><summary>Is it free?</summary><p>Yes. There is no trial and no card to enter.</p></details>
