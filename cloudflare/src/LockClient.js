@@ -3,8 +3,12 @@
  *
  *   lock(id, ownerId)          -> {status, ok, editorKey?, error?}   409 locked-by-other, 404 no calendar
  *   unlock(id, ownerId)        -> {status, ok}
- *   rotateEditorKey(id, owner) -> {status, ok, editorKey?}
+ *   rotateEditorKey(id, owner) -> {status, ok, editorKey?}     revokes every editor link, makes one 'Editors' link
  *   lockStatus(id)             -> {status, locked, ownerId, plan, lockedAt}
+ *   createEditorLink(id, owner, label) -> {status, ok, id, label, createdAt, editorKey}   409 too-many-links / not-locked, 403 not-owner
+ *   listEditorLinks(id, owner)         -> {status, ok, links:[{id, label, createdAt, lastUsedAt}]}
+ *   revokeEditorLink(id, owner, linkId) -> {status, ok}                                   404 no-link
+ *   setProSettings(id, owner, settings) -> {status, ok, settings}                         400 bad-settings (+message)
  *
  * Calls go to the calendar's Durable Object. In local tests, ACCOUNTS_DEV_MODE=1 plus
  * LOCK_API_BASE=http://127.0.0.1:<port> sends them to a fake instead; any other host is refused,
@@ -36,4 +40,8 @@ export const LockClient = {
     unlock: (env, id, ownerId) => call(env, id, 'unlock', 'POST', { ownerId }),
     rotateEditorKey: (env, id, ownerId) => call(env, id, 'rotate-editor-key', 'POST', { ownerId }),
     lockStatus: (env, id) => call(env, id, 'lock-status', 'GET'),
+    createEditorLink: (env, id, ownerId, label) => call(env, id, 'create-editor-link', 'POST', { ownerId, label }),
+    listEditorLinks: (env, id, ownerId) => call(env, id, 'list-editor-links', 'POST', { ownerId }),
+    revokeEditorLink: (env, id, ownerId, linkId) => call(env, id, 'revoke-editor-link', 'POST', { ownerId, id: linkId }),
+    setProSettings: (env, id, ownerId, settings) => call(env, id, 'set-pro-settings', 'POST', { ownerId, settings }),
 };

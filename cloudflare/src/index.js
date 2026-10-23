@@ -17,6 +17,7 @@
  *   /api/auth/*, /api/me, /api/pro/*, /api/stripe/webhook   Pro accounts + billing (Accounts.js)
  *   POST /api/admin/cal/<id>/{lock,unlock,rotate-editor-key}, GET .../lock-status
  *                                 Pro lock, for support and tests (Bearer IMPORT_SECRET)
+ *                                 (+ dev-legacy-key with ACCOUNTS_DEV_MODE=1: a test hook for the key migration)
  */
 import { ICSService } from './ICSService.js';
 import { SlugService } from './SlugService.js';
@@ -264,7 +265,9 @@ export default {
             let id = null;
             try { id = decodeURIComponent(adminLock[1]); } catch { /* bad escape */ }
             const op = adminLock[2];
-            if (!id || !validId(id) || !ADMIN_LOCK_OPS.has(op)) return new Response('not found', { status: 404 });
+            // dev-legacy-key (local tests only) rewrites a lock into its pre-editor-links shape.
+            const devOp = op === 'dev-legacy-key' && env.ACCOUNTS_DEV_MODE === '1';
+            if (!id || !validId(id) || !(ADMIN_LOCK_OPS.has(op) || devOp)) return new Response('not found', { status: 404 });
             if ((op === 'lock-status') !== (request.method === 'GET')) return new Response('method not allowed', { status: 405 });
             const room = env.CALENDARS.get(env.CALENDARS.idFromName(id));
             return room.fetch(`http://internal/cal/${encodeURIComponent(id)}/${op}`,

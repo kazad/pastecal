@@ -8,7 +8,15 @@
  *   GET  /api/me                                 -> {email, calendars:[{id, status, plan, interval, currentPeriodEnd}]} | 401
  *   POST /api/pro/checkout    {calendarId, interval?:'year'|'month', editName?} -> {url} (Stripe Checkout)
  *   POST /api/pro/portal      {calendarId?}      -> {url} (Stripe Billing Portal)
- *   POST /api/pro/editor-key  {calendarId}       -> {editorKey}, shown once (owner only)
+ *   POST /api/pro/editor-key  {calendarId}       -> {editorKey}, shown once (owner only). Compatibility: revokes
+ *                                                   every editor link and makes one new link labeled 'Editors'.
+ *   POST /api/pro/editor-links {calendarId, label} -> {id, label, createdAt, url_fragment_key} (key shown once; owner only)
+ *   GET  /api/pro/editor-links?calendar=<id>     -> [{id, label, createdAt, lastUsedAt}] live links only, never keys (owner only)
+ *   POST /api/pro/editor-links/revoke {calendarId, id} -> {ok:true}; that link's sockets drop to read-only (owner only)
+ *   POST /api/pro/settings    {calendarId, settings} -> {ok:true, settings} (owner only; a partial patch, see
+ *                                                   mergeProSettings in CalendarRoom.js; 400 {error:'bad-settings', message})
+ *     Owner routes answer 401 signed-out, 400 bad-calendar, 404 no-calendar, 409 not-locked, 403 not-owner;
+ *     editor-links also 400 bad-label, 409 too-many-links (20 live), 404 no-link.
  *   GET  /api/pro/status?calendar=<id>           -> {locked, pro, isOwner}
  *   POST /api/stripe/webhook                     Stripe events (signed), see handleWebhook
  *   POST /api/admin/accounts/reassign {calendarId, email}   (Bearer IMPORT_SECRET; lost access, disputes)
@@ -274,6 +282,14 @@ async function route(request, env, url, path) {
         const locked = !!st.locked;
         return json({ locked, pro: locked && st.plan === 'pro', isOwner: !!(locked && userId && st.ownerId === userId) });
     }
+    if (path === '/api/pro/editor-links' && m === 'GET') {
+        const calendarId = url.searchParams.get('calendar');
+        const o = await requireOwner(request, env, calendarId);
+        if (o.res) return o.res;
+        const r = await LockClient.listEditorLinks(env, calendarId, o.userId);
+        if (!r.ok || !Array.isArray(r.links)) return roomError(r);
+        return json(r.links);
+    }
 
     if (m !== 'POST') return json({ error: 'method' }, 405);
     if (!sameSite(request, env)) return json({ error: 'forbidden-origin' }, 403);
@@ -328,7 +344,47 @@ async function route(request, env, url, path) {
         if (!r.ok || !r.editorKey) return json({ error: r.error || 'unavailable' }, r.status >= 400 && r.status < 500 ? r.status : 502);
         return json({ editorKey: r.editorKey });
     }
+    if (path === '/api/pro/editor-links') {
+        const o = await requireOwner(request, env, body.calendarId);
+        if (o.res) return o.res;
+        if (typeof body.label !== 'string' || !body.label.trim() || body.label.trim().length > 40) return json({ error: 'bad-label' }, 400);
+        const r = await LockClient.createEditorLink(env, body.calendarId, o.userId, body.label);
+        if (!r.ok || !r.editorKey) return roomError(r);
+        return json({ id: r.id, label: r.label, createdAt: r.createdAt, url_fragment_key: r.editorKey });
+    }
+    if (path === '/api/pro/editor-links/revoke') {
+        const o = await requireOwner(request, env, body.calendarId);
+        if (o.res) return o.res;
+        if (typeof body.id !== 'string' || !body.id || body.id.length > 100) return json({ error: 'no-link' }, 404);
+        const r = await LockClient.revokeEditorLink(env, body.calendarId, o.userId, body.id);
+        return r.ok ? json({ ok: true }) : roomError(r);
+    }
+    if (path === '/api/pro/settings') {
+        const o = await requireOwner(request, env, body.calendarId);
+        if (o.res) return o.res;
+        const r = await LockClient.setProSettings(env, body.calendarId, o.userId, body.settings);
+        return r.ok ? json({ ok: true, settings: r.settings }) : roomError(r);
+    }
     return json({ error: 'not-found' }, 404);
+}
+
+// The signed-in owner of a locked calendar: {userId}, or {res} to send back. The room checks the
+// owner id again on every owner-only route.
+async function requireOwner(request, env, calendarId) {
+    const userId = await sessionUserId(request, env);
+    if (!userId) return { res: json({ error: 'signed-out' }, 401) };
+    if (!validId(calendarId)) return { res: json({ error: 'bad-calendar' }, 400) };
+    const st = await LockClient.lockStatus(env, calendarId);
+    if (st.status === 404) return { res: json({ error: 'no-calendar' }, 404) };
+    if (!st.ok) return { res: json({ error: 'unavailable' }, 502) };
+    if (!st.locked) return { res: json({ error: 'not-locked' }, 409) };
+    if (st.ownerId !== userId) return { res: json({ error: 'not-owner' }, 403) };
+    return { userId };
+}
+// A room's refusal, passed on: its 4xx status and error (and message, for bad-settings); 502 otherwise.
+function roomError(r) {
+    if (r.status >= 400 && r.status < 500) return json({ error: r.error || 'refused', ...(r.message ? { message: r.message } : {}) }, r.status);
+    return json({ error: 'unavailable' }, 502);
 }
 
 // Stripe requires a Checkout page to live at least 30 minutes from when IT creates the session,
