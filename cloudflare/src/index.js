@@ -57,7 +57,14 @@ async function sessionUserId(request, env) {
     if (env.UNSAFE_DEV_SESSION_HEADER === 'on' && /^(::1|127\.0\.0\.1)$/.test(request.headers.get('CF-Connecting-IP') || '')) {
         return request.headers.get('X-Dev-Session-User') || null;
     }
-    return accountsSessionUserId(request, env);   // the pc_session cookie (magic-link sign-in)
+    // The pc_session cookie (magic-link sign-in). If the Accounts object fails, the caller is simply
+    // anonymous: a calendar socket must never 500 because sign-in is down (viewers and editor links still work).
+    try {
+        return await accountsSessionUserId(request, env);
+    } catch (err) {
+        console.error('[Worker] session lookup failed; treating the request as signed out:', err && err.message);
+        return null;
+    }
 }
 
 // A request to forward to a room, without any X-PC-User the client sent (rooms trust that header).
