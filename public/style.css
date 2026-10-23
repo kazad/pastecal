@@ -990,3 +990,9 @@ div#Schedule,
 .pc-nav-label { margin: 6px 4px 0; padding: 10px 6px 4px }
 .pc-nav-empty { margin: 6px 4px 0; padding: 10px 6px 4px; line-height: 1.45 }
 .pc-nav a, .pc-nav a:hover { text-decoration: none }
+.pc-home-links { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0 }
+.pc-demo-code { color: inherit; text-decoration: underline; text-decoration-color: var(--pc-line); text-underline-offset: 3px }
+.pc-demo-code:hover { text-decoration-color: currentColor }
+.pc-home-nots { grid-template-columns: repeat(2, max-content); column-gap: 16px }
+.pc-home-nots li { white-space: nowrap }
+@media (max-width: 1359px) { .pc-home-split .pc-home-nots { grid-template-columns: max-content } }
