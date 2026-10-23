@@ -17,6 +17,9 @@ function runSnippet(file, href, referrer = '') {
   const html = fs.readFileSync(path.join(root, file), 'utf8');
   const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]).find((s) => s.includes("gtag('set'"));
   assert.ok(script, `${file}: no gtag('set', ...) block`);
+  // The container's Google tag sends its page_view on gtm.js, and dataLayer commands apply in
+  // order: the set must be queued before the GTM snippet pushes gtm.js (seen sending the edit URL otherwise).
+  assert.ok(html.indexOf("gtag('set'") < html.indexOf("'gtm.start'"), `${file}: gtag('set') must come before the GTM snippet`);
   const url = new URL(href);
   const calls = [];
   const window = { location: { href, pathname: url.pathname, search: url.search, origin: url.origin, host: url.host }, dataLayer: [] };
