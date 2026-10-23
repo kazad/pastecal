@@ -228,12 +228,30 @@ assert.equal((await admin(id, 'unlock', {})).body.alreadyUnlocked, true);
 assert.ok((await (await fetch(`${BASE}/cal/${enc(id)}/history`)).json()).some((h) => h.kind === 'unlocked' && h.label === 'Unlocked'));
 r = await fetch(`${BASE}/cal/${enc(id)}/import`, { method: 'PUT', headers: auth, body: JSON.stringify({ id, title: 'Team', options: cal.calendar.options, events: cal.calendar.events }) });
 assert.equal(r.status, 200);
-// A key from the locked period means nothing after a re-lock (new key id).
+// Changed deliberately (security review #7): an unlock PAUSES editor links instead of revoking them.
+// A re-lock by the same owner turns them back on (no new key is made); a lock by anyone else revokes them.
+const reopened = tab(id); await reopened.ready;
+assert.equal((await reopened.authKey(relock.body.editorKey)).ok, true, 'while unlocked, a paused link still names itself');
 const l2 = await admin(id, 'lock', { ownerId: OWNER });
-assert.ok(l2.body.editorKey);
-assert.equal((await keyed3.save([{ type: 'add', event: ev('stale', 'stale key socket', 11) }])).code, 'locked');
+assert.equal(l2.body.ok, true); assert.equal(l2.body.editorKey, null, 'same owner: the paused link comes back, no new one');
+assert.equal((await keyed3.save([{ type: 'add', event: ev('back', 'paused link works again', 11) }])).t, 'ack');
+assert.equal((await reopened.save([{ type: 'add', event: ev('back2', 'opened while unlocked', 11) }])).t, 'ack');
+assert.equal((await fresh.save([{ type: 'add', event: ev('stale', 'rotated-away key', 11) }])).code, 'locked', 'a key rotated away before the unlock stays dead');
 await admin(id, 'unlock', {});
-step('unlock (wrong owner 409): every tab is told locked:false, canEdit:true, anyone can save again, events kept, history shows "Unlocked", /import works; sockets keyed before do not regain write after a re-lock');
+const l3 = await admin(id, 'lock', { ownerId: 'new-owner-' + OWNER });
+assert.ok(l3.body.editorKey, 'a new owner starts with one fresh link');
+res = await keyed3.waitFor((m) => m.t === 'auth' && m.reason === 'link-revoked');
+assert.deepEqual([res.ok, res.canEdit], [false, false]);
+assert.equal((await keyed3.save([{ type: 'add', event: ev('stale2', 'old owner link', 12) }])).code, 'locked');
+const late = tab(id); await late.ready;
+res = await late.authKey(relock.body.editorKey);
+assert.deepEqual([res.ok, res.reason], [false, 'link-revoked'], 'a tab opened later with that key is told it was revoked');
+await admin(id, 'unlock', {});
+const l4 = await admin(id, 'lock', { ownerId: OWNER, createLink: false });
+assert.equal(l4.body.editorKey, null, 'createLink:false (billing) makes no link');
+assert.equal((await late.authKey(relock.body.editorKey)).ok, false, 'the old owner coming back does not revive links a new owner revoked');
+await admin(id, 'unlock', {});
+step('unlock (wrong owner 409): every tab is told locked:false, canEdit:true, anyone can save again, events kept, history shows "Unlocked", /import works; links are paused: the same owner re-locking turns them back on, a new owner revokes them (tabs told link-revoked)');
 
-for (const t of [anon0, anon, viaQuery, editor2, spoof, owner, notOwner, fresh, keyed3]) t.ws.close();
+for (const t of [anon0, anon, viaQuery, editor2, spoof, owner, notOwner, fresh, keyed3, reopened, late]) t.ws.close();
 console.log(`\n${n} checks passed`); process.exit(0);

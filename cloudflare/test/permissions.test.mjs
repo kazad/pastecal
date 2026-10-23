@@ -269,14 +269,15 @@ assert.equal((await post('/api/pro/settings', settingsBody, { cookie: owner.cook
 assert.equal((await mk('After unlock')).status, 409);
 assert.equal((await anon.meta({ options: { theme: { accent: '#000000' }, color: 'blue' } })).t, 'ack');
 assert.equal((await getCal(id)).calendar.options.theme, undefined, 'unlocked calendars cannot smuggle theme into options either');
+// Changed deliberately (security review #7): unlock pauses links; the same owner re-locking turns them back on.
 const relock = await admin(id, 'lock', { ownerId: owner.userId });
-assert.ok(relock.body.editorKey);
+assert.equal(relock.body.ok, true); assert.equal(relock.body.editorKey, null, 'no new link: the paused one came back');
 assert.deepEqual((await getCal(id)).proSettings, S2, 'same owner: settings come back');
 list = await getJ(`/api/pro/editor-links?calendar=${enc(id)}`, owner.cookie);
-assert.equal(list.body.length, 1, 'a re-lock starts with one fresh link');
-assert.equal((await lt.save([{ type: 'add', event: ev('st', 'stale socket', 7) }])).code, 'locked');
+assert.deepEqual(list.body.map((l) => [l.id, l.label]), [[legacy.body.keyId, 'Editors']], 'the same links as before the unlock');
+assert.equal((await lt.save([{ type: 'add', event: ev('st', 'paused link socket', 7) }])).t, 'ack');
 await admin(id, 'unlock', {});
-step('unlock: proSettings null, owner routes 409, everyone edits again; a re-lock by the same owner restores the settings and starts with one fresh link; sockets keyed before stay read-only');
+step('unlock: proSettings null, owner routes 409, everyone edits again; a re-lock by the same owner restores the settings and the same editor links (sockets keyed before can edit again)');
 
 for (const t of [tA, tB, ownerTab, otherTab, anon, viewTab, fresh, late, lateView, lt]) t.ws.close();
 console.log(`\n${n} checks passed`); process.exit(0);

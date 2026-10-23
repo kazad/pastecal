@@ -201,3 +201,19 @@ test('flow: debounce_sync goes through the cloud sync (not the inherited Firebas
     S.flush();
     assert.equal(ws.sent.length, 2, 'flush sends without waiting for the debounce');
 });
+
+test('editor key: kept when the calendar is unlocked or the key is merely refused; forgotten only when the owner revoked or replaced it', () => {
+    const { tab, ws } = open([ev('a', 'A')]);
+    tab.run(require('node:fs').readFileSync(require('node:path').join(__dirname, '../../public/services/EditorKeys.js'), 'utf8') + '\nglobalThis.EditorKeys = EditorKeys;', 'EditorKeys.js');
+    const KEY = 'pastecal_editor_key:room';
+    tab.store[KEY] = 'k123';
+    ws.push({ t: 'auth', ok: false, locked: false, canEdit: true });
+    assert.equal(tab.store[KEY], 'k123', 'unlocked: links are paused, not gone');
+    ws.push({ t: 'auth', ok: false, locked: true, canEdit: false });
+    assert.equal(tab.store[KEY], 'k123', 'a refusal without a reason keeps the key');
+    ws.push({ t: 'auth', ok: false, locked: true, canEdit: false, reason: 'link-revoked' });
+    assert.equal(tab.store[KEY], undefined, 'revoked: forgotten');
+    tab.store[KEY] = 'k456';
+    ws.push({ t: 'auth', ok: false, locked: true, canEdit: false, reason: 'key-rotated' });
+    assert.equal(tab.store[KEY], undefined, 'replaced: forgotten');
+});

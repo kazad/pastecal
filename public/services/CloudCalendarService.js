@@ -280,12 +280,16 @@ class CloudCalendarService extends CalendarDataService {
         if (m.ok) {
             room.lock = { ...room.lock, locked: !!m.locked, canEdit: m.canEdit !== false };
         } else if (m.locked) {
-            // The key is wrong now: the owner reset it (or it never matched). It will not start working again.
-            this._forgetEditorKey(room.id);
+            // Forget the key only when the server says the owner revoked or replaced it: it will not
+            // start working again. Any other refusal keeps it (it costs nothing to send again).
+            if (m.reason === 'key-rotated' || m.reason === 'link-revoked') {
+                this._forgetEditorKey(room.id);
+                if (!m.canEdit) reason = 'key-rotated';
+            }
             room.lock = { ...room.lock, locked: true, canEdit: !!m.canEdit };
-            if (!m.canEdit) reason = 'key-rotated';
         }
-        // (ok:false on a calendar that is not locked: nothing to do, the key is simply not needed.)
+        // (ok:false on a calendar that is not locked: keep the key. An unlock pauses editor links, and a
+        // re-lock by the same owner turns them back on.)
         const held = room.heldSnapshot; room.heldSnapshot = null;
         if (held) return this._onSnapshot(room, { ...held, canEdit: room.lock.canEdit }, reason);
         this._notifyLock(room, reason);
