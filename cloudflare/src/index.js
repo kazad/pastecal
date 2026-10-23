@@ -15,6 +15,8 @@
  *   PUT  /cal/<id>/import         Full calendar replace (Bearer IMPORT_SECRET)
  *   PUT  /cal/<id>/from-firebase  Firebase sync write (same auth)
  *   /api/auth/*, /api/me, /api/pro/*, /api/stripe/webhook   Pro accounts + billing (Accounts.js)
+ *   POST /api/admin/cal/<id>/{lock,unlock,rotate-editor-key}, GET .../lock-status
+ *                                 Pro lock, for support and tests (Bearer IMPORT_SECRET)
  */
 import { ICSService } from './ICSService.js';
 import { SlugService } from './SlugService.js';
@@ -23,7 +25,7 @@ export { CalendarRoom } from './CalendarRoom.js';
 export { CalendarDirectory } from './CalendarDirectory.js';
 export { Waitlist } from './Waitlist.js';
 export { Accounts } from './Accounts.js';
-import { handleAccounts } from './Accounts.js';
+import { handleAccounts, sessionUserId as accountsSessionUserId } from './Accounts.js';
 import { PLANS } from './Waitlist.js';
 
 // Any name Firebase allowed: real calendars include "TEAM NUÑEZ", "d&d8", "강아지봉사" and
@@ -42,6 +44,31 @@ function publicLookup(out) {
     if (!out || !out.isReadOnly) return out;
     return { found: out.found, actualSlug: out.actualSlug, isReadOnly: true };
 }
+
+// The signed-in pastecal user making this request, or null. The accounts code fills this in
+// (validate the session cookie, return the user id). Until then nobody is signed in. Its answer is
+// the ONLY source of the trusted X-PC-User header a room sees.
+// UNSAFE_DEV_SESSION_HEADER is for local tests only (wrangler dev --var), never in wrangler.jsonc:
+// it takes the user from an X-Dev-Session-User header, and only from a loopback client.
+async function sessionUserId(request, env) {
+    // wrangler dev rewrites the URL to the route's host, so "local" is the client address: Cloudflare
+    // sets CF-Connecting-IP itself in production, where it is never loopback.
+    if (env.UNSAFE_DEV_SESSION_HEADER === 'on' && /^(::1|127\.0\.0\.1)$/.test(request.headers.get('CF-Connecting-IP') || '')) {
+        return request.headers.get('X-Dev-Session-User') || null;
+    }
+    return accountsSessionUserId(request, env);   // the pc_session cookie (magic-link sign-in)
+}
+
+// A request to forward to a room, without any X-PC-User the client sent (rooms trust that header).
+// `userId` is set only from sessionUserId.
+function forRoom(request, url = request.url, userId = null) {
+    const headers = new Headers(request.headers);
+    headers.delete('X-PC-User');
+    if (userId) headers.set('X-PC-User', userId);
+    return new Request(url, new Request(request, { headers }));
+}
+
+const ADMIN_LOCK_OPS = new Set(['lock', 'unlock', 'rotate-editor-key', 'lock-status']);
 
 function getDirectory(env) {
     return env.DIRECTORY ? env.DIRECTORY.get(env.DIRECTORY.idFromName('global')) : null;
@@ -186,6 +213,20 @@ export default {
             const customSlug = payload?.customSlug;
             const dir = getDirectory(env);
             if (!dir) return Response.json({ ok: false, error: 'Directory unavailable' }, { status: 500 });
+            if (typeof sourceCalendarId !== 'string' || !validId(sourceCalendarId)) {
+                return withCors(Response.json({ ok: false, error: 'invalid-argument', message: 'sourceCalendarId is required' }, { status: 400 }));
+            }
+            const room = env.CALENDARS.get(env.CALENDARS.idFromName(sourceCalendarId));
+            // A locked calendar's read-only link is made only by its owner or an editor -- checked
+            // BEFORE the directory, so no one else can even mint a view name pointing at it.
+            const access = await (await room.fetch(`http://internal/cal/${encodeURIComponent(sourceCalendarId)}/can-edit`, {
+                method: 'POST',
+                body: JSON.stringify({ editorKey: payload?.editorKey, userId: await sessionUserId(request, env) }),
+            })).json();
+            if (access.locked && !access.canEdit) {
+                const err = { ok: false, error: 'locked', message: 'This calendar is locked. Only its owner and people with an editor key can change it.' };
+                return withCors(Response.json(path === '/createPublicLink' ? { error: err } : err, { status: 403 }));
+            }
 
             const dirRes = await dir.fetch('http://internal/create-view', {
                 method: 'POST',
@@ -197,24 +238,13 @@ export default {
                 return Response.json(path === '/createPublicLink' ? { error: out } : out, { status: dirRes.status });
             }
 
-            // Save publicViewId into the source room's options
+            // Save publicViewId into the source room's options: one field, through a narrow internal
+            // route (it used to rewrite the whole calendar through /from-firebase, which a lock refuses).
             try {
-                const room = env.CALENDARS.get(env.CALENDARS.idFromName(sourceCalendarId));
-                const getRes = await room.fetch(`http://internal/cal/${encodeURIComponent(sourceCalendarId)}`);
-                if (getRes.ok) {
-                    const current = await getRes.json();
-                    if (current?.calendar) {
-                        const nextOptions = { ...(current.calendar.options || {}), publicViewId: out.publicViewId };
-                        await room.fetch(`http://internal/cal/${encodeURIComponent(sourceCalendarId)}/from-firebase`, {
-                            method: 'PUT',
-                            headers: {
-                                'Content-Type': 'application/json',
-                                Authorization: `Bearer ${env.IMPORT_SECRET || 'dev-secret'}`
-                            },
-                            body: JSON.stringify({ ...current.calendar, options: nextOptions })
-                        });
-                    }
-                }
+                await room.fetch(`http://internal/cal/${encodeURIComponent(sourceCalendarId)}/set-view-id`, {
+                    method: 'POST',
+                    body: JSON.stringify({ publicViewId: out.publicViewId }),
+                });
             } catch (err) {
                 console.error('[Worker create-view] failed to update source room options:', err);
             }
@@ -223,6 +253,22 @@ export default {
                 return withCors(Response.json({ data: { publicViewId: out.publicViewId }, result: { publicViewId: out.publicViewId } }));
             }
             return withCors(Response.json(out));
+        }
+
+        // Pro lock admin: what the billing code does internally, for support ("lost key", disputes) and tests.
+        const adminLock = path.match(/^\/api\/admin\/cal\/([^/]+)\/([a-z-]+)$/);
+        if (adminLock) {
+            if (!env.IMPORT_SECRET || request.headers.get('Authorization') !== `Bearer ${env.IMPORT_SECRET}`) {
+                return new Response('forbidden', { status: 403 });
+            }
+            let id = null;
+            try { id = decodeURIComponent(adminLock[1]); } catch { /* bad escape */ }
+            const op = adminLock[2];
+            if (!id || !validId(id) || !ADMIN_LOCK_OPS.has(op)) return new Response('not found', { status: 404 });
+            if ((op === 'lock-status') !== (request.method === 'GET')) return new Response('method not allowed', { status: 405 });
+            const room = env.CALENDARS.get(env.CALENDARS.idFromName(id));
+            return room.fetch(`http://internal/cal/${encodeURIComponent(id)}/${op}`,
+                op === 'lock-status' ? {} : { method: 'POST', body: await request.text() });
         }
 
         // 4. Directory maintenance: /api/directory/*
@@ -261,7 +307,7 @@ export default {
             const subPath = viewMatch[2] === '/ws' ? '/ws' : '';
             const roomUrl = new URL(`http://internal/cal/${encodeURIComponent(targetId)}${subPath}`);
             roomUrl.searchParams.set('view', viewId);
-            return withCors(await room.fetch(new Request(roomUrl, request)));
+            return withCors(await room.fetch(forRoom(request, roomUrl)));
         }
 
         // 6. Regular /cal/<id> endpoints
@@ -289,7 +335,9 @@ export default {
             }
 
             const room = env.CALENDARS.get(env.CALENDARS.idFromName(id));
-            return withCors(await room.fetch(request));
+            // Never pass on a client's X-PC-User; on the WebSocket, set it from the session.
+            const userId = m[2] === '/ws' ? await sessionUserId(request, env) : null;
+            return withCors(await room.fetch(forRoom(request, request.url, userId)));
         }
 
         // 7. Static assets & Single Page App rewrites
