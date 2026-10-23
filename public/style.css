@@ -1007,7 +1007,8 @@ div#Schedule,
 /* A Pro pill after a calendar's title, and the Pro account section at the bottom of the menu */
 .pc-nav-title { display: flex; align-items: center; gap: var(--pc-space-2); min-width: 0 }
 .pc-nav-pro { flex: none; padding: 0 7px; border-radius: var(--pc-radius-pill); background: var(--pc-soft); color: var(--pc-text-2); font-size: var(--pc-fs-caption); font-weight: var(--pc-fw-semibold); line-height: 18px }
-.pc-acct { margin: 6px 4px 0; padding: 10px 6px 4px; font-family: var(--pc-font); font-size: var(--pc-fs-small); color: var(--pc-text) }
+.pc-acct { margin: 6px 4px 0; padding: 10px 6px 4px; font-family: var(--pc-font); color: var(--pc-text) }
+.pc-acct-line, .pc-acct-email, .pc-acct-cal-status, .pc-acct-form label, .pc-acct-err { font-size: var(--pc-fs-small) }
 .pc-acct-muted { color: var(--pc-text-muted) }
 .pc-acct-line { display: block; margin: 0; padding: 2px 0; line-height: var(--pc-lh-body) }
 .pc-acct-head { display: flex; flex-direction: column; gap: 1px; margin-bottom: var(--pc-space-1) }
@@ -1016,7 +1017,7 @@ div#Schedule,
 .pc-acct-cal { display: flex; flex-direction: column; margin: 0 -6px; padding: 6px; border-radius: var(--pc-radius-sm); color: var(--pc-text) }
 .pc-acct-cal:hover { background: var(--pc-hover) }
 .pc-acct-cal:hover .pc-acct-cal-title { color: var(--pc-link) }
-.pc-acct-cal-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--pc-fs-body); font-weight: var(--pc-fw-medium) }
+.pc-acct-cal-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--pc-fw-medium) }
 .pc-acct-cal-status { color: var(--pc-text-muted) }
 .pc-acct-cal-status--warn { color: var(--pc-warning); font-weight: var(--pc-fw-medium) }
 .pc-acct-actions { display: flex; align-items: center; gap: var(--pc-space-3); margin-top: var(--pc-space-2) }

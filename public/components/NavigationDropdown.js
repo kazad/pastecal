@@ -13,13 +13,14 @@
 const ACCOUNT_ACTIVE = ['active', 'trialing', 'past_due'];
 const AccountMenu = {
     state: (typeof Vue !== 'undefined' && Vue.reactive ? Vue.reactive : (x) => x)({
-        status: 'idle',   // idle | loading | in | out | error
+        status: 'idle',   // idle | loading | in | out
         me: null,         // /api/me while signed in
         step: 'idle',     // signed out: idle | email | sent
         email: '',
         busy: false,
         error: '',        // a short message for the section, never blocking the menu
         shown: false,     // accountMenuShown fires once per page
+        retry: false,     // /api/me failed (not a 401): fetch again on the next open
     }),
     async api(method, path, body) {
         const init = { method, credentials: 'same-origin', headers: {} };
@@ -38,13 +39,15 @@ const AccountMenu = {
     // GET /api/me once per page (the first time the menu opens); load(true) after a sign-out.
     async load(force) {
         const st = this.state;
-        if (!force && st.status !== 'idle' && st.status !== 'error') return;
-        st.status = 'loading'; st.error = '';
+        if (!force && st.status !== 'idle' && !(st.retry && st.status === 'out' && st.step === 'idle')) return;
+        st.status = 'loading'; st.error = ''; st.retry = false;
         const r = await this.api('GET', '/api/me');
         if (r.status === 200) { st.me = r.data; st.status = 'in'; }
         else if (r.status === 401) { st.me = null; st.status = 'out'; }
-        else { st.me = null; st.status = 'error'; }
-        if (!st.shown && (st.status === 'in' || st.status === 'out')) {
+        // Anything else (offline, a server error): most people opening this menu have no account,
+        // so don't tell them one failed to load. Show the quiet line and try again next open.
+        else { st.me = null; st.status = 'out'; st.retry = true; }
+        if (!st.shown && !st.retry) {
             st.shown = true;
             const state = st.status === 'in' ? 'signed_in' : 'signed_out';
             this.track(a => a.accountMenuShown(state));
@@ -52,7 +55,7 @@ const AccountMenu = {
     },
     // Someone signed in or out elsewhere on the page (the share dialog): fetch again next open.
     reset() {
-        Object.assign(this.state, { status: 'idle', me: null, step: 'idle', busy: false, error: '' });
+        Object.assign(this.state, { status: 'idle', me: null, step: 'idle', busy: false, error: '', retry: false });
     },
 };
 if (typeof window !== 'undefined') window.AccountMenu = AccountMenu;
@@ -162,10 +165,6 @@ const NavigationDropdown = {
                     <button v-else type="button" class="pc-acct-link pc-acct-line" @click="startSignIn" data-testid="account-signin">Pro owner? Sign in</button>
                 </template>
 
-                <p v-else-if="acct.status === 'error'" class="pc-acct-muted pc-acct-line">
-                    Couldn’t load your account. <button type="button" class="pc-acct-link" @click="load(true)">Try again</button>
-                </p>
-
                 <p v-if="acct.error" class="pc-acct-err" role="alert" data-testid="account-error">{{ acct.error }}</p>
             </div>
         </div>
@@ -215,7 +214,6 @@ const NavigationDropdown = {
         }
     },
     methods: {
-        load(force) { return AccountMenu.load(force); },
         startSignIn() {
             this.acct.step = 'email'; this.acct.error = '';
             this.$nextTick(() => { this.$refs.email && this.$refs.email.focus(); });
