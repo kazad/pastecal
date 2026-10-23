@@ -374,6 +374,12 @@ const Analytics = {
      * reuses the slug event names for something that is NOT a new calendar.
      */
     /** The homepage pitch was shown, and which section of it scrolled into view. */
+    // The denominator for homepage conversion: one per visit, before anything else is read.
+    // `where` is new or returning (has calendars in this browser).
+    homepageViewed(kind) {
+        this.track('homepage_viewed', { where: kind });
+    },
+
     tourSeen(section) {
         this.track('tour_seen', { where: section });
     },

@@ -1421,7 +1421,10 @@ const CalendarVueApp = {
             handler(home) {
                 if (!home || this._tourStarted) return;
                 this._tourStarted = true;
-                track(a => { this.tourVariant = a.homepageVariant(); });
+                track(a => {
+                    this.tourVariant = a.homepageVariant();
+                    a.homepageViewed(this.homeRecents.length ? 'returning' : 'new');
+                });
                 this.$nextTick(() => this.observeTour());
             },
         },
