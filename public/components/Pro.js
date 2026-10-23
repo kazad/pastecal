@@ -52,10 +52,15 @@ const LockBadge = {
             @pointerenter="$event.pointerType === 'mouse' && (open = true)" @pointerleave="$event.pointerType === 'mouse' && (open = false)">
             <button type="button" class="pc-lock-btn" :aria-label="label" :aria-expanded="open ? 'true' : 'false'"
                 @click.stop="open = !open" @keydown.esc="open = false" @blur="open = false" v-html="svg"></button>
-            <span v-if="open" class="pc-lock-pop" role="tooltip" data-testid="lock-tip">{{ label }}</span>
+            <span v-if="open" class="pc-lock-pop" role="tooltip" data-testid="lock-tip">{{ label }}
+                <!-- mousedown.prevent keeps the button's blur from closing the popover before the click lands -->
+                <a v-if="!canEdit" href="/" class="pc-lock-copy" data-testid="lock-copy"
+                    @mousedown.prevent @click.prevent.stop="open = false; $emit('copy')">Make your own copy</a>
+            </span>
         </span>
     `,
     props: { canEdit: Boolean },
+    emits: ['copy'],
     data() { return { open: false, svg: PRO_LOCK_SVG }; },
     computed: {
         label() { return this.canEdit ? PRO_MESSAGES.lockedEditor : PRO_MESSAGES.lockedVisitor; },

@@ -1969,6 +1969,31 @@ const CalendarVueApp = {
             }
         },
 
+        // "Make your own copy" from a locked calendar: the events become a new unsaved draft on
+        // the homepage, under a new name, for the visitor to Save & share as their own. Nothing
+        // touches the original. A draft they already had with events of their own is kept aside
+        // (pastecal_previous_draft) rather than silently replaced.
+        makeOwnCopy() {
+            const src = JSON.parse(JSON.stringify(this.calendar));
+            const copy = {
+                id: Utils.randomID(8),
+                title: `Copy of ${Calendar.displayTitle ? Calendar.displayTitle(src.title) : (src.title || 'calendar')}`,
+                events: (src.events || []).map((e) => ({ ...e, secret: undefined })),
+                options: { ...(src.options || {}), publicViewId: undefined },
+            };
+            try {
+                const prev = JSON.parse(localStorage.getItem('calendar') || 'null');
+                const mine = prev && Array.isArray(prev.events) && prev.events.some((e) => !Calendar.isSampleTitle(e.title || e.Subject));
+                if (mine) localStorage.setItem('pastecal_previous_draft', JSON.stringify(prev));
+                localStorage.setItem('calendar', JSON.stringify(copy));
+            } catch (e) {
+                this.showToast && this.showToast("Couldn't make a copy: this browser blocks saving.", 'error');
+                return;
+            }
+            track(a => a.featureUsed && a.featureUsed('locked_copy'));
+            window.location.href = '/?from=locked-copy';
+        },
+
         saveLocalStorage() {
             // Only save to localStorage when on homepage
             // Named calendars should never overwrite homepage data

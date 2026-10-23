@@ -1273,3 +1273,5 @@ button:hover > .pc-add-event {
 /* A title with the lock beside it: size to the text so the lock sits next to it, not across the bar. */
 .pc-title-fit { width: auto !important }
 .pc-pro-note { margin-top: 6px; font-size: 12.5px }
+.pc-lock-copy { display: block; margin-top: 6px; color: var(--pc-link); font-weight: 600; text-decoration: none }
+.pc-lock-copy:hover { text-decoration: underline }

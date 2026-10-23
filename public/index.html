@@ -284,7 +284,7 @@ Copyright (c) 2025 Kalid Azad
                         @update:title="calendar.title = $event" @click="editTitle = true" @blur="editTitle = false"
                         @enter="editTitle = false">
                     </calendar-title>
-                    <lock-badge v-if="lock.locked && !editTitle" :can-edit="lock.canEdit"></lock-badge>
+                    <lock-badge v-if="lock.locked && !editTitle" :can-edit="lock.canEdit" @copy="makeOwnCopy"></lock-badge>
                     <button v-if="!editTitle" v-on:click="toggleNotes" aria-label="Toggle notes"
                         class="text-color-1 hover:text-blue-500 p-1 transition-colors flex items-center justify-center flex-shrink-0">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
@@ -482,7 +482,7 @@ Copyright (c) 2025 Kalid Azad
                     @update:title="calendar.title = $event" @click="editTitle = true" @blur="editTitle = false"
                     @enter="setTitle($event)">
                 </calendar-title>
-                <lock-badge v-if="lock.locked && !editTitle" :can-edit="lock.canEdit"></lock-badge>
+                <lock-badge v-if="lock.locked && !editTitle" :can-edit="lock.canEdit" @copy="makeOwnCopy"></lock-badge>
                 <custom-tooltip width="w-auto" align="center" v-if="!editTitle">
                     <template #trigger>
                         <button v-on:click="toggleNotes" aria-label="Toggle notes"
