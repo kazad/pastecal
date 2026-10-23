@@ -64,7 +64,8 @@ export class Accounts extends DurableObject {
             CREATE INDEX IF NOT EXISTS subscriptions_user ON subscriptions(user_id);
             CREATE INDEX IF NOT EXISTS subscriptions_calendar ON subscriptions(calendar_id);
             CREATE TABLE IF NOT EXISTS processed_events (event_id TEXT PRIMARY KEY, at INTEGER);
-            CREATE TABLE IF NOT EXISTS outbox (id INTEGER PRIMARY KEY AUTOINCREMENT, to_email TEXT, subject TEXT, text TEXT, at INTEGER);`);
+            CREATE TABLE IF NOT EXISTS outbox (id INTEGER PRIMARY KEY AUTOINCREMENT, to_email TEXT, subject TEXT, text TEXT, at INTEGER);
+            CREATE TABLE IF NOT EXISTS checkout_holds (calendar_id TEXT PRIMARY KEY, user_id TEXT, expires_at INTEGER);`);
     }
 
     // A new sign-in link for this email, or null past the per-email limit (the caller still says ok).
@@ -143,6 +144,18 @@ export class Accounts extends DurableObject {
         const row = this.sql.exec(`SELECT stripe_customer_id FROM subscriptions WHERE user_id = ? AND stripe_customer_id IS NOT NULL ORDER BY updated_at DESC LIMIT 1`, userId).toArray()[0];
         return row ? row.stripe_customer_id : null;
     }
+    // One buyer at a time per calendar: a hold lasts as long as the Stripe Checkout page it guards
+    // (both CHECKOUT_HOLD_MS), so a second person can't pay for a calendar someone is already buying
+    // and end up charged without the lock. The same user may restart their own checkout.
+    holdCheckout(calendarId, userId, ms) {
+        const now = Date.now();
+        const row = this.sql.exec(`SELECT user_id, expires_at FROM checkout_holds WHERE calendar_id = ?`, calendarId).toArray()[0];
+        if (row && row.user_id !== userId && row.expires_at > now) return false;
+        this.sql.exec(`INSERT OR REPLACE INTO checkout_holds (calendar_id, user_id, expires_at) VALUES (?, ?, ?)`, calendarId, userId, now + ms);
+        return true;
+    }
+    releaseCheckout(calendarId) { this.sql.exec(`DELETE FROM checkout_holds WHERE calendar_id = ?`, calendarId); }
+
     // Support: move a calendar's subscriptions to another owner. Returns {previousUserIds, active}.
     reassignCalendar(calendarId, userId) {
         const rows = this.sql.exec(`SELECT user_id, status FROM subscriptions WHERE calendar_id = ?`, calendarId).toArray();
@@ -318,6 +331,9 @@ async function route(request, env, url, path) {
     return json({ error: 'not-found' }, 404);
 }
 
+// Stripe's minimum Checkout lifetime; the per-calendar hold lasts exactly as long.
+const CHECKOUT_HOLD_MS = 30 * 60 * 1000;
+
 async function checkout(request, env, body) {
     const cfg = stripeConfig(env);
     if (!cfg) return json({ error: 'billing-not-configured' }, 503);
@@ -339,6 +355,7 @@ async function checkout(request, env, body) {
     const acc = accounts(env);
     const [user, customer] = await Promise.all([acc.getUser(userId), acc.customerForUser(userId)]);
     if (!user) return json({ error: 'signed-out' }, 401);
+    if (!(await acc.holdCheckout(calendarId, userId, CHECKOUT_HOLD_MS))) return json({ error: 'checkout-in-progress' }, 409);
     const back = validId(body.editName) ? body.editName : calendarId;
     const meta = { calendar_id: calendarId, user_id: userId };
     const params = {
@@ -348,6 +365,7 @@ async function checkout(request, env, body) {
         subscription_data: { metadata: meta },
         success_url: `${SITE}/pro/done?session_id={CHECKOUT_SESSION_ID}#${encodeURIComponent(calendarId)}`,
         cancel_url: `${SITE}/${encodeURIComponent(back)}`,
+        expires_at: Math.floor((Date.now() + CHECKOUT_HOLD_MS) / 1000),
     };
     // Stripe limits client_reference_id's characters; calendar names can be anything, and metadata has the real id.
     if (/^[A-Za-z0-9_-]{1,200}$/.test(calendarId)) params.client_reference_id = calendarId;
@@ -405,6 +423,7 @@ async function applySubscription(env, acc, s) {
         const r = await LockClient.lock(env, calendarId, userId);
         if (r.status >= 500) return { retry: true };
         if (!r.ok) console.warn('[accounts] could not lock paid calendar:', calendarId, r.status, r.error);
+        else await acc.releaseCheckout(calendarId);
         return {};
     }
     if (await acc.otherActiveSubscription(calendarId, s.id)) return {};   // still paid for by another subscription

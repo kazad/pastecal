@@ -99,6 +99,17 @@ try {
     assert.equal(cs2.body['line_items[0][price]'], 'price_fake_monthly'); assert.equal(cs2.body.client_reference_id, plainCal);
     step('checkout interval "month" uses the monthly price');
 
+    // One buyer at a time: while ann's checkout for plainCal is open, nobody else can start one.
+    const holder2 = await signIn(BASE, `bob-hold-${run}@example.com`);
+    r = await post(BASE, '/api/pro/checkout', { calendarId: plainCal }, holder2.cookie);
+    assert.equal(r.status, 409); assert.equal((await r.json()).error, 'checkout-in-progress');
+    r = await post(BASE, '/api/pro/checkout', { calendarId: plainCal }, ann.cookie);
+    assert.equal(r.status, 200, 'the same buyer can restart their own checkout');
+    const csHold = fake.log.filter((l) => l.path === "/stripe/v1/checkout/sessions").pop();
+    const exp = Number(csHold.body.expires_at) * 1000;
+    assert.ok(exp > Date.now() + 29 * 60e3 && exp < Date.now() + 31 * 60e3, 'the Stripe page expires with the hold (30 minutes)');
+    step('while one person is checking out a calendar, another gets 409 checkout-in-progress; the page expires in 30 minutes');
+
     // --- Webhook signatures
     const ev1 = event('customer.subscription.created', { id: `sub_${run}_a` });
     fake.subs.set(`sub_${run}_a`, sub(`sub_${run}_a`, cal, ann.userId, 'active'));
