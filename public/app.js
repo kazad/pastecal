@@ -86,7 +86,9 @@ const COMPONENT_REGISTRY = {
     'share-icon': ShareIcon,                   // Share icon SVG
     'notes-icon': NotesIcon,                   // Notes icon SVG
     'chevron-down-icon': ChevronDownIcon,      // Chevron down icon SVG
-    'close-icon': CloseIcon                    // Close icon SVG
+    'close-icon': CloseIcon,                   // Close icon SVG
+    'lock-badge': LockBadge,                   // Pro lock icon + popover beside the title
+    'pro-panel': ProPanel                      // Share dialog: Lock this calendar / owner panel
 };
 
 const CAL_BASE = (typeof window !== 'undefined' && window.CAL_BASE) ? window.CAL_BASE : '/';
@@ -141,6 +143,11 @@ const CalendarVueApp = {
 
         return {
             isReadOnly: false,
+            // Pro lock, from the live snapshot (CloudCalendarService.onLockState). lockedOut =
+            // locked and this tab has no rights: the calendar is shown read-only.
+            lock: { locked: false, pro: false, canEdit: true },
+            lockedOut: false,
+            viewRoute: false,   // /view/<slug>: read-only for its own reason, whatever the lock says
             isLoading: true, // set to false when calendar status is determined
             isExisting: false, // set by callback
             editTitle: false,
@@ -431,6 +438,11 @@ const CalendarVueApp = {
             // User has edit permissions (defensive boolean coercion)
             return !Boolean(this.isReadOnly);
         },
+        // Pro removes pastecal's branding from what visitors see (view links, embeds, a locked
+        // calendar's read-only face). The owner's own editing UI keeps it.
+        hideBranding() {
+            return !!(this.isReadOnly && this.lock.pro);
+        },
 
         // Homepage calendar (no slug and not an existing saved calendar)
         isHomepageCalendar() {
@@ -489,6 +501,7 @@ const CalendarVueApp = {
                     const requestedSlug = path.split('/')[2];
             // Ensure explicit boolean normalization when setting read-only mode
             this.setIsReadOnly(true);
+            this.viewRoute = true;
 
             // Always use lookupCalendar for consistent case-insensitive handling
             (async () => {
@@ -501,7 +514,8 @@ const CalendarVueApp = {
                         const actualSlug = result.data.actualSlug;
                         console.log('Found read-only calendar with slug:', actualSlug);
 
-                        CalendarDataService.subscribe_readonly(actualSlug, (c) => {
+                        CalendarDataService.subscribe_readonly(actualSlug, (c, access) => {
+                            if (access) this.lock = { locked: !!access.locked, pro: !!access.pro, canEdit: false };
                             this.applyRemoteCalendar(c);
                             this.ensureCalendarOptionsDefaults();
                             // Update custom view in schedule with calendar's settings
@@ -573,6 +587,12 @@ const CalendarVueApp = {
                                 this.$nextTick(() => { if (!this.showShare) this.toggleShare(); });
                             }
                         } catch (e) { /* storage blocked: nothing to open */ }
+                        // Back from a Pro sign-in link: reopen Share, where "Lock this calendar" now continues.
+                        const proIntent = typeof ProIntent !== 'undefined' ? ProIntent.get(this.calendar.id) : null;
+                        if (proIntent) {
+                            // Once: the panel reads the chosen interval as it mounts, then the intent is done.
+                            this.$nextTick(() => { if (!this.showShare) this.toggleShare(); this.$nextTick(() => ProIntent.clear()); });
+                        }
                     }
                     this.visitCounted = true;
 
@@ -854,6 +874,11 @@ const CalendarVueApp = {
                 scheduleObj.closeQuickInfoPopup();
             }
 
+            if (args.type === 'Editor' && this.lockedOut) {
+                args.cancel = true;
+                this.showToast(PRO_MESSAGES.lockedVisitor, 'info');
+                return;
+            }
             if (args.type === 'Editor') {
                 this.editorSaved = false;
                 ScheduleAdapter.noteStart(args.data);
@@ -1117,6 +1142,16 @@ const CalendarVueApp = {
         }, true);
 
         scheduleObj.appendTo('#Schedule');
+        // A locked calendar's grid is read-only, so a double-click on a day opens nothing at all.
+        // Say why, instead of leaving people clicking at a calendar that ignores them.
+        try {
+            const el = document.getElementById('Schedule');
+            if (el) el.addEventListener('dblclick', (e) => {
+                if (this.lockedOut && e.target && e.target.closest && e.target.closest('.e-work-cells, .e-all-day-cells')) {
+                    this.showToast(PRO_MESSAGES.lockedVisitor, 'info');
+                }
+            });
+        } catch (e) { /* no grid: nothing to explain */ }
 
         // Syncfusion sizes month-view event chips in pixels from the cell widths it measures
         // while it renders. On first load the grid is still being built (and fonts/styles may
@@ -1340,7 +1375,18 @@ const CalendarVueApp = {
         // refused until a reload. The list keeps this write's own additions and edits,
         // and the service re-sends them along with any deletion the user named, so local
         // and server converge on the same list.
-        CalendarDataService.onSyncRefused = ({ before, removing, recovered, events }) => {
+        // Pro lock: who may change this calendar. Fired on every snapshot and editor-key answer.
+        CalendarDataService.onLockState = (s) => this.applyLockState(s);
+
+        CalendarDataService.onSyncRefused = ({ before, removing, recovered, events, code }) => {
+            if (code === 'locked') {
+                // The calendar is locked (or the editor link stopped working): undo the edit, say why.
+                this.showToast(PRO_MESSAGES.lockedVisitor, 'info');
+                if (Array.isArray(events)) {
+                    this.applyRemoteCalendar({ ...this.calendar, events: JSON.parse(JSON.stringify(events)) }, { replace: true });
+                }
+                return;
+            }
             // The rows put back, not the net shrink: an addition in the same write offsets
             // the count without making the loss any smaller.
             const n = recovered ?? removing;
@@ -4303,6 +4349,40 @@ const CalendarVueApp = {
         // Safely set isReadOnly with normalization
         setIsReadOnly(val) {
             this.isReadOnly = this.normalizeBoolean(val);
+        },
+
+        /**
+         * Pro lock state for the open calendar. A locked calendar this tab may not change is
+         * shown exactly like a view link (the existing read-only mode), so every editing control
+         * that already hides for view links hides here too. An editor key or the owner's
+         * sign-in lifts it again.
+         */
+        applyLockState(s) {
+            if (!s || (this.calendar && s.id && s.id !== this.calendar.id)) return;
+            this.lock = { locked: !!s.locked, pro: !!s.pro, canEdit: s.canEdit !== false };
+            const out = this.lock.locked && !this.lock.canEdit;
+            if (out !== this.lockedOut) {
+                this.lockedOut = out;
+                this.setIsReadOnly(out || this.viewRoute);
+                if (out) this.editTitle = false;
+                try {
+                    if (window.scheduleObj) {
+                        if (out && typeof scheduleObj.closeEditor === 'function') scheduleObj.closeEditor();
+                        if (out && typeof scheduleObj.closeQuickInfoPopup === 'function') scheduleObj.closeQuickInfoPopup();
+                        scheduleObj.readonly = this.isReadOnly;
+                    }
+                } catch (e) { /* the grid catches up on its next render */ }
+            }
+            if (s.reason === 'key-rotated') this.showToast(PRO_MESSAGES.keyReset, 'info', { duration: 10000 });
+        },
+
+        /** Quick add from a menu: on a calendar this tab can't change, say why instead of opening it. */
+        openQuickAdd() {
+            if (!this.canEdit) {
+                this.showToast(this.lockedOut ? PRO_MESSAGES.lockedVisitor : 'This is a view-only link. Events cannot be added or edited.', 'info');
+                return;
+            }
+            this.$refs.quickAddDialog && this.$refs.quickAddDialog.showDialog();
         },
 
         showToast(message, type = 'info', options = {}) {
