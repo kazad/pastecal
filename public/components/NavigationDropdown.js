@@ -1,30 +1,30 @@
 // NavigationDropdown component
-// Shows homepage link and recent calendars list with pin/remove controls
+// "New calendar", then your calendars and recently visited ones, with pin/remove controls
 const NavigationDropdown = {
     template: /* html */ `
-        <div class="absolute top-full left-0 md:left-0 mt-2 bg-1 min-w-[280px] md:min-w-[280px] w-[90vw] md:w-auto max-w-[280px] shadow-lg rounded-lg border border-color-default overflow-hidden z-50">
-            <!-- Home / New Calendar option -->
-            <a @click.prevent="$emit('go-homepage')"
-                class="flex items-center px-4 py-3 text-color-2 hover:bg-theme-hover transition-colors cursor-pointer group">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                    stroke-width="1.5" stroke="currentColor"
-                    class="w-5 h-5 mr-3 text-color-1 group-hover:text-blue-500 transition-colors">
-                    <path stroke-linecap="round" stroke-linejoin="round"
-                        d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
-                </svg>
-                <span class="font-medium group-hover:text-blue-500 transition-colors">Home [New Calendar]</span>
+        <div class="pc-nav absolute top-full left-0 mt-2 bg-1 shadow-xl border border-color-default overflow-hidden z-50">
+            <!-- Starts a fresh draft on the homepage -->
+            <a href="/" @click.prevent="$emit('go-homepage')"
+                class="pc-nav-row pc-nav-new flex items-center text-color-2 hover:bg-theme-hover transition-colors cursor-pointer group">
+                <span class="pc-nav-plus">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" width="16" height="16"><path d="M12 5v14M5 12h14"/></svg>
+                </span>
+                <span class="min-w-0">
+                    <span class="block font-semibold group-hover:text-blue-500 transition-colors">New calendar</span>
+                    <span class="block text-xs text-color-1">No sign-up. Share it when it's ready.</span>
+                </span>
             </a>
 
             <!-- Calendars grouped by ownership: yours first, then ones you visited -->
-            <div v-if="recentCalendars.length > 0" class="max-h-[36rem] overflow-y-auto">
+            <div v-if="recentCalendars.length > 0" class="pc-nav-list">
                 <template v-for="group in groups" :key="group.label">
                 <div v-if="group.items.length > 0">
-                <div class="px-4 py-2 text-xs font-semibold text-color-1 uppercase tracking-wider bg-1 border-t border-color-default">
+                <div class="pc-nav-label text-xs font-semibold text-color-1 border-t border-color-default">
                     {{ group.label }}
                 </div>
                 <div>
                     <div v-for="item in group.items" :key="item.id"
-                        class="flex justify-between items-center px-4 py-3 hover:bg-theme-hover transition-colors group">
+                        class="pc-nav-row flex justify-between items-center hover:bg-theme-hover transition-colors group">
                         <a :href="'/' + item.id" class="flex-1 min-w-0 mr-3">
                             <div class="text-color-2 font-medium truncate group-hover:text-blue-500 transition-colors">
                                 {{ item.title }}
@@ -64,16 +64,9 @@ const NavigationDropdown = {
                 </template>
             </div>
 
-            <div v-if="recentCalendars.length === 0" class="px-4 py-6 text-center">
-                <svg xmlns="http://www.w3.org/2000/svg"
-                    class="w-8 h-8 mx-auto mb-2 text-color-1 opacity-50" fill="none" viewBox="0 0 24 24"
-                    stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                        d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                <p class="text-sm text-color-1">No recent calendars yet</p>
-                <p class="text-xs text-color-1 opacity-60 mt-1">Your calendars will appear here</p>
-            </div>
+            <p v-if="recentCalendars.length === 0" class="pc-nav-empty border-t border-color-default text-sm text-color-1">
+                Calendars you open or save show up here, so you can find them again.
+            </p>
         </div>
     `,
     props: ['recentCalendars'],
@@ -84,8 +77,8 @@ const NavigationDropdown = {
         groups() {
             const all = this.recentCalendars || [];
             return [
-                { label: 'My Calendars', items: all.filter(item => item.mine) },
-                { label: 'Recently Visited', items: all.filter(item => !item.mine) },
+                { label: 'Your calendars', items: all.filter(item => item.mine) },
+                { label: 'Recently visited', items: all.filter(item => !item.mine) },
             ];
         }
     }

@@ -981,3 +981,12 @@ div#Schedule,
 .pc-recent-more { margin: 0 0 16px; font-size: 13px; color: var(--pc-text-muted) }
 .pc-home-new { margin: 18px 0 12px; font-size: 15px; line-height: 1.5; color: var(--pc-text-muted) }
 .pc-home-new strong { color: var(--pc-text) }
+
+/* Logo menu (NavigationDropdown). Plain CSS: the prebuilt tailwind.css lacks these sizes. */
+.pc-nav { width: min(300px, calc(100vw - 24px)); padding: 6px; border-radius: 12px }
+.pc-nav-row { gap: 12px; padding: 8px 10px; border-radius: 8px; text-decoration: none }
+.pc-nav-plus { display: grid; place-items: center; flex: none; width: 32px; height: 32px; border-radius: 8px; background: #2563eb; color: #fff }
+.pc-nav-list { max-height: 32rem; overflow-y: auto }
+.pc-nav-label { margin: 6px 4px 0; padding: 10px 6px 4px }
+.pc-nav-empty { margin: 6px 4px 0; padding: 10px 6px 4px; line-height: 1.45 }
+.pc-nav a, .pc-nav a:hover { text-decoration: none }
