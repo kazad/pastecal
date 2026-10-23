@@ -14,11 +14,15 @@
 //     --var STRIPE_PRICE_PRO_YEARLY:price_fake_yearly --var STRIPE_PRICE_PRO_MONTHLY:price_fake_monthly \
 //     --var STRIPE_API_BASE:http://127.0.0.1:8832/stripe
 //   node node_modules/.bin/wrangler dev --port 8823 --inspector-port 9242 --persist-to /tmp/pc-billing-state-nokeys --var COPY_BACK:
+//   TESTKEY_BASE (8824): a test-mode key WITHOUT dev mode (pass --var ACCOUNTS_DEV_MODE:0 if .dev.vars sets it):
+//   node node_modules/.bin/wrangler dev --port 8824 --inspector-port 9243 --persist-to /tmp/pc-billing-state-testkey --var COPY_BACK: \
+//     --var ACCOUNTS_DEV_MODE:0 --var STRIPE_SECRET_KEY:sk_test_fake --var STRIPE_WEBHOOK_SECRET:fake-webhook-secret
 //   node test/accounts.test.mjs && node test/billing.test.mjs
 // This file runs the fake Stripe + fake lock API on 8832 (test/fake-stripe.mjs).
 import assert from 'node:assert/strict';
 import { startFakeStripe, signStripe } from './fake-stripe.mjs';
 const BASE = process.env.BASE || 'http://localhost:8822', NOKEYS = process.env.NOKEYS_BASE || 'http://localhost:8823';
+const TESTKEY = process.env.TESTKEY_BASE || 'http://localhost:8824';
 const SECRET = process.env.IMPORT_SECRET || 'dev-secret', WHSEC = 'fake-webhook-secret';
 let n = 0; const step = (s) => console.log(`  ok ${++n} - ${s}`);
 const run = Date.now().toString(36);
@@ -103,12 +107,28 @@ try {
     const holder2 = await signIn(BASE, `bob-hold-${run}@example.com`);
     r = await post(BASE, '/api/pro/checkout', { calendarId: plainCal }, holder2.cookie);
     assert.equal(r.status, 409); assert.equal((await r.json()).error, 'checkout-in-progress');
+    const firstPage = [...fake.sessions.values()].at(-1).id;
     r = await post(BASE, '/api/pro/checkout', { calendarId: plainCal }, ann.cookie);
     assert.equal(r.status, 200, 'the same buyer can restart their own checkout');
+    assert.equal(fake.sessions.get(firstPage).status, 'expired', 'restarting expires the previous page first');
     const csHold = fake.log.filter((l) => l.path === "/stripe/v1/checkout/sessions").pop();
     const exp = Number(csHold.body.expires_at) * 1000;
     assert.ok(exp > Date.now() + 30 * 60e3 && exp < Date.now() + 32 * 60e3, 'the Stripe page expires with the hold (31 minutes)');
-    step('while one person is checking out a calendar, another gets 409 checkout-in-progress; the page expires in 31 minutes');
+    step('while one person is checking out a calendar, another gets 409 checkout-in-progress; a restart expires the previous page; the page expires in 31 minutes');
+
+    const capCal = `cap-${run}`; fake.addCalendar(capCal);
+    for (let i = 0; i < 4; i++) assert.equal((await post(BASE, '/api/pro/checkout', { calendarId: capCal }, ann.cookie)).status, 200, `start + restart ${i}`);
+    r = await post(BASE, '/api/pro/checkout', { calendarId: capCal }, ann.cookie);
+    assert.equal(r.status, 429); assert.equal((await r.json()).error, 'too-many-checkouts');
+    const capPages = fake.log.filter((l) => l.path === '/stripe/v1/checkout/sessions' && l.body['metadata[calendar_id]'] === capCal).length;
+    assert.equal(capPages, 4);
+    assert.equal([...fake.sessions.values()].filter((x) => x.status === 'open').length, 3, 'one open page per calendar (cal, plainCal, capCal)');
+    const blocked = `blocked-${run}`; fake.addCalendar(blocked);
+    assert.equal((await post(BASE, '/api/pro/checkout', { calendarId: blocked }, ann.cookie)).status, 200);
+    fake.hooks.expireFails = 1;
+    r = await post(BASE, '/api/pro/checkout', { calendarId: blocked }, ann.cookie);
+    assert.equal(r.status, 409, 'the previous page could not be expired (and is still open): no second page');
+    step('restarts: at most 3 an hour (then 429 too-many-checkouts), only ever one open page; if the old page cannot be expired, no new one');
 
     // --- Webhook signatures
     const ev1 = event('customer.subscription.created', { id: `sub_${run}_a` });
@@ -219,6 +239,85 @@ try {
     assert.equal((await webhook(event('customer.subscription.updated', { id: `sub_${run}_c` }))).status, 200);
     assert.equal(fake.cals.get(cal3).ownerId, re.userId);
     step('admin reassign moves the subscription and the lock to the new email, and later events keep it there');
+
+    // --- A second payer for a calendar someone else already locked (newer API shape: the invoice has no
+    // payment_intent, invoice_payments does): refunded and canceled, the lock stays with the first owner.
+    const conf = `conflict-${run}`; fake.addCalendar(conf);
+    fake.subs.set(`sub_${run}_own`, { ...sub(`sub_${run}_own`, conf, ann.userId, 'active'), created: 1700000000 });
+    assert.equal((await webhook(event('customer.subscription.created', { id: `sub_${run}_own` }))).status, 200);
+    assert.equal(fake.cals.get(conf).ownerId, ann.userId);
+    assert.equal(lockCalls(conf).at(-1).body.createLink, false, 'a billing lock makes no editor link');
+    fake.subs.set(`sub_${run}_2nd`, { ...sub(`sub_${run}_2nd`, conf, bob.userId, 'active'), created: 1700000100, latest_invoice: `in_${run}_2nd` });
+    fake.invoices.set(`in_${run}_2nd`, { id: `in_${run}_2nd`, amount_paid: 2400, parent: { subscription_details: { subscription: `sub_${run}_2nd` } } });
+    fake.invoicePayments.push({ invoice: `in_${run}_2nd`, status: 'paid', payment: { type: 'payment_intent', payment_intent: `pi_${run}_2nd` } });
+    const evConf = event('checkout.session.completed', { id: 'cs_conf', subscription: `sub_${run}_2nd` });
+    fake.hooks.refundFails = 1;
+    assert.equal((await webhook(evConf)).status, 500, 'refund failed: Stripe retries the event');
+    assert.equal(fake.subs.get(`sub_${run}_2nd`).status, 'active', 'not canceled before the refund went through');
+    assert.equal((await webhook(evConf)).status, 200);
+    const confRefunds = fake.refunds.filter((x) => x.payment_intent === `pi_${run}_2nd`);
+    assert.equal(confRefunds.length, 1); assert.equal(confRefunds[0].idem, `refund-conflict-sub_${run}_2nd`);
+    assert.equal(fake.subs.get(`sub_${run}_2nd`).status, 'canceled');
+    assert.ok(fake.log.some((l) => l.method === 'DELETE' && l.path === `/stripe/v1/subscriptions/sub_${run}_2nd` && l.idem === `cancel-conflict-sub_${run}_2nd`));
+    assert.equal(fake.cals.get(conf).ownerId, ann.userId, 'the lock stays with the first owner');
+    let conflicts = (await (await admin(BASE, '/api/admin/accounts/conflicts')).json()).conflicts;
+    assert.equal(conflicts.find((c) => c.stripe_subscription_id === `sub_${run}_2nd`).status, 'refunded-conflict');
+    assert.ok(!(await me(bob.cookie)).calendars.some((c) => c.id === conf), 'not listed as theirs');
+    assert.equal((await webhook(event('customer.subscription.deleted', { id: `sub_${run}_2nd` }))).status, 200);
+    assert.equal((await webhook(event('charge.refunded', { id: 'ch_conf', refunded: true, payment_intent: `pi_${run}_2nd` }))).status, 200);
+    assert.equal(fake.cals.get(conf).ownerId, ann.userId);
+    assert.equal(fake.refunds.filter((x) => x.payment_intent === `pi_${run}_2nd`).length, 1);
+    conflicts = (await (await admin(BASE, '/api/admin/accounts/conflicts')).json()).conflicts;
+    assert.equal(conflicts.find((c) => c.stripe_subscription_id === `sub_${run}_2nd`).status, 'refunded-conflict', 'later events keep it final');
+    step('a second payer for a locked calendar: refunded (once, across a retried webhook) then canceled, marked refunded-conflict; the owner keeps the lock');
+
+    // --- The same person paying twice for one calendar (older API shape: invoice.payment_intent): the later one is refunded.
+    fake.subs.set(`sub_${run}_dup`, { ...sub(`sub_${run}_dup`, conf, ann.userId, 'active'), created: 1700000200, latest_invoice: `in_${run}_dup` });
+    fake.invoices.set(`in_${run}_dup`, { id: `in_${run}_dup`, amount_paid: 2400, payment_intent: `pi_${run}_dup`, subscription: `sub_${run}_dup` });
+    assert.equal((await webhook(event('customer.subscription.created', { id: `sub_${run}_dup` }))).status, 200);
+    assert.equal(fake.refunds.filter((x) => x.payment_intent === `pi_${run}_dup`).length, 1);
+    assert.equal(fake.subs.get(`sub_${run}_dup`).status, 'canceled');
+    assert.equal(fake.subs.get(`sub_${run}_own`).status, 'active', 'the original stays');
+    assert.equal((await webhook(event('customer.subscription.updated', { id: `sub_${run}_own` }))).status, 200);
+    assert.equal(fake.subs.get(`sub_${run}_own`).status, 'active', 'a later event on the original refunds nothing');
+    assert.equal(fake.cals.get(conf).ownerId, ann.userId);
+    step('a duplicate subscription by the same owner: the later one is refunded and canceled, the original keeps the lock');
+
+    // --- The owner's subscription ends while another person's is still active: the lock passes to them.
+    const heirCal = `heir-${run}`; fake.addCalendar(heirCal);
+    const dana = await signIn(BASE, `dana-${run}@example.com`);
+    fake.subs.set(`sub_${run}_h1`, { ...sub(`sub_${run}_h1`, heirCal, ann.userId, 'active'), created: 1700000000 });
+    assert.equal((await webhook(event('customer.subscription.created', { id: `sub_${run}_h1` }))).status, 200);
+    assert.equal((await admin(BASE, '/api/admin/accounts/dev-subscription', { method: 'POST', body: JSON.stringify({ email: `dana-${run}@example.com`, calendarId: heirCal }) })).status, 200);
+    fake.subs.get(`sub_${run}_h1`).status = 'canceled';
+    assert.equal((await webhook(event('customer.subscription.deleted', { id: `sub_${run}_h1` }))).status, 200);
+    assert.equal(fake.cals.get(heirCal).locked, true); assert.equal(fake.cals.get(heirCal).ownerId, dana.userId);
+    step('when the owner\'s subscription ends and another person\'s is active, the lock is handed to them');
+
+    // --- Full refund and dispute end the subscription (and so the lock); a partial refund does not.
+    const rfCal = `refund-${run}`; fake.addCalendar(rfCal);
+    fake.subs.set(`sub_${run}_rf`, { ...sub(`sub_${run}_rf`, rfCal, ann.userId, 'active'), created: 1700000000 });
+    assert.equal((await webhook(event('customer.subscription.created', { id: `sub_${run}_rf` }))).status, 200);
+    fake.invoices.set(`in_${run}_rf`, { id: `in_${run}_rf`, amount_paid: 2400, parent: { subscription_details: { subscription: `sub_${run}_rf` } } });
+    fake.invoicePayments.push({ invoice: `in_${run}_rf`, status: 'paid', payment: { type: 'payment_intent', payment_intent: `pi_${run}_rf` } });
+    assert.equal((await webhook(event('charge.refunded', { id: 'ch_rf', object: 'charge', refunded: false, amount_refunded: 100, payment_intent: `pi_${run}_rf` }))).status, 200);
+    assert.equal(fake.cals.get(rfCal).locked, true, 'a partial refund keeps Pro');
+    assert.equal((await webhook(event('charge.refunded', { id: 'ch_rf', object: 'charge', refunded: true, payment_intent: `pi_${run}_rf` }))).status, 200);
+    assert.equal(fake.subs.get(`sub_${run}_rf`).status, 'canceled'); assert.equal(fake.cals.get(rfCal).locked, false);
+    const dpCal = `dispute-${run}`; fake.addCalendar(dpCal);
+    fake.subs.set(`sub_${run}_dp`, { ...sub(`sub_${run}_dp`, dpCal, ann.userId, 'active'), created: 1700000000 });
+    assert.equal((await webhook(event('customer.subscription.created', { id: `sub_${run}_dp` }))).status, 200);
+    fake.charges.set(`ch_${run}_dp`, { id: `ch_${run}_dp`, object: 'charge', invoice: `in_${run}_dp` });
+    fake.invoices.set(`in_${run}_dp`, { id: `in_${run}_dp`, amount_paid: 299, subscription: `sub_${run}_dp` });
+    assert.equal((await webhook(event('charge.dispute.created', { id: 'dp_1', object: 'dispute', charge: `ch_${run}_dp` }))).status, 200);
+    assert.equal(fake.subs.get(`sub_${run}_dp`).status, 'canceled'); assert.equal(fake.cals.get(dpCal).locked, false);
+    step('a full refund (newer shape: payment_intent -> invoice_payments) or a dispute (older shape: charge.invoice) cancels the subscription and unlocks; a partial refund does not');
+
+    // --- An event from the other Stripe mode is ignored (this instance's key is a local fake: no mode, so
+    // only the TESTKEY instance below shows the refusal). And a test key outside dev mode turns billing off.
+    r = await fetch(TESTKEY + '/api/stripe/webhook', { method: 'POST', body: '{}', headers: { 'Stripe-Signature': signStripe(WHSEC, '{}') } });
+    assert.equal(r.status, 503); assert.deepEqual(await r.json(), { error: 'billing-not-configured' });
+    step('a test-mode Stripe key without dev mode: billing answers 503 billing-not-configured');
 } finally {
     fake.close();
 }

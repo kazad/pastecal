@@ -82,9 +82,11 @@ stripe billing_portal configurations list 2>/dev/null | jq '.data[] | {id, is_de
 
 ### a3. Local end-to-end against the sandbox
 
-Webhook events the code acts on (`SUBSCRIPTION_EVENTS` in `Accounts.js`). The Worker records and ignores every other event:
+Webhook events the code acts on (`SUBSCRIPTION_EVENTS` and `CHARGE_EVENTS` in `Accounts.js`). The Worker records and ignores every other event:
 
-`checkout.session.completed, customer.subscription.created, customer.subscription.updated, customer.subscription.deleted, invoice.payment_failed`
+`checkout.session.completed, customer.subscription.created, customer.subscription.updated, customer.subscription.deleted, invoice.payment_failed, charge.refunded, charge.dispute.created`
+
+A full refund or a dispute cancels the subscription it paid for, which unlocks the calendar. A test-mode key (`sk_test_`/`rk_test_`) only works with `ACCOUNTS_DEV_MODE=1`; anywhere else billing answers `503 billing-not-configured` and logs `BILLING OFF`. Events whose `livemode` doesn't match the key's mode are ignored.
 
 1. Create `cloudflare/.dev.vars`. It is gitignored. **Never copy it to production.** It holds:
    - `ACCOUNTS_DEV_MODE=1`, which accepts `http://localhost` origins and writes sign-in emails to an outbox instead of sending them.
@@ -103,7 +105,7 @@ stripe prices list --lookup-keys=pro_monthly 2>/dev/null | jq -er '.data[0].id'
 4. In terminal 2, forward sandbox events to it:
 
 ```zsh
-stripe listen --forward-to localhost:8787/api/stripe/webhook --events checkout.session.completed,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.payment_failed
+stripe listen --forward-to localhost:8787/api/stripe/webhook --events checkout.session.completed,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.payment_failed,charge.refunded,charge.dispute.created
 ```
 
 5. Run the loop in a browser:
@@ -242,11 +244,12 @@ Want `is_default: true` and `cancel: "at_period_end"`.
 
 Dashboard → Developers → API keys → **Create restricted key** named "pastecal-sync Worker". The Worker calls only:
 
-- `POST /v1/checkout/sessions`
+- `POST /v1/checkout/sessions`, `POST /v1/checkout/sessions/<id>/expire`, `GET /v1/checkout/sessions/<id>` (a buyer restarting checkout: the old page is expired first)
 - `POST /v1/billing_portal/sessions`
-- `GET /v1/subscriptions/<id>`
+- `GET /v1/subscriptions/<id>`, `DELETE /v1/subscriptions/<id>` (cancel now: a second payer for a locked calendar, a duplicate, a full refund or a dispute)
+- `GET /v1/invoices/<id>`, `GET /v1/invoice_payments`, `GET /v1/charges/<id>`, `POST /v1/refunds` (refund a payment that could not get the lock)
 
-Grant **Checkout Sessions: Write**, **Customer portal: Write**, **Subscriptions: Read**, and nothing else. The exact permission labels are unverified, so prove the set in the sandbox first (a3). If live checkout answers `502 stripe-error` and `wr tail` shows a 403 permission error, add the one Stripe names. Copy the key and go straight to d1. Do not paste it anywhere else.
+Grant **Checkout Sessions: Write**, **Customer portal: Write**, **Subscriptions: Write**, **Invoices: Read**, **Charges: Read**, **Refunds: Write**, and nothing else. The exact permission labels are unverified, so prove the set in the sandbox first (a3). If live checkout answers `502 stripe-error` and `wr tail` shows a 403 permission error, add the one Stripe names. Copy the key and go straight to d1. Do not paste it anywhere else.
 
 ### c5. Live webhook endpoint: done in d4, **after** the deploy
 
@@ -276,7 +279,7 @@ M=$(stripe prices list --live --lookup-keys=pro_monthly 2>/dev/null | jq -er '.d
 d4. Create the live webhook endpoint and store its signing secret. **Run this after (e).** Billing turns on when this finishes:
 
 ```zsh
-WH=$(stripe webhook_endpoints create --live --url=https://pastecal.com/api/stripe/webhook --description="pastecal Pro (Worker pastecal-sync)" --enabled-events=checkout.session.completed --enabled-events=customer.subscription.created --enabled-events=customer.subscription.updated --enabled-events=customer.subscription.deleted --enabled-events=invoice.payment_failed 2>/dev/null | jq -er .secret) && print -r -- "$WH" | wr secret put STRIPE_WEBHOOK_SECRET; unset WH
+WH=$(stripe webhook_endpoints create --live --url=https://pastecal.com/api/stripe/webhook --description="pastecal Pro (Worker pastecal-sync)" --enabled-events=checkout.session.completed --enabled-events=customer.subscription.created --enabled-events=customer.subscription.updated --enabled-events=customer.subscription.deleted --enabled-events=invoice.payment_failed --enabled-events=charge.refunded --enabled-events=charge.dispute.created 2>/dev/null | jq -er .secret) && print -r -- "$WH" | wr secret put STRIPE_WEBHOOK_SECRET; unset WH
 ```
 
 If `jq` printed an error, the endpoint may exist without its secret stored. Look for it with `stripe webhook_endpoints list --live 2>/dev/null | jq '.data[] | {id, url, enabled_events}'`. Then either roll its signing secret in the Dashboard (Developers → Webhooks → endpoint → Roll secret) and set it with `pbpaste | wr secret put STRIPE_WEBHOOK_SECRET`, or delete it (`stripe webhook_endpoints delete <we_id> --live`) and re-run d4.

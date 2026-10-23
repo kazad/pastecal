@@ -23,6 +23,8 @@
  *   POST /api/stripe/webhook                     Stripe events (signed), see handleWebhook
  *   POST /api/admin/accounts/reassign {calendarId, email}   (Bearer IMPORT_SECRET; lost access, disputes)
  *   GET  /api/admin/accounts/lookup?email=                  (same)
+ *   GET  /api/admin/accounts/conflicts                      (same) subscriptions refunded because they could not
+ *                                                           get the lock (status refunded-conflict / conflict-refund-failed)
  *
  * Tokens (sign-in links, sessions) are 128-bit random, base64url; only their SHA-256 is stored.
  * Cookie-authenticated POSTs need Content-Type: application/json and an Origin of pastecal.com.
@@ -36,7 +38,8 @@
  */
 import { DurableObject } from 'cloudflare:workers';
 import { LockClient } from './LockClient.js';
-import { INTERVALS, stripeConfig, stripeRequest, verifyStripeSignature, summarizeSubscription, subscriptionIdOf, timingSafeEqual } from './Stripe.js';
+import { INTERVALS, stripeConfig, stripeRequest, verifyStripeSignature, summarizeSubscription, subscriptionIdOf, timingSafeEqual,
+    eventModeMismatch, subscriptionOfInvoice, paymentOfInvoice, paymentOfInvoicePayments } from './Stripe.js';
 
 const SITE = 'https://pastecal.com';
 const LOGIN_TTL = 15 * 60 * 1000;
@@ -45,8 +48,14 @@ const LOGINS_PER_EMAIL_PER_HOUR = 5;
 const LOGINS_PER_EMAIL_PER_DAY = 10;     // and no more than this a day: nobody can flood an inbox slowly either
 const ACTIVE = new Set(['active', 'trialing', 'past_due']);
 const ENDED = new Set(['canceled', 'unpaid', 'incomplete_expired']);
+// Our own final statuses for a subscription we refunded and canceled because it could not get the
+// lock (another owner, or a duplicate). Later events for it change nothing.
+const CONFLICT = new Set(['refunded-conflict', 'conflict-refund-failed']);
 const SUBSCRIPTION_EVENTS = new Set(['checkout.session.completed', 'customer.subscription.created',
     'customer.subscription.updated', 'customer.subscription.deleted', 'invoice.payment_failed']);
+// A full refund or a dispute ends the subscription that charge paid for (which unlocks as usual).
+const CHARGE_EVENTS = new Set(['charge.refunded', 'charge.dispute.created']);
+const CHECKOUT_RESTARTS_PER_HOUR = 3;
 
 // Same rule as index.js: any name Firebase allowed.
 const validId = (id) => typeof id === 'string' && id.length >= 1 && id.length <= 200 && !/[.#$\[\]\/\u0000-\u001f\u007f]/.test(id);
@@ -90,6 +99,12 @@ export class Accounts extends DurableObject {
             CREATE TABLE IF NOT EXISTS processed_events (event_id TEXT PRIMARY KEY, at INTEGER);
             CREATE TABLE IF NOT EXISTS outbox (id INTEGER PRIMARY KEY AUTOINCREMENT, to_email TEXT, subject TEXT, text TEXT, at INTEGER);
             CREATE TABLE IF NOT EXISTS checkout_holds (calendar_id TEXT PRIMARY KEY, user_id TEXT, expires_at INTEGER);`);
+        // Added later (an existing table keeps its columns): which subscription came first, and the
+        // Checkout Session a hold guards plus how often its buyer restarted it.
+        for (const col of ['subscriptions ADD COLUMN created INTEGER', 'checkout_holds ADD COLUMN session_id TEXT',
+            'checkout_holds ADD COLUMN restarts INTEGER', 'checkout_holds ADD COLUMN window_start INTEGER']) {
+            try { this.sql.exec(`ALTER TABLE ${col}`); } catch (_) { /* already there */ }
+        }
     }
 
     // A new sign-in link for this email, or null past the per-email limit (the caller still says ok).
@@ -152,6 +167,7 @@ export class Accounts extends DurableObject {
         const rows = this.sql.exec(`SELECT * FROM subscriptions WHERE user_id = ? ORDER BY updated_at DESC`, userId).toArray();
         const byCal = new Map();     // one entry per calendar: an active subscription wins over old ones
         for (const r of rows) {
+            if (CONFLICT.has(r.status)) continue;          // refunded: never theirs
             const have = byCal.get(r.calendar_id);
             if (!have || (!ACTIVE.has(have.status) && ACTIVE.has(r.status))) byCal.set(r.calendar_id, r);
         }
@@ -163,16 +179,23 @@ export class Accounts extends DurableObject {
 
     getSubscription(id) { return this.sql.exec(`SELECT * FROM subscriptions WHERE stripe_subscription_id = ?`, id).toArray()[0] || null; }
     upsertSubscription(s) {
-        this.sql.exec(`INSERT INTO subscriptions (stripe_subscription_id, user_id, stripe_customer_id, calendar_id, plan, interval, price_id, status, current_period_end, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        this.sql.exec(`INSERT INTO subscriptions (stripe_subscription_id, user_id, stripe_customer_id, calendar_id, plan, interval, price_id, status, current_period_end, updated_at, created)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(stripe_subscription_id) DO UPDATE SET user_id = excluded.user_id, stripe_customer_id = excluded.stripe_customer_id,
                 calendar_id = excluded.calendar_id, plan = excluded.plan, interval = excluded.interval, price_id = excluded.price_id,
-                status = excluded.status, current_period_end = excluded.current_period_end, updated_at = excluded.updated_at`,
-            s.id, s.userId, s.customer || null, s.calendarId, 'pro', s.interval || null, s.priceId || null, s.status, s.currentPeriodEnd || null, Date.now());
+                status = excluded.status, current_period_end = excluded.current_period_end, updated_at = excluded.updated_at,
+                created = COALESCE(excluded.created, subscriptions.created)`,
+            s.id, s.userId, s.customer || null, s.calendarId, 'pro', s.interval || null, s.priceId || null, s.status, s.currentPeriodEnd || null, Date.now(), s.created || null);
     }
-    otherActiveSubscription(calendarId, exceptId) {
-        const rows = this.sql.exec(`SELECT status FROM subscriptions WHERE calendar_id = ? AND stripe_subscription_id != ?`, calendarId, exceptId).toArray();
-        return rows.some((r) => ACTIVE.has(r.status));
+    setSubscriptionStatus(id, status) { this.sql.exec(`UPDATE subscriptions SET status = ?, updated_at = ? WHERE stripe_subscription_id = ?`, status, Date.now(), id); }
+    // The calendar's other active subscriptions, oldest first (a row without `created` predates the column: oldest).
+    otherActiveSubscriptions(calendarId, exceptId) {
+        return this.sql.exec(`SELECT stripe_subscription_id AS id, user_id AS userId, status, created FROM subscriptions
+            WHERE calendar_id = ? AND stripe_subscription_id != ? ORDER BY COALESCE(created, 0), stripe_subscription_id`, calendarId, exceptId)
+            .toArray().filter((r) => ACTIVE.has(r.status));
+    }
+    conflicts() {
+        return this.sql.exec(`SELECT stripe_subscription_id, user_id, calendar_id, status, updated_at FROM subscriptions WHERE status IN ('refunded-conflict', 'conflict-refund-failed') ORDER BY updated_at DESC LIMIT 100`).toArray();
     }
     customerForUser(userId) {
         const row = this.sql.exec(`SELECT stripe_customer_id FROM subscriptions WHERE user_id = ? AND stripe_customer_id IS NOT NULL ORDER BY updated_at DESC LIMIT 1`, userId).toArray()[0];
@@ -180,13 +203,23 @@ export class Accounts extends DurableObject {
     }
     // One buyer at a time per calendar: a hold lasts as long as the Stripe Checkout page it guards
     // (both CHECKOUT_HOLD_MS), so a second person can't pay for a calendar someone is already buying
-    // and end up charged without the lock. The same user may restart their own checkout.
+    // and end up charged without the lock. The same user may restart their own checkout, at most
+    // CHECKOUT_RESTARTS_PER_HOUR times an hour, and the caller expires their previous page first
+    // (previousSession), so only one page can ever take a payment.
     holdCheckout(calendarId, userId, ms) {
         const now = Date.now();
-        const row = this.sql.exec(`SELECT user_id, expires_at FROM checkout_holds WHERE calendar_id = ?`, calendarId).toArray()[0];
-        if (row && row.user_id !== userId && row.expires_at > now) return false;
-        this.sql.exec(`INSERT OR REPLACE INTO checkout_holds (calendar_id, user_id, expires_at) VALUES (?, ?, ?)`, calendarId, userId, now + ms);
-        return true;
+        const row = this.sql.exec(`SELECT user_id, expires_at, session_id, restarts, window_start FROM checkout_holds WHERE calendar_id = ?`, calendarId).toArray()[0];
+        if (row && row.user_id !== userId && row.expires_at > now) return { ok: false, error: 'checkout-in-progress' };
+        const mine = row && row.user_id === userId;
+        const inWindow = mine && row.window_start && now - row.window_start < 3600 * 1000;
+        const restarts = inWindow ? (row.restarts || 0) + 1 : 0;
+        if (restarts > CHECKOUT_RESTARTS_PER_HOUR) return { ok: false, error: 'too-many-checkouts' };
+        this.sql.exec(`INSERT OR REPLACE INTO checkout_holds (calendar_id, user_id, expires_at, session_id, restarts, window_start) VALUES (?, ?, ?, ?, ?, ?)`,
+            calendarId, userId, now + ms, mine ? row.session_id : null, restarts, inWindow ? row.window_start : now);
+        return { ok: true, previousSession: mine ? row.session_id || null : null };
+    }
+    setCheckoutSession(calendarId, userId, sessionId) {
+        this.sql.exec(`UPDATE checkout_holds SET session_id = ? WHERE calendar_id = ? AND user_id = ?`, sessionId, calendarId, userId);
     }
     releaseCheckout(calendarId) { this.sql.exec(`DELETE FROM checkout_holds WHERE calendar_id = ?`, calendarId); }
 
@@ -450,7 +483,20 @@ async function checkout(request, env, body) {
     const acc = accounts(env);
     const [user, customer] = await Promise.all([acc.getUser(userId), acc.customerForUser(userId)]);
     if (!user) return json({ error: 'signed-out' }, 401);
-    if (!(await acc.holdCheckout(calendarId, userId, CHECKOUT_HOLD_MS))) return json({ error: 'checkout-in-progress' }, 409);
+    const hold = await acc.holdCheckout(calendarId, userId, CHECKOUT_HOLD_MS);
+    if (!hold.ok) return json({ error: hold.error }, hold.error === 'too-many-checkouts' ? 429 : 409);
+    // A restart: expire the previous page first, so two pages for one calendar can never both take a payment.
+    if (hold.previousSession) {
+        const path = `/v1/checkout/sessions/${encodeURIComponent(hold.previousSession)}`;
+        const x = await stripeRequest(cfg, 'POST', path + '/expire');
+        if (!x.ok) {
+            const g = await stripeRequest(cfg, 'GET', path);
+            if (!(g.ok && g.data.status === 'expired')) {
+                console.warn('[accounts] could not expire the previous checkout page:', x.status, g.ok ? g.data.status : g.status);
+                return json({ error: 'checkout-in-progress' }, 409);
+            }
+        }
+    }
     const back = validId(body.editName) ? body.editName : calendarId;
     const meta = { calendar_id: calendarId, user_id: userId };
     const params = {
@@ -467,6 +513,7 @@ async function checkout(request, env, body) {
     if (customer) params.customer = customer; else params.customer_email = user.email;
     const r = await stripeRequest(cfg, 'POST', '/v1/checkout/sessions', params);
     if (!r.ok || !r.data.url) { console.error('[accounts] checkout session failed:', r.status, r.data && r.data.error && r.data.error.code); return json({ error: 'stripe-error' }, 502); }
+    if (r.data.id) await acc.setCheckoutSession(calendarId, userId, r.data.id);
     return json({ url: r.data.url });
 }
 
@@ -485,22 +532,116 @@ async function handleWebhook(request, env) {
 
     const acc = accounts(env);
     if (await acc.eventSeen(event.id)) return json({ received: true, duplicate: true });
+    if (eventModeMismatch(cfg, event)) {
+        console.error('[accounts] ignoring a', event.livemode ? 'live' : 'test', 'mode event: the key is the other mode', event.id);
+        await acc.markEvent(event.id);
+        return json({ received: true, ignored: 'mode' });
+    }
     const subId = SUBSCRIPTION_EVENTS.has(event.type) ? subscriptionIdOf(event) : null;
     if (subId) {
         const r = await stripeRequest(cfg, 'GET', `/v1/subscriptions/${encodeURIComponent(subId)}`);
         if (r.status >= 500 || r.status === 429 || (!r.ok && r.status !== 404)) return json({ error: 'retry' }, 500);
         if (r.ok) {
-            const outcome = await applySubscription(env, acc, summarizeSubscription(r.data));
+            const outcome = await applySubscription(env, acc, cfg, summarizeSubscription(r.data));
             if (outcome.retry) return json({ error: 'retry' }, 500);       // not marked: Stripe sends it again
         }
+    }
+    if (CHARGE_EVENTS.has(event.type)) {
+        const outcome = await endForCharge(env, acc, cfg, event);
+        if (outcome.retry) return json({ error: 'retry' }, 500);
     }
     await acc.markEvent(event.id);
     return json({ received: true });
 }
 
-// Make the calendar match the subscription. {retry:true} when the calendar couldn't be reached.
-async function applySubscription(env, acc, s) {
+const retryable = (r) => r.status >= 500 || r.status === 429 || r.status === 0;
+
+// A full refund or a dispute: find the subscription the charge paid for and cancel it now. The
+// cancellation then unlocks the calendar through the usual path (applied here too, not only when
+// Stripe's customer.subscription.deleted arrives).
+async function endForCharge(env, acc, cfg, event) {
+    const o = event.data && event.data.object || {};
+    if (event.type === 'charge.refunded' && o.refunded !== true) return {};      // partial refund: keep Pro
+    let charge = event.type === 'charge.refunded' ? o : null;
+    if (!charge) {
+        const chId = typeof o.charge === 'string' ? o.charge : o.charge && o.charge.id;
+        if (!chId) return {};
+        const c = await stripeRequest(cfg, 'GET', `/v1/charges/${encodeURIComponent(chId)}`);
+        if (retryable(c)) return { retry: true };
+        if (!c.ok) { console.warn('[accounts] dispute: charge not found', chId); return {}; }
+        charge = c.data;
+    }
+    const ref = (v) => (typeof v === 'string' ? v : v && v.id) || null;
+    // Older API versions name the invoice on the charge; newer ones only through invoice_payments.
+    let invoiceId = ref(charge.invoice);
+    const pi = ref(charge.payment_intent) || ref(o.payment_intent);
+    if (!invoiceId && pi) {
+        const p = await stripeRequest(cfg, 'GET', `/v1/invoice_payments?payment[type]=payment_intent&payment[payment_intent]=${encodeURIComponent(pi)}`);
+        if (retryable(p)) return { retry: true };
+        invoiceId = p.ok && p.data.data && p.data.data[0] ? ref(p.data.data[0].invoice) : null;
+    }
+    if (!invoiceId) return {};                                               // not a subscription payment
+    const inv = await stripeRequest(cfg, 'GET', `/v1/invoices/${encodeURIComponent(invoiceId)}`);
+    if (retryable(inv)) return { retry: true };
+    const subId = inv.ok ? subscriptionOfInvoice(inv.data) : null;
+    if (!subId) return {};
+    const prev = await acc.getSubscription(subId);
+    if (prev && CONFLICT.has(prev.status)) return {};                       // our own conflict refund
+    const g = await stripeRequest(cfg, 'GET', `/v1/subscriptions/${encodeURIComponent(subId)}`);
+    if (retryable(g)) return { retry: true };
+    if (!g.ok) return {};
+    let sub = g.data;
+    if (ACTIVE.has(sub.status) || sub.status === 'incomplete') {
+        const d = await stripeRequest(cfg, 'DELETE', `/v1/subscriptions/${encodeURIComponent(subId)}`, null, { idempotencyKey: `cancel-${event.type}-${subId}` });
+        if (retryable(d)) return { retry: true };
+        if (d.ok) sub = d.data;
+        console.warn('[accounts]', event.type, '-> canceled subscription', subId, d.ok ? '' : `(cancel answered ${d.status})`);
+    }
+    return applySubscription(env, acc, cfg, summarizeSubscription(sub));
+}
+
+// The payment behind a subscription's latest invoice, for a refund: {ref} | {none} (nothing paid) | {retry} | {failed}.
+async function latestPayment(cfg, s) {
+    if (!s.latestInvoice) return { none: true };
+    const inv = await stripeRequest(cfg, 'GET', `/v1/invoices/${encodeURIComponent(s.latestInvoice)}`);
+    if (retryable(inv)) return { retry: true };
+    if (!inv.ok) return { failed: true };
+    if (!inv.data.amount_paid) return { none: true };
+    const direct = paymentOfInvoice(inv.data);
+    if (direct) return { ref: direct };
+    const p = await stripeRequest(cfg, 'GET', `/v1/invoice_payments?invoice=${encodeURIComponent(s.latestInvoice)}`);
+    if (retryable(p)) return { retry: true };
+    const found = p.ok ? paymentOfInvoicePayments(p.data) : null;
+    return found ? { ref: found } : { failed: true };
+}
+
+// A paid subscription that cannot get the lock (someone else holds it, or the same person already
+// pays for this calendar): refund what it took, cancel it now, and mark it. Refund first, so a
+// retry after a failure still finds it active; both calls carry idempotency keys, so a retry
+// never refunds or cancels twice. {retry:true} when Stripe could not be reached.
+async function refundConflict(acc, cfg, s, why) {
+    console.error('[accounts] refunded-conflict:', why, s.id);                 // health check: GET /api/admin/accounts/conflicts
+    let failed = false;
+    const pay = await latestPayment(cfg, s);
+    if (pay.retry) return { retry: true };
+    if (pay.ref) {
+        const r = await stripeRequest(cfg, 'POST', '/v1/refunds', { ...pay.ref, reason: 'duplicate', metadata: { subscription: s.id, why } },
+            { idempotencyKey: `refund-conflict-${s.id}` });
+        if (retryable(r)) return { retry: true };
+        const already = r.data && r.data.error && r.data.error.code === 'charge_already_refunded';
+        if (!r.ok && !already) { failed = true; console.error('[accounts] conflict refund FAILED:', s.id, r.status, r.data && r.data.error && r.data.error.code); }
+    } else if (pay.failed) { failed = true; console.error('[accounts] conflict refund FAILED: no payment found for', s.id); }
+    const d = await stripeRequest(cfg, 'DELETE', `/v1/subscriptions/${encodeURIComponent(s.id)}`, null, { idempotencyKey: `cancel-conflict-${s.id}` });
+    if (retryable(d)) return { retry: true };
+    if (!d.ok) console.warn('[accounts] conflict cancel answered', d.status, s.id);
+    await acc.setSubscriptionStatus(s.id, failed ? 'conflict-refund-failed' : 'refunded-conflict');
+    return {};
+}
+
+// Make the calendar match the subscription. {retry:true} when the calendar (or Stripe) couldn't be reached.
+async function applySubscription(env, acc, cfg, s) {
     const prev = await acc.getSubscription(s.id);
+    if (prev && CONFLICT.has(prev.status)) return {};                   // refunded and canceled by us: final
     // Our row wins over Stripe's metadata: support may have reassigned the owner.
     const calendarId = (prev && prev.calendar_id) || s.calendarId;
     const userId = (prev && prev.user_id) || s.userId;
@@ -511,20 +652,39 @@ async function applySubscription(env, acc, s) {
     const st = await LockClient.lockStatus(env, calendarId);
     if (st.status >= 500) return { retry: true };
     if (st.status === 404) { console.warn('[accounts] paid calendar not found:', calendarId); return {}; }
+    const others = await acc.otherActiveSubscriptions(calendarId, s.id);
     if (ACTIVE.has(s.status)) {
-        if (st.locked && st.ownerId === userId) return {};
-        // The first lock returns an editor key, but there is no browser here to give it to.
-        // It is dropped unseen; the owner makes a fresh one from the calendar (POST /api/pro/editor-key).
+        if (st.locked && st.ownerId === userId) {
+            // The same person paying twice for one calendar: the oldest subscription stays, later ones are refunded.
+            const mine = others.filter((o) => o.userId === userId);
+            const older = mine.filter((o) => !o.created || !s.created || o.created < s.created || (o.created === s.created && o.id < s.id));
+            if (older.length) return refundConflict(acc, cfg, s, 'duplicate');
+            for (const dup of mine) {
+                const g = await stripeRequest(cfg, 'GET', `/v1/subscriptions/${encodeURIComponent(dup.id)}`);
+                if (retryable(g)) return { retry: true };
+                if (g.ok && ACTIVE.has(g.data.status) && (await refundConflict(acc, cfg, summarizeSubscription(g.data), 'duplicate')).retry) return { retry: true };
+            }
+            return {};
+        }
+        // No editor link is made here (there is no browser to show its key to): the owner makes them from the calendar.
         const r = await LockClient.lock(env, calendarId, userId);
         if (r.status >= 500) return { retry: true };
+        if (r.status === 409 && r.error === 'locked-by-other') return refundConflict(acc, cfg, s, 'locked-by-other');
         if (!r.ok) console.warn('[accounts] could not lock paid calendar:', calendarId, r.status, r.error);
         else await acc.releaseCheckout(calendarId);
         return {};
     }
-    if (await acc.otherActiveSubscription(calendarId, s.id)) return {};   // still paid for by another subscription
-    if (!st.locked || st.ownerId !== userId) return {};
-    const r = await LockClient.unlock(env, calendarId, userId);
-    return r.status >= 500 ? { retry: true } : {};
+    if (others.some((o) => o.userId === userId)) return {};            // still paid for by this owner
+    const heir = others[0];                                             // another person's active subscription, oldest first
+    if (st.locked && st.ownerId === userId) {
+        const r = await LockClient.unlock(env, calendarId, userId);
+        if (r.status >= 500) return { retry: true };
+    } else if (st.locked || !heir) return {};
+    if (!heir) return {};
+    // The ex-owner's lock passes to the person still paying, instead of staying with someone who isn't.
+    console.warn('[accounts] lock handed to the remaining subscription:', heir.id);
+    const l = await LockClient.lock(env, calendarId, heir.userId);
+    return l.status >= 500 ? { retry: true } : {};
 }
 
 async function handleAdmin(request, env, url, path) {
@@ -534,6 +694,10 @@ async function handleAdmin(request, env, url, path) {
         const email = String(url.searchParams.get('email') || '').trim().toLowerCase();
         const out = await acc.lookup(email);
         return out ? json(out) : json({ error: 'no-user' }, 404);
+    }
+    if (path === '/api/admin/accounts/conflicts' && request.method === 'GET') {
+        // Subscriptions refunded because they could not get the lock (for the health check and support).
+        return json({ conflicts: await acc.conflicts() });
     }
     if (path === '/api/admin/accounts/reassign' && request.method === 'POST') {
         const body = (await readJson(request)) || {};
@@ -546,7 +710,7 @@ async function handleAdmin(request, env, url, path) {
         if (moved.active) {
             const st = await LockClient.lockStatus(env, body.calendarId);
             if (st.locked && st.ownerId !== userId) await LockClient.unlock(env, body.calendarId, st.ownerId);
-            if (!(st.locked && st.ownerId === userId)) relocked = (await LockClient.lock(env, body.calendarId, userId)).ok;   // key dropped unseen
+            if (!(st.locked && st.ownerId === userId)) relocked = (await LockClient.lock(env, body.calendarId, userId)).ok;   // no link made: the new owner makes them
         }
         return json({ ok: true, userId, calendarId: body.calendarId, relocked });
     }
