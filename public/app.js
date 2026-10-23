@@ -422,17 +422,11 @@ const CalendarVueApp = {
             return !this.urlslug && !this.isExisting;
         },
 
-        // Headline and lead for the homepage pitch, by experiment variant.
+        // Headline and lead for the homepage pitch. One version for now; a later test adds more,
+        // keyed by experiment variant.
         tourCopy() {
-            const copy = {
-                a: { title: 'A shared calendar in one link',
-                     lead: 'No account, nothing to install. Add your events, send the link, and everyone sees the same schedule.' },
-                b: { title: 'Sign-ups, shifts and bookings in one shared calendar',
-                     lead: 'People add their name to a slot, book the room, or mark when they are away. Everyone sees the same schedule from one link.' },
-                c: { title: 'No-login shared calendars that keep everyone on the same schedule',
-                     lead: 'Add events, send one link, and everyone sees every change. Nothing to sign up for, nothing to install.' },
-            };
-            return copy[this.tourVariant] || copy.a;
+            return { title: 'No-login shared calendars that keep everyone on the same schedule',
+                     lead: 'Add events, send one link, and everyone sees every change. Nothing to sign up for, nothing to install.' };
         }
     },
 

@@ -204,7 +204,7 @@ const Analytics = {
     // it as `hv` -- so a calendar made under variant B still reports hv=b when its owner
     // comes back weeks later. That is what makes retention, not just clicks, comparable.
     // ?hv=b previews a variant without changing the stored one.
-    HOMEPAGE_VARIANTS: ['a', 'b', 'c'],
+    HOMEPAGE_VARIANTS: ['c'], // only the No-login headline is live; add letters to test more
     _hv: null,
 
     homepageVariant() {
