@@ -246,7 +246,9 @@ export default {
         const out = new Response(res.body, res);
         // Only the test site stays out of search. Sending this on every hostname told Google to drop
         // pastecal.com itself (Oct 2026: organic visitors fell from ~110/week to ~5).
-        if (url.hostname === 'new.pastecal.com') out.headers.set('X-Robots-Tag', 'noindex'); else out.headers.delete('X-Robots-Tag');
+        // Pages served here are beta EDIT links; only / and /view/ may be indexed (see public/_headers).
+        const indexable = url.hostname !== 'new.pastecal.com' && (path === '/' || path.startsWith('/view/'));
+        if (indexable) out.headers.delete('X-Robots-Tag'); else out.headers.set('X-Robots-Tag', 'noindex');
         if (/\.(js|css|json)$/.test(path) || beta) out.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
         return out;
     },

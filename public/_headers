@@ -1,3 +1,15 @@
+# Search engines: index the homepage and read-only /view/ links only. Every other page path is a
+# calendar's EDIT link (pastecal.com/<name>): anyone holding it can change that calendar, so it must
+# never be listed. (Rules apply in order; "! X-Robots-Tag" removes the header an earlier rule set.)
+/*
+  X-Robots-Tag: noindex
+/
+  ! X-Robots-Tag
+/view/*
+  ! X-Robots-Tag
+# The test site stays out of search entirely.
+https://new.pastecal.com/*
+  X-Robots-Tag: noindex
 /*.html
   Cache-Control: no-cache, no-store, must-revalidate
 /*.js
