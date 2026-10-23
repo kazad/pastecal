@@ -1225,3 +1225,7 @@ button:hover > .pc-add-event {
 .e-dropdownbase .e-list-item.e-active,
 .e-dropdownbase .e-list-item.e-active.e-hover { color: var(--pc-link) !important }
 .e-calendar .e-footer-container .e-btn { text-transform: none }
+/* Phones: the time column is ~36px wide; keep the early-hours toggle readable in it. */
+@media (max-width: 640px) {
+    td.e-header-cells.e-disable-dates::before { font-size: 10px; letter-spacing: -0.02em; white-space: nowrap }
+}

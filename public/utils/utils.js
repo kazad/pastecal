@@ -133,7 +133,9 @@ class RecentCalendars {
     static display(item) {
         const raw = item.title || item.id;
         const view = !!item.view || / \(View Only\)$/.test(raw);
-        const title = raw.replace(/ \(View Only\)$/, '');
+        const stripped = raw.replace(/ \(View Only\)$/, '');
+        // The stored default title, in sentence case (as Calendar.displayTitle shows it).
+        const title = stripped === 'New Calendar' ? 'New calendar' : stripped;
         const path = (view ? '/view/' : '/') + item.id;
         return { title, view, path, address: 'pastecal.com' + path };
     }

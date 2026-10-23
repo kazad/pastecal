@@ -12,7 +12,7 @@ const CalendarTitle = {
             <!-- Edit mode input -->
             <input v-if="isEditing"
                 type="text"
-                :value="title"
+                :value="title === 'New Calendar' ? displayTitle : title"
                 @input="$emit('update:title', $event.target.value)"
                 @blur="$emit('blur')"
                 @keyup.enter="$emit('enter')"
