@@ -410,6 +410,10 @@ const Analytics = {
     proCheckoutFailed(reason) { this.track('pro_checkout_failed', { where: 'share_panel', reason: String(reason).slice(0, 40) }); },
     proEditorLinkMade(kind) { this.track('pro_editor_link', { where: kind === 'reset' ? 'reset' : 'create' }); },
     proPortalOpened() { this.track('pro_portal_opened', { where: 'share_panel' }); },
+    // The "Lock this calendar" line on your own calendar after someone else changed it.
+    proUpsellShown() { this.track('pro_upsell_shown', { where: 'changed_since_visit' }); },
+    proUpsellClicked() { this.track('pro_upsell_clicked', { where: 'changed_since_visit' }); },
+    proUpsellDismissed() { this.track('pro_upsell_dismissed', { where: 'changed_since_visit' }); },
     // The logo menu's Pro account section. The state only: never the email or a calendar.
     accountMenuShown(state) { this.track('account_menu_shown', { state: state === 'signed_in' ? 'signed_in' : 'signed_out' }); },
     accountSignInSent() { this.track('pro_signin_sent', { where: 'logo_menu' }); },

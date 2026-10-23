@@ -946,6 +946,14 @@ div#Schedule,
 
 /* Homepage split: calendar 2/3, pitch 1/3, only on wide screens. Narrower, a one-line pitch sits
    above the calendar instead and the aside is hidden. */
+/* The quiet Pro line above the calendar (index.html pro-upsell). */
+.pc-upsell { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; margin: 0 0 8px; padding: 6px 4px 6px 12px; border: 1px solid var(--pc-line); border-radius: 8px; background: var(--pc-surface); font: 14px/1.4 var(--pc-font); color: var(--pc-text-muted) }
+.pc-upsell-go { padding: 0; border: 0; background: none; font: inherit; font-weight: 600; color: var(--pc-link); cursor: pointer; white-space: nowrap }
+.pc-upsell-go:hover { color: var(--pc-link-hover); text-decoration: underline }
+.pc-upsell-x { margin-left: auto; width: 28px; height: 28px; border: 0; border-radius: 6px; background: none; font-size: 18px; line-height: 1; color: var(--pc-text-muted); cursor: pointer }
+.pc-upsell-x:hover { background: var(--pc-hover); color: var(--pc-text) }
+.pc-upsell-go:focus-visible, .pc-upsell-x:focus-visible { outline: 2px solid var(--pc-link); outline-offset: 2px }
+.pc-pro { scroll-margin-top: 12px }   /* the upsell scrolls Share to the Pro panel */
 .pc-home-line { display: none }
 .pc-home-aside { display: none }
 @media (max-width: 1099px) {

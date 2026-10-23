@@ -1317,6 +1317,13 @@ Copyright (c) 2025 Kalid Azad
             </button>
         </div>
 
+        <!-- Pro, quietly, on your own calendar after someone else changed it (maybeShowProUpsell). -->
+        <p v-if="proUpsell" class="pc-upsell" data-testid="pro-upsell" v-cloak>
+            <span>Changed since your last visit. Want only your team to edit?</span>
+            <button type="button" class="pc-upsell-go" data-testid="pro-upsell-open" @click="openProUpsell">Lock this calendar&nbsp;→</button>
+            <button type="button" class="pc-upsell-x" data-testid="pro-upsell-dismiss" aria-label="Dismiss" @click="dismissProUpsell">×</button>
+        </p>
+
         <!-- Homepage only, narrow screens: what this is, before the calendar. -->
         <p v-if="isHomepageCalendar" class="pc-home-line" v-cloak>
             <strong>No-login shared calendars.</strong> Tap a day to add an event, then press Save &amp; share for the link. <a href="/view/demo?from=home-line">See a demo</a> · <a href="#how">How it works&nbsp;↓</a>

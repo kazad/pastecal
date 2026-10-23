@@ -147,6 +147,7 @@ const CalendarVueApp = {
             // locked and this tab has no rights: the calendar is shown read-only.
             lock: { locked: false, pro: false, canEdit: true },
             lockedOut: false,
+            lockKnown: false,   // a lock state has arrived for this calendar (the default above is a guess)
             viewRoute: false,   // /view/<slug>: read-only for its own reason, whatever the lock says
             isLoading: true, // set to false when calendar status is determined
             isExisting: false, // set by callback
@@ -177,6 +178,8 @@ const CalendarVueApp = {
             // changes list answer "what happened while I was away" rather than only
             // "what can I undo". Null on a first visit, where nothing is "new".
             lastSeenAt: null,
+            lastSeenKnown: false,       // lastSeenAt has been read for this visit
+            proUpsell: false,           // the "Lock this calendar" line (see maybeShowProUpsell)
             lastEditLabel: '',          // "Edited 2d ago" in the header, or '' when unknown
             lastEditExact: '',          // the full timestamp, shown on hover
             lastEditedAt: null,         // server ms of the last real edit (/history_meta)
@@ -605,7 +608,9 @@ const CalendarVueApp = {
                         this.lastSeenAt = prior?.lastVisited
                             ? new Date(prior.lastVisited).getTime()
                             : null;
+                        this.lastSeenKnown = true;
                         this.recentManager.add(this.calendar.id, this.calendar.title);
+                        this.$nextTick(() => this.maybeShowProUpsell());
                     } else {
                         this.recentManager.touchTitle(this.calendar.id, this.calendar.title);
                     }
@@ -3372,6 +3377,61 @@ const CalendarVueApp = {
                 this.lastEditedAt = this.calendar.lastEditedAt;
             }
             this.refreshRelativeTimes();
+            this.maybeShowProUpsell();
+        },
+
+        /**
+         * Pro, at the moment it is most relevant: you open a calendar YOU made and someone else
+         * has changed it since your last visit. One quiet line above the calendar, at most once
+         * per calendar per 30 days (ProUpsell, public/components/Pro.js). Never on someone
+         * else's calendar, a locked or read-only one, the homepage draft, an embed or /beta.
+         * Called whenever one of its inputs arrives (visit, lock state, last-edit stamp); the
+         * history is read once, and only when everything cheaper already says yes.
+         */
+        async maybeShowProUpsell() {
+            if (this._upsellChecked || this.proUpsell || typeof ProUpsell === 'undefined') return;
+            const id = this.calendar && this.calendar.id;
+            let embedded = true;
+            try { embedded = window.self !== window.top; } catch (e) { /* cross-origin parent: embedded */ }
+            const verdict = ProUpsell.precheck({
+                id, existing: this.isExisting, homepage: this.isHomepageCalendar,
+                readOnly: this.isReadOnly, viewRoute: this.viewRoute, embedded,
+                beta: /^\/(beta|nativecal)(\/|$)/.test(location.pathname),
+                mine: !!(this.recentManager && this.recentManager.getMine().some(item => item.id === id)),
+                shownAt: ProUpsell.shownAt(id), now: Date.now(),
+                lockKnown: this.lockKnown, locked: this.lock.locked,
+                visitKnown: this.lastSeenKnown, lastSeenAt: this.lastSeenAt, lastEditedAt: this.lastEditedAt,
+            });
+            if (verdict === 'wait') return;
+            this._upsellChecked = true;
+            if (verdict !== 'yes') return;
+            const rows = await this.loadUndoEntries();
+            if (!ProUpsell.changedByOthers(rows, this.lastSeenAt, CalendarDataService.writerId)) return;
+            // Things may have moved while the history loaded.
+            if (!this.calendar || this.calendar.id !== id || this.lock.locked || this.isReadOnly) return;
+            this.proUpsell = true;
+            ProUpsell.markShown(id);
+            track(a => a.proUpsellShown());
+        },
+
+        dismissProUpsell() {
+            this.proUpsell = false;
+            track(a => a.proUpsellDismissed());
+        },
+
+        // Opens Share with the Pro panel in view. The panel renders with the dialog, but the
+        // dialog animates in, so look for it for a moment rather than once.
+        openProUpsell() {
+            this.proUpsell = false;
+            track(a => a.proUpsellClicked());
+            if (!this.showShare) this.toggleShare();
+            let tries = 0;
+            const reveal = () => {
+                const panel = document.querySelector('[data-testid="pro-panel"]');
+                if (panel) { panel.scrollIntoView({ block: 'start', behavior: 'smooth' }); return; }
+                if (++tries < 30) requestAnimationFrame(reveal);
+            };
+            this.$nextTick(reveal);
         },
 
         /** Re-render every relative time from its stored timestamp. */
@@ -4385,6 +4445,9 @@ const CalendarVueApp = {
         applyLockState(s) {
             if (!s || (this.calendar && s.id && s.id !== this.calendar.id)) return;
             this.lock = { locked: !!s.locked, pro: !!s.pro, canEdit: s.canEdit !== false };
+            this.lockKnown = true;
+            if (this.lock.locked) this.proUpsell = false;
+            else this.$nextTick(() => this.maybeShowProUpsell());
             const out = this.lock.locked && !this.lock.canEdit;
             if (out !== this.lockedOut) {
                 this.lockedOut = out;
