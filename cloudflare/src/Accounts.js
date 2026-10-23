@@ -21,6 +21,12 @@
  *   POST /api/stripe/webhook                     Stripe events (signed), see handleWebhook
  *   POST /api/admin/accounts/reassign {calendarId, email}   (Bearer IMPORT_SECRET; lost access, disputes)
  *   GET  /api/admin/accounts/lookup?email=                  (same)
+ *   GET  /api/admin/pro/health                              (same) subscription counts, lock mismatches,
+ *                                                           sign-in funnel for the last 24h; see proHealth
+ *
+ * The first time the webhook locks a calendar for an owner, that owner gets one welcome email
+ * (sendWelcomeEmail). welcome_emails records it per (calendar, owner), so retries, replays,
+ * renewals and a later re-subscribe never send it again.
  *
  * Tokens (sign-in links, sessions) are 128-bit random, base64url; only their SHA-256 is stored.
  * Cookie-authenticated POSTs need Content-Type: application/json and an Origin of pastecal.com.
@@ -76,7 +82,8 @@ export class Accounts extends DurableObject {
             CREATE INDEX IF NOT EXISTS subscriptions_calendar ON subscriptions(calendar_id);
             CREATE TABLE IF NOT EXISTS processed_events (event_id TEXT PRIMARY KEY, at INTEGER);
             CREATE TABLE IF NOT EXISTS outbox (id INTEGER PRIMARY KEY AUTOINCREMENT, to_email TEXT, subject TEXT, text TEXT, at INTEGER);
-            CREATE TABLE IF NOT EXISTS checkout_holds (calendar_id TEXT PRIMARY KEY, user_id TEXT, expires_at INTEGER);`);
+            CREATE TABLE IF NOT EXISTS checkout_holds (calendar_id TEXT PRIMARY KEY, user_id TEXT, expires_at INTEGER);
+            CREATE TABLE IF NOT EXISTS welcome_emails (calendar_id TEXT, user_id TEXT, at INTEGER, PRIMARY KEY (calendar_id, user_id));`);
     }
 
     // A new sign-in link for this email, or null past the per-email limit (the caller still says ok).
@@ -182,6 +189,37 @@ export class Accounts extends DurableObject {
         return { user, subscriptions, activeSessions: sessions };
     }
 
+    // True only for the first caller per (calendar, owner): the welcome email is claimed before it
+    // is sent, so two webhook events racing for the same new subscription can't both send it.
+    claimWelcome(calendarId, userId) {
+        if (this.sql.exec(`SELECT 1 FROM welcome_emails WHERE calendar_id = ? AND user_id = ?`, calendarId, userId).toArray().length) return false;
+        this.sql.exec(`INSERT INTO welcome_emails (calendar_id, user_id, at) VALUES (?, ?, ?)`, calendarId, userId, Date.now());
+        return true;
+    }
+
+    // For the health check: subscription counts by status, one row per calendar (an active
+    // subscription wins over ended ones), and the sign-in funnel for the last 24 hours. Login
+    // tokens are kept for a day past expiry, so the last 24 hours are all still here.
+    healthSnapshot() {
+        const now = Date.now();
+        const byStatus = {};
+        for (const r of this.sql.exec(`SELECT status, COUNT(*) AS n FROM subscriptions GROUP BY status`).toArray()) byStatus[r.status || 'unknown'] = r.n;
+        const rows = this.sql.exec(`SELECT calendar_id, user_id, status, stripe_subscription_id FROM subscriptions ORDER BY updated_at DESC`).toArray();
+        const byCal = new Map();
+        for (const r of rows) {
+            const have = byCal.get(r.calendar_id);
+            if (!have || (!ACTIVE.has(have.status) && ACTIVE.has(r.status))) byCal.set(r.calendar_id, r);
+        }
+        const since = now - 24 * 3600 * 1000;
+        const issued = this.sql.exec(`SELECT COUNT(*) AS n FROM login_tokens WHERE created_at > ?`, since).one().n;
+        const consumed = this.sql.exec(`SELECT COUNT(*) AS n FROM login_tokens WHERE created_at > ? AND used = 1`, since).one().n;
+        return {
+            byStatus,
+            calendars: [...byCal.values()].map((r) => ({ calendarId: r.calendar_id, userId: r.user_id, status: r.status, subscriptionId: r.stripe_subscription_id })),
+            signIn: { issued, consumed },
+        };
+    }
+
     eventSeen(id) { return this.sql.exec(`SELECT 1 FROM processed_events WHERE event_id = ?`, id).toArray().length > 0; }
     markEvent(id) {
         const now = Date.now();
@@ -236,12 +274,46 @@ async function sendSignInEmail(env, to, token) {
         + `If you didn't ask to sign in, you can ignore this email. Nothing will change.\n`;
     const html = `<p>Here is your link to sign in to pastecal:</p><p><a href="${link}">Sign in to pastecal</a></p>`
         + `<p>It works once and expires in 15 minutes.</p><p>If you didn't ask to sign in, you can ignore this email. Nothing will change.</p>`;
-    if (devMode(env)) return accounts(env).addOutbox(to, subject, text);
-    if (!env.EMAIL) { console.error('[accounts] EMAIL binding missing; sign-in email not sent'); return; }
+    await sendEmail(env, to, subject, text, html, 'sign-in');
+}
+
+// Every email leaves here, from login@pastecal.com; in dev mode it lands in the outbox instead.
+// Never throws: a failed send is logged (without the body) and the caller carries on.
+async function sendEmail(env, to, subject, text, html, kind) {
     try {
-        await env.EMAIL.send({ to, from: { email: 'login@pastecal.com', name: 'pastecal' }, subject, text, html });
+        if (devMode(env)) return await accounts(env).addOutbox(to, subject, text);
+        if (!env.EMAIL) { console.error(`[accounts] EMAIL binding missing; ${kind} email not sent`); return; }
+        await env.EMAIL.send({ to, from: { email: 'login@pastecal.com', name: 'pastecal' }, subject, text, ...(html ? { html } : {}) });
     } catch (err) {
-        console.error('[accounts] sign-in email failed:', err && err.code, err && err.message);
+        console.error(`[accounts] ${kind} email failed:`, err && err.code, err && err.message);
+    }
+}
+
+// A calendar title is anyone's text: no control characters or line breaks (it goes in a header), short.
+function cleanTitle(title, fallback) {
+    const t = typeof title === 'string' ? title.replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, ' ').replace(/\s+/g, ' ').trim() : '';
+    if (!t) return fallback;
+    return t.length > 80 ? t.slice(0, 79).trimEnd() + '…' : t;
+}
+
+// Once per (calendar, owner), the first time the webhook locks it. Plain text, no key, no token:
+// the owner makes editor links from the calendar itself.
+async function sendWelcomeEmail(env, acc, calendarId, userId, title) {
+    try {
+        if (!(await acc.claimWelcome(calendarId, userId))) return;
+        const user = await acc.getUser(userId);
+        if (!user || !user.email) return;
+        const name = cleanTitle(title, cleanTitle(calendarId, 'your calendar'));
+        const link = `${SITE}/${encodeURIComponent(calendarId)}`;
+        const text = `Pro is on for ${name}.\n\n`
+            + `${link}\n\n`
+            + `What's locked now: only you (signed in with this email) and people with an editor link can change this calendar. Everyone else can still view it.\n\n`
+            + `To give someone editor access: open the calendar, choose Share, and copy the Editor link. You can reset or revoke editor links there at any time.\n\n`
+            + `To manage billing: open the calendar's Share panel, or the logo menu, and choose Manage billing. You can also sign in at pastecal.com with this email.\n\n`
+            + `Questions? Write to support@pastecal.com.\n`;
+        await sendEmail(env, user.email, `Pro is on for ${name}`, text, null, 'welcome');
+    } catch (err) {
+        console.error('[accounts] welcome email failed:', err && err.message);
     }
 }
 
@@ -254,7 +326,7 @@ async function readJson(request) {
 export async function handleAccounts(request, env, url) {
     const path = url.pathname;
     const owned = path === '/api/me' || path === '/api/stripe/webhook' || path.startsWith('/api/auth/')
-        || path.startsWith('/api/pro/') || path.startsWith('/api/admin/accounts/');
+        || path.startsWith('/api/pro/') || path.startsWith('/api/admin/accounts/') || path === '/api/admin/pro/health';
     if (!owned) return null;
     if (!env.ACCOUNTS) return json({ error: 'not-available' }, 503);
     try {
@@ -269,6 +341,10 @@ async function route(request, env, url, path) {
     const m = request.method;
     if (path === '/api/stripe/webhook') return m === 'POST' ? handleWebhook(request, env) : json({ error: 'method' }, 405);
     if (path.startsWith('/api/admin/accounts/')) return handleAdmin(request, env, url, path);
+    if (path === '/api/admin/pro/health') {
+        if (!isAdmin(request, env)) return new Response('forbidden', { status: 403 });
+        return m === 'GET' ? json(await proHealth(env)) : json({ error: 'method' }, 405);
+    }
     if (path === '/api/me') {
         if (m !== 'GET') return json({ error: 'method' }, 405);
         const userId = await sessionUserId(request, env);
@@ -483,13 +559,55 @@ async function applySubscription(env, acc, s) {
         const r = await LockClient.lock(env, calendarId, userId);
         if (r.status >= 500) return { retry: true };
         if (!r.ok) console.warn('[accounts] could not lock paid calendar:', calendarId, r.status, r.error);
-        else await acc.releaseCheckout(calendarId);
+        else {
+            await acc.releaseCheckout(calendarId);
+            await sendWelcomeEmail(env, acc, calendarId, userId, st.title);
+        }
         return {};
     }
     if (await acc.otherActiveSubscription(calendarId, s.id)) return {};   // still paid for by another subscription
     if (!st.locked || st.ownerId !== userId) return {};
     const r = await LockClient.unlock(env, calendarId, userId);
     return r.status >= 500 ? { retry: true } : {};
+}
+
+// The daily health check (scripts/pro-health.sh). Every calendar with a subscription row is
+// checked against its room's lock, up to HEALTH_CAP of them:
+//   paid-not-locked    active/trialing/past_due, but not locked by that owner (or by anyone)
+//   locked-not-paid    every subscription ended, yet still locked by that owner
+//   no-calendar        paid for, but the room doesn't exist
+// A room that can't be reached is listed under `unchecked`, not as a mismatch (but `ok` is false). Calendars locked
+// with no subscription row at all (admin locks) can't be listed: locks live in each room, and
+// there is no index of rooms to walk.
+const HEALTH_CAP = 200;
+async function proHealth(env) {
+    const snap = await accounts(env).healthSnapshot();
+    const todo = snap.calendars.filter((c) => ACTIVE.has(c.status) || ENDED.has(c.status));
+    const checking = todo.slice(0, HEALTH_CAP);
+    const mismatches = [], unchecked = [];
+    for (let i = 0; i < checking.length; i += 20) {
+        await Promise.all(checking.slice(i, i + 20).map(async (c) => {
+            const paid = ACTIVE.has(c.status);
+            let st;
+            try { st = await LockClient.lockStatus(env, c.calendarId); } catch { st = { status: 0 }; }
+            const base = { calendarId: c.calendarId, status: c.status, subscriptionId: c.subscriptionId };
+            if (st.status === 404) { if (paid) mismatches.push({ kind: 'no-calendar', ...base }); return; }
+            if (!st.ok) { unchecked.push({ ...base, httpStatus: st.status }); return; }
+            const lockedByOwner = !!st.locked && st.ownerId === c.userId;
+            if (paid && !lockedByOwner) mismatches.push({ kind: 'paid-not-locked', ...base, lockedByOther: !!st.locked });
+            if (!paid && lockedByOwner) mismatches.push({ kind: 'locked-not-paid', ...base });
+        }));
+    }
+    return {
+        ok: mismatches.length === 0 && unchecked.length === 0,
+        at: Date.now(),
+        subscriptions: snap.byStatus,
+        calendars: { total: todo.length, checked: checking.length, capped: todo.length > checking.length },
+        mismatches,
+        unchecked,
+        notChecked: 'Calendars locked without any subscription row (admin locks) are not listed: there is no index of rooms.',
+        signIn24h: snap.signIn,
+    };
 }
 
 async function handleAdmin(request, env, url, path) {

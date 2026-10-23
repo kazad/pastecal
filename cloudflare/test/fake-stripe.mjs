@@ -37,7 +37,7 @@ export function startFakeStripe(port) {
             const [, id, action] = lm, cal = cals.get(id);
             if (action !== 'lock-status' && hooks.lockFails > 0) { hooks.lockFails--; return send(res, 503, { ok: false, error: 'unavailable' }); }
             if (!cal) return send(res, 404, { ok: false, error: 'no-calendar' });
-            if (action === 'lock-status') return send(res, 200, { locked: cal.locked, ownerId: cal.ownerId || null, plan: cal.plan || null, lockedAt: cal.lockedAt || null });
+            if (action === 'lock-status') return send(res, 200, { locked: cal.locked, ownerId: cal.ownerId || null, plan: cal.plan || null, lockedAt: cal.lockedAt || null, title: cal.title || null });
             if (action === 'lock') {
                 if (cal.locked && cal.ownerId !== body.ownerId) return send(res, 409, { ok: false, error: 'locked-by-other' });
                 Object.assign(cal, { locked: true, ownerId: body.ownerId, plan: body.plan, lockedAt: Date.now(), editorKey: 'ek-' + crypto.randomBytes(8).toString('hex') });

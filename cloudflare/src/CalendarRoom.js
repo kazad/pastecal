@@ -337,7 +337,8 @@ export class CalendarRoom extends DurableObject {
         const no = (status, error) => Response.json({ ok: false, error }, { status });
         if (op === 'lock-status') {
             if (!this.state.id) return no(404, 'not-found');
-            return Response.json({ locked: !!l, ownerId: l ? l.ownerId : null, plan: l ? l.plan : null, lockedAt: l ? l.lockedAt : null });
+            return Response.json({ locked: !!l, ownerId: l ? l.ownerId : null, plan: l ? l.plan : null, lockedAt: l ? l.lockedAt : null,
+                title: this.state.title || null });   // for the Pro welcome email's subject
         }
         if (op === 'can-edit') {
             // For the Worker (create-view): may this caller change the calendar?

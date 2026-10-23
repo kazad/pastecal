@@ -33,6 +33,45 @@ const ProIntent = {
     clear() { try { localStorage.removeItem(PRO_INTENT_KEY); } catch (e) { /* storage blocked */ } },
 };
 
+// The quiet "Lock this calendar" line on your own calendar when someone else changed it since
+// your last visit (app.js maybeShowProUpsell). Shown at most once per calendar per 30 days;
+// storage holds calendar ids and times, nothing personal. Pure decisions, unit-tested in
+// test/unit/pro-upsell.test.js.
+const PRO_UPSELL_KEY = 'pastecal_pro_upsell';
+const ProUpsell = {
+    EVERY_MS: 30 * 24 * 3600 * 1000,
+    MAX_IDS: 100,
+    _all() {
+        try { const v = JSON.parse(localStorage.getItem(PRO_UPSELL_KEY) || '{}'); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; } catch (e) { return {}; }
+    },
+    shownAt(id) { const t = this._all()[id]; return typeof t === 'number' ? t : null; },
+    markShown(id, now = Date.now()) {
+        try {
+            const all = this._all(); all[id] = now;
+            const keep = Object.entries(all).sort((a, b) => b[1] - a[1]).slice(0, this.MAX_IDS);
+            localStorage.setItem(PRO_UPSELL_KEY, JSON.stringify(Object.fromEntries(keep)));
+        } catch (e) { /* storage blocked: it may show again next visit */ }
+    },
+    // Everything that can be decided before reading the history. 'wait' = not known yet (the
+    // lock state or the last-edit stamp hasn't arrived), so ask again later.
+    precheck(c) {
+        if (!c.id || !c.existing || c.homepage || c.readOnly || c.viewRoute || c.embedded || c.beta) return 'no';
+        if (!c.mine) return 'no';                                   // never pitch to visitors of someone else's calendar
+        if (c.shownAt != null && c.now - c.shownAt < this.EVERY_MS) return 'no';
+        if (!c.lockKnown) return 'wait';
+        if (c.locked) return 'no';
+        if (!c.visitKnown) return 'wait';
+        if (!c.lastSeenAt) return 'no';                             // first visit from this browser: nothing is "since"
+        if (c.lastEditedAt == null) return 'wait';
+        return c.lastEditedAt > c.lastSeenAt ? 'yes' : 'no';
+    },
+    // Did a browser other than this one change the calendar after `since`? History rows written
+    // before writers were recorded (or by the server, like lock changes) have no writer and don't count.
+    changedByOthers(entries, since, me) {
+        return (entries || []).some((e) => (e.parts || [e]).some((p) => p.savedAt > since && p.writer && p.writer !== me));
+    },
+};
+
 function proTrack(fn) {
     try { if (typeof Analytics !== 'undefined' && Analytics) fn(Analytics); } catch (e) { /* observational only */ }
 }
