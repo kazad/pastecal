@@ -14,6 +14,7 @@
  *   POST /cal/<id>                Create empty calendar (rate-limited per IP)
  *   PUT  /cal/<id>/import         Full calendar replace (Bearer IMPORT_SECRET)
  *   PUT  /cal/<id>/from-firebase  Firebase sync write (same auth)
+ *   /api/auth/*, /api/me, /api/pro/*, /api/stripe/webhook   Pro accounts + billing (Accounts.js)
  */
 import { ICSService } from './ICSService.js';
 import { SlugService } from './SlugService.js';
@@ -21,6 +22,8 @@ import { handleCollect } from './Collector.js';
 export { CalendarRoom } from './CalendarRoom.js';
 export { CalendarDirectory } from './CalendarDirectory.js';
 export { Waitlist } from './Waitlist.js';
+export { Accounts } from './Accounts.js';
+import { handleAccounts } from './Accounts.js';
 import { PLANS } from './Waitlist.js';
 
 // Any name Firebase allowed: real calendars include "TEAM NUÑEZ", "d&d8", "강아지봉사" and
@@ -117,6 +120,10 @@ export default {
                 }
             });
         }
+
+        // Pro accounts and billing: /api/auth/*, /api/me, /api/pro/*, /api/stripe/webhook, /api/admin/accounts/*
+        const accountsRes = await handleAccounts(request, env, url);
+        if (accountsRes) return accountsRes;
 
         // Telemetry: POST /api/collect -> Analytics Engine
         if (request.method === 'POST' && path === '/api/collect') return handleCollect(request, env);

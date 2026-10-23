@@ -1,0 +1,108 @@
+// Pro accounts: magic-link sign-in, sessions, CSRF, admin lookup, against `wrangler dev` with
+// ACCOUNTS_DEV_MODE=1 (sign-in emails land in an outbox the test reads; see .dev.vars).
+//   BASE=http://localhost:8822 node test/accounts.test.mjs
+import assert from 'node:assert/strict';
+const BASE = process.env.BASE || 'http://localhost:8822', SECRET = process.env.IMPORT_SECRET || 'dev-secret';
+let n = 0; const step = (s) => console.log(`  ok ${++n} - ${s}`);
+const run = Date.now().toString(36);
+let ip = 0; const nextIp = () => `10.20.${Math.floor(++ip / 200)}.${ip % 200}`;   // its own rate-limit bucket per call
+
+const post = (path, body, { origin = BASE, cookie, type = 'application/json', ipAddr = nextIp() } = {}) => fetch(BASE + path, {
+    method: 'POST', body: JSON.stringify(body),
+    headers: { 'Content-Type': type, ...(origin ? { Origin: origin } : {}), ...(cookie ? { Cookie: cookie } : {}), 'CF-Connecting-IP': ipAddr },
+});
+const admin = (path, init = {}) => fetch(BASE + path, { ...init, headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json', ...(init.headers || {}) } });
+const outbox = async (email) => (await (await admin(`/api/admin/accounts/outbox?email=${encodeURIComponent(email)}`)).json()).emails;
+const lastToken = async (email) => { const m = (await outbox(email)).at(-1).text.match(/\/signin#t=([A-Za-z0-9_-]+)/); return m && m[1]; };
+const me = (cookie) => fetch(BASE + '/api/me', { headers: cookie ? { Cookie: cookie } : {} });
+
+const ann = `ann-${run}@example.com`;
+let r = await post('/api/auth/start', { email: ann.toUpperCase(), next: '/team-calendar' });
+assert.equal(r.status, 200); assert.deepEqual(await r.json(), { ok: true });
+const mail = (await outbox(ann))[0];
+assert.equal(mail.subject, 'Your pastecal sign-in link');
+assert.match(mail.text, /https:\/\/pastecal\.com\/signin#t=[A-Za-z0-9_-]{22}\n/, 'token in the fragment, never the query');
+assert.match(mail.text, /expires in 15 minutes/); assert.match(mail.text, /ignore this email/);
+step('start: generic ok, one email (lowercased address) with the token in the #fragment');
+
+const token = await lastToken(ann);
+r = await post('/api/auth/verify', { token });
+assert.equal(r.status, 200);
+const v = await r.json();
+assert.equal(v.email, ann); assert.equal(v.next, '/team-calendar');
+const setCookie = r.headers.get('set-cookie');
+assert.match(setCookie, /^pc_session=[A-Za-z0-9_-]{22}; HttpOnly; Secure; SameSite=Lax; Path=\/; Max-Age=2592000$/);
+const cookie = setCookie.split(';')[0];
+r = await me(cookie);
+assert.equal(r.status, 200); assert.deepEqual(await r.json(), { email: ann, calendars: [] });
+step('verify sets a 30-day HttpOnly Secure SameSite=Lax cookie; /api/me knows the user');
+
+r = await post('/api/auth/verify', { token });
+assert.equal(r.status, 400); assert.match((await r.json()).error, /expired or was already used/); assert.equal(r.headers.get('set-cookie'), null);
+step('a used link is refused');
+
+const bob = `bob-${run}@example.com`;
+await post('/api/auth/start', { email: bob });
+const bobToken = await lastToken(bob);
+await admin('/api/admin/accounts/expire-tokens', { method: 'POST', body: JSON.stringify({ email: bob }) });
+r = await post('/api/auth/verify', { token: bobToken });
+assert.equal(r.status, 400); assert.match((await r.json()).error, /expired/);
+r = await post('/api/auth/verify', { token: 'A'.repeat(22) });
+assert.equal(r.status, 400);
+step('an expired link and a made-up token are refused');
+
+r = await post('/api/auth/start', { email: `nobody-${run}@example.com` });
+const unknown = await r.text();
+r = await post('/api/auth/start', { email: ann });
+assert.equal(unknown, await r.text(), 'same answer for known and unknown emails');
+r = await post('/api/auth/start', { email: 'not-an-email' });
+assert.equal(r.status, 400);
+step('the same answer for a new and an existing email; a bad address gets a plain 400');
+
+const cara = `cara-${run}@example.com`;
+for (let i = 0; i < 7; i++) assert.equal((await post('/api/auth/start', { email: cara })).status, 200);
+assert.equal((await outbox(cara)).length, 5);
+step('at most 5 sign-in emails an hour per address (still answers ok)');
+
+let limited = false;
+for (let i = 0; i < 15 && !limited; i++) limited = (await post('/api/auth/start', { email: `x${i}-${run}@example.com` }, { ipAddr: `10.99.${run.length}.1` })).status === 429;
+assert.ok(limited, 'never rate-limited');
+step('rapid sign-in requests from one IP are rate-limited');
+
+r = await post('/api/auth/start', { email: ann }, { origin: 'https://evil.example' });
+assert.equal(r.status, 403);
+r = await post('/api/auth/start', { email: ann }, { origin: null });
+assert.equal(r.status, 403);
+r = await post('/api/auth/verify', { token: 'x' }, { type: 'text/plain' });
+assert.equal(r.status, 403);
+r = await post('/api/auth/signout', {}, { cookie, origin: 'https://evil.example' });
+assert.equal(r.status, 403);
+assert.equal((await me(cookie)).status, 200, 'a cross-site signout did nothing');
+step('CSRF: a foreign or missing Origin, or a non-JSON body, is refused');
+
+const dan = `dan-${run}@example.com`;
+await post('/api/auth/start', { email: dan, next: '//evil.example/x' });
+r = await post('/api/auth/verify', { token: await lastToken(dan) });
+assert.equal((await r.json()).next, null);
+await post('/api/auth/start', { email: dan, next: 'https://evil.example' });
+r = await post('/api/auth/verify', { token: await lastToken(dan) });
+assert.equal((await r.json()).next, null);
+step('next is only ever a path on pastecal (no open redirect)');
+
+assert.equal((await me()).status, 401);
+assert.equal((await me('pc_session=garbage')).status, 401);
+assert.equal((await me('pc_session=' + 'B'.repeat(22))).status, 401);
+r = await post('/api/auth/signout', {}, { cookie });
+assert.equal(r.status, 200); assert.match(r.headers.get('set-cookie'), /pc_session=; .*Max-Age=0/);
+assert.equal((await me(cookie)).status, 401);
+step('/api/me is 401 without a valid session; signout ends the session');
+
+assert.equal((await fetch(`${BASE}/api/admin/accounts/lookup?email=${ann}`)).status, 403);
+assert.equal((await fetch(`${BASE}/api/admin/accounts/outbox?email=${ann}`)).status, 403);
+r = await admin(`/api/admin/accounts/lookup?email=${ann}`);
+const look = await r.json();
+assert.equal(look.user.email, ann); assert.match(look.user.id, /^u_/); assert.deepEqual(look.subscriptions, []);
+assert.ok(!JSON.stringify(look).includes(cookie.split('=')[1]), 'no session token in the lookup');
+step('admin lookup and the test outbox need the secret');
+
+console.log(`\n${n} checks passed`); process.exit(0);

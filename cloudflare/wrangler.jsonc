@@ -35,7 +35,8 @@
     "bindings": [
       { "name": "CALENDARS", "class_name": "CalendarRoom" },
       { "name": "DIRECTORY", "class_name": "CalendarDirectory" },
-      { "name": "WAITLIST", "class_name": "Waitlist" }
+      { "name": "WAITLIST", "class_name": "Waitlist" },
+      { "name": "ACCOUNTS", "class_name": "Accounts" }   // Pro owners, sessions, subscriptions (one global instance)
     ]
   },
   // New calendars from browsers (POST /cal/<id>): 10 a minute per IP.
@@ -43,7 +44,8 @@
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["CalendarRoom"] },
     { "tag": "v2", "new_sqlite_classes": ["CalendarDirectory"] },
-    { "tag": "v3", "new_sqlite_classes": ["Waitlist"] }
+    { "tag": "v3", "new_sqlite_classes": ["Waitlist"] },
+    { "tag": "v4", "new_sqlite_classes": ["Accounts"] }
   ],
   // Copy-back to Firebase (see CalendarRoom). Inert until the FIREBASE_SA secret exists.
   // In Phase 4, COPY_BACK="*" mirrors every save back to Firebase RTDB for zero data loss and instant rollback.
@@ -55,7 +57,12 @@
   // Backups: each calendar writes its own snapshot here after a change (CalendarRoom.backupToR2).
   "r2_buckets": [{ "binding": "BACKUPS", "bucket_name": "pastecal-backups" }],
   "analytics_engine_datasets": [{ "binding": "EVENTS", "dataset": "pastecal_events" }],
+  // Sign-in links for Pro owners (Cloudflare Email Service). pastecal.com must be onboarded for sending.
+  "send_email": [{ "name": "EMAIL", "allowed_sender_addresses": ["login@pastecal.com"] }],
   "observability": { "enabled": true }
   // Secrets (wrangler secret put): IMPORT_SECRET -- lets the Firebase shadow copy write;
   // FIREBASE_SA -- a service account key (JSON) that lets the room write to Firebase.
+  // Billing (Accounts.js; off with a 503 until all are set): STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
+  // STRIPE_PRICE_PRO_YEARLY, STRIPE_PRICE_PRO_MONTHLY. ACCOUNTS_DEV_MODE, STRIPE_API_BASE and
+  // LOCK_API_BASE are for local tests only (.dev.vars / --var); never set them here.
 }
