@@ -331,8 +331,9 @@ async function route(request, env, url, path) {
     return json({ error: 'not-found' }, 404);
 }
 
-// Stripe's minimum Checkout lifetime; the per-calendar hold lasts exactly as long.
-const CHECKOUT_HOLD_MS = 30 * 60 * 1000;
+// Stripe requires a Checkout page to live at least 30 minutes from when IT creates the session,
+// so ask for 31 to absorb clock drift and network time. The per-calendar hold lasts as long.
+const CHECKOUT_HOLD_MS = 31 * 60 * 1000;
 
 async function checkout(request, env, body) {
     const cfg = stripeConfig(env);

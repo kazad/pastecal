@@ -107,8 +107,8 @@ try {
     assert.equal(r.status, 200, 'the same buyer can restart their own checkout');
     const csHold = fake.log.filter((l) => l.path === "/stripe/v1/checkout/sessions").pop();
     const exp = Number(csHold.body.expires_at) * 1000;
-    assert.ok(exp > Date.now() + 29 * 60e3 && exp < Date.now() + 31 * 60e3, 'the Stripe page expires with the hold (30 minutes)');
-    step('while one person is checking out a calendar, another gets 409 checkout-in-progress; the page expires in 30 minutes');
+    assert.ok(exp > Date.now() + 30 * 60e3 && exp < Date.now() + 32 * 60e3, 'the Stripe page expires with the hold (31 minutes)');
+    step('while one person is checking out a calendar, another gets 409 checkout-in-progress; the page expires in 31 minutes');
 
     // --- Webhook signatures
     const ev1 = event('customer.subscription.created', { id: `sub_${run}_a` });
