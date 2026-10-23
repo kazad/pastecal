@@ -7,6 +7,7 @@
 // signed out, it is one quiet "Pro owner? Sign in" line. Talks to this site's JSON API (cookie
 // session, cloudflare/src/Accounts.js): GET /api/me, POST /api/auth/start, /api/auth/signout,
 // /api/pro/portal. Analytics get the state only: never the email or a calendar name.
+// Each Pro calendar row has a "Stats" button beside it (open-stats, handled by app.js).
 
 // Shared by both header instances and kept across opens: the menu is v-if'd, so it is destroyed
 // on every close, and a "Check your email" must not vanish when the mouse drifts off it.
@@ -141,10 +142,15 @@ const NavigationDropdown = {
                         <span class="pc-acct-label">Pro account</span>
                         <span class="pc-acct-muted pc-acct-email" data-testid="account-email" data-hj-suppress data-clarity-mask="true">{{ acct.me.email }}</span>
                     </div>
-                    <a v-for="c in proCalendars" :key="c.id" :href="c.path" class="pc-acct-cal" data-testid="account-calendar">
-                        <span class="pc-acct-cal-title">{{ c.title }}</span>
-                        <span class="pc-acct-cal-status" :class="{ 'pc-acct-cal-status--warn': c.problem }">{{ c.label }}</span>
-                    </a>
+                    <div v-for="c in proCalendars" :key="c.id" class="pc-acct-cal-row">
+                        <a :href="c.path" class="pc-acct-cal" data-testid="account-calendar">
+                            <span class="pc-acct-cal-title">{{ c.title }}</span>
+                            <span class="pc-acct-cal-status" :class="{ 'pc-acct-cal-status--warn': c.problem }">{{ c.label }}</span>
+                        </a>
+                        <!-- Beside the row, not inside it: the row is a link to the calendar -->
+                        <button type="button" class="pc-acct-btn pc-acct-stats" @click="$emit('open-stats', c.id)"
+                            :aria-label="'Stats for ' + c.title" data-testid="account-stats">Stats</button>
+                    </div>
                     <p v-if="proCalendars.length === 0" class="pc-acct-muted pc-acct-line">No Pro calendars right now.</p>
                     <div class="pc-acct-actions">
                         <button type="button" class="pc-acct-btn" @click="portal" :disabled="acct.busy" data-testid="account-billing">Manage billing</button>
@@ -170,7 +176,7 @@ const NavigationDropdown = {
         </div>
     `,
     props: ['recentCalendars'],
-    emits: ['go-homepage', 'toggle-pin', 'remove-recent'],
+    emits: ['go-homepage', 'toggle-pin', 'remove-recent', 'open-stats'],
     data() { return { acct: AccountMenu.state }; },
     mounted() { AccountMenu.load(); },     // never blocks opening: the section shows its own loading line
     computed: {
