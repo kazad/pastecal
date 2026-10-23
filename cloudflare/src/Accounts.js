@@ -30,7 +30,7 @@
  * ACCOUNTS_DEV_MODE=1 (only ever in .dev.vars or --var, never in wrangler.jsonc) is for local tests:
  * it allows http://localhost origins, writes sign-in emails to an outbox instead of sending them,
  * lets STRIPE_API_BASE / LOCK_API_BASE point at local fakes, and opens three admin test hooks:
- *   GET  /api/admin/accounts/outbox?email=, POST /api/admin/accounts/expire-tokens {email},
+ *   GET  /api/admin/accounts/outbox?email=, POST /api/admin/accounts/expire-tokens {email, ageMs?},
  *   POST /api/admin/accounts/dev-subscription {email, calendarId, status?, interval?, currentPeriodEnd?}
  *        (a subscription row without Stripe, so /api/me lists the calendar; no lock is changed).
  */
@@ -42,6 +42,7 @@ const SITE = 'https://pastecal.com';
 const LOGIN_TTL = 15 * 60 * 1000;
 const SESSION_TTL = 30 * 24 * 3600 * 1000;
 const LOGINS_PER_EMAIL_PER_HOUR = 5;
+const LOGINS_PER_EMAIL_PER_DAY = 10;     // and no more than this a day: nobody can flood an inbox slowly either
 const ACTIVE = new Set(['active', 'trialing', 'past_due']);
 const ENDED = new Set(['canceled', 'unpaid', 'incomplete_expired']);
 const SUBSCRIPTION_EVENTS = new Set(['checkout.session.completed', 'customer.subscription.created',
@@ -98,6 +99,8 @@ export class Accounts extends DurableObject {
         this.sql.exec(`DELETE FROM sessions WHERE expires_at < ?`, now);
         const recent = this.sql.exec(`SELECT COUNT(*) AS n FROM login_tokens WHERE email = ? AND created_at > ?`, email, now - 3600 * 1000).one().n;
         if (recent >= LOGINS_PER_EMAIL_PER_HOUR) return null;
+        const today = this.sql.exec(`SELECT COUNT(*) AS n FROM login_tokens WHERE email = ? AND created_at > ?`, email, now - 24 * 3600 * 1000).one().n;
+        if (today >= LOGINS_PER_EMAIL_PER_DAY) return null;
         const token = randomToken();
         this.sql.exec(`INSERT INTO login_tokens (hash, email, next, created_at, expires_at, used) VALUES (?, ?, ?, ?, ?, 0)`,
             await sha256(token), email, next || null, now, now + LOGIN_TTL);
@@ -213,6 +216,7 @@ export class Accounts extends DurableObject {
     addOutbox(to, subject, text) { this.sql.exec(`INSERT INTO outbox (to_email, subject, text, at) VALUES (?, ?, ?, ?)`, to, subject, text, Date.now()); }
     listOutbox(to) { return this.sql.exec(`SELECT to_email, subject, text, at FROM outbox WHERE to_email = ? ORDER BY id`, to).toArray(); }
     expireLoginTokens(email) { this.sql.exec(`UPDATE login_tokens SET expires_at = ? WHERE email = ?`, Date.now() - 1, email); }
+    ageLoginTokens(email, ms) { this.sql.exec(`UPDATE login_tokens SET created_at = created_at - ?, expires_at = expires_at - ? WHERE email = ?`, ms, ms, email); }
 }
 
 // --- Worker side -------------------------------------------------------------------------------
@@ -552,7 +556,10 @@ async function handleAdmin(request, env, url, path) {
     }
     if (devMode(env) && path === '/api/admin/accounts/expire-tokens' && request.method === 'POST') {
         const body = (await readJson(request)) || {};
-        await acc.expireLoginTokens(String(body.email || '').toLowerCase());
+        const email = String(body.email || '').toLowerCase();
+        // ageMs: move the links back in time (as if sent that long ago), for the daily-limit test.
+        if (Number.isFinite(body.ageMs) && body.ageMs > 0) await acc.ageLoginTokens(email, body.ageMs);
+        else await acc.expireLoginTokens(email);
         return json({ ok: true });
     }
     if (devMode(env) && path === '/api/admin/accounts/dev-subscription' && request.method === 'POST') {

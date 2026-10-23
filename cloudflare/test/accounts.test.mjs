@@ -83,7 +83,12 @@ step('the same answer for a new and an existing email; a bad address gets a plai
 const cara = `cara-${run}@example.com`;
 for (let i = 0; i < 7; i++) assert.equal((await post('/api/auth/start', { email: cara })).status, 200);
 assert.equal((await outbox(cara)).length, 5);
-step('at most 5 sign-in emails an hour per address (still answers ok)');
+for (const later of [10, 10]) {               // two hours later, twice: the hourly limit has reset each time
+    await admin('/api/admin/accounts/expire-tokens', { method: 'POST', body: JSON.stringify({ email: cara, ageMs: 2 * 3600e3 }) });
+    for (let i = 0; i < 6; i++) assert.equal((await post('/api/auth/start', { email: cara })).status, 200);
+    assert.equal((await outbox(cara)).length, later, 'five more two hours later, then none: the daily cap');
+}
+step('at most 5 sign-in emails an hour and 10 a day per address (still answers ok)');
 
 let limited = false;
 for (let i = 0; i < 15 && !limited; i++) limited = (await post('/api/auth/start', { email: `x${i}-${run}@example.com` }, { ipAddr: `10.99.${run.length}.1` })).status === 429;
