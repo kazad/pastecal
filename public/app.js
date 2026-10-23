@@ -243,6 +243,9 @@ const CalendarVueApp = {
             showClaimDialog: false,
             slugTaken: null,   // { slug, options: [free alternatives] } after a claim hits a taken name
             userHasEditedSlug: false,
+            // Homepage flow: a tip on the grid until the first event of your own, then Share pulses once.
+            userAddedEvent: false,
+            sharePulse: false,
 
             // Mobile Menu
             showMobileMenu: false,
@@ -539,6 +542,15 @@ const CalendarVueApp = {
                     // calendar would rack up hundreds. Count the visit once per page
                     // load; later fires only refresh the title.
                     const firstLoad = !this.visitCounted;
+                    // Just created on the homepage: open Share so the links are right there.
+                    if (firstLoad) {
+                        try {
+                            if (sessionStorage.getItem('pastecal_open_share') === this.calendar.id) {
+                                sessionStorage.removeItem('pastecal_open_share');
+                                this.$nextTick(() => { if (!this.showShare) this.toggleShare(); });
+                            }
+                        } catch (e) { /* storage blocked: nothing to open */ }
+                    }
                     this.visitCounted = true;
 
                     if (firstLoad) {
@@ -1311,6 +1323,7 @@ const CalendarVueApp = {
         if (this.isHomepageCalendar && this.calendar.events.length == 0) {
             // Load homepage data from localStorage
             this.loadLocalStorage();
+            if ((this.calendar.events || []).some(e => e && (e.title || e.Subject) && (e.title || e.Subject) !== 'Sample event')) this.userAddedEvent = true;
 
             // If still no events after loading, create default sample event
             if (this.calendar.events.length == 0) {
@@ -1974,7 +1987,7 @@ const CalendarVueApp = {
             // A real, user-initiated change to this calendar (sync() also runs for other
             // people's edits echoing back, so it cannot be recorded there).
             if (this.isExisting && typeof AuthorSignal !== 'undefined') AuthorSignal.touch(this.calendar.id);
-            if (args.requestType === 'eventCreate') track(a => a.eventAdded('grid', this.calendar));
+            if (args.requestType === 'eventCreate') { track(a => a.eventAdded('grid', this.calendar)); this.noteHomepageEvent(); }
             if (deleting) this.offerUndo(label);
         },
 
@@ -1982,9 +1995,33 @@ const CalendarVueApp = {
         // REGION: Calendar CRUD Operations
         // ============================================================
 
-        create() {
-            // If user hasn't manually edited the slug, show intervention dialog
+        // The first event someone adds on the homepage: the tip has done its job, and Share
+        // gets one gentle pulse, because now a link is worth having.
+        noteHomepageEvent() {
+            if (!this.isHomepageCalendar || this.userAddedEvent) return;
+            this.userAddedEvent = true;
+            this.sharePulse = true;
+            setTimeout(() => { this.sharePulse = false; }, 3500);
+        },
+
+        // A link name from the calendar's title, else its first event: "Soccer Fall 2026" ->
+        // "soccer-fall-2026". Null when there is nothing better than the random name.
+        suggestedSlug() {
+            const own = (this.calendar.events || []).find(e => e && (e.title || e.Subject) && (e.title || e.Subject) !== 'Sample event');
+            const source = (this.calendar.title && this.calendar.title !== 'New Calendar') ? this.calendar.title : (own && (own.title || own.Subject));
+            if (!source) return null;
+            const slug = String(source).toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+                .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30);
+            return slug.length >= 3 ? slug : null;
+        },
+
+        // Share on a draft: ask for a name first (suggested from the title), unless one was typed.
+        // This was a second create() until Oct 2026; the later create() replaced it, so the naming
+        // dialog never appeared and Claim saved the random name straight away.
+        share() {
             if (!this.userHasEditedSlug) {
+                const suggestion = this.suggestedSlug();
+                if (suggestion) this.calendar.id = suggestion;
                 this.showClaimDialog = true;
                 // Focus input in dialog on next tick
                 this.$nextTick(() => {
@@ -2008,6 +2045,12 @@ const CalendarVueApp = {
         },
 
         create() {
+            // The starter "Sample event" is only there to show what an event looks like. Once
+            // someone has added their own, it is not part of their calendar; one they edited stays.
+            if (this.isHomepageCalendar && this.userAddedEvent) {
+                const kept = (this.calendar.events || []).filter(e => !(e && (e.title || e.Subject) === 'Sample event'));
+                if (kept.length && kept.length < this.calendar.events.length) this.calendar.setEvents(kept);
+            }
             let slug = this.calendar.id;
             if (!slug) {
                 slug = Utils.randomID(8);
@@ -2065,6 +2108,7 @@ const CalendarVueApp = {
                     this.recentManager.add(slug, this.calendar.title, true);
                     this.recentCalendars = this.recentManager.getAll();
                     this.showToast('Calendar created!', 'success');
+                    try { sessionStorage.setItem('pastecal_open_share', slug); } catch (e) { /* the links are still under Share */ }
                     window.location.href = "/" + slug;
                 });
             });
@@ -2855,6 +2899,7 @@ const CalendarVueApp = {
         },
 
         handleQuickAddEvent(event) {
+            this.noteHomepageEvent();
             // Quick-add can produce a start with no end ("standup tomorrow 9am" parses a
             // time but no duration), and the dialog's own validation only requires a start.
             // An event with a null end is dropped at the write boundary by
