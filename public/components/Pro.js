@@ -135,7 +135,7 @@ const ProPanel = {
                     <p class="pc-pro-muted">Share it with people who should be able to edit.</p>
                     <div v-if="editorLink" class="pc-pro-row">
                         <input ref="link" class="pc-pro-field" type="text" readonly :value="editorLink" @focus="$event.target.select()"
-                            aria-label="Editor link" data-testid="pro-editor-link">
+                            aria-label="Editor link" data-testid="pro-editor-link" data-hj-suppress data-clarity-mask="true">
                         <button type="button" class="pc-pro-btn" @click="copyLink">{{ copied ? 'Copied' : 'Copy' }}</button>
                     </div>
                     <div class="pc-pro-row">
