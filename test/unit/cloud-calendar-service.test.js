@@ -18,7 +18,7 @@ const ev = (id, title, d = 1, extra = {}) => ({ id, title, start: at(d, 9), end:
 const { Cloud, EventStore } = loadTab();
 const plain = (x) => JSON.parse(JSON.stringify(x));
 
-test('the flag: ?backend=cf turns it on and is remembered; ?backend=firebase turns it off; pastecal.com and new.pastecal.com are on by default', () => {
+test('the flag: ?backend=cf turns it on and is remembered; ?backend=firebase turns it off (not on pastecal.com); pastecal.com and new.pastecal.com are always on', () => {
     const mem = () => { const s = {}; return { getItem: (k) => s[k] ?? null, setItem: (k, v) => { s[k] = v; }, removeItem: (k) => { delete s[k]; } }; };
     const store = mem();
     assert.equal(Cloud.enabled({ search: '', hostname: 'localhost' }, store), false);
@@ -27,7 +27,8 @@ test('the flag: ?backend=cf turns it on and is remembered; ?backend=firebase tur
     assert.equal(Cloud.enabled({ search: '?backend=firebase', hostname: 'localhost' }, store), false);
     assert.equal(Cloud.enabled({ search: '', hostname: 'localhost' }, store), false, 'forgotten');
     assert.equal(Cloud.enabled({ search: '', hostname: 'pastecal.com' }, mem()), true);
-    assert.equal(Cloud.enabled({ search: '?backend=firebase', hostname: 'pastecal.com' }, mem()), false);
+    assert.equal(Cloud.enabled({ search: '?backend=firebase', hostname: 'pastecal.com' }, mem()), true, 'no way back to the stale Firebase copy on the live site');
+    assert.equal(Cloud.enabled({ search: '?backend=firebase', hostname: 'www.pastecal.com' }, mem()), true);
     assert.equal(Cloud.enabled({ search: '', hostname: 'new.pastecal.com' }, mem()), true);
 });
 
@@ -200,4 +201,20 @@ test('flow: debounce_sync goes through the cloud sync (not the inherited Firebas
     S.debounce_sync({ ...cal, events: [ev('a', 'A3')] });
     S.flush();
     assert.equal(ws.sent.length, 2, 'flush sends without waiting for the debounce');
+});
+
+test('editor key: kept when the calendar is unlocked or the key is merely refused; forgotten only when the owner revoked or replaced it', () => {
+    const { tab, ws } = open([ev('a', 'A')]);
+    tab.run(require('node:fs').readFileSync(require('node:path').join(__dirname, '../../public/services/EditorKeys.js'), 'utf8') + '\nglobalThis.EditorKeys = EditorKeys;', 'EditorKeys.js');
+    const KEY = 'pastecal_editor_key:room';
+    tab.store[KEY] = 'k123';
+    ws.push({ t: 'auth', ok: false, locked: false, canEdit: true });
+    assert.equal(tab.store[KEY], 'k123', 'unlocked: links are paused, not gone');
+    ws.push({ t: 'auth', ok: false, locked: true, canEdit: false });
+    assert.equal(tab.store[KEY], 'k123', 'a refusal without a reason keeps the key');
+    ws.push({ t: 'auth', ok: false, locked: true, canEdit: false, reason: 'link-revoked' });
+    assert.equal(tab.store[KEY], undefined, 'revoked: forgotten');
+    tab.store[KEY] = 'k456';
+    ws.push({ t: 'auth', ok: false, locked: true, canEdit: false, reason: 'key-rotated' });
+    assert.equal(tab.store[KEY], undefined, 'replaced: forgotten');
 });

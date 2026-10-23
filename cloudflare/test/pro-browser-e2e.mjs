@@ -38,7 +38,9 @@ await form.locator('input[type=email]').fill(email); await form.locator('button[
 await op.locator('[data-testid=pro-sent]').waitFor({ timeout: 10000 });
 const mail = (await admin(`/api/admin/accounts/outbox?email=${encodeURIComponent(email)}`)).emails.at(-1);
 const token = mail.text.match(/#t=([A-Za-z0-9_-]+)/)[1];
-await op.goto(`${BASE}/signin#t=${token}`); await op.waitForURL((u) => !u.pathname.startsWith('/signin'), { timeout: 20000 });
+await op.goto(`${BASE}/signin#t=${token}`);
+await op.locator('#confirm').click({ timeout: 10000 });          // the page asks "Sign in to pastecal as <email>?" first
+await op.waitForURL((u) => !u.pathname.startsWith('/signin'), { timeout: 20000 });
 assert.ok(!(await op.evaluate(() => location.hash)).includes('t='), 'token left in URL');
 step('owner asked to lock, got the sign-in email, the link signed them in and brought them back');
 

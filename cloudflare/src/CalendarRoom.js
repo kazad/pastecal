@@ -148,6 +148,8 @@ export function mergeProSettings(current, patch) {
             out.branding.name = name || null;
         }
         if ('logoUrl' in b) {
+            // TODO(before the branding UI ships): a logo URL loads from the owner's server in every
+            // viewer's browser, a tracking pixel. Logos must be uploaded or proxied through pastecal first.
             if (b.logoUrl === null || b.logoUrl === '') out.branding.logoUrl = null;
             else {
                 if (typeof b.logoUrl !== 'string' || b.logoUrl.length > 500) return bad('branding.logoUrl must be an https URL (500 characters at most)');
@@ -188,6 +190,8 @@ export class CalendarRoom extends DurableObject {
             this.sql.exec(`CREATE TABLE IF NOT EXISTS authors (uid TEXT PRIMARY KEY, first_seen INTEGER, last_seen INTEGER, edit_count INTEGER, created_here INTEGER, days TEXT)`);
             this.sql.exec(`CREATE TABLE IF NOT EXISTS lock (k INTEGER PRIMARY KEY CHECK (k = 1), owner TEXT NOT NULL, plan TEXT, locked_at INTEGER, key_hash TEXT, key_id TEXT)`);
             this.sql.exec(`CREATE TABLE IF NOT EXISTS editor_links (id TEXT PRIMARY KEY, label TEXT NOT NULL, key_hash TEXT NOT NULL, created_at INTEGER, last_used_at INTEGER, revoked_at INTEGER)`);
+            // suspended_for: the owner whose unlock paused this link; a re-lock by that owner turns it back on.
+            try { this.sql.exec(`ALTER TABLE editor_links ADD COLUMN suspended_for TEXT`); } catch (_) {}
             this.sql.exec(`CREATE TABLE IF NOT EXISTS pro_settings (k INTEGER PRIMARY KEY CHECK (k = 1), owner TEXT, data TEXT, updated_at INTEGER)`);
             initInsight(this.sql);       // stats + restore (RoomInsight.js)
             this.load();
@@ -219,8 +223,11 @@ export class CalendarRoom extends DurableObject {
             this.sql.exec(`UPDATE lock SET key_hash = NULL, key_id = NULL`);
         }
         // Live links only, in memory: canWrite checks a socket's link against this at every message.
-        this.links = new Map(this.sql.exec(`SELECT id, label, key_hash, created_at, last_used_at FROM editor_links WHERE revoked_at IS NULL ORDER BY created_at, id`).toArray()
-            .map((r) => [r.id, { id: r.id, label: r.label, keyHash: r.key_hash, createdAt: r.created_at, lastUsedAt: r.last_used_at }]));
+        // Links paused by an unlock (suspended_for) are kept apart: they authorize nothing.
+        const rows = this.sql.exec(`SELECT id, label, key_hash, created_at, last_used_at, suspended_for FROM editor_links WHERE revoked_at IS NULL ORDER BY created_at, id`).toArray();
+        const asLink = (r) => [r.id, { id: r.id, label: r.label, keyHash: r.key_hash, createdAt: r.created_at, lastUsedAt: r.last_used_at, suspendedFor: r.suspended_for || null }];
+        this.links = new Map(rows.filter((r) => !r.suspended_for).map(asLink));
+        this.suspended = new Map(rows.filter((r) => r.suspended_for).map(asLink));
         const ps = this.sql.exec(`SELECT owner, data FROM pro_settings`).toArray()[0];
         let settings = null; try { settings = ps ? JSON.parse(ps.data) : null; } catch { /* unreadable: defaults */ }
         this.proStored = ps && settings ? { owner: ps.owner, settings } : null;
@@ -240,8 +247,8 @@ export class CalendarRoom extends DurableObject {
     // ---- Pro lock -------------------------------------------------------------------------
     // A socket's right to write is worked out at each message from what it proved (its
     // attachment) against the lock as it is NOW, never cached: revoking a link, replacing all of
-    // them, or unlocking and re-locking removes the link id from this.links, so its sockets lose
-    // write access at once, even after hibernation.
+    // them, an unlock (which pauses them) or a lock by a new owner removes the link id from
+    // this.links, so its sockets lose write access at once, even after hibernation.
     canWrite(att) {
         if (att.isViewOnly) return false;
         const l = this.lock;
@@ -263,13 +270,21 @@ export class CalendarRoom extends DurableObject {
     }
     // The live link a key belongs to, or null. Hashed first; after the await everything is read
     // synchronously, so the answer is about the links as they are now. Every link is compared
-    // (no early exit), each in constant time.
+    // (no early exit), each in constant time. While unlocked, a key matches a paused link, so the
+    // socket remembers it and can write again if the same owner re-locks.
     async keyMatches(key) {
-        if (!this.lock || typeof key !== 'string' || !key || key.length > 200) return null;
+        if (typeof key !== 'string' || !key || key.length > 200) return null;
         const hash = await sha256Hex(key);
-        if (!this.lock) return null;
         let hit = null;
-        for (const link of this.links.values()) if (sameHex(hash, link.keyHash)) hit = link;
+        for (const link of (this.lock ? this.links : this.suspended).values()) if (sameHex(hash, link.keyHash)) hit = link;
+        return hit;
+    }
+    // Was this key a link that has since been revoked? (Revoked rows are kept a while with their hashes.)
+    async keyRevoked(key) {
+        if (typeof key !== 'string' || !key || key.length > 200) return false;
+        const hash = await sha256Hex(key);
+        let hit = false;
+        for (const r of this.sql.exec(`SELECT key_hash FROM editor_links WHERE revoked_at IS NOT NULL`).toArray()) hit = sameHex(hash, r.key_hash) || hit;
         return hit;
     }
     touchLink(link) {
@@ -301,7 +316,9 @@ export class CalendarRoom extends DurableObject {
         if (!gone.size) return;
         const at = Date.now();
         for (const id of gone) { this.sql.exec(`UPDATE editor_links SET revoked_at = ? WHERE id = ?`, at, id); this.links.delete(id); }
-        if (!reason) return;
+        if (reason) this.tellRevoked(gone, reason);
+    }
+    tellRevoked(gone, reason) {
         for (const ws of this.ctx.getWebSockets()) {
             const att = ws.deserializeAttachment() || {};
             if (!gone.has(att.keyId)) continue;
@@ -365,8 +382,11 @@ export class CalendarRoom extends DurableObject {
             if (!l) return Response.json({ ok: true, alreadyUnlocked: true });
             if (ownerId && ownerId !== l.ownerId) return no(409, 'locked-by-other');
             this.sql.exec(`DELETE FROM lock`); this.lock = null;
-            // Every link dies with the lock: a re-lock starts over, so no old key regains write.
-            this.revokeLinks([...this.links.keys()], null);
+            // Links are paused, not revoked: an unlocked calendar is editable by everyone anyway, and a
+            // re-lock by the same owner turns them back on. A lock by anyone else revokes them.
+            this.sql.exec(`UPDATE editor_links SET suspended_for = ? WHERE revoked_at IS NULL AND suspended_for IS NULL`, l.ownerId);
+            for (const [id, link] of this.links) this.suspended.set(id, { ...link, suspendedFor: l.ownerId });
+            this.links.clear();
             // Firebase kept its pre-lock copy, and anyone may have edited (or emptied) it since.
             // Merging that against the pre-lock baseline would replay those edits here, so the next
             // exchange adopts Firebase's copy as the baseline, applies none of it, and writes ours over it.
@@ -386,9 +406,29 @@ export class CalendarRoom extends DurableObject {
             this.sql.exec(`INSERT INTO lock (k, owner, plan, locked_at, key_hash, key_id) VALUES (1, ?, ?, ?, NULL, NULL)`, ownerId, plan, at);
             this.lock = { ownerId, plan, lockedAt: at };
             this.revokeLinks([...this.links.keys()], null);            // none should be live; never inherit any
-            this.createLink('Editors', k);
+            // Paused links come back for the owner who paused them; anyone else's are revoked, and
+            // tabs still holding them are told, so they forget the key.
+            const stale = new Set();
+            for (const [id, link] of this.suspended) {
+                if (link.suspendedFor === ownerId) {
+                    this.sql.exec(`UPDATE editor_links SET suspended_for = NULL WHERE id = ?`, id);
+                    this.links.set(id, { ...link, suspendedFor: null });
+                } else {
+                    this.sql.exec(`UPDATE editor_links SET suspended_for = NULL, revoked_at = ? WHERE id = ?`, at, id);
+                    stale.add(id);
+                }
+            }
+            this.suspended.clear();
+            if (stale.size) this.tellRevoked(stale, 'link-revoked');
+            // Billing locks with createLink:false: there is no browser to show a key to, and the owner
+            // makes links from the calendar. The admin route still gets one 'Editors' key.
+            const made = body.createLink !== false && !this.links.size ? this.createLink('Editors', k) : null;
             this.recordLockChange('locked', 'Locked with Pro');
-            return Response.json({ ok: true, editorKey: k.key });
+            // Claim this calendar's own name (and view link) in the directory now, so a case variant
+            // registered earlier can't keep its lookups. (A name held by another LOCKED calendar stays.)
+            this.ctx.waitUntil(this.registerInDirectory(this.state.id, false, null, true));
+            if (this.state.options?.publicViewId) this.ctx.waitUntil(this.registerInDirectory(this.state.options.publicViewId, true, this.state.id, true));
+            return Response.json({ ok: true, editorKey: made ? k.key : null, links: this.links.size });
         }
         // Everything below is owner-only, and only while locked.
         if (!l) return no(409, 'not-locked');
@@ -439,7 +479,7 @@ export class CalendarRoom extends DurableObject {
         return Response.json({ ok: true, editorKey: k.key });
     }
 
-    async registerInDirectory(actualSlug, isReadOnly = false, targetId = null) {
+    async registerInDirectory(actualSlug, isReadOnly = false, targetId = null, force = false) {
         if (!this.env.DIRECTORY || !actualSlug) return;
         try {
             const dir = this.env.DIRECTORY.get(this.env.DIRECTORY.idFromName('global'));
@@ -448,13 +488,17 @@ export class CalendarRoom extends DurableObject {
             // publicViewId (it is in the view URL) and take over its /view/ link -- or create a
             // case variant of its name and take over the name's lookups.
             const target = targetId || actualSlug;
-            const cur = await (await dir.fetch(`http://internal/lookup?slug=${encodeURIComponent(actualSlug)}`)).json().catch(() => ({}));
-            const curTarget = cur && cur.found ? (cur.targetId || cur.actualSlug) : null;
+            // Fail closed: if we can't tell where the name leads now, or whether that calendar is locked,
+            // leave the directory alone.
+            const cur = await (await dir.fetch(`http://internal/lookup?slug=${encodeURIComponent(actualSlug)}`)).json().catch(() => null);
+            if (!cur || typeof cur.found !== 'boolean') { console.warn(`[CalendarRoom] not registering ${actualSlug}: lookup unreadable`); return; }
+            const curTarget = cur.found ? (cur.targetId || cur.actualSlug) : null;
             if (curTarget && curTarget !== target && this.env.CALENDARS) {
                 const st = await this.env.CALENDARS.get(this.env.CALENDARS.idFromName(curTarget))
                     .fetch(`http://internal/cal/${encodeURIComponent(curTarget)}/lock-status`);
-                if (st.ok && (await st.json()).locked) {
-                    console.warn(`[CalendarRoom] not re-pointing ${actualSlug}: it leads to a locked calendar`);
+                const locked = st.ok ? (await st.json().catch(() => null))?.locked : st.status === 404 ? false : null;
+                if (locked !== false) {
+                    console.warn(`[CalendarRoom] not re-pointing ${actualSlug}: it leads to a ${locked ? 'locked' : 'possibly locked'} calendar`);
                     return;
                 }
             }
@@ -464,7 +508,8 @@ export class CalendarRoom extends DurableObject {
                 body: json({
                     actualSlug,
                     isReadOnly: !!isReadOnly,
-                    targetId: targetId || actualSlug
+                    targetId: targetId || actualSlug,
+                    ...(force ? { force: true } : {})
                 })
             });
         } catch (e) {
@@ -906,6 +951,7 @@ export class CalendarRoom extends DurableObject {
         const s = this.state;
         if (!s.id) return { ok: true, missing: true };
         if (!/^test/i.test(s.id)) return { ok: false, error: 'only test calendars can be archived' };
+        if (this.lock) return { ok: false, error: 'locked' };          // a paid calendar is never archived this way
         if (!this.env.BACKUPS) return { ok: false, error: 'no backup bucket' };
         const id = s.id;
         await this.env.BACKUPS.put(`archive/test-calendars/${encodeURIComponent(id)}.json`,
@@ -1022,9 +1068,11 @@ export class CalendarRoom extends DurableObject {
         if (m.t === 'auth') {
             // An editor link's key, sent over the socket: never in a URL, which logs and analytics record.
             const link = tab.isViewOnly ? null : await this.keyMatches(m.key);
+            // A key revoked earlier (while this tab was closed) says so, so the tab forgets it.
+            const revoked = !link && !tab.isViewOnly && this.lock ? await this.keyRevoked(m.key) : false;
             let next = ws.deserializeAttachment() || {};                  // re-read: the await may have let other messages in
             if (link) { next = { ...next, keyId: link.id }; ws.serializeAttachment(next); this.touchLink(link); }
-            return ws.send(json({ t: 'auth', ok: !!link, locked: !!this.lock, canEdit: this.canWrite(next), role: this.roleOf(next) }));
+            return ws.send(json({ t: 'auth', ok: !!link, locked: !!this.lock, canEdit: this.canWrite(next), role: this.roleOf(next), ...(revoked ? { reason: 'link-revoked' } : {}) }));
         }
 
         const author = m.author || tab.author;

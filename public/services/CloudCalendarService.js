@@ -51,11 +51,13 @@
 class CloudCalendarService extends CalendarDataService {
     // ---- the flag ---------------------------------------------------------------------------
     static enabled(loc = (typeof location !== 'undefined' ? location : null), store = CloudCalendarService._store()) {
+        // On the live site it is always on: ?backend=firebase would open Firebase's stale, world-writable
+        // copy, a way around a Pro lock. The query flag works only elsewhere (localhost, dev).
+        if (loc && (loc.hostname === 'pastecal.com' || loc.hostname === 'www.pastecal.com' || loc.hostname === 'new.pastecal.com')) return true;
         let q = null;
         try { q = loc && new URLSearchParams(loc.search).get('backend'); } catch (e) { /* no query */ }
         if (q === 'firebase') { try { store && store.removeItem('pastecal_backend'); } catch (e) { /* ignore */ } return false; }
         if (q === 'cf') { try { store && store.setItem('pastecal_backend', 'cf'); } catch (e) { /* ignore */ } return true; }
-        if (loc && (loc.hostname === 'pastecal.com' || loc.hostname === 'www.pastecal.com' || loc.hostname === 'new.pastecal.com')) return true;
         try { return !!store && store.getItem('pastecal_backend') === 'cf'; } catch (e) { return false; }
     }
     static _store() { try { return typeof localStorage !== 'undefined' ? localStorage : null; } catch (e) { return null; } }
@@ -280,12 +282,16 @@ class CloudCalendarService extends CalendarDataService {
         if (m.ok) {
             room.lock = { ...room.lock, locked: !!m.locked, canEdit: m.canEdit !== false };
         } else if (m.locked) {
-            // The key is wrong now: the owner reset it (or it never matched). It will not start working again.
-            this._forgetEditorKey(room.id);
+            // Forget the key only when the server says the owner revoked or replaced it: it will not
+            // start working again. Any other refusal keeps it (it costs nothing to send again).
+            if (m.reason === 'key-rotated' || m.reason === 'link-revoked') {
+                this._forgetEditorKey(room.id);
+                if (!m.canEdit) reason = 'key-rotated';
+            }
             room.lock = { ...room.lock, locked: true, canEdit: !!m.canEdit };
-            if (!m.canEdit) reason = 'key-rotated';
         }
-        // (ok:false on a calendar that is not locked: nothing to do, the key is simply not needed.)
+        // (ok:false on a calendar that is not locked: keep the key. An unlock pauses editor links, and a
+        // re-lock by the same owner turns them back on.)
         const held = room.heldSnapshot; room.heldSnapshot = null;
         if (held) return this._onSnapshot(room, { ...held, canEdit: room.lock.canEdit }, reason);
         this._notifyLock(room, reason);

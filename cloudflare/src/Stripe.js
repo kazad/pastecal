@@ -6,6 +6,7 @@
  * billing is off and the routes answer 503 billing-not-configured.
  * Requests go to https://api.stripe.com; local tests may point STRIPE_API_BASE at a fake on this
  * machine, honored only with ACCOUNTS_DEV_MODE=1 (see localBase), so the key never goes elsewhere.
+ * A test-mode key (sk_test_/rk_test_) is refused outside dev mode: production never bills in test mode.
  */
 import { localBase } from './LockClient.js';
 
@@ -13,9 +14,16 @@ export const INTERVALS = { year: 'STRIPE_PRICE_PRO_YEARLY', month: 'STRIPE_PRICE
 
 export function stripeConfig(env) {
     if (!env.STRIPE_SECRET_KEY || !env.STRIPE_WEBHOOK_SECRET) return null;
+    const testKey = /^(sk|rk)_test_/.test(env.STRIPE_SECRET_KEY);
+    if (testKey && env.ACCOUNTS_DEV_MODE !== '1') {
+        console.error('[stripe] BILLING OFF: STRIPE_SECRET_KEY is a TEST-mode key outside dev mode. Set the live key.');
+        return null;
+    }
     const devBase = env.ACCOUNTS_DEV_MODE === '1' && env.STRIPE_API_BASE ? localBase(env.STRIPE_API_BASE) : null;
     return {
         key: env.STRIPE_SECRET_KEY,
+        // true for a live key, false for a test key, null for anything else (local fakes): which events to believe.
+        livemode: /^(sk|rk)_live_/.test(env.STRIPE_SECRET_KEY) ? true : testKey ? false : null,
         webhookSecret: env.STRIPE_WEBHOOK_SECRET,
         prices: { year: env.STRIPE_PRICE_PRO_YEARLY || null, month: env.STRIPE_PRICE_PRO_MONTHLY || null },
         base: devBase || 'https://api.stripe.com',
@@ -33,8 +41,15 @@ export function formEncode(obj, prefix = '', out = new URLSearchParams()) {
     return out;
 }
 
-export async function stripeRequest(cfg, method, path, params) {
+// An event from the other mode than our key (a test event at a live endpoint, or the reverse) is ignored.
+export function eventModeMismatch(cfg, event) {
+    return cfg.livemode !== null && typeof event.livemode === 'boolean' && event.livemode !== cfg.livemode;
+}
+
+// opts.idempotencyKey: Stripe performs a retried POST/DELETE with the same key only once.
+export async function stripeRequest(cfg, method, path, params, opts = {}) {
     const init = { method, headers: { Authorization: `Bearer ${cfg.key}` } };
+    if (opts.idempotencyKey) init.headers['Idempotency-Key'] = opts.idempotencyKey;
     if (params && method !== 'GET') {
         init.headers['Content-Type'] = 'application/x-www-form-urlencoded';
         init.body = formEncode(params).toString();
@@ -86,7 +101,31 @@ export function summarizeSubscription(sub) {
         priceId: price.id || null,
         interval: (price.recurring && price.recurring.interval) || price.interval || null,
         currentPeriodEnd: item.current_period_end || sub.current_period_end || null,
+        created: Number.isFinite(sub.created) ? sub.created : null,
+        latestInvoice: (typeof sub.latest_invoice === 'string' ? sub.latest_invoice : sub.latest_invoice && sub.latest_invoice.id) || null,
     };
+}
+
+const ref = (v) => (typeof v === 'string' ? v : v && v.id) || null;
+
+// The subscription an invoice belongs to, in either API shape.
+export function subscriptionOfInvoice(inv) {
+    return ref(inv && inv.subscription) || ref(inv && inv.parent && inv.parent.subscription_details && inv.parent.subscription_details.subscription);
+}
+
+// What to refund for an invoice: {payment_intent} or {charge}, or null when the invoice doesn't say
+// (2025-03-31.basil removed both fields; then ask /v1/invoice_payments, see paymentOfInvoicePayments).
+export function paymentOfInvoice(inv) {
+    const pi = ref(inv && inv.payment_intent), ch = ref(inv && inv.charge);
+    return pi ? { payment_intent: pi } : ch ? { charge: ch } : null;
+}
+// The same, from a GET /v1/invoice_payments?invoice=<id> list: the paid payment.
+export function paymentOfInvoicePayments(list) {
+    const rows = (list && list.data) || [];
+    const paid = rows.find((p) => p.status === 'paid') || rows.find((p) => p.is_default) || rows[0];
+    const pay = paid && paid.payment || {};
+    const pi = ref(pay.payment_intent), ch = ref(pay.charge);
+    return pi ? { payment_intent: pi } : ch ? { charge: ch } : null;
 }
 
 export function subscriptionIdOf(event) {

@@ -150,7 +150,7 @@ const ProPanel = {
                     <button type="button" class="pc-pro-btn" @click="lockNow" :disabled="busy" data-testid="pro-lock-btn">
                         {{ busy ? 'One moment…' : 'Lock this calendar' }}
                     </button>
-                    <span v-if="me" class="pc-pro-muted">Signed in as {{ me.email }} · <a href="#" @click.prevent="signOut">Sign out</a></span>
+                    <span v-if="me" class="pc-pro-muted">Signed in as <span data-hj-suppress data-clarity-mask="true">{{ me.email }}</span> · <a href="#" @click.prevent="signOut">Sign out</a></span>
                 </div>
             </template>
 
@@ -165,7 +165,7 @@ const ProPanel = {
                     </div>
                 </form>
                 <p v-else-if="step === 'sent'" class="pc-pro-ok">Check your email for a sign-in link.</p>
-                <p v-else-if="me" class="pc-pro-muted">Signed in as {{ me.email }}, which doesn't own this calendar · <a href="#" @click.prevent="signOut">Sign out</a></p>
+                <p v-else-if="me" class="pc-pro-muted">Signed in as <span data-hj-suppress data-clarity-mask="true">{{ me.email }}</span>, which doesn't own this calendar · <a href="#" @click.prevent="signOut">Sign out</a></p>
                 <a v-else href="#" class="pc-pro-link" @click.prevent="step = 'email'; focusEmail()">Owner? Sign in to manage it</a>
             </template>
 
@@ -194,7 +194,7 @@ const ProPanel = {
                 <div class="pc-pro-row pc-pro-foot">
                     <button type="button" class="pc-pro-btn pc-pro-btn--quiet" @click="portal" :disabled="busy">Manage billing</button>
                     <a href="#" class="pc-pro-link" @click.prevent="signOut">Sign out</a>
-                    <span v-if="me" class="pc-pro-muted">{{ me.email }}</span>
+                    <span v-if="me" class="pc-pro-muted" data-hj-suppress data-clarity-mask="true">{{ me.email }}</span>
                 </div>
             </template>
 

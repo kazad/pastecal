@@ -1,7 +1,7 @@
 /**
  * LockClient -- the one place accounts/billing talks to a calendar's lock (built inside CalendarRoom).
  *
- *   lock(id, ownerId)          -> {status, ok, editorKey?, error?}   409 locked-by-other, 404 no calendar
+ *   lock(id, ownerId)          -> {status, ok, error?}   409 locked-by-other, 404 no calendar (makes no editor link)
  *   unlock(id, ownerId)        -> {status, ok}
  *   rotateEditorKey(id, owner) -> {status, ok, editorKey?}     revokes every editor link, makes one 'Editors' link
  *   lockStatus(id)             -> {status, locked, ownerId, plan, lockedAt}
@@ -36,7 +36,8 @@ async function call(env, id, action, method, body) {
 }
 
 export const LockClient = {
-    lock: (env, id, ownerId) => call(env, id, 'lock', 'POST', { ownerId, plan: 'pro' }),
+    // Billing has no browser to show a key to: no 'Editors' link is made (the owner makes links later).
+    lock: (env, id, ownerId) => call(env, id, 'lock', 'POST', { ownerId, plan: 'pro', createLink: false }),
     unlock: (env, id, ownerId) => call(env, id, 'unlock', 'POST', { ownerId }),
     rotateEditorKey: (env, id, ownerId) => call(env, id, 'rotate-editor-key', 'POST', { ownerId }),
     lockStatus: (env, id) => call(env, id, 'lock-status', 'GET'),

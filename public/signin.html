@@ -3,7 +3,10 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <!-- The sign-in link carries its token in the #fragment. No analytics here, no referrer sent on,
-     and the fragment is cleared before anything else runs, so the token is never recorded. -->
+     and the fragment is cleared before anything else runs, so the token is never recorded.
+     Opening the link never signs anyone in by itself: the page asks /api/auth/peek which email the
+     link is for, and only a click on Continue uses it (/api/auth/verify). Someone else's link, sent
+     to you, cannot quietly sign you in to their account, and link scanners don't use it up. -->
 <meta name="referrer" content="no-referrer">
 <meta name="robots" content="noindex">
 <title>Sign in · pastecal</title>
@@ -21,32 +24,49 @@ main { max-width: 420px; margin: 12vh auto 0; padding: 32px 24px; background: va
 h1 { font-size: 22px; margin: 0 0 8px; }
 p { margin: 8px 0; color: var(--muted); }
 p.bad { color: var(--bad); }
-a.btn { display: inline-block; margin-top: 16px; padding: 10px 16px; border-radius: 8px; background: var(--blue); color: #fff; text-decoration: none; font-weight: 600; }
+a.btn, button.btn { display: inline-block; margin-top: 16px; padding: 10px 16px; border-radius: 8px; border: 0; background: var(--blue); color: #fff; text-decoration: none; font: 600 16px var(--ui); cursor: pointer; }
+button.btn[disabled] { opacity: .6; cursor: default; }
+.who { color: var(--ink); font-weight: 600; word-break: break-all; }
+[hidden] { display: none !important; }
 @media (max-width: 480px) { main { margin: 24px 16px; } }
 </style>
 </head>
 <body>
 <main>
-  <h1 id="title">Signing you in…</h1>
+  <h1 id="title">Sign in</h1>
   <p id="msg">One moment.</p>
+  <button class="btn" id="confirm" type="button" hidden>Continue</button>
   <a class="btn" id="go" href="/" hidden>Continue</a>
 </main>
 <script>
 (function () {
-  var title = document.getElementById('title'), msg = document.getElementById('msg'), go = document.getElementById('go');
-  function fail(text) { title.textContent = 'That link didn’t work'; msg.textContent = text; msg.className = 'bad'; go.textContent = 'Back to pastecal'; go.hidden = false; }
+  var title = document.getElementById('title'), msg = document.getElementById('msg'), go = document.getElementById('go'), confirm = document.getElementById('confirm');
+  function fail(text) { title.textContent = 'That link didn’t work'; msg.textContent = text; msg.className = 'bad'; confirm.hidden = true; go.textContent = 'Back to pastecal'; go.hidden = false; }
+  function post(path) {
+    return fetch(path, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: signinToken }) })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); });
+  }
+  var offline = function () { fail('We couldn’t reach pastecal. Check your connection and open the link again.'); };
   if (!signinToken) return fail('This page needs the link from your sign-in email. Open the email and tap the link again.');
-  fetch('/api/auth/verify', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: signinToken }) })
-    .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
-    .then(function (res) {
+  post('/api/auth/peek').then(function (res) {
+    if (!res.ok || !res.d.ok) return fail(res.d.error || 'Ask for a new sign-in link and try again.');
+    var who = document.createElement('span'); who.className = 'who'; who.textContent = res.d.email;
+    who.setAttribute('data-hj-suppress', ''); who.setAttribute('data-clarity-mask', 'true');
+    msg.textContent = ''; msg.append('Sign in to pastecal as ', who, '?');
+    confirm.hidden = false; confirm.focus();
+  }).catch(offline);
+  confirm.addEventListener('click', function () {
+    confirm.disabled = true; confirm.textContent = 'Signing in…';
+    post('/api/auth/verify').then(function (res) {
       if (!res.ok || !res.d.ok) return fail(res.d.error || 'Ask for a new sign-in link and try again.');
+      confirm.hidden = true;
       title.textContent = 'You’re signed in';
-      msg.textContent = 'Signed in as ' + res.d.email + '.';
+      msg.textContent = 'You’re signed in.';
       go.href = res.d.next || '/';
       go.hidden = false;
       if (res.d.next) location.replace(res.d.next);
-    })
-    .catch(function () { fail('We couldn’t reach pastecal. Check your connection and open the link again.'); });
+    }).catch(offline);
+  });
 })();
 </script>
 </body>

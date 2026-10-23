@@ -36,6 +36,15 @@ assert.match(mail.text, /expires in 15 minutes/); assert.match(mail.text, /ignor
 step('start: generic ok, one email (lowercased address) with the token in the #fragment');
 
 const token = await lastToken(ann);
+r = await post('/api/auth/peek', { token });
+assert.equal(r.status, 200); assert.deepEqual(await r.json(), { ok: true, email: ann });
+assert.equal(r.headers.get('set-cookie'), null, 'peek signs no one in');
+assert.equal((await post('/api/auth/peek', { token }, { origin: 'https://evil.example' })).status, 403);
+r = await post('/api/auth/peek', { token: 'A'.repeat(22) });
+assert.equal(r.status, 400);
+const madeUp = (await r.json()).error;
+step('peek names the email of a working link without using it up or setting a cookie (same-site only)');
+
 r = await post('/api/auth/verify', { token });
 assert.equal(r.status, 200);
 const v = await r.json();
@@ -49,7 +58,9 @@ step('verify sets a 30-day HttpOnly Secure SameSite=Lax cookie; /api/me knows th
 
 r = await post('/api/auth/verify', { token });
 assert.equal(r.status, 400); assert.match((await r.json()).error, /expired or was already used/); assert.equal(r.headers.get('set-cookie'), null);
-step('a used link is refused');
+r = await post('/api/auth/peek', { token });
+assert.equal(r.status, 400); assert.equal((await r.json()).error, madeUp, 'a used link and a made-up one look the same');
+step('a used link is refused (verify and peek)');
 
 const bob = `bob-${run}@example.com`;
 await post('/api/auth/start', { email: bob });
@@ -72,7 +83,12 @@ step('the same answer for a new and an existing email; a bad address gets a plai
 const cara = `cara-${run}@example.com`;
 for (let i = 0; i < 7; i++) assert.equal((await post('/api/auth/start', { email: cara })).status, 200);
 assert.equal((await outbox(cara)).length, 5);
-step('at most 5 sign-in emails an hour per address (still answers ok)');
+for (const later of [10, 10]) {               // two hours later, twice: the hourly limit has reset each time
+    await admin('/api/admin/accounts/expire-tokens', { method: 'POST', body: JSON.stringify({ email: cara, ageMs: 2 * 3600e3 }) });
+    for (let i = 0; i < 6; i++) assert.equal((await post('/api/auth/start', { email: cara })).status, 200);
+    assert.equal((await outbox(cara)).length, later, 'five more two hours later, then none: the daily cap');
+}
+step('at most 5 sign-in emails an hour and 10 a day per address (still answers ok)');
 
 let limited = false;
 for (let i = 0; i < 15 && !limited; i++) limited = (await post('/api/auth/start', { email: `x${i}-${run}@example.com` }, { ipAddr: `10.99.${run.length}.1` })).status === 429;
@@ -97,7 +113,17 @@ assert.equal((await r.json()).next, null);
 await post('/api/auth/start', { email: dan, next: 'https://evil.example' });
 r = await post('/api/auth/verify', { token: await lastToken(dan) });
 assert.equal((await r.json()).next, null);
-step('next is only ever a path on pastecal (no open redirect)');
+let nn = 0;
+const nextFor = async (next) => { const e = `next-${++nn}-${run}@example.com`; await post('/api/auth/start', { email: e, next }); return (await (await post('/api/auth/verify', { token: await lastToken(e) })).json()).next; };
+assert.equal(await nextFor('/pro/done'), null, 'never back to /pro/done (it makes editor links)');
+assert.equal(await nextFor('/pro'), null);
+assert.equal(await nextFor('/signin'), null);
+assert.equal(await nextFor('/team?x=1'), null, 'no query');
+assert.equal(await nextFor('/a/b'), null, 'one segment only');
+assert.equal(await nextFor('/%2F%2Fevil.example'), null, 'a slash hidden in an escape');
+assert.equal(await nextFor('/'), '/');
+assert.equal(await nextFor('/Team%20NU%C3%91EZ'), '/Team%20NU%C3%91EZ', 'an encoded calendar name');
+step('next is only ever "/" or one calendar on pastecal (no open redirect, no /pro/ or /signin, no query)');
 
 assert.equal((await me()).status, 401);
 assert.equal((await me('pc_session=garbage')).status, 401);
@@ -131,5 +157,26 @@ assert.equal(byId[`eve-cal-${run}`].status, 'active'); assert.equal(byId[`eve-ca
 assert.ok(byId[`eve-cal-${run}`].currentPeriodEnd > Date.now() / 1000);
 assert.equal(byId[`eve-late-${run}`].status, 'past_due'); assert.equal(byId[`eve-late-${run}`].currentPeriodEnd, 1900000000);
 step('dev-subscription (dev mode + secret) adds a subscription row that /api/me lists');
+
+// The session cookie on a calendar WebSocket counts only from pastecal's own pages (Origin); otherwise the
+// socket still opens, as a viewer.
+const fay = `fay-${run}@example.com`;
+await post('/api/auth/start', { email: fay });
+r = await post('/api/auth/verify', { token: await lastToken(fay) });
+const fayCookie = r.headers.get('set-cookie').split(';')[0];
+const fayId = (await (await admin(`/api/admin/accounts/lookup?email=${encodeURIComponent(fay)}`)).json()).user.id;
+const wsCal = `test-ws-origin-${run}`;
+assert.equal((await fetch(`${BASE}/cal/${encodeURIComponent(wsCal)}`, { method: 'POST', body: JSON.stringify({ title: 'T', events: [] }), headers: { 'CF-Connecting-IP': nextIp() } })).status, 201);
+assert.equal((await admin(`/api/admin/cal/${encodeURIComponent(wsCal)}/lock`, { method: 'POST', body: JSON.stringify({ ownerId: fayId }) })).status, 200);
+const roleVia = (origin) => new Promise((resolve, reject) => {
+    const ws = new WebSocket(`${BASE.replace(/^http/, 'ws')}/cal/${encodeURIComponent(wsCal)}/ws`, { headers: { Cookie: fayCookie, ...(origin ? { Origin: origin } : {}) } });
+    const t = setTimeout(() => reject(new Error('no snapshot')), 4000);
+    ws.addEventListener('message', (e) => { const m = JSON.parse(e.data); if (m.t === 'snapshot') { clearTimeout(t); ws.close(); resolve(m.role); } });
+    ws.addEventListener('error', () => { clearTimeout(t); reject(new Error('socket error')); });
+});
+assert.equal(await roleVia(BASE), 'owner', 'from our own page: the owner');
+assert.equal(await roleVia('https://evil.example'), 'viewer', 'from another site: anonymous');
+assert.equal(await roleVia(null), 'viewer', 'no Origin: anonymous');
+step('a calendar socket trusts the session cookie only with pastecal\'s Origin; from anywhere else it opens read-only');
 
 console.log(`\n${n} checks passed`); process.exit(0);

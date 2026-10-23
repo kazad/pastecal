@@ -139,7 +139,7 @@ const NavigationDropdown = {
                 <template v-else-if="acct.status === 'in'">
                     <div class="pc-acct-head">
                         <span class="pc-acct-label">Pro account</span>
-                        <span class="pc-acct-muted pc-acct-email" data-testid="account-email">{{ acct.me.email }}</span>
+                        <span class="pc-acct-muted pc-acct-email" data-testid="account-email" data-hj-suppress data-clarity-mask="true">{{ acct.me.email }}</span>
                     </div>
                     <a v-for="c in proCalendars" :key="c.id" :href="c.path" class="pc-acct-cal" data-testid="account-calendar">
                         <span class="pc-acct-cal-title">{{ c.title }}</span>

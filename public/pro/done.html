@@ -5,7 +5,8 @@
 <!-- Stripe Checkout's success page (?session_id=...#<calendar>). No analytics here and no referrer
      sent on, so the Checkout session id is never recorded; the query is cleared on load.
      The lock lands when Stripe's webhook does, which can be a few seconds after this page opens,
-     so it polls /api/pro/status before making the first editor link. -->
+     so it polls /api/pro/status before making the first editor link. It never revokes a link: it makes
+     one ('Editors') only when the calendar has none, through the named-links API. -->
 <meta name="referrer" content="no-referrer">
 <meta name="robots" content="noindex">
 <title>Pro is on · pastecal</title>
@@ -51,7 +52,7 @@ a.btn { margin-top: 24px }
       <input id="link" type="text" readonly aria-label="Editor link" data-hj-suppress data-clarity-mask="true">
       <button id="copy" type="button">Copy</button>
     </div>
-    <p class="small">You can make a new one any time from Share on your calendar. Making a new link turns off the old one.</p>
+    <p class="small">You can make more links, or turn one off, from Share on your calendar.</p>
   </section>
 
   <a class="btn" id="go" href="/">Back to your calendar</a>
@@ -80,20 +81,36 @@ a.btn { margin-top: 24px }
   function locked() {
     var span = document.createElement('span'); span.className = 'cal'; span.textContent = proCalendar;
     msg.textContent = ''; msg.append(span, ' is locked. Only you and people with your editor link can change it.');
-    // Reloading this page must not reset a link the owner may already have sent out.
-    var shown = null;
-    try { shown = localStorage.getItem('pastecal_editor_link:' + proCalendar.toLowerCase()); } catch (e) { shown = null; }
-    if (shown) { $('link').value = shown; $('linkbox').hidden = false; return; }
-    api('POST', '/api/pro/editor-key', { calendarId: proCalendar }).then(function (r) {
-      if (r.status === 200 && r.data.editorKey) {
-        var link = 'https://pastecal.com' + calPath + '#k=' + r.data.editorKey;
-        try { localStorage.setItem('pastecal_editor_link:' + proCalendar.toLowerCase(), link); } catch (e) { /* shown here anyway */ }
-        $('link').value = link;
-        $('linkbox').hidden = false;
-        return;
-      }
+    // This page never turns off a link the owner may already have sent out: it makes the first
+    // link only when the calendar has none, and otherwise points to Share.
+    // pastecal_editor_link:<cal> is the plain link the Share panel shows; pastecal_done_link:<cal> also
+    // keeps its id, so this page re-shows a link only while it is still live.
+    var shareName = 'pastecal_editor_link:' + proCalendar.toLowerCase(), storeName = 'pastecal_done_link:' + proCalendar.toLowerCase();
+    function show(link) { $('link').value = link; $('linkbox').hidden = false; }
+    function signInHint(r) {
       if (r.status === 401) msg.append(' Sign in from your calendar’s Share panel to make an editor link.');
       else msg.append(' Make an editor link from your calendar’s Share panel.');
+    }
+    api('GET', '/api/pro/editor-links?calendar=' + encodeURIComponent(proCalendar)).then(function (r) {
+      if (r.status !== 200 || !Array.isArray(r.data)) return signInHint(r);
+      if (r.data.length) {
+        // Made by this page earlier in this browser, and still live (not revoked since): show it again.
+        var saved = null;
+        try { saved = JSON.parse(localStorage.getItem(storeName) || 'null'); } catch (e) { saved = null; }
+        var live = saved && saved.id && r.data.some(function (l) { return l.id === saved.id; });
+        if (live && typeof saved.link === 'string') return show(saved.link);
+        msg.append(' Your editor links are in Share on your calendar.');
+        return;
+      }
+      api('POST', '/api/pro/editor-links', { calendarId: proCalendar, label: 'Editors' }).then(function (c) {
+        if (c.status !== 200 || !c.data.url_fragment_key) return signInHint(c);
+        var link = 'https://pastecal.com' + calPath + '#k=' + c.data.url_fragment_key;
+        try {
+          localStorage.setItem(shareName, link);
+          localStorage.setItem(storeName, JSON.stringify({ id: c.data.id, link: link }));
+        } catch (e) { /* shown here anyway */ }
+        show(link);
+      });
     });
   }
 
