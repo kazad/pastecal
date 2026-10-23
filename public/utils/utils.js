@@ -43,12 +43,16 @@ function sanitizeUrl(url) {
     return sanitized;
 }
 
+// A calendar's default name is its edit key, so it comes from crypto.getRandomValues, not
+// Math.random. Bytes >= 231 (33 * 7) are skipped so every character is equally likely.
 function randomID(size = 21) {
     const alphabet = '123456789abcdefghjklmnpqrstuvwxyz';
     let id = '';
-    let i = size;
-    while (i--) {
-        id += alphabet[(Math.random() * alphabet.length) | 0];
+    while (id.length < size) {
+        const bytes = crypto.getRandomValues(new Uint8Array(size * 2));
+        for (const b of bytes) {
+            if (b < 231 && id.length < size) id += alphabet[b % 33];
+        }
     }
     return id;
 }
