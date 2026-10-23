@@ -175,7 +175,18 @@ assert.equal(r.status, 201);
 await sleep(300);
 const lk = await (await fetch(`${BASE}/api/lookup?slug=${enc(id)}`)).json();
 assert.equal(lk.actualSlug, id, 'the name still leads to the locked calendar, not its case variant');
-step('a new calendar carrying a locked calendar\'s publicViewId (the rename path), or a case variant of its name, does not re-point the view link or the name');
+// A case variant made BEFORE the lock holds the name's lookup; locking claims the name back.
+const claim = `test-lock-claim-${Date.now()}`;
+assert.equal((await fetch(`${BASE}/cal/${enc(claim)}`, { method: 'POST', body: JSON.stringify({ title: 'real', events: [] }) })).status, 201);
+await sleep(300);
+assert.equal((await fetch(`${BASE}/cal/${enc(claim.toUpperCase())}`, { method: 'POST', body: JSON.stringify({ title: 'variant', events: [] }) })).status, 201);
+await sleep(300);
+assert.equal((await (await fetch(`${BASE}/api/lookup?slug=${enc(claim)}`)).json()).actualSlug, claim.toUpperCase(), 'before the lock: the variant holds the lookup');
+assert.equal((await admin(claim, 'lock', { ownerId: OWNER })).status, 200);
+await sleep(300);
+assert.equal((await (await fetch(`${BASE}/api/lookup?slug=${enc(claim)}`)).json()).actualSlug, claim, 'locking claims the name back');
+await admin(claim, 'unlock', {});
+step('a new calendar carrying a locked calendar\'s publicViewId (the rename path), or a case variant of its name, does not re-point the view link or the name; locking claims the name back from an earlier variant');
 
 // 9. No key material or owner id anywhere public.
 const leaks = [];

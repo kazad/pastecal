@@ -418,6 +418,10 @@ export class CalendarRoom extends DurableObject {
             // makes links from the calendar. The admin route still gets one 'Editors' key.
             const made = body.createLink !== false && !this.links.size ? this.createLink('Editors', k) : null;
             this.recordLockChange('locked', 'Locked with Pro');
+            // Claim this calendar's own name (and view link) in the directory now, so a case variant
+            // registered earlier can't keep its lookups. (A name held by another LOCKED calendar stays.)
+            this.ctx.waitUntil(this.registerInDirectory(this.state.id, false, null, true));
+            if (this.state.options?.publicViewId) this.ctx.waitUntil(this.registerInDirectory(this.state.options.publicViewId, true, this.state.id, true));
             return Response.json({ ok: true, editorKey: made ? k.key : null, links: this.links.size });
         }
         // Everything below is owner-only, and only while locked.
@@ -469,7 +473,7 @@ export class CalendarRoom extends DurableObject {
         return Response.json({ ok: true, editorKey: k.key });
     }
 
-    async registerInDirectory(actualSlug, isReadOnly = false, targetId = null) {
+    async registerInDirectory(actualSlug, isReadOnly = false, targetId = null, force = false) {
         if (!this.env.DIRECTORY || !actualSlug) return;
         try {
             const dir = this.env.DIRECTORY.get(this.env.DIRECTORY.idFromName('global'));
@@ -478,13 +482,17 @@ export class CalendarRoom extends DurableObject {
             // publicViewId (it is in the view URL) and take over its /view/ link -- or create a
             // case variant of its name and take over the name's lookups.
             const target = targetId || actualSlug;
-            const cur = await (await dir.fetch(`http://internal/lookup?slug=${encodeURIComponent(actualSlug)}`)).json().catch(() => ({}));
-            const curTarget = cur && cur.found ? (cur.targetId || cur.actualSlug) : null;
+            // Fail closed: if we can't tell where the name leads now, or whether that calendar is locked,
+            // leave the directory alone.
+            const cur = await (await dir.fetch(`http://internal/lookup?slug=${encodeURIComponent(actualSlug)}`)).json().catch(() => null);
+            if (!cur || typeof cur.found !== 'boolean') { console.warn(`[CalendarRoom] not registering ${actualSlug}: lookup unreadable`); return; }
+            const curTarget = cur.found ? (cur.targetId || cur.actualSlug) : null;
             if (curTarget && curTarget !== target && this.env.CALENDARS) {
                 const st = await this.env.CALENDARS.get(this.env.CALENDARS.idFromName(curTarget))
                     .fetch(`http://internal/cal/${encodeURIComponent(curTarget)}/lock-status`);
-                if (st.ok && (await st.json()).locked) {
-                    console.warn(`[CalendarRoom] not re-pointing ${actualSlug}: it leads to a locked calendar`);
+                const locked = st.ok ? (await st.json().catch(() => null))?.locked : st.status === 404 ? false : null;
+                if (locked !== false) {
+                    console.warn(`[CalendarRoom] not re-pointing ${actualSlug}: it leads to a ${locked ? 'locked' : 'possibly locked'} calendar`);
                     return;
                 }
             }
@@ -494,7 +502,8 @@ export class CalendarRoom extends DurableObject {
                 body: json({
                     actualSlug,
                     isReadOnly: !!isReadOnly,
-                    targetId: targetId || actualSlug
+                    targetId: targetId || actualSlug,
+                    ...(force ? { force: true } : {})
                 })
             });
         } catch (e) {
