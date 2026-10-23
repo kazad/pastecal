@@ -48,6 +48,16 @@ const SUBSCRIPTION_EVENTS = new Set(['checkout.session.completed', 'customer.sub
 // Same rule as index.js: any name Firebase allowed.
 const validId = (id) => typeof id === 'string' && id.length >= 1 && id.length <= 200 && !/[.#$\[\]\/\u0000-\u001f\u007f]/.test(id);
 const validEmail = (e) => e.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+// Where a sign-in link may send people afterwards: exactly "/" or "/<calendar>" (one segment, a valid
+// calendar id once decoded, no query). Never /pro/done (it makes editor links), /signin, or another site.
+const RESERVED_NEXT = new Set(['signin', 'pro', 'pricing', 'view', 'beta', 'nativecal', 'api', 'cal']);
+function safeNext(raw) {
+    if (raw === '/') return '/';
+    if (typeof raw !== 'string' || raw.length > 700 || !/^\/[^/?#\\\s]+$/.test(raw)) return null;
+    let id; try { id = decodeURIComponent(raw.slice(1)); } catch { return null; }
+    if (!validId(id) || RESERVED_NEXT.has(id.toLowerCase())) return null;
+    return '/' + encodeURIComponent(id);
+}
 
 function randomToken() {
     const b = crypto.getRandomValues(new Uint8Array(16));
@@ -305,8 +315,8 @@ async function route(request, env, url, path) {
             const { success } = await env.CREATE_LIMITER.limit({ key: 'auth:' + (request.headers.get('CF-Connecting-IP') || 'unknown') });
             if (!success) return json({ ok: false, error: 'Too many tries. Wait a minute and send it again.' }, 429);
         }
-        // Only a path on this site: no "//evil.example" or "https://..." open redirect.
-        const next = typeof body.next === 'string' && /^\/(?![\/\\])[^\s]{0,300}$/.test(body.next) ? body.next : null;
+        // Only "/" or a calendar on this site: no open redirect, and no /pro/... page (see safeNext).
+        const next = safeNext(body.next);
         const token = await accounts(env).issueLoginToken(email, next);
         if (token) await sendSignInEmail(env, email, token);
         return json({ ok: true });

@@ -97,7 +97,17 @@ assert.equal((await r.json()).next, null);
 await post('/api/auth/start', { email: dan, next: 'https://evil.example' });
 r = await post('/api/auth/verify', { token: await lastToken(dan) });
 assert.equal((await r.json()).next, null);
-step('next is only ever a path on pastecal (no open redirect)');
+let nn = 0;
+const nextFor = async (next) => { const e = `next-${++nn}-${run}@example.com`; await post('/api/auth/start', { email: e, next }); return (await (await post('/api/auth/verify', { token: await lastToken(e) })).json()).next; };
+assert.equal(await nextFor('/pro/done'), null, 'never back to /pro/done (it makes editor links)');
+assert.equal(await nextFor('/pro'), null);
+assert.equal(await nextFor('/signin'), null);
+assert.equal(await nextFor('/team?x=1'), null, 'no query');
+assert.equal(await nextFor('/a/b'), null, 'one segment only');
+assert.equal(await nextFor('/%2F%2Fevil.example'), null, 'a slash hidden in an escape');
+assert.equal(await nextFor('/'), '/');
+assert.equal(await nextFor('/Team%20NU%C3%91EZ'), '/Team%20NU%C3%91EZ', 'an encoded calendar name');
+step('next is only ever "/" or one calendar on pastecal (no open redirect, no /pro/ or /signin, no query)');
 
 assert.equal((await me()).status, 401);
 assert.equal((await me('pc_session=garbage')).status, 401);

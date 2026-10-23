@@ -279,5 +279,18 @@ assert.equal((await lt.save([{ type: 'add', event: ev('st', 'paused link socket'
 await admin(id, 'unlock', {});
 step('unlock: proSettings null, owner routes 409, everyone edits again; a re-lock by the same owner restores the settings and the same editor links (sockets keyed before can edit again)');
 
+// 14. What /pro/done relies on: a billing lock (createLink:false) has no links, so the page makes ONE
+// named 'Editors' link through the named-links API (never the revoking editor-key route).
+const paid = `test-perms-paid-${run}`;
+assert.equal((await fetch(`${BASE}/cal/${enc(paid)}`, { method: 'POST', body: JSON.stringify({ title: 'Paid', events: [] }) })).status, 201);
+assert.equal((await admin(paid, 'lock', { ownerId: owner.userId, plan: 'pro', createLink: false })).body.editorKey, null);
+assert.deepEqual((await getJ(`/api/pro/editor-links?calendar=${enc(paid)}`, owner.cookie)).body, []);
+r = await post('/api/pro/editor-links', { calendarId: paid, label: 'Editors' }, { cookie: owner.cookie });
+assert.equal(r.status, 200);
+const first = await r.json();
+assert.match(first.url_fragment_key, /^[A-Za-z0-9_-]{22}$/);
+assert.deepEqual((await getJ(`/api/pro/editor-links?calendar=${enc(paid)}`, owner.cookie)).body.map((l) => l.label), ['Editors']);
+step('a billing lock (createLink:false) starts with no links; the owner\'s first named link is the only one');
+
 for (const t of [tA, tB, ownerTab, otherTab, anon, viewTab, fresh, late, lateView, lt]) t.ws.close();
 console.log(`\n${n} checks passed`); process.exit(0);
