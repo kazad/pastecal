@@ -10,14 +10,14 @@ Copyright (c) 2025 Kalid Azad
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <!-- HTML Meta Tags -->
-    <title>PasteCal: Shareable, no-login calendar</title>
-    <meta name="description" content="Create a public shared calendar link, no signups needed.">
+    <title>PasteCal: A shared calendar in one link</title>
+    <meta name="description" content="Make a shared calendar, send one link, and everyone sees the same schedule. No accounts and nothing to install.">
 
     <!-- Facebook Meta Tags -->
     <meta property="og:url" content="https://pastecal.com/">
     <meta property="og:type" content="website">
-    <meta property="og:title" content="PasteCal: Shareable, no-login calendar">
-    <meta property="og:description" content="Create a public shared calendar link, no signups needed.">
+    <meta property="og:title" content="PasteCal: A shared calendar in one link">
+    <meta property="og:description" content="Make a shared calendar, send one link, and everyone sees the same schedule. No accounts and nothing to install.">
     <meta property="og:image" content="https://pastecal.com/img/screenshot.png">
 
     <!-- Twitter Meta Tags -->
@@ -1290,7 +1290,7 @@ Copyright (c) 2025 Kalid Azad
             </div>
         </div>
         <p v-if="isHomepageCalendar" class="pc-draft-note" v-cloak>
-            <span>Draft, saved in this browser.</span> Press <b>Share</b> when you're ready to send it.
+            <span><b>A shared calendar in one link, no signup.</b> Add events, then press <b>Share</b>. Until then it's a draft saved in this browser.</span>
             <a href="#how">New here? How pastecal works ↓</a>
         </p>
 
@@ -1316,7 +1316,7 @@ Copyright (c) 2025 Kalid Azad
                             <span class="pc-tour-chip">pastecal.com/<b>soccer-fall</b></span>
                         </div>
                         <h3>Send the link</h3>
-                        <p>Pick a name, then share it in your group chat or email.</p>
+                        <p>Press Share and send the link to your group chat or email.</p>
                     </li>
                     <li>
                         <div class="pc-tour-art" aria-hidden="true">
@@ -1328,11 +1328,11 @@ Copyright (c) 2025 Kalid Azad
                     </li>
                 </ol>
 
-                <h3 class="pc-tour-label">Three ways to share</h3>
+                <h3 class="pc-tour-label">How to share it</h3>
                 <div class="pc-tour-links">
-                    <div><h4>Edit link</h4><code>pastecal.com/soccer-fall</code><p>Anyone with it can add and change events.</p></div>
-                    <div><h4>View-only link</h4><code>pastecal.com/view/soccer-fall-parents</code><p>People can see the calendar but not change it, and they never see the edit link. Pick any name for it.</p></div>
-                    <div><h4>Calendar app link</h4><code>pastecal.com/soccer-fall.ics</code><p>Subscribe in Google, Apple or Outlook Calendar and it stays up to date. Google can take a few hours to refresh.</p></div>
+                    <div class="pc-tour-link-main"><h4>View-only link <span>for everyone</span></h4><code>pastecal.com/view/k3n8q2xw</code><p>Send this to the group chat, post it, or embed it. People see every change but can't edit, and never see your edit link.</p></div>
+                    <div><h4>Calendar app link</h4><code>pastecal.com/view/k3n8q2xw.ics</code><p>For Google, Apple or Outlook Calendar. Read-only, and it stays up to date. Google can take a few hours to refresh.</p></div>
+                    <div><h4>Edit link <span>for helpers</span></h4><code>pastecal.com/soccer-fall</code><p>Only for people who help run the calendar. Anyone with it can add and change events.</p></div>
                 </div>
 
                 <h3 class="pc-tour-label">People use it for</h3>
@@ -1364,6 +1364,9 @@ Copyright (c) 2025 Kalid Azad
 
                 <p class="pc-tour-end">Your calendar is ready at the top of this page. <a href="#">Back to the calendar ↑</a></p>
                 <p class="pc-tour-maker">pastecal is made by <a href="https://betterexplained.com" target="_blank" rel="noopener">Kalid Azad</a>, creator of BetterExplained.</p>
+                <nav class="pc-tour-footer" aria-label="About pastecal">
+                    <a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="https://github.com/kazad/pastecal/issues" target="_blank" rel="noopener">Feedback</a>
+                </nav>
             </div>
         </section>
 

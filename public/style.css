@@ -880,9 +880,15 @@ div#Schedule,
   box-shadow: 0 6px 18px rgba(0,0,0,.18); white-space: nowrap; animation: pc-tip-in .4s ease-out .8s both }
 @keyframes pc-tip-in { from { opacity: 0; transform: translate(-50%, 6px) } to { opacity: 1; transform: translate(-50%, 0) } }
 .pc-draft-note { margin: 8px 4px 0; font-size: 13px; color: var(--pc-text-muted); display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center }
-.pc-draft-note span { color: var(--pc-text) }
+.pc-draft-note > span { color: var(--pc-text-muted) }
+.pc-draft-note b { color: var(--pc-text) }
 .pc-draft-note a { margin-left: auto; color: var(--pc-link) }
 .pc-share-pulse { animation: pc-share-pulse 1.5s ease-out 2 }
 @keyframes pc-share-pulse { 0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, .6) } 100% { box-shadow: 0 0 0 12px rgba(37, 99, 235, 0) } }
 @media (prefers-reduced-motion: reduce) { .pc-grid-tip, .pc-share-pulse { animation: none } }
 @media (max-width: 640px) { .pc-grid-tip { top: 150px; font-size: 13px } .pc-draft-note a { margin-left: 0 } }
+.pc-tour-links h4 span { font-size: 12px; font-weight: 600; color: var(--pc-text-muted); margin-left: 6px }
+.pc-tour-link-main { border-color: var(--pc-link) !important; box-shadow: 0 0 0 1px var(--pc-link) }
+.pc-tour-footer { display: flex; gap: 18px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--pc-line); font-size: 14px }
+.pc-tour-footer a { color: var(--pc-text-muted) }
+.pc-tour-footer a:hover { color: var(--pc-link) }
