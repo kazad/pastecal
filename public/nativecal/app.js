@@ -361,6 +361,15 @@ const CalendarVueApp = {
                 }
             })();
         } else if (this.urlslug) {
+            // A locked (Pro) calendar can't be edited here: this page has no editor-key or lock handling,
+            // so edits would be dropped. Open it in the main app instead, keeping an editor link's #k=.
+            if (typeof CloudCalendarService !== 'undefined') {
+                CloudCalendarService.onLockState = (s) => {
+                    if (!s || !s.locked) return;
+                    const hash = /^#k=/.test(location.hash) ? location.hash : '';
+                    location.replace('/' + encodeURIComponent(s.id || this.urlslug) + hash);
+                };
+            }
             // default: pastecal.com/ID
             CalendarDataService.findAndSubscribe(this.urlslug, (c) => {
                 if (c) {
