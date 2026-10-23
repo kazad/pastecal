@@ -1,6 +1,7 @@
 // Defensive limits, against `wrangler dev` (BASE, default http://localhost:8787):
 //   - size caps on event ids, recurrenceIDs, types and the whole calendar, on every way in
 //     (create, save, meta, import, from-firebase);
+//   - a WebSocket save/meta to a calendar nobody created is refused and stores nothing.
 //
 //   cd cloudflare && npx wrangler dev   (other terminal)   then   node test/hardening.test.mjs
 import assert from 'node:assert/strict';
@@ -100,6 +101,28 @@ function tab(id) {
     r = await put(ty, '/import', { id: ty, title: 'x', events: [ev('t1', 'a', 1, { type: '3' }), ev('t2', 'b', 1, { type: 'undefined' }), ev('t3', 'c', 1, { type: null })] });
     assert.equal(r.status, 200);
     step('an event type that is not a number or short text is refused; real stored shapes still import');
+}
+
+// ---- 3. a WebSocket cannot create a calendar ----------------------------------------------
+{
+    const id = uniq('nocal');
+    const t = tab(id); const snap = await t.ready;
+    assert.equal(snap.calendar.id, null);
+    let r = await t.send({ t: 'save', id: 's1', v: 0, commands: [{ type: 'add', event: ev('a1', 'sneaky') }] });
+    assert.equal(r.t, 'error'); assert.equal(r.code, 'no_calendar');
+    r = await t.send({ t: 'meta', id: 'm1', title: 'sneaky', options: { notes: 'x' } });
+    assert.equal(r.t, 'error'); assert.equal(r.code, 'no_calendar');
+    t.close();
+    assert.equal((await fetch(url(id))).status, 404, 'still no calendar');
+    assert.deepEqual(await (await fetch(url(id, '/authors'))).json(), [], 'no author row stored either');
+    assert.deepEqual(await (await fetch(url(id, '/history'))).json(), [], 'no history');
+    // The real way still works, and the name is then writable over the socket.
+    assert.equal((await create(id, { title: 'real', events: [] })).status, 201);
+    const t2 = tab(id); await t2.ready;
+    r = await t2.send({ t: 'save', id: 's2', v: 1, commands: [{ type: 'add', event: ev('a1', 'fine') }] });
+    assert.equal(r.t, 'ack');
+    t2.close();
+    step('save/meta over a socket to an uncreated calendar: refused (no_calendar), nothing stored; POST then works');
 }
 
 console.log('hardening tests passed');

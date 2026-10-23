@@ -253,7 +253,7 @@ export class CalendarRoom extends DurableObject {
             this.ctx.acceptWebSocket(server);
             const author = url.searchParams.get('author');
             server.serializeAttachment({ saves: [], isViewOnly, viewId, author });
-            if (author && !isViewOnly) this.recordAuthor(author, false);
+            if (author && !isViewOnly && this.state.id) this.recordAuthor(author, false);   // a name nobody created stores nothing
             const cal = isViewOnly ? this.viewCalendar(viewId) : this.calendar();
             server.send(json({ t: 'snapshot', v: this.state.v, calendar: cal }));
             return new Response(null, { status: 101, webSocket: client });
@@ -625,8 +625,14 @@ export class CalendarRoom extends DurableObject {
             return refuse('read_only', 'this link is read-only');
         }
 
+        // A calendar is created only by POST /cal/<id> (rate-limited per IP in the Worker). A room
+        // nobody created takes no writes over the socket, and stores nothing -- not even an author.
+        if ((m.t === 'save' || m.t === 'meta') && !this.state.id) {
+            return refuse('no_calendar', 'this calendar does not exist; create it first');
+        }
+
         const author = m.author || tab.author;
-        if (author && !tab.isViewOnly) this.recordAuthor(author, false);
+        if (author && !tab.isViewOnly && this.state.id) this.recordAuthor(author, false);
 
         if (m.t === 'save' || m.t === 'meta') {
             const rate = this.overRate(ws);
