@@ -1,12 +1,20 @@
+# Security headers (same values as cloudflare/src/SecurityHeaders.js, which sets them on the pages the
+# Worker serves; cloudflare/test/headers.test.mjs keeps them equal): edit pages may not be framed;
+# /view/* may (embeds), so it detaches the inherited policy and sets its own.
 # Search engines: index the homepage and read-only /view/ links only. Every other page path is a
 # calendar's EDIT link (pastecal.com/<name>): anyone holding it can change that calendar, so it must
 # never be listed. (Rules apply in order; "! X-Robots-Tag" removes the header an earlier rule set.)
 /*
   X-Robots-Tag: noindex
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://*.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://www.gstatic.com https://apis.google.com https://*.firebaseio.com https://cdn.jsdelivr.net https://unpkg.com https://cdn.tailwindcss.com https://static.cloudflareinsights.com https://*.hotjar.com https://*.clarity.ms; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.hotjar.com; font-src 'self' data: https://fonts.gstatic.com https://*.hotjar.com; img-src 'self' data: blob: https:; connect-src 'self' https: wss://pastecal.com wss://www.pastecal.com wss://new.pastecal.com wss://*.firebaseio.com wss://*.hotjar.com wss://*.clarity.ms; frame-src 'self' https://pastecal-web.firebaseapp.com https://*.firebaseio.com https://*.hotjar.com https://www.googletagmanager.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
 /
   ! X-Robots-Tag
 /view/*
   ! X-Robots-Tag
+  ! Content-Security-Policy
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://*.googletagmanager.com https://www.google-analytics.com https://*.google-analytics.com https://www.gstatic.com https://apis.google.com https://*.firebaseio.com https://cdn.jsdelivr.net https://unpkg.com https://cdn.tailwindcss.com https://static.cloudflareinsights.com https://*.hotjar.com https://*.clarity.ms; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.hotjar.com; font-src 'self' data: https://fonts.gstatic.com https://*.hotjar.com; img-src 'self' data: blob: https:; connect-src 'self' https: wss://pastecal.com wss://www.pastecal.com wss://new.pastecal.com wss://*.firebaseio.com wss://*.hotjar.com wss://*.clarity.ms; frame-src 'self' https://pastecal-web.firebaseapp.com https://*.firebaseio.com https://*.hotjar.com https://www.googletagmanager.com; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors *
 /privacy
   ! X-Robots-Tag
 /terms

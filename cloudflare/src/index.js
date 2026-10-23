@@ -18,6 +18,7 @@
 import { ICSService } from './ICSService.js';
 import { SlugService } from './SlugService.js';
 import { handleCollect } from './Collector.js';
+import { applySecurityHeaders } from './SecurityHeaders.js';
 export { CalendarRoom } from './CalendarRoom.js';
 export { CalendarDirectory } from './CalendarDirectory.js';
 export { Waitlist } from './Waitlist.js';
@@ -317,6 +318,7 @@ export default {
         const indexable = url.hostname !== 'new.pastecal.com' && (path === '/' || path.startsWith('/view/'));
         if (indexable) out.headers.delete('X-Robots-Tag'); else out.headers.set('X-Robots-Tag', 'noindex');
         if (/\.(js|css|json)$/.test(path) || beta) out.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        applySecurityHeaders(out.headers, path);
         return out;
     },
 };
