@@ -4,7 +4,11 @@
 # Columns: blob1 event, blob6 detail (section, new/returning...), blob8 homepage variant.
 set -euo pipefail
 DAYS="${1:-7}"
-q() { printf '%s FORMAT TabSeparated' "$1" > "$TMP"; cf analytics_engine sql query --file "$TMP" | python3 -c 'import json,sys; print(json.load(sys.stdin), end="")'; }
+q() { printf '%s FORMAT TabSeparated' "$1" > "$TMP"; cf analytics_engine sql query --file "$TMP" | python3 -c 'import json,sys
+raw = sys.stdin.read().strip()
+try: out = json.loads(raw) if raw else ""
+except ValueError: out = raw
+print(out if str(out).strip() else "  (none yet)")'; }
 TMP="$(mktemp)"; trap 'rm -f "$TMP"' EXIT
 W="timestamp > NOW() - INTERVAL '$DAYS' DAY"
 
