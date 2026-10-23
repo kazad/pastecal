@@ -51,7 +51,7 @@
                                     Dark mode uses the solid color instead (a tint turned coral brown). */
 
     /* ---- type --------------------------------------------------------------------------- */
-    --pc-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --pc-font: "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     --pc-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     --pc-fs-caption: 11px;       /* UPPERCASE labels: weekdays, section eyebrows (600, +.06em) */
     --pc-fs-small: 12.5px;       /* events, field labels, meta */

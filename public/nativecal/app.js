@@ -457,7 +457,7 @@ const CalendarVueApp = {
 
             // If still no events after loading, create default sample event
             if (this.calendar.events.length == 0) {
-                var defaultEvent = this.calendar.defaultEvent("Sample event");
+                var defaultEvent = this.calendar.defaultEvent("Your event here");
                 this.calendar.setEvents([defaultEvent]);
             }
             this.updateCalendarView();
@@ -728,7 +728,7 @@ const CalendarVueApp = {
                 defaultView: 'week'
             };
             // Add one sample event
-            var defaultEvent = this.calendar.defaultEvent("Sample event");
+            var defaultEvent = this.calendar.defaultEvent("Your event here");
             this.calendar.setEvents([defaultEvent]);
             // Reset local settings to defaults
             this.initializeLocalSettings();

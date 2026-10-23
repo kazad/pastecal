@@ -43,7 +43,7 @@ async function createViaDialog(page, title, nth = 15) {
 
 const stored = (page) => page.evaluate(`${VM}.calendar.events.map(e => ({ id: String(e.id), title: e.title, start: e.start }))`);
 
-/** Just the events this test created -- a new calendar also ships with "Sample event". */
+/** Just the events this test created -- a new calendar also ships with "Your event here". */
 const mine = async (page, title) => (await stored(page)).filter(e => e.title === title);
 
 test('an event created through the dialog gets a stable, non-numeric id', async ({ page }) => {

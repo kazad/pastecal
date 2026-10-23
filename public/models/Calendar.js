@@ -39,14 +39,14 @@ class Calendar {
 
     // A brand-new homepage calendar shows one example so the grid isn't empty. It is
     // dropped as soon as someone adds an event of their own; one they edited stays.
-    static SAMPLE_TITLES = ['Sample event'];
+    static SAMPLE_TITLES = ['Your event here', 'Sample event'];   // the old name, so older drafts still clear it
 
     static isSampleTitle(title) {
         return Calendar.SAMPLE_TITLES.includes(title);
     }
 
     sampleEvents() {
-        return [this.defaultEvent('Sample event')];
+        return [this.defaultEvent(Calendar.SAMPLE_TITLES[0])];
     }
 
     import(c) {

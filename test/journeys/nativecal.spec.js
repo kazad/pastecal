@@ -51,11 +51,11 @@ async function openNative(page, path) {
   await expect(page.locator('[data-testid="month-view-grid"]')).toBeVisible({ timeout: 15_000 });
 }
 
-// Minus the "Sample event" every new calendar starts with.
+// Minus the "Your event here" every new calendar starts with.
 const onServer = (page) => page.evaluate(`(async () => {
   const snap = await firebase.database().ref('/calendars/' + ${VM}.calendar.id + '/events').once('value');
   const v = snap.val() || [];
-  return (Array.isArray(v) ? v : Object.values(v)).filter(e => e && e.title !== 'Sample event');
+  return (Array.isArray(v) ? v : Object.values(v)).filter(e => e && e.title !== 'Your event here');
 })()`);
 const byTitle = async (page, t) => (await onServer(page)).find(e => e.title === t);
 /** Wait until the server agrees (writes are async). */

@@ -400,7 +400,7 @@ test('delete an event, then Undo brings it back; other events untouched', async 
   await tap(page, confirm);
 
   await expect.poll(() => titles(page), { timeout: 10_000 }).not.toContain('Delete me');
-  expect(await titles(page)).toContain('Sample event');
+  expect(await titles(page)).toContain('Your event here');
 
   await tap(page, page.locator('button', { hasText: /^Undo$/ }).locator('visible=true').first());
   await expect.poll(() => titles(page), { timeout: 10_000 }).toContain('Delete me');
@@ -660,7 +660,7 @@ test('delete a whole repeating series from one of its occurrences: it is gone, n
 
   await expect.poll(async () => (await onServer(page)).some(e => /Gym/.test(e.title)), { timeout: 10_000 }).toBe(false);
   await expect(page.locator('.e-appointment', { hasText: 'Gym' })).toHaveCount(0);
-  expect(await titles(page), 'the sample event is untouched').toContain('Sample event');
+  expect(await titles(page), 'the sample event is untouched').toContain('Your event here');
 });
 
 // ===========================================================================

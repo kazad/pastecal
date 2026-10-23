@@ -72,7 +72,7 @@ async function run(base, name) {
     await p.waitForTimeout(3000);
     const open = await dlg.count(); if (open) errs.push('editor still open');
     const rows = await p.evaluate(`(async () => { const v = (await firebase.database().ref('/calendars/${slug}/events').once('value')).val() || [];
-      return (Array.isArray(v) ? v : Object.values(v)).filter(e => e && e.title !== 'Sample event'); })()`);
+      return (Array.isArray(v) ? v : Object.values(v)).filter(e => e && e.title !== 'Your event here'); })()`);
     const drawn = await p.locator('.e-appointment').count();
     await b.close(); return { rows, errs, drawn };
   } catch (e) { errs.push('script: ' + e.message.split('\n')[0]); await b.close(); return { rows: [], errs, drawn: -1 }; }
