@@ -3530,6 +3530,7 @@ const CalendarVueApp = {
             const gone = (lost || []).map(e => ({
                 title: (e.title && e.title.trim()) ? e.title : 'Untitled event',
             }));
+            if (entry.label) return entry.label;                 // server-written rows: "Locked with Pro", "Unlocked"
             if (entry.kind === 'wiped' || entry.kind === 'deleted') {
                 return gone.length ? `All events deleted (${gone.length})` : 'All events deleted';
             }

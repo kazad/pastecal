@@ -68,4 +68,17 @@ await fetch(`${BASE}/cal/${other}`, { method: 'POST', body: JSON.stringify({ tit
 await sleep(6000); assert.equal(fb.store.has(other), false); assert.equal(puts(other), 0);
 step('a calendar outside COPY_BACK is never written to Firebase');
 
+// 7. A Pro-locked calendar stops mirroring: Firebase is world-writable, so it gets no copy to edit.
+const lk = await (await fetch(`${BASE}/api/admin/cal/${id}/lock`, { method: 'POST', headers: { Authorization: `Bearer ${SECRET}` }, body: JSON.stringify({ ownerId: 'cb-owner', plan: 'pro' }) })).json();
+assert.ok(lk.editorKey, JSON.stringify(lk));
+await sleep(4000);
+const lockedPuts = puts(id);
+T.ws.send(JSON.stringify({ t: 'auth', key: lk.editorKey }));
+await waitFor(() => T.got.find((m) => m.t === 'auth' && m.ok));
+assert.equal((await T.save('l1', [{ type: 'add', event: ev('l1', 'while locked', 24) }])).t, 'ack');
+await sleep(6000);
+assert.equal(puts(id), lockedPuts); assert.ok(!fb.store.get(id).events.some((e) => e.title === 'while locked'));
+await fetch(`${BASE}/api/admin/cal/${id}/unlock`, { method: 'POST', headers: { Authorization: `Bearer ${SECRET}` }, body: '{}' });
+step('a locked calendar is not copied back to Firebase, even after an editor saves');
+
 T.ws.close(); fb.close(); console.log(`\n${n} checks passed`); process.exit(0);

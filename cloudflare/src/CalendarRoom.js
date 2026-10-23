@@ -21,15 +21,25 @@
  *                   {t:'hello'}                           "send me the snapshot again" (after a conflict or reconnect)
  *   server -> tab   {t:'ack', id, v}                      to the sender
  *                   {t:'change', v, commands}             to every other tab
- *                   {t:'error', id, code, message}        refused; nothing was stored
+ *                   {t:'error', id, code, message}        refused; nothing was stored (code 'locked': a Pro lock)
+ *   tab -> server   {t:'auth', key}                       an editor key for a locked calendar (never in a URL)
+ *   server -> tab   {t:'auth', ok, canEdit, locked}       the answer; also sent (ok:false) when that key is rotated
+ * Snapshots also carry {locked, pro, canEdit}: booleans only.
  *
  * HTTP: GET /cal/<id> the calendar (404 = no such calendar); HEAD /cal/<id> same, no body;
  * POST /cal/<id> creates the calendar from {title, options, events} -- ONLY when the room
  * is empty (409 otherwise), names and events validated, size-limited (the Worker also
  * rate-limits it per IP). PUT /cal/<id>/import replaces everything (secret required).
  *
+ * Pro lock: while `lock` holds a row, only the owner (X-PC-User on the WebSocket upgrade, set by
+ * the Worker from a session, never by a client) and sockets that sent the editor key may change
+ * the calendar; every other write path (saves, meta, /import, /from-firebase) is refused. Lock
+ * routes (lock, unlock, rotate-editor-key, lock-status, can-edit, set-view-id) answer only
+ * http://internal/... requests from Worker code; the Worker's public /cal/ forwarder never passes them.
+ *
  * Storage (this object's own SQLite): meta(k, v), events(k, pos, data), history(v, at,
- * source, commands).
+ * source, commands), lock(owner, plan, locked_at, key_hash, key_id). The lock lives apart from
+ * `options` because any tab can write options; its owner and key hash never leave this table.
  */
 import { DurableObject } from 'cloudflare:workers';
 import EventStore from '../../public/services/EventStore.js';
@@ -47,6 +57,28 @@ export const LIMITS = {
 
 const json = (x) => JSON.stringify(x);
 
+// Option keys only the server may decide. Tabs write options through ordinary saves, so a client
+// that sent {pro:true} would hide branding, and {locked:false} would read as unlocked.
+const SERVER_ONLY_OPTIONS = /^(locked|lock|pro|plan|owner|ownerId|editorKey.*)$/i;
+function clientOptions(o) {
+    if (!o || typeof o !== 'object' || Array.isArray(o)) return o;
+    if (!Object.keys(o).some((k) => SERVER_ONLY_OPTIONS.test(k))) return o;
+    return Object.fromEntries(Object.entries(o).filter(([k]) => !SERVER_ONLY_OPTIONS.test(k)));
+}
+
+const LOCK_ROUTES = new Set(['lock', 'unlock', 'rotate-editor-key', 'lock-status', 'can-edit', 'set-view-id']);
+const b64url = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+async function sha256Hex(str) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+// Equal-length hex digests; no early exit, so timing says nothing about how much matched.
+function sameHex(a, b) {
+    if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) return false;
+    let d = 0; for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    return d === 0;
+}
+
 export class CalendarRoom extends DurableObject {
     constructor(ctx, env) {
         super(ctx, env);
@@ -58,6 +90,7 @@ export class CalendarRoom extends DurableObject {
             this.sql.exec(`CREATE TABLE IF NOT EXISTS history (v INTEGER PRIMARY KEY, at INTEGER, source TEXT, commands TEXT, entry TEXT)`);
             try { this.sql.exec(`ALTER TABLE history ADD COLUMN entry TEXT`); } catch (_) {}
             this.sql.exec(`CREATE TABLE IF NOT EXISTS authors (uid TEXT PRIMARY KEY, first_seen INTEGER, last_seen INTEGER, edit_count INTEGER, created_here INTEGER, days TEXT)`);
+            this.sql.exec(`CREATE TABLE IF NOT EXISTS lock (k INTEGER PRIMARY KEY CHECK (k = 1), owner TEXT NOT NULL, plan TEXT, locked_at INTEGER, key_hash TEXT, key_id TEXT)`);
             this.load();
         });
     }
@@ -74,6 +107,8 @@ export class CalendarRoom extends DurableObject {
             lastEditedAt: meta.lastEditedAt || null,
             events: this.sql.exec(`SELECT data FROM events ORDER BY pos`).toArray().map((r) => JSON.parse(r.data)),
         };
+        const l = this.sql.exec(`SELECT owner, plan, locked_at, key_hash, key_id FROM lock`).toArray()[0];
+        this.lock = l ? { ownerId: l.owner, plan: l.plan, lockedAt: l.locked_at, keyHash: l.key_hash, keyId: l.key_id } : null;
     }
     setMeta(k, v) { this.sql.exec(`INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)`, k, json(v)); }
     calendar() {
@@ -87,10 +122,129 @@ export class CalendarRoom extends DurableObject {
         return { id: viewId, title: s.title, options, lastEditedAt: s.lastEditedAt, events: s.events };
     }
 
+    // ---- Pro lock -------------------------------------------------------------------------
+    // A socket's right to write is worked out at each message from what it proved (its
+    // attachment) against the lock as it is NOW, never cached: rotating the key or unlocking
+    // and re-locking changes key_id, so an old key's sockets lose write access at once, even
+    // after hibernation.
+    canWrite(att) {
+        if (att.isViewOnly) return false;
+        const l = this.lock;
+        if (!l) return true;
+        return (!!att.user && att.user === l.ownerId) || (!!att.keyId && att.keyId === l.keyId);
+    }
+    snapshotFor(att) {
+        const cal = att.isViewOnly ? this.viewCalendar(att.viewId) : this.calendar();
+        return { t: 'snapshot', v: this.state.v, calendar: cal, locked: !!this.lock, pro: !!this.lock, canEdit: this.canWrite(att) };
+    }
+    async keyMatches(key) {
+        if (!this.lock || typeof key !== 'string' || !key || key.length > 200) return false;
+        return sameHex(await sha256Hex(key), this.lock.keyHash);
+    }
+    async newEditorKey() {
+        const key = b64url(crypto.getRandomValues(new Uint8Array(16)));    // 128 bits
+        return { key, keyHash: await sha256Hex(key), keyId: crypto.randomUUID() };
+    }
+    // A history row for a lock change, so a group can see why editing stopped (or came back).
+    // No owner and no key: history is served to anyone with the edit name.
+    recordLockChange(kind, label) {
+        const s = this.state, at = Date.now();
+        s.v += 1; this.setMeta('v', s.v);
+        const entry = { savedAt: at, kind, label, removed: 0, changed: 0, added: 0, removedEvents: [], changedEvents: [], addedEvents: [],
+            eventCount: s.events.length, title: s.title, options: s.options, writer: null };
+        this.sql.exec(`INSERT INTO history (v, at, source, commands, entry) VALUES (?, ?, ?, ?, ?)`, s.v, at, kind, json([{ type: kind }]), json(entry));
+        this.sql.exec(`DELETE FROM history WHERE v NOT IN (SELECT v FROM history ORDER BY v DESC LIMIT 50)`);
+        for (const ws of this.ctx.getWebSockets()) { try { ws.send(json(this.snapshotFor(ws.deserializeAttachment() || {}))); } catch { /* gone */ } }
+    }
+
+    async lockRoute(op, request) {
+        const body = request.method === 'POST' ? await request.json().catch(() => ({})) : {};
+        const ownerId = typeof body?.ownerId === 'string' ? body.ownerId.trim() : '';
+        const l = this.lock;
+        const no = (status, error) => Response.json({ ok: false, error }, { status });
+        if (op === 'lock-status') {
+            if (!this.state.id) return no(404, 'not-found');
+            return Response.json({ locked: !!l, ownerId: l ? l.ownerId : null, plan: l ? l.plan : null, lockedAt: l ? l.lockedAt : null });
+        }
+        if (op === 'can-edit') {
+            // For the Worker (create-view): may this caller change the calendar?
+            const canEdit = !l || (!!body.userId && body.userId === l.ownerId) || await this.keyMatches(body.editorKey);
+            return Response.json({ locked: !!l, canEdit });
+        }
+        if (op === 'set-view-id') {
+            // The Worker's create-view, already authorized: records the new read-only link.
+            const publicViewId = typeof body.publicViewId === 'string' ? body.publicViewId : '';
+            if (!this.state.id) return no(404, 'not-found');
+            if (!publicViewId || publicViewId.length > 200) return no(400, 'bad publicViewId');
+            const s = this.state;
+            if (s.options.publicViewId === publicViewId) return Response.json({ ok: true, unchanged: true });
+            const beforeOptions = s.options;
+            s.options = { ...s.options, publicViewId }; this.setMeta('options', s.options);
+            this.bump('meta', [{ type: 'meta', options: { publicViewId } }], { beforeEvents: s.events, beforeTitle: s.title, beforeOptions });
+            this.broadcast({ t: 'meta', v: s.v, title: s.title, options: s.options });
+            await this.scheduleCopyBack();
+            return Response.json({ ok: true, v: s.v });
+        }
+        if (op === 'unlock') {
+            if (!l) return Response.json({ ok: true, alreadyUnlocked: true });
+            if (ownerId && ownerId !== l.ownerId) return no(409, 'locked-by-other');
+            this.sql.exec(`DELETE FROM lock`); this.lock = null;
+            this.recordLockChange('unlocked', 'Unlocked');
+            return Response.json({ ok: true });
+        }
+        if (!ownerId || ownerId.length > 200) return no(400, 'ownerId required');
+        if (op === 'lock') {
+            if (!this.state.id) return no(404, 'not-found');
+            if (l && l.ownerId !== ownerId) return no(409, 'locked-by-other');
+            if (l && !body.rotate) return Response.json({ ok: true, alreadyLocked: true });   // only the hash is kept: no key to return
+            if (l) return this.rotateKey();
+            const plan = typeof body.plan === 'string' && body.plan ? body.plan.slice(0, 32) : 'pro';
+            const k = await this.newEditorKey(), at = Date.now();
+            this.sql.exec(`INSERT INTO lock (k, owner, plan, locked_at, key_hash, key_id) VALUES (1, ?, ?, ?, ?, ?)`, ownerId, plan, at, k.keyHash, k.keyId);
+            this.lock = { ownerId, plan, lockedAt: at, keyHash: k.keyHash, keyId: k.keyId };
+            this.recordLockChange('locked', 'Locked with Pro');
+            return Response.json({ ok: true, editorKey: k.key });
+        }
+        if (op === 'rotate-editor-key') {
+            if (!l) return no(409, 'not-locked');
+            if (l.ownerId !== ownerId) return no(403, 'not-owner');
+            return this.rotateKey();
+        }
+        return no(404, 'not found');
+    }
+    // New key; the old one stops working now. Sockets that used it are told, and drop to read-only.
+    async rotateKey() {
+        const k = await this.newEditorKey(), oldId = this.lock.keyId;
+        this.sql.exec(`UPDATE lock SET key_hash = ?, key_id = ?`, k.keyHash, k.keyId);
+        this.lock = { ...this.lock, keyHash: k.keyHash, keyId: k.keyId };
+        for (const ws of this.ctx.getWebSockets()) {
+            const att = ws.deserializeAttachment() || {};
+            if (att.keyId !== oldId) continue;
+            ws.serializeAttachment({ ...att, keyId: null });
+            try { ws.send(json({ t: 'auth', ok: false, reason: 'key-rotated', locked: true, canEdit: this.canWrite({ ...att, keyId: null }) })); } catch { /* gone */ }
+        }
+        return Response.json({ ok: true, editorKey: k.key });
+    }
+
     async registerInDirectory(actualSlug, isReadOnly = false, targetId = null) {
         if (!this.env.DIRECTORY || !actualSlug) return;
         try {
             const dir = this.env.DIRECTORY.get(this.env.DIRECTORY.idFromName('global'));
+            // Never re-point a name that leads to a LOCKED calendar elsewhere. Registering is an
+            // upsert, so without this anyone could create a calendar carrying a locked calendar's
+            // publicViewId (it is in the view URL) and take over its /view/ link -- or create a
+            // case variant of its name and take over the name's lookups.
+            const target = targetId || actualSlug;
+            const cur = await (await dir.fetch(`http://internal/lookup?slug=${encodeURIComponent(actualSlug)}`)).json().catch(() => ({}));
+            const curTarget = cur && cur.found ? (cur.targetId || cur.actualSlug) : null;
+            if (curTarget && curTarget !== target && this.env.CALENDARS) {
+                const st = await this.env.CALENDARS.get(this.env.CALENDARS.idFromName(curTarget))
+                    .fetch(`http://internal/cal/${encodeURIComponent(curTarget)}/lock-status`);
+                if (st.ok && (await st.json()).locked) {
+                    console.warn(`[CalendarRoom] not re-pointing ${actualSlug}: it leads to a locked calendar`);
+                    return;
+                }
+            }
             await dir.fetch('http://internal/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -231,20 +385,32 @@ export class CalendarRoom extends DurableObject {
         const url = new URL(request.url);
         const viewId = url.searchParams.get('view') || request.headers.get('X-View-Id');
         const isViewOnly = !!viewId;
+        // /cal/<id>[/<suffix>], matched exactly. endsWith('/import') also matched a calendar NAMED
+        // "import" (PUT /cal/import replaced it with no secret), and would do the same for "lock".
+        const [, , , suffix = '', ...rest] = url.pathname.split('/');
+        if (rest.length) return new Response('not found', { status: 404 });
+        if (LOCK_ROUTES.has(suffix)) {
+            // Only Worker code calls these (stub.fetch('http://internal/...')). Public requests are
+            // forwarded with their real host, and the Worker's allowlist never forwards these
+            // suffixes; read-only view forwards use the internal host but always carry ?view=.
+            if (url.hostname !== 'internal' || isViewOnly) return new Response('not found', { status: 404 });
+            return this.lockRoute(suffix, request);
+        }
         if (request.headers.get('Upgrade') === 'websocket') {
             const [client, server] = Object.values(new WebSocketPair());
             this.ctx.acceptWebSocket(server);
             const author = url.searchParams.get('author');
-            server.serializeAttachment({ saves: [], isViewOnly, viewId, author });
-            if (author && !isViewOnly) this.recordAuthor(author, false);
-            const cal = isViewOnly ? this.viewCalendar(viewId) : this.calendar();
-            server.send(json({ t: 'snapshot', v: this.state.v, calendar: cal }));
+            // X-PC-User is trusted: the Worker deletes any a client sent and sets it from a session.
+            const att = { saves: [], isViewOnly, viewId, author, user: isViewOnly ? null : request.headers.get('X-PC-User') || null };
+            server.serializeAttachment(att);
+            if (author && this.canWrite(att)) this.recordAuthor(author, false);
+            server.send(json(this.snapshotFor(att)));
             return new Response(null, { status: 101, webSocket: client });
         }
-        if (request.method === 'POST' && url.pathname.endsWith('/archive')) return Response.json(await this.archiveTestCalendar());
+        if (request.method === 'POST' && suffix === 'archive') return Response.json(await this.archiveTestCalendar());
         if (request.method === 'HEAD') return new Response(null, { status: this.state.id ? 200 : 404 });
         if (request.method === 'GET') {
-            if (url.pathname.endsWith('/history')) {
+            if (suffix === 'history') {
                 const rows = this.sql.exec(`SELECT v, at, source, commands, entry FROM history ORDER BY v DESC LIMIT 20`).toArray();
                 const entries = rows.map((r) => {
                     if (r.entry) {
@@ -262,7 +428,7 @@ export class CalendarRoom extends DurableObject {
                 });
                 return Response.json(entries);
             }
-            if (url.pathname.endsWith('/authors')) {
+            if (suffix === 'authors') {
                 const rows = this.sql.exec(`SELECT uid, first_seen, last_seen, edit_count, created_here, days FROM authors`).toArray();
                 const authors = rows.map((r) => ({
                     uid: r.uid,
@@ -282,9 +448,9 @@ export class CalendarRoom extends DurableObject {
             }
             if (!this.state.id) return Response.json({ error: 'not found' }, { status: 404 });
             const cal = isViewOnly ? this.viewCalendar(viewId) : this.calendar();
-            return Response.json({ v: this.state.v, calendar: cal });
+            return Response.json({ v: this.state.v, calendar: cal, locked: !!this.lock, pro: !!this.lock });
         }
-        if (request.method === 'POST' && !url.pathname.endsWith('/import')) {
+        if (request.method === 'POST' && suffix === '') {
             const text = await request.text();
             if (text.length > LIMITS.maxCreate) return Response.json({ ok: false, error: 'too big' }, { status: 413 });
             let cal; try { cal = JSON.parse(text); } catch { return Response.json({ ok: false, error: 'bad json' }, { status: 400 }); }
@@ -293,14 +459,17 @@ export class CalendarRoom extends DurableObject {
             if (r.ok) await this.scheduleCopyBack();
             return Response.json(r, { status: r.ok ? 201 : r.status });
         }
-        if (request.method === 'PUT' && url.pathname.endsWith('/import')) {
+        if (request.method === 'PUT' && suffix === 'import') {
             // Whole-calendar replace: the Firebase shadow copy, and the one-time load.
             const cal = await request.json();
-            return Response.json(this.importCalendar(cal));
+            const r = this.importCalendar(cal);
+            return Response.json(r, { status: r.status || 200 });
         }
-        if (request.method === 'PUT' && url.pathname.endsWith('/from-firebase')) {
+        if (request.method === 'PUT' && suffix === 'from-firebase') {
             // A live Firebase write: merged onto the current state, never a blind replace.
-            return Response.json(this.fromFirebase(await request.json()));
+            // Locked: refused with ok:false and an error, which the Firebase function logs and does not retry.
+            const r = this.fromFirebase(await request.json());
+            return Response.json(r, { status: r.status || 200 });
         }
         return new Response('not found', { status: 404 });
     }
@@ -337,7 +506,7 @@ export class CalendarRoom extends DurableObject {
         if (!cal || typeof cal !== 'object') return { ok: false, status: 400, error: 'bad calendar' };
         const title = cal.title ?? '';
         if (typeof title !== 'string' || title.length > LIMITS.maxTitle) return { ok: false, status: 400, error: 'bad title' };
-        const options = cal.options ?? {};
+        const options = clientOptions(cal.options ?? {});
         if (typeof options !== 'object' || Array.isArray(options) || json(options).length > LIMITS.maxField * 5) {
             return { ok: false, status: 400, error: 'bad options' };
         }
@@ -356,6 +525,9 @@ export class CalendarRoom extends DurableObject {
     }
 
     importCalendar(cal, source = 'import') {
+        // A locked calendar is replaced by no one: /import is the Firebase shadow, and Firebase is world-writable.
+        if (this.lock) return { ok: false, status: 423, error: 'locked' };
+        cal = { ...cal, options: clientOptions(cal.options) };
         const { events, renamed } = this.dedupe(cal);
         const why = this.tooBig(events);
         if (why) return { ok: false, error: why };
@@ -388,7 +560,9 @@ export class CalendarRoom extends DurableObject {
     // Values are copied raw, never normalized (see dedupe).
     fromFirebase(cal) {
         const s = this.state;
+        if (this.lock) return { ok: false, status: 423, error: 'locked' };   // Firebase is world-writable: no bypass through it
         if (!s.id) return this.importCalendar(cal);                      // first sight: a plain copy
+        cal = { ...cal, options: clientOptions(cal.options) };
         const { events: incoming, renamed } = this.dedupe(cal);
         const title = cal.title ?? '', options = cal.options || {};
         // Rooms imported before `mirrored` existed: the import is the baseline.
@@ -473,6 +647,9 @@ export class CalendarRoom extends DurableObject {
     copyBackAllowed() {
         const id = this.state.id, list = String(this.env.COPY_BACK || '').split(',').map((x) => x.trim()).filter(Boolean);
         if (!id || !this.env.FIREBASE_DB_URL) return false;
+        // Locked calendars stop mirroring to Firebase: anyone can write there, and its edits are
+        // refused here anyway (fromFirebase). Covers both scheduling and the alarm itself.
+        if (this.lock) return false;
         if (!this.firebaseLocal() && !this.env.FIREBASE_SA) return false;
         return list.some((p) => p === '*' || (p.endsWith('*') ? id.startsWith(p.slice(0, -1)) : id === p));
     }
@@ -504,7 +681,7 @@ export class CalendarRoom extends DurableObject {
             { httpMetadata: { contentType: 'application/json' }, customMetadata: { id } });
         for (const ws of this.ctx.getWebSockets()) { try { ws.close(1000, 'archived'); } catch { /* gone */ } }
         await this.ctx.storage.deleteAlarm();
-        this.sql.exec('DELETE FROM events'); this.sql.exec('DELETE FROM meta'); this.sql.exec('DELETE FROM history');
+        this.sql.exec('DELETE FROM events'); this.sql.exec('DELETE FROM meta'); this.sql.exec('DELETE FROM history'); this.sql.exec('DELETE FROM lock');
         this.mirrored = null;
         this.load();                                                    // now empty: GET answers 404
         if (this.env.DIRECTORY) {
@@ -603,9 +780,21 @@ export class CalendarRoom extends DurableObject {
         if (tab.isViewOnly && (m.t === 'save' || m.t === 'meta')) {
             return refuse('read_only', 'this link is read-only');
         }
+        // Before the rate limit and author tally: a refused tab must not use up the calendar's
+        // shared save budget (that would lock out the owner) or count as an author.
+        if ((m.t === 'save' || m.t === 'meta') && !this.canWrite(tab)) {
+            return refuse('locked', 'This calendar is locked. Only its owner and people with an editor key can change it.');
+        }
+        if (m.t === 'auth') {
+            // An editor key, sent over the socket: never in a URL, which logs and analytics record.
+            const ok = !tab.isViewOnly && await this.keyMatches(m.key);
+            const next = ok ? { ...tab, keyId: this.lock.keyId } : tab;
+            if (ok) ws.serializeAttachment(next);
+            return ws.send(json({ t: 'auth', ok, locked: !!this.lock, canEdit: this.canWrite(next) }));
+        }
 
         const author = m.author || tab.author;
-        if (author && !tab.isViewOnly) this.recordAuthor(author, false);
+        if (author && this.canWrite(tab)) this.recordAuthor(author, false);
 
         if (m.t === 'save' || m.t === 'meta') {
             const rate = this.overRate(ws);
@@ -648,7 +837,7 @@ export class CalendarRoom extends DurableObject {
                 s.title = m.title; this.setMeta('title', s.title); changed = true;
             }
             if (m.options && typeof m.options === 'object') {
-                const next = { ...s.options, ...m.options };           // keys merge (publicViewId survives)
+                const next = { ...s.options, ...clientOptions(m.options) };   // keys merge (publicViewId survives)
                 if (json(next).length > LIMITS.maxField * 5) return refuse('too_big', 'settings too large');
                 if (json(next) !== json(s.options)) { s.options = next; this.setMeta('options', next); changed = true; }
             }
@@ -662,8 +851,7 @@ export class CalendarRoom extends DurableObject {
         if (m.t === 'hello') {
             // A reconnecting tab says which version it has; the snapshot was already sent on
             // connect, so this is only for the future "changes since v" optimization.
-            const cal = tab.isViewOnly ? this.viewCalendar(tab.viewId) : this.calendar();
-            return ws.send(json({ t: 'snapshot', v: this.state.v, calendar: cal }));
+            return ws.send(json(this.snapshotFor(tab)));
         }
         refuse('unknown', `unknown message ${m.t}`);
     }
@@ -680,10 +868,10 @@ export class CalendarRoom extends DurableObject {
             if (s === except) continue;
             try {
                 const att = s.deserializeAttachment() || {};
-                if (att.isViewOnly) {
-                    if (msg.t === 'snapshot') {
-                        s.send(json({ ...msg, calendar: this.viewCalendar(att.viewId) }));
-                    } else if (msg.t === 'meta') {
+                if (msg.t === 'snapshot') {
+                    s.send(json(this.snapshotFor(att)));                // per tab: view copy, canEdit
+                } else if (att.isViewOnly) {
+                    if (msg.t === 'meta') {
                         const options = { ...(msg.options || {}) };
                         delete options.publicViewId;
                         s.send(json({ ...msg, options }));
