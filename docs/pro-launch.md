@@ -1,7 +1,8 @@
 # pastecal Pro: launch runbook
 
-Run the sections in order. Every command fits on one line and is safe to paste into zsh. A line
-starting with `#` is a note, not a command. Prices: **$24/year and $2.99/month, no trial.**
+**Run order (not the section order):** a → b → c1–c4 → e1–e3 (deploy, then smoke test with billing off) → d1–d4 (turn billing on) → the second smoke test in e3 → f. Section g is for emergencies.
+
+Every command fits on one line and is safe to paste into zsh. Prices: **$24/year and $2.99/month, no trial.**
 
 What ships: Worker `pastecal-sync` from the `pro` branch. It adds:
 
@@ -118,7 +119,7 @@ stripe listen --forward-to localhost:8787/api/stripe/webhook --events checkout.s
 
    After payment, Stripe redirects to the hard-coded `https://pastecal.com/pro/done…`. Locally that page is irrelevant: the webhook in terminal 2 is what locks the calendar. Confirm in the `stripe listen` output that each event got `[200]`, and that the calendar now shows as locked at `http://localhost:8787`.
 
-**The first checkout must succeed.** Checkout sets `expires_at` to exactly 30 minutes from the Worker's clock (`CHECKOUT_HOLD_MS`). Stripe's documented minimum is 30 minutes after session creation, so clock or network delay could make Stripe refuse it. The failure looks like this: the browser gets `502 stripe-error`, and `wr tail` shows `[accounts] checkout session failed: 400 parameter_invalid_integer` (or similar). If you see it, the hold must grow (e.g. to 31 minutes) in code before launch. The automated tests use a fake Stripe and do not prove this.
+**The first checkout must succeed.** Checkout sets `expires_at` to exactly 30 minutes from the Worker's clock (`CHECKOUT_HOLD_MS`). Stripe's documented minimum is 30 minutes after session creation, so clock or network delay could make Stripe refuse it. The failure looks like this: the browser gets `502 stripe-error`, and the `wr dev` terminal shows `[accounts] checkout session failed: 400 <code>`. Confirm it is this problem in the Dashboard (Developers → Logs → that request): the error names `expires_at`. If you see it, the hold must grow (e.g. to 31 minutes) in code before launch. The automated tests use a fake Stripe and do not prove this.
 
 Test cards: any future expiry, any CVC, any ZIP.
 
@@ -156,7 +157,7 @@ The read-only preview (`cf email-sending subdomains preview -z pastecal.com --na
 
 None of these names is the apex, so Email Routing's MX and SPF are untouched.
 
-**Decision before b1, about the DMARC record.** `p=reject` on `pastecal.com` makes receivers reject any mail *From: @pastecal.com* that is not sent through Cloudflare. A real case: replying as `support@pastecal.com` from Gmail ("Send mail as"). If you do that, or might, set the record to `v=DMARC1; p=none; rua=mailto:support@pastecal.com` after b1 (Dashboard → DNS → edit `_dmarc`). If nothing else ever sends as @pastecal.com, keep `p=reject`.
+**Decision before b1, about the DMARC record.** `p=reject` on `pastecal.com` makes receivers reject any mail *From: @pastecal.com* that is not sent through Cloudflare. A real case: replying as `support@pastecal.com` from Gmail ("Send mail as"). If you do that, or might, set the record to `v=DMARC1; p=none; rua=mailto:support@pastecal.com` after b1 (Dashboard → DNS → edit `_dmarc`). Unverified: Cloudflare may lock the records it creates for email (the `dns fix` help mentions an "email_routing lock"), so check that the record can be edited before you rely on this. If nothing else ever sends as @pastecal.com, keep `p=reject`.
 
 ### b1. Onboard
 
@@ -253,7 +254,7 @@ The endpoint's signing secret (`whsec_…`) is returned **only once, when the en
 
 ---
 
-## (d) Worker secrets (run from `~/worktrees/pastecal-pro/cloudflare`, live Stripe context)
+## (d) Worker secrets: run after (e), from `~/worktrees/pastecal-pro/cloudflare`, in the live Stripe context
 
 `wr secret put NAME` reads the value from a hidden prompt, or from a pipe (the docs say "The `put` command can also receive piped input"). Either way the value never shows on screen. Each `put` takes effect immediately on the deployed Worker.
 
