@@ -50,9 +50,11 @@ test('linkify: wraps a bare https URL in an anchor with the right href', () => {
   assert.match(out, /target="_blank"/);
 });
 
-test('linkify: sets rel="noopener noreferrer" on target=_blank links (reverse-tabnabbing guard)', () => {
-  const out = Utils.linkify('See https://example.com/x');
-  assert.match(out, /rel="noopener noreferrer"/);
+test('linkify: sets rel="ugc nofollow noopener noreferrer" on target=_blank links (reverse-tabnabbing guard, user content)', () => {
+  const out = Utils.linkify('See https://example.com/x and www.example.org');
+  const rels = out.match(/rel="[^"]*"/g);
+  assert.deepEqual(rels, ['rel="ugc nofollow noopener noreferrer"', 'rel="ugc nofollow noopener noreferrer"']);
+  assert.equal(out.match(/target="_blank"/g).length, 2);
 });
 
 test('linkify: applies visible link styling so it does not blend into plain text', () => {

@@ -902,6 +902,9 @@ div#Schedule,
 .pc-draft-note > span { color: var(--pc-text-muted) }
 .pc-draft-note b { color: var(--pc-text) }
 .pc-draft-note a { margin-left: auto; color: var(--pc-link) }
+.pc-hosted-note { margin: 6px 4px 0; font-size: 12px; color: var(--pc-text-muted); text-align: right }
+.pc-hosted-note a { color: var(--pc-text-muted); text-decoration: underline }
+.pc-hosted-note a:hover { color: var(--pc-link) }
 .pc-share-pulse { animation: pc-share-pulse 1.5s ease-out 2 }
 @keyframes pc-share-pulse { 0% { box-shadow: 0 0 0 0 rgba(37, 99, 235, .6) } 100% { box-shadow: 0 0 0 12px rgba(37, 99, 235, 0) } }
 @media (prefers-reduced-motion: reduce) { .pc-grid-tip, .pc-share-pulse { animation: none } }
