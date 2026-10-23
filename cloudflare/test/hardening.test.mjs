@@ -125,5 +125,42 @@ function tab(id) {
     step('save/meta over a socket to an uncreated calendar: refused (no_calendar), nothing stored; POST then works');
 }
 
+// ---- 4. read-only links: real source, no stealing a calendar's name, rate-limited ---------
+{
+    const view = (body, route = '/api/create-view') => fetch(`${BASE}${route}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(route === '/createPublicLink' ? { data: body } : body) });
+    const ghost = `testhardghost${Date.now()}`;
+    let r = await view({ sourceCalendarId: ghost });
+    assert.equal(r.status, 404); assert.equal((await r.json()).error, 'not-found');
+    r = await view({ sourceCalendarId: ghost, customSlug: `${ghost}v` }, '/createPublicLink');
+    assert.equal(r.status, 404); assert.equal((await r.json()).error.error, 'not-found');
+    const lk = await (await fetch(`${BASE}/api/lookup?slug=${ghost}v`)).json();
+    assert.equal(lk.found, false, 'nothing registered for a calendar that does not exist');
+    step('a read-only link for a calendar that does not exist is refused (404) and registers nothing');
+
+    const src = `testhardsrc${Date.now()}`, other = `TestHardOther${Date.now()}`;
+    assert.equal((await create(src, { title: 's', events: [] })).status, 201);
+    assert.equal((await create(other, { title: 'o', events: [] })).status, 201);
+    for (const slug of [other, other.toLowerCase(), other.toUpperCase()]) {
+        r = await view({ sourceCalendarId: src, customSlug: slug });
+        assert.equal(r.status, 409, `customSlug ${slug} names an existing calendar`);
+        assert.equal((await r.json()).error, 'already-exists');
+    }
+    r = await view({ sourceCalendarId: src, customSlug: other }, '/createPublicLink');
+    assert.equal(r.status, 409); assert.equal((await r.json()).error.error, 'already-exists');
+    assert.equal((await (await fetch(url(other))).json()).calendar.id, other, 'the other calendar is untouched');
+    step('a custom read-only name equal (any case) to an existing calendar is refused with the 409 shape');
+
+    r = await view({ sourceCalendarId: src });
+    assert.equal(r.status, 200); const made = await r.json();
+    assert.equal(made.ok, true); assert.ok(made.publicViewId.length >= 10);
+    step('a read-only link for a real calendar is still created');
+
+    // Per-IP rate limit (CREATE_LIMITER, key view:<ip>, 10 a minute).
+    const statuses = [];
+    for (let i = 0; i < 12; i++) statuses.push((await view({ sourceCalendarId: src })).status);
+    assert.ok(statuses.includes(429), `expected a 429 among ${statuses}`);
+    step('creating read-only links is rate-limited per IP');
+}
+
 console.log('hardening tests passed');
 process.exit(0);

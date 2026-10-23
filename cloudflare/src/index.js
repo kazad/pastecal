@@ -180,6 +180,26 @@ export default {
             const customSlug = payload?.customSlug;
             const dir = getDirectory(env);
             if (!dir) return Response.json({ ok: false, error: 'Directory unavailable' }, { status: 500 });
+            const fail = (status, out) => withCors(Response.json(path === '/createPublicLink' ? { error: out } : out, { status }));
+
+            // Rate-limited per IP (its own key, so it never eats the budget for new calendars).
+            if (env.CREATE_LIMITER) {
+                const { success } = await env.CREATE_LIMITER.limit({ key: 'view:' + (request.headers.get('CF-Connecting-IP') || 'unknown') });
+                if (!success) return fail(429, { ok: false, error: 'resource-exhausted', message: 'Too many read-only links from here; try again in a minute' });
+            }
+            // Before anything is written: the source must be a real calendar, and a custom name must not
+            // be a calendar's name (rooms are exact-case, so check what was typed and its stored lowercase form).
+            const hasCalendar = async (name) => validId(name)
+                && (await env.CALENDARS.get(env.CALENDARS.idFromName(name)).fetch(`http://internal/cal/${encodeURIComponent(name)}`, { method: 'HEAD' })).status === 200;
+            if (typeof sourceCalendarId !== 'string' || !(await hasCalendar(sourceCalendarId))) {
+                return fail(404, { ok: false, error: 'not-found', message: 'Calendar not found' });
+            }
+            if (customSlug) {
+                const typed = String(customSlug).trim();
+                for (const name of new Set([typed, typed.toLowerCase()])) {
+                    if (await hasCalendar(name)) return fail(409, { ok: false, error: 'already-exists', message: 'Slug is already taken' });
+                }
+            }
 
             const dirRes = await dir.fetch('http://internal/create-view', {
                 method: 'POST',
