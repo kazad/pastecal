@@ -27,7 +27,10 @@
  *
  * ACCOUNTS_DEV_MODE=1 (only ever in .dev.vars or --var, never in wrangler.jsonc) is for local tests:
  * it allows http://localhost origins, writes sign-in emails to an outbox instead of sending them,
- * lets STRIPE_API_BASE / LOCK_API_BASE point at local fakes, and opens two admin test hooks.
+ * lets STRIPE_API_BASE / LOCK_API_BASE point at local fakes, and opens three admin test hooks:
+ *   GET  /api/admin/accounts/outbox?email=, POST /api/admin/accounts/expire-tokens {email},
+ *   POST /api/admin/accounts/dev-subscription {email, calendarId, status?, interval?, currentPeriodEnd?}
+ *        (a subscription row without Stripe, so /api/me lists the calendar; no lock is changed).
  */
 import { DurableObject } from 'cloudflare:workers';
 import { LockClient } from './LockClient.js';
@@ -520,6 +523,18 @@ async function handleAdmin(request, env, url, path) {
         const body = (await readJson(request)) || {};
         await acc.expireLoginTokens(String(body.email || '').toLowerCase());
         return json({ ok: true });
+    }
+    if (devMode(env) && path === '/api/admin/accounts/dev-subscription' && request.method === 'POST') {
+        const body = (await readJson(request)) || {};
+        const email = String(body.email || '').trim().toLowerCase();
+        if (!validId(body.calendarId) || !validEmail(email)) return json({ error: 'need calendarId and email' }, 400);
+        const status = typeof body.status === 'string' && /^[a-z_]{1,30}$/.test(body.status) ? body.status : 'active';
+        const userId = await acc.ensureUser(email);
+        const id = 'sub_dev_' + body.calendarId.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 40) + '_' + userId.slice(-8);
+        await acc.upsertSubscription({ id, userId, calendarId: body.calendarId, status,
+            interval: body.interval === 'month' ? 'month' : 'year',
+            currentPeriodEnd: Number.isFinite(body.currentPeriodEnd) ? body.currentPeriodEnd : Math.floor(Date.now() / 1000) + 365 * 86400 });
+        return json({ ok: true, userId, subscriptionId: id });
     }
     return json({ error: 'not-found' }, 404);
 }

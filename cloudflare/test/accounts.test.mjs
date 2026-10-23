@@ -115,4 +115,21 @@ assert.equal(look.user.email, ann); assert.match(look.user.id, /^u_/); assert.de
 assert.ok(!JSON.stringify(look).includes(cookie.split('=')[1]), 'no session token in the lookup');
 step('admin lookup and the test outbox need the secret');
 
+const eve = `eve-${run}@example.com`;
+await post('/api/auth/start', { email: eve });
+r = await post('/api/auth/verify', { token: await lastToken(eve) });
+const eveCookie = r.headers.get('set-cookie').split(';')[0];
+const devSub = (body, init = {}) => fetch(BASE + '/api/admin/accounts/dev-subscription', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(init.headers || {}) }, body: JSON.stringify(body) });
+assert.equal((await devSub({ email: eve, calendarId: `eve-cal-${run}` })).status, 403);
+r = await devSub({ email: eve, calendarId: `eve-cal-${run}` }, { headers: { Authorization: `Bearer ${SECRET}` } });
+assert.equal(r.status, 200);
+r = await devSub({ email: eve, calendarId: `eve-late-${run}`, status: 'past_due', interval: 'month', currentPeriodEnd: 1900000000 }, { headers: { Authorization: `Bearer ${SECRET}` } });
+assert.equal(r.status, 200);
+const eveMe = await (await me(eveCookie)).json();
+const byId = Object.fromEntries(eveMe.calendars.map((c) => [c.id, c]));
+assert.equal(byId[`eve-cal-${run}`].status, 'active'); assert.equal(byId[`eve-cal-${run}`].interval, 'year');
+assert.ok(byId[`eve-cal-${run}`].currentPeriodEnd > Date.now() / 1000);
+assert.equal(byId[`eve-late-${run}`].status, 'past_due'); assert.equal(byId[`eve-late-${run}`].currentPeriodEnd, 1900000000);
+step('dev-subscription (dev mode + secret) adds a subscription row that /api/me lists');
+
 console.log(`\n${n} checks passed`); process.exit(0);

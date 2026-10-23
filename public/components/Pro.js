@@ -312,6 +312,7 @@ const ProPanel = {
         async signOut() {
             await proApi('POST', '/api/auth/signout', {});
             this.me = null; this.step = 'idle'; this.editorLink = '';
+            if (typeof AccountMenu !== 'undefined') AccountMenu.reset();   // the logo menu fetches again
             this.refresh();
         },
     },

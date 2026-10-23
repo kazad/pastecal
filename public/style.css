@@ -1004,6 +1004,40 @@ div#Schedule,
 .pc-nav-label { margin: 6px 4px 0; padding: 10px 6px 4px }
 .pc-nav-empty { margin: 6px 4px 0; padding: 10px 6px 4px; line-height: 1.45 }
 .pc-nav a, .pc-nav a:hover { text-decoration: none }
+/* A Pro pill after a calendar's title, and the Pro account section at the bottom of the menu */
+.pc-nav-title { display: flex; align-items: center; gap: var(--pc-space-2); min-width: 0 }
+.pc-nav-pro { flex: none; padding: 0 7px; border-radius: var(--pc-radius-pill); background: var(--pc-soft); color: var(--pc-text-2); font-size: var(--pc-fs-caption); font-weight: var(--pc-fw-semibold); line-height: 18px }
+.pc-acct { margin: 6px 4px 0; padding: 10px 6px 4px; font-family: var(--pc-font); color: var(--pc-text) }
+.pc-acct-line, .pc-acct-email, .pc-acct-cal-status, .pc-acct-form label, .pc-acct-err { font-size: var(--pc-fs-small) }
+.pc-acct-muted { color: var(--pc-text-muted) }
+.pc-acct-line { display: block; margin: 0; padding: 2px 0; line-height: var(--pc-lh-body) }
+.pc-acct-head { display: flex; flex-direction: column; gap: 1px; margin-bottom: var(--pc-space-1) }
+.pc-acct-label { font-size: 12px; font-weight: var(--pc-fw-semibold); color: var(--pc-text-muted) }
+.pc-acct-email { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.pc-acct-cal { display: flex; flex-direction: column; margin: 0 -6px; padding: 6px; border-radius: var(--pc-radius-sm); color: var(--pc-text) }
+.pc-acct-cal:hover { background: var(--pc-hover) }
+.pc-acct-cal:hover .pc-acct-cal-title { color: var(--pc-link) }
+.pc-acct-cal-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--pc-fw-medium) }
+.pc-acct-cal-status { color: var(--pc-text-muted) }
+.pc-acct-cal-status--warn { color: var(--pc-warning); font-weight: var(--pc-fw-medium) }
+.pc-acct-actions { display: flex; align-items: center; gap: var(--pc-space-3); margin-top: var(--pc-space-2) }
+.pc-acct-btn { display: inline-flex; align-items: center; min-height: 32px; padding: 0 12px; border: 1px solid var(--pc-field); border-radius: var(--pc-radius-md); background: transparent; color: var(--pc-text); font: var(--pc-fw-semibold) var(--pc-fs-small) var(--pc-font); cursor: pointer; white-space: nowrap }
+.pc-acct-btn:hover:not(:disabled) { background: var(--pc-hover) }
+.pc-acct-btn--primary { border-color: var(--pc-link); background: var(--pc-link); color: var(--pc-bg) }
+.pc-acct-btn--primary:hover:not(:disabled) { background: var(--pc-link-hover) }
+.pc-acct-btn:disabled, .pc-acct-link:disabled { opacity: .6; cursor: default }
+.pc-acct-link { padding: 0; border: 0; background: none; color: var(--pc-link); font: inherit; cursor: pointer; text-align: left }
+.pc-acct-link:hover:not(:disabled) { color: var(--pc-link-hover); text-decoration: underline }
+.pc-acct-line.pc-acct-link { color: var(--pc-text-muted) }
+.pc-acct-line.pc-acct-link:hover { color: var(--pc-link) }
+.pc-acct-btn:focus-visible, .pc-acct-link:focus-visible, .pc-acct-cal:focus-visible { outline: 2px solid var(--pc-link); outline-offset: 2px }
+.pc-acct-form label { display: block; margin-bottom: var(--pc-space-1); line-height: var(--pc-lh-tight) }
+.pc-acct-row { display: flex; gap: var(--pc-space-2) }
+.pc-acct-row input { flex: 1 1 auto; min-width: 0; height: 32px; padding: 0 8px; border: 1px solid var(--pc-field); border-radius: var(--pc-radius-md); background: var(--pc-bg); color: var(--pc-text); font: var(--pc-fs-body) var(--pc-font) }
+@media (max-width: 640px) { .pc-acct-row input { font-size: var(--pc-fs-lead) } }   /* 16px: iOS zooms smaller fields */
+.pc-acct-row input:focus { outline: none; border-color: var(--pc-link); box-shadow: 0 0 0 1px var(--pc-link) }
+.pc-acct-ok { color: var(--pc-success) }
+.pc-acct-err { margin: var(--pc-space-1) 0 0; color: var(--pc-danger); line-height: var(--pc-lh-tight) }
 .pc-home-links { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0 }
 .pc-demo-code { color: inherit; text-decoration: underline; text-decoration-color: var(--pc-line); text-underline-offset: 3px }
 .pc-demo-code:hover { text-decoration-color: currentColor }

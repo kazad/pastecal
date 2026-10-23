@@ -1,5 +1,67 @@
 // NavigationDropdown component
-// "New calendar", then your calendars and recently visited ones, with pin/remove controls
+// "New calendar", then your calendars and recently visited ones, with pin/remove controls,
+// then the Pro account section at the bottom.
+//
+// Only Pro owners have accounts, so there is no sign-in button anywhere else: free users never
+// need one. Signed in, the section lists the owner's Pro calendars with billing and sign-out;
+// signed out, it is one quiet "Pro owner? Sign in" line. Talks to this site's JSON API (cookie
+// session, cloudflare/src/Accounts.js): GET /api/me, POST /api/auth/start, /api/auth/signout,
+// /api/pro/portal. Analytics get the state only: never the email or a calendar name.
+
+// Shared by both header instances and kept across opens: the menu is v-if'd, so it is destroyed
+// on every close, and a "Check your email" must not vanish when the mouse drifts off it.
+const ACCOUNT_ACTIVE = ['active', 'trialing', 'past_due'];
+const AccountMenu = {
+    state: (typeof Vue !== 'undefined' && Vue.reactive ? Vue.reactive : (x) => x)({
+        status: 'idle',   // idle | loading | in | out
+        me: null,         // /api/me while signed in
+        step: 'idle',     // signed out: idle | email | sent
+        email: '',
+        busy: false,
+        error: '',        // a short message for the section, never blocking the menu
+        shown: false,     // accountMenuShown fires once per page
+        retry: false,     // /api/me failed (not a 401): fetch again on the next open
+    }),
+    async api(method, path, body) {
+        const init = { method, credentials: 'same-origin', headers: {} };
+        if (body !== undefined) { init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(body); }
+        let res;
+        try { res = await fetch(path, init); } catch (e) { return { status: 0, data: {} }; }
+        const data = await res.json().catch(() => ({}));
+        return { status: res.status, data };
+    },
+    track(fn) {
+        try {
+            if (typeof track === 'function') track(fn);
+            else if (typeof Analytics !== 'undefined' && Analytics) fn(Analytics);
+        } catch (e) { /* observational only */ }
+    },
+    // GET /api/me once per page (the first time the menu opens); load(true) after a sign-out.
+    async load(force) {
+        const st = this.state;
+        if (!force && st.status !== 'idle' && !(st.retry && st.status === 'out' && st.step === 'idle')) return;
+        st.status = 'loading'; st.error = ''; st.retry = false;
+        const r = await this.api('GET', '/api/me');
+        if (r.status === 200) { st.me = r.data; st.status = 'in'; }
+        else if (r.status === 401) { st.me = null; st.status = 'out'; }
+        // Anything else (offline, a server error): most people opening this menu have no account,
+        // so don't tell them one failed to load. Show the quiet line and try again next open.
+        else { st.me = null; st.status = 'out'; st.retry = true; }
+        if (!st.shown && !st.retry) {
+            st.shown = true;
+            const state = st.status === 'in' ? 'signed_in' : 'signed_out';
+            this.track(a => a.accountMenuShown(state));
+        }
+    },
+    // Someone signed in or out elsewhere on the page (the share dialog): fetch again next open.
+    reset() {
+        Object.assign(this.state, { status: 'idle', me: null, step: 'idle', busy: false, error: '', retry: false });
+    },
+};
+if (typeof window !== 'undefined') window.AccountMenu = AccountMenu;
+
+const NAV_NETWORK_ERROR = 'We couldn’t reach pastecal. Check your connection and try again.';
+
 const NavigationDropdown = {
     template: /* html */ `
         <div class="pc-nav absolute top-full left-0 mt-2 bg-1 shadow-xl border border-color-default overflow-hidden z-50">
@@ -26,8 +88,9 @@ const NavigationDropdown = {
                     <div v-for="item in group.items" :key="item.id"
                         class="pc-nav-row flex justify-between items-center hover:bg-theme-hover transition-colors group">
                         <a :href="item.path" class="flex-1 min-w-0 mr-3">
-                            <div class="text-color-2 font-medium truncate group-hover:text-blue-500 transition-colors">
-                                {{ item.title }}
+                            <div class="pc-nav-title text-color-2 font-medium group-hover:text-blue-500 transition-colors">
+                                <span class="truncate">{{ item.title }}</span>
+                                <span v-if="item.pro" class="pc-nav-pro" data-testid="nav-pro-pill">Pro</span>
                             </div>
                             <div class="text-xs text-color-1 truncate">
                                 {{ item.address }}<template v-if="item.view"> · view only</template>
@@ -67,19 +130,134 @@ const NavigationDropdown = {
             <p v-if="recentCalendars.length === 0" class="pc-nav-empty border-t border-color-default text-sm text-color-1">
                 Calendars you open or save show up here, so you can find them again.
             </p>
+
+            <!-- Pro account: only owners have one, so signed out it is a single quiet line -->
+            <!-- click.stop like the pin buttons: both headers' v-click-outside would close the menu -->
+            <div class="pc-acct border-t border-color-default" data-testid="account-section" @click.stop>
+                <p v-if="acct.status === 'idle' || acct.status === 'loading'" class="pc-acct-muted pc-acct-line" aria-live="polite">Loading…</p>
+
+                <template v-else-if="acct.status === 'in'">
+                    <div class="pc-acct-head">
+                        <span class="pc-acct-label">Pro account</span>
+                        <span class="pc-acct-muted pc-acct-email" data-testid="account-email">{{ acct.me.email }}</span>
+                    </div>
+                    <a v-for="c in proCalendars" :key="c.id" :href="c.path" class="pc-acct-cal" data-testid="account-calendar">
+                        <span class="pc-acct-cal-title">{{ c.title }}</span>
+                        <span class="pc-acct-cal-status" :class="{ 'pc-acct-cal-status--warn': c.problem }">{{ c.label }}</span>
+                    </a>
+                    <p v-if="proCalendars.length === 0" class="pc-acct-muted pc-acct-line">No Pro calendars right now.</p>
+                    <div class="pc-acct-actions">
+                        <button type="button" class="pc-acct-btn" @click="portal" :disabled="acct.busy" data-testid="account-billing">Manage billing</button>
+                        <button type="button" class="pc-acct-link" @click="signOut" :disabled="acct.busy" data-testid="account-signout">Sign out</button>
+                    </div>
+                </template>
+
+                <template v-else-if="acct.status === 'out'">
+                    <p v-if="acct.step === 'sent'" class="pc-acct-ok pc-acct-line" data-testid="account-sent">Check your email for a sign-in link.</p>
+                    <form v-else-if="acct.step === 'email'" class="pc-acct-form" @submit.prevent="sendLink" data-testid="account-email-form">
+                        <label for="pc-acct-email" class="pc-acct-muted">Use the email you paid with. No password.</label>
+                        <div class="pc-acct-row">
+                            <input id="pc-acct-email" ref="email" type="email" v-model.trim="acct.email" required
+                                autocomplete="email" placeholder="you@example.com" @keydown.esc.stop="acct.step = 'idle'">
+                            <button type="submit" class="pc-acct-btn pc-acct-btn--primary" :disabled="acct.busy">{{ acct.busy ? 'Sending…' : 'Send link' }}</button>
+                        </div>
+                    </form>
+                    <button v-else type="button" class="pc-acct-link pc-acct-line" @click="startSignIn" data-testid="account-signin">Pro owner? Sign in</button>
+                </template>
+
+                <p v-if="acct.error" class="pc-acct-err" role="alert" data-testid="account-error">{{ acct.error }}</p>
+            </div>
         </div>
     `,
     props: ['recentCalendars'],
     emits: ['go-homepage', 'toggle-pin', 'remove-recent'],
+    data() { return { acct: AccountMenu.state }; },
+    mounted() { AccountMenu.load(); },     // never blocks opening: the section shows its own loading line
     computed: {
+        // Calendars this account pays for, lowercased id -> /api/me row.
+        proById() {
+            const map = new Map();
+            const cals = (this.acct.status === 'in' && this.acct.me && this.acct.me.calendars) || [];
+            for (const c of cals) if (c && c.id) map.set(String(c.id).toLowerCase(), c);
+            return map;
+        },
+        proCalendars() {
+            const titles = new Map((this.recentCalendars || []).filter(r => !r.view && !/ \(View Only\)$/.test(r.title || ''))
+                .map(r => [String(r.id).toLowerCase(), RecentCalendars.display(r).title]));
+            const now = Date.now();
+            const out = [];
+            for (const c of this.proById.values()) {
+                const end = c.currentPeriodEnd ? (c.currentPeriodEnd < 1e12 ? c.currentPeriodEnd * 1000 : c.currentPeriodEnd) : 0;
+                const date = end ? new Date(end).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+                let label;
+                if (c.status === 'past_due') label = 'Payment problem';
+                else if (c.status === 'active' || c.status === 'trialing') label = date ? `Pro · renews ${date}` : 'Pro';
+                else if (end > now) label = `Pro · ends ${date}`;
+                else continue;     // ended: no longer Pro
+                out.push({ id: c.id, title: titles.get(String(c.id).toLowerCase()) || c.id,
+                    path: '/' + encodeURIComponent(c.id), label, problem: c.status === 'past_due' });
+            }
+            return out;
+        },
         // Calendars you created are listed separately from ones you merely visited:
         // in a no-login product this list is the only route back to your own work.
         groups() {
-            const all = (this.recentCalendars || []).map(item => ({ ...item, ...RecentCalendars.display(item) }));
+            const all = (this.recentCalendars || []).map(item => {
+                const shown = { ...item, ...RecentCalendars.display(item) };
+                const sub = !shown.view && this.proById.get(String(item.id).toLowerCase());
+                return { ...shown, pro: !!(sub && ACCOUNT_ACTIVE.includes(sub.status)) };
+            });
             return [
                 { label: 'Your calendars', items: all.filter(item => item.mine) },
                 { label: 'Recently visited', items: all.filter(item => !item.mine) },
             ];
         }
+    },
+    methods: {
+        startSignIn() {
+            this.acct.step = 'email'; this.acct.error = '';
+            this.$nextTick(() => { this.$refs.email && this.$refs.email.focus(); });
+        },
+        async sendLink() {
+            const st = this.acct;
+            st.error = '';
+            if (!st.email) return;
+            st.busy = true;
+            try {
+                // Back to this page after signing in. A path only: the server refuses anything else.
+                const r = await AccountMenu.api('POST', '/api/auth/start', { email: st.email, next: location.pathname });
+                if (r.status === 200 && r.data.ok) {
+                    st.step = 'sent';
+                    AccountMenu.track(a => a.accountSignInSent());
+                    return;
+                }
+                st.error = r.status === 0 ? NAV_NETWORK_ERROR
+                    : (r.data.error && r.status < 500 ? r.data.error : 'Something went wrong. Try again in a minute.');
+            } finally { st.busy = false; }
+        },
+        async portal() {
+            const st = this.acct;
+            st.error = ''; st.busy = true;
+            try {
+                const first = this.proCalendars[0];
+                const r = await AccountMenu.api('POST', '/api/pro/portal', first ? { calendarId: first.id } : {});
+                if (r.status === 200 && r.data.url) { AccountMenu.track(a => a.accountPortalOpened()); location.href = r.data.url; return; }
+                if (r.status === 503) st.error = 'Billing isn’t available right now. Try again later.';
+                else if (r.status === 404) st.error = 'We couldn’t find a billing account for this email.';
+                else if (r.status === 401) { st.error = ''; await AccountMenu.load(true); }
+                else st.error = r.status === 0 ? NAV_NETWORK_ERROR : 'Something went wrong. Try again in a minute.';
+            } finally { st.busy = false; }
+        },
+        async signOut() {
+            const st = this.acct;
+            st.error = ''; st.busy = true;
+            try {
+                const r = await AccountMenu.api('POST', '/api/auth/signout', {});
+                if (r.status === 0) { st.error = NAV_NETWORK_ERROR; return; }
+                AccountMenu.track(a => a.accountSignedOut());
+                st.step = 'idle';
+                await AccountMenu.load(true);
+            } finally { st.busy = false; }
+        },
     }
 };
