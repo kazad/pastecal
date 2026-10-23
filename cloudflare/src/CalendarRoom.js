@@ -22,9 +22,12 @@
  *   server -> tab   {t:'ack', id, v}                      to the sender
  *                   {t:'change', v, commands}             to every other tab
  *                   {t:'error', id, code, message}        refused; nothing was stored (code 'locked': a Pro lock)
- *   tab -> server   {t:'auth', key}                       an editor key for a locked calendar (never in a URL)
- *   server -> tab   {t:'auth', ok, canEdit, locked}       the answer; also sent (ok:false) when that key is rotated
- * Snapshots also carry {locked, pro, canEdit}: booleans only.
+ *   tab -> server   {t:'auth', key}                       an editor link's key for a locked calendar (never in a URL)
+ *   server -> tab   {t:'auth', ok, canEdit, locked, role} the answer; also sent (ok:false, reason) when that link
+ *                                                         is revoked ('link-revoked') or all are replaced ('key-rotated')
+ *   server -> tab   {t:'pro', settings}                   the owner changed proSettings (sent to every tab, views too)
+ * Snapshots also carry {locked, pro, canEdit, role, proSettings}. role is 'owner' | 'editor' | 'viewer'
+ * (an unlocked calendar: 'editor' for everyone with the edit name). proSettings is null unless locked.
  *
  * HTTP: GET /cal/<id> the calendar (404 = no such calendar); HEAD /cal/<id> same, no body;
  * POST /cal/<id> creates the calendar from {title, options, events} -- ONLY when the room
@@ -32,14 +35,35 @@
  * rate-limits it per IP). PUT /cal/<id>/import replaces everything (secret required).
  *
  * Pro lock: while `lock` holds a row, only the owner (X-PC-User on the WebSocket upgrade, set by
- * the Worker from a session, never by a client) and sockets that sent the editor key may change
- * the calendar; every other write path (saves, meta, /import, /from-firebase) is refused. Lock
- * routes (lock, unlock, rotate-editor-key, lock-status, can-edit, set-view-id) answer only
- * http://internal/... requests from Worker code; the Worker's public /cal/ forwarder never passes them.
+ * the Worker from a session, never by a client) and sockets that sent a live editor link's key may
+ * change the calendar; every other write path (saves, meta, /import, /from-firebase) is refused. Lock
+ * routes (see LOCK_ROUTES) answer only http://internal/... requests from Worker code; the Worker's
+ * public /cal/ forwarder never passes them.
+ *
+ * Roles on a locked calendar:
+ *   owner  -- everything: events, notes, title, categories, options, AND the owner-only list:
+ *             editor links, proSettings, lock/unlock, billing (the last two live in Accounts/Stripe).
+ *   editor -- holds an editor link: events, notes, title, categories, options (calendar content).
+ *             Title is content, so editors may change it. Never the owner-only list.
+ *   viewer -- everyone else (edit name without a key, or a view link): read only.
+ * Owner-only operations never travel over the socket: they are internal routes the Worker calls
+ * only after checking the owner's session (Accounts.js), and the room re-checks ownerId itself.
+ * Unlocked calendars: anyone with the edit name edits everything, as always.
+ *
+ * Editor links: up to 20 live links per calendar, each with a label and only its key's SHA-256
+ * stored. Revoking one drops the sockets that used it to read-only at once. A socket's attachment
+ * holds the link id in `keyId` (the name predates links: a legacy single key became a link with
+ * the same id, so sockets authorized before the migration keep working).
+ *
+ * proSettings: owner-written display settings ({theme, branding, hideBranding}, see
+ * mergeProSettings), stored in pro_settings, NOT in `options` (any tab writes options). Sent at the
+ * top level of snapshots and GET /cal while locked; never accepted from a save or meta.
  *
  * Storage (this object's own SQLite): meta(k, v), events(k, pos, data), history(v, at,
- * source, commands), lock(owner, plan, locked_at, key_hash, key_id). The lock lives apart from
- * `options` because any tab can write options; its owner and key hash never leave this table.
+ * source, commands), lock(owner, plan, locked_at, key_hash, key_id), editor_links(id, label,
+ * key_hash, created_at, last_used_at, revoked_at), pro_settings(owner, data, updated_at). The lock
+ * lives apart from `options` because any tab can write options; owner ids and key hashes never leave
+ * these tables. lock.key_hash/key_id are the legacy single key, moved into editor_links on load.
  */
 import { DurableObject } from 'cloudflare:workers';
 import EventStore from '../../public/services/EventStore.js';
@@ -59,14 +83,84 @@ const json = (x) => JSON.stringify(x);
 
 // Option keys only the server may decide. Tabs write options through ordinary saves, so a client
 // that sent {pro:true} would hide branding, and {locked:false} would read as unlocked.
-const SERVER_ONLY_OPTIONS = /^(locked|lock|pro|plan|owner|ownerId|editorKey.*)$/i;
+// The Pro display settings (theme, branding) are owner-only: they live in proSettings, so the same
+// names in options are dropped from every tab, editor or not.
+const SERVER_ONLY_OPTIONS = /^(locked|lock|pro|plan|owner|ownerId|editorKey.*|editorLinks?|proSettings|theme|branding|hideBranding)$/i;
 function clientOptions(o) {
     if (!o || typeof o !== 'object' || Array.isArray(o)) return o;
     if (!Object.keys(o).some((k) => SERVER_ONLY_OPTIONS.test(k))) return o;
     return Object.fromEntries(Object.entries(o).filter(([k]) => !SERVER_ONLY_OPTIONS.test(k)));
 }
 
-const LOCK_ROUTES = new Set(['lock', 'unlock', 'rotate-editor-key', 'lock-status', 'can-edit', 'set-view-id']);
+const LOCK_ROUTES = new Set(['lock', 'unlock', 'rotate-editor-key', 'lock-status', 'can-edit', 'set-view-id',
+    'create-editor-link', 'list-editor-links', 'revoke-editor-link', 'set-pro-settings', 'dev-legacy-key']);
+export const MAX_EDITOR_LINKS = 20;
+const LINK_TOUCH_MS = 3600 * 1000;          // last_used_at is written at most once an hour per link
+
+// ---- Pro display settings (owner-only) ----
+export const DEFAULT_PRO_SETTINGS = Object.freeze({
+    theme: Object.freeze({ accent: null, font: null, embedMode: 'auto' }),
+    branding: Object.freeze({ name: null, logoUrl: null }),
+    hideBranding: true,
+});
+const FONTS = ['figtree', 'system', 'serif', 'rounded'];
+const EMBED_MODES = ['auto', 'light', 'dark'];
+const isPlainObject = (x) => !!x && typeof x === 'object' && !Array.isArray(x);
+const CONTROL_CHARS = /[\u0000-\u001f\u007f]/;
+// A PARTIAL patch merged onto the current settings, field by field; every field present is
+// validated strictly and anything unknown is refused (nothing is stored on any error).
+// -> {ok:true, settings} | {ok:false, error}
+export function mergeProSettings(current, patch) {
+    if (!isPlainObject(patch)) return { ok: false, error: 'settings must be an object' };
+    const cur = current || DEFAULT_PRO_SETTINGS;
+    const out = { theme: { ...DEFAULT_PRO_SETTINGS.theme, ...cur.theme }, branding: { ...DEFAULT_PRO_SETTINGS.branding, ...cur.branding },
+        hideBranding: typeof cur.hideBranding === 'boolean' ? cur.hideBranding : true };
+    const bad = (error) => ({ ok: false, error });
+    for (const k of Object.keys(patch)) if (!['theme', 'branding', 'hideBranding'].includes(k)) return bad(`unknown setting: ${k}`);
+    if ('theme' in patch) {
+        const t = patch.theme;
+        if (!isPlainObject(t)) return bad('theme must be an object');
+        for (const k of Object.keys(t)) if (!['accent', 'font', 'embedMode'].includes(k)) return bad(`unknown setting: theme.${k}`);
+        if ('accent' in t) {
+            if (t.accent !== null && !(typeof t.accent === 'string' && /^#[0-9a-fA-F]{6}$/.test(t.accent))) return bad('theme.accent must be #rrggbb or null');
+            out.theme.accent = t.accent === null ? null : t.accent.toLowerCase();
+        }
+        if ('font' in t) {
+            if (t.font !== null && !FONTS.includes(t.font)) return bad(`theme.font must be one of ${FONTS.join(', ')} or null`);
+            out.theme.font = t.font;
+        }
+        if ('embedMode' in t) {
+            if (!EMBED_MODES.includes(t.embedMode)) return bad(`theme.embedMode must be one of ${EMBED_MODES.join(', ')}`);
+            out.theme.embedMode = t.embedMode;
+        }
+    }
+    if ('branding' in patch) {
+        const b = patch.branding;
+        if (!isPlainObject(b)) return bad('branding must be an object');
+        for (const k of Object.keys(b)) if (!['name', 'logoUrl'].includes(k)) return bad(`unknown setting: branding.${k}`);
+        if ('name' in b) {
+            if (b.name !== null && typeof b.name !== 'string') return bad('branding.name must be a string or null');
+            const name = b.name === null ? '' : b.name.trim();
+            if (name.length > 60) return bad('branding.name is longer than 60 characters');
+            if (CONTROL_CHARS.test(name)) return bad('branding.name has control characters');
+            out.branding.name = name || null;
+        }
+        if ('logoUrl' in b) {
+            if (b.logoUrl === null || b.logoUrl === '') out.branding.logoUrl = null;
+            else {
+                if (typeof b.logoUrl !== 'string' || b.logoUrl.length > 500) return bad('branding.logoUrl must be an https URL (500 characters at most)');
+                let u; try { u = new URL(b.logoUrl); } catch { return bad('branding.logoUrl must be an https URL'); }
+                if (u.protocol !== 'https:' || !u.hostname || u.username || u.password) return bad('branding.logoUrl must be an https URL');
+                out.branding.logoUrl = u.href;
+            }
+        }
+    }
+    if ('hideBranding' in patch) {
+        if (typeof patch.hideBranding !== 'boolean') return bad('hideBranding must be true or false');
+        out.hideBranding = patch.hideBranding;
+    }
+    return { ok: true, settings: out };
+}
 const b64url = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 async function sha256Hex(str) {
     const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
@@ -91,6 +185,8 @@ export class CalendarRoom extends DurableObject {
             try { this.sql.exec(`ALTER TABLE history ADD COLUMN entry TEXT`); } catch (_) {}
             this.sql.exec(`CREATE TABLE IF NOT EXISTS authors (uid TEXT PRIMARY KEY, first_seen INTEGER, last_seen INTEGER, edit_count INTEGER, created_here INTEGER, days TEXT)`);
             this.sql.exec(`CREATE TABLE IF NOT EXISTS lock (k INTEGER PRIMARY KEY CHECK (k = 1), owner TEXT NOT NULL, plan TEXT, locked_at INTEGER, key_hash TEXT, key_id TEXT)`);
+            this.sql.exec(`CREATE TABLE IF NOT EXISTS editor_links (id TEXT PRIMARY KEY, label TEXT NOT NULL, key_hash TEXT NOT NULL, created_at INTEGER, last_used_at INTEGER, revoked_at INTEGER)`);
+            this.sql.exec(`CREATE TABLE IF NOT EXISTS pro_settings (k INTEGER PRIMARY KEY CHECK (k = 1), owner TEXT, data TEXT, updated_at INTEGER)`);
             this.load();
         });
     }
@@ -108,7 +204,23 @@ export class CalendarRoom extends DurableObject {
             events: this.sql.exec(`SELECT data FROM events ORDER BY pos`).toArray().map((r) => JSON.parse(r.data)),
         };
         const l = this.sql.exec(`SELECT owner, plan, locked_at, key_hash, key_id FROM lock`).toArray()[0];
-        this.lock = l ? { ownerId: l.owner, plan: l.plan, lockedAt: l.locked_at, keyHash: l.key_hash, keyId: l.key_id } : null;
+        this.lock = l ? { ownerId: l.owner, plan: l.plan, lockedAt: l.locked_at } : null;
+        if (l && l.key_hash) {
+            // A lock from before editor links held one key. It becomes a link labeled 'Editors' with the
+            // SAME id, so sockets that proved that key (attachment keyId) keep their write access.
+            const id = l.key_id || this.newLinkId();
+            if (!this.sql.exec(`SELECT 1 FROM editor_links WHERE id = ?`, id).toArray().length) {
+                this.sql.exec(`INSERT INTO editor_links (id, label, key_hash, created_at, last_used_at, revoked_at) VALUES (?, 'Editors', ?, ?, NULL, NULL)`,
+                    id, l.key_hash, l.locked_at || Date.now());
+            }
+            this.sql.exec(`UPDATE lock SET key_hash = NULL, key_id = NULL`);
+        }
+        // Live links only, in memory: canWrite checks a socket's link against this at every message.
+        this.links = new Map(this.sql.exec(`SELECT id, label, key_hash, created_at, last_used_at FROM editor_links WHERE revoked_at IS NULL ORDER BY created_at, id`).toArray()
+            .map((r) => [r.id, { id: r.id, label: r.label, keyHash: r.key_hash, createdAt: r.created_at, lastUsedAt: r.last_used_at }]));
+        const ps = this.sql.exec(`SELECT owner, data FROM pro_settings`).toArray()[0];
+        let settings = null; try { settings = ps ? JSON.parse(ps.data) : null; } catch { /* unreadable: defaults */ }
+        this.proStored = ps && settings ? { owner: ps.owner, settings } : null;
     }
     setMeta(k, v) { this.sql.exec(`INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)`, k, json(v)); }
     calendar() {
@@ -124,26 +236,81 @@ export class CalendarRoom extends DurableObject {
 
     // ---- Pro lock -------------------------------------------------------------------------
     // A socket's right to write is worked out at each message from what it proved (its
-    // attachment) against the lock as it is NOW, never cached: rotating the key or unlocking
-    // and re-locking changes key_id, so an old key's sockets lose write access at once, even
-    // after hibernation.
+    // attachment) against the lock as it is NOW, never cached: revoking a link, replacing all of
+    // them, or unlocking and re-locking removes the link id from this.links, so its sockets lose
+    // write access at once, even after hibernation.
     canWrite(att) {
         if (att.isViewOnly) return false;
         const l = this.lock;
         if (!l) return true;
-        return (!!att.user && att.user === l.ownerId) || (!!att.keyId && att.keyId === l.keyId);
+        return this.isOwner(att) || (!!att.keyId && this.links.has(att.keyId));
+    }
+    isOwner(att) { return !att.isViewOnly && !!this.lock && !!att.user && att.user === this.lock.ownerId; }
+    roleOf(att) { return this.isOwner(att) ? 'owner' : this.canWrite(att) ? 'editor' : 'viewer'; }
+    // Shown to everyone while locked (it is how the calendar looks); null otherwise. Settings saved
+    // by a previous owner are not inherited by a new one.
+    proSettings() {
+        if (!this.lock) return null;
+        const p = this.proStored;
+        return p && p.owner === this.lock.ownerId ? mergeProSettings(p.settings, {}).settings : mergeProSettings(null, {}).settings;
     }
     snapshotFor(att) {
         const cal = att.isViewOnly ? this.viewCalendar(att.viewId) : this.calendar();
-        return { t: 'snapshot', v: this.state.v, calendar: cal, locked: !!this.lock, pro: !!this.lock, canEdit: this.canWrite(att) };
+        return { t: 'snapshot', v: this.state.v, calendar: cal, locked: !!this.lock, pro: !!this.lock, canEdit: this.canWrite(att), role: this.roleOf(att), proSettings: this.proSettings() };
     }
+    // The live link a key belongs to, or null. Hashed first; after the await everything is read
+    // synchronously, so the answer is about the links as they are now. Every link is compared
+    // (no early exit), each in constant time.
     async keyMatches(key) {
-        if (!this.lock || typeof key !== 'string' || !key || key.length > 200) return false;
-        return sameHex(await sha256Hex(key), this.lock.keyHash);
+        if (!this.lock || typeof key !== 'string' || !key || key.length > 200) return null;
+        const hash = await sha256Hex(key);
+        if (!this.lock) return null;
+        let hit = null;
+        for (const link of this.links.values()) if (sameHex(hash, link.keyHash)) hit = link;
+        return hit;
     }
+    touchLink(link) {
+        const now = Date.now();
+        if (link.lastUsedAt && now - link.lastUsedAt < LINK_TOUCH_MS) return;
+        link.lastUsedAt = now;
+        this.sql.exec(`UPDATE editor_links SET last_used_at = ? WHERE id = ?`, now, link.id);
+    }
+    newLinkId() { return b64url(crypto.getRandomValues(new Uint8Array(6))); }      // 8 characters
     async newEditorKey() {
         const key = b64url(crypto.getRandomValues(new Uint8Array(16)));    // 128 bits
-        return { key, keyHash: await sha256Hex(key), keyId: crypto.randomUUID() };
+        return { key, keyHash: await sha256Hex(key), keyId: this.newLinkId() };
+    }
+    // Synchronous: callers make the key first (the only await), then read and write.
+    createLink(label, k) {
+        let id = k.keyId;
+        while (this.links.has(id) || this.sql.exec(`SELECT 1 FROM editor_links WHERE id = ?`, id).toArray().length) id = this.newLinkId();
+        const at = Date.now();
+        this.sql.exec(`INSERT INTO editor_links (id, label, key_hash, created_at, last_used_at, revoked_at) VALUES (?, ?, ?, ?, NULL, NULL)`, id, label, k.keyHash, at);
+        // Revoked rows are kept a while (they explain a dead link), not forever.
+        this.sql.exec(`DELETE FROM editor_links WHERE revoked_at IS NOT NULL AND id NOT IN (SELECT id FROM editor_links WHERE revoked_at IS NOT NULL ORDER BY revoked_at DESC LIMIT 50)`);
+        const link = { id, label, keyHash: k.keyHash, createdAt: at, lastUsedAt: null };
+        this.links.set(id, link);
+        return link;
+    }
+    // Revoke links; sockets that used one are told at once and drop to read-only (unless they are the owner).
+    revokeLinks(ids, reason) {
+        const gone = new Set(ids.filter((id) => this.links.has(id)));
+        if (!gone.size) return;
+        const at = Date.now();
+        for (const id of gone) { this.sql.exec(`UPDATE editor_links SET revoked_at = ? WHERE id = ?`, at, id); this.links.delete(id); }
+        if (!reason) return;
+        for (const ws of this.ctx.getWebSockets()) {
+            const att = ws.deserializeAttachment() || {};
+            if (!gone.has(att.keyId)) continue;
+            const next = { ...att, keyId: null };
+            ws.serializeAttachment(next);
+            try { ws.send(json({ t: 'auth', ok: false, reason, locked: !!this.lock, canEdit: this.canWrite(next), role: this.roleOf(next) })); } catch { /* gone */ }
+        }
+    }
+    static cleanLabel(label) {
+        if (typeof label !== 'string') return null;
+        const t = label.replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
+        return t && t.length <= 40 ? t : null;
     }
     // A history row for a lock change, so a group can see why editing stopped (or came back).
     // No owner and no key: history is served to anyone with the edit name.
@@ -161,8 +328,8 @@ export class CalendarRoom extends DurableObject {
         const body = request.method === 'POST' ? await request.json().catch(() => ({})) : {};
         const ownerId = typeof body?.ownerId === 'string' ? body.ownerId.trim() : '';
         // Any key is made BEFORE the lock is read: from here on nothing awaits, so two lock calls
-        // cannot both see "unlocked".
-        const k = op === 'lock' || op === 'rotate-editor-key' ? await this.newEditorKey() : null;
+        // cannot both see "unlocked", and two link creations cannot both see 19 links.
+        const k = ['lock', 'rotate-editor-key', 'create-editor-link', 'dev-legacy-key'].includes(op) ? await this.newEditorKey() : null;
         const l = this.lock;
         const no = (status, error) => Response.json({ ok: false, error }, { status });
         if (op === 'lock-status') {
@@ -171,8 +338,10 @@ export class CalendarRoom extends DurableObject {
         }
         if (op === 'can-edit') {
             // For the Worker (create-view): may this caller change the calendar?
-            const canEdit = !l || (!!body.userId && body.userId === l.ownerId) || await this.keyMatches(body.editorKey);
-            return Response.json({ locked: !!l, canEdit });
+            if (!l || (!!body.userId && body.userId === l.ownerId)) return Response.json({ locked: !!l, canEdit: true });
+            const link = await this.keyMatches(body.editorKey);
+            if (link) this.touchLink(link);
+            return Response.json({ locked: !!this.lock, canEdit: !this.lock || !!link });
         }
         if (op === 'set-view-id') {
             // The Worker's create-view, already authorized: records the new read-only link.
@@ -192,6 +361,8 @@ export class CalendarRoom extends DurableObject {
             if (!l) return Response.json({ ok: true, alreadyUnlocked: true });
             if (ownerId && ownerId !== l.ownerId) return no(409, 'locked-by-other');
             this.sql.exec(`DELETE FROM lock`); this.lock = null;
+            // Every link dies with the lock: a re-lock starts over, so no old key regains write.
+            this.revokeLinks([...this.links.keys()], null);
             // Firebase kept its pre-lock copy, and anyone may have edited (or emptied) it since.
             // Merging that against the pre-lock baseline would replay those edits here, so the next
             // exchange adopts Firebase's copy as the baseline, applies none of it, and writes ours over it.
@@ -204,33 +375,63 @@ export class CalendarRoom extends DurableObject {
         if (op === 'lock') {
             if (!this.state.id) return no(404, 'not-found');
             if (l && l.ownerId !== ownerId) return no(409, 'locked-by-other');
-            if (l && !body.rotate) return Response.json({ ok: true, alreadyLocked: true });   // only the hash is kept: no key to return
+            if (l && !body.rotate) return Response.json({ ok: true, alreadyLocked: true });   // only hashes are kept: no key to return
             if (l) return this.rotateKey(k);
             const plan = typeof body.plan === 'string' && body.plan ? body.plan.slice(0, 32) : 'pro';
             const at = Date.now();
-            this.sql.exec(`INSERT INTO lock (k, owner, plan, locked_at, key_hash, key_id) VALUES (1, ?, ?, ?, ?, ?)`, ownerId, plan, at, k.keyHash, k.keyId);
-            this.lock = { ownerId, plan, lockedAt: at, keyHash: k.keyHash, keyId: k.keyId };
+            this.sql.exec(`INSERT INTO lock (k, owner, plan, locked_at, key_hash, key_id) VALUES (1, ?, ?, ?, NULL, NULL)`, ownerId, plan, at);
+            this.lock = { ownerId, plan, lockedAt: at };
+            this.revokeLinks([...this.links.keys()], null);            // none should be live; never inherit any
+            this.createLink('Editors', k);
             this.recordLockChange('locked', 'Locked with Pro');
             return Response.json({ ok: true, editorKey: k.key });
         }
-        if (op === 'rotate-editor-key') {
-            if (!l) return no(409, 'not-locked');
-            if (l.ownerId !== ownerId) return no(403, 'not-owner');
-            return this.rotateKey(k);
+        // Everything below is owner-only, and only while locked.
+        if (!l) return no(409, 'not-locked');
+        if (l.ownerId !== ownerId) return no(403, 'not-owner');
+        if (op === 'rotate-editor-key') return this.rotateKey(k);
+        if (op === 'create-editor-link') {
+            const label = CalendarRoom.cleanLabel(body.label);
+            if (!label) return no(400, 'label must be 1-40 characters');
+            if (this.links.size >= MAX_EDITOR_LINKS) return no(409, 'too-many-links');
+            const link = this.createLink(label, k);
+            return Response.json({ ok: true, id: link.id, label: link.label, createdAt: link.createdAt, editorKey: k.key });
+        }
+        if (op === 'list-editor-links') {
+            const links = [...this.links.values()].map(({ id, label, createdAt, lastUsedAt }) => ({ id, label, createdAt, lastUsedAt }));
+            return Response.json({ ok: true, links });
+        }
+        if (op === 'revoke-editor-link') {
+            const id = typeof body.id === 'string' ? body.id : '';
+            if (!this.links.has(id)) return no(404, 'no-link');
+            this.revokeLinks([id], 'link-revoked');
+            return Response.json({ ok: true });
+        }
+        if (op === 'set-pro-settings') {
+            const cur = this.proStored && this.proStored.owner === l.ownerId ? this.proStored.settings : null;
+            const r = mergeProSettings(cur, body.settings);
+            if (!r.ok) return Response.json({ ok: false, error: 'bad-settings', message: r.error }, { status: 400 });
+            const at = Date.now();
+            this.sql.exec(`INSERT OR REPLACE INTO pro_settings (k, owner, data, updated_at) VALUES (1, ?, ?, ?)`, l.ownerId, json(r.settings), at);
+            this.proStored = { owner: l.ownerId, settings: r.settings };
+            this.broadcast({ t: 'pro', settings: r.settings });
+            return Response.json({ ok: true, settings: r.settings });
+        }
+        if (op === 'dev-legacy-key' && this.env.ACCOUNTS_DEV_MODE === '1') {
+            // Local tests only: put this lock back in the pre-links shape (one key in the lock row) and
+            // reload, so the real migration in load() runs.
+            this.sql.exec(`DELETE FROM editor_links`);
+            this.sql.exec(`UPDATE lock SET key_hash = ?, key_id = ?`, k.keyHash, 'legacy-' + k.keyId);
+            this.load();
+            return Response.json({ ok: true, editorKey: k.key, keyId: 'legacy-' + k.keyId });
         }
         return no(404, 'not found');
     }
-    // New key; the old one stops working now. Sockets that used it are told, and drop to read-only.
+    // Every link is revoked and one new 'Editors' link made (the old single-key "rotate"). Sockets
+    // that used any old link are told (reason 'key-rotated') and drop to read-only.
     rotateKey(k) {
-        const oldId = this.lock.keyId;
-        this.sql.exec(`UPDATE lock SET key_hash = ?, key_id = ?`, k.keyHash, k.keyId);
-        this.lock = { ...this.lock, keyHash: k.keyHash, keyId: k.keyId };
-        for (const ws of this.ctx.getWebSockets()) {
-            const att = ws.deserializeAttachment() || {};
-            if (att.keyId !== oldId) continue;
-            ws.serializeAttachment({ ...att, keyId: null });
-            try { ws.send(json({ t: 'auth', ok: false, reason: 'key-rotated', locked: true, canEdit: this.canWrite({ ...att, keyId: null }) })); } catch { /* gone */ }
-        }
+        this.revokeLinks([...this.links.keys()], 'key-rotated');
+        this.createLink('Editors', k);
         return Response.json({ ok: true, editorKey: k.key });
     }
 
@@ -456,7 +657,7 @@ export class CalendarRoom extends DurableObject {
             }
             if (!this.state.id) return Response.json({ error: 'not found' }, { status: 404 });
             const cal = isViewOnly ? this.viewCalendar(viewId) : this.calendar();
-            return Response.json({ v: this.state.v, calendar: cal, locked: !!this.lock, pro: !!this.lock });
+            return Response.json({ v: this.state.v, calendar: cal, locked: !!this.lock, pro: !!this.lock, proSettings: this.proSettings() });
         }
         if (request.method === 'POST' && suffix === '') {
             const text = await request.text();
@@ -698,6 +899,7 @@ export class CalendarRoom extends DurableObject {
         for (const ws of this.ctx.getWebSockets()) { try { ws.close(1000, 'archived'); } catch { /* gone */ } }
         await this.ctx.storage.deleteAlarm();
         this.sql.exec('DELETE FROM events'); this.sql.exec('DELETE FROM meta'); this.sql.exec('DELETE FROM history'); this.sql.exec('DELETE FROM lock');
+        this.sql.exec('DELETE FROM editor_links'); this.sql.exec('DELETE FROM pro_settings');
         this.mirrored = null;
         this.load();                                                    // now empty: GET answers 404
         if (this.env.DIRECTORY) {
@@ -802,11 +1004,11 @@ export class CalendarRoom extends DurableObject {
             return refuse('locked', 'This calendar is locked. Only its owner and people with an editor key can change it.');
         }
         if (m.t === 'auth') {
-            // An editor key, sent over the socket: never in a URL, which logs and analytics record.
-            const ok = !tab.isViewOnly && await this.keyMatches(m.key);
-            const next = ok ? { ...tab, keyId: this.lock.keyId } : tab;
-            if (ok) ws.serializeAttachment(next);
-            return ws.send(json({ t: 'auth', ok, locked: !!this.lock, canEdit: this.canWrite(next) }));
+            // An editor link's key, sent over the socket: never in a URL, which logs and analytics record.
+            const link = tab.isViewOnly ? null : await this.keyMatches(m.key);
+            let next = ws.deserializeAttachment() || {};                  // re-read: the await may have let other messages in
+            if (link) { next = { ...next, keyId: link.id }; ws.serializeAttachment(next); this.touchLink(link); }
+            return ws.send(json({ t: 'auth', ok: !!link, locked: !!this.lock, canEdit: this.canWrite(next), role: this.roleOf(next) }));
         }
 
         const author = m.author || tab.author;
