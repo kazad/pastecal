@@ -630,7 +630,7 @@ const CalendarVueApp = {
         // first render and won't reactively update if set later. (See applyGlobalSettings
         // for the post-render path used when settings change at runtime.)
         scheduleObj.startHour = this.calendar?.options?.extended ? "00:00" : (this.globalSettings.startHour || "05:00");
-        scheduleObj.timeFormat = this.globalSettings.timeFormat === '24' ? 'HH:mm' : 'hh:mm a';
+        scheduleObj.timeFormat = this.globalSettings.timeFormat === '24' ? 'HH:mm' : 'h:mm a';
         scheduleObj.firstDayOfWeek = parseInt(this.globalSettings.firstDayOfWeek) || 0;
 
         // Build custom view configuration dynamically
@@ -769,6 +769,15 @@ const CalendarVueApp = {
         scheduleObj.resizeStart = (args) => ScheduleAdapter.noteStart(args.data);
 
         // color events based on type
+        // Month view day names ("Monday") get a short form ("Mon") that phones show instead
+        // (style.css swaps them); the full name was clipped to "Mond..." at phone width.
+        scheduleObj.renderCell = (args) => {
+            if (args.elementType !== 'monthDay' || !args.element) return;
+            const label = args.element.querySelector('span') || args.element;
+            const full = (label.textContent || '').trim();
+            if (full) label.setAttribute('data-short', Array.from(full).slice(0, 3).join(''));
+        };
+
         scheduleObj.eventRendered = (args) => {
             // change color as needed
             categoryColor = app.COLORS[args.data.Type - 1] || app.COLORS[0];
@@ -3854,7 +3863,7 @@ const CalendarVueApp = {
                 scheduleObj.firstDayOfWeek = parseInt(this.globalSettings.firstDayOfWeek);
 
                 // Apply time format
-                const timeFormat = this.globalSettings.timeFormat === '24' ? 'HH:mm' : 'hh:mm a';
+                const timeFormat = this.globalSettings.timeFormat === '24' ? 'HH:mm' : 'h:mm a';
                 scheduleObj.timeFormat = timeFormat;
 
                 // Apply default view if not already set via URL
@@ -3880,7 +3889,7 @@ const CalendarVueApp = {
                 } catch (e) { console.warn('Failed to apply first day of week setting:', e); }
 
                 try {
-                    scheduleObj.timeFormat = this.globalSettings.timeFormat === '24' ? 'HH:mm' : 'hh:mm a';
+                    scheduleObj.timeFormat = this.globalSettings.timeFormat === '24' ? 'HH:mm' : 'h:mm a';
                     console.log('Applied time format setting');
                 } catch (e) { console.warn('Failed to apply time format setting:', e); }
 

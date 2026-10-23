@@ -511,7 +511,7 @@ div#Schedule,
 
 
 .e-date-header.e-navigate.month-start {
-    font-size: 18px;
+    font-weight: 600;
 }
 
 
@@ -996,3 +996,26 @@ div#Schedule,
 .pc-home-nots { grid-template-columns: repeat(2, max-content); column-gap: 16px }
 .pc-home-nots li { white-space: nowrap }
 @media (max-width: 1359px) { .pc-home-split .pc-home-nots { grid-template-columns: max-content } }
+
+/* --- Calendar polish: one accent (pastecal blue, not Material's pink), pill view switcher,
+   rounder chips, quieter repeat icons, and titles rather than times on phones --- */
+.e-schedule .e-month-view .e-current-date .e-date-header { background: var(--pc-link) !important; color: #fff !important }
+.e-schedule .e-month-view .e-header-cells.e-current-day,
+.e-schedule .e-vertical-view .e-header-cells.e-current-day,
+.e-schedule .e-vertical-view .e-header-cells.e-current-day .e-header-day,
+.e-schedule .e-vertical-view .e-header-cells.e-current-day .e-header-date { color: var(--pc-link) !important }
+.e-schedule .e-vertical-view .e-current-timeline { border-top: 2px solid var(--pc-link) !important }
+.e-schedule .e-vertical-view .e-current-time { color: var(--pc-link) !important }
+.e-schedule .e-schedule-toolbar .e-active-view .e-tbar-btn-text,
+.e-schedule .e-schedule-toolbar .e-active-view .e-icons { color: var(--pc-link) !important }
+.e-schedule .e-schedule-toolbar .e-views .e-tbar-btn { border-radius: 999px !important }
+.e-schedule .e-schedule-toolbar .e-active-view .e-tbar-btn { background: color-mix(in srgb, var(--pc-link) 12%, transparent) !important }
+.e-schedule .e-month-view .e-appointment { border-radius: 6px !important }
+.e-schedule .e-month-view .e-appointment .e-recurrence-icon { display: none !important }
+.e-schedule .e-month-view .e-appointment .e-time { font-weight: 500; opacity: .9 }
+@media (max-width: 640px) {
+  .e-schedule .e-month-view .e-appointment .e-time { display: none !important }
+  .e-schedule .e-month-view .e-appointment .e-subject { font-size: 10.5px !important; padding-inline: 1px }
+  .e-schedule .e-month-view .e-header-cells span[data-short] { font-size: 0 }
+  .e-schedule .e-month-view .e-header-cells span[data-short]::after { content: attr(data-short); font-size: 12px }
+}
