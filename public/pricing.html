@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pricing · PasteCal</title>
+<meta name="description" content="pastecal is free to use. Pro adds full backup history, subcalendars, no branding and more. Join the waitlist.">
+<link rel="icon" href="/favicon.ico">
+<style>
+/* Layout: the app's own look (system type, pastecal blue). Three plan cards, then one feature
+   grid, then the waitlist. Pro is the recommended plan, so it carries the only emphasis. */
+:root {
+  --bg: #f5f6f8; --surface: #ffffff; --ink: #141a24; --muted: #5c6577; --line: #e2e6ed;
+  --blue: #2563eb; --blue-ink: #ffffff; --blue-soft: #eef3ff; --ok: #1f7a4d; --soon: #8a5a00; --soon-bg: #fdf3dc;
+  --ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0f1218; --surface: #171b23; --ink: #e6e9ef; --muted: #9aa3b2; --line: #2a303b;
+  --blue: #6b9bff; --blue-ink: #0b1220; --blue-soft: #1b2436; --ok: #34d399; --soon: #f5c451; --soon-bg: #3a300f; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0f1218; --surface: #171b23; --ink: #e6e9ef; --muted: #9aa3b2; --line: #2a303b;
+  --blue: #6b9bff; --blue-ink: #0b1220; --blue-soft: #1b2436; --ok: #34d399; --soon: #f5c451; --soon-bg: #3a300f; color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font: 16px/1.55 var(--ui); margin: 0 }
+.col { max-width: 1080px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 40px 64px }
+.mock { background: var(--blue-soft); color: var(--muted); font-size: 13px; text-align: center; padding-block: 6px }
+h1 { margin: 0; font-size: clamp(30px, 4.4vw, 44px); line-height: 1.1; text-wrap: balance }
+.lead { color: var(--muted); font-size: 18px; max-width: 60ch; margin: 12px 0 0 }
+h2 { font-size: 22px; margin: 56px 0 14px; text-wrap: balance }
+
+.plans { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 32px; align-items: stretch }
+.plan { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 22px; display: flex; flex-direction: column; gap: 6px }
+.plan.pro { border: 2px solid var(--blue); position: relative }
+.badge { position: absolute; top: -12px; left: 22px; background: var(--blue); color: var(--blue-ink); font-size: 12px; font-weight: 700; border-radius: 999px; padding: 3px 10px }
+.plan h3 { margin: 0; font-size: 19px }
+.who { color: var(--muted); font-size: 15px; margin: 0 }
+.price { margin: 12px 0 0; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap }
+.price strong { font-size: 38px; line-height: 1; font-variant-numeric: tabular-nums }
+.price span { color: var(--muted); font-size: 15px }
+.per { color: var(--muted); font-size: 14px; margin: 2px 0 0; min-height: 1.4em }
+.plan ul { list-style: none; padding: 0; margin: 14px 0 18px; display: flex; flex-direction: column; gap: 7px; font-size: 15px; flex: 1 }
+.plan li::before { content: "✓"; color: var(--ok); font-weight: 700; margin-right: 8px }
+.cta { display: block; text-align: center; border-radius: 9px; padding: 10px 14px; font-weight: 700; text-decoration: none; border: 1px solid var(--line); color: var(--ink); background: var(--surface); cursor: pointer; font-size: 15px }
+.cta.primary { background: var(--blue); border-color: var(--blue); color: var(--blue-ink) }
+
+.promises { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 18px }
+.promises div { padding: 14px 16px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); font-size: 15px; color: var(--muted) }
+.promises b { display: block; color: var(--ink); font-size: 16px; margin-bottom: 2px }
+
+.gridwrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 14px }
+table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 15px }
+th, td { padding: 11px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top }
+thead th { font-size: 14px; position: sticky; top: 0; background: var(--surface) }
+thead th:not(:first-child), td:not(:first-child) { text-align: center; width: 17% }
+thead th.pro, td.pro { background: var(--blue-soft) }
+tr.group td { background: var(--bg); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700 }
+tbody tr:last-child td { border-bottom: 0 }
+.y { color: var(--ok); font-weight: 700 }
+.n { color: var(--muted) }
+td small { display: block; color: var(--muted); font-size: 13px; font-weight: 400 }
+.soon { display: inline-block; font-size: 11px; font-weight: 700; color: var(--soon); background: var(--soon-bg); border-radius: 999px; padding: 1px 7px; margin-left: 6px; vertical-align: 1px }
+.legend { font-size: 14px; color: var(--muted); margin: 10px 0 0 }
+
+.wait { margin-top: 56px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 28px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 36px; align-items: start; position: relative }
+.wait h2 { margin: 0 0 6px }
+.wait p { margin: 0; color: var(--muted) }
+form { display: flex; flex-direction: column; gap: 14px }
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0 }
+label { font-size: 14px; font-weight: 600 }
+.opt { font-weight: 400; color: var(--muted) }
+input[type=email], select, textarea { width: 100%; height: 46px; border: 1px solid var(--line); border-radius: 10px; padding: 0 14px; background: var(--bg); color: var(--ink); font: inherit; font-size: 16px }
+textarea { height: auto; min-height: 84px; padding: 11px 14px; resize: vertical; line-height: 1.45 }
+select { appearance: none; -webkit-appearance: none; cursor: pointer; padding-right: 38px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 20px) 50%, calc(100% - 14px) 50%; background-size: 6px 6px; background-repeat: no-repeat }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--blue); outline-offset: 1px; border-color: var(--blue) }
+.formrow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px }
+.hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden }
+#waitBtn { height: 48px; font-size: 16px }
+.wait-ideas { margin-top: 12px !important; font-size: 15px }
+.done { color: var(--ok); font-weight: 600; min-height: 1.4em; margin: 0 }
+
+.faq { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 32px }
+details { border-bottom: 1px solid var(--line); padding-block: 12px }
+summary { cursor: pointer; font-weight: 600 }
+details p { color: var(--muted); margin: 8px 0 0 }
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px }
+
+@media (max-width: 860px) {
+  .plans, .promises, .faq { grid-template-columns: minmax(0, 1fr) }
+  .formrow { grid-template-columns: minmax(0, 1fr) }
+  .wait { grid-template-columns: minmax(0, 1fr) }
+  .plan.pro { order: -1 }
+}
+</style>
+</head>
+<body>
+
+
+<div class="col">
+  <h1>Free for everyone you share with. Pro when it matters.</h1>
+  <p class="lead">pastecal stays free and account-free for making and sharing calendars. Pro is for the calendars you're responsible for: lock who can edit, review suggestions, and keep every change forever.</p>
+
+  <div class="plans">
+    <div class="plan">
+      <h3>Free</h3>
+      <p class="who">For trips, families and small groups.</p>
+      <div class="price"><strong>$0</strong></div>
+      <p class="per">Always.</p>
+      <ul>
+        <li>Unlimited calendars</li>
+        <li>Unlimited people, no accounts</li>
+        <li>Read/write, read-only and calendar app links</li>
+        <li>Undo and 7 days of backups</li>
+      </ul>
+      <a class="cta" href="/">Make a calendar</a>
+    </div>
+
+    <div class="plan pro">
+      <span class="badge">Recommended</span>
+      <h3>Pro</h3>
+      <p class="who">For a calendar you run: a team, a class, a rota.</p>
+      <div class="price"><strong>$24</strong><span>per calendar, per year</span></div>
+      <p class="per">That's $2 a month.</p>
+      <ul>
+        <li>Everything in Free</li>
+        <li>Lock editing to people you choose</li>
+        <li>Others suggest events, you approve</li>
+        <li>Every change kept, forever</li>
+        <li>Secret events and subcalendars</li>
+        <li>See how many people view and follow it</li>
+        <li>Your logo, name and theme, not ours</li>
+      </ul>
+      <a class="cta primary" href="#waitlist">Join the waitlist</a>
+    </div>
+
+    <div class="plan">
+      <h3>Teams</h3>
+      <p class="who">For clubs, schools and offices with several calendars.</p>
+      <div class="price"><strong>$80</strong><span>per year</span></div>
+      <p class="per">Up to 10 Pro calendars. $8 each.</p>
+      <ul>
+        <li>Everything in Pro, on 10 calendars</li>
+        <li>One bill for the whole group</li>
+        <li>Move Pro between calendars anytime</li>
+        <li>Shared admins across calendars</li>
+      </ul>
+      <a class="cta" href="#waitlist">Join the waitlist</a>
+    </div>
+  </div>
+
+  <div class="promises">
+    <div><b>Nobody pays per person</b>Everyone you share with stays free, with no account. You pay per calendar, not per seat.</div>
+    <div><b>Founding price, for life</b>Join the waitlist and your price is locked in for as long as you stay subscribed.</div>
+    <div><b>30-day money back</b>If Pro isn't worth it, tell us within 30 days for a full refund.</div>
+  </div>
+
+  <h2>Compare plans</h2>
+  <div class="gridwrap">
+    <table>
+      <thead><tr><th>Feature</th><th>Free</th><th class="pro">Pro</th><th>Teams</th></tr></thead>
+      <tbody>
+        <tr class="group"><td colspan="4">Sharing</td></tr>
+        <tr><td>Calendars</td><td>Unlimited</td><td class="pro">1 Pro calendar</td><td>Up to 10</td></tr>
+        <tr><td>People who can view and edit<small>No accounts for anyone</small></td><td>Unlimited</td><td class="pro">Unlimited</td><td>Unlimited</td></tr>
+        <tr><td>Read/write, read-only and calendar app links</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Embed on your website</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Choose your read-only link name</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td></tr>
+
+        <tr class="group"><td colspan="4">Control</td></tr>
+        <tr><td>Lock editing to people you choose<span class="soon">Soon</span><small>Everyone else can view, as today</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Suggested events<span class="soon">Soon</span><small>Visitors suggest, you approve or decline</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Secret events<span class="soon">Soon</span><small>Seen only by people who can edit</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Subcalendars<span class="soon">Soon</span><small>Layers like "Games" and "Practice" people can turn on and off</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Shared admins across calendars<span class="soon">Soon</span></td><td class="n">—</td><td class="pro n">—</td><td class="y">✓</td></tr>
+
+        <tr class="group"><td colspan="4">Safety</td></tr>
+        <tr><td>Undo and recent changes</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Backups</td><td>7 days</td><td class="pro">Forever</td><td>Forever</td></tr>
+        <tr><td>Restore any earlier version<span class="soon">Soon</span></td><td>Last 7 days</td><td class="pro">Any date</td><td>Any date</td></tr>
+
+        <tr class="group"><td colspan="4">Insight</td></tr>
+        <tr><td>Calendar stats<span class="soon">Soon</span><small>Views and visitors by day, and how many people follow it in a calendar app</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Where people are<span class="soon">Soon</span><small>Countries and cities your visitors come from</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Private by design<small>Counts only. Never names, addresses or who viewed what</small></td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Stats across all your calendars<span class="soon">Soon</span></td><td class="n">—</td><td class="pro n">—</td><td class="y">✓</td></tr>
+
+        <tr class="group"><td colspan="4">Look</td></tr>
+        <tr><td>Event colors and category labels</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td></tr>
+        <tr><td>No pastecal branding<small>On the calendar and in embeds</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Custom branding<span class="soon">Soon</span><small>Your logo and name at the top of the calendar and in embeds</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Custom theme<span class="soon">Soon</span><small>Your colors and font, and light or dark mode for embeds, so it matches your site</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td></tr>
+
+        <tr class="group"><td colspan="4">Help</td></tr>
+        <tr><td>Support<small>Pro and Teams emails are answered first</small></td><td>Help pages and email</td><td class="pro">Priority email</td><td>Priority email</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="legend"><span class="soon" style="margin-left:0">Soon</span> means it's being built for Pro. Founding members get each one as it ships, at no extra cost.</p>
+
+  <section class="wait" id="waitlist" aria-labelledby="waitH">
+    <div class="wait-copy">
+      <h2 id="waitH">Join the Pro waitlist</h2>
+      <p>We'll email you once, when Pro opens. Founding members keep the launch price for as long as they stay subscribed.</p>
+      <p class="wait-ideas">Have an idea for Pro, or something pastecal should do better? Add it to the form. We read every one.</p>
+    </div>
+    <form id="waitForm" novalidate>
+      <div class="field">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" required placeholder="you@example.com" autocomplete="email">
+      </div>
+      <div class="formrow">
+        <div class="field">
+          <label for="plan">Plan</label>
+          <select id="plan" name="plan"><option value="pro">Pro, $24 a year</option><option value="teams">Teams, $80 a year</option><option value="unsure">Not sure yet</option></select>
+        </div>
+        <div class="field">
+          <label for="use">Mostly for</label>
+          <select id="use" name="use"><option>Sports or a club</option><option>Work or a team</option><option>School or a class</option><option>Family</option><option>Something else</option></select>
+        </div>
+      </div>
+      <div class="field">
+        <label for="ideas">Ideas or thoughts <span class="opt">optional</span></label>
+        <textarea id="ideas" name="ideas" rows="3" maxlength="2000" placeholder="What would make Pro worth it for you?"></textarea>
+      </div>
+      <div class="hp" aria-hidden="true"><label for="website">Website</label><input id="website" name="website" tabindex="-1" autocomplete="off"></div>
+      <button class="cta primary" type="submit" id="waitBtn">Join the waitlist</button>
+      <p class="done" id="done" role="status"></p>
+    </form>
+  </section>
+
+  <h2>Questions</h2>
+  <div class="faq">
+    <details><summary>Will the free plan change?</summary><p>No. Making, editing and sharing calendars stays free and account-free.</p></details>
+    <details><summary>Does everyone I share with need to pay?</summary><p>No. You pay for the calendar, once a year. Everyone you share it with stays free.</p></details>
+    <details><summary>Do I need an account for Pro?</summary><p>Only you do, so we know who owns the calendar. Nobody you share with ever needs one.</p></details>
+    <details><summary>What happens to backups on the free plan?</summary><p>Free calendars keep 7 days of backups. Pro keeps every change forever and can restore any date.</p></details>
+    <details><summary>Can I switch a Pro calendar later?</summary><p>On Teams, yes, anytime. On Pro, email us and we'll move it.</p></details>
+    <details><summary>Can I see who looked at my calendar?</summary><p>Pro shows how many people viewed it, how many follow it in a calendar app, and which countries and cities they're in. It never shows who they are.</p></details>
+    <details><summary>What if I stop paying?</summary><p>Your calendar stays, with everything in it. It goes back to the free plan, unlocked.</p></details>
+  </div>
+</div>
+
+<script>
+(() => {
+  const form = document.getElementById('waitForm'), done = document.getElementById('done'), btn = document.getElementById('waitBtn');
+  const live = /(^|\.)pastecal\.com$/.test(location.hostname);   // on the real site it saves; here it is a demo
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = document.getElementById('email');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim())) { done.style.color = 'var(--soon)'; done.textContent = 'Enter an email address, like you@example.com.'; email.focus(); return; }
+    const body = Object.fromEntries(new FormData(form)); body.page = location.pathname;
+    if (!live) { done.style.color = ''; done.textContent = "Preview only: on pastecal.com this would be saved."; return; }
+    btn.disabled = true; done.style.color = ''; done.textContent = 'Sending…';
+    try {
+      const r = await fetch('/api/waitlist', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const out = await r.json().catch(() => ({}));
+      if (!r.ok || !out.ok) throw new Error(out.error || 'Something went wrong. Please try again.');
+      done.textContent = out.returning ? "Updated. You're still on the list." : "You're on the list. We'll email you when Pro opens.";
+      form.reset();
+    } catch (err) { done.style.color = 'var(--soon)'; done.textContent = err.message; }
+    btn.disabled = false;
+  });
+})();
+</script>
+
+</body>
+</html>
