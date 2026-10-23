@@ -5,6 +5,13 @@
  *   POST /api/auth/start      {email, next?}     -> {ok:true} always (never says if the email is known)
  *   POST /api/auth/verify     {token}            -> {ok, email, next} + Set-Cookie pc_session (30 days)
  *   POST /api/auth/signout                       -> {ok:true}, cookie cleared
+ *   POST /api/auth/signout-all                   -> {ok:true, sessionsEnded}: every session of this user, on every
+ *                                                   device, ends (cookie cleared); 401 signed-out
+ *   POST /api/account/delete                     -> {ok:true, deleted:true}: sessions, sign-in links and the user row
+ *                                                   are deleted; subscription rows keep their Stripe ids (accounting)
+ *                                                   but lose the link to the user. Cancels nothing: 409
+ *                                                   {error:'active-subscription', calendars} while any subscription
+ *                                                   is active, trialing or past_due (cancel it first). 401 signed-out
  *   GET  /api/me                                 -> {email, calendars:[{id, status, plan, interval, currentPeriodEnd}]} | 401
  *   POST /api/pro/checkout    {calendarId, interval?:'year'|'month', editName?} -> {url} (Stripe Checkout)
  *   POST /api/pro/portal      {calendarId?}      -> {url} (Stripe Billing Portal)
@@ -127,6 +134,33 @@ export class Accounts extends DurableObject {
         this.sql.exec(`INSERT INTO users (id, email, created_at) VALUES (?, ?, ?)`, id, email, Date.now());
         return id;
     }
+    // Sign out everywhere: every session of this user. Returns how many ended.
+    endAllSessions(userId) {
+        const n = this.sql.exec(`SELECT COUNT(*) AS n FROM sessions WHERE user_id = ?`, userId).one().n;
+        this.sql.exec(`DELETE FROM sessions WHERE user_id = ?`, userId);
+        return n;
+    }
+    // Delete an account. Refuses (returns {active:[calendarIds]}) while any subscription is still
+    // active/trialing/past_due: Stripe would keep charging a user who can no longer sign in to cancel.
+    // Otherwise drops sessions, sign-in links, holds and the user row (the email lives only there and in
+    // login_tokens), and unlinks the user's subscriptions: their Stripe ids stay for accounting.
+    deleteAccount(userId) {
+        const user = this.getUser(userId);
+        if (!user) return { deleted: false };
+        const active = this.sql.exec(`SELECT calendar_id, status FROM subscriptions WHERE user_id = ?`, userId).toArray().filter((r) => ACTIVE.has(r.status));
+        if (active.length) return { active: [...new Set(active.map((r) => r.calendar_id))] };
+        this.ctx.storage.transactionSync(() => {
+            this.sql.exec(`DELETE FROM login_tokens WHERE email = ?`, user.email);
+            this.sql.exec(`DELETE FROM sessions WHERE user_id = ?`, userId);
+            this.sql.exec(`DELETE FROM checkout_holds WHERE user_id = ?`, userId);
+            this.sql.exec(`DELETE FROM welcome_emails WHERE user_id = ?`, userId);
+            this.sql.exec(`DELETE FROM outbox WHERE to_email = ?`, user.email);          // dev mode only ever writes here
+            this.sql.exec(`UPDATE subscriptions SET user_id = NULL, updated_at = ? WHERE user_id = ?`, Date.now(), userId);
+            this.sql.exec(`DELETE FROM users WHERE id = ?`, userId);
+        });
+        return { deleted: true };
+    }
+
     getUser(userId) { return this.sql.exec(`SELECT * FROM users WHERE id = ?`, userId).toArray()[0] || null; }
     findUser(email) { return this.sql.exec(`SELECT * FROM users WHERE email = ?`, email).toArray()[0] || null; }
 
@@ -325,7 +359,7 @@ async function readJson(request) {
 // Returns a Response for every accounts/billing path, or null for paths it doesn't own.
 export async function handleAccounts(request, env, url) {
     const path = url.pathname;
-    const owned = path === '/api/me' || path === '/api/stripe/webhook' || path.startsWith('/api/auth/')
+    const owned = path === '/api/me' || path === '/api/stripe/webhook' || path.startsWith('/api/auth/') || path === '/api/account/delete'
         || path.startsWith('/api/pro/') || path.startsWith('/api/admin/accounts/') || path === '/api/admin/pro/health';
     if (!owned) return null;
     if (!env.ACCOUNTS) return json({ error: 'not-available' }, 503);
@@ -398,6 +432,8 @@ async function route(request, env, url, path) {
         if (token) await accounts(env).endSession(token);
         return json({ ok: true }, 200, { 'Set-Cookie': sessionCookie('', 0) });
     }
+    if (path === '/api/auth/signout-all') return signOutAll(request, env);
+    if (path === '/api/account/delete') return deleteAccount(request, env);
 
     if (path === '/api/pro/checkout') return checkout(request, env, body);
     if (path === '/api/pro/portal') {
@@ -449,6 +485,23 @@ async function route(request, env, url, path) {
 
 // The signed-in owner of a locked calendar: {userId}, or {res} to send back. The room checks the
 // owner id again on every owner-only route.
+// POST /api/auth/signout-all and /api/account/delete (session + CSRF, checked by route()). Kept apart
+// from the sign-in and checkout code above.
+async function signOutAll(request, env) {
+    const userId = await sessionUserId(request, env);
+    if (!userId) return json({ error: 'signed-out' }, 401);
+    const sessionsEnded = await accounts(env).endAllSessions(userId);
+    return json({ ok: true, sessionsEnded }, 200, { 'Set-Cookie': sessionCookie('', 0) });
+}
+async function deleteAccount(request, env) {
+    const userId = await sessionUserId(request, env);
+    if (!userId) return json({ error: 'signed-out' }, 401);
+    const r = await accounts(env).deleteAccount(userId);
+    if (r.active) return json({ error: 'active-subscription', calendars: r.active,
+        message: 'Cancel your Pro subscription first (Manage billing), then delete your account.' }, 409);
+    return json({ ok: true, deleted: true }, 200, { 'Set-Cookie': sessionCookie('', 0) });
+}
+
 async function requireOwner(request, env, calendarId) {
     const userId = await sessionUserId(request, env);
     if (!userId) return { res: json({ error: 'signed-out' }, 401) };

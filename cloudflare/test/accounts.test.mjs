@@ -132,4 +132,41 @@ assert.ok(byId[`eve-cal-${run}`].currentPeriodEnd > Date.now() / 1000);
 assert.equal(byId[`eve-late-${run}`].status, 'past_due'); assert.equal(byId[`eve-late-${run}`].currentPeriodEnd, 1900000000);
 step('dev-subscription (dev mode + secret) adds a subscription row that /api/me lists');
 
+// Sign out everywhere, and delete an account.
+const signInAs = async (email) => { await post('/api/auth/start', { email }); return (await post('/api/auth/verify', { token: await lastToken(email) })).headers.get('set-cookie').split(';')[0]; };
+const sam = `sam-${run}@example.com`;
+const samLaptop = await signInAs(sam), samPhone = await signInAs(sam);
+assert.equal((await me(samLaptop)).status, 200); assert.equal((await me(samPhone)).status, 200);
+assert.equal((await post('/api/auth/signout-all', {})).status, 401);
+assert.equal((await post('/api/auth/signout-all', {}, { cookie: samLaptop, origin: 'https://evil.example' })).status, 403);
+assert.equal((await post('/api/auth/signout-all', {}, { cookie: samLaptop, type: 'text/plain' })).status, 403);
+r = await post('/api/auth/signout-all', {}, { cookie: samLaptop });
+assert.equal(r.status, 200); assert.deepEqual(await r.json(), { ok: true, sessionsEnded: 2 });
+assert.match(r.headers.get('set-cookie'), /pc_session=; .*Max-Age=0/);
+assert.equal((await me(samLaptop)).status, 401); assert.equal((await me(samPhone)).status, 401);
+step('POST /api/auth/signout-all: needs a session (401) and same-site JSON (403); ends every session of the user (sessionsEnded: 2), cookie cleared');
+
+assert.equal((await post('/api/account/delete', {})).status, 401);
+assert.equal((await post('/api/account/delete', {}, { cookie: eveCookie, origin: 'https://evil.example' })).status, 403);
+r = await post('/api/account/delete', {}, { cookie: eveCookie });
+assert.equal(r.status, 409);
+const refused = await r.json();
+assert.equal(refused.error, 'active-subscription');
+assert.deepEqual(refused.calendars.sort(), [`eve-cal-${run}`, `eve-late-${run}`].sort(), 'active and past_due both block');
+assert.equal((await me(eveCookie)).status, 200, 'nothing deleted');
+const dee = `dee-${run}@example.com`;
+const deeCookie = await signInAs(dee), deeOther = await signInAs(dee);
+assert.equal((await admin('/api/admin/accounts/dev-subscription', { method: 'POST', body: JSON.stringify({ email: dee, calendarId: `dee-cal-${run}`, status: 'canceled' }) })).status, 200);
+await post('/api/auth/start', { email: dee });
+const unusedLink = await lastToken(dee);
+r = await post('/api/account/delete', {}, { cookie: deeCookie });
+assert.equal(r.status, 200); assert.deepEqual(await r.json(), { ok: true, deleted: true });
+assert.match(r.headers.get('set-cookie'), /pc_session=; .*Max-Age=0/);
+assert.equal((await me(deeCookie)).status, 401); assert.equal((await me(deeOther)).status, 401);
+assert.equal((await admin(`/api/admin/accounts/lookup?email=${encodeURIComponent(dee)}`)).status, 404, 'user row (and email) gone');
+assert.equal((await post('/api/auth/verify', { token: unusedLink })).status, 400, 'an unused sign-in link is gone too');
+const deeAgain = await signInAs(dee);
+assert.deepEqual((await (await me(deeAgain)).json()).calendars, [], 'signing up again starts fresh: old subscriptions are unlinked');
+step('POST /api/account/delete: 409 active-subscription (lists the calendars; nothing deleted) while any is active/past_due; otherwise sessions, sign-in links and the user row go, subscriptions are unlinked');
+
 console.log(`\n${n} checks passed`); process.exit(0);
