@@ -30,6 +30,14 @@ async function sha1Hex(str) {
     return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+// What the public may learn from a lookup. A view-only name must never lead back to the
+// calendar's edit name: that is full edit access (Oct 2026, the same hole PR #46 closed on
+// Firebase). The Worker's own lookups go to the directory directly and still see targetId.
+function publicLookup(out) {
+    if (!out || !out.isReadOnly) return out;
+    return { found: out.found, actualSlug: out.actualSlug, isReadOnly: true };
+}
+
 function getDirectory(env) {
     return env.DIRECTORY ? env.DIRECTORY.get(env.DIRECTORY.idFromName('global')) : null;
 }
@@ -115,7 +123,7 @@ export default {
         if ((request.method === 'GET' || request.method === 'POST') && path === '/api/lookup') {
             const dir = getDirectory(env);
             if (!dir) return withCors(Response.json({ found: false }));
-            return withCors(await dir.fetch(request));
+            return withCors(Response.json(publicLookup(await (await dir.fetch(request)).json())));
         }
 
         if (request.method === 'POST' && path === '/lookupCalendar') {
@@ -124,7 +132,7 @@ export default {
             const dir = getDirectory(env);
             if (!dir || !slug) return withCors(Response.json({ data: { found: false }, result: { found: false } }));
             const res = await dir.fetch(`http://internal/lookup?slug=${encodeURIComponent(slug)}`);
-            const out = await res.json();
+            const out = publicLookup(await res.json());
             return withCors(Response.json({ data: out, result: out }));
         }
 
