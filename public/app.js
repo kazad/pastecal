@@ -574,8 +574,10 @@ const CalendarVueApp = {
                             }
                         } catch (e) { /* storage blocked: nothing to open */ }
                         // Back from a Pro sign-in link: reopen Share, where "Lock this calendar" now continues.
-                        if (typeof ProIntent !== 'undefined' && ProIntent.get(this.calendar.id)) {
-                            this.$nextTick(() => { if (!this.showShare) this.toggleShare(); });
+                        const proIntent = typeof ProIntent !== 'undefined' ? ProIntent.get(this.calendar.id) : null;
+                        if (proIntent) {
+                            // Once: the panel reads the chosen interval as it mounts, then the intent is done.
+                            this.$nextTick(() => { if (!this.showShare) this.toggleShare(); this.$nextTick(() => ProIntent.clear()); });
                         }
                     }
                     this.visitCounted = true;

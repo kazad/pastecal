@@ -140,10 +140,11 @@ const ProPanel = {
                     </div>
                     <div class="pc-pro-row">
                         <button type="button" class="pc-pro-btn" :class="{ 'pc-pro-btn--quiet': editorLink }" @click="makeKey" :disabled="busy" data-testid="pro-key-btn">
-                            {{ editorLink ? 'Reset editor link' : 'Create editor link' }}
+                            {{ editorLink ? 'Reset editor link' : 'Get a new editor link' }}
                         </button>
                     </div>
-                    <p class="pc-pro-warn">Making a new link turns off the old one. Anyone still using it will see a read-only calendar.</p>
+                    <p v-if="editorLink" class="pc-pro-muted pc-pro-note">The last link made in this browser. If you reset it somewhere else, get a new one here.</p>
+                    <p class="pc-pro-warn">A new link turns off the old one. Anyone still using it will see a read-only calendar.</p>
                 </div>
 
                 <div class="pc-pro-row pc-pro-foot">
@@ -265,7 +266,8 @@ const ProPanel = {
             } finally { this.busy = false; }
         },
         async makeKey() {
-            if (this.editorLink && !window.confirm('Reset the editor link? The current link stops working right away.')) return;
+            // A key always exists once the calendar is locked (maybe made on another device), so always ask.
+            if (!window.confirm('Make a new editor link? Any editor link you already shared stops working right away.')) return;
             const kind = this.editorLink ? 'reset' : 'create';
             this.error = ''; this.busy = true; this.copied = false;
             try {

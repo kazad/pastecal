@@ -1062,3 +1062,4 @@ div#Schedule,
 .pc-pro-foot { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--pc-line) }
 /* A title with the lock beside it: size to the text so the lock sits next to it, not across the bar. */
 .pc-title-fit { width: auto !important }
+.pc-pro-note { margin-top: 6px; font-size: 12.5px }
