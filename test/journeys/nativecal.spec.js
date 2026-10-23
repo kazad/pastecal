@@ -35,7 +35,7 @@ async function newCalendar(browser, page, name = 'n') {
   const d = await ctx.newPage();
   await d.goto('/');
   await d.locator('input[placeholder="your-name"]').fill(slug);
-  await d.locator('button:has-text("Claim")').locator('visible=true').first().click();
+  await d.locator('[data-testid^="share-new"]').locator('visible=true').first().click();
   await expect(d).toHaveURL(new RegExp(`/${slug}`, 'i'), { timeout: 20_000 });
   await d.waitForFunction(`${VM_SAFE}?.isExisting === true`, null, { timeout: 20_000 });
   await ctx.close();

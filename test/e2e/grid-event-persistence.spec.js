@@ -49,7 +49,7 @@ async function freshCalendar(page) {
   // claimed calendar exercises the persistence path these tests are about.
   // Two claim buttons exist for responsive layouts and only one is visible at a
   // given width, so filter on visibility rather than taking the first match.
-  await page.locator('button:has-text("Claim")').locator('visible=true').first().click();
+  await page.locator('[data-testid^="share-new"]').locator('visible=true').first().click();
   await expect(page).toHaveURL(new RegExp(`/${slug}`), { timeout: 15_000 });
   await page.waitForFunction(`${VM}.isExisting === true`, null, { timeout: 15_000 });
   return slug;

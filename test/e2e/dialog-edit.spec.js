@@ -25,7 +25,7 @@ async function freshCalendar(page) {
   await page.goto('/');
   const slug = `test-dialog-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
   await page.locator('input[placeholder="your-name"]').fill(slug);
-  await page.locator('button:has-text("Claim")').locator('visible=true').first().click();
+  await page.locator('[data-testid^="share-new"]').locator('visible=true').first().click();
   await expect(page).toHaveURL(new RegExp(`/${slug}`), { timeout: 15_000 });
   await page.waitForFunction(`${VM}.isExisting === true`, null, { timeout: 15_000 });
   return slug;

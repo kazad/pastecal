@@ -50,7 +50,7 @@ async function run(base, name) {
   p.on('console', m => { if (/command failed|refused/i.test(m.text())) errs.push(m.text().slice(0, 160)); });
   const slug = `test-matrix-${Date.now()}-${Math.floor(Math.random() * 1e5)}`;
   try {
-    await p.goto(base + '/'); await p.locator('input[placeholder="your-name"]').fill(slug); await p.locator('button:has-text("Claim")').locator('visible=true').first().click();
+    await p.goto(base + '/'); await p.locator('input[placeholder="your-name"]').fill(slug); await p.locator('[data-testid^="share-new"]').locator('visible=true').first().click();
     await p.waitForFunction(`document.querySelector('#app')?._vnode?.component?.proxy?.isExisting === true`, null, { timeout: 30000 });
     await p.evaluate(SEED); await p.waitForTimeout(2500); await p.reload(); await p.waitForFunction(`${VM}.isExisting === true`); await p.waitForTimeout(2000);
     await p.evaluate(() => { const s = window.scheduleObj; s.selectedDate = new Date(2026, 9, 15); s.currentView = 'Month'; s.dataBind(); }); await p.waitForTimeout(1500);
