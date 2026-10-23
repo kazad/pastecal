@@ -51,12 +51,22 @@ function publicLookup(out) {
 // the ONLY source of the trusted X-PC-User header a room sees.
 // UNSAFE_DEV_SESSION_HEADER is for local tests only (wrangler dev --var), never in wrangler.jsonc:
 // it takes the user from an X-Dev-Session-User header, and only from a loopback client.
-async function sessionUserId(request, env) {
+// A WebSocket upgrade carries the session cookie even when another site opens it (no CORS for
+// sockets), so on sockets the cookie counts only from pastecal's own pages (dev mode: localhost too,
+// and the http://pastecal.com that wrangler dev rewrites a same-host Origin to). Anything else is anonymous.
+function trustedSocketOrigin(request, env) {
+    const origin = request.headers.get('Origin') || '';
+    if (origin === 'https://pastecal.com' || origin === 'https://www.pastecal.com') return true;
+    return env.ACCOUNTS_DEV_MODE === '1' && (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) || origin === 'http://pastecal.com');
+}
+
+async function sessionUserId(request, env, { socket = false } = {}) {
     // wrangler dev rewrites the URL to the route's host, so "local" is the client address: Cloudflare
     // sets CF-Connecting-IP itself in production, where it is never loopback.
     if (env.UNSAFE_DEV_SESSION_HEADER === 'on' && /^(::1|127\.0\.0\.1)$/.test(request.headers.get('CF-Connecting-IP') || '')) {
         return request.headers.get('X-Dev-Session-User') || null;
     }
+    if (socket && !trustedSocketOrigin(request, env)) return null;       // not rejected: embeds still read
     // The pc_session cookie (magic-link sign-in). If the Accounts object fails, the caller is simply
     // anonymous: a calendar socket must never 500 because sign-in is down (viewers and editor links still work).
     try {
@@ -346,7 +356,7 @@ export default {
 
             const room = env.CALENDARS.get(env.CALENDARS.idFromName(id));
             // Never pass on a client's X-PC-User; on the WebSocket, set it from the session.
-            const userId = m[2] === '/ws' ? await sessionUserId(request, env) : null;
+            const userId = m[2] === '/ws' ? await sessionUserId(request, env, { socket: true }) : null;
             return withCors(await room.fetch(forRoom(request, request.url, userId)));
         }
 

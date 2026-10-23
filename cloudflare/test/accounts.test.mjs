@@ -158,4 +158,25 @@ assert.ok(byId[`eve-cal-${run}`].currentPeriodEnd > Date.now() / 1000);
 assert.equal(byId[`eve-late-${run}`].status, 'past_due'); assert.equal(byId[`eve-late-${run}`].currentPeriodEnd, 1900000000);
 step('dev-subscription (dev mode + secret) adds a subscription row that /api/me lists');
 
+// The session cookie on a calendar WebSocket counts only from pastecal's own pages (Origin); otherwise the
+// socket still opens, as a viewer.
+const fay = `fay-${run}@example.com`;
+await post('/api/auth/start', { email: fay });
+r = await post('/api/auth/verify', { token: await lastToken(fay) });
+const fayCookie = r.headers.get('set-cookie').split(';')[0];
+const fayId = (await (await admin(`/api/admin/accounts/lookup?email=${encodeURIComponent(fay)}`)).json()).user.id;
+const wsCal = `test-ws-origin-${run}`;
+assert.equal((await fetch(`${BASE}/cal/${encodeURIComponent(wsCal)}`, { method: 'POST', body: JSON.stringify({ title: 'T', events: [] }), headers: { 'CF-Connecting-IP': nextIp() } })).status, 201);
+assert.equal((await admin(`/api/admin/cal/${encodeURIComponent(wsCal)}/lock`, { method: 'POST', body: JSON.stringify({ ownerId: fayId }) })).status, 200);
+const roleVia = (origin) => new Promise((resolve, reject) => {
+    const ws = new WebSocket(`${BASE.replace(/^http/, 'ws')}/cal/${encodeURIComponent(wsCal)}/ws`, { headers: { Cookie: fayCookie, ...(origin ? { Origin: origin } : {}) } });
+    const t = setTimeout(() => reject(new Error('no snapshot')), 4000);
+    ws.addEventListener('message', (e) => { const m = JSON.parse(e.data); if (m.t === 'snapshot') { clearTimeout(t); ws.close(); resolve(m.role); } });
+    ws.addEventListener('error', () => { clearTimeout(t); reject(new Error('socket error')); });
+});
+assert.equal(await roleVia(BASE), 'owner', 'from our own page: the owner');
+assert.equal(await roleVia('https://evil.example'), 'viewer', 'from another site: anonymous');
+assert.equal(await roleVia(null), 'viewer', 'no Origin: anonymous');
+step('a calendar socket trusts the session cookie only with pastecal\'s Origin; from anywhere else it opens read-only');
+
 console.log(`\n${n} checks passed`); process.exit(0);
