@@ -423,6 +423,12 @@ const CalendarVueApp = {
             return !this.urlslug && !this.isExisting;
         },
 
+        // The homepage panel's shortcut list for returning visitors: most recently opened first.
+        homeRecents() {
+            const time = (item) => Date.parse(item.lastVisited || item.createdAt || 0) || 0;
+            return [...(this.recentCalendars || [])].sort((a, b) => time(b) - time(a)).slice(0, 6);
+        },
+
         // Headline and lead for the homepage pitch. One version for now; a later test adds more,
         // keyed by experiment variant.
         tourCopy() {

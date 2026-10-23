@@ -963,3 +963,11 @@ div#Schedule,
 .pc-home-body { padding: 20px 22px 24px; overflow: auto }
 .pc-home-aside .pc-home-draft { background: var(--pc-surface) }
 .pc-home-aside .pc-home-steps b { background: var(--pc-surface); border: 1px solid var(--pc-line) }
+.pc-home-recents { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px }
+.pc-home-recents a { display: grid; gap: 1px; padding: 9px 12px; border: 1px solid var(--pc-line); border-radius: 10px; background: var(--pc-surface); text-decoration: none }
+.pc-home-recents a:hover, .pc-home-recents a:focus-visible { border-color: var(--pc-link) }
+.pc-recent-title { font-size: 15px; font-weight: 600; color: var(--pc-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.pc-recent-meta { font-size: 12.5px; color: var(--pc-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.pc-recent-more { margin: 0 0 16px; font-size: 13px; color: var(--pc-text-muted) }
+.pc-home-new { margin: 18px 0 12px; font-size: 15px; line-height: 1.5; color: var(--pc-text-muted) }
+.pc-home-new strong { color: var(--pc-text) }

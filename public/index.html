@@ -1303,8 +1303,23 @@ Copyright (c) 2025 Kalid Azad
             </p>
             </div>
             <aside v-if="isHomepageCalendar && !homeAsideHidden" class="pc-home-aside" data-testid="home-aside" v-cloak>
-                <div class="pc-home-bar"><span>Getting started</span><button type="button" class="pc-home-hide" @click="toggleHomeAside" aria-label="Hide guide" title="Hide guide"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m8 9 3 3-3 3"/></svg></button></div>
+                <div class="pc-home-bar"><span>{{ homeRecents.length ? 'Your calendars' : 'Getting started' }}</span><button type="button" class="pc-home-hide" @click="toggleHomeAside" aria-label="Hide guide" title="Hide guide"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m8 9 3 3-3 3"/></svg></button></div>
                 <div class="pc-home-body">
+                <!-- Returning visitors: jump back into a recent calendar instead of reading the intro. -->
+                <template v-if="homeRecents.length">
+                    <ul class="pc-home-recents" data-testid="home-recents">
+                        <li v-for="item in homeRecents" :key="item.id">
+                            <a :href="'/' + item.id">
+                                <span class="pc-recent-title">{{ item.title || item.id }}</span>
+                                <span class="pc-recent-meta">pastecal.com/{{ item.id }}<template v-if="item.mine"> · yours</template></span>
+                            </a>
+                        </li>
+                    </ul>
+                    <p v-if="recentCalendars.length > homeRecents.length" class="pc-recent-more">{{ recentCalendars.length - homeRecents.length }} more in the menu next to the logo.</p>
+                    <p class="pc-home-new"><strong>Starting a new one?</strong> Click any day on the left, then press Save &amp; share.</p>
+                    <p class="pc-home-draft">This calendar is a draft, saved only in this browser until you press Save &amp; share.</p>
+                </template>
+                <template v-else>
                 <h1>No-login shared calendars that keep everyone on the same schedule</h1>
                 <p class="pc-home-lead">Add events, send one link, and everyone sees every change.</p>
                 <ol class="pc-home-steps">
@@ -1316,6 +1331,7 @@ Copyright (c) 2025 Kalid Azad
                     <li>Nothing to install</li><li>No sign-up</li><li>No password to reset</li><li>No permissions to set</li>
                 </ul>
                 <p class="pc-home-draft">This calendar is a draft, saved only in this browser until you press Save &amp; share.</p>
+                </template>
                 <a class="pc-home-more" href="#how">How pastecal works ↓</a>
                 </div>
             </aside>
