@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pricing · pastecal</title>
-<meta name="description" content="pastecal is free to use. Pro adds full backup history, subcalendars, no branding and more. Join the waitlist.">
+<meta name="description" content="pastecal is free to use. Pro locks editing to people you choose and removes pastecal branding: $24 a year or $2.99 a month per calendar.">
 <link rel="icon" href="/favicon.ico">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
 <style>
@@ -79,6 +79,11 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--blue); outl
 #waitBtn { height: 48px; font-size: 16px }
 .wait-ideas { margin-top: 12px !important; font-size: 15px }
 .done { color: var(--ok); font-weight: 600; min-height: 1.4em; margin: 0 }
+.howto { margin-top: 32px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 4px 24px 20px }
+.howto h2 { margin: 18px 0 8px }
+.howto ol { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 6px }
+.howto p { color: var(--muted); margin: 12px 0 0 }
+.plan li .soon { margin-left: 8px }
 
 .faq { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 32px }
 details { border-bottom: 1px solid var(--line); padding-block: 12px }
@@ -99,7 +104,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
 
 <div class="col">
   <h1>Free for everyone you share with. Pro when it matters.</h1>
-  <p class="lead">pastecal stays free and account-free for making and sharing calendars. Pro is for the calendars you're responsible for: lock who can edit, review suggestions, and keep a full history of changes.</p>
+  <p class="lead">pastecal stays free and account-free for making and sharing calendars. Pro is for the calendars you're responsible for: lock who can edit, and show it without our branding. More is on the way.</p>
 
   <div class="plans">
     <div class="plan">
@@ -121,17 +126,18 @@ details p { color: var(--muted); margin: 8px 0 0 }
       <h3>Pro</h3>
       <p class="who">For a calendar you run: a team, a class, a shift schedule.</p>
       <div class="price"><strong>$24</strong><span>per calendar, per year</span></div>
-      <p class="per">That's $2 a month.</p>
+      <p class="per">Or $2.99 a month. Yearly saves 33%.</p>
       <ul>
         <li>Everything in Free</li>
         <li>Lock editing to people you choose</li>
-        <li>Others suggest events, you approve</li>
-        <li>A full history of changes</li>
-        <li>Secret events and subcalendars</li>
-        <li>See how many people view and follow it</li>
-        <li>Your logo, name and theme, not ours</li>
+        <li>No pastecal branding</li>
+        <li>Others suggest events, you approve<span class="soon">Soon</span></li>
+        <li>A full history of changes<span class="soon">Soon</span></li>
+        <li>Secret events and subcalendars<span class="soon">Soon</span></li>
+        <li>See how many people view and follow it<span class="soon">Soon</span></li>
+        <li>Your logo, name and theme<span class="soon">Soon</span></li>
       </ul>
-      <a class="cta primary" href="#waitlist" data-plan="pro">Join the waitlist</a>
+      <a class="cta primary" href="#get-pro" data-plan="pro">Get Pro</a>
     </div>
 
     <div class="plan">
@@ -153,6 +159,16 @@ details p { color: var(--muted); margin: 8px 0 0 }
     <div><b>Nobody pays per person</b>Everyone you share with stays free, with no account. You pay per calendar, not per seat.</div>
   </div>
 
+  <section class="howto" id="get-pro" aria-labelledby="getProH">
+    <h2 id="getProH">How to get Pro</h2>
+    <ol>
+      <li><b>Open your calendar</b> on pastecal.</li>
+      <li><b>Press Share</b>, at the top right.</li>
+      <li><b>Choose Lock this calendar.</b> Pick yearly ($24) or monthly ($2.99), sign in with a link we email you, and pay with Stripe.</li>
+    </ol>
+    <p>Then share your editor link with the people who should be able to edit. Everyone else can still view.</p>
+  </section>
+
   <h2>Compare plans</h2>
   <div class="gridwrap">
     <table>
@@ -166,7 +182,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
         <tr><td>Choose your read-only link name</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td></tr>
 
         <tr class="group"><td colspan="4">Control</td></tr>
-        <tr><td>Lock editing to people you choose<span class="soon">Soon</span><small>Everyone else can view, as today</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Lock editing to people you choose<small>They edit with an editor link you share. Everyone else can view, as today</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td></tr>
         <tr><td>Suggested events<span class="soon">Soon</span><small>Visitors suggest, you approve or decline</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td></tr>
         <tr><td>Secret events<span class="soon">Soon</span><small>Seen only by people who can edit</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td></tr>
         <tr><td>Subcalendars<span class="soon">Soon</span><small>Layers like "Games" and "Practice" people can turn on and off</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td></tr>
@@ -198,8 +214,8 @@ details p { color: var(--muted); margin: 8px 0 0 }
 
   <section class="wait" id="waitlist" aria-labelledby="waitH">
     <div class="wait-copy">
-      <h2 id="waitH">Join the Pro waitlist</h2>
-      <p>We'll email you once, when Pro opens.</p>
+      <h2 id="waitH">Join the waitlist</h2>
+      <p>For Teams, and for the Pro features marked Soon. We'll email you once, when they open.</p>
       <p class="wait-ideas">Have an idea for Pro, or something pastecal should do better? Add it to the form. We read every one.</p>
     </div>
     <form id="waitForm" novalidate>
@@ -210,7 +226,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
       <div class="formrow">
         <div class="field">
           <label for="plan">Plan</label>
-          <select id="plan" name="plan"><option value="pro">Pro, $24 a year</option><option value="teams">Teams, $80 a year</option><option value="unsure">Not sure yet</option></select>
+          <select id="plan" name="plan"><option value="teams">Teams, $80 a year</option><option value="pro">Pro features marked Soon</option><option value="unsure">Not sure yet</option></select>
         </div>
         <div class="field">
           <label for="use">Mostly for</label>
@@ -230,8 +246,8 @@ details p { color: var(--muted); margin: 8px 0 0 }
   <h2>Questions</h2>
   <div class="faq">
     <details><summary>What's free?</summary><p>Making, editing and sharing calendars, with no account. Pro adds features for people who run a calendar.</p></details>
-    <details><summary>Does everyone I share with need to pay?</summary><p>No. You pay for the calendar, once a year. Everyone you share it with stays free.</p></details>
-    <details><summary>Do I need an account for Pro?</summary><p>Only you do, so we know who owns the calendar. Nobody you share with ever needs one.</p></details>
+    <details><summary>Does everyone I share with need to pay?</summary><p>No. You pay for the calendar, yearly or monthly. Everyone you share it with stays free.</p></details>
+    <details><summary>Do I need an account for Pro?</summary><p>Only you, the calendar's owner, sign in, so we know who owns it. You sign in with a link we email you. There's no password. Nobody you share with ever needs an account.</p></details>
     <details><summary>What happens to backups on the free plan?</summary><p>Every calendar is backed up daily. Pro will add a full history you can restore from.</p></details>
     <details><summary>Can I switch a Pro calendar later?</summary><p>On Teams, yes, anytime. On Pro, email us and we'll move it.</p></details>
     <details><summary>Can I see who looked at my calendar?</summary><p>Pro shows how many people viewed it, how many follow it in a calendar app, and which countries and cities they're in. It never shows who they are.</p></details>

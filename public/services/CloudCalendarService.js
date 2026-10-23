@@ -29,6 +29,13 @@
  * only this tab's own changes, minus whatever the server already has, minus anything
  * someone else changed since -- so a replay can neither double-apply nor undo other people.
  *
+ * Pro lock. Snapshots carry {locked, pro, canEdit}. On a locked calendar a tab without rights
+ * is read-only: _push sends nothing (the server would refuse it, and a refused save is asked for
+ * again on every snapshot). A tab holding an editor key (EditorKeys, from a #k= link) sends
+ * {t:'auth', key} as soon as the socket opens; the first snapshot is held back until the answer
+ * (or AUTH_WAIT_MS), so an editor never flashes the read-only view. Every change of access is
+ * reported to the app through onLockState({id, locked, pro, canEdit, reason}).
+ *
  * Pure decisions (planSave, rebuild, ackOutcome, metaDiff) are static and unit-tested in
  * test/unit/cloud-calendar-service.test.js; the socket code is exercised against
  * `wrangler dev` by cloudflare/test/cloud-service.test.mjs.
@@ -69,6 +76,7 @@ class CloudCalendarService extends CalendarDataService {
     }
 
     static RECONNECT = { baseMs: 500, maxMs: 30000 };
+    static AUTH_WAIT_MS = 2500;
     static READONLY_POLL_MS = 15000;
     static _rooms = {};
 
@@ -165,6 +173,7 @@ class CloudCalendarService extends CalendarDataService {
         const room = this._rooms[slug] = {
             id: slug, callback, ws: null, v: 0, server: null, inflight: null, latest: null, seq: 0,
             retries: 0, timer: null, closed: false, unsent: false, force: null, sawSnapshot: false,
+            lock: { locked: false, pro: false, canEdit: true }, authPending: false, authTimer: null, heldSnapshot: null,
         };
         this._open(room);
     }
@@ -174,6 +183,16 @@ class CloudCalendarService extends CalendarDataService {
         let ws;
         try { ws = new WebSocket(this._wsUrl(room.id)); } catch (e) { this._scheduleReconnect(room); return; }
         room.ws = ws;
+        // An editor key goes first, before the app sees the snapshot (which says canEdit:false until it lands).
+        ws.onopen = () => {
+            if (room.ws !== ws) return;
+            const key = this._editorKey(room.id);
+            if (!key) return;
+            room.authPending = true;
+            clearTimeout(room.authTimer);
+            room.authTimer = setTimeout(() => { if (room.ws === ws) this._releaseAuth(room); }, this.AUTH_WAIT_MS);
+            this._send(room, { t: 'auth', key });
+        };
         ws.onmessage = (ev) => { if (room.ws === ws) { try { this._onMessage(room, JSON.parse(ev.data)); } catch (e) { console.error('[CloudCalendarService]', e); } } };
         ws.onclose = () => { if (room.ws === ws) this._onClose(room); };
         ws.onerror = () => { /* onclose follows */ };
@@ -181,6 +200,7 @@ class CloudCalendarService extends CalendarDataService {
 
     static _onClose(room) {
         room.ws = null;
+        room.authPending = false; clearTimeout(room.authTimer); room.heldSnapshot = null;
         if (room.inflight) { room.inflight = null; room.unsent = true; }   // may or may not have landed; rebuild decides
         this._scheduleReconnect(room);
     }
@@ -195,7 +215,7 @@ class CloudCalendarService extends CalendarDataService {
     /** Stop a subscription (tests, and a page that switches calendars). */
     static close(id) {
         const room = this._rooms[id]; if (!room) return;
-        room.closed = true; clearTimeout(room.timer);
+        room.closed = true; clearTimeout(room.timer); clearTimeout(room.authTimer);
         try { room.ws && room.ws.close(); } catch (e) { /* gone */ }
         if (this.connected === id) this.connected = false;
         delete this._rooms[id];
@@ -225,7 +245,51 @@ class CloudCalendarService extends CalendarDataService {
             }
             case 'ack': return this._onAck(room, m);
             case 'error': return this._onError(room, m);
+            case 'auth': return this._onAuth(room, m);
         }
+    }
+
+    // ---- Pro lock ---------------------------------------------------------------------------
+
+    static _editorKey(id) {
+        try { return typeof EditorKeys !== 'undefined' ? EditorKeys.get(id) : null; } catch (e) { return null; }
+    }
+    static _forgetEditorKey(id) {
+        try { if (typeof EditorKeys !== 'undefined') EditorKeys.forget(id); } catch (e) { /* storage blocked */ }
+    }
+    /** A locked calendar this tab may not change. */
+    static _blocked(room) { return !!(room.lock && room.lock.locked && !room.lock.canEdit); }
+    /** Access for the calendar this tab has open (the app's lock icon and read-only state). */
+    static lockState(id) { const r = this._rooms[id]; return r ? { ...r.lock } : null; }
+
+    static _notifyLock(room, reason) {
+        if (typeof this.onLockState !== 'function') return;
+        try { this.onLockState({ id: room.id, ...room.lock, ...(reason ? { reason } : {}) }); } catch (e) { /* never rethrow */ }
+    }
+
+    // The auth answer did not come in time: show what the snapshot said; a late answer still applies.
+    static _releaseAuth(room) {
+        room.authPending = false; clearTimeout(room.authTimer);
+        const held = room.heldSnapshot; room.heldSnapshot = null;
+        if (held) this._onSnapshot(room, held);
+    }
+
+    static _onAuth(room, m) {
+        room.authPending = false; clearTimeout(room.authTimer);
+        let reason = null;
+        if (m.ok) {
+            room.lock = { ...room.lock, locked: !!m.locked, canEdit: m.canEdit !== false };
+        } else if (m.locked) {
+            // The key is wrong now: the owner reset it (or it never matched). It will not start working again.
+            this._forgetEditorKey(room.id);
+            room.lock = { ...room.lock, locked: true, canEdit: !!m.canEdit };
+            if (!m.canEdit) reason = 'key-rotated';
+        }
+        // (ok:false on a calendar that is not locked: nothing to do, the key is simply not needed.)
+        const held = room.heldSnapshot; room.heldSnapshot = null;
+        if (held) return this._onSnapshot(room, { ...held, canEdit: room.lock.canEdit }, reason);
+        this._notifyLock(room, reason);
+        if (!this._blocked(room) && (room.unsent || room.latest)) { room.unsent = false; this._push(room); }
     }
 
     static _calendar(room) {
@@ -245,8 +309,15 @@ class CloudCalendarService extends CalendarDataService {
         room.callback(cal);
     }
 
-    static _onSnapshot(room, m) {
+    static _onSnapshot(room, m, reason = null) {
         room.retries = 0;
+        if (m.calendar && m.calendar.id && room.authPending && m.locked && !m.canEdit) {
+            room.heldSnapshot = m;                       // wait for the editor key's answer (or AUTH_WAIT_MS)
+            return;
+        }
+        if (m.calendar && m.calendar.id) {
+            room.lock = { locked: !!m.locked, pro: !!m.pro, canEdit: m.canEdit !== false };
+        }
         if (!m.calendar || !m.calendar.id) {            // no such calendar: the app treats it as a new one
             room.closed = true;
             try { room.ws.close(); } catch (e) { /* gone */ }
@@ -269,7 +340,9 @@ class CloudCalendarService extends CalendarDataService {
             this._replayed[room.id + ':' + entry.t] = true;
             if (typeof this.onJournalReplay === 'function') { try { this.onJournalReplay({ ageMs: Date.now() - entry.t }); } catch (e) { /* never rethrow */ } }
         }
+        this._notifyLock(room, reason);
         this._deliver(room, true);
+        if (this._blocked(room)) return;               // read-only here: the journal waits (an editor key may still land)
         if (commands.length) this._sendSave(room, commands, { journalT: entry.t, replay: true, localEvents: null });
         else if (room.unsent || room.latest) { room.unsent = false; this._push(room); }
     }
@@ -286,6 +359,7 @@ class CloudCalendarService extends CalendarDataService {
 
     static _push(room, opts = {}) {
         if (room.inflight || !room.latest || !room.server || this._paused) return;
+        if (this._blocked(room)) return;                 // locked and no rights: the server would refuse it
         const safe = this._dropIncompleteEvents(room.latest);
         const local = this._sanitizeForFirebase(safe.events || []);
         const commands = this.planSave(room.server.events, local);
@@ -375,6 +449,13 @@ class CloudCalendarService extends CalendarDataService {
         }
         // Refused for what it says: replaying it would be refused again, so drop it, and show the server's data.
         if (f) { this._journalClear(room.id, f.journalT); room.force = f.localEvents || null; }
+        if (m.code === 'locked') {
+            // Locked under us (or the key stopped working): read-only from here, and drop the
+            // refused edit so the next snapshot does not send it again.
+            room.latest = null; room.unsent = false;
+            room.lock = { ...room.lock, locked: true, canEdit: false };
+            this._notifyLock(room);
+        }
         if (typeof this.onSyncRefused === 'function') {
             const events = room.server ? JSON.parse(JSON.stringify(room.server.events)) : null;
             try { this.onSyncRefused({ before: events ? events.length : 0, removing: 0, events, code: m.code, message }); } catch (e) { /* never rethrow */ }
@@ -443,7 +524,7 @@ class CloudCalendarService extends CalendarDataService {
                     if (r.status === 404) r = await fetch(this._url(slug));
                     if (r.ok) {
                         const out = await r.json();
-                        if (out.v !== v && out.calendar && out.calendar.id) { v = out.v; callback({ ...out.calendar, events: out.calendar.events }); }
+                        if (out.v !== v && out.calendar && out.calendar.id) { v = out.v; callback({ ...out.calendar, events: out.calendar.events }, { locked: !!out.locked, pro: !!out.pro }); }
                     }
                 }
             } catch (e) { /* offline: try again next time */ }
@@ -469,10 +550,15 @@ class CloudCalendarService extends CalendarDataService {
     }
 
     static async createPublicLink(params) {
+        // A locked calendar's view link needs the owner (session cookie, sent automatically) or an editor key.
+        const body = { ...params };
+        const room = this._rooms[params && params.sourceCalendarId];
+        const key = params && this._editorKey(params.sourceCalendarId);
+        if (key && (!room || room.lock.locked)) body.editorKey = key;
         const res = await fetch(`${this._base()}/api/create-view`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(params)
+            body: JSON.stringify(body)
         });
         const out = await res.json().catch(() => ({}));
         if (!res.ok || !out.ok) {

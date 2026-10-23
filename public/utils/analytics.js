@@ -399,6 +399,18 @@ const Analytics = {
      * a dozen near-empty event names makes that harder to read, not easier.
      * Registering one custom dimension unlocks every feature at once.
      */
+    // ---- Pro funnel ------------------------------------------------------------
+    //
+    // Offer shown -> sign-in asked/sent -> checkout started (or failed, and why). `where`
+    // says which surface; no email, calendar name or key ever goes in here.
+    proLockShown(where) { this.track('pro_lock_shown', { where }); },
+    proSignInShown(where) { this.track('pro_signin_shown', { where }); },
+    proSignInSent(where) { this.track('pro_signin_sent', { where }); },
+    proCheckoutStarted(interval) { this.track('pro_checkout_started', { where: 'share_panel', interval: interval === 'month' ? 'month' : 'year' }); },
+    proCheckoutFailed(reason) { this.track('pro_checkout_failed', { where: 'share_panel', reason: String(reason).slice(0, 40) }); },
+    proEditorLinkMade(kind) { this.track('pro_editor_link', { where: kind === 'reset' ? 'reset' : 'create' }); },
+    proPortalOpened() { this.track('pro_portal_opened', { where: 'share_panel' }); },
+
     featureUsed(feature, detail) {
         this.track('feature_used', {
             feature,               // 'notes' | 'colors' | 'settings' | 'event_type'

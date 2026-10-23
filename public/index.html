@@ -41,6 +41,22 @@ Copyright (c) 2025 Kalid Azad
     <link rel="preconnect" href="https://www.gstatic.com">
     <link rel="preconnect" href="https://cdn.jsdelivr.net">
 
+    <!-- Editor link (pastecal.com/<calendar>#k=<key>): move the key out of the URL before ANY
+         analytics script can read location. Stored per calendar (services/EditorKeys.js reads it)
+         and sent only over the calendar's WebSocket. Must stay the first script on the page. -->
+    <script>
+        (function () {
+            var m = /(?:^#|&)k=([A-Za-z0-9_-]{8,200})(?:&|$)/.exec(location.hash || '');
+            if (!m) return;
+            var id = null;
+            try { id = decodeURIComponent(location.pathname.split('/').filter(Boolean)[0] || '').toLowerCase() || null; } catch (e) { id = null; }
+            try { history.replaceState(history.state, '', location.pathname + location.search); } catch (e) { location.hash = ''; }
+            if (!id) return;
+            window.__pcEditorKey = { id: id, key: m[1] };
+            try { localStorage.setItem('pastecal_editor_key:' + id, m[1]); } catch (e) { /* storage blocked: kept for this page load */ }
+        })();
+    </script>
+
     <!-- Google Tag Manager -->
     <script>
         (function (w, d, s, l, i) {
@@ -174,6 +190,7 @@ Copyright (c) 2025 Kalid Azad
     <script src="/models/Calendar.js?v=1790553083"></script>
     <script src="/services/EventStore.js?v=1790553083"></script>
     <!-- Picks the backend: replaces CalendarDataService with the Cloudflare one when ?backend=cf / new.pastecal.com. Flag off = no effect. -->
+    <script src="/services/EditorKeys.js?v=1790553083"></script>
     <script src="/services/CloudCalendarService.js?v=1790553083"></script>
     <script src="/services/ScheduleAdapter.js?v=1790553083"></script>
     <script src="/directives/clickOutside.js?v=1790553083"></script>
@@ -186,6 +203,7 @@ Copyright (c) 2025 Kalid Azad
     <script src="/components/CalendarTitle.js?v=1790553083"></script>
     <script src="/components/NavigationDropdown.js?v=1790553083"></script>
     <script src="/components/WelcomeDock.js?v=1790553083"></script>
+    <script src="/components/Pro.js?v=1790553083"></script>
 
     <script>
         // Load-order guard for critical globals
@@ -241,7 +259,7 @@ Copyright (c) 2025 Kalid Azad
             <!-- Row 1: Logo, Title, Menu -->
             <div class="relative flex items-center justify-between gap-2">
                 <!-- Logo & Recents -->
-                <div class="relative z-40 flex-shrink-0" v-click-outside="closeRecents">
+                <div class="relative z-40 flex-shrink-0" v-click-outside="closeRecents" :style="hideBranding ? 'visibility:hidden' : ''">
                     <div @click.stop="toggleRecents" class="cursor-pointer flex items-center gap-1">
                         <div class="flex items-center gap-1.5">
                             <img class="h-8 w-8 dark:brightness-150" src="/img/pastecal.logo.svg" alt="pastecal">
@@ -262,10 +280,11 @@ Copyright (c) 2025 Kalid Azad
                 <!-- Center: Title (absolutely centered) -->
                 <div class="absolute left-1/2 transform -translate-x-1/2 z-30 flex items-center gap-1">
                     <calendar-title :title="calendar.title" :is-editing="editTitle" :is-read-only="isReadOnly"
-                        mode="mobile" input-ref="mobileTitleInput" class="overflow-hidden max-w-[120px]"
+                        mode="mobile" input-ref="mobileTitleInput" class="overflow-hidden max-w-[120px]" :class="{ 'pc-title-fit': lock.locked }"
                         @update:title="calendar.title = $event" @click="editTitle = true" @blur="editTitle = false"
                         @enter="editTitle = false">
                     </calendar-title>
+                    <lock-badge v-if="lock.locked && !editTitle" :can-edit="lock.canEdit"></lock-badge>
                     <button v-if="!editTitle" v-on:click="toggleNotes" aria-label="Toggle notes"
                         class="text-color-1 hover:text-blue-500 p-1 transition-colors flex items-center justify-center flex-shrink-0">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
@@ -303,7 +322,7 @@ Copyright (c) 2025 Kalid Azad
                                                                         <icon name="search" class="w-5 h-5"></icon>                                Search
                             </button>
                             <button
-                                @click="showMobileMenu = false; $refs.quickAddDialog && $refs.quickAddDialog.showDialog()"
+                                @click="showMobileMenu = false; openQuickAdd()"
                                 class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
                                 <span class="text-lg leading-none font-bold text-blue-500">+</span> Quick Add Event
                             </button>
@@ -353,7 +372,7 @@ Copyright (c) 2025 Kalid Azad
             <!-- Left section -->
             <section class="flex-1 flex flex-col md:flex-row items-start md:space-x-2 min-w-0">
                 <!-- Logo and app name -->
-                <logo class="flex items-center text-sm h-8 relative">
+                <logo class="flex items-center text-sm h-8 relative" v-if="!hideBranding">
                     <div class="relative" v-click-outside="closeRecents" @mouseenter="handleDropdownMouseEnter"
                         @mouseleave="handleDropdownMouseLeave">
                         <div class="flex items-center space-x-2">
@@ -454,7 +473,7 @@ Copyright (c) 2025 Kalid Azad
                         <span class="whitespace-nowrap">Click to edit title</span>
                     </template>
                 </custom-tooltip>
-                <calendar-title v-if="!editTitle && isReadOnly" :title="calendar.title" :is-editing="editTitle"
+                <calendar-title v-if="!editTitle && isReadOnly" class="pc-title-fit" :title="calendar.title" :is-editing="editTitle"
                     :is-read-only="isReadOnly" mode="desktop" @update:title="calendar.title = $event"
                     @click="editTitle = true" @blur="editTitle = false" @enter="setTitle($event)">
                 </calendar-title>
@@ -463,6 +482,7 @@ Copyright (c) 2025 Kalid Azad
                     @update:title="calendar.title = $event" @click="editTitle = true" @blur="editTitle = false"
                     @enter="setTitle($event)">
                 </calendar-title>
+                <lock-badge v-if="lock.locked && !editTitle" :can-edit="lock.canEdit"></lock-badge>
                 <custom-tooltip width="w-auto" align="center" v-if="!editTitle">
                     <template #trigger>
                         <button v-on:click="toggleNotes" aria-label="Toggle notes"
@@ -524,25 +544,29 @@ Copyright (c) 2025 Kalid Azad
                             <div class="flex items-center bg-1 border border-color-default rounded-full p-1 pl-3 pr-3 shadow-sm cursor-pointer select-none hover:border-blue-500 hover:bg-[var(--bg-interactive-hover)] transition-all"
                                 @click="toggleShare"
                                 data-testid="share-pill-readonly">
-                                <!-- Share Icon -->
+                                <!-- Share Icon (a lock on a locked calendar) -->
                                 <div class="text-color-1 flex-shrink-0 mr-1.5">
-                                    <icon name="share" class="w-5 h-5"></icon>
+                                    <svg v-if="lock.locked" class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                    <icon v-else name="share" class="w-5 h-5"></icon>
                                 </div>
                                 <!-- Text -->
-                                <div class="text-color-2 text-xs font-bold">
-                                    View Only
+                                <div class="text-color-2 text-xs font-bold" data-testid="readonly-pill-label">
+                                    {{ lock.locked ? 'Locked' : 'View Only' }}
                                 </div>
                             </div>
                         </template>
                         <template #content>
-                            <p class="leading-relaxed">
+                            <p class="leading-relaxed" v-if="lock.locked">
+                                Only the owner and invited editors can change this calendar.
+                            </p>
+                            <p class="leading-relaxed" v-else>
                                 You are in View Only mode. Events cannot be added or edited.
                             </p>
                         </template>
                     </custom-tooltip>
                     <!-- People sent a view-only link are the best future users: one quiet invitation.
                          Also shown inside embeds, as the free plan's small credit (Pro removes it). -->
-                    <a href="https://pastecal.com/" target="_top" class="pc-make-own" data-testid="make-own">Make your own calendar</a>
+                    <a v-if="!hideBranding" href="https://pastecal.com/" target="_top" class="pc-make-own" data-testid="make-own">Make your own calendar</a>
                 </div>
 
                 <div v-if="!isLoading && !isReadOnly">
@@ -832,7 +856,10 @@ Copyright (c) 2025 Kalid Azad
 
                             Edit Access
                         </h4>
-                        <p class="text-xs text-color-1 mb-3 italic">
+                        <p class="text-xs text-color-1 mb-3 italic" v-if="lock.locked">
+                            Locked: people with this link can view. Only you and people with an editor link can change it.
+                        </p>
+                        <p class="text-xs text-color-1 mb-3 italic" v-else>
                             Full editing access - anyone can view and change events
                         </p>
                         <div class="flex gap-2">
@@ -1036,6 +1063,9 @@ Copyright (c) 2025 Kalid Azad
                     </div>
 
                 </div>
+
+                <!-- Pro: lock this calendar, or (owner) the editor link and billing -->
+                <pro-panel v-if="isExisting" :calendar-id="calendar.id" :locked="lock.locked" :can-edit="canEdit"></pro-panel>
             </div>
 
             <div v-if="showSettings" class="w-full p-2.5 text-sm text-color-2" v-cloak>

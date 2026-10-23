@@ -1019,3 +1019,46 @@ div#Schedule,
   .e-schedule .e-month-view .e-header-cells span[data-short] { font-size: 0 }
   .e-schedule .e-month-view .e-header-cells span[data-short]::after { content: attr(data-short); font-size: 12px }
 }
+
+/* ---- Pro: lock badge beside a locked calendar's title ---------------------------------- */
+.pc-lock { position: relative; display: inline-flex; align-items: center; flex-shrink: 0 }
+.pc-lock-btn { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: var(--pc-radius-pill, 999px); background: transparent; color: var(--pc-text-muted); cursor: pointer }
+.pc-lock-btn svg { width: 15px; height: 15px }
+.pc-lock-btn:hover, .pc-lock--open .pc-lock-btn { color: var(--pc-text); background: var(--pc-soft) }
+.pc-lock-btn:focus-visible { outline: 2px solid var(--pc-link); outline-offset: 1px }
+.pc-lock-pop { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); z-index: 60; width: max-content; max-width: min(260px, calc(100vw - 32px)); padding: 8px 10px; border-radius: var(--pc-radius-md, 8px); border: 1px solid var(--pc-line); background: var(--pc-bg); color: var(--pc-text); font: 500 12.5px/1.4 var(--pc-font); text-align: left; box-shadow: 0 6px 20px rgba(0,0,0,.12); white-space: normal }
+
+/* ---- Pro: share dialog section ----------------------------------------------------------- */
+.pc-pro { --pro-btn: #2563eb; margin-top: 16px; padding: 16px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-lg, 12px); background: var(--pc-bg); color: var(--pc-text); font-family: var(--pc-font) }
+.pc-pro-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px }
+.pc-pro-head h4 { margin: 0; font-size: 15px; font-weight: 600 }
+.pc-pro-icon { display: inline-flex; color: var(--pc-text-muted) }
+.pc-pro-icon svg { width: 18px; height: 18px }
+.pc-pro-lead { margin: 0 0 12px; color: var(--pc-text-muted); font-size: 13.5px; line-height: 1.5 }
+.pc-pro-plans { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px }
+.pc-pro-plan { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--pc-field); border-radius: var(--pc-radius-md, 8px); cursor: pointer; font-size: 14px; background: var(--pc-bg) }
+.pc-pro-plan.on { border-color: var(--pc-link); box-shadow: inset 0 0 0 1px var(--pc-link) }
+.pc-pro-plan input { margin: 0; accent-color: var(--pc-link) }
+.pc-pro-plan b { font-weight: 600 }
+.pc-pro-save { font-style: normal; font-size: 11.5px; font-weight: 600; color: var(--pc-success); background: var(--pc-success-soft); border-radius: 999px; padding: 1px 7px; margin-left: 2px }
+.pc-pro-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px }
+.pc-pro-btn { display: inline-flex; align-items: center; justify-content: center; min-height: 36px; padding: 0 14px; border: 1px solid var(--pro-btn); border-radius: var(--pc-radius-md, 8px); background: var(--pro-btn); color: #fff; font: 600 14px var(--pc-font); cursor: pointer; white-space: nowrap }
+.pc-pro-btn:hover:not(:disabled) { filter: brightness(1.08) }
+.pc-pro-btn:disabled { opacity: .6; cursor: default }
+.pc-pro-btn--quiet { background: transparent; color: var(--pc-text); border-color: var(--pc-field) }
+.pc-pro-btn:focus-visible, .pc-pro-link:focus-visible { outline: 2px solid var(--pc-link); outline-offset: 2px }
+.pc-pro-email label { display: block; font-size: 13px; color: var(--pc-text); margin-bottom: 2px }
+.pc-pro-email input, .pc-pro-field { flex: 1 1 220px; min-width: 0; max-width: 420px; height: 36px; padding: 0 10px; border: 1px solid var(--pc-field); border-radius: var(--pc-radius-md, 8px); background: var(--pc-bg); color: var(--pc-text); font: 14px var(--pc-font) }
+.pc-pro-field { max-width: 560px; background: var(--pc-surface); font-family: var(--pc-font-mono); font-size: 12.5px }
+.pc-pro-email input:focus, .pc-pro-field:focus { outline: 2px solid var(--pc-link); outline-offset: 0; border-color: var(--pc-link) }
+.pc-pro-muted { color: var(--pc-text-muted); font-size: 13px; margin: 0 }
+.pc-pro-muted a, .pc-pro-link { color: var(--pc-link); font-size: 13px; text-decoration: none }
+.pc-pro-muted a:hover, .pc-pro-link:hover { text-decoration: underline }
+.pc-pro-ok { margin: 8px 0 0; color: var(--pc-success); font-size: 14px; font-weight: 500 }
+.pc-pro-err { margin: 10px 0 0; color: var(--pc-danger); font-size: 13.5px }
+.pc-pro-sub { margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--pc-line) }
+.pc-pro-sub h5 { margin: 0; font-size: 14px; font-weight: 600 }
+.pc-pro-warn { margin: 8px 0 0; color: var(--pc-text-muted); font-size: 12.5px }
+.pc-pro-foot { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--pc-line) }
+/* A title with the lock beside it: size to the text so the lock sits next to it, not across the bar. */
+.pc-title-fit { width: auto !important }
