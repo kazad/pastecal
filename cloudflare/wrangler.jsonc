@@ -34,14 +34,16 @@
   "durable_objects": {
     "bindings": [
       { "name": "CALENDARS", "class_name": "CalendarRoom" },
-      { "name": "DIRECTORY", "class_name": "CalendarDirectory" }
+      { "name": "DIRECTORY", "class_name": "CalendarDirectory" },
+      { "name": "WAITLIST", "class_name": "Waitlist" }
     ]
   },
   // New calendars from browsers (POST /cal/<id>): 10 a minute per IP.
   "ratelimits": [{ "name": "CREATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }],
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["CalendarRoom"] },
-    { "tag": "v2", "new_sqlite_classes": ["CalendarDirectory"] }
+    { "tag": "v2", "new_sqlite_classes": ["CalendarDirectory"] },
+    { "tag": "v3", "new_sqlite_classes": ["Waitlist"] }
   ],
   // Copy-back to Firebase (see CalendarRoom). Inert until the FIREBASE_SA secret exists.
   // In Phase 4, COPY_BACK="*" mirrors every save back to Firebase RTDB for zero data loss and instant rollback.

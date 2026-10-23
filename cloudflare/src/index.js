@@ -20,6 +20,8 @@ import { SlugService } from './SlugService.js';
 import { handleCollect } from './Collector.js';
 export { CalendarRoom } from './CalendarRoom.js';
 export { CalendarDirectory } from './CalendarDirectory.js';
+export { Waitlist } from './Waitlist.js';
+import { PLANS } from './Waitlist.js';
 
 // Any name Firebase allowed: real calendars include "TEAM NUÑEZ", "d&d8", "강아지봉사" and
 // trailing spaces. Firebase keys cannot hold . # $ [ ] / or control chars.
@@ -124,6 +126,39 @@ export default {
             const dir = getDirectory(env);
             if (!dir) return withCors(Response.json({ found: false }));
             return withCors(Response.json(publicLookup(await (await dir.fetch(request)).json())));
+        }
+
+        // Pro waitlist: anyone may sign up (rate-limited, with a hidden field that only bots fill
+        // in); only the owner, with IMPORT_SECRET, can export the list.
+        if (path === '/api/waitlist' && request.method === 'POST') {
+            if (!env.WAITLIST) return withCors(Response.json({ ok: false, error: 'not available' }, { status: 503 }));
+            const body = await request.json().catch(() => null);
+            if (!body || typeof body !== 'object') return withCors(Response.json({ ok: false, error: 'Send the form as JSON.' }, { status: 400 }));
+            if (body.website) return withCors(Response.json({ ok: true }));          // the hidden field: a bot
+            const email = String(body.email || '').trim().toLowerCase();
+            if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                return withCors(Response.json({ ok: false, error: 'Enter an email address, like you@example.com.' }, { status: 400 }));
+            }
+            if (env.CREATE_LIMITER) {
+                const { success } = await env.CREATE_LIMITER.limit({ key: 'waitlist:' + (request.headers.get('CF-Connecting-IP') || 'unknown') });
+                if (!success) return withCors(Response.json({ ok: false, error: 'Too many tries. Wait a minute and send it again.' }, { status: 429 }));
+            }
+            const entry = {
+                email,
+                plan: PLANS.includes(body.plan) ? body.plan : 'unsure',
+                use: String(body.use || '').slice(0, 60),
+                ideas: String(body.ideas || '').trim().slice(0, 2000),
+                country: (request.cf && request.cf.country) || '',
+                page: String(body.page || '').slice(0, 200),
+            };
+            const wl = env.WAITLIST.get(env.WAITLIST.idFromName('pro'));
+            return withCors(await wl.fetch('http://internal/add', { method: 'POST', body: JSON.stringify(entry) }));
+        }
+        if (path === '/api/waitlist/export' && request.method === 'GET') {
+            if (!env.WAITLIST || !env.IMPORT_SECRET || request.headers.get('Authorization') !== `Bearer ${env.IMPORT_SECRET}`) {
+                return new Response('forbidden', { status: 403 });
+            }
+            return env.WAITLIST.get(env.WAITLIST.idFromName('pro')).fetch('http://internal/export');
         }
 
         if (request.method === 'POST' && path === '/lookupCalendar') {
