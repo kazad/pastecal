@@ -89,7 +89,7 @@ export async function countHit(room, request) {
     let views = 0, visitors = 0, followers = 0;
     if (kind === 'f') {
         if (seen) return;                                     // this subscriber already counted today
-        if (sql.exec(`SELECT COUNT(*) AS n FROM stats_seen WHERE kind = 'f'`).one().n >= STATS.maxSeenPerDay) return;
+        if (todayCount(sql, today, 'followers') >= STATS.maxSeenPerDay) return;
         sql.exec(`INSERT INTO stats_seen (kind, hash, last_at) VALUES ('f', ?, ?)`, hash, now);
         followers = 1;
     } else if (seen) {
@@ -98,7 +98,7 @@ export async function countHit(room, request) {
         views = 1;
     } else {
         views = 1;
-        if (sql.exec(`SELECT COUNT(*) AS n FROM stats_seen WHERE kind = 'v'`).one().n < STATS.maxSeenPerDay) {
+        if (todayCount(sql, today, 'visitors') < STATS.maxSeenPerDay) {
             sql.exec(`INSERT INTO stats_seen (kind, hash, last_at) VALUES ('v', ?, ?)`, hash, now);
             visitors = 1;
         }
@@ -121,6 +121,8 @@ export async function countHit(room, request) {
     }
     sql.exec(`UPDATE stats_daily SET countries_json = ?, cities_json = ? WHERE day = ?`, json(countries), json(cities), today);
 }
+// Today's visitors/followers equal the rows of that kind in stats_seen (one is added with each).
+const todayCount = (sql, day, col) => sql.exec(`SELECT ${col} AS n FROM stats_daily WHERE day = ?`, day).toArray()[0]?.n || 0;
 const clean = (s, n) => String(s || '').replace(/[\u0000-\u001f\u007f|]/g, '').trim().slice(0, n);
 
 // What the owner sees: one row per day (oldest first, days with no visits as zeros), the top
@@ -171,50 +173,59 @@ const versionLabel = (version) => version.length > 10 ? `${version.slice(0, 10)}
 const restorePointName = (ms) => new Date(ms).toISOString().replace(/[-:]/g, '').replace(/^(\d{4})(\d{2})(\d{2})T(\d{6})\.\d{3}Z$/, '$1-$2-$3T$4Z');
 
 // Replace the calendar's events, title and notes with a snapshot's. Everything else stays: the lock
-// (its own table), every other option (Pro settings, publicViewId, ...). One history entry, which
-// carries the full pre-restore events so the existing undo can bring them back; and the pre-restore
-// state goes to R2 first, as a restore point, because the day's backup is about to be overwritten.
-// Runs inside blockConcurrencyWhile: no save can land between reading the state and replacing it.
+// (its own table), every other option (Pro settings, publicViewId, ...). One history entry (counts and
+// a label only), and -- first -- the pre-restore state goes to R2 as a restore point: that is the undo,
+// since the day's backup is about to be overwritten with the restored state.
+// Runs inside blockConcurrencyWhile, so no save can land between reading the state and replacing it;
+// errors are caught there, because a throw out of it resets the object (and drops every open tab).
 export function restoreVersion(room, version) {
     return room.ctx.blockConcurrencyWhile(async () => {
-        const s = room.state, env = room.env;
-        const no = (status, error) => ({ ok: false, status, error });
-        if (!s.id) return no(404, 'not-found');
-        if (!env.BACKUPS) return no(503, 'no-backups');
-        if (typeof version !== 'string' || !VERSION_RE.test(version)) return no(400, 'bad-version');
-        const obj = await env.BACKUPS.get(`${snapshotPrefix(s.id)}${version}.json`);
-        if (!obj) return no(404, 'no-such-version');
-        let snap; try { snap = await obj.json(); } catch { return no(422, 'bad-snapshot'); }
-        const cal = snap && snap.calendar;
-        if (!cal || typeof cal !== 'object') return no(422, 'bad-snapshot');
-        const { events } = room.dedupe(cal);
-        const why = room.tooBig(events);
-        const title = typeof cal.title === 'string' ? cal.title : '';
-        if (why || title.length > 2000) return no(422, why || 'title too long');
-        const notes = cal.options && typeof cal.options === 'object' ? cal.options.notes : undefined;
-        const options = { ...s.options };
-        if (notes === undefined || notes === null) delete options.notes; else options.notes = notes;
-        if (title === s.title && json(options) === json(s.options) && json(events) === json(s.events)) return { ok: true, unchanged: true, v: s.v };
-
-        const now = Date.now();
-        await env.BACKUPS.put(`${snapshotPrefix(s.id)}${restorePointName(now)}.json`,
-            json({ v: s.v, savedAt: new Date(now).toISOString(), restorePointFor: version, calendar: room.calendar() }), {
-                httpMetadata: { contentType: 'application/json' },
-                customMetadata: { id: s.id, v: String(s.v), events: String(s.events.length), savedAt: new Date(now).toISOString(), kind: 'restore-point' },
-            });
-
-        const beforeEvents = s.events, beforeTitle = s.title, beforeOptions = s.options;
-        room.sql.exec(`DELETE FROM events`);
-        s.events = [];
-        room.storeEvents(events, 'all');
-        s.title = title; room.setMeta('title', title);
-        s.options = options; room.setMeta('options', options);
-        room.bump('restore', [{ type: 'restore', version, events: events.length }],
-            { beforeEvents, beforeTitle, beforeOptions, kind: 'restored', label: `Restored the version from ${versionLabel(version)}`, keepBefore: true });
-        room.broadcast({ t: 'snapshot', v: s.v, calendar: room.calendar() });
-        await room.scheduleCopyBack();                         // a no-op while locked; kept for symmetry with other writes
-        return { ok: true, v: s.v, events: events.length };
+        try { return await restoreNow(room, version); }
+        catch (e) {
+            console.error('[restore] failed:', e && e.message);
+            room.load();                                       // memory back in step with what SQLite holds
+            return { ok: false, status: 502, error: 'unavailable' };
+        }
     });
+}
+async function restoreNow(room, version) {
+    const s = room.state, env = room.env;
+    const no = (status, error) => ({ ok: false, status, error });
+    if (!s.id) return no(404, 'not-found');
+    if (!env.BACKUPS) return no(503, 'no-backups');
+    if (typeof version !== 'string' || !VERSION_RE.test(version)) return no(400, 'bad-version');
+    const obj = await env.BACKUPS.get(`${snapshotPrefix(s.id)}${version}.json`);
+    if (!obj) return no(404, 'no-such-version');
+    let snap; try { snap = await obj.json(); } catch { return no(422, 'bad-snapshot'); }
+    const cal = snap && snap.calendar;
+    if (!cal || typeof cal !== 'object') return no(422, 'bad-snapshot');
+    const { events } = room.dedupe(cal);
+    const why = room.tooBig(events);
+    const title = typeof cal.title === 'string' ? cal.title : '';
+    if (why || title.length > 2000) return no(422, why || 'title too long');
+    const notes = cal.options && typeof cal.options === 'object' ? cal.options.notes : undefined;
+    const options = { ...s.options };
+    if (notes === undefined || notes === null) delete options.notes; else options.notes = notes;
+    if (title === s.title && json(options) === json(s.options) && json(events) === json(s.events)) return { ok: true, unchanged: true, v: s.v };
+
+    const now = Date.now();
+    await env.BACKUPS.put(`${snapshotPrefix(s.id)}${restorePointName(now)}.json`,
+        json({ v: s.v, savedAt: new Date(now).toISOString(), restorePointFor: version, calendar: room.calendar() }), {
+            httpMetadata: { contentType: 'application/json' },
+            customMetadata: { id: s.id, v: String(s.v), events: String(s.events.length), savedAt: new Date(now).toISOString(), kind: 'restore-point' },
+        });
+
+    const beforeEvents = s.events, beforeTitle = s.title, beforeOptions = s.options;
+    room.sql.exec(`DELETE FROM events`);
+    s.events = [];
+    room.storeEvents(events, 'all');
+    s.title = title; room.setMeta('title', title);
+    s.options = options; room.setMeta('options', options);
+    room.bump('restore', [{ type: 'restore', version, events: events.length }],
+        { beforeEvents, beforeTitle, beforeOptions, kind: 'restored', label: `Restored the version from ${versionLabel(version)}`, countsOnly: true });
+    room.broadcast({ t: 'snapshot', v: s.v, calendar: room.calendar() });
+    await room.scheduleCopyBack();                         // a no-op while locked; kept for symmetry with other writes
+    return { ok: true, v: s.v, events: events.length };
 }
 
 export async function insightRoute(room, op, request) {

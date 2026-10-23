@@ -6,16 +6,17 @@
  *        -> {days:[{day, views, visitors, followers}], countries:[{code, count}],
  *            cities:[{name, country, count}], totals:{views, visitors, followers, followersToday}}
  *   GET  /api/pro/versions?calendar=<id>
- *        -> {versions:[{version, date, kind:'daily'|'restore-point', v, events, savedAt}]}  newest first
- *   GET  /api/pro/versions/preview?calendar=<id>&date=<version>
- *        -> {version, date, kind, v, savedAt, calendar:{id, title, options, events, ...}}
+ *        -> [{date, day, kind:'daily'|'restore-point', v, events, savedAt}]  newest first
+ *   GET  /api/pro/versions/preview?calendar=<id>&date=<date>
+ *        -> {date, day, kind, v, savedAt, calendar:{id, title, options, events, ...}}
  *   POST /api/pro/versions/restore {calendarId, date}   (session + CSRF, like other /api/pro POSTs)
  *        -> {ok:true, v, events} | {ok:true, unchanged:true, v}
  *
  * Errors: 400 {error:'bad-calendar'|'bad-days'|'bad-version'}, 401 {error:'signed-out'},
  * 403 {error:'pro-only'} (calendar not on Pro), 403 {error:'not-owner'}, 403 {error:'forbidden-origin'},
  * 404 {error:'no-calendar'|'no-such-version'}, 503 {error:'no-backups'}.
- * `date` is a version name: a daily snapshot (YYYY-MM-DD) or a restore point (YYYY-MM-DDTHHMMSSZ).
+ * `date` names a version: a daily snapshot (YYYY-MM-DD) or a restore point written just before a
+ * restore (YYYY-MM-DDTHHMMSSZ, UTC). `day` is its YYYY-MM-DD. Pass `date` back to preview/restore.
  *
  * Also here, because the Worker is the only one that may say so: hitHeaders(), which marks a
  * forwarded calendar read as a countable hit for RoomInsight.countHit.
@@ -75,7 +76,7 @@ async function listVersions(env, id) {
             if (!VERSION_RE.test(version)) continue;
             const m = o.customMetadata || {};
             out.push({
-                version, date: version.slice(0, 10), kind: version.length > 10 ? 'restore-point' : 'daily',
+                date: version, day: version.slice(0, 10), kind: version.length > 10 ? 'restore-point' : 'daily',
                 v: m.v !== undefined ? Number(m.v) : null,
                 events: m.events !== undefined ? Number(m.events) : null,
                 savedAt: m.savedAt || (o.uploaded ? new Date(o.uploaded).toISOString() : null),
@@ -83,10 +84,10 @@ async function listVersions(env, id) {
         }
         cursor = page.truncated ? page.cursor : undefined;
     } while (cursor);
-    const newestFirst = (a, b) => b.date.localeCompare(a.date) || (b.savedAt || '').localeCompare(a.savedAt || '') || b.version.localeCompare(a.version);
+    const newestFirst = (a, b) => b.day.localeCompare(a.day) || (b.savedAt || '').localeCompare(a.savedAt || '') || b.date.localeCompare(a.date);
     out.sort(newestFirst);
     await Promise.all(out.filter((x) => x.events === null).slice(0, 20).map(async (x) => {
-        const snap = await (await env.BACKUPS.get(`${prefix}${x.version}.json`))?.json().catch(() => null);
+        const snap = await (await env.BACKUPS.get(`${prefix}${x.date}.json`))?.json().catch(() => null);
         const ev = snap && snap.calendar && snap.calendar.events;
         if (ev) x.events = Array.isArray(ev) ? ev.length : Object.keys(ev).length;
         if (x.v === null && snap && typeof snap.v === 'number') x.v = snap.v;
@@ -136,7 +137,7 @@ export async function handleInsight(request, env, url, sessionUserId) {
             return json(await r.json(), r.status);
         }
         if (!env.BACKUPS) return json({ error: 'no-backups' }, 503);
-        if (path === '/api/pro/versions') return json({ versions: await listVersions(env, id) });
+        if (path === '/api/pro/versions') return json(await listVersions(env, id));
         // preview
         const version = url.searchParams.get('date') || '';
         if (!VERSION_RE.test(version)) return json({ error: 'bad-version' }, 400);
@@ -144,7 +145,7 @@ export async function handleInsight(request, env, url, sessionUserId) {
         if (!obj) return json({ error: 'no-such-version' }, 404);
         const snap = await obj.json().catch(() => null);
         if (!snap || !snap.calendar) return json({ error: 'bad-snapshot' }, 422);
-        return json({ version, date: version.slice(0, 10), kind: version.length > 10 ? 'restore-point' : 'daily',
+        return json({ date: version, day: version.slice(0, 10), kind: version.length > 10 ? 'restore-point' : 'daily',
             v: typeof snap.v === 'number' ? snap.v : null, savedAt: snap.savedAt || null, calendar: snap.calendar });
     } catch (err) {
         console.error('[insight]', path, err && err.message);

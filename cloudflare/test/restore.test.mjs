@@ -88,19 +88,19 @@ wrangler('put', `pastecal-backups/${prefix}${OLD}.json`, '--file', oldFile, '--c
 // 2. The list.
 r = await get(`/api/pro/versions?calendar=${enc(id)}`, owner.cookie);
 assert.equal(r.status, 200);
-let versions = (await r.json()).versions;
-assert.deepEqual(versions.map((x) => x.version), [OLD, today].sort().reverse(), 'newest first');
-const vToday = versions.find((x) => x.version === today), vOld = versions.find((x) => x.version === OLD);
-assert.deepEqual(vToday, { version: today, date: today, kind: 'daily', v: original.v, events: 3, savedAt: todays.savedAt });
+let versions = await r.json();
+assert.deepEqual(versions.map((x) => x.date), [today, OLD], 'newest first');
+const vToday = versions.find((x) => x.date === today), vOld = versions.find((x) => x.date === OLD);
+assert.deepEqual(vToday, { date: today, day: today, kind: 'daily', v: original.v, events: 3, savedAt: todays.savedAt });
 assert.equal(vOld.events, 2, 'an old object without metadata is read to count its events');
 assert.equal(vOld.kind, 'daily'); assert.equal(typeof vOld.savedAt, 'string');
-step(`GET /api/pro/versions: [{version, date, kind, v, events, savedAt}] newest first; today from metadata (v${original.v}, 3 events), an old backup counted by reading it (2 events)`);
+step(`GET /api/pro/versions: [{date, day, kind, v, events, savedAt}] newest first; today from metadata (v${original.v}, 3 events), an old backup counted by reading it (2 events)`);
 
 // 3. Preview.
 r = await get(`/api/pro/versions/preview?calendar=${enc(id)}&date=${OLD}`, owner.cookie);
 assert.equal(r.status, 200);
 const pv = await r.json();
-assert.equal(pv.calendar.title, 'Old title'); assert.equal(pv.calendar.events.length, 2); assert.equal(pv.version, OLD); assert.equal(pv.v, 1);
+assert.equal(pv.calendar.title, 'Old title'); assert.equal(pv.calendar.events.length, 2); assert.equal(pv.date, OLD); assert.equal(pv.day, OLD); assert.equal(pv.v, 1);
 assert.equal((await get(`/api/pro/versions/preview?calendar=${enc(id)}&date=2020-01-01`, owner.cookie)).status, 404);
 assert.equal((await get(`/api/pro/versions/preview?calendar=${enc(id)}&date=../../x`, owner.cookie)).status, 400);
 step('preview returns the snapshot calendar; an unknown date is 404, a malformed one 400');
@@ -150,34 +150,51 @@ const entry = hist.find((h) => h.kind === 'restored');
 assert.equal(hist.filter((h) => !histBefore.some((b) => b.key === h.key)).filter((h) => h.kind === 'restored').length, 1, 'one history entry for the restore');
 assert.equal(entry.key, String(restored.v));
 assert.equal(entry.label, `Restored the version from ${OLD}`);
-assert.deepEqual(entry.events.map((e) => e.id), ['a', 'b', 'c'], 'the entry keeps the pre-restore events');
-assert.equal(entry.title, 'Team');
-step('history: ONE entry {kind:"restored", label:"Restored the version from 2026-01-15"} that carries the full pre-restore events');
+assert.deepEqual([entry.removed, entry.added, entry.eventCount, entry.title], [3, 2, 3, 'Team'], 'counts and the old title');
+assert.deepEqual([entry.removedEvents, entry.addedEvents, entry.changedEvents, entry.events], [[], [], [], undefined], 'no event lists (row size)');
+step('history: ONE entry {kind:"restored", label:"Restored the version from 2026-01-15"} with counts only (the undo is the R2 restore point)');
 
 // 6. Undo: the pre-restore state is a restore point in R2, even though today's backup gets overwritten.
 const afterRestore = await cal(id);
 const overwritten = await waitFor(() => { const s = r2get(`${prefix}${today}.json`); return s && s.v === afterRestore.v ? s : null; });
 assert.deepEqual(overwritten.calendar.events.map((e) => e.id), ['o1', 'o2'], "today's backup now holds the restored state");
-versions = (await (await get(`/api/pro/versions?calendar=${enc(id)}`, owner.cookie)).json()).versions;
+versions = await (await get(`/api/pro/versions?calendar=${enc(id)}`, owner.cookie)).json();
 const point = versions.find((x) => x.kind === 'restore-point');
 assert.ok(point, 'a restore point is listed');
-assert.match(point.version, new RegExp(`^${today}T\\d{6}Z$`));
-assert.deepEqual([point.date, point.v, point.events], [today, original.v, 3]);
-assert.equal(versions[0].version, today, 'newest first: today (saved after the restore), then the restore point');
-assert.equal(versions[1].version, point.version);
-r = await post('/api/pro/versions/restore', { calendarId: id, date: point.version }, { cookie: owner.cookie });
+assert.match(point.date, new RegExp(`^${today}T\\d{6}Z$`));
+assert.deepEqual([point.day, point.v, point.events], [today, original.v, 3]);
+assert.equal(versions[0].date, today, 'newest first: today (saved after the restore), then the restore point');
+assert.equal(versions[1].date, point.date);
+r = await post('/api/pro/versions/restore', { calendarId: id, date: point.date }, { cookie: owner.cookie });
 assert.equal(r.status, 200);
 now = await cal(id);
 assert.deepEqual(now.calendar.events, original.calendar.events);
 assert.equal(now.calendar.title, 'Team'); assert.equal(now.calendar.options.notes, 'current notes');
 assert.equal(now.calendar.options.publicViewId, viewId);
-step(`undo: restoring the restore point ${point.version} (listed with v${point.v}, 3 events) brings back the exact pre-restore events, title and notes`);
+step(`undo: restoring the restore point ${point.date} (listed with v${point.v}, 3 events) brings back the exact pre-restore events, title and notes`);
 
-r = await post('/api/pro/versions/restore', { calendarId: id, date: point.version }, { cookie: owner.cookie });
+r = await post('/api/pro/versions/restore', { calendarId: id, date: point.date }, { cookie: owner.cookie });
 assert.deepEqual(await r.json(), { ok: true, unchanged: true, v: now.v });
 assert.equal((await post('/api/pro/versions/restore', { calendarId: id, date: '2020-01-01' }, { cookie: owner.cookie })).status, 404);
 assert.equal((await post('/api/pro/versions/restore', { calendarId: id, date: 'today' }, { cookie: owner.cookie })).status, 400);
 step('restoring what is already there changes nothing (unchanged:true); an unknown date is 404, a malformed one 400');
+
+// 8. A big calendar (2,500 events, about 1.2 MB) restored onto a disjoint one of the same size.
+const big = `test-restore-big-${run}`, bigPrefix = `snapshots/${enc(big)}/`;
+const pad = 'x'.repeat(380);
+const many = (tag) => Array.from({ length: 2500 }, (_, i) => ({ ...ev(`${tag}${i}`, `${tag} ${i}`, 1 + (i % 28)), description: pad }));
+r = await fetch(`${BASE}/cal/${enc(big)}/import`, { method: 'PUT', headers: auth, body: JSON.stringify({ id: big, title: 'Big', events: many('now') }) });
+assert.equal(r.status, 200, await r.text());
+assert.equal((await fetch(`${BASE}/api/admin/cal/${enc(big)}/lock`, { method: 'POST', headers: auth, body: JSON.stringify({ ownerId: owner.userId }) })).status, 200);
+writeFileSync(oldFile, JSON.stringify({ v: 1, savedAt: '2026-02-01T12:00:00.000Z', calendar: { id: big, title: 'Big then', options: {}, events: many('old') } }));
+wrangler('put', `pastecal-backups/${bigPrefix}2026-02-01.json`, '--file', oldFile, '--content-type', 'application/json');
+r = await post('/api/pro/versions/restore', { calendarId: big, date: '2026-02-01' }, { cookie: owner.cookie });
+assert.equal(r.status, 200, await r.text());
+now = await cal(big);
+assert.equal(now.calendar.events.length, 2500); assert.equal(now.calendar.events[0].id, 'old0'); assert.equal(now.calendar.title, 'Big then');
+const bigEntry = (await (await fetch(`${BASE}/cal/${enc(big)}/history`)).json())[0];
+assert.deepEqual([bigEntry.kind, bigEntry.removed, bigEntry.added], ['restored', 2500, 2500]);
+step('a 2,500-event calendar (~1.2 MB) restores onto a disjoint one: all 2,500 replaced, one small history entry');
 
 ownerTab.ws.close(); viewer.ws.close();
 console.log(`\n${n} checks passed`); process.exit(0);

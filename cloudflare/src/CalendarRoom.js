@@ -318,7 +318,7 @@ export class CalendarRoom extends DurableObject {
         this.state.events = events;
     }
 
-    bump(source, commands, { beforeEvents, beforeTitle, beforeOptions, writer, kind: kindOverride, label, keepBefore } = {}) {
+    bump(source, commands, { beforeEvents, beforeTitle, beforeOptions, writer, kind: kindOverride, label, countsOnly } = {}) {
         const s = this.state;
         s.v += 1;
         s.lastEditedAt = Date.now();
@@ -363,7 +363,10 @@ export class CalendarRoom extends DurableObject {
             writer: writer || null,
         };
         if (label) entry.label = label;
-        if (keepBefore || kind === 'shrunk' || kind === 'title-cleared') entry.events = before;
+        // A whole-calendar replace (restore) keeps counts only: two full event lists in one row could
+        // pass SQLite's 2 MB row limit. Its undo is the R2 restore point (RoomInsight.restoreVersion).
+        if (countsOnly) { entry.removedEvents = []; entry.changedEvents = []; entry.addedEvents = []; }
+        else if (kind === 'shrunk' || kind === 'title-cleared') entry.events = before;
 
         this.sql.exec(`INSERT INTO history (v, at, source, commands, entry) VALUES (?, ?, ?, ?, ?)`,
             s.v, s.lastEditedAt, source, json(commands), json(entry));
