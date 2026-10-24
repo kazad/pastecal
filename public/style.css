@@ -1769,3 +1769,26 @@ button:hover > .pc-add-event {
   .pc-hdr-btn[aria-label="Toggle notes"] { width: auto; padding: 0 10px }
   .pc-hdr-btn[aria-label="Toggle notes"] span { display: inline }
 }
+
+/* ---- Header controls as real buttons (tokens only). ----
+   Add event: the one primary action on the left, a tinted 36px button.
+   Right: one toolbar group (soft well, 1px line, 12px radius) of 32px buttons; the open panel's
+   button is raised like a selected segment. */
+@media (min-width: 768px) {
+  topbar [data-testid="desktop-add-event-button"] { padding: 0 !important; border-radius: 10px }
+  topbar .pc-add-event { height: 36px; padding: 0 14px 0 11px; gap: 6px; border: 0; border-radius: 10px;
+    background: color-mix(in srgb, var(--pc-link) 13%, transparent); color: var(--pc-link); font-size: 14px; font-weight: 600 }
+  topbar .pc-add-event-plus { font-size: 18px; font-weight: 500; margin-top: -1px }
+  topbar button:hover > .pc-add-event { background: color-mix(in srgb, var(--pc-link) 20%, transparent) }
+  topbar [data-testid="desktop-add-event-button"]:focus-visible { outline: 2px solid var(--pc-link); outline-offset: 2px }
+
+  .pc-hdr-actions { padding: 3px; gap: 2px; margin-right: 12px; border: 1px solid var(--pc-line); border-right: 1px solid var(--pc-line) !important;
+    border-radius: 12px; background: var(--pc-soft) }
+  .pc-hdr-btn { height: 32px; border-radius: 9px; color: var(--pc-text-2); font-weight: 500 }
+  .pc-hdr-btn svg { stroke-width: 1.9 }
+  .pc-hdr-icon { width: 32px }
+  .pc-hdr-btn:hover { background: color-mix(in srgb, var(--pc-text) 7%, transparent); color: var(--pc-text) }
+  .pc-hdr-btn:focus-visible { outline: 2px solid var(--pc-link); outline-offset: 1px }
+  .pc-hdr-btn.pc-hdr-on { background: var(--pc-bg); color: var(--pc-link) !important; box-shadow: 0 1px 2px rgba(0,0,0,.12), 0 0 0 1px var(--pc-line) }
+  @media (max-width: 1499px) { .pc-hdr-btn:not([aria-label="Toggle notes"]) { width: 32px } }
+}
