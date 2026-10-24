@@ -179,7 +179,10 @@ const CalendarVueApp = {
             insightWhere: 'share_panel',    // which surface opened them, for analytics
             proOwner: false,            // this browser is signed in as the Pro calendar's owner
             shareProFocus: false,       // Share opened from Get Pro: just the lock offer
-            showRecentChanges: false,   // the recent-changes dialog
+            showRecentChanges: false,   // the Changes tab of the side panel
+            // The side panel docks beside the calendar only on wide screens (style.css, the
+            // side panel block); narrower it floats over the calendar, so the grid keeps its width.
+            sideWide: typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 1100px)').matches,
             // When this browser last opened THIS calendar, captured before the visit is
             // recorded and so still pointing at the previous visit. It is what makes the
             // changes list answer "what happened while I was away" rather than only
@@ -268,6 +271,46 @@ const CalendarVueApp = {
     },
 
     computed: {
+        // ---- The side panel: Notes, Share, Changes, Settings (and Search, Help, Pro) ----------
+        // One panel at a time, beside the calendar. The show* flags stay the source of truth
+        // (the Escape key, analytics and history refreshes all read them); this names which is up.
+        sideTab() {
+            if (this.showRecentChanges) return 'changes';
+            if (this.showProStats) return 'stats';
+            if (this.showProHistory) return 'history';
+            if (this.showNotes) return 'notes';
+            if (this.showShare) return 'share';
+            if (this.showSettings) return 'settings';
+            if (this.showSearch) return 'search';
+            if (this.showHelp) return 'help';
+            return null;
+        },
+        // Docked: the calendar narrows to make room instead of moving down.
+        sideDocked() {
+            return !!this.sideTab && this.sideWide;
+        },
+        // The tab row is for people who can change the calendar. Viewers see one thing at a
+        // time under a plain title. Share and Changes need a saved calendar; Stats and History
+        // answer only the owner of a Pro calendar.
+        sideTabs() {
+            if (this.isReadOnly) return [];
+            const tabs = [{ id: 'notes', label: 'Notes' }];
+            if (this.isExisting) tabs.push({ id: 'share', label: 'Share' }, { id: 'changes', label: 'Changes' });
+            tabs.push({ id: 'settings', label: 'Settings' });
+            if (this.isExisting && this.lock.locked && this.proOwner) tabs.push({ id: 'stats', label: 'Stats' }, { id: 'history', label: 'History' });
+            return tabs;
+        },
+        sideShowsTabs() {
+            return this.sideTabs.some((t) => t.id === this.sideTab);
+        },
+        // Shown in the bar when there is no tab row, for the views without a heading of their own.
+        sideTitle() {
+            return { notes: 'About this calendar', search: 'Search', help: 'Help' }[this.sideTab] || '';
+        },
+        // A view link or locked calendar with notes opens with them pinned beside the grid.
+        viewerNotesPinnable() {
+            return !this.isLoading && this.isReadOnly && !!(this.calendar?.options?.notes || '').trim();
+        },
         // Shown wherever the title is: the stored default "New Calendar" in sentence case.
         displayCalendarTitle() {
             return Calendar.displayTitle(this.calendar.title);
@@ -1569,8 +1612,7 @@ const CalendarVueApp = {
             const modalShowing = [...document.querySelectorAll('[aria-modal="true"]')]
                 .some((m) => m.getClientRects().length > 0 && getComputedStyle(m).visibility !== 'hidden');
             const dialogOpen = modalShowing || !!document.querySelector('.e-popup-open:not(.e-tooltip-wrap), .pc-modal')
-                || !!(this.$refs.quickAddDialog && this.$refs.quickAddDialog.dialogVisible)
-                || this.showRecentChanges;
+                || !!(this.$refs.quickAddDialog && this.$refs.quickAddDialog.dialogVisible);
             if (dialogOpen) return;
             // Without server history there is still this session's own stack to undo.
             if (typing || (!this.isExisting && !this.store().canUndo)) return;
@@ -1607,6 +1649,13 @@ const CalendarVueApp = {
             if (this.showHelp) { this.showHelp = false; }
         };
         window.addEventListener('keydown', this._escapeHandler);
+
+        // Whether the side panel docks (style.css uses the same 1100px line).
+        if (typeof window.matchMedia === 'function') {
+            const wide = window.matchMedia('(min-width: 1100px)');
+            const sync = () => { this.sideWide = wide.matches; };
+            if (wide.addEventListener) wide.addEventListener('change', sync); else if (wide.addListener) wide.addListener(sync);
+        }
     },
 
     beforeUnmount() {
@@ -1643,6 +1692,8 @@ const CalendarVueApp = {
             } else {
                 const opener = this._recentChangesOpener;
                 this._recentChangesOpener = null;
+                // Switching to another tab keeps focus in the panel; only closing gives it back.
+                if (this.sideTab) return;
                 if (opener && document.contains(opener) && typeof opener.focus === 'function') {
                     opener.focus();
                 }
@@ -1684,6 +1735,21 @@ const CalendarVueApp = {
         },
         showProStats(open) { this.focusInsight(open, 'proStatsPanel'); },
         showProHistory(open) { this.focusInsight(open, 'proHistoryPanel'); },
+        // The grid re-lays out on any container resize (mounted); this is the explicit nudge
+        // for the moment the panel docks or undocks.
+        sideDocked() {
+            this.$nextTick(() => { try { scheduleObj.refreshLayout(); } catch (e) { /* not rendered yet */ } });
+        },
+        viewerNotesPinnable: {
+            immediate: true,
+            handler(pin) {
+                if (!pin || this._notesPinned) return;
+                this._notesPinned = true;
+                // Only where it docks: over a phone's calendar it would hide what they came to see.
+                if (!this.sideWide || this.sideTab || this.notesHiddenHere()) return;
+                this.showNotes = true;
+            },
+        },
 
         showShare(newValue) {
             if (!newValue) this.shareProFocus = false;   // the Get Pro view lasts until Share closes
@@ -2998,7 +3064,29 @@ const CalendarVueApp = {
         // ============================================================
 
         isPanelOpen() {
-            return this.showNotes || this.showSearch || this.showHelp || this.showShare || this.showSettings;
+            return !!this.sideTab;
+        },
+
+        /** A tab in the side panel's row. Picking the open tab leaves it open. */
+        openSideTab(id) {
+            if (this.sideTab === id) return;
+            if (id === 'notes') this.toggleNotes();
+            else if (id === 'share') this.toggleShare();
+            else if (id === 'settings') this.toggleSettings();
+            else if (id === 'changes') this.openRecentChanges();
+            else if (id === 'stats' || id === 'history') this.openInsight(id, 'side_panel');
+        },
+
+        /** The panel's close button, its backdrop on small screens, and Escape. */
+        closeSidePanel() {
+            // A viewer who hides the pinned notes means it for this calendar, in this browser.
+            if (this.showNotes && this.isReadOnly) {
+                try { localStorage.setItem('pc_notes_hidden:' + String(this.calendar.id).toLowerCase(), '1'); } catch (e) { /* this visit only */ }
+            }
+            this.closeAllPanels();
+        },
+        notesHiddenHere() {
+            try { return !!localStorage.getItem('pc_notes_hidden:' + String(this.calendar.id).toLowerCase()); } catch (e) { return false; }
         },
 
         // First-run welcome. Deliberately narrow: it's for someone who has never
@@ -3180,6 +3268,11 @@ const CalendarVueApp = {
             if (this.showSettings) {
                 this.toggleSettings();
             }
+
+            // Changes and the Pro views share the panel, so opening anything closes them too.
+            this.showRecentChanges = false;
+            this.showProStats = false;
+            this.showProHistory = false;
         },
 
         togglePin(id) {
@@ -4622,8 +4715,7 @@ const CalendarVueApp = {
         /** Open Stats or History. The dialogs ask the server, which answers only the owner. */
         openInsight(view, where) {
             this.insightWhere = where || 'share_panel';
-            if (this.showShare) this.showShare = false;
-            this.showRecentChanges = false;
+            this.closeAllPanels();
             this.showProHistory = view === 'history';
             this.showProStats = view !== 'history';
         },
@@ -4682,7 +4774,7 @@ const CalendarVueApp = {
             if (open) {
                 this._insightOpener = this._insightOpener || document.activeElement;
                 this.$nextTick(() => { const el = this.$refs[ref]; if (el) el.focus(); });
-            } else if (!this.showProStats && !this.showProHistory) {
+            } else if (!this.showProStats && !this.showProHistory && !this.sideTab) {
                 const opener = this._insightOpener;
                 this._insightOpener = null;
                 if (opener && document.contains(opener) && typeof opener.focus === 'function') opener.focus();
@@ -4696,6 +4788,7 @@ const CalendarVueApp = {
         /** Open the change history, refreshing it first so the list is never stale. */
         async openRecentChanges() {
             await this.loadUndoEntries();
+            if (!this.showRecentChanges) this.closeAllPanels();
             this.showRecentChanges = true;
         },
 
