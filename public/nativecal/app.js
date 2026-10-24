@@ -1,5 +1,16 @@
 // CopyIcon and SettingsIcon already defined above, no need to redeclare
 
+/**
+ * Null-safe analytics, as in the main app (public/app.js): runs `fn` against the Analytics
+ * module if it loaded and does nothing if it didn't, never throwing into the caller.
+ */
+function track(fn) {
+    try {
+        if (typeof Analytics === 'undefined' || !Analytics) return;
+        fn(Analytics);
+    } catch (err) { /* observational only */ }
+}
+
 // ============================================================
 // COMPONENT REGISTRY
 // ============================================================
@@ -485,6 +496,12 @@ const CalendarVueApp = {
     },
 
     watch: {
+        // An editor that closes without a save or delete: the main app's editor_abandoned.
+        showEditor(open) {
+            if (open) { this._editorCommitted = false; return; }
+            if (!this._editorCommitted) track(a => a.editorAbandoned());
+        },
+
         showShare(newValue) {
             if (newValue) {
                 this.updateCurrentViewURL();
@@ -944,6 +961,7 @@ const CalendarVueApp = {
         },
 
         _applyEvents(next, undoText) {
+            this._editorCommitted = true;
             const before = this.calendar.events;
             this._declareShrink(before, next);
             this.calendar.setEvents(next);
@@ -1065,6 +1083,7 @@ const CalendarVueApp = {
         },
 
         handleSaveEvent(eventData) {
+            this._editorCommitted = true;
             const events = [...this.calendar.events];
             const { _occurrenceOf, _occurrenceStart, _followingOf, ...data } = eventData;
             // The series this edit belongs to can vanish while the editor is open (deleted in
@@ -1113,7 +1132,9 @@ const CalendarVueApp = {
                 }
             } else {
                 events.push(new Event(this.toStoredEvent(data, null)));
+                track(a => a.eventAdded('grid', this.calendar));
             }
+            if (Number(data.type) > 1) track(a => a.featureUsed('event_type', 'popup'));
             this.calendar.setEvents(events);
             if (typeof AuthorSignal !== 'undefined') AuthorSignal.touch(this.calendar.id);
             this.closeEditor();
@@ -1509,6 +1530,8 @@ const CalendarVueApp = {
 
         toggleNotes() {
             if (this.showNotes) {
+                // As in the main app: notes count as used when the panel closes with content.
+                if ((this.calendar?.options?.notes || '').trim()) track(a => a.featureUsed('notes'));
                 this.showNotes = false;
             } else {
                 this.closeAllPanels();
@@ -1588,6 +1611,7 @@ const CalendarVueApp = {
             });
             this.calendar.events.push(newEvent);
             this.calendar.setEvents(this.calendar.events);
+            track(a => a.eventAdded('quick_add', this.calendar));
         },
 
         shareUrl(url, title) {
@@ -1731,6 +1755,7 @@ const CalendarVueApp = {
         saveGlobalSettings() {
             try {
                 localStorage.setItem('pastecal_global_settings', JSON.stringify(this.globalSettings));
+                track(a => a.featureUsed('settings'));
                 console.log('Global settings saved to localStorage');
             } catch (error) {
                 console.warn('Failed to save settings to localStorage:', error);
@@ -1803,6 +1828,7 @@ const CalendarVueApp = {
 
         updateEventColor(index, color) {
             if (index >= 0 && index < this.COLORS.length) {
+                track(a => a.featureUsed('colors'));
                 // Update local settings
                 this.localSettings.colors[index] = color;
 

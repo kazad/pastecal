@@ -220,6 +220,9 @@ const Analytics = {
     // sites having to remember to pass them.
     baseParams() {
         const base = { surface: window.__TEST__ ? 'test' : 'web' };
+        // The native renderer (/beta, /nativecal) is on trial against Syncfusion: tag every
+        // event so its error rate and usage can be segmented.
+        if (/^\/(beta|nativecal)(\/|$)/.test(window.location.pathname)) base.renderer = 'native';
         if (this._hv) base.hv = this._hv;
         return base;
     },

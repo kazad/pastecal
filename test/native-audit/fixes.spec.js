@@ -44,4 +44,47 @@ for (const scope of ['this', 'following']) {
   });
 }
 
+// ---------------------------------------------------------------- fix 2: error + usage analytics
+/** Record every Analytics.track call (as the sinks would see it, base params included). */
+async function recordAnalytics(page) {
+  await page.evaluate(() => {
+    window.__tracked = [];
+    Analytics.track = function (name, params) { window.__tracked.push({ name, ...this.baseParams(), ...params }); };
+  });
+}
+const tracked = (page) => page.evaluate(() => window.__tracked);
+
+test('fix2: uncaught errors and rejections are reported as js_error, tagged renderer=native', async ({ page }, info) => {
+  only(info);
+  const id = await fresh(info, 'analytics');
+  await nat.open(page, id);
+  await recordAnalytics(page);
+  await page.evaluate(() => { const s = document.createElement('script'); s.textContent = "throw new Error('native-boom')"; document.head.appendChild(s); Promise.reject(new Error('native-reject')); });
+  await expect.poll(async () => (await tracked(page)).filter((t) => t.name === 'js_error').map((t) => `${t.kind}:${t.message}:${t.renderer}`).sort())
+    .toEqual(['error:native-boom:native', 'unhandledrejection:native-reject:native']);
+});
+
+test('fix2: event_added (grid, quick_add) and editor_abandoned fire from native, tagged renderer=native', async ({ page }, info) => {
+  only(info);
+  const id = await fresh(info, 'analytics2');
+  await nat.open(page, id);
+  await recordAnalytics(page);
+  await nat.quickCreate(page, '2026-10-13', 'Picnic');
+  await soon(async () => !!(await byTitle(id, 'Picnic'))).toBe(true);
+  await nat.openNewEditor(page, '2026-10-14');
+  await tap(page, page.locator('[data-testid="editor-cancel"]'));
+  await expect(nat.dialog(page)).toHaveCount(0);
+  await nat.openNewEditor(page, '2026-10-15');
+  await nat.setTitle(page, 'Saved one');
+  await nat.save(page);
+  await nat.openQuickAdd(page);
+  await page.keyboard.type('Brunch tomorrow 2pm for 1 hour', { delay: 20 });
+  await tap(page, page.locator('button[type=submit]:has-text("Create")'));
+  await soon(async () => !!(await byTitle(id, 'Brunch'))).toBe(true);
+  const t = await tracked(page);
+  const names = t.filter((x) => ['event_added', 'editor_abandoned'].includes(x.name)).map((x) => `${x.name}${x.source ? ':' + x.source : ''}`);
+  expect(names).toEqual(['event_added:grid', 'editor_abandoned', 'event_added:grid', 'event_added:quick_add']);
+  expect(t.every((x) => x.renderer === 'native')).toBe(true);
+});
+
 module.exports = { only, fresh };
