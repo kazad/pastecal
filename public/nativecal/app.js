@@ -1,5 +1,16 @@
 // CopyIcon and SettingsIcon already defined above, no need to redeclare
 
+/**
+ * Null-safe analytics, as in the main app (public/app.js): runs `fn` against the Analytics
+ * module if it loaded and does nothing if it didn't, never throwing into the caller.
+ */
+function track(fn) {
+    try {
+        if (typeof Analytics === 'undefined' || !Analytics) return;
+        fn(Analytics);
+    } catch (err) { /* observational only */ }
+}
+
 // ============================================================
 // COMPONENT REGISTRY
 // ============================================================
@@ -212,8 +223,55 @@ const CalendarVueApp = {
         hasCustomColors() {
             return this.COLORS.some((color, index) => color !== this.DEFAULT_COLORS[index]);
         },
+        // ---- color filter (the main app's isEventVisible / hidden-events banner, for the native grid) ----
+        // Persists after the search panel closes, as in the main app; the banner says so.
+        hiddenColorSlots() {
+            const out = [];
+            for (let i = 0; i < this.COLORS.length; i++) if (this.colorFilters[i] === false) out.push(i);
+            return out;
+        },
+        isColorFilterActive() { return this.hiddenColorSlots.length > 0; },
+        hiddenEventsMessage() {
+            const labels = this.hiddenColorSlots.map(i => (this.localSettings.typeLabels && this.localSettings.typeLabels[i]) || `Type ${i + 1}`);
+            return labels.length === 1 ? `${labels[0]} events are hidden.` : 'Some event types are hidden by a filter.';
+        },
         calendarAutoViewLabel() {
-            return 'Month'; // Could be dynamic based on screen size etc.
+            // "Auto" means each viewer's personal default.
+            const v = this.globalSettings.defaultView || 'Month';
+            return v === 'Custom' ? this.personalCustomViewLabel : v;
+        },
+        // ---- the view the calendar opens on (ported from the nativecal-parity fork's resolvedDefaultView) ----
+        // Precedence, as in the main app's applyDefaultView: ?view= (or ?v=) > the calendar's own default
+        // (forces every viewer; only for a saved calendar) > the personal default > Month.
+        urlParams() { try { return new URLSearchParams(window.location.search); } catch (e) { return new URLSearchParams(); } },
+        resolvedInitialView() {
+            const fromUrl = this.urlParams.get('view') || this.urlParams.get('v');
+            if (fromUrl) return fromUrl;
+            const cal = this.calendar && this.calendar.options && this.calendar.options.defaultView;
+            if (cal && cal !== 'Auto' && (this.isExisting || this.isReadOnly)) return cal;
+            return this.globalSettings.defaultView || 'Month';
+        },
+        // ?date=YYYY-MM-DD (or ?d=): the day the calendar opens on.
+        resolvedInitialDate() { return this.urlParams.get('date') || this.urlParams.get('d') || null; },
+        // "N Months" / "N Weeks": ?dur= and ?unit= for this visit, else the calendar's, else personal.
+        resolvedCustomDuration() {
+            const n = parseInt(this.urlParams.get('dur'), 10);
+            if (n > 0) return n;
+            const v = String(this.urlParams.get('view') || this.urlParams.get('v') || '').toLowerCase();
+            const m = /^(\d+)\s*(week|month)s?$/.exec(v);
+            if (m) return parseInt(m[1], 10);
+            if (v === 'q' || v === 'quarter') return 3;
+            return (this.calendar && this.calendar.options && this.calendar.options.customViewDuration) || this.globalSettings.customViewDuration || 3;
+        },
+        resolvedCustomUnit() {
+            const u = String(this.urlParams.get('unit') || '').toLowerCase();
+            if (/^weeks?$/.test(u)) return 'Weeks';
+            if (/^months?$/.test(u)) return 'Months';
+            const v = String(this.urlParams.get('view') || this.urlParams.get('v') || '').toLowerCase();
+            const m = /^\d+\s*(week|month)s?$/.exec(v);
+            if (m) return m[1] === 'week' ? 'Weeks' : 'Months';
+            if (v === 'q' || v === 'quarter') return 'Months';
+            return (this.calendar && this.calendar.options && this.calendar.options.customViewUnit) || this.globalSettings.customViewUnit || 'Months';
         },
         calendarCustomViewLabel() {
             return `${this.calendar.options.customViewDuration || 3} ${this.calendar.options.customViewUnit || 'Months'}`;
@@ -262,6 +320,31 @@ const CalendarVueApp = {
         // Escape closes the innermost thing first -- editor, then popover -- so one
         // key backs out of a nested state in the order the user entered it.
         this._onKeydown = (e) => {
+            // Cmd/Ctrl+Z: undo this tab's last change (delete, move, save, add), as in the main
+            // app -- but not while typing (it still undoes text in an input) or with a dialog open.
+            if ((e.metaKey || e.ctrlKey) && !e.shiftKey && typeof e.key === 'string' && e.key.toLowerCase() === 'z') {
+                const el = document.activeElement;
+                const typing = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+                const dialogOpen = this.showEditor || !!this.confirmDialog || this.showQuickCreate
+                    || !!(this.$refs.quickAddDialog && this.$refs.quickAddDialog.dialogVisible);
+                if (typing || dialogOpen || !this.canEdit || !this.store().canUndo) return;
+                e.preventDefault();
+                this.undoLast();
+                return;
+            }
+            // Left/right arrows page the calendar (ported from the nativecal-parity fork, G12) --
+            // only with nothing open and focus outside any field.
+            if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+                const el = document.activeElement;
+                const typing = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+                const open = this.showEditor || this.showPopover || this.showQuickCreate || !!this.confirmDialog || this.isPanelOpen()
+                    || !!(this.$refs.quickAddDialog && this.$refs.quickAddDialog.dialogVisible);
+                const cal = this.$refs.nativeCal;
+                if (typing || open || !cal || typeof cal.step !== 'function') return;
+                e.preventDefault();
+                cal.step(e.key === 'ArrowLeft' ? -1 : 1);
+                return;
+            }
             if (e.key !== 'Escape') return;
             if (this.confirmDialog) { this.confirmDialog = null; return; }
             if (this.showEditor) { this.closeEditor(); return; }
@@ -348,16 +431,16 @@ const CalendarVueApp = {
                     } else if (result.data.found && !result.data.isReadOnly) {
                         // Found as editable calendar - show message
                         this.isLoading = false;
-                        alert('This calendar exists but is not shared for viewing. Ask the owner to create a read-only link.');
+                        this.notifyLoadError('This calendar exists but is not shared for viewing. Ask the owner to create a read-only link.');
                     } else {
                         // Calendar doesn't exist at all
                         this.isLoading = false;
-                        alert('Calendar not found. Please check the URL and try again.');
+                        this.notifyLoadError('Calendar not found. Please check the URL and try again.');
                     }
                 } catch (error) {
                     console.error('Calendar lookup failed:', error);
                     this.isLoading = false;
-                    alert('Failed to load calendar. Please try again later.');
+                    this.notifyLoadError('Failed to load calendar. Please try again later.');
                 }
             })();
         } else if (this.urlslug) {
@@ -475,6 +558,8 @@ const CalendarVueApp = {
         // Global keyboard shortcut for quick-add (Cmd/Ctrl+E)
         this._quickAddShortcutHandler = (e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
+                // A view-only link has nothing to add to (it drew a phantom event that never saved).
+                if (!this.canEdit) return;
                 e.preventDefault();
                 if (this.$refs && this.$refs.quickAddDialog && typeof this.$refs.quickAddDialog.showDialog === 'function') {
                     this.$refs.quickAddDialog.showDialog();
@@ -485,6 +570,12 @@ const CalendarVueApp = {
     },
 
     watch: {
+        // An editor that closes without a save or delete: the main app's editor_abandoned.
+        showEditor(open) {
+            if (open) { this._editorCommitted = false; return; }
+            if (!this._editorCommitted) track(a => a.editorAbandoned());
+        },
+
         showShare(newValue) {
             if (newValue) {
                 this.updateCurrentViewURL();
@@ -641,7 +732,10 @@ const CalendarVueApp = {
 
         // Apply default view to schedule (if no URL override)
         applyDefaultView() {
-             console.log('[applyDefaultView] NativeCal: Stubbed');
+            // The calendar takes its view from :initial-view (resolvedInitialView) and follows it when
+            // it changes; this re-applies it on demand (a ?view= link always wins).
+            const cal = this.$refs.nativeCal;
+            if (cal && typeof cal.setView === 'function') cal.setView(this.resolvedInitialView);
         },
 
         // Apply theme based on user preference and system settings
@@ -701,7 +795,8 @@ const CalendarVueApp = {
 
         // Update the custom view in the schedule when duration/unit changes
         updateCustomViewInSchedule(shouldRefresh = false) {
-             console.log('[updateCustomViewInSchedule] NativeCal: Stubbed');
+            // Nothing to rebuild: NativeCalendar reads :custom-duration / :custom-unit
+            // (resolvedCustomDuration / resolvedCustomUnit) reactively, label and grid included.
         },
 
         // Get the actual Syncfusion view name for a given default view setting
@@ -943,22 +1038,65 @@ const CalendarVueApp = {
                 before.map(e => CalendarDataService._eventKey(e)).filter(k => !kept.has(k)));
         },
 
-        _applyEvents(next, undoText) {
+        /**
+         * The shared EventStore (services/EventStore.js, the one the main app uses) owns the undo
+         * stack. Native still writes the list itself; each change records the exact inverse --
+         * EventStore.changesBetween(after, before), only the rows it touched -- so undoing it
+         * keeps whatever someone else changed in the meantime.
+         */
+        store() {
+            if (!this._eventStore) {
+                this._eventStore = new EventStore({
+                    getEvents: () => this.calendar.events,
+                    commit: (list) => {
+                        const next = list.map(e => new Event(e));
+                        this._declareShrink(this.calendar.events, next);
+                        this.calendar.setEvents(next);
+                    },
+                    onError: (err, command) => {
+                        console.warn('[nativecal] undo failed:', err.message, command);
+                        track(a => a.jsError('command_failed', err.message, (command && command.label) || 'undo'));
+                        this.showToast(`Couldn't undo that: ${err.message.replace(/^\w+: /, '')}`, 'error');
+                    },
+                });
+            }
+            return this._eventStore;
+        },
+        _rememberUndo(before, next, label) {
+            if (typeof EventStore === 'undefined') return null;
+            const commands = EventStore.changesBetween(next, before);
+            if (!commands.length) return null;
+            const entry = { inverse: { type: 'batch', commands, label }, label };
+            const stack = this.store().undoStack;
+            stack.push(entry);
+            if (stack.length > 50) stack.shift();
+            return entry;
+        },
+        /** Undo one recorded change (the latest by default); returns its label or null. */
+        undoLast(entry) {
+            const stack = this.store().undoStack;
+            const target = entry || stack[stack.length - 1];
+            const i = target ? stack.lastIndexOf(target) : -1;
+            if (i === -1) return null;
+            stack.splice(i, 1);
+            const r = this.store().dispatch(target.inverse, { label: `Undo ${target.label}`, undoable: false });
+            if (!r.ok) return null;
+            this.showToast(`Undid: ${target.label}`, 'success');
+            return target.label;
+        },
+
+        /**
+         * Apply a change to the events. It can be taken back (Cmd/Ctrl+Z, and in v2 the snackbar's
+         * Undo for deletes and moves). Shrinking writes are declared, as the write gate requires.
+         */
+        _applyEvents(next, undoText, { snackbar = true } = {}) {
+            this._editorCommitted = true;
             const before = this.calendar.events;
             this._declareShrink(before, next);
             this.calendar.setEvents(next);
-            if (!this.ux2 || !undoText) return;
-            const snap = (list) => new Map(list.filter(e => e && e.id).map(e => [e.id, JSON.stringify(e)]));
-            const was = snap(before), now = snap(next);
-            const touched = [...new Set([...was.keys(), ...now.keys()])].filter(id => was.get(id) !== now.get(id));
-            this.showSnackbar(undoText, () => {
-                const cur = this.calendar.events;
-                const out = cur.filter(e => !touched.includes(e.id) || was.has(e.id))
-                    .map(e => touched.includes(e.id) ? new Event(JSON.parse(was.get(e.id))) : e);
-                for (const id of touched) if (was.has(id) && !out.some(e => e.id === id)) out.push(new Event(JSON.parse(was.get(id))));
-                this._declareShrink(cur, out);
-                this.calendar.setEvents(out);
-            });
+            const entry = this._rememberUndo(before, this.calendar.events, undoText || 'change');
+            if (!this.ux2 || !undoText || !snackbar || !entry) return;
+            this.showSnackbar(undoText, () => this.undoLast(entry));
         },
 
         showSnackbar(text, undo) {
@@ -1065,49 +1203,61 @@ const CalendarVueApp = {
         },
 
         handleSaveEvent(eventData) {
+            this._editorCommitted = true;
             const events = [...this.calendar.events];
-            const { _occurrenceOf, _occurrenceStart, ...data } = eventData;
+            const { _occurrenceOf, _occurrenceStart, _followingOf, ...data } = eventData;
+            // As in the main app, a color (type) counts as used only when it was changed.
+            const was = events.find(e => e.id === (_occurrenceOf || _followingOf || data.id) && !e.recurrenceID);
+            if (Number(data.type || 1) !== Number((was && was.type) || 1)) track(a => a.featureUsed('event_type', 'popup'));
+            // The series this edit belongs to can vanish while the editor is open (deleted in
+            // another tab). Never drop the edit: keep it as a new event and say so.
+            const orphaned = (asSeries, wasRepeating = true) => {
+                events.push(new Event(this.toStoredEvent({ ...data, id: Utils.uuidv4(), recurrenceID: null, recurrenceException: '',
+                    recurrencerule: asSeries ? data.recurrencerule : '' }, null)));
+                this._applyEvents(events, `Saved "${data.title || '(No title)'}"`, { snackbar: false });
+                if (typeof AuthorSignal !== 'undefined') AuthorSignal.touch(this.calendar.id);
+                this.closeEditor();
+                this.showToast(`${wasRepeating ? 'The repeating event' : 'This event'} was deleted elsewhere, so "${data.title || '(No title)'}" was saved as a ${asSeries ? 'new repeating' : 'separate'} event`, 'info');
+            };
 
-            if (data._followingOf) {
-                const { _followingOf, ...rest } = data;
+            if (_followingOf) {
                 const series = events.find(e => e.id === _followingOf && !e.recurrenceID);
-                if (series) {
-                    const { events: cut, remaining } = this._cutSeries(series, _occurrenceStart);
-                    let rule = rest.recurrencerule;
-                    // Unchanged COUNT rule: the new part repeats only what was left.
-                    const norm = (r) => String(r || '').split(';').filter(p => p.includes('=')).sort().join(';');
-                    if (remaining !== null && norm(rule) === norm(series.recurrencerule)) rule = rule.replace(/COUNT=\d+/, `COUNT=${remaining}`);
-                    cut.push(new Event(this.toStoredEvent({ ...rest, id: Utils.uuidv4(), recurrencerule: rule, recurrenceException: '' }, null)));
-                    this._applyEvents(cut);
-                    if (typeof AuthorSignal !== 'undefined') AuthorSignal.touch(this.calendar.id);
-                    this.closeEditor();
-                    return;
-                }
+                if (!series) return orphaned(true);
+                const { events: cut, remaining } = this._cutSeries(series, _occurrenceStart);
+                let rule = data.recurrencerule;
+                // Unchanged COUNT rule: the new part repeats only what was left.
+                const norm = (r) => String(r || '').split(';').filter(p => p.includes('=')).sort().join(';');
+                if (remaining !== null && norm(rule) === norm(series.recurrencerule)) rule = rule.replace(/COUNT=\d+/, `COUNT=${remaining}`);
+                cut.push(new Event(this.toStoredEvent({ ...data, id: Utils.uuidv4(), recurrencerule: rule, recurrenceException: '' }, null)));
+                this._applyEvents(cut, `Saved "${data.title || '(No title)'}"`, { snackbar: false });
+                if (typeof AuthorSignal !== 'undefined') AuthorSignal.touch(this.calendar.id);
+                this.closeEditor();
+                return;
             }
             if (_occurrenceOf) {
                 // "Edit Event" on one occurrence: an exception row plus a stamp on the series.
-                const i = events.findIndex(e => e.id === _occurrenceOf);
-                if (i !== -1) {
-                    const series = events[i];
-                    const stamp = this._stamp(_occurrenceStart);
-                    const list = String(series.recurrenceException || '').split(',').map(s => s.trim()).filter(Boolean);
-                    if (!list.includes(stamp)) list.push(stamp);
-                    events[i] = new Event({ ...series, recurrenceException: list.join(',') });
-                    events.push(new Event({ ...this.toStoredEvent(data, null), id: Utils.uuidv4(), recurrenceID: series.id,
-                        recurrencerule: series.recurrencerule, recurrenceException: stamp }));
-                }
+                const i = events.findIndex(e => e.id === _occurrenceOf && !e.recurrenceID);
+                if (i === -1) return orphaned(false);
+                const series = events[i];
+                const stamp = this._stamp(_occurrenceStart);
+                const list = String(series.recurrenceException || '').split(',').map(s => s.trim()).filter(Boolean);
+                if (!list.includes(stamp)) list.push(stamp);
+                events[i] = new Event({ ...series, recurrenceException: list.join(',') });
+                events.push(new Event({ ...this.toStoredEvent(data, null), id: Utils.uuidv4(), recurrenceID: series.id,
+                    recurrencerule: series.recurrencerule, recurrenceException: stamp }));
             } else if (data.id) {
                 const i = events.findIndex(e => e.id === data.id && !e.recurrenceID === !data.recurrenceID);
                 if (i !== -1) events[i] = new Event(this.toStoredEvent({ ...events[i], ...data }, events[i]));
                 else {
-                    // The row changed under the open editor (someone else saved it). Keep the
-                    // user's edit rather than dropping it silently.
-                    events.push(new Event(this.toStoredEvent(data, null)));
+                    // The row was deleted under the open editor (in another tab). Keep the user's
+                    // edit, as a new event, and say so rather than bringing it back silently.
+                    return orphaned(!!data.recurrencerule, !!data.recurrencerule);
                 }
             } else {
                 events.push(new Event(this.toStoredEvent(data, null)));
+                track(a => a.eventAdded('grid', this.calendar));
             }
-            this.calendar.setEvents(events);
+            this._applyEvents(events, `${data.id || _occurrenceOf ? 'Saved' : 'Added'} "${data.title || '(No title)'}"`, { snackbar: false });
             if (typeof AuthorSignal !== 'undefined') AuthorSignal.touch(this.calendar.id);
             this.closeEditor();
         },
@@ -1502,6 +1652,8 @@ const CalendarVueApp = {
 
         toggleNotes() {
             if (this.showNotes) {
+                // As in the main app: notes count as used when the panel closes with content.
+                if ((this.calendar?.options?.notes || '').trim()) track(a => a.featureUsed('notes'));
                 this.showNotes = false;
             } else {
                 this.closeAllPanels();
@@ -1511,8 +1663,8 @@ const CalendarVueApp = {
 
         toggleSearch() {
             if (this.showSearch) {
+                // Filters stay on after the panel closes, as in the main app; the banner says so.
                 this.showSearch = false;
-                this.resetColorFilters();
             } else {
                 this.closeAllPanels();
                 this.showSearch = true;
@@ -1579,8 +1731,8 @@ const CalendarVueApp = {
                 end: event.endDateTime,
                 isAllDay: !!event.isAllDay
             });
-            this.calendar.events.push(newEvent);
-            this.calendar.setEvents(this.calendar.events);
+            this._applyEvents([...this.calendar.events, newEvent], `Added "${newEvent.title || '(No title)'}"`, { snackbar: false });
+            track(a => a.eventAdded('quick_add', this.calendar));
         },
 
         shareUrl(url, title) {
@@ -1724,6 +1876,7 @@ const CalendarVueApp = {
         saveGlobalSettings() {
             try {
                 localStorage.setItem('pastecal_global_settings', JSON.stringify(this.globalSettings));
+                track(a => a.featureUsed('settings'));
                 console.log('Global settings saved to localStorage');
             } catch (error) {
                 console.warn('Failed to save settings to localStorage:', error);
@@ -1796,6 +1949,7 @@ const CalendarVueApp = {
 
         updateEventColor(index, color) {
             if (index >= 0 && index < this.COLORS.length) {
+                track(a => a.featureUsed('colors'));
                 // Update local settings
                 this.localSettings.colors[index] = color;
 
@@ -2038,6 +2192,14 @@ const CalendarVueApp = {
         // Safely set isReadOnly with normalization
         setIsReadOnly(val) {
             this.isReadOnly = this.normalizeBoolean(val);
+        },
+
+        // A view link that cannot be shown: the app's toast (it was a blocking alert()), held long
+        // enough to read; the console if the toast is not mounted.
+        notifyLoadError(message) {
+            const t = this.$refs && this.$refs.toast;
+            if (t && typeof t.display === 'function') t.display(message, 'error', { duration: 15000 });
+            else console.error('[nativecal]', message);
         },
 
         showToast(message, type = 'info') {

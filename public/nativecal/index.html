@@ -90,10 +90,13 @@ Copyright (c) 2025 Kalid Azad
     <script>(function () { var ux = new URLSearchParams(location.search).get('ux');
         if (ux === '2' || (ux !== '1' && /^\/beta(\/|$)/.test(location.pathname))) document.documentElement.dataset.ux = '2'; })();</script>
     <link rel="stylesheet" href="/nativecal/native.css">
+    <!-- Tailwind, prebuilt by scripts/build-css.sh from this page's files (was the cdn.tailwindcss.com in-browser
+         compiler, not meant for production). Last, where the compiler injected its output. -->
+    <link rel="stylesheet" href="/nativecal/tailwind.css?v=20261024">
 
     <!-- Third-party libraries -->
-    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Vue, self-hosted and pinned: the same build the main app uses (public/index.html), not unpkg's floating vue@3. -->
+    <script src="/vendor/vue-3.5.44/vue.global.prod.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/date-fns@3.6.0/cdn.min.js" integrity="sha384-yzVjVsgM1C687v6dWwBp9XurYpqEHWfk39FYLcmjZkbneJ2hefxMNuv73FZOxcNx" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/rrule@2.8.1/dist/es5/rrule.min.js" integrity="sha384-/841P5sCxcfR/THAcUhWr9d8zrIF1TPFzXRz8YhqxlPKvyL3tA/Ns4ytyfN5/hZh" crossorigin="anonymous"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-compat.js" integrity="sha384-wZrK4b7F6nW2Jp4rrQ2D5NbLlGAyUvPfyrReLbqjf+DyXRvT/usqx3w5RO043g1Q" crossorigin="anonymous"></script>
@@ -126,6 +129,7 @@ Copyright (c) 2025 Kalid Azad
 
     <!-- App scripts (order matters: Utils → models/services → directives → components) -->
     <script src="/utils/analytics.js?v=1763769217"></script>
+    <script src="/nativecal/errors.js?v=1"></script>
     <script src="/utils/utils.js?v=1763769217"></script>
     <script src="/models/Event.js?v=1763769217"></script>
     <script src="/services/SlugManager.js?v=1763769217"></script>
@@ -291,7 +295,8 @@ Copyright (c) 2025 Kalid Azad
         <!-- Mobile FAB removed - mobile menu will open the central quick-add dialog directly -->
 
         <!-- Single dialog instance used by button triggers -->
-        <quick-add-dialog ref="quickAddDialog" @event-created="handleQuickAddEvent"></quick-add-dialog>
+        <!-- Not on a view-only link: its own Cmd/Ctrl+E listener opened it there and drew a phantom event. -->
+        <quick-add-dialog v-if="canEdit" ref="quickAddDialog" @event-created="handleQuickAddEvent"></quick-add-dialog>
 
         <topbar class="hidden md:flex justify-between items-center pb-1 md:pb-3 text-sm">
             <!-- Left section -->
@@ -1108,8 +1113,23 @@ Copyright (c) 2025 Kalid Azad
             </div>
         </panel>
 
+        <div v-if="isColorFilterActive" data-testid="hidden-events-banner"
+            class="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2 px-3 py-2 rounded-sm border border-color-default bg-2 text-sm"
+            v-cloak>
+            <span class="text-color-2">{{ hiddenEventsMessage }}</span>
+            <button @click="resetColorFilters" type="button"
+                class="underline text-color-1 hover:text-red-500 transition-colors">
+                Show all events
+            </button>
+        </div>
         <div id="cal2_wrap" style="width: 100%; height: 100%;" class="flex-1 overflow-hidden">
             <native-calendar
+                :hidden-slots="hiddenColorSlots"
+                ref="nativeCal"
+                :initial-view="resolvedInitialView"
+                :initial-date="resolvedInitialDate"
+                :custom-duration="resolvedCustomDuration"
+                :custom-unit="resolvedCustomUnit"
                 :events="displayEvents"
                 :time-format="globalSettings.timeFormat"
                 :colors="COLORS"
