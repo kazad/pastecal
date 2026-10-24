@@ -31,6 +31,7 @@ import { handleAccounts, sessionUserId as accountsSessionUserId } from './Accoun
 import { PLANS } from './Waitlist.js';
 import { handleInsight, hitHeaders } from './Insight.js';
 import { timingSafeEqual } from './Stripe.js';
+import { allowedOrigins, noindexEverywhere, ROBOTS_DISALLOW_ALL } from './Site.js';
 
 // Admin routes: Authorization: Bearer <IMPORT_SECRET>, compared in constant time. Callers check IMPORT_SECRET is set.
 const bearerIsSecret = (request, env) => timingSafeEqual(request.headers.get('Authorization') || '', `Bearer ${env.IMPORT_SECRET}`);
@@ -58,11 +59,12 @@ function publicLookup(out) {
 // UNSAFE_DEV_SESSION_HEADER is for local tests only (wrangler dev --var), never in wrangler.jsonc:
 // it takes the user from an X-Dev-Session-User header, and only from a loopback client.
 // A WebSocket upgrade carries the session cookie even when another site opens it (no CORS for
-// sockets), so on sockets the cookie counts only from pastecal's own pages (dev mode: localhost too,
-// and the http://pastecal.com that wrangler dev rewrites a same-host Origin to). Anything else is anonymous.
+// sockets), so on sockets the cookie counts only from pastecal's own pages (staging: its SITE_URL; dev
+// mode: localhost too, and the http://pastecal.com that wrangler dev rewrites a same-host Origin to).
+// Anything else is anonymous.
 function trustedSocketOrigin(request, env) {
     const origin = request.headers.get('Origin') || '';
-    if (origin === 'https://pastecal.com' || origin === 'https://www.pastecal.com') return true;
+    if (allowedOrigins(env).includes(origin)) return true;
     return env.ACCOUNTS_DEV_MODE === '1' && (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) || origin === 'http://pastecal.com');
 }
 
@@ -106,8 +108,28 @@ function withCors(response) {
     return res;
 }
 
+// Staging (preview.pastecal.com) stays out of search everywhere: robots.txt disallows all, and every
+// response says noindex. Its wrangler env sends every path through the Worker (run_worker_first: true)
+// so this sees static pages too. Production is untouched: noindexEverywhere is false there.
+function withStagingHeaders(response) {
+    if (!response || response.status === 101) return response;     // a WebSocket upgrade: leave it alone
+    const res = new Response(response.body, response);
+    res.headers.set('X-Robots-Tag', 'noindex, nofollow');
+    return res;
+}
+
 export default {
-    async fetch(request, env) {
+    async fetch(request, env, ctx) {
+        const url = new URL(request.url);
+        if (!noindexEverywhere(env, url.hostname)) return route(request, env, ctx);
+        if (url.pathname === '/robots.txt') {
+            return withStagingHeaders(new Response(ROBOTS_DISALLOW_ALL, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-cache' } }));
+        }
+        return withStagingHeaders(await route(request, env, ctx));
+    },
+};
+
+async function route(request, env) {
         if (request.method === 'OPTIONS') {
             return new Response(null, {
                 status: 204,
@@ -387,5 +409,4 @@ export default {
         if (indexable) out.headers.delete('X-Robots-Tag'); else out.headers.set('X-Robots-Tag', 'noindex');
         if (/\.(js|css|json)$/.test(path) || beta) out.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
         return out;
-    },
-};
+}

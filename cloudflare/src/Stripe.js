@@ -7,16 +7,24 @@
  * Requests go to https://api.stripe.com; local tests may point STRIPE_API_BASE at a fake on this
  * machine, honored only with ACCOUNTS_DEV_MODE=1 (see localBase), so the key never goes elsewhere.
  * A test-mode key (sk_test_/rk_test_) is refused outside dev mode: production never bills in test mode.
+ * The one exception is staging (Site.js testKeyAllowed): BILLING_TEST_MODE=1 with a non-production
+ * SITE_URL, for requests to that host only. There a LIVE key is refused instead: staging never takes real money.
  */
 import { localBase } from './LockClient.js';
+import { testKeyAllowed } from './Site.js';
 
 export const INTERVALS = { year: 'STRIPE_PRICE_PRO_YEARLY', month: 'STRIPE_PRICE_PRO_MONTHLY' };
 
-export function stripeConfig(env) {
+// host: the request's hostname (url.hostname). It matters only for a test key on staging.
+export function stripeConfig(env, host = null) {
     if (!env.STRIPE_SECRET_KEY || !env.STRIPE_WEBHOOK_SECRET) return null;
     const testKey = /^(sk|rk)_test_/.test(env.STRIPE_SECRET_KEY);
-    if (testKey && env.ACCOUNTS_DEV_MODE !== '1') {
-        console.error('[stripe] BILLING OFF: STRIPE_SECRET_KEY is a TEST-mode key outside dev mode. Set the live key.');
+    if (testKey && !testKeyAllowed(env, host)) {
+        console.error('[stripe] BILLING OFF: STRIPE_SECRET_KEY is a TEST-mode key outside dev mode / staging. Set the live key.');
+        return null;
+    }
+    if (env.BILLING_TEST_MODE === '1' && /^(sk|rk)_live_/.test(env.STRIPE_SECRET_KEY)) {
+        console.error('[stripe] BILLING OFF: BILLING_TEST_MODE=1 with a LIVE key. Staging takes test keys only.');
         return null;
     }
     const devBase = env.ACCOUNTS_DEV_MODE === '1' && env.STRIPE_API_BASE ? localBase(env.STRIPE_API_BASE) : null;
