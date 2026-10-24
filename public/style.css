@@ -1714,3 +1714,14 @@ button:hover > .pc-add-event {
 .pc-draft-chip { flex: none; margin-right: 6px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .02em;
   color: var(--pc-warning); background: var(--pc-warning-soft); cursor: help }
 .pc-draft-note > span:first-child { display: none }
+
+/* Header (desktop): logo + Add event | title | the calendar's actions + address. Labeled buttons, one height. */
+.pc-hdr-actions { display: flex; align-items: center; gap: 2px; margin-right: 10px }
+.pc-hdr-btn { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; border: 0; border-radius: 8px; background: none;
+  color: var(--pc-text-muted); font: 500 13px/1 var(--pc-font); white-space: nowrap; cursor: pointer }
+.pc-hdr-btn:hover { color: var(--pc-text); background: var(--pc-hover) }
+.pc-hdr-icon { width: 34px; padding: 0; justify-content: center }
+@media (max-width: 1499px) { .pc-hdr-btn span { display: none } .pc-hdr-btn { width: 34px; padding: 0; justify-content: center } }
+[data-testid="desktop-title-area"] { overflow: hidden }
+[data-testid="desktop-title-area"] h1, [data-testid="desktop-title-area"] div { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.pc-hdr-btn svg, .pc-hdr-btn icon, .pc-hdr-btn icon svg { width: 18px !important; height: 18px !important; flex: none; display: block }

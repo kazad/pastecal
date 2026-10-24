@@ -51,7 +51,7 @@ test('editor: every header button and every tab opens the panel beside the calen
   const before = await box(page);
 
   const fromHeader = [
-    ['notes', page.getByTestId('desktop-title-area').getByRole('button', { name: 'Toggle notes' })],
+    ['notes', page.locator('.pc-hdr-actions').getByRole('button', { name: 'Toggle notes' })],
     ['changes', page.getByTestId('last-edit-link')],
     ['settings', page.getByTestId('settings-button-desktop')],
     ['share', page.getByTestId('share-pill-more')],
@@ -136,7 +136,7 @@ test('view link: notes are pinned beside the calendar, and hiding them sticks', 
   await page.waitForFunction(() => window.scheduleObj && document.querySelector('.e-month-view .e-appointment'), null, { timeout: 20_000 });
   await page.waitForTimeout(800);
   await expect(panel(page)).toHaveCount(0);
-  await page.getByTestId('desktop-title-area').getByRole('button', { name: 'Toggle notes' }).click();
+  await page.locator('.pc-hdr-actions').getByRole('button', { name: 'Toggle notes' }).click();
   await expect(page.getByTestId('side-title')).toHaveText('About this calendar');
   await ctx.close();
 });

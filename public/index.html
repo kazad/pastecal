@@ -300,7 +300,7 @@ Copyright (c) 2025 Kalid Azad
                         </svg>
                     </div>
                     <navigation-dropdown v-if="showRecents" :recent-calendars="recentCalendars"
-                        @go-homepage="goToHomepage" @toggle-pin="togglePin" @remove-recent="removeRecent" @open-stats="openStatsFor"
+                        @go-homepage="goToHomepage" @open-help="showRecents = false; toggleHelp()" @toggle-pin="togglePin" @remove-recent="removeRecent" @open-stats="openStatsFor"
                         class="mt-2"></navigation-dropdown>
                 </div>
 
@@ -429,55 +429,13 @@ Copyright (c) 2025 Kalid Azad
 
                         <!-- Navigation dropdown component -->
                         <navigation-dropdown v-if="showRecents" :recent-calendars="recentCalendars"
-                            @go-homepage="goToHomepage" @toggle-pin="togglePin" @remove-recent="removeRecent" @open-stats="openStatsFor" v-cloak>
+                            @go-homepage="goToHomepage" @open-help="showRecents = false; toggleHelp()" @toggle-pin="togglePin" @remove-recent="removeRecent" @open-stats="openStatsFor" v-cloak>
                         </navigation-dropdown>
                     </div>
                 </logo>
 
                 <!-- Action buttons -->
-                <buttonarea class="flex items-center space-x-1 mt-0">
-
-                    <!-- Help button -->
-                    <custom-tooltip width="w-auto" align="center">
-                        <template #trigger>
-                            <button v-on:click="toggleHelp" aria-label="Show help"
-                                class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8">
-                                <icon name="help" class="w-5 h-5"></icon>
-                            </button>
-                        </template>
-                        <template #content>
-                            <span class="whitespace-nowrap">Show Help</span>
-                        </template>
-                    </custom-tooltip>
-
-                    <!-- Search button -->
-                    <custom-tooltip width="w-auto" align="center">
-                        <template #trigger>
-                            <button v-on:click="toggleSearch" aria-label="Search events"
-                                data-testid="search-button-desktop"
-                                class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors">
-                                <icon name="search" class="w-5 h-5"></icon>
-                            </button>
-                        </template>
-                        <template #content>
-                            <span class="whitespace-nowrap">Search Events</span>
-                        </template>
-                    </custom-tooltip>
-
-                    <!-- Settings button -->
-                    <custom-tooltip width="w-auto" align="center">
-                        <template #trigger>
-                            <button v-on:click="toggleSettings" aria-label="Settings"
-                                data-testid="settings-button-desktop" :class="{ 'pc-hdr-on': showSettings }"
-                                class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8">
-                                <icon name="settings" class="w-5 h-5"></icon>
-                            </button>
-                        </template>
-                        <template #content>
-                            <span class="whitespace-nowrap">Settings</span>
-                        </template>
-                    </custom-tooltip>
-
+                <buttonarea class="flex items-center space-x-1 mt-0 ml-3">
                     <!-- Quick add button - desktop only -->
                     <quick-add-button v-if="canEdit" class="block"
                         @open="$refs.quickAddDialog && $refs.quickAddDialog.showDialog()"
@@ -512,24 +470,7 @@ Copyright (c) 2025 Kalid Azad
                     @enter="setTitle($event)">
                 </calendar-title>
                 <lock-badge v-if="lock.locked && !editTitle" :can-edit="lock.canEdit" @copy="makeOwnCopy"></lock-badge>
-                <custom-tooltip width="w-auto" align="center" v-if="!editTitle">
-                    <template #trigger>
-                        <button v-on:click="toggleNotes" aria-label="Toggle notes" :aria-expanded="showNotes ? 'true' : 'false'" :class="{ 'pc-hdr-on': showNotes }"
-                            class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors flex items-center justify-center h-8">
-                            <div class="flex items-center">
-                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-                                    stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
-                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                        d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-                                </svg>
-                                <span class="ml-0.5 text-xs hidden lg:inline">Notes</span>
-                            </div>
-                        </button>
-                    </template>
-                    <template #content>
-                        <span class="whitespace-nowrap">Toggle Notes</span>
-                    </template>
-                </custom-tooltip>
+
 
             </section>
 
@@ -539,18 +480,24 @@ Copyright (c) 2025 Kalid Azad
                 <!-- When the CALENDAR last changed, and the way into its history. Kept out
                      of the title cluster: sitting beside "Notes" it read as the notes'
                      timestamp rather than the calendar's. -->
-                <custom-tooltip width="w-auto" align="center" v-if="!isLoading && lastEditLabel">
-                    <template #trigger>
-                        <button @click="showRecentChanges ? closeSidePanel() : openRecentChanges()" data-testid="last-edit-link" :class="{ 'pc-hdr-on': showRecentChanges }"
-                            class="text-color-1 hover:text-blue-500 text-xs whitespace-nowrap mr-3
-                                   transition-colors hidden lg:inline-flex items-center">
-                            {{ lastEditLabel }}
-                        </button>
-                    </template>
-                    <template #content>
-                        <span class="whitespace-nowrap">Calendar edited {{ lastEditExact }}</span>
-                    </template>
-                </custom-tooltip>
+                <!-- The calendar's own actions, labeled (side panel tabs): search, notes, its history, settings. -->
+                <div class="pc-hdr-actions" v-if="!isLoading">
+                    <button v-on:click="toggleSearch" aria-label="Search events" data-testid="search-button-desktop" class="pc-hdr-btn pc-hdr-icon" title="Search events">
+                        <icon name="search"></icon>
+                    </button>
+                    <button v-if="!editTitle" v-on:click="toggleNotes" aria-label="Toggle notes" :aria-expanded="showNotes ? 'true' : 'false'" :class="{ 'pc-hdr-on': showNotes }" class="pc-hdr-btn" title="Notes everyone sees">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8"/></svg>
+                        <span>Notes</span>
+                    </button>
+                    <button v-if="lastEditLabel" @click="showRecentChanges ? closeSidePanel() : openRecentChanges()" data-testid="last-edit-link" :class="{ 'pc-hdr-on': showRecentChanges }" class="pc-hdr-btn" :title="'Calendar edited ' + lastEditExact">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l4 2"/></svg>
+                        <span>{{ lastEditLabel }}</span>
+                    </button>
+                    <button v-on:click="toggleSettings" aria-label="Settings" data-testid="settings-button-desktop" :class="{ 'pc-hdr-on': showSettings }" class="pc-hdr-btn" title="Settings">
+                        <icon name="settings"></icon>
+                        <span>Settings</span>
+                    </button>
+                </div>
 
                 <!-- Loading state -->
                 <div v-if="isLoading">
