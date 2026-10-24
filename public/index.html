@@ -889,243 +889,110 @@
                         <p class="pc-side-empty-text">Save &amp; share gives this calendar its own link: one to edit, one for the group chat, and one for calendar apps. No sign-up for anyone.</p>
                         <button type="button" class="pc-side-btn pc-side-btn--primary" @click="share">Save &amp; share</button>
                     </div>
-                    <div v-if="showShare && isExisting" class="text-sm w-full" v-cloak>
+                    <!-- Share, ordered by what people do most: send the read-only link, add it to a calendar
+                         app, hand helpers the edit link, then Pro. The rest (this exact view, the link's name,
+                         raw feeds) waits under "More sharing options". Same URLs and copy paths as before. -->
+                    <div v-if="showShare && isExisting" class="pc-share" v-cloak>
                         <h2 v-if="shareProFocus" class="text-lg font-bold mb-4">Get Pro</h2>
                         <!-- Arriving from Get Pro: only the lock offer, the links one click away -->
                         <template v-if="!shareProFocus">
 
-                        <!-- Free calendar, its creator: one quiet line about Pro stats. No numbers: the server keeps them Pro-only. -->
-                        <button v-if="proTeaser" type="button" class="pc-teaser" @click="openProFromTeaser" data-testid="pro-stats-teaser">
-                            <svg class="pc-teaser-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
-                            <span>Pro shows who’s following and where they’re from</span>
-                            <span class="pc-teaser-go" aria-hidden="true">→</span>
-                        </button>
-
-                        <!-- 2x2 Grid Layout -->
-                        <div class="grid grid-cols-1 gap-4">
-
-                            <!-- Edit Access (Top Left) -->
-                            <div v-if="canEdit" class="pc-share-card">
-                                <h4 class="font-medium mb-2 inline-flex items-center gap-x-2">
-
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
-                                        stroke="currentColor" class="size-5">
-                                        <path stroke-linecap="round" stroke-linejoin="round"
-                                            d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
-                                    </svg>
-
-                                    Edit link
-                                </h4>
-                                <p class="pc-share-desc" v-if="lock.locked">
-                                    Locked: people with this link can view. Only you and people with an editor link can change it.
-                                </p>
-                                <p class="pc-share-desc" v-else>
-                                    For helpers. Anyone with it can add and change events.
-                                </p>
-                                <div class="flex gap-2">
-                                    <input type="text" :value="getEditableURL()" readonly
-                                        class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
-                                    <button @click="copyToClipboard(getEditableURL(), $event.currentTarget, 'copy')"
-                                        class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                        <icon name="copy" class="h-4 w-4 mr-1"></icon>
-                                        <span>Copy</span>
-                                    </button>
-                                    <button v-if="canShare()" @click="shareUrl(getEditableURL(), 'Calendar')"
-                                        class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-                                            stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
-                                        </svg>
-                                    </button>
-                                </div>
+                        <section class="pc-share-card" data-testid="share-group">
+                            <h4>Send to your group</h4>
+                            <p class="pc-share-desc">They see every change but can’t edit.</p>
+                            <!-- Older calendars may not have a read-only link yet: make one on request rather than show an empty field. -->
+                            <button v-if="!getReadOnlyURL()" type="button" class="pc-share-copy pc-share-copy--primary" :disabled="creatingReadOnly || !canEdit"
+                                @click="makeReadOnlyLink" data-testid="create-readonly">{{ creatingReadOnly ? 'Creating…' : 'Create read-only link' }}</button>
+                            <div v-else class="pc-share-link">
+                                <input type="text" :value="getReadOnlyURL()" readonly aria-label="Read-only link" class="pc-share-url">
+                                <button type="button" @click="copyToClipboard(getReadOnlyURL(), $event.currentTarget, 'copy')" class="pc-share-copy pc-share-copy--primary">
+                                    <icon name="copy" class="h-4 w-4 mr-1"></icon><span>Copy</span>
+                                </button>
+                                <button v-if="canShare()" type="button" @click="shareUrl(getReadOnlyURL(), 'Calendar')" class="pc-share-copy" aria-label="Share read-only link">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" /></svg>
+                                </button>
                             </div>
+                        </section>
 
-                            <!--  View Only (Top Right) -->
-                            <div class="pc-share-card">
-                                <h4 class="font-medium mb-2 inline-flex items-center gap-x-2">
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
-                                        stroke="currentColor" class="size-5">
-                                        <path stroke-linecap="round" stroke-linejoin="round"
-                                            d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
-                                        <path stroke-linecap="round" stroke-linejoin="round"
-                                            d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-                                    </svg>
-
-                                    Read-only link
-                                </h4>
-                                <p class="pc-share-desc">
-                                    For the group chat. People see every change but can't edit.
-                                </p>
-
-                                <!-- View-only link (auto-created) -->
-                                <div class="space-y-2">
-                                    <div class="flex gap-2">
-                                        <input type="text" :value="getReadOnlyURL()" readonly
-                                            class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
-                                        <button @click="copyToClipboard(getReadOnlyURL(), $event.currentTarget, 'copy')"
-                                            class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                            <icon name="copy" class="h-4 w-4 mr-1"></icon>
-                                            <span>Copy</span>
-                                        </button>
-                                        <button v-if="canShare()" @click="shareUrl(getReadOnlyURL(), 'Calendar')"
-                                            class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none"
-                                                viewBox="0 0 24 24" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                    d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
-                                            </svg>
-                                        </button>
-                                    </div>
-
-                                    <!-- Short URL alias -->
-                                    <div class="text-xs text-color-1">
-                                        Short: pastecal.com/{{ getReadOnlySlug() }}
-                                    </div>
-
-                                    <!-- Customize existing link -->
-                                    <div class="">
-                                        <button @click="showReadOnlySlug = !showReadOnlySlug"
-                                            class="text-xs text-blue-500 hover:text-blue-600">
-                                            {{ showReadOnlySlug ? 'Cancel' : 'Customize URL' }}
-                                        </button>
-
-                                        <div v-if="showReadOnlySlug" class="mt-2">
-                                            <div class="flex gap-2">
-                                                <input type="text" v-model="readOnlySlugInput" placeholder="Enter custom name"
-                                                    class="flex-1 p-2 border border-color-default rounded bg-bg text-sm">
-                                                <button @click="customizeExistingLink" :disabled="!readOnlySlugInput.trim()"
-                                                    class="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 disabled:bg-theme-disabled text-xs">
-                                                    Update
-                                                </button>
-                                            </div>
-                                            <div class="text-xs text-color-1 mt-1">
-                                                New: pastecal.com/view/{{ readOnlySlugInput || 'custom-name' }}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
+                        <!-- The read-only feed, so subscribing never spreads edit access. webcal:// does nothing
+                             when no app is registered for it, so the named apps are load-bearing. -->
+                        <section v-if="getWebcalURL()" class="pc-share-card" data-testid="share-apps">
+                            <h4>Add to a calendar app</h4>
+                            <p class="pc-share-desc">Subscribe once; changes show up on their own. Google checks every few hours.</p>
+                            <div class="pc-share-apps">
+                                <a :href="getGoogleSubscribeURL()" target="_blank" rel="noopener" @click="trackSubscribe('subscribe_google')" data-testid="subscribe-google" class="pc-share-app">Google</a>
+                                <a :href="getWebcalURL()" @click="trackSubscribe('subscribe_apple')" data-testid="subscribe-apple" class="pc-share-app">Apple</a>
+                                <a :href="getOutlookSubscribeURL()" target="_blank" rel="noopener" @click="trackSubscribe('subscribe_outlook')" data-testid="subscribe-outlook" class="pc-share-app">Outlook</a>
                             </div>
+                        </section>
 
-                            <!-- Current View (Bottom Left) -->
-                            <div class="pc-share-card">
-                                <h4 class="font-medium mb-2 inline-flex items-center gap-x-2">
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
-                                        stroke="currentColor" class="size-5">
-                                        <path stroke-linecap="round" stroke-linejoin="round"
-                                            d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
-                                    </svg>
-
-                                    Link to this view
-                                </h4>
-                                <p class="pc-share-desc">
-                                    Opens at the date and view you're looking at now.
-                                </p>
-                                <div class="flex gap-2">
-                                    <input type="text" :value="currentViewURL" readonly
-                                        class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
-                                    <button @click="copyToClipboard(currentViewURL, $event.currentTarget, 'copy')"
-                                        class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                        <icon name="copy" class="h-4 w-4 mr-1"></icon>
-                                        <span>Copy</span>
-                                    </button>
-                                    <button v-if="canShare()" @click="shareUrl(currentViewURL, 'Calendar View')"
-                                        class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
-                                            stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" />
-                                        </svg>
-                                    </button>
-                                </div>
+                        <section v-if="canEdit" class="pc-share-card" data-testid="share-helpers">
+                            <h4>Helpers who can edit</h4>
+                            <p class="pc-share-desc" v-if="lock.locked">Locked: people with the read-only link can view. Only you and people with an editor link can change it.</p>
+                            <p class="pc-share-desc" v-else>Anyone with this link can add and change events.</p>
+                            <div class="pc-share-link">
+                                <input type="text" :value="getEditableURL()" readonly aria-label="Edit link" class="pc-share-url">
+                                <button type="button" @click="copyToClipboard(getEditableURL(), $event.currentTarget, 'copy')" class="pc-share-copy">
+                                    <icon name="copy" class="h-4 w-4 mr-1"></icon><span>Copy</span>
+                                </button>
+                                <button v-if="canShare()" type="button" @click="shareUrl(getEditableURL(), 'Calendar')" class="pc-share-copy" aria-label="Share edit link">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" /></svg>
+                                </button>
                             </div>
-
-                            <!-- Phone/Apps (Bottom Right) -->
-                            <div class="pc-share-card">
-                                <h4 class="font-medium mb-2 inline-flex items-center gap-x-2">
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
-                                        stroke="currentColor" class="size-5">
-                                        <path stroke-linecap="round" stroke-linejoin="round"
-                                            d="M10.5 1.5H8.25A2.25 2.25 0 0 0 6 3.75v16.5a2.25 2.25 0 0 0 2.25 2.25h7.5A2.25 2.25 0 0 0 18 20.25V3.75a2.25 2.25 0 0 0-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
-                                    </svg>
-
-
-                                    Add to a calendar app
-                                </h4>
-                                <p class="pc-share-desc">
-                                    Subscribe once in Google, Apple or Outlook and new events show up on their own. Google checks every few hours.
-                                </p>
-
-                                <!-- Primary: hand the feed to the OS default calendar app. Uses the
-                                     read-only feed so subscribing never spreads edit access. -->
-                                <a v-if="getWebcalURL()" :href="getWebcalURL()"
-                                    @click="trackSubscribe('subscribe')"
-                                    data-testid="subscribe-webcal"
-                                    class="block w-full text-center px-4 py-2.5 mb-2 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 transition-colors no-underline">
-                                    Subscribe to this calendar
-                                    <span class="block text-xs font-normal opacity-90">Opens your default calendar app</span>
-                                </a>
-
-                                <!-- webcal:// does nothing at all when no app is registered for the
-                                     scheme, so these named fallbacks are load-bearing, not decoration. -->
-                                <div v-if="getWebcalURL()" class="flex gap-2 mb-3">
-                                    <a :href="getGoogleSubscribeURL()" target="_blank" rel="noopener"
-                                        @click="trackSubscribe('subscribe_google')"
-                                        data-testid="subscribe-google"
-                                        class="flex-1 text-center px-2 py-1.5 text-xs font-semibold rounded border border-color-default text-color-1 hover:border-blue-500 hover:text-blue-500 transition-colors no-underline">
-                                        Google
-                                    </a>
-                                    <a :href="getOutlookSubscribeURL()" target="_blank" rel="noopener"
-                                        @click="trackSubscribe('subscribe_outlook')"
-                                        data-testid="subscribe-outlook"
-                                        class="flex-1 text-center px-2 py-1.5 text-xs font-semibold rounded border border-color-default text-color-1 hover:border-blue-500 hover:text-blue-500 transition-colors no-underline">
-                                        Outlook
-                                    </a>
-                                    <a :href="getWebcalURL()"
-                                        @click="trackSubscribe('subscribe_apple')"
-                                        data-testid="subscribe-apple"
-                                        class="flex-1 text-center px-2 py-1.5 text-xs font-semibold rounded border border-color-default text-color-1 hover:border-blue-500 hover:text-blue-500 transition-colors no-underline">
-                                        Apple
-                                    </a>
-                                </div>
-
-                                <div class="space-y-3">
-                                    <!-- View-Only ICS -->
-                                    <div v-if="getReadOnlyURL()">
-                                        <div class="text-xs font-medium text-color-2 mb-1">Feed URL (view only):</div>
-                                        <div class="flex gap-2">
-                                            <input type="text" :value="getReadOnlyICSURL()" readonly
-                                                class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
-                                            <button @click="copyToClipboard(getReadOnlyICSURL(), $event.currentTarget, 'ics')"
-                                                class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                                <icon name="copy" class="h-4 w-4 mr-1"></icon>
-                                                <span>Copy</span>
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <!-- Edit ICS -->
-                                    <div v-if="canEdit">
-                                        <div class="text-xs font-medium text-color-2 mb-1">Feed URL (full access):</div>
-                                        <div class="flex gap-2">
-                                            <input type="text" :value="getEditableICSURL()" readonly
-                                                class="flex-1 p-2 border border-color-default rounded bg-disabled text-sm">
-                                            <button @click="copyToClipboard(getEditableICSURL(), $event.currentTarget, 'ics')"
-                                                class="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 flex items-center">
-                                                <icon name="copy" class="h-4 w-4 mr-1"></icon>
-                                                <span>Copy</span>
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                        </div>
+                        </section>
 
                         </template>
                         <!-- Pro: lock this calendar, or (owner) the editor link and billing -->
                         <pro-panel v-if="isExisting" ref="proPanel" :calendar-id="calendar.id" :calendar-title="calendar.title" :locked="lock.locked" :can-edit="canEdit"
                             @open-insight="openInsight($event, 'share_panel')" @owner="proOwner = $event"></pro-panel>
+
+                        <template v-if="!shareProFocus">
+                        <button type="button" class="pc-share-more-btn" :aria-expanded="shareMore ? 'true' : 'false'" @click="shareMore = !shareMore" data-testid="share-more">
+                            {{ shareMore ? 'Fewer options' : 'More sharing options' }}
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" :style="{ transform: shareMore ? 'rotate(180deg)' : '' }"><path d="m6 9 6 6 6-6"/></svg>
+                        </button>
+                        <div v-if="shareMore" class="pc-share-more" data-testid="share-more-options">
+                            <div class="pc-share-row">
+                                <div class="pc-share-row-text"><b>Link to this view</b><span>Opens at the date and view you’re looking at now.</span></div>
+                                <div class="pc-share-link">
+                                    <button type="button" class="pc-share-copy" @click="copyToClipboard(currentViewURL, $event.currentTarget, 'copy')" data-testid="share-view-copy"><icon name="copy" class="h-4 w-4 mr-1"></icon><span>Copy</span></button>
+                                    <button v-if="canShare()" type="button" @click="shareUrl(currentViewURL, 'Calendar View')" class="pc-share-copy" aria-label="Share link to this view">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" /></svg>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="pc-share-row pc-share-row--stack">
+                                <div class="pc-share-row-text"><b>Name the read-only link</b><span>{{ getReadOnlySlug() ? 'Now pastecal.com/' + getReadOnlySlug() : 'Pick a name people can remember.' }}</span></div>
+                                <button type="button" class="pc-set-link" @click="showReadOnlySlug = !showReadOnlySlug">{{ showReadOnlySlug ? 'Cancel' : 'Change' }}</button>
+                            </div>
+                            <div v-if="showReadOnlySlug" class="pc-share-slug">
+                                <div class="pc-share-link">
+                                    <input type="text" v-model="readOnlySlugInput" placeholder="Enter custom name" aria-label="Custom name for the read-only link" class="pc-share-url pc-share-url--edit">
+                                    <button type="button" @click="customizeExistingLink" :disabled="!readOnlySlugInput.trim()" class="pc-share-copy pc-share-copy--primary">Update</button>
+                                </div>
+                                <span class="pc-share-row-note">New: pastecal.com/view/{{ readOnlySlugInput || 'custom-name' }}</span>
+                            </div>
+
+                            <div v-if="getReadOnlyURL()" class="pc-share-row pc-share-row--stack">
+                                <div class="pc-share-row-text"><b>Feed URL (view only):</b><span>For calendar apps not listed above.</span></div>
+                            </div>
+                            <div v-if="getReadOnlyURL()" class="pc-share-link">
+                                <input type="text" :value="getReadOnlyICSURL()" readonly aria-label="Read-only feed URL" class="pc-share-url">
+                                <button type="button" @click="copyToClipboard(getReadOnlyICSURL(), $event.currentTarget, 'ics')" class="pc-share-copy"><icon name="copy" class="h-4 w-4 mr-1"></icon><span>Copy</span></button>
+                            </div>
+                            <a v-if="getWebcalURL()" :href="getWebcalURL()" @click="trackSubscribe('subscribe')" data-testid="subscribe-webcal" class="pc-set-link">Open in my default calendar app</a>
+
+                            <!-- The full-access feed carries the edit link inside it: kept, but last and labeled. -->
+                            <div v-if="canEdit" class="pc-share-row pc-share-row--stack">
+                                <div class="pc-share-row-text"><b>Feed URL (full access):</b><span class="pc-share-warn">Contains your edit link. Anyone who gets it can change the calendar.</span></div>
+                            </div>
+                            <div v-if="canEdit" class="pc-share-link">
+                                <input type="text" :value="getEditableICSURL()" readonly aria-label="Full-access feed URL" class="pc-share-url">
+                                <button type="button" @click="copyToClipboard(getEditableICSURL(), $event.currentTarget, 'ics')" class="pc-share-copy"><icon name="copy" class="h-4 w-4 mr-1"></icon><span>Copy</span></button>
+                            </div>
+                        </div>
+                        </template>
                         <button v-if="shareProFocus" type="button" class="pc-share-all" @click="shareProFocus = false" data-testid="share-show-all">Show all sharing options</button>
                     </div>
 

@@ -1656,6 +1656,11 @@ button:hover > .pc-add-event {
 /* Settings is a gear at the end of the row, so five tabs fit the column at 1100px without scrolling. */
 .pc-side-tab--icon { display: grid; place-items: center; width: 40px; padding: 0; margin-left: auto }
 .pc-side-tab--icon svg { width: 18px; height: 18px }
+/* Docked between 1100 and 1279px the column is narrower: tighter tabs, still no scrolling. */
+@media (min-width: 1100px) and (max-width: 1279px) {
+  .pc-side-tab { padding: 0 7px }
+  .pc-side-tab--icon { width: 34px; padding: 0 }
+}
 .pc-side-tab:hover { color: var(--pc-text) }
 .pc-side-tab[aria-selected="true"] { font-weight: 700; color: var(--pc-text); box-shadow: inset 0 -2px 0 var(--pc-link) }
 .pc-side-tab:focus-visible, .pc-side-close:focus-visible { outline: 2px solid var(--pc-link); outline-offset: -2px; border-radius: 6px }
@@ -1767,6 +1772,31 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 .pc-share-card input[readonly] { border-radius: 8px !important; font-size: 13px !important; background: var(--pc-soft) !important; color: var(--pc-text) }
 .pc-share-card button.bg-blue-500 { border-radius: 8px !important }
 .pc-share-card .grid, .pc-side .grid.gap-4 { gap: 0 !important }
+/* A link and its button on one line; the read-only link's Copy is the panel's main action. */
+.pc-share-link { display: flex; gap: 8px }
+.pc-share-url { flex: 1; min-width: 0; height: 38px; padding: 0 12px; border: 1px solid var(--pc-line); border-radius: 8px; background: var(--pc-soft); color: var(--pc-text); font: 400 13px var(--pc-font); text-overflow: ellipsis }
+.pc-share-url:focus { outline: none; border-color: var(--pc-link); box-shadow: var(--pc-focus-ring) }
+.pc-share-url--edit { background: var(--pc-bg); border-color: var(--pc-field) }
+.pc-share-copy { flex: none; display: inline-flex; align-items: center; justify-content: center; height: 38px; padding: 0 14px; border: 1px solid var(--pc-field); border-radius: 8px; background: var(--pc-bg); color: var(--pc-text); font: 600 13px/1 var(--pc-font); cursor: pointer; white-space: nowrap }
+.pc-share-copy:hover { background: var(--pc-hover) }
+.pc-share-copy:focus-visible, .pc-share-app:focus-visible, .pc-share-more-btn:focus-visible { outline: 2px solid var(--pc-link); outline-offset: 2px }
+.pc-share-copy:disabled { opacity: .5; cursor: default }
+.pc-share-copy--primary { border-color: var(--pc-link); background: var(--pc-link); color: var(--pc-bg) }
+.pc-share-copy--primary:hover:not(:disabled) { border-color: var(--pc-link-hover); background: var(--pc-link-hover) }
+.pc-share-apps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px }
+.pc-share-app { display: grid; place-items: center; height: 38px; border: 1px solid var(--pc-field); border-radius: 8px; color: var(--pc-text) !important; font-size: 13.5px; font-weight: 600; text-decoration: none !important }
+.pc-share-app:hover { background: var(--pc-hover) }
+/* "More sharing options": the rarely used links, one quiet list. */
+.pc-share-more-btn { display: inline-flex; align-items: center; gap: 6px; margin-top: 16px; padding: 0; border: 0; background: none; color: var(--pc-link); font: 600 14px var(--pc-font); cursor: pointer }
+.pc-share-more-btn svg { transition: transform var(--pc-dur-fast) var(--pc-ease) }
+.pc-share-more { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; padding-top: 14px; border-top: 1px solid var(--pc-line) }
+.pc-share-row { display: flex; align-items: center; justify-content: space-between; gap: 12px }
+.pc-share-row--stack { margin-top: 6px }
+.pc-share-row-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13.5px; line-height: 1.4 }
+.pc-share-row-text b { font-weight: 600; color: var(--pc-text) }
+.pc-share-row-text span, .pc-share-row-note { font-size: 12.5px; color: var(--pc-text-muted); overflow-wrap: anywhere }
+.pc-share-row-text .pc-share-warn { color: var(--pc-warning) }
+.pc-share-slug { display: flex; flex-direction: column; gap: 4px }
 
 /* Draft tag in the address bar, beside Save & share: where the action is, not a line under the grid. */
 .pc-draft-chip { flex: none; margin-right: 6px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .02em;

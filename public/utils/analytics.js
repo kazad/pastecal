@@ -453,8 +453,8 @@ const Analytics = {
     proHistoryViewed(where) { this.track('pro_history_viewed', { where: String(where).slice(0, 20) }); },
     proVersionPreviewed(kind) { this.track('pro_version_previewed', { kind: kind === 'restore-point' ? 'restore-point' : 'daily' }); },
     proVersionRestored(kind, unchanged) { this.track('pro_version_restored', { kind: kind === 'restore-point' ? 'restore-point' : 'daily', unchanged: !!unchanged }); },
-    proStatsTeaserShown() { this.track('pro_stats_teaser_shown', { where: 'share_panel' }); },
-    proStatsTeaserClicked() { this.track('pro_stats_teaser_clicked', { where: 'share_panel' }); },
+    proStatsTeaserShown() { this.track('pro_stats_teaser_shown', { where: 'stats_tab' }); },
+    proStatsTeaserClicked() { this.track('pro_stats_teaser_clicked', { where: 'stats_tab' }); },
 
     featureUsed(feature, detail) {
         this.track('feature_used', {

@@ -1,10 +1,12 @@
 // @ts-check
 /**
- * The side panel, driven like a person: Notes, Share, Changes and Settings open beside the
+ * The side panel, driven like a person: Notes, Share, Activity, Stats and Settings open beside the
  * calendar (never above it), from their header buttons and from the panel's tab row. The
  * calendar keeps its top and narrows; closing gives the width back. A view link with notes
  * opens with them pinned; a phone gets the same panel as a bottom sheet. And what moved
- * must still work: a setting still applies, Share still copies, Changes can still undo.
+ * must still work: a setting still applies, Share still copies, Activity can still undo.
+ * The tabs are the same five in the same order for every editor, draft or saved; on a draft,
+ * Share, Activity and Stats say what they will hold. Notes read first and edit on purpose.
  * Needs `wrangler dev` on BASE_URL (default http://localhost:8787); seeds one calendar and
  * one view link (the Worker allows 10 creates a minute per IP, so the tests share them).
  */
@@ -75,9 +77,13 @@ test('editor: every header button and every tab opens the panel beside the calen
     await page.getByTestId(`side-tab-${tab}`).click();
     await expect(panel(page)).toHaveAttribute('data-tab', tab);
   }
-  await expect(panel(page).getByRole('heading', { name: 'Read-only link' })).toBeVisible();
+  await expect(panel(page).getByRole('heading', { name: 'Send to your group' })).toBeVisible();
   await page.getByTestId('side-tab-notes').click();
+  await expect(page.getByTestId('notes-read')).toContainText('Rainouts decided by 7am');   // read first
+  await expect(panel(page).getByLabel('Calendar notes')).toHaveCount(0);
+  await page.getByTestId('notes-edit').click();
   await expect(panel(page).getByLabel('Calendar notes')).toHaveValue(NOTES);
+  await expect(panel(page).getByLabel('Calendar notes')).toBeFocused();
 
   // Clicking the open tab's header button again closes it; so does the close button.
   await page.getByTestId('settings-button-desktop').click();
@@ -100,11 +106,25 @@ test('a setting changed in the panel still applies at once', async ({ browser, r
   const { id } = await seed(request);
   const { ctx, page } = await open(browser, `/${id}?backend=cf`);
   await page.getByTestId('settings-button-desktop').click();
-  await panel(page).locator('select').first().selectOption('1');   // First day of week: Monday
+  // Two sub-tabs, neither scrolls: "This calendar" first, "Just me" one click away.
+  await expect(page.getByTestId('settings-scope-calendar')).toHaveAttribute('aria-pressed', 'true');
+  await expect(panel(page).getByLabel('Default view')).toBeVisible();
+  await expect(panel(page).getByLabel('First day of week')).toHaveCount(0);
+  const fits = () => page.$eval('.pc-side-body', (b) => b.scrollHeight <= b.clientHeight + 1);
+  expect(await fits(), 'This calendar fits without scrolling').toBe(true);
+  await page.getByTestId('settings-scope-me').click();
+  expect(await fits(), 'Just me fits without scrolling').toBe(true);
+  await panel(page).getByLabel('First day of week').selectOption('1');   // Monday
   await expect.poll(() => page.evaluate(() => scheduleObj.firstDayOfWeek)).toBe(1);
   await expect(page.locator('.e-month-view .e-header-cells').first()).toContainText('Monday');
-  await panel(page).locator('select').first().selectOption('0');
+  await panel(page).getByLabel('First day of week').selectOption('0');
   await expect.poll(() => page.evaluate(() => scheduleObj.firstDayOfWeek)).toBe(0);
+  // A calendar setting still binds to the calendar.
+  await page.getByTestId('settings-scope-calendar').click();
+  await panel(page).getByLabel('Default view').selectOption('Week');
+  await expect.poll(() => page.evaluate(() => document.querySelector('#app')._vnode.component.proxy.calendar.options.defaultView)).toBe('Week');
+  await panel(page).getByLabel('Default view').selectOption({ index: 0 })   // Auto;
+  await expect.poll(() => page.evaluate(() => document.querySelector('#app')._vnode.component.proxy.calendar.options.defaultView)).toBe(null);
   await ctx.close();
 });
 
@@ -113,9 +133,17 @@ test('Share in the panel still copies its links', async ({ browser, request }) =
   const { ctx, page } = await open(browser, `/${id}?backend=cf`);
   await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.getByTestId('share-pill-more').click();
-  const viewCard = panel(page).locator('.pc-share-card', { has: page.getByRole('heading', { name: 'Read-only link' }) });
-  await viewCard.getByRole('button', { name: 'Copy' }).first().click();
+  // Ordered by what people do most: the read-only link first, then calendar apps, then helpers.
+  const order = await panel(page).locator('.pc-share-card h4').allTextContents();
+  expect(order).toEqual(['Send to your group', 'Add to a calendar app', 'Helpers who can edit']);
+  await page.getByTestId('share-group').getByRole('button', { name: 'Copy' }).click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain(`/view/${viewId}`);
+  // The rest is one click away, the full-access feed labeled for what it gives.
+  await expect(page.getByTestId('share-more-options')).toHaveCount(0);
+  await page.getByTestId('share-more').click();
+  await expect(page.getByTestId('share-more-options')).toContainText('Contains your edit link');
+  await page.getByTestId('share-view-copy').click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain(`/${id}`);
   await ctx.close();
 });
 
@@ -154,9 +182,72 @@ test('phone: the panel is a bottom sheet over the calendar, with tabs, closed by
   expect(sheet.height).toBeLessThan(844 * 0.75);                       // the calendar still shows above
   expect(Math.abs((await box(page)).width - before.width)).toBeLessThan(2);   // over it, not beside it
   await page.getByTestId('side-tab-notes').click();
+  await page.getByTestId('notes-edit').click();
   await expect(panel(page).getByLabel('Calendar notes')).toBeVisible();
+  const row = await page.$eval('.pc-side-tabs', (e) => [e.scrollWidth, e.clientWidth]);
+  expect(row[0], 'all five tabs fit a phone').toBeLessThanOrEqual(row[1]);
   await page.getByTestId('side-scrim').click({ position: { x: 195, y: 60 } });
   await expect(panel(page)).toHaveCount(0);
+  await ctx.close();
+});
+
+const TABS = ['notes', 'share', 'changes', 'stats', 'settings'];
+const tabIds = (page) => page.$$eval('[data-testid^="side-tab-"]', (els) => els.map((e) => e.dataset.testid.replace('side-tab-', '')));
+
+test('the same five tabs in the same order, and the row never scrolls', async ({ browser, request }) => {
+  const { id } = await seed(request);
+  for (const viewport of [{ width: 1440, height: 900 }, { width: 1100, height: 800 }, { width: 1000, height: 800 }]) {
+    const { ctx, page } = await open(browser, `/${id}?backend=cf`, viewport);
+    await page.getByTestId('settings-button-desktop').click();
+    expect(await tabIds(page)).toEqual(TABS);
+    await expect(page.getByTestId('side-tab-settings')).toHaveAccessibleName('Settings');   // a gear, named
+    const row = await page.$eval('.pc-side-tabs', (e) => [e.scrollWidth, e.clientWidth]);
+    expect(row[0], `${viewport.width}px: no hidden tabs`).toBeLessThanOrEqual(row[1]);
+    // Stats on a free calendar: what Pro shows, no numbers, one way to get it.
+    await page.getByTestId('side-tab-stats').click();
+    await expect(page.getByTestId('stats-teaser')).toContainText('Counts only');
+    await expect(page.getByTestId('stats-teaser')).not.toContainText(/\d+ (views|followers)/);
+    await expect(page.getByTestId('stats-get-pro')).toBeVisible();
+    await ctx.close();
+  }
+});
+
+test('draft: Share, Activity and Stats say what they will hold, with one Save & share button', async ({ browser }) => {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  await ctx.addInitScript(() => { window.__TEST__ = true; });
+  await ctx.route('**/*', (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
+  const page = await ctx.newPage();
+  await page.goto('/?backend=cf');
+  await page.waitForFunction(() => window.scheduleObj, null, { timeout: 20_000 });
+  await page.waitForTimeout(600);
+  await page.getByTestId('settings-button-desktop').click();
+  expect(await tabIds(page)).toEqual(TABS);
+  for (const [tab, testid, text] of [['share', 'share-draft', 'once you save it'], ['changes', 'activity-draft', 'once you share it'], ['stats', 'stats-draft', 'Views show up here once you share it']]) {
+    await page.getByTestId(`side-tab-${tab}`).click();
+    await expect(page.getByTestId(testid)).toContainText(text);
+    await expect(page.getByTestId(testid).getByRole('button')).toHaveText(['Save & share']);
+  }
+  await page.getByTestId('side-tab-notes').click();
+  await expect(page.getByTestId('notes-empty')).toContainText('No notes yet');
+  await page.getByTestId('notes-add').click();
+  await expect(panel(page).getByLabel('Calendar notes')).toBeFocused();
+  await ctx.close();
+});
+
+test('notes: read, Edit, type, Done, and it is saved for everyone', async ({ browser, request }) => {
+  const id = `test-notes-${Date.now()}-${Math.floor(Math.random() * 1e5)}`;
+  const d = new Date(); d.setDate(12); d.setHours(10, 0, 0, 0);
+  const events = [{ id: 'n1', title: 'Meetup', start: d.toISOString(), end: new Date(+d + 3600e3).toISOString(), type: 1 }];
+  expect((await request.post(`/cal/${id}`, { data: { title: 'Notes test', options: {}, events } })).status()).toBe(201);
+  const { ctx, page } = await open(browser, `/${id}?backend=cf`);
+  await page.locator('.pc-hdr-actions').getByRole('button', { name: 'Toggle notes' }).click();
+  await expect(page.getByTestId('notes-empty')).toContainText('No notes yet. Add where to meet, who to call, what to bring.');
+  await page.getByTestId('notes-add').click();
+  await panel(page).getByLabel('Calendar notes').fill('Meet at the library. Details: https://example.com/club');
+  await page.getByTestId('notes-done').click();
+  await expect(page.getByTestId('notes-read').getByRole('link', { name: 'https://example.com/club' })).toBeVisible();
+  const notes = async () => (await (await page.request.get(`/cal/${id}`)).json()).calendar.options.notes;
+  await expect.poll(notes, { timeout: 10_000 }).toBe('Meet at the library. Details: https://example.com/club');
   await ctx.close();
 });
 
@@ -174,7 +265,8 @@ test('Changes in the panel still undoes an edit', async ({ browser, request }) =
 
   await page.getByTestId('last-edit-link').click();
   const changes = page.getByTestId('recent-changes');
-  await expect(changes.getByRole('heading', { name: 'Recent changes' })).toBeVisible();
+  await expect(page.getByTestId('side-tab-changes')).toHaveText('Activity');
+  await expect(changes).toBeVisible();
   await changes.getByRole('button', { name: 'Undo this edit' }).first().click();
   await expect.poll(title, { timeout: 10_000 }).toBe('Game vs Hawks');
   await expect(page.locator('.e-appointment:has-text("Game vs Hawks")')).toHaveCount(1);
