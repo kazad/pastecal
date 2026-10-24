@@ -160,7 +160,7 @@ start_wrangler() {
 }
 
 PLAIN_VARS="--var COPY_BACK: --var FIREBASE_DB_URL:$DEAD_FIREBASE"
-LOCK_VARS="$PLAIN_VARS --var UNSAFE_DEV_SESSION_HEADER:on"
+LOCK_VARS="$PLAIN_VARS --var UNSAFE_DEV_SESSION_HEADER:on --var LOCK_API_BASE:"   # empty: override any LOCK_API_BASE left in cloudflare/.dev.vars
 PRO_VARS="$LOCK_VARS --var ACCOUNTS_DEV_MODE:1"
 fake_stripe_vars() {   # needs FAKE_PORT
   BILLING_VARS="$PLAIN_VARS --var ACCOUNTS_DEV_MODE:1 --var LOCK_API_BASE:http://127.0.0.1:$FAKE_PORT/lockfake"
