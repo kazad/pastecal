@@ -302,4 +302,30 @@ test('fix8: events are role=button with a spoken label, reachable with Tab, Ente
   await expect.poll(async () => (await page.locator('[data-testid="current-date-range"]').innerText()).trim()).toBe('October 25 - 31, 2026');
 });
 
+// ---------------------------------------------------------------- fix 9: small
+test('fix9: Cmd/Ctrl+E does nothing on a view-only link', async ({ page, request }, info) => {
+  only(info);
+  const id = await fresh(info, 'viewonly');
+  const j = await (await request.post('/api/create-view', { data: { sourceCalendarId: id } })).json();
+  const vid = j.viewId || j.publicViewId || j.id || j.slug;
+  expect(vid).toBeTruthy();
+  const dialogs = [];
+  page.on('dialog', (d) => { dialogs.push(d.message()); d.dismiss(); });
+  await page.goto(`/beta/view/${vid}`);
+  await expect(nat.event(page, 'Lunch with Sam').first()).toBeVisible({ timeout: 15_000 });
+  await page.keyboard.press('ControlOrMeta+e');
+  await page.waitForTimeout(500);
+  await expect(page.getByText('Add Event by Typing').locator('visible=true')).toHaveCount(0);
+  expect(dialogs).toEqual([]);
+});
+
+test('fix9: a missing view link says so in a toast, not alert()', async ({ page }, info) => {
+  only(info);
+  const dialogs = [];
+  page.on('dialog', (d) => { dialogs.push(d.message()); d.dismiss(); });
+  await page.goto('/beta/view/no-such-view-xyz');
+  await expect(page.locator('body')).toContainText('Calendar not found', { timeout: 15_000 });
+  expect(dialogs).toEqual([]);
+});
+
 module.exports = { only, fresh };

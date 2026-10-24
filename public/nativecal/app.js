@@ -431,16 +431,16 @@ const CalendarVueApp = {
                     } else if (result.data.found && !result.data.isReadOnly) {
                         // Found as editable calendar - show message
                         this.isLoading = false;
-                        alert('This calendar exists but is not shared for viewing. Ask the owner to create a read-only link.');
+                        this.notifyLoadError('This calendar exists but is not shared for viewing. Ask the owner to create a read-only link.');
                     } else {
                         // Calendar doesn't exist at all
                         this.isLoading = false;
-                        alert('Calendar not found. Please check the URL and try again.');
+                        this.notifyLoadError('Calendar not found. Please check the URL and try again.');
                     }
                 } catch (error) {
                     console.error('Calendar lookup failed:', error);
                     this.isLoading = false;
-                    alert('Failed to load calendar. Please try again later.');
+                    this.notifyLoadError('Failed to load calendar. Please try again later.');
                 }
             })();
         } else if (this.urlslug) {
@@ -558,6 +558,8 @@ const CalendarVueApp = {
         // Global keyboard shortcut for quick-add (Cmd/Ctrl+E)
         this._quickAddShortcutHandler = (e) => {
             if ((e.metaKey || e.ctrlKey) && e.key === 'e') {
+                // A view-only link has nothing to add to (it drew a phantom event that never saved).
+                if (!this.canEdit) return;
                 e.preventDefault();
                 if (this.$refs && this.$refs.quickAddDialog && typeof this.$refs.quickAddDialog.showDialog === 'function') {
                     this.$refs.quickAddDialog.showDialog();
@@ -2190,6 +2192,14 @@ const CalendarVueApp = {
         // Safely set isReadOnly with normalization
         setIsReadOnly(val) {
             this.isReadOnly = this.normalizeBoolean(val);
+        },
+
+        // A view link that cannot be shown: the app's toast (it was a blocking alert()), held long
+        // enough to read; the console if the toast is not mounted.
+        notifyLoadError(message) {
+            const t = this.$refs && this.$refs.toast;
+            if (t && typeof t.display === 'function') t.display(message, 'error', { duration: 15000 });
+            else console.error('[nativecal]', message);
         },
 
         showToast(message, type = 'info') {
