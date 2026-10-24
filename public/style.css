@@ -1563,3 +1563,45 @@ button:hover > .pc-add-event {
 .pc-acct-cal-row { display: flex; align-items: center; gap: var(--pc-space-2) }
 .pc-acct-cal-row .pc-acct-cal { flex: 1; min-width: 0 }
 .pc-acct-stats { flex: none; min-height: 28px; padding: 0 10px }
+
+/* ---- Modern grid (Oct 2026): quieter lines, small-caps weekdays, one surface color, softer
+   chips. Tokens only, so dark mode follows; Syncfusion's material themes set their own colors
+   with high specificity, hence !important. Category colors on events are untouched. ---- */
+.e-schedule { border: 1px solid var(--pc-line) !important; border-radius: 10px; overflow: hidden; background: var(--pc-bg) !important }
+.e-schedule .e-schedule-toolbar { box-shadow: none !important; border-bottom: 1px solid var(--pc-line) !important }
+.e-schedule .e-schedule-toolbar, .e-schedule .e-schedule-toolbar .e-toolbar-items { background: var(--pc-bg) !important }
+.e-schedule .e-schedule-toolbar .e-date-range .e-tbar-btn-text { font-weight: 600; font-size: 15px }
+.e-schedule .e-schedule-toolbar .e-views .e-tbar-btn-text { font-weight: 500 }
+.e-schedule .e-schedule-toolbar .e-views:not(.e-active-view) .e-tbar-btn-text { color: var(--pc-text-muted) !important }
+/* Weekday row: small caps, muted, no box around each name. */
+.e-schedule .e-month-view .e-date-header-wrap table td,
+.e-schedule .e-month-view .e-header-cells { background: var(--pc-bg) !important; border-color: var(--pc-line) !important; color: var(--pc-text-muted) !important;
+  font-size: 11px !important; font-weight: 600 !important; letter-spacing: .06em; text-transform: uppercase; padding-block: 8px !important }
+.e-schedule .e-month-view .e-header-cells.e-current-day { color: var(--pc-link) !important }
+/* Month cells: one surface, hairline dividers, weekends a shade off, other months dimmed. */
+.e-schedule .e-month-view .e-work-cells { background: var(--pc-bg) !important; border-color: var(--pc-line) !important }
+.e-schedule .e-month-view .e-work-cells:not(.e-work-days) { background: var(--pc-weekend) !important }
+.e-schedule .e-month-view .e-work-cells:hover { background: var(--pc-hover) !important }
+.e-schedule .e-month-view .e-other-month .e-date-header { color: var(--pc-text-muted) !important; opacity: .7 }
+.e-schedule .e-month-view .e-date-header { font-size: 12.5px !important; font-weight: 500; color: var(--pc-text-2) !important; margin: 6px 0 2px 6px !important;
+  min-width: 22px; height: 22px; line-height: 22px !important; text-align: center; border-radius: 999px; padding-inline: 4px }
+.e-schedule .e-month-view .e-date-header.e-navigate:hover { background: var(--pc-hover); text-decoration: none !important }
+.e-schedule .e-month-view .e-current-date .e-date-header { font-weight: 700 }
+/* Chips: no border or shadow, a little more air, time lighter than the title. */
+.e-schedule .e-month-view .e-appointment { border: 0 !important; box-shadow: none !important; padding-inline: 2px }
+.e-schedule .e-month-view .e-appointment .e-subject { font-size: 12px !important }
+.e-schedule .e-month-view .e-appointment .e-time { font-weight: 500 !important; opacity: .85 }
+.e-schedule .e-month-view .e-more-indicator { color: var(--pc-text-muted) !important; font-weight: 600; font-size: 11.5px !important }
+/* Week and Day: working hours plain, the rest a faint tint (not a gray block), quiet hour lines. */
+.e-schedule .e-vertical-view .e-work-cells { background: var(--pc-weekend) !important; border-color: var(--pc-line) !important }
+.e-schedule .e-vertical-view .e-work-cells.e-work-hours { background: var(--pc-bg) !important }
+.e-schedule .e-vertical-view .e-work-cells.e-alternate-cells { border-bottom-color: color-mix(in srgb, var(--pc-line) 55%, transparent) !important }
+.e-schedule .e-vertical-view .e-time-cells-wrap table td,
+.e-schedule .e-vertical-view .e-left-indent-wrap table td { background: var(--pc-bg) !important; border-color: var(--pc-line) !important }
+.e-schedule .e-vertical-view .e-time-cells-wrap .e-time-slots span { font-size: 11px; color: var(--pc-text-muted) !important }
+.e-schedule .e-vertical-view .e-date-header-wrap table td { background: var(--pc-bg) !important; border-color: var(--pc-line) !important }
+.e-schedule .e-vertical-view .e-header-cells .e-header-day { font-size: 11px !important; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--pc-text-muted) !important }
+.e-schedule .e-vertical-view .e-header-cells .e-header-date { font-size: 20px !important; font-weight: 600 }
+.e-schedule .e-vertical-view .e-appointment { border: 0 !important; border-radius: 8px !important; box-shadow: 0 0 0 1px var(--pc-bg) !important }
+.e-schedule .e-vertical-view .e-appointment .e-subject { font-weight: 600 !important; font-size: 12.5px !important }
+.e-schedule .e-vertical-view .e-all-day-cells { background: var(--pc-bg) !important; border-color: var(--pc-line) !important }
