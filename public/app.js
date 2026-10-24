@@ -179,7 +179,11 @@ const CalendarVueApp = {
             insightWhere: 'share_panel',    // which surface opened them, for analytics
             proOwner: false,            // this browser is signed in as the Pro calendar's owner
             shareProFocus: false,       // Share opened from Get Pro: just the lock offer
-            showRecentChanges: false,   // the Changes tab of the side panel
+            showRecentChanges: false,   // the Activity tab of the side panel (id 'changes')
+            showStatsInfo: false,       // the Stats tab when it can't show Pro stats: a draft, a free calendar, a non-owner
+            proOwnerChecked: false,     // /api/pro/status has answered for this lock, so "not the owner" is known
+            notesEditing: false,        // Notes reads by default; Edit swaps in the textarea
+            settingsScope: 'calendar',  // Settings: 'calendar' (everyone) or 'me' (this device)
             // The side panel docks beside the calendar only on wide screens (style.css, the
             // side panel block); narrower it floats over the calendar, so the grid keeps its width.
             sideWide: typeof window.matchMedia === 'function' && window.matchMedia('(min-width: 1100px)').matches,
@@ -271,12 +275,12 @@ const CalendarVueApp = {
     },
 
     computed: {
-        // ---- The side panel: Notes, Share, Changes, Settings (and Search, Help, Pro) ----------
+        // ---- The side panel: Notes, Share, Activity, Stats, Settings (and Search, Help) ---------
         // One panel at a time, beside the calendar. The show* flags stay the source of truth
         // (the Escape key, analytics and history refreshes all read them); this names which is up.
         sideTab() {
             if (this.showRecentChanges) return 'changes';
-            if (this.showProStats) return 'stats';
+            if (this.showProStats || this.showStatsInfo) return 'stats';
             if (this.showProHistory) return 'history';
             if (this.showNotes) return 'notes';
             if (this.showShare) return 'share';
@@ -290,22 +294,33 @@ const CalendarVueApp = {
             return !!this.sideTab && this.sideWide;
         },
         // The tab row is for people who can change the calendar. Viewers see one thing at a
-        // time under a plain title. Share and Changes need a saved calendar; Stats and History
-        // answer only the owner of a Pro calendar.
+        // time under a plain title. Always the same five in the same order, so people learn
+        // where things are: on a draft, Share, Activity and Stats say what they will hold once
+        // it is saved. Settings is a gear, so five fit the column without scrolling.
         sideTabs() {
             if (this.isReadOnly) return [];
-            const tabs = [{ id: 'notes', label: 'Notes' }];
-            if (this.isExisting) tabs.push({ id: 'share', label: 'Share' }, { id: 'changes', label: 'Changes' });
-            tabs.push({ id: 'settings', label: 'Settings' });
-            if (this.isExisting && this.lock.locked && this.proOwner) tabs.push({ id: 'stats', label: 'Stats' }, { id: 'history', label: 'History' });
-            return tabs;
+            return [
+                { id: 'notes', label: 'Notes' },
+                { id: 'share', label: 'Share' },
+                { id: 'changes', label: 'Activity' },
+                { id: 'stats', label: 'Stats' },
+                { id: 'settings', label: 'Settings', icon: 'settings' },
+            ];
+        },
+        // The tab that reads as selected. History (every saved version) opens from Activity, so it stays lit.
+        sideSelectedTab() {
+            return this.sideTab === 'history' ? 'changes' : this.sideTab;
         },
         sideShowsTabs() {
-            return this.sideTabs.some((t) => t.id === this.sideTab);
+            return this.sideTabs.some((t) => t.id === this.sideSelectedTab);
         },
         // Shown in the bar when there is no tab row, for the views without a heading of their own.
         sideTitle() {
-            return { notes: 'About this calendar', search: 'Search', help: 'Help' }[this.sideTab] || '';
+            return { notes: 'About this calendar', search: 'Search', help: 'Help', settings: 'Settings' }[this.sideTab] || '';
+        },
+        // Stats can show the real numbers: the owner of a Pro calendar (the server answers no one else).
+        canSeeProStats() {
+            return this.isExisting && this.lock.locked && this.proOwner;
         },
         // A view link or locked calendar with notes opens with them pinned beside the grid.
         viewerNotesPinnable() {
@@ -1641,7 +1656,8 @@ const CalendarVueApp = {
         this._escapeHandler = (e) => {
             if (e.key !== 'Escape') return;
             if (this.showRecentChanges) { this.showRecentChanges = false; return; }
-            if (this.showProStats || this.showProHistory) { this.showProStats = false; this.showProHistory = false; return; }
+            if (this.showProStats || this.showProHistory || this.showStatsInfo) { this.closeAllPanels(); return; }
+            if (this.showNotes && this.notesEditing) { this.notesEditing = false; return; }
             if (this.showClaimDialog) { this.showClaimDialog = false; return; }
             if (this.showSettings) { this.showSettings = false; return; }
             if (this.showSearch) { this.showSearch = false; return; }
@@ -1716,6 +1732,7 @@ const CalendarVueApp = {
         // panel reports it too, but Recent changes needs it without that dialog ever opening.
         'lock.locked': {
             handler(locked) {
+                this.proOwnerChecked = false;
                 if (!locked) { this.proOwner = false; return; }
                 this.refreshProOwner();
             },
@@ -1726,6 +1743,8 @@ const CalendarVueApp = {
         },
         // The owner's first visit after locking: say once what changed, and where the editor link is.
         proOwner(isOwner) {
+            // Stats opened before the owner check answered: now it can show the real numbers.
+            if (isOwner && this.showStatsInfo && this.canSeeProStats) this.openInsight('stats', 'side_panel');
             if (!isOwner || !this.calendar || !this.calendar.id) return;
             const key = 'pastecal_pro_welcomed:' + String(this.calendar.id).toLowerCase();
             try { if (localStorage.getItem(key)) return; localStorage.setItem(key, '1'); } catch (e) { return; }
@@ -3074,7 +3093,25 @@ const CalendarVueApp = {
             else if (id === 'share') this.toggleShare();
             else if (id === 'settings') this.toggleSettings();
             else if (id === 'changes') this.openRecentChanges();
-            else if (id === 'stats' || id === 'history') this.openInsight(id, 'side_panel');
+            else if (id === 'stats') this.openStats();
+            else if (id === 'history') this.openInsight(id, 'side_panel');
+        },
+        /** Stats: the Pro numbers for the owner; for everyone else, what Stats holds and how to get it. */
+        openStats() {
+            if (this.canSeeProStats) { this.openInsight('stats', 'side_panel'); return; }
+            this.closeAllPanels();
+            this.showStatsInfo = true;
+        },
+        /** Notes' Edit and Add notes. The textarea is bound as before, so typing saves the same way. */
+        editNotes() {
+            this.notesEditing = true;
+            this.$nextTick(() => { const el = this.$refs.notesInput; if (el) el.focus(); });
+        },
+        /** From the Stats tab: Share, showing just the Pro offer (as when arriving from Get Pro). */
+        getProFromStats() {
+            this.closeAllPanels();
+            this.showShare = true;
+            this.$nextTick(() => { this.shareProFocus = true; });
         },
 
         /** The panel's close button, its backdrop on small screens, and Escape. */
@@ -3154,6 +3191,7 @@ const CalendarVueApp = {
                     track(a => a.featureUsed('notes'));
                 }
                 this.showNotes = false;
+                this.notesEditing = false;
             } else {
                 this.closeAllPanels();
                 this.showNotes = true;
@@ -3269,10 +3307,11 @@ const CalendarVueApp = {
                 this.toggleSettings();
             }
 
-            // Changes and the Pro views share the panel, so opening anything closes them too.
+            // Activity, Stats and History share the panel, so opening anything closes them too.
             this.showRecentChanges = false;
             this.showProStats = false;
             this.showProHistory = false;
+            this.showStatsInfo = false;
         },
 
         togglePin(id) {
@@ -4737,6 +4776,7 @@ const CalendarVueApp = {
                 const data = res.ok ? await res.json() : null;
                 if (this.calendar && this.calendar.id === id) this.proOwner = !!(data && data.isOwner);
             } catch (e) { /* offline: leave it as it was */ }
+            this.proOwnerChecked = true;
         },
         /** A restore landed. The room has already sent every open tab (this one too) the restored calendar. */
         onVersionRestored({ label, unchanged }) {
@@ -4787,7 +4827,7 @@ const CalendarVueApp = {
 
         /** Open the change history, refreshing it first so the list is never stale. */
         async openRecentChanges() {
-            await this.loadUndoEntries();
+            if (this.isExisting) await this.loadUndoEntries();   // a draft has no history yet
             if (!this.showRecentChanges) this.closeAllPanels();
             this.showRecentChanges = true;
         },
