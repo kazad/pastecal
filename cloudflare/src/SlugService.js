@@ -5,16 +5,24 @@ export const RESERVED_WORDS = new Set([
     'view', 'beta', 'nativecal', 'api', 'admin', 'administrator', 'www', 'app', 'apps', 'calendar', 'cal',
     'about', 'account', 'accounts', 'assets', 'auth', 'bin', 'billing', 'blog', 'bot',
     'cache', 'careers', 'cgi-bin', 'config', 'contact', 'cpanel', 'css', 'dashboard',
-    'dev', 'docs', 'download', 'downloads', 'enterprise', 'faq', 'favicon.ico', 'ftp',
+    'dev', 'docs', 'download', 'downloads', 'enterprise', 'explore', 'faq', 'favicon.ico', 'ftp',
     'ghost', 'guide', 'help', 'home', 'hostmaster', 'images', 'img', 'imap', 'index',
     'jobs', 'js', 'legal', 'login', 'logout', 'mail', 'manage', 'media', 'me',
     'moderator', 'mx', 'news', 'ns', 'ns1', 'ns2', 'null', 'oauth', 'password', 'pop',
     'pop3', 'postmaster', 'press', 'pricing', 'privacy', 'pro', 'profile', 'public',
-    'recover', 'register', 'reset', 'robots.txt', 'root', 'settings', 'setup', 'signin',
+    'recover', 'register', 'report', 'reset', 'robots.txt', 'root', 'settings', 'setup', 'signin',
     'signout', 'signup', 'sitemap.xml', 'smtp', 'ssl', 'static', 'status',
     'subscriptions', 'superuser', 'support', 'sys', 'sysadmin', 'system', 'team',
     'terms', 'tos', 'undefined', 'user', 'users', 'v1', 'v2', 'webhooks', 'webmail',
     'wiki', 'wp-admin', 'wp-content', 'wp-login',
+]);
+
+// Calendar names the site routes itself (pages and paths it serves, or will: /explore). A calendar
+// created under one would have an address that opens something else, so POST /cal/<name> refuses
+// them. Only creation: an existing calendar keeps working. The apps' checkExists lists match.
+export const RESERVED_CALENDAR_NAMES = new Set([
+    'beta', 'nativecal', 'view', 'dev', 'api', 'cal',
+    'report', 'signin', 'pro', 'pricing', 'explore', 'privacy', 'terms',
 ]);
 
 export const SlugService = {

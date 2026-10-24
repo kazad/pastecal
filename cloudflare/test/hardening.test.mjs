@@ -162,5 +162,20 @@ function tab(id) {
     step('creating read-only links is rate-limited per IP');
 }
 
+// Calendar names the site routes itself can't be created (any case), before the rate limit is spent;
+// a calendar that already has one (imported) still reads.
+{
+    for (const name of ['report', 'signin', 'pro', 'pricing', 'explore', 'Pricing']) {
+        const r = await create(name, { title: 'x', events: [] });
+        assert.equal(r.status, 409, `${name}: ${r.status}`);
+        assert.equal((await r.json()).error, 'reserved name');
+    }
+    assert.equal((await fetch(url('explore'))).status, 404, 'nothing was stored');
+    const imp = await fetch(url('terms', '/import'), { method: 'PUT', headers: { Authorization: `Bearer ${SECRET}` }, body: JSON.stringify({ id: 'terms', title: 'Old', events: [], options: {} }) });
+    assert.equal(imp.status, 200);
+    assert.equal((await fetch(url('terms'))).status, 200);
+    step('reserved calendar names are refused on create; an existing one still reads');
+}
+
 console.log('hardening tests passed');
 process.exit(0);

@@ -85,7 +85,7 @@ const validId = (id) => typeof id === 'string' && id.length >= 1 && id.length <=
 const validEmail = (e) => e.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 // Where a sign-in link may send people afterwards: exactly "/" or "/<calendar>" (one segment, a valid
 // calendar id once decoded, no query). Never /pro/done (it makes editor links), /signin, or another site.
-const RESERVED_NEXT = new Set(['signin', 'pro', 'pricing', 'view', 'beta', 'nativecal', 'api', 'cal']);
+const RESERVED_NEXT = new Set(['signin', 'pro', 'pricing', 'view', 'beta', 'nativecal', 'api', 'cal', 'report', 'explore']);
 function safeNext(raw) {
     if (raw === '/') return '/';
     if (typeof raw !== 'string' || raw.length > 700 || !/^\/[^/?#\\\s]+$/.test(raw)) return null;

@@ -22,7 +22,7 @@
  *                                 (+ dev-legacy-key with ACCOUNTS_DEV_MODE=1: a test hook for the key migration)
  */
 import { ICSService } from './ICSService.js';
-import { SlugService } from './SlugService.js';
+import { SlugService, RESERVED_CALENDAR_NAMES } from './SlugService.js';
 import { handleCollect } from './Collector.js';
 import { applySecurityHeaders } from './SecurityHeaders.js';
 export { CalendarRoom } from './CalendarRoom.js';
@@ -413,6 +413,9 @@ async function route(request, env) {
             }
             if (m[2] === '/ws' && request.headers.get('Upgrade') !== 'websocket') {
                 return new Response('expected a WebSocket', { status: 426 });
+            }
+            if (request.method === 'POST' && !m[2] && RESERVED_CALENDAR_NAMES.has(id.toLowerCase())) {
+                return withCors(Response.json({ ok: false, error: 'reserved name' }, { status: 409 }));
             }
             if (request.method === 'POST' && !m[2] && env.CREATE_LIMITER) {
                 const { success } = await env.CREATE_LIMITER.limit({ key: request.headers.get('CF-Connecting-IP') || 'unknown' });

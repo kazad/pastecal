@@ -284,5 +284,5 @@ test('/beta serves NativeCal (the public beta), before the catch-all', () => {
     assert.ok(i !== -1 && i < all && fb.hosting.rewrites[i].destination === '/nativecal/index.html', `${src} must rewrite to /nativecal/index.html before **`);
   }
   // Nobody can claim a calendar whose address the site routes elsewhere.
-  assert.match(read('public/services/CalendarDataService.js'), /\['beta', 'nativecal', 'view', 'dev'\]\.includes/);
+  assert.match(read('public/services/CalendarDataService.js'), /\['beta', 'nativecal', 'view', 'dev', [^\]]*\]\.includes/);
 });

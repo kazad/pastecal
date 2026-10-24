@@ -850,7 +850,7 @@ class CalendarDataService {
     static checkExists(id, callback_yes, callback_no) {
         // Names the site itself routes (pastecal.com/beta/..., /view/..., /nativecal/...) are
         // "taken": a calendar claimed under one would have an address that opens something else.
-        if (['beta', 'nativecal', 'view', 'dev'].includes(String(id || '').toLowerCase())) { callback_yes(); return; }
+        if (['beta', 'nativecal', 'view', 'dev', 'api', 'cal', 'report', 'signin', 'pro', 'pricing', 'explore', 'privacy', 'terms'].includes(String(id || '').toLowerCase())) { callback_yes(); return; }
         this.db.child(id).once('value', async data => {
             if (data.val()) { callback_yes(); return; }
             try {
