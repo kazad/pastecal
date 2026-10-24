@@ -1637,7 +1637,7 @@ button:hover > .pc-add-event {
 
 
 /* ==========================================================================
-   Side panel (index.html .pc-side): Notes, Share, Changes, Settings and the rest,
+   Side panel (index.html .pc-side): Notes, Share, Activity, Stats, Settings and the rest,
    one at a time. Three shapes from one element:
      1100px+   docked in the homepage guide's column (.pc-home-split); the calendar
                narrows and keeps its top.
@@ -1653,6 +1653,14 @@ button:hover > .pc-add-event {
 .pc-side-tabs { flex: 1; min-width: 0; display: flex; align-items: stretch; gap: 2px; overflow-x: auto; scrollbar-width: none }
 .pc-side-tabs::-webkit-scrollbar { display: none }
 .pc-side-tab { flex: none; padding: 0 10px; border: 0; background: none; font: 500 14px/1 var(--pc-font); color: var(--pc-text-muted); cursor: pointer; white-space: nowrap }
+/* Settings is a gear at the end of the row, so five tabs fit the column at 1100px without scrolling. */
+.pc-side-tab--icon { display: grid; place-items: center; width: 40px; padding: 0; margin-left: auto }
+.pc-side-tab--icon svg { width: 18px; height: 18px }
+/* Docked between 1100 and 1279px the column is narrower: tighter tabs, still no scrolling. */
+@media (min-width: 1100px) and (max-width: 1279px) {
+  .pc-side-tab { padding: 0 7px }
+  .pc-side-tab--icon { width: 34px; padding: 0 }
+}
 .pc-side-tab:hover { color: var(--pc-text) }
 .pc-side-tab[aria-selected="true"] { font-weight: 700; color: var(--pc-text); box-shadow: inset 0 -2px 0 var(--pc-link) }
 .pc-side-tab:focus-visible, .pc-side-close:focus-visible { outline: 2px solid var(--pc-link); outline-offset: -2px; border-radius: 6px }
@@ -1666,6 +1674,61 @@ button:hover > .pc-add-event {
 .pc-side-notes-input:focus { outline: none; border-color: var(--pc-link); box-shadow: var(--pc-focus-ring) }
 .pc-side-notes-read { font-size: 14px; line-height: 1.6; color: var(--pc-text); overflow-wrap: anywhere }
 .pc-side-notes-read a { color: var(--pc-link) }
+/* A hint on the left, its one action on the right: Notes' Edit and Done. */
+.pc-side-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px }
+.pc-side-btn { flex: none; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid var(--pc-field); border-radius: 8px; background: var(--pc-bg); color: var(--pc-text); font: 600 13px/1 var(--pc-font); cursor: pointer; white-space: nowrap }
+.pc-side-btn:hover { background: var(--pc-hover) }
+.pc-side-btn:focus-visible { outline: 2px solid var(--pc-link); outline-offset: 2px }
+/* Blue, like Save & share and Copy beside it. The page background as its text reads in both themes. */
+.pc-side-btn--primary { border-color: var(--pc-link); background: var(--pc-link); color: var(--pc-bg) }
+.pc-side-btn--primary:hover { border-color: var(--pc-link-hover); background: var(--pc-link-hover) }
+/* Empty states: what the tab will hold, in a sentence or two, and one button. Quiet, not a card. */
+.pc-side-empty { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 8px 0 }
+.pc-side-empty .pc-side-btn { margin-top: 6px }
+.pc-side-empty-title { margin: 0; font-size: 15px; font-weight: 700; line-height: 1.35; color: var(--pc-text) }
+.pc-side-empty-text { margin: 0; font-size: 14px; line-height: 1.5; color: var(--pc-text-muted) }
+/* Stats for a free calendar: what Pro shows, no numbers. */
+.pc-stats-teaser { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 8px 0 }
+.pc-stats-list { display: flex; flex-direction: column; gap: 10px; margin: 4px 0; padding: 0; list-style: none }
+.pc-stats-list li { display: flex; align-items: flex-start; gap: 10px; font-size: 14px; line-height: 1.45; color: var(--pc-text-2) }
+.pc-stats-list b { color: var(--pc-text); font-weight: 600 }
+.pc-stats-list svg { flex: none; width: 18px; height: 18px; margin-top: 1px; color: var(--pc-link) }
+.pc-stats-teaser .pc-side-btn { margin-top: 4px }
+/* The tab label is the title: the Pro Stats view's own heading stays for screen readers only. */
+.pc-side .pc-insight-head .pc-insight-title#pro-stats-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
+.pc-side .pc-insight-head { margin-right: 0 }
+.pc-insight-back { margin: 0 0 var(--pc-space-3); font-size: var(--pc-fs-small) }
+.pc-insight-back .pc-pro-link { padding: 0; border: 0; background: none; cursor: pointer; font-family: var(--pc-font) }
+
+/* Settings: a segmented control for whose settings, then compact fields, labels above, two columns. */
+.pc-set { display: flex; flex-direction: column; gap: 14px; font-size: 14px; color: var(--pc-text) }
+.pc-set-scope { display: flex; width: 100% }
+.pc-set-scope .pc-seg-btn { flex: 1; min-height: 32px; font-size: 13.5px }
+.pc-set-pane { display: flex; flex-direction: column; gap: 14px }
+.pc-set-lead { margin: 0; font-size: 13px; line-height: 1.45; color: var(--pc-text-muted) }
+.pc-set-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px }
+.pc-set-wide { grid-column: 1 / -1 }
+.pc-set-field { min-width: 0 }
+.pc-set-label { display: block; margin-bottom: 5px; font-size: 13px; font-weight: 600; color: var(--pc-text) }
+.pc-set-label-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px }
+.pc-set-input { display: block; width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--pc-field); border-radius: 8px; background-color: var(--pc-bg); color: var(--pc-text); font: 400 14px var(--pc-font) }
+.pc-set-input:focus { outline: none; border-color: var(--pc-link); box-shadow: var(--pc-focus-ring) }
+select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
+.pc-set-pair { display: flex; gap: 6px }
+.pc-set-num { flex: none; width: 64px }
+.pc-set-hint { margin: -6px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--pc-text-muted) }
+.pc-set-link { padding: 0; border: 0; background: none; color: var(--pc-link); font: 500 13px var(--pc-font); cursor: pointer }
+.pc-set-link:hover { text-decoration: underline }
+.pc-set-add { margin-top: 8px }
+.pc-set-check { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer }
+.pc-set-check input { width: 16px; height: 16px; accent-color: var(--pc-link) }
+/* Colors and labels: two columns of swatch + name. The swatch is the color picker. */
+.pc-set-colors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px }
+.pc-set-color { display: flex; align-items: center; gap: 8px; min-width: 0 }
+.pc-set-color .pc-set-input { height: 32px; font-size: 13.5px }
+.pc-set-swatch { position: relative; flex: none; width: 20px; height: 20px; border-radius: 50%; cursor: pointer }
+.pc-set-swatch:hover, .pc-set-swatch:focus-within { box-shadow: 0 0 0 2px var(--pc-bg), 0 0 0 4px var(--pc-link) }
+.pc-set-swatch input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer }
 /* Viewers: the pinned notes read as part of the page, a quieter panel than the editor's. */
 .pc-side--notes:not(:has(.pc-side-tabs)) { background: var(--pc-surface) }
 .pc-side--notes:not(:has(.pc-side-tabs)) .pc-side-bar { background: transparent; border-bottom: 0; min-height: 52px; padding-top: 6px }
@@ -1709,6 +1772,31 @@ button:hover > .pc-add-event {
 .pc-share-card input[readonly] { border-radius: 8px !important; font-size: 13px !important; background: var(--pc-soft) !important; color: var(--pc-text) }
 .pc-share-card button.bg-blue-500 { border-radius: 8px !important }
 .pc-share-card .grid, .pc-side .grid.gap-4 { gap: 0 !important }
+/* A link and its button on one line; the read-only link's Copy is the panel's main action. */
+.pc-share-link { display: flex; gap: 8px }
+.pc-share-url { flex: 1; min-width: 0; height: 38px; padding: 0 12px; border: 1px solid var(--pc-line); border-radius: 8px; background: var(--pc-soft); color: var(--pc-text); font: 400 13px var(--pc-font); text-overflow: ellipsis }
+.pc-share-url:focus { outline: none; border-color: var(--pc-link); box-shadow: var(--pc-focus-ring) }
+.pc-share-url--edit { background: var(--pc-bg); border-color: var(--pc-field) }
+.pc-share-copy { flex: none; display: inline-flex; align-items: center; justify-content: center; height: 38px; padding: 0 14px; border: 1px solid var(--pc-field); border-radius: 8px; background: var(--pc-bg); color: var(--pc-text); font: 600 13px/1 var(--pc-font); cursor: pointer; white-space: nowrap }
+.pc-share-copy:hover { background: var(--pc-hover) }
+.pc-share-copy:focus-visible, .pc-share-app:focus-visible, .pc-share-more-btn:focus-visible { outline: 2px solid var(--pc-link); outline-offset: 2px }
+.pc-share-copy:disabled { opacity: .5; cursor: default }
+.pc-share-copy--primary { border-color: var(--pc-link); background: var(--pc-link); color: var(--pc-bg) }
+.pc-share-copy--primary:hover:not(:disabled) { border-color: var(--pc-link-hover); background: var(--pc-link-hover) }
+.pc-share-apps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px }
+.pc-share-app { display: grid; place-items: center; height: 38px; border: 1px solid var(--pc-field); border-radius: 8px; color: var(--pc-text) !important; font-size: 13.5px; font-weight: 600; text-decoration: none !important }
+.pc-share-app:hover { background: var(--pc-hover) }
+/* "More sharing options": the rarely used links, one quiet list. */
+.pc-share-more-btn { display: inline-flex; align-items: center; gap: 6px; margin-top: 16px; padding: 0; border: 0; background: none; color: var(--pc-link); font: 600 14px var(--pc-font); cursor: pointer }
+.pc-share-more-btn svg { transition: transform var(--pc-dur-fast) var(--pc-ease) }
+.pc-share-more { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; padding-top: 14px; border-top: 1px solid var(--pc-line) }
+.pc-share-row { display: flex; align-items: center; justify-content: space-between; gap: 12px }
+.pc-share-row--stack { margin-top: 6px }
+.pc-share-row-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13.5px; line-height: 1.4 }
+.pc-share-row-text b { font-weight: 600; color: var(--pc-text) }
+.pc-share-row-text span, .pc-share-row-note { font-size: 12.5px; color: var(--pc-text-muted); overflow-wrap: anywhere }
+.pc-share-row-text .pc-share-warn { color: var(--pc-warning) }
+.pc-share-slug { display: flex; flex-direction: column; gap: 4px }
 
 /* Draft tag in the address bar, beside Save & share: where the action is, not a line under the grid. */
 .pc-draft-chip { flex: none; margin-right: 6px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .02em;

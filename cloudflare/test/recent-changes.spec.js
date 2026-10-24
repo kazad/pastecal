@@ -37,9 +37,10 @@ test('two quick edits of one event list as one row, with no "0 events added"', a
     { timeout: 10_000 }).toBe('bring napkins');
 
   await page.locator('button[aria-label="Settings"]').click();
-  await page.locator('button:has-text("Recent changes")').click();
-  const modal = page.getByTestId('recent-changes');   // the side panel's Changes tab (was a dialog)
-  await expect(modal.locator('h2:has-text("Recent changes")')).toBeVisible();
+  await page.getByTestId('side-tab-changes').click();
+  const modal = page.getByTestId('recent-changes');   // the side panel's Activity tab (was a dialog)
+  await expect(page.getByTestId('side-tab-changes')).toHaveText('Activity');
+  await expect(page.getByTestId('side-tab-changes')).toHaveAttribute('aria-selected', 'true');
   await expect(modal.getByText('Edited "Team lunch v2" 2 times')).toBeVisible();
   await expect(modal.getByText(/\b0 events?\b/)).toHaveCount(0);
   await page.screenshot({ path: 'snapshots/cf-recent-changes.png' });
