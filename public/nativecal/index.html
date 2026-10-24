@@ -44,9 +44,18 @@ Copyright (c) 2025 Kalid Azad
     <link rel="preconnect" href="https://cdn.jsdelivr.net">
 
     <!-- Analytics privacy: must run before Google Tag Manager (see the comment inside). -->
+    <!-- Europe (EU/EEA/UK/CH and nearby): no third-party trackers, so no cookie banner is needed. Read from the
+         browser's time zone because most pages are served without the Worker; it errs toward not tracking.
+         First-party cookieless analytics (/api/collect) and calendar stats still count everyone. -->
+    <script>
+        window.pcInEurope = (function () {
+            try { return /^(Europe\/|Atlantic\/(Canary|Madeira|Azores|Reykjavik|Faroe)|Africa\/Ceuta|Arctic\/)/.test(Intl.DateTimeFormat().resolvedOptions().timeZone || ''); }
+            catch (e) { return false; }
+        })();
+    </script>
     <script>
         (function () {
-            if (window.__TEST__ || window.location.search.includes('no-analytics')) return;
+            if (window.__TEST__ || window.pcInEurope || window.location.search.includes('no-analytics')) return;
             window.dataLayer = window.dataLayer || [];
             window.gtag = window.gtag || function () { window.dataLayer.push(arguments); };
             // Never send a calendar's name to Google: the path IS the edit key (anyone holding
@@ -66,7 +75,7 @@ Copyright (c) 2025 Kalid Azad
     <!-- Google Tag Manager -->
     <script>
         (function (w, d, s, l, i) {
-            const enableAnalytics = !(w.__TEST__ || w.location.search.includes('no-analytics') || w.location.hostname === 'preview.pastecal.com');
+            const enableAnalytics = !(w.__TEST__ || w.pcInEurope || w.location.search.includes('no-analytics') || w.location.hostname === 'preview.pastecal.com');
             if (!enableAnalytics) {
                 console.log('[analytics] disabled by test mode');
                 return;

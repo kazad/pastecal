@@ -134,9 +134,18 @@ details p { color: var(--muted); margin: 8px 0 0 }
      with ?no-analytics, and on preview.pastecal.com. Google gets /pricing and campaign params
      only, and a referrer from pastecal itself becomes the bare origin, because a calendar's
      path is its edit key. Calendar names and the paste box are masked in recordings. -->
+    <!-- Europe (EU/EEA/UK/CH and nearby): no third-party trackers, so no cookie banner is needed. Read from the
+         browser's time zone because most pages are served without the Worker; it errs toward not tracking.
+         First-party cookieless analytics (/api/collect) and calendar stats still count everyone. -->
+    <script>
+        window.pcInEurope = (function () {
+            try { return /^(Europe\/|Atlantic\/(Canary|Madeira|Azores|Reykjavik|Faroe)|Africa\/Ceuta|Arctic\/)/.test(Intl.DateTimeFormat().resolvedOptions().timeZone || ''); }
+            catch (e) { return false; }
+        })();
+    </script>
 <script>
 (function (w, d) {
-  if (w.__TEST__ || w.location.search.includes('no-analytics') || w.location.hostname === 'preview.pastecal.com') return;
+  if (w.__TEST__ || w.pcInEurope || w.location.search.includes('no-analytics') || w.location.hostname === 'preview.pastecal.com') return;
   w.dataLayer = w.dataLayer || [];
   w.gtag = w.gtag || function () { w.dataLayer.push(arguments); };
   var q = new URLSearchParams(location.search), keep = new URLSearchParams();

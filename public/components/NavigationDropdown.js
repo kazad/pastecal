@@ -67,8 +67,8 @@ const NAV_NETWORK_ERROR = 'We couldn’t reach pastecal. Check your connection a
 const NavigationDropdown = {
     template: /* html */ `
         <div class="pc-nav absolute top-full left-0 mt-2 bg-1 shadow-xl border border-color-default overflow-hidden z-50">
-            <!-- Starts a fresh draft on the homepage -->
-            <a href="/" @click.prevent="$emit('go-homepage')"
+            <!-- Starts a fresh draft on the homepage. Hidden on the draft itself: you're already on a new one. -->
+            <a v-if="!onDraft" href="/" @click.prevent="$emit('go-homepage')" data-testid="nav-new"
                 class="pc-nav-row pc-nav-new flex items-center text-color-2 hover:bg-theme-hover transition-colors cursor-pointer group">
                 <span class="pc-nav-plus">
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" width="16" height="16"><path d="M12 5v14M5 12h14"/></svg>
@@ -196,7 +196,7 @@ const NavigationDropdown = {
             </div>
         </div>
     `,
-    props: ['recentCalendars'],
+    props: ['recentCalendars', 'onDraft'],
     emits: ['go-homepage', 'toggle-pin', 'remove-recent', 'open-stats', 'open-help'],
     data() { return { acct: AccountMenu.state }; },
     mounted() { AccountMenu.load(); },     // never blocks opening: the section shows its own loading line

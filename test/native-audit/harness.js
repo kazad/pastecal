@@ -152,7 +152,7 @@ const sf = {
   async openQuickAdd(page) {
     if (isPhone(page)) {
       await tap(page, page.getByRole('button', { name: 'Open menu' }));
-      await tap(page, page.getByText('Quick Add Event').locator('visible=true').first());
+      await tap(page, page.getByText('Quick add event').locator('visible=true').first());
     } else await tap(page, page.locator('[data-testid="desktop-add-event-button"]').locator('visible=true').first());
     await expect(page.getByText('Add Event by Typing')).toBeVisible();
   },
@@ -217,7 +217,7 @@ const nat = {
   async openQuickAdd(page) {
     if (isPhone(page)) {
       const menu = page.getByRole('button', { name: 'Open menu' });
-      if (await menu.count()) { await tap(page, menu.first()); await tap(page, page.getByText('Quick Add Event').locator('visible=true').first()); }
+      if (await menu.count()) { await tap(page, menu.first()); await tap(page, page.getByText('Quick add event').locator('visible=true').first()); }
       else await page.keyboard.press('ControlOrMeta+e');
     } else await tap(page, page.getByRole('button', { name: /Add event/ }).locator('visible=true').first());
     await expect(page.getByText('Add Event by Typing')).toBeVisible();

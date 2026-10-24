@@ -197,7 +197,7 @@ const ProPanel = {
                         </button>
                     </div>
                     <p v-if="editorLink" class="pc-pro-muted pc-pro-note">The last link made in this browser. If you reset it somewhere else, get a new one here.</p>
-                    <p class="pc-pro-warn">A new link turns off the old one. Anyone still using it will see a read-only calendar.</p>
+                    <p class="pc-pro-warn">A new link turns off the old one. Anyone still using it will see a view-only calendar.</p>
                 </div>
 
                 <div class="pc-pro-row pc-pro-foot">

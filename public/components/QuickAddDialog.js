@@ -6,7 +6,7 @@ const QuickAddDialog = {
         <div v-if="dialogVisible" 
                  class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                 <div class="bg-1 rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4">
-                    <h3 class="text-lg font-semibold mb-4">Add Event by Typing</h3>
+                    <h3 class="text-lg font-semibold mb-4">Add event by typing</h3>
                     <form @submit.prevent="createEvent">
                         <div class="flex items-baseline gap-2 mb-1.5">
                             <span class="flex items-center justify-center shrink-0 h-5 w-5 rounded-full bg-blue-600 text-white text-xs font-bold">1</span>
@@ -43,7 +43,7 @@ const QuickAddDialog = {
                                        type="text"
                                        v-model="fields.subject"
                                        @input="pin('subject')"
-                                       placeholder="Untitled Event"
+                                       placeholder="Untitled event"
                                        class="flex-1 min-w-0 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                             </div>
 

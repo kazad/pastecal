@@ -106,9 +106,9 @@ test('a setting changed in the panel still applies at once', async ({ browser, r
   const { id } = await seed(request);
   const { ctx, page } = await open(browser, `/${id}?backend=cf`);
   await page.getByTestId('settings-button-desktop').click();
-  // One page, two sections: "This calendar" then "Just me", and it fits without scrolling.
+  // One page, two sections: "This calendar" then "Only me", and it fits without scrolling.
   await expect(page.getByTestId('settings-calendar')).toContainText('This calendar');
-  await expect(page.getByTestId('settings-me')).toContainText('Just me');
+  await expect(page.getByTestId('settings-me')).toContainText('Only me');
   await expect(panel(page).getByLabel('Default view', { exact: true })).toBeVisible();
   await expect(panel(page).getByLabel('First day of week')).toBeVisible();
   expect(await page.$eval('.pc-side-body', (b) => b.scrollHeight <= b.clientHeight + 1), 'Settings fits without scrolling').toBe(true);

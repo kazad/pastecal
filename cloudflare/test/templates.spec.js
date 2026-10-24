@@ -41,12 +41,11 @@ test('pick a template, switch, keep your own event, then Save & share saves it a
   expect(d.title).toBe('Tigers U10 Soccer');
   expect(d.notes).toContain('Home field');
   expect(d.labels.slice(0, 2)).toEqual(['Practice', 'Game']);
-  await expect(page.getByTestId('tpl-nudge')).toContainText('for a link anyone can open. No sign-up.');
+  await expect(page.getByTestId('tpl-nudge')).toContainText('for a link anyone can open. No login required.');
   await expect(page.getByTestId('grid-tip')).toHaveCount(0);
 
   // 2. another chip replaces the template's events (nothing of yours yet, so no question)
   await page.getByTestId('tpl-family').click();
-  await expect(page.getByTestId('tpl-confirm')).toHaveCount(0);
   await expect(appt(page, 'Piano: Maya').first()).toBeVisible();
   await expect(appt(page, 'Practice')).toHaveCount(0);
   d = await draft(page);
@@ -60,22 +59,31 @@ test('pick a template, switch, keep your own event, then Save & share saves it a
   await page.locator('button[type="submit"]').locator('visible=true').first().click();
   await expect.poll(() => titles(page)).toContain('Bake sale');
 
-  // 4. now switching asks first; Cancel changes nothing
-  await page.getByTestId('tpl-team').click();
-  await expect(page.getByTestId('tpl-confirm')).toContainText('Switch to Sports team? Events you added or changed stay.');
-  expect(await titles(page)).toContain('Piano: Maya');
-  await page.getByTestId('tpl-confirm-no').click();
-  await expect(page.getByTestId('tpl-confirm')).toHaveCount(0);
-  expect(await titles(page)).toContain('Piano: Maya');
+  // 3b. edit one of the template's events (the bug: an edited template event used to survive a switch)
+  await page.evaluate(() => {
+    const vm = document.querySelector('#app')._vnode.component.proxy;
+    const ev = vm.calendar.events.find((e) => /^Piano: Maya/.test(e.title || e.Subject));
+    vm.store().dispatch({ type: 'update', key: EventStore.keyOf(ev), changes: { title: 'Piano: Maya (moved)' } });
+  });
+  await expect.poll(() => titles(page)).toContain('Piano: Maya (moved)');
 
-  // ...and Switch replaces only the template's events
+  // 4. switching never asks: it swaps the template's events at once, yours stay, and the toast's Undo
+  //    puts the last template back exactly
   await page.getByTestId('tpl-team').click();
-  await page.getByTestId('tpl-confirm-yes').click();
   await expect(appt(page, 'Practice').first()).toBeVisible();
-  const now = await titles(page);
+  let now = await titles(page);
   expect(now).toContain('Bake sale');
   expect(now).not.toContain('Piano: Maya');
+  expect(now).not.toContain('Piano: Maya (moved)');               // edited template events go too
   expect((await draft(page)).title).toBe('Tigers U10 Soccer');
+  await page.getByRole('button', { name: 'Undo' }).locator('visible=true').first().click();
+  await expect(appt(page, 'Piano: Maya (moved)').first()).toBeVisible();   // Undo brings back the edit
+  now = await titles(page);
+  expect(now).toContain('Bake sale');
+  expect(now.filter((t) => t === 'Practice')).toEqual([]);
+  // ...and again, so the rest of the test continues from Sports team
+  await page.getByTestId('tpl-team').click();
+  await expect(appt(page, 'Practice').first()).toBeVisible();
 
   // 5. Save & share from the nudge: the name is the visitor's, never one made from the template
   await page.getByTestId('share-new').click();
@@ -144,7 +152,6 @@ test('Start blank clears the template; Cmd+Z undoes a pick and a switch', async 
   await page.waitForFunction(() => window.scheduleObj && document.querySelector('.e-work-cells'), null, { timeout: 20_000 });
   await expect(page.getByTestId('tpl-team')).toHaveAttribute('aria-pressed', 'true');
   await page.getByTestId('tpl-out').click();
-  await expect(page.getByTestId('tpl-confirm')).toHaveCount(0);   // nothing of the visitor's to ask about
   await expect(appt(page, 'Sam: WFH').first()).toBeVisible();
   await ctx.close();
 });

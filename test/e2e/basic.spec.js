@@ -98,8 +98,8 @@ test.describe('Add Event Icon Visibility', () => {
     // Open mobile menu
     await menuButton.click();
 
-    // Verify "Quick Add Event" is visible in mobile menu
-    const mobileQuickAdd = page.getByText('Quick Add Event');
+    // Verify "Quick add event" is visible in mobile menu
+    const mobileQuickAdd = page.getByText('Quick add event');
     await expect(mobileQuickAdd).toBeVisible();
   });
 });

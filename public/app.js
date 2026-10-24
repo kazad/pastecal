@@ -273,7 +273,6 @@ const CalendarVueApp = {
             // "Start from" on the homepage draft (utils/templates.js): the template whose events are on it
             // ({ id, date } of the month they were built for), a switch waiting for a yes, and the Save nudge.
             template: null,
-            templateConfirm: null,
             templateNudge: false,
             templateChips: CalendarTemplates.list(),
             tourVariant: 'a',
@@ -663,16 +662,16 @@ const CalendarVueApp = {
                     } else if (result.data.found && !result.data.isReadOnly) {
                         // Found as editable calendar - show message
                         this.isLoading = false;
-                        alert('This calendar exists but is not shared for viewing. Ask the owner to create a read-only link.');
+                        alert('This calendar has no view-only link yet. Ask the owner to make one in Share.');
                     } else {
                         // Calendar doesn't exist at all
                         this.isLoading = false;
-                        alert('Calendar not found. Please check the URL and try again.');
+                        alert('Calendar not found. Check the link and try again.');
                     }
                 } catch (error) {
                     console.error('Calendar lookup failed:', error);
                     this.isLoading = false;
-                    alert('Failed to load calendar. Please try again later.');
+                    alert('Couldn’t load this calendar. Check your connection and reload the page.');
                 }
             })();
         } else if (this.urlslug) {
@@ -1149,7 +1148,7 @@ const CalendarVueApp = {
                     let tooltip = createElement('div', {
                         id: 'type-label-hint',
                         className: 'w-full px-4 py-2 text-xs text-center italic hidden flex items-center justify-center gap-1',
-                        innerHTML: `Customize labels in Settings`
+                        innerHTML: `Name these colors in Settings`
                     });
                     tooltip.style.background = 'var(--panel-bg)';
                     tooltip.style.color = 'var(--text-color-1)';
@@ -1571,7 +1570,7 @@ const CalendarVueApp = {
             const named = dropped.map(e => e && e.title).filter(Boolean);
             const what = named.length === 1 ? `"${named[0]}"`
                 : `${dropped.length} event${dropped.length === 1 ? '' : 's'}`;
-            this.showToast(`${what} needs a start and end time — not saved`, 'error');
+            this.showToast(`${what} wasn’t saved: it needs a start and end time`, 'error');
             // The count, not the events: this is how we find out whether an entry path
             // is still producing unsaveable events without waiting for a bug report.
             track(a => a.eventsDropped(dropped.length, 'incomplete'));
@@ -1588,11 +1587,11 @@ const CalendarVueApp = {
         // that exists only on their screen is the failure mode this whole investigation
         // was about.
         CalendarDataService.onSyncPaused = ({ writes }) => {
-            this.showToast('Saving paused — reload the page to continue', 'error');
+            this.showToast('Saving paused. Reload the page to keep editing.', 'error');
             track(a => a.jsError('sync_paused', `${writes} writes in a minute`, 'sync'));
         };
         CalendarDataService.onSyncFailed = () => {
-            this.showToast('Could not save — check your connection', 'error');
+            this.showToast('Couldn’t save. Check your connection.', 'error');
             track(a => a.jsError('sync_failed', 'transaction did not commit', 'sync'));
         };
 
@@ -2506,19 +2505,11 @@ const CalendarVueApp = {
             });
         },
 
+        // Switching templates is instant: no "are you sure", because one Undo (toast or Cmd+Z) puts back
+        // exactly what was there, the same rule as deleting an event.
         pickTemplate(id) {
-            if (this.template && this.template.id === id) { this.templateConfirm = null; return; }
-            // Events the visitor added or changed stay either way; ask before mixing another template in.
-            const owned = new Set(this.templateOwned().map(EventStore.keyOf));
-            const theirs = (this.calendar.events || []).some(e => e && !owned.has(EventStore.keyOf(e)) && !Calendar.isSampleTitle(e.title || e.Subject));
-            if (theirs) { this.templateConfirm = { next: id }; return; }
+            if (this.template && this.template.id === id) return;
             this.applyTemplate(id);
-        },
-
-        confirmTemplate() {
-            const next = this.templateConfirm && this.templateConfirm.next;
-            this.templateConfirm = null;
-            if (next) this.applyTemplate(next);
         },
 
         startBlank() {
@@ -2533,16 +2524,15 @@ const CalendarVueApp = {
         // Swap the draft's template events for another template's (or for none) as ONE store change,
         // so they save like any events and one Cmd+Z puts back exactly what was there.
         applyTemplate(id) {
-            this.templateConfirm = null;
             const anchor = (window.scheduleObj && scheduleObj.selectedDate) || new Date();
             const next = id ? { id, date: `${anchor.getFullYear()}-${String(anchor.getMonth() + 1).padStart(2, '0')}-01` } : null;
             const built = next && CalendarTemplates.build(id, this.templateDate(next));
             const events = this.calendar.events || [];
-            const going = [...this.templateOwned(), ...events.filter(e => e && Calendar.isSampleTitle(e.title || e.Subject))];
+            // Every template event goes, edited or not (Undo brings them back); events the visitor made stay.
+            const fromTemplate = (e) => e && String(e.id).startsWith(CalendarTemplates.PREFIX);
+            const going = events.filter(e => fromTemplate(e) || (e && Calendar.isSampleTitle(e.title || e.Subject)));
             const commands = going.map(e => ({ type: 'remove', key: EventStore.keyOf(e) }));
-            const ids = new Set(events.map(e => String(e.id)));
-            // An event of this template the visitor already changed stands in for the original.
-            if (built) built.events.filter(e => !ids.has(e.id)).forEach(e => commands.push({ type: 'add', event: e }));
+            if (built) built.events.forEach(e => commands.push({ type: 'add', event: e }));
             // Back to a fresh draft: the example event returns, as on a first visit.
             else if (going.length === events.length) this.calendar.sampleEvents().forEach(e => commands.push({ type: 'add', event: e }));
             const before = this.template;
@@ -2555,6 +2545,10 @@ const CalendarVueApp = {
                 (this._templateUndo = this._templateUndo || []).push({ entry: stack[stack.length - 1], state: before });
             }
             this.setTemplate(next);
+            if (commands.length && before) {
+                this.showToast(id ? `Switched to ${CalendarTemplates.label(id)}` : 'Template cleared', 'info',
+                    { actionLabel: 'Undo', action: () => this.undoLastLocal(), duration: 6000 });
+            }
             if (id) {
                 this.templateNudge = !this._templateNudgeDismissed;
                 track(a => a.featureUsed('template', id));
@@ -2716,7 +2710,7 @@ const CalendarVueApp = {
                     // recents cap — this list is the only way back without a login.
                     this.recentManager.add(slug, this.calendar.title, true);
                     this.recentCalendars = this.recentManager.getAll();
-                    this.showToast('Calendar created!', 'success');
+                    this.showToast('Calendar saved', 'success');
                     try { sessionStorage.setItem('pastecal_open_share', slug); } catch (e) { /* the links are still under Share */ }
                     window.location.href = "/" + slug;
                 });
@@ -2772,13 +2766,13 @@ const CalendarVueApp = {
             let newId = this.newCalendarId.trim();
             // basic validation (alphanumeric, hyphens)
             if (!newId.match(/^[a-zA-Z0-9_\-]+$/)) {
-                alert("Invalid name. Use letters, numbers, dashes, and underscores.");
+                alert("That name won’t work. Use letters, numbers, dashes and underscores.");
                 return;
             }
 
             // Check if current name is same as new name
             if (newId.toLowerCase() === this.calendar.id.toLowerCase()) {
-                alert("New name must be different from current name.");
+                alert("That’s already this calendar’s name.");
                 return;
             }
 
@@ -3483,13 +3477,13 @@ const CalendarVueApp = {
             // user something rather than silently doing nothing.
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(url).then(settle).catch(() => {
-                    if (!this.legacyCopy(url)) this.showToast('Could not copy the link', 'error');
+                    if (!this.legacyCopy(url)) this.showToast('Couldn’t copy the link', 'error');
                     else settle();
                 });
             } else if (this.legacyCopy(url)) {
                 settle();
             } else {
-                this.showToast('Could not copy the link', 'error');
+                this.showToast('Couldn’t copy the link', 'error');
             }
         },
 
@@ -4948,7 +4942,7 @@ const CalendarVueApp = {
                 const checkIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1 text-green-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>`;
-                buttonElement.innerHTML = `${checkIcon} Copied!`;
+                buttonElement.innerHTML = `${checkIcon} Copied`;
                 buttonElement.classList.remove('bg-blue-500', 'hover:bg-blue-600');
                 buttonElement.classList.add('bg-green-500');
 
@@ -4960,7 +4954,7 @@ const CalendarVueApp = {
 
             }).catch(err => {
                 console.error('Failed to copy: ', err);
-                this.showToast('Failed to copy link', 'error');
+                this.showToast('Couldn’t copy the link', 'error');
             });
         },
 
@@ -5010,7 +5004,7 @@ const CalendarVueApp = {
         /** Quick add from a menu: on a calendar this tab can't change, say why instead of opening it. */
         openQuickAdd() {
             if (!this.canEdit) {
-                this.showToast(this.lockedOut ? PRO_MESSAGES.lockedVisitor : 'This is a view-only link. Events cannot be added or edited.', 'info');
+                this.showToast(this.lockedOut ? PRO_MESSAGES.lockedVisitor : 'This is a view-only link. You can’t add or change events.', 'info');
                 return;
             }
             this.$refs.quickAddDialog && this.$refs.quickAddDialog.showDialog();

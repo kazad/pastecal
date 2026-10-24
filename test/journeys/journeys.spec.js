@@ -203,7 +203,7 @@ const localDay = (page, iso) => page.evaluate((v) => new Date(v).getDay(), iso);
 async function openQuickAdd(page) {
   if (isPhone(page)) {
     await tap(page, page.getByRole('button', { name: 'Open menu' }));
-    await tap(page, page.getByText('Quick Add Event').locator('visible=true').first());
+    await tap(page, page.getByText('Quick add event').locator('visible=true').first());
   } else {
     await tap(page, page.locator('[data-testid="desktop-add-event-button"]').locator('visible=true').first());
   }

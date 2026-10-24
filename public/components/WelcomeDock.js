@@ -16,11 +16,11 @@ const WelcomeDock = {
 
             <div class="flex items-start gap-2">
                 <div class="flex-1 min-w-0">
-                    <p class="text-sm font-bold text-color-2 mb-1">Shared calendars that just work</p>
+                    <p class="text-sm font-bold text-color-2 mb-1">A calendar you can share in a minute</p>
                     <p class="text-xs text-color-1 leading-relaxed">
-                        No logins. No installs. Add events, then pick a link like
+                        No login required. Add events, then pick a link like
                         <code class="welcome-dock__url bg-disabled">pastecal.com/summer-trip</code>
-                        and everyone with it can view and edit.
+                        and send it. Anyone with it can view and edit.
                     </p>
 
                     <div class="flex items-center gap-1 mt-3">
