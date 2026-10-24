@@ -1085,11 +1085,14 @@ div#Schedule,
   .pc-home-split:has(.pc-home-aside) .pc-draft-links a { display: none }
   .pc-home-split ~ .pc-tour .pc-intro-short { display: block }
 }
-.pc-home-aside h1 { margin: 0 0 10px; font-size: 25px; line-height: 1.18; font-weight: 750; letter-spacing: -.01em; color: var(--pc-text); text-wrap: balance }
-.pc-home-lead { margin: 0 0 18px; font-size: 16px; line-height: 1.5; color: var(--pc-text-muted) }
+.pc-home-aside h1 { margin: 0 0 14px; font-size: 36px; line-height: 1.06; font-weight: 900; letter-spacing: -.02em; color: var(--pc-text); text-wrap: balance }
+/* The highlighter: one phrase only. Yellow in both themes, dark text on it. */
+.pc-hl { background: linear-gradient(transparent 55%, #ffe066 55%, #ffe066 92%, transparent 92%); color: inherit; padding: 0 4px; margin-left: -4px; -webkit-box-decoration-break: clone; box-decoration-break: clone }
+:root[data-theme="dark"] .pc-hl { background: linear-gradient(transparent 55%, #8a6d00 55%, #8a6d00 92%, transparent 92%) }
+.pc-home-lead { margin: 0 0 20px; font-size: 17px; line-height: 1.5; color: var(--pc-text-muted) }
 .pc-home-steps { list-style: none; margin: 0 0 18px; padding: 0; display: grid; gap: 10px }
-.pc-home-steps li { display: grid; grid-template-columns: 24px 1fr; gap: 10px; align-items: center; font-size: 15px; color: var(--pc-text) }
-.pc-home-steps b { width: 24px; height: 24px; border-radius: 50%; background: var(--pc-soft); color: var(--pc-link); display: grid; place-items: center; font-size: 12px; font-weight: 700 }
+.pc-home-steps li { display: grid; grid-template-columns: 28px 1fr; gap: 12px; align-items: center; font-size: 16px; color: var(--pc-text) }
+.pc-home-steps b { width: 28px; height: 28px; border-radius: 50%; background: var(--pc-soft); color: var(--pc-link); display: grid; place-items: center; font-size: 12px; font-weight: 700 }
 .pc-home-nots { list-style: none; margin: 0 0 18px; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; font-size: 14px; color: var(--pc-text-muted) }
 .pc-home-nots li::before { content: "✓"; color: var(--pc-success); font-size: 12px; font-weight: 700; margin-right: 7px }
 .pc-home-draft { margin: 0 0 14px; padding: 10px 12px; border: 1px solid var(--pc-line); border-radius: 10px; background: var(--pc-surface); font-size: 13.5px; line-height: 1.45; color: var(--pc-text-muted) }
@@ -1120,7 +1123,7 @@ div#Schedule,
 .pc-home-proof a { color: inherit; text-decoration: underline; text-underline-offset: 2px }
 .pc-home-aside .pc-home-links { margin-bottom: 18px !important }
 .pc-home-aside .pc-home-draft { background: var(--pc-surface) }
-.pc-home-aside .pc-home-steps b { background: var(--pc-surface); border: 1px solid var(--pc-line) }
+.pc-home-aside .pc-home-steps b { background: var(--pc-bg); border: 0 }
 .pc-home-recents { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px }
 .pc-home-recents a { display: grid; gap: 1px; padding: 9px 12px; border: 1px solid var(--pc-line); border-radius: 10px; background: var(--pc-surface); text-decoration: none }
 .pc-home-recents a:hover, .pc-home-recents a:focus-visible { border-color: var(--pc-link) }
