@@ -178,7 +178,8 @@ Copyright (c) 2025 Kalid Azad
 
 </head>
 
-<body class="p-1 m-1">
+<!-- Session recordings (Clarity, Hotjar) never see calendar contents: titles, events, notes. Clicks and layout still count. -->
+<body class="p-1 m-1" data-clarity-mask="true" data-hj-suppress>
     <div id="app" data-testid="app-root">
         <!-- Mobile Header -->
         <div class="md:hidden flex flex-col mb-2 pt-3 space-y-3" data-testid="mobile-header">

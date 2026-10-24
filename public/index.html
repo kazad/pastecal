@@ -267,7 +267,8 @@ Copyright (c) 2025 Kalid Azad
 
 </head>
 
-<body class="p-1 m-1">
+<!-- Session recordings (Clarity, Hotjar) never see calendar contents: titles, events, notes. Clicks and layout still count. -->
+<body class="p-1 m-1" data-clarity-mask="true" data-hj-suppress>
     <script>
         // #app is hidden until Vue mounts (v-cloak). If the app never mounts (a script failed
         // to load or threw), don't leave a blank page: say so.
