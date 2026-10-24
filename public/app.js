@@ -925,6 +925,11 @@ const CalendarVueApp = {
         // custom display for types
         scheduleObj.popupOpen = (args) => {
             if (args.type === 'QuickInfo' && args.data) ScheduleAdapter.showTitle(args.element, args.data);
+            // The date line opens the editor (click handler by appendTo below); say so on hover.
+            if (args.type === 'QuickInfo' && args.data && !scheduleObj.readonly) {
+                const when = args.element.querySelector('.e-event-popup .e-date-time');
+                if (when) when.title = 'Change date or time';
+            }
 
 
             // One popup at a time. A double-click on a day fires Syncfusion's quick
@@ -1212,6 +1217,17 @@ const CalendarVueApp = {
             if (typeof scheduleObj.closeQuickInfoPopup === 'function') scheduleObj.closeQuickInfoPopup();
         }, true);
 
+        // The date line in an event's popup ("Friday, October 10 (9:00 AM - 10:00 AM)") opens the
+        // editor, as the pencil does. People clicked it expecting to change the time, and the
+        // click did nothing (Clarity, Oct 2026). Only where the pencil is there to click: view
+        // links and locked calendars have none, so their date line stays plain text.
+        document.addEventListener('click', (e) => {
+            const when = e.target && e.target.closest && e.target.closest('.e-quick-popup-wrapper .e-event-popup .e-date-time');
+            if (!when) return;
+            const edit = when.closest('.e-quick-popup-wrapper').querySelector('.e-event-popup .e-edit');
+            if (edit && !edit.disabled && edit.offsetParent) edit.click();
+        });
+
         scheduleObj.appendTo('#Schedule');
         // A locked calendar's grid is read-only, so a double-click on a day opens nothing at all.
         // Say why, instead of leaving people clicking at a calendar that ignores them.
@@ -1223,6 +1239,32 @@ const CalendarVueApp = {
                 }
             });
         } catch (e) { /* no grid: nothing to explain */ }
+
+        // View links: a click on a day opens that day, as a click on its date number already
+        // does. Syncfusion's own day click opens the new-event box, which read-only mode
+        // turns off, so on a view link the click did nothing: a third of the day clicks there
+        // were dead clicks (Clarity, Oct 2026). Events and "+N more" keep their own popups.
+        // A click made while an event popup or "+N more" list is open only closes it (as on an
+        // edit link); the popup is already gone by the click, so look at the press.
+        let popupAtPress = false;
+        scheduleObj.element.addEventListener('pointerdown', () => {
+            popupAtPress = !!document.querySelector('.e-quick-popup-wrapper.e-popup-open, .e-more-popup-wrapper.e-popup-open');
+        }, true);
+        scheduleObj.element.addEventListener('click', (e) => {
+            if (!scheduleObj.readonly || scheduleObj.currentView !== 'Month') return;
+            if (popupAtPress) {
+                // Read-only mode leaves "+N more" open on an outside click; close it like the event popup.
+                const more = document.querySelector('.e-more-popup-wrapper.e-popup-open');
+                if (more && !more.contains(e.target)) more.querySelector('.e-more-event-close')?.click();
+                return;
+            }
+            const cell = e.target && e.target.closest && e.target.closest('.e-work-cells');
+            if (!cell || e.target.closest('.e-appointment, .e-more-indicator, .e-date-header')) return;
+            const day = scheduleObj.getCellDetails(cell);
+            if (!day || !day.startTime) return;
+            scheduleObj.selectedDate = day.startTime;
+            scheduleObj.currentView = 'Day';
+        });
 
         // Syncfusion sizes month-view event chips in pixels from the cell widths it measures
         // while it renders. On first load the grid is still being built (and fonts/styles may

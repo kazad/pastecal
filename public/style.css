@@ -837,6 +837,11 @@ div#Schedule,
 .e-schedule .e-month-view .e-date-header-container .e-header-cells { font-weight: 500 }
 .e-schedule .e-appointment .e-subject { font-weight: 600 }
 .e-schedule .e-month-view .e-work-cells:hover { background: var(--pc-hover) !important }
+/* View links: a day opens on click (app.js), so it says so. */
+.e-schedule.e-read-only .e-month-view .e-work-cells { cursor: pointer }
+/* An event popup's date line opens the editor where the pencil is enabled (app.js). */
+.e-quick-popup-wrapper:has(.e-event-popup .e-edit:not([disabled])) .e-event-popup .e-date-time { cursor: pointer; border-radius: 4px }
+.e-quick-popup-wrapper:has(.e-event-popup .e-edit:not([disabled])) .e-event-popup .e-date-time:hover { background: var(--pc-hover) }
 
 /* ---- Homepage tour: below the calendar, homepage only (index.html .pc-tour) ---- */
 .pc-tour { margin-top: 28px; border-top: 1px solid var(--pc-line); background: var(--pc-soft) }
