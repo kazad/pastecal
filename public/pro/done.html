@@ -103,10 +103,16 @@ button.secondary { margin-top: 10px; background: transparent; color: var(--blue)
     function show(link) {
       $('link').value = link; $('linkbox').hidden = false;
       // The phone's share sheet (Messages, WhatsApp, email) with a message ready to send.
+      var note = 'Here is the link to edit ' + calName + ' on pastecal. Anyone else sees it read-only.';
+      var b = $('share'); b.hidden = false;
       if (navigator.share) {
-        var b = $('share'); b.hidden = false;
+        b.onclick = function () { navigator.share({ title: calName, text: note, url: link }).catch(function () {}); };
+      } else {
+        // No share sheet (most desktops): copy a ready-to-send message instead.
+        b.textContent = 'Copy a message for your editors';
         b.onclick = function () {
-          navigator.share({ title: calName, text: 'Here is the link to edit ' + calName + ' on pastecal. Anyone else sees it read-only.', url: link }).catch(function () {});
+          var msgText = note + '\n' + link;
+          navigator.clipboard.writeText(msgText).then(function () { b.textContent = 'Message copied'; }, function () { $('link').focus(); $('link').select(); });
         };
       }
     }

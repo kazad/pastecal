@@ -462,12 +462,15 @@ function claimToken(request) {
 }
 
 // The one place a sign-in email leaves. Never logs the link: Workers Logs are on.
-async function sendSignInEmail(env, to, token, next) {
+async function sendSignInEmail(env, to, token, next, kind) {
     const link = `${siteUrl(env)}/signin#t=${token}`;
-    // Asked for in the middle of buying Pro: say what the link finishes.
-    const buying = typeof next === 'string' && /\?pro=/.test(next);
-    const subject = buying ? 'Your pastecal sign-in link: finish locking your calendar' : 'Your pastecal sign-in link';
-    const lead = buying ? 'Here is your link to sign in and finish locking your calendar. It takes you straight to payment:' : 'Here is your link to sign in to pastecal:';
+    // Asked for in the middle of buying Pro (?pro=), or sent after paying while signed out with an email
+    // that already had an account (kind 'paid'): say what the link is for. Never the calendar's name:
+    // anyone can make us email any address, so nothing they chose goes in the message.
+    const buying = typeof next === 'string' && /\?pro=/.test(next), paid = kind === 'paid';
+    const subject = paid ? 'Your pastecal sign-in link: manage your new Pro' : buying ? 'Your pastecal sign-in link: finish locking your calendar' : 'Your pastecal sign-in link';
+    const lead = paid ? 'Thanks for getting Pro. This email already has a pastecal account, so sign in here to get your editor link and manage Pro:'
+        : buying ? 'Here is your link to sign in and finish locking your calendar. It takes you straight to payment:' : 'Here is your link to sign in to pastecal:';
     const text = `${lead}\n\n${link}\n\n`
         + `It works once and expires in 15 minutes.\n\n`
         + `If you didn't ask to sign in, you can ignore this email. Nothing will change.\n`;
@@ -737,7 +740,7 @@ async function claimCheckout(request, env, body) {
     if (out.existing) {
         const calendarId = sess.metadata && sess.metadata.calendar_id;
         const token = await acc.issueLoginToken(email, safeNext('/' + encodeURIComponent(calendarId || '')) || '/');
-        if (token) await sendSignInEmail(env, email, token, null);
+        if (token) await sendSignInEmail(env, email, token, null, 'paid');
         return Response.json({ ok: true, signedIn: false, email }, { headers });
     }
     headers.append('Set-Cookie', sessionCookie(out.session, COOKIE_MAX_AGE));

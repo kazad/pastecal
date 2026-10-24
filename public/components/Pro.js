@@ -153,6 +153,7 @@ const ProPanel = {
                         {{ going ? 'Taking you to payment…' : busy ? 'One moment…' : 'Lock this calendar' }}
                     </button>
                     <span v-if="me" class="pc-pro-muted">Signed in as <span data-hj-suppress data-clarity-mask="true">{{ me.email }}</span> · <a href="#" @click.prevent="signOut">Sign out</a></span>
+                    <span v-else class="pc-pro-muted" data-testid="pro-next">Next: pay on Stripe's secure page. No account to set up.</span>
                 </div>
             </template>
 
