@@ -82,9 +82,11 @@ test('the filter warning lives with the calendar, not inside the search panel', 
   // would never have been seen.
   const banner = INDEX.indexOf('data-testid="hidden-events-banner"');
   assert.ok(banner !== -1, 'expected a hidden-events banner in the template');
-  const panelEnd = INDEX.indexOf('</panel>');
-  assert.ok(panelEnd !== -1 && banner > panelEnd,
-    'the banner must sit outside the search panel, with the calendar');
+  // Search lives in the side panel (data-testid="side-panel"), beside the calendar.
+  const side = INDEX.indexOf('data-testid="side-panel"');
+  const search = INDEX.indexOf('v-if="showSearch"');
+  assert.ok(side !== -1 && search > side, 'expected search inside the side panel');
+  assert.ok(banner < side, 'the banner must sit outside the search panel, with the calendar');
 
   // And it must track the filter being on, not merely something being hidden right here:
   // filters persist past closing the panel, so paging to a week with none of the hidden

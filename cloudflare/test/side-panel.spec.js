@@ -147,8 +147,9 @@ test('phone: the panel is a bottom sheet over the calendar, with tabs, closed by
   const before = await box(page);
   await page.getByTestId('share-button-mobile').click();
   await expect(panel(page)).toHaveAttribute('data-tab', 'share');
+  // It slides up 24px as it opens; measure once it has come to rest.
+  await expect.poll(async () => { const b = await panel(page).boundingBox(); return Math.round(b.y + b.height); }).toBe(844);   // anchored to the bottom
   const sheet = await panel(page).boundingBox();
-  expect(Math.round(sheet.y + sheet.height)).toBe(844);                 // anchored to the bottom
   expect(sheet.width).toBe(390);
   expect(sheet.height).toBeLessThan(844 * 0.75);                       // the calendar still shows above
   expect(Math.abs((await box(page)).width - before.width)).toBeLessThan(2);   // over it, not beside it
