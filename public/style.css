@@ -314,8 +314,9 @@ div#Schedule:has(.e-month-view, .e-year-view) {
 
 
 
+/* 100px, or taller on wide screens so the month fills the window (app.js, fitMonthRows). */
 .e-schedule .e-month-view .e-work-cells {
-    height: 100px !important;
+    height: var(--month-cell-h, 100px) !important;
 }
 
 
@@ -1698,6 +1699,22 @@ button:hover > .pc-add-event {
 .pc-side .pc-insight-head .pc-insight-title#pro-stats-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
 .pc-side .pc-insight-head { margin-right: 0 }
 .pc-insight-back { margin: 0 0 var(--pc-space-3); font-size: var(--pc-fs-small) }
+/* Activity: a compact feed. Day headings, then one row per change: dot, what, detail · time, Undo. */
+.pc-act-lead { margin-bottom: 6px }
+.pc-act-day-head { display: flex; align-items: center; gap: 8px; margin: 14px 0 2px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--pc-text-muted) }
+.pc-act-new { padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, var(--pc-link) 14%, var(--pc-bg)); color: var(--pc-link); font-size: 10px; letter-spacing: 0; text-transform: none }
+.pc-act-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--pc-line) }
+.pc-act-dot { flex: none; width: 9px; height: 9px; margin-top: 6px; border-radius: 50% }
+.pc-act-main { flex: 1; min-width: 0 }
+.pc-act-what { font-size: 14px; font-weight: 600; line-height: 1.4; color: var(--pc-text); overflow-wrap: anywhere }
+.pc-act-detail { font-size: 12.5px; line-height: 1.45; color: var(--pc-text-muted) }
+.pc-act-list { margin: 2px 0 0; padding: 0; list-style: none; font-size: 12.5px; line-height: 1.45; color: var(--pc-text-muted) }
+.pc-act-list li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.pc-act-undo { flex: none; align-self: center; height: 28px; padding: 0 10px; border: 1px solid var(--pc-field); border-radius: 8px; background: var(--pc-bg); color: var(--pc-text); font: 600 12.5px/1 var(--pc-font); cursor: pointer }
+.pc-act-undo:hover { background: var(--pc-hover) }
+.pc-act-undo:focus-visible, .pc-act-more:focus-visible { outline: 2px solid var(--pc-link); outline-offset: 2px }
+.pc-act-more { display: inline-flex; align-items: center; gap: 6px; margin-top: 14px; padding: 0; border: 0; background: none; color: var(--pc-link); font: 600 13.5px var(--pc-font); cursor: pointer }
+.pc-act-pro { padding: 1px 6px; border-radius: 999px; background: color-mix(in srgb, var(--pc-link) 14%, var(--pc-bg)); font-size: 11px; font-weight: 700 }
 .pc-insight-back .pc-pro-link { padding: 0; border: 0; background: none; cursor: pointer; font-family: var(--pc-font) }
 
 /* Settings: a segmented control for whose settings, then compact fields, labels above, two columns. */
@@ -1772,31 +1789,45 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 .pc-share-card input[readonly] { border-radius: 8px !important; font-size: 13px !important; background: var(--pc-soft) !important; color: var(--pc-text) }
 .pc-share-card button.bg-blue-500 { border-radius: 8px !important }
 .pc-share-card .grid, .pc-side .grid.gap-4 { gap: 0 !important }
-/* A link and its button on one line; the read-only link's Copy is the panel's main action. */
-.pc-share-link { display: flex; gap: 8px }
-.pc-share-url { flex: 1; min-width: 0; height: 38px; padding: 0 12px; border: 1px solid var(--pc-line); border-radius: 8px; background: var(--pc-soft); color: var(--pc-text); font: 400 13px var(--pc-font); text-overflow: ellipsis }
-.pc-share-url:focus { outline: none; border-color: var(--pc-link); box-shadow: var(--pc-focus-ring) }
-.pc-share-url--edit { background: var(--pc-bg); border-color: var(--pc-field) }
-.pc-share-copy { flex: none; display: inline-flex; align-items: center; justify-content: center; height: 38px; padding: 0 14px; border: 1px solid var(--pc-field); border-radius: 8px; background: var(--pc-bg); color: var(--pc-text); font: 600 13px/1 var(--pc-font); cursor: pointer; white-space: nowrap }
+/* Share: one compact row per link. Icon, bold label, a one-line hint, the short address, its buttons.
+   The read-only link's Copy is the tab's main action; everything else is secondary. */
+.pc-share-item { display: flex; align-items: flex-start; gap: 12px; padding: 14px 0; border-top: 1px solid var(--pc-line) }
+.pc-share-item:first-child { border-top: 0; padding-top: 2px }
+.pc-share-ico { flex: none; width: 18px; height: 18px; margin-top: 1px; color: var(--pc-link) }
+.pc-share-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px }
+.pc-share-label { margin: 0; font-size: 14px; font-weight: 700; line-height: 1.35; color: var(--pc-text) }
+.pc-share-hint { margin: 0; font-size: 13px; line-height: 1.4; color: var(--pc-text-muted) }
+.pc-share-addr { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; color: var(--pc-text-muted); font-family: var(--pc-font-mono) }
+.pc-share-acts { flex: none; display: flex; gap: 6px; align-self: center }
+.pc-share-copy { flex: none; display: inline-flex; align-items: center; justify-content: center; height: 32px; padding: 0 12px; border: 1px solid var(--pc-field); border-radius: 8px; background: var(--pc-bg); color: var(--pc-text); font: 600 13px/1 var(--pc-font); cursor: pointer; white-space: nowrap }
+.pc-share-copy svg { width: 16px; height: 16px }
+.pc-share-icon { width: 32px; padding: 0 }
 .pc-share-copy:hover { background: var(--pc-hover) }
-.pc-share-copy:focus-visible, .pc-share-app:focus-visible, .pc-share-more-btn:focus-visible { outline: 2px solid var(--pc-link); outline-offset: 2px }
+.pc-share-copy:focus-visible, .pc-share-app:focus-visible, .pc-share-sub:focus-visible, .pc-share-more-btn:focus-visible { outline: 2px solid var(--pc-link); outline-offset: 2px }
 .pc-share-copy:disabled { opacity: .5; cursor: default }
 .pc-share-copy--primary { border-color: var(--pc-link); background: var(--pc-link); color: var(--pc-bg) }
 .pc-share-copy--primary:hover:not(:disabled) { border-color: var(--pc-link-hover); background: var(--pc-link-hover) }
-.pc-share-apps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px }
-.pc-share-app { display: grid; place-items: center; height: 38px; border: 1px solid var(--pc-field); border-radius: 8px; color: var(--pc-text) !important; font-size: 13.5px; font-weight: 600; text-decoration: none !important }
+.pc-share-apps { display: flex; align-items: center; gap: 6px; margin-top: 6px }
+.pc-share-app { display: inline-grid; place-items: center; height: 30px; padding: 0 11px; border: 1px solid var(--pc-field); border-radius: 8px; color: var(--pc-text) !important; font-size: 13px; font-weight: 600; text-decoration: none !important }
 .pc-share-app:hover { background: var(--pc-hover) }
-/* "More sharing options": the rarely used links, one quiet list. */
-.pc-share-more-btn { display: inline-flex; align-items: center; gap: 6px; margin-top: 16px; padding: 0; border: 0; background: none; color: var(--pc-link); font: 600 14px var(--pc-font); cursor: pointer }
+.pc-share-sub { margin-left: 4px; font-size: 13px; font-weight: 500; color: var(--pc-link) !important; text-decoration: none !important }
+.pc-share-sub:hover { text-decoration: underline !important }
+/* Pro, unlocked: two lines and a link, a soft blue well. */
+.pc-share-pro { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; margin-top: 6px; padding: 12px 14px; border-radius: 10px; background: color-mix(in srgb, var(--pc-link) 9%, var(--pc-bg)) }
+.pc-share-pro b { font-size: 14px; color: var(--pc-text) }
+.pc-share-pro span { font-size: 13px; line-height: 1.4; color: var(--pc-text-2) }
+.pc-share-pro .pc-pro-link { margin-top: 4px; padding: 0; border: 0; background: none; font-weight: 700; cursor: pointer; font-family: var(--pc-font) }
+/* "More sharing options": the rarely used links, same rows, quieter. */
+.pc-share-more-btn { display: inline-flex; align-items: center; gap: 6px; margin-top: 14px; padding: 0; border: 0; background: none; color: var(--pc-link); font: 600 13.5px var(--pc-font); cursor: pointer }
 .pc-share-more-btn svg { transition: transform var(--pc-dur-fast) var(--pc-ease) }
-.pc-share-more { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; padding-top: 14px; border-top: 1px solid var(--pc-line) }
+.pc-share-more { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--pc-line) }
 .pc-share-row { display: flex; align-items: center; justify-content: space-between; gap: 12px }
-.pc-share-row--stack { margin-top: 6px }
-.pc-share-row-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13.5px; line-height: 1.4 }
-.pc-share-row-text b { font-weight: 600; color: var(--pc-text) }
-.pc-share-row-text span, .pc-share-row-note { font-size: 12.5px; color: var(--pc-text-muted); overflow-wrap: anywhere }
-.pc-share-row-text .pc-share-warn { color: var(--pc-warning) }
+.pc-share-row .pc-share-label { font-size: 13.5px; font-weight: 600 }
+.pc-share-hint.pc-share-warn { color: var(--pc-warning) }
 .pc-share-slug { display: flex; flex-direction: column; gap: 4px }
+.pc-share-link { display: flex; gap: 6px }
+.pc-share-url { flex: 1; min-width: 0; height: 32px; padding: 0 10px; border: 1px solid var(--pc-field); border-radius: 8px; background: var(--pc-bg); color: var(--pc-text); font: 400 13px var(--pc-font) }
+.pc-share-url:focus { outline: none; border-color: var(--pc-link); box-shadow: var(--pc-focus-ring) }
 
 /* Draft tag in the address bar, beside Save & share: where the action is, not a line under the grid. */
 .pc-draft-chip { flex: none; margin-right: 6px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .02em;
