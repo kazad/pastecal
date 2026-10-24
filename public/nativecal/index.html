@@ -43,6 +43,26 @@ Copyright (c) 2025 Kalid Azad
     <link rel="preconnect" href="https://unpkg.com">
     <link rel="preconnect" href="https://cdn.jsdelivr.net">
 
+    <!-- Analytics privacy: must run before Google Tag Manager (see the comment inside). -->
+    <script>
+        (function () {
+            if (window.__TEST__ || window.location.search.includes('no-analytics')) return;
+            window.dataLayer = window.dataLayer || [];
+            window.gtag = window.gtag || function () { window.dataLayer.push(arguments); };
+            // Never send a calendar's name to Google: the path IS the edit key (anyone holding
+            // pastecal.com/<name> can change that calendar), and every hit carries the page URL.
+            // Google sees a generic path (/, /view, /beta, /cal), the campaign params, and a referrer
+            // with pastecal's own paths removed. Set BEFORE the GTM snippet below queues gtm.js: the container's Google tag
+            // sends its page_view on that event, and commands are applied in dataLayer order.
+            var p = location.pathname, q = new URLSearchParams(location.search), keep = new URLSearchParams();
+            var generic = p === '/' ? '/' : /^\/view\//.test(p) ? '/view' : /^\/(beta|nativecal)(\/|$)/.test(p) ? '/beta' : '/cal';
+            q.forEach(function (v, k) { if (/^utm_[a-z]+$|^gclid$/.test(k)) keep.set(k, v); });
+            var ref = document.referrer;
+            try { if (ref && new URL(ref).host === location.host) ref = location.origin + '/'; } catch (e) { ref = ''; }
+            window.gtag('set', { page_location: location.origin + generic + (keep.toString() ? '?' + keep : ''), page_path: generic, page_referrer: ref });
+        })();
+    </script>
+
     <!-- Google Tag Manager -->
     <script>
         (function (w, d, s, l, i) {
@@ -74,10 +94,10 @@ Copyright (c) 2025 Kalid Azad
     <!-- Third-party libraries -->
     <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/date-fns@3.6.0/cdn.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/rrule@2.8.1/dist/es5/rrule.min.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-compat.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/date-fns@3.6.0/cdn.min.js" integrity="sha384-yzVjVsgM1C687v6dWwBp9XurYpqEHWfk39FYLcmjZkbneJ2hefxMNuv73FZOxcNx" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/rrule@2.8.1/dist/es5/rrule.min.js" integrity="sha384-/841P5sCxcfR/THAcUhWr9d8zrIF1TPFzXRz8YhqxlPKvyL3tA/Ns4ytyfN5/hZh" crossorigin="anonymous"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-compat.js" integrity="sha384-wZrK4b7F6nW2Jp4rrQ2D5NbLlGAyUvPfyrReLbqjf+DyXRvT/usqx3w5RO043g1Q" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js" integrity="sha384-jxA//jFtZ5wjn1SjXb0Sg82gt6EeMtPbRu/MsN+fkNRI1LXjgIZyPDRwKNJ09PKg" crossorigin="anonymous"></script>
     
     <script>
         // Served at /beta/<name> (the public beta: the v2 redesign) and /nativecal/<name>

@@ -57,6 +57,26 @@ Copyright (c) 2025 Kalid Azad
         })();
     </script>
 
+    <!-- Analytics privacy: must run before Google Tag Manager (see the comment inside). -->
+    <script>
+        (function () {
+            if (window.__TEST__ || window.location.search.includes('no-analytics')) return;
+            window.dataLayer = window.dataLayer || [];
+            window.gtag = window.gtag || function () { window.dataLayer.push(arguments); };
+            // Never send a calendar's name to Google: the path IS the edit key (anyone holding
+            // pastecal.com/<name> can change that calendar), and every hit carries the page URL.
+            // Google sees a generic path (/, /view, /beta, /cal), the campaign params, and a referrer
+            // with pastecal's own paths removed. Set BEFORE the GTM snippet below queues gtm.js: the container's Google tag
+            // sends its page_view on that event, and commands are applied in dataLayer order.
+            var p = location.pathname, q = new URLSearchParams(location.search), keep = new URLSearchParams();
+            var generic = p === '/' ? '/' : /^\/view\//.test(p) ? '/view' : /^\/(beta|nativecal)(\/|$)/.test(p) ? '/beta' : '/cal';
+            q.forEach(function (v, k) { if (/^utm_[a-z]+$|^gclid$/.test(k)) keep.set(k, v); });
+            var ref = document.referrer;
+            try { if (ref && new URL(ref).host === location.host) ref = location.origin + '/'; } catch (e) { ref = ''; }
+            window.gtag('set', { page_location: location.origin + generic + (keep.toString() ? '?' + keep : ''), page_path: generic, page_referrer: ref });
+        })();
+    </script>
+
     <!-- Google Tag Manager -->
     <script>
         (function (w, d, s, l, i) {
@@ -134,11 +154,11 @@ Copyright (c) 2025 Kalid Azad
     <script src="/vendor/syncfusion-23.2.6/ej2-calendar.min.js?v=1792797113" type="text/javascript"></script>
     <!-- Only the Firebase services the app uses (92 KB), not firebase-compat.js, which
          bundles every service (224 KB). Same version, same compat API; app must load first. -->
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-functions-compat.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js" integrity="sha384-Nc5ARm3RyW8KveEJE95Jpt7ImqwhlOwGfqVpFGgF4Ao//x1qi8KIDcSj+OLG4ekb" crossorigin="anonymous"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js" integrity="sha384-grmC0pfpaPqWq+qECwReRV8PH0JVnrRGo3iRC6FcVXv6Sv2EqgON68UDisDfj5tA" crossorigin="anonymous"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js" integrity="sha384-86kXGYkdFocjUe4AWPRLlnQjzMA29UWeFlyne4xC/mwpqoVrwkFrRC/mbWZdYsO7" crossorigin="anonymous"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-functions-compat.js" integrity="sha384-YX+6hxIHQIMMnbSpbqTfJY5YU9Vtodi1mVLyXsIdszTtaQjp2IVqLHz9q55z0Jmx" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js" integrity="sha384-jxA//jFtZ5wjn1SjXb0Sg82gt6EeMtPbRu/MsN+fkNRI1LXjgIZyPDRwKNJ09PKg" crossorigin="anonymous"></script>
 
     <!-- Firebase config -->
     <script>

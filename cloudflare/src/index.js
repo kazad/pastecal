@@ -23,6 +23,7 @@
 import { ICSService } from './ICSService.js';
 import { SlugService } from './SlugService.js';
 import { handleCollect } from './Collector.js';
+import { applySecurityHeaders } from './SecurityHeaders.js';
 export { CalendarRoom } from './CalendarRoom.js';
 export { CalendarDirectory } from './CalendarDirectory.js';
 export { Waitlist } from './Waitlist.js';
@@ -169,7 +170,8 @@ export default {
                 status: 200,
                 headers: {
                     'Content-Type': 'text/calendar; charset=utf-8',
-                    'Content-Disposition': `inline; filename="${actualSlug}.ics"`,
+                    // The name may hold quotes or non-ASCII ("TEAM NUÑEZ"): an ASCII fallback plus the RFC 5987 form.
+                    'Content-Disposition': `inline; filename="${actualSlug.replace(/[^A-Za-z0-9._-]/g, '_')}.ics"; filename*=UTF-8''${encodeURIComponent(actualSlug)}.ics`,
                     'ETag': etag,
                     'Cache-Control': 'public, max-age=300'
                 }
@@ -245,8 +247,19 @@ export default {
             const customSlug = payload?.customSlug;
             const dir = getDirectory(env);
             if (!dir) return Response.json({ ok: false, error: 'Directory unavailable' }, { status: 500 });
-            if (typeof sourceCalendarId !== 'string' || !validId(sourceCalendarId)) {
-                return withCors(Response.json({ ok: false, error: 'invalid-argument', message: 'sourceCalendarId is required' }, { status: 400 }));
+            const fail = (status, out) => withCors(Response.json(path === '/createPublicLink' ? { error: out } : out, { status }));
+
+            // Rate-limited per IP (its own key, so it never eats the budget for new calendars).
+            if (env.CREATE_LIMITER) {
+                const { success } = await env.CREATE_LIMITER.limit({ key: 'view:' + (request.headers.get('CF-Connecting-IP') || 'unknown') });
+                if (!success) return fail(429, { ok: false, error: 'resource-exhausted', message: 'Too many read-only links from here; try again in a minute' });
+            }
+            // Before anything is written: the source must be a real calendar, and a custom name must not
+            // be a calendar's name (rooms are exact-case, so check what was typed and its stored lowercase form).
+            const hasCalendar = async (name) => validId(name)
+                && (await env.CALENDARS.get(env.CALENDARS.idFromName(name)).fetch(`http://internal/cal/${encodeURIComponent(name)}`, { method: 'HEAD' })).status === 200;
+            if (typeof sourceCalendarId !== 'string' || !(await hasCalendar(sourceCalendarId))) {
+                return fail(404, { ok: false, error: 'not-found', message: 'Calendar not found' });
             }
             const room = env.CALENDARS.get(env.CALENDARS.idFromName(sourceCalendarId));
             // A locked calendar's read-only link is made only by its owner or an editor -- checked
@@ -256,8 +269,13 @@ export default {
                 body: JSON.stringify({ editorKey: payload?.editorKey, userId: await sessionUserId(request, env) }),
             })).json();
             if (access.locked && !access.canEdit) {
-                const err = { ok: false, error: 'locked', message: 'This calendar is locked. Only its owner and people with an editor key can change it.' };
-                return withCors(Response.json(path === '/createPublicLink' ? { error: err } : err, { status: 403 }));
+                return fail(403, { ok: false, error: 'locked', message: 'This calendar is locked. Only its owner and people with an editor key can change it.' });
+            }
+            if (customSlug) {
+                const typed = String(customSlug).trim();
+                for (const name of new Set([typed, typed.toLowerCase()])) {
+                    if (await hasCalendar(name)) return fail(409, { ok: false, error: 'already-exists', message: 'Slug is already taken' });
+                }
             }
 
             const dirRes = await dir.fetch('http://internal/create-view', {
@@ -386,6 +404,7 @@ export default {
         const indexable = url.hostname !== 'new.pastecal.com' && (path === '/' || path.startsWith('/view/'));
         if (indexable) out.headers.delete('X-Robots-Tag'); else out.headers.set('X-Robots-Tag', 'noindex');
         if (/\.(js|css|json)$/.test(path) || beta) out.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        applySecurityHeaders(out.headers, path);
         return out;
     },
 };

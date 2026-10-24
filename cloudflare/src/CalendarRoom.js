@@ -79,6 +79,9 @@ export const LIMITS = {
     maxMessage: 512 * 1024,      // one save message
     copyBackDelayMs: 3000,       // after the last save, before writing to Firebase
     maxCreate: 1024 * 1024,      // the body of a first save (POST /cal/<id>)
+    maxId: 200,                  // event id / recurrenceID; longest real: 38 (Oct 21 backup)
+    maxType: 64,                 // event type (category) when stored as text; real ones: "1".."8", "undefined"
+    maxCalendar: 2 * 1024 * 1024, // JSON chars of title + options + events; largest real: ~1.03 MB, 2,550 events (Oct 21 backup)
 };
 
 const json = (x) => JSON.stringify(x);
@@ -635,14 +638,28 @@ export class CalendarRoom extends DurableObject {
         ws.serializeAttachment({ ...tab, saves: mine });
         return null;
     }
-    tooBig(events) {
+    // `rows` are the events to check one by one: by default all of them, but a save checks only
+    // the rows it adds or changes, so an old row that predates a rule never locks a calendar out.
+    // The count and the total size always cover the whole calendar.
+    tooBig(events, { title = this.state.title, options = this.state.options, rows = events } = {}) {
         if (events.length > LIMITS.maxEvents) return `more than ${LIMITS.maxEvents} events`;
-        for (const e of events) {
+        for (const e of rows) {
+            if (!e || typeof e !== 'object') return 'an event is not an object';
             if ((e.title || '').length > LIMITS.maxTitle) return 'an event title is too long';
-            for (const f of ['description', 'recurrenceException', 'recurrencerule']) {
+            for (const f of ['description', 'recurrenceException', 'recurrencerule', 'repeat']) {
                 if ((e[f] || '').length > LIMITS.maxField) return `an event ${f} is too long`;
             }
+            for (const f of ['id', 'recurrenceID']) {
+                const v = e[f];
+                if (v !== undefined && v !== null && typeof v !== 'string' && typeof v !== 'number') return `an event ${f} is not text`;
+                if (String(v ?? '').length > LIMITS.maxId) return `an event ${f} is too long`;
+            }
+            const t = e.type;
+            if (t !== undefined && t !== null && typeof t !== 'number' && typeof t !== 'string') return 'an event type is not a number';
+            if (typeof t === 'string' && t.length > LIMITS.maxType) return 'an event type is too long';
         }
+        const size = json(title ?? '').length + json(options ?? {}).length + json(events).length;
+        if (size > LIMITS.maxCalendar) return `this calendar is too large (over ${LIMITS.maxCalendar / 1024 / 1024} MB)`;
         return null;
     }
 
@@ -675,7 +692,7 @@ export class CalendarRoom extends DurableObject {
             // X-PC-User is trusted: the Worker deletes any a client sent and sets it from a session.
             const att = { saves: [], isViewOnly, viewId, author, user: isViewOnly ? null : request.headers.get('X-PC-User') || null };
             server.serializeAttachment(att);
-            if (author && this.canWrite(att)) this.recordAuthor(author, false);
+            if (author && this.canWrite(att) && this.state.id) this.recordAuthor(author, false);   // a name nobody created stores nothing
             server.send(json(this.snapshotFor(att)));
             return new Response(null, { status: 101, webSocket: client });
         }
@@ -735,13 +752,14 @@ export class CalendarRoom extends DurableObject {
             // Whole-calendar replace: the Firebase shadow copy, and the one-time load.
             const cal = await request.json();
             const r = this.importCalendar(cal);
-            return Response.json(r, { status: r.status || 200 });
+            return Response.json(r, { status: r.status || (r.ok ? 200 : 413) });   // 423 locked, 413 a size limit
         }
         if (request.method === 'PUT' && suffix === 'from-firebase') {
             // A live Firebase write: merged onto the current state, never a blind replace.
             // Locked: refused with ok:false and an error, which the Firebase function logs and does not retry.
+            // Refused (a size limit): nothing is stored, and the caller is told why.
             const r = this.fromFirebase(await request.json());
-            return Response.json(r, { status: r.status || 200 });
+            return Response.json(r, { status: r.status || (r.ok ? 200 : 413) });
         }
         return new Response('not found', { status: 404 });
     }
@@ -801,7 +819,7 @@ export class CalendarRoom extends DurableObject {
         if (this.lock) return { ok: false, status: 423, error: 'locked' };
         cal = { ...cal, options: clientOptions(cal.options) };
         const { events, renamed } = this.dedupe(cal);
-        const why = this.tooBig(events);
+        const why = this.tooBig(events, { title: cal.title ?? '', options: cal.options || {} });
         if (why) return { ok: false, error: why };
         // Identical to what is stored: do nothing. This is what stops a two-way copy with
         // Firebase from bouncing one write back and forth forever (the Sep 26 shape).
@@ -897,7 +915,8 @@ export class CalendarRoom extends DurableObject {
             this.setMirrored(title, options, incoming);
             return done({ unchanged: true, v: s.v });
         }
-        const why = this.tooBig(list) || (nextTitle.length > LIMITS.maxTitle ? 'title too long' : null);
+        const why = this.tooBig(list, { title: nextTitle, options: nextOptions, rows: list.filter((e) => touched.has(EventStore.keyOf(e))) })
+            || (nextTitle.length > LIMITS.maxTitle ? 'title too long' : null);
         if (why) return { ok: false, error: why };                             // nothing stored
         const beforeEvents = s.events;
         const beforeTitle = s.title;
@@ -1091,8 +1110,14 @@ export class CalendarRoom extends DurableObject {
             return ws.send(json({ t: 'auth', ok: !!link, locked: !!this.lock, canEdit: this.canWrite(next), role: this.roleOf(next), ...(revoked ? { reason: 'link-revoked' } : {}) }));
         }
 
+        // A calendar is created only by POST /cal/<id> (rate-limited per IP in the Worker). A room
+        // nobody created takes no writes over the socket, and stores nothing -- not even an author.
+        if ((m.t === 'save' || m.t === 'meta') && !this.state.id) {
+            return refuse('no_calendar', 'this calendar does not exist; create it first');
+        }
+
         const author = m.author || tab.author;
-        if (author && this.canWrite(tab)) this.recordAuthor(author, false);
+        if (author && this.canWrite(tab) && this.state.id) this.recordAuthor(author, false);
 
         if (m.t === 'save' || m.t === 'meta') {
             const rate = this.overRate(ws);
@@ -1112,7 +1137,7 @@ export class CalendarRoom extends DurableObject {
             if (!result.added.length && !result.changed.length && !result.removed.length) {
                 return ws.send(json({ t: 'ack', id: m.id, v: this.state.v, unchanged: true }));
             }
-            const why = this.tooBig(result.events);
+            const why = this.tooBig(result.events, { rows: [...result.added, ...result.changed] });
             if (why) return refuse('too_big', why);
             const beforeEvents = this.state.events;
             const beforeTitle = this.state.title;
@@ -1130,16 +1155,21 @@ export class CalendarRoom extends DurableObject {
             const beforeEvents = s.events;
             const beforeTitle = s.title;
             const beforeOptions = s.options;
+            let nextTitle = s.title, nextOptions = s.options;
             if (typeof m.title === 'string' && m.title !== s.title) {
                 if (m.title.length > LIMITS.maxTitle) return refuse('too_big', 'title too long');
-                s.title = m.title; this.setMeta('title', s.title); changed = true;
+                nextTitle = m.title; changed = true;
             }
             if (m.options && typeof m.options === 'object') {
                 const next = { ...s.options, ...clientOptions(m.options) };   // keys merge (publicViewId survives)
                 if (json(next).length > LIMITS.maxField * 5) return refuse('too_big', 'settings too large');
-                if (json(next) !== json(s.options)) { s.options = next; this.setMeta('options', next); changed = true; }
+                if (json(next) !== json(s.options)) { nextOptions = next; changed = true; }
             }
             if (!changed) return ws.send(json({ t: 'ack', id: m.id, v: s.v, unchanged: true }));
+            const why = this.tooBig(s.events, { title: nextTitle, options: nextOptions, rows: [] });
+            if (why) return refuse('too_big', why);
+            if (nextTitle !== s.title) { s.title = nextTitle; this.setMeta('title', s.title); }
+            if (nextOptions !== s.options) { s.options = nextOptions; this.setMeta('options', s.options); }
             this.bump('meta', [{ type: 'meta', title: m.title, options: m.options }], { beforeEvents, beforeTitle, beforeOptions, writer: m.writer || author });
             ws.send(json({ t: 'ack', id: m.id, v: s.v }));
             this.broadcast({ t: 'meta', v: s.v, title: s.title, options: s.options }, ws);

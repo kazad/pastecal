@@ -40,7 +40,12 @@
     ]
   },
   // New calendars from browsers (POST /cal/<id>): 10 a minute per IP.
-  "ratelimits": [{ "name": "CREATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }],
+  // Telemetry (POST /api/collect): 60 batches a minute per IP. Its own limiter, not CREATE_LIMITER: 10 a
+  // minute would drop real telemetry from a school or office sharing one IP.
+  "ratelimits": [
+    { "name": "CREATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
+    { "name": "COLLECT_LIMITER", "namespace_id": "1002", "simple": { "limit": 60, "period": 60 } }
+  ],
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["CalendarRoom"] },
     { "tag": "v2", "new_sqlite_classes": ["CalendarDirectory"] },

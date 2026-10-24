@@ -13,7 +13,7 @@
 //   double1 ttfb_ms | double2 fcp_ms | double3 lcp_ms | double4 load_ms | double5 cls | double6 first_event_seconds | double7 count
 
 export const MAX_BODY_BYTES = 16 * 1024;
-export const MAX_EVENTS = 50;
+export const MAX_EVENTS = 20;           // the page sends at most 12 at a time (analytics.js BATCH_SIZE)
 
 const NAME = /^[a-z0-9_]{1,40}$/;
 const str = (v, n = 60) => (v == null ? '' : String(v).slice(0, n));
@@ -52,6 +52,12 @@ export async function handleCollect(request, env) {
     const done = new Response(null, { status: 204 });
     try {
         if (!env.EVENTS) return done;
+        // Per IP (COLLECT_LIMITER, wrangler.jsonc): a page sends one batch every ~10 s at most, so
+        // anything faster is not a person. Over the limit, the batch is dropped -- still a 204.
+        if (env.COLLECT_LIMITER) {
+            const { success } = await env.COLLECT_LIMITER.limit({ key: 'collect:' + (request.headers.get('CF-Connecting-IP') || 'unknown') });
+            if (!success) return done;
+        }
         const text = await request.text();
         if (text.length > MAX_BODY_BYTES) return done;
         const points = toDataPoints(JSON.parse(text), request.cf?.country);
