@@ -1107,7 +1107,17 @@ div#Schedule,
 .pc-home-split div#Schedule { min-height: 0 }
 .pc-home-split .e-quick-popup-wrapper { z-index: 20 }
 .pc-home-bar { display: flex; align-items: center; justify-content: space-between; padding: 6px 6px 6px 16px; border-bottom: 1px solid var(--pc-line); background: var(--pc-surface); font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--pc-text-muted) }
-.pc-home-body { padding: 20px 22px 24px; overflow: auto }
+.pc-home-body { padding: 20px 22px 24px; overflow: auto; display: flex; flex-direction: column; flex: 1 }
+/* A new visitor's guide has no title in its bar: the hide button floats in the corner instead. */
+.pc-home-bar--bare { position: absolute; top: 6px; right: 6px; padding: 0; border: 0; background: none }
+.pc-home-aside:has(.pc-home-bar--bare) { position: relative }
+.pc-home-aside:has(.pc-home-bar--bare) .pc-home-body { padding-top: 26px }
+.pc-home-aside:has(.pc-home-bar--bare) h1 { padding-right: 28px }
+/* Proof at the foot of the guide: real numbers and who makes it. */
+.pc-home-proof { margin: auto 0 0 !important; padding-top: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--pc-text-muted); border-top: 1px solid var(--pc-line) }
+.pc-home-proof strong { color: var(--pc-text) }
+.pc-home-proof a { color: inherit; text-decoration: underline; text-underline-offset: 2px }
+.pc-home-aside .pc-home-links { margin-bottom: 18px !important }
 .pc-home-aside .pc-home-draft { background: var(--pc-surface) }
 .pc-home-aside .pc-home-steps b { background: var(--pc-surface); border: 1px solid var(--pc-line) }
 .pc-home-recents { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px }

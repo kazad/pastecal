@@ -306,7 +306,7 @@ Copyright (c) 2025 Kalid Azad
 
                 <!-- Center: Title (absolutely centered) -->
                 <div class="absolute left-1/2 transform -translate-x-1/2 z-30 flex items-center gap-1">
-                    <calendar-title :title="calendar.title" :is-editing="editTitle" :is-read-only="isReadOnly"
+                    <calendar-title :title="calendar.title" :is-editing="editTitle" :is-read-only="isReadOnly" :heading="isHomepageCalendar ? 'div' : 'h1'"
                         mode="mobile" input-ref="mobileTitleInput" class="overflow-hidden max-w-[120px]" :class="{ 'pc-title-fit': lock.locked }"
                         @update:title="calendar.title = $event" @click="editTitle = true" @blur="editTitle = false"
                         @enter="editTitle = false">
@@ -492,7 +492,7 @@ Copyright (c) 2025 Kalid Azad
                 v-cloak v-if="!isLoading">
                 <custom-tooltip width="w-auto" align="center" v-if="!editTitle && !isReadOnly">
                     <template #trigger>
-                        <calendar-title :title="calendar.title" :is-editing="editTitle" :is-read-only="isReadOnly"
+                        <calendar-title :title="calendar.title" :is-editing="editTitle" :is-read-only="isReadOnly" :heading="isHomepageCalendar ? 'div' : 'h1'"
                             mode="desktop" input-ref="desktopTitleInput" @update:title="calendar.title = $event"
                             @click="editTitle = true" @blur="editTitle = false" @enter="setTitle($event)">
                         </calendar-title>
@@ -1366,7 +1366,7 @@ Copyright (c) 2025 Kalid Azad
 
         <!-- Homepage only, narrow screens: what this is, before the calendar. -->
         <p v-if="isHomepageCalendar" class="pc-home-line" v-cloak>
-            <strong>No-login shared calendars.</strong> Tap a day to add an event, then press Save &amp; share for the link. <a href="/view/demo" data-from="home-line">See a demo</a> · <a href="#how">How it works&nbsp;↓</a>
+            <strong>A shared calendar in one link.</strong> No sign-up. Tap a day to add an event, then press Save &amp; share. <a href="/view/demo" data-from="home-line">See a demo</a> · <a href="#how">How it works&nbsp;↓</a>
         </p>
 
         <!-- On the homepage at 1100px+, the calendar takes two thirds and the pitch the rest. Elsewhere
@@ -1389,7 +1389,7 @@ Copyright (c) 2025 Kalid Azad
             </p>
             </div>
             <aside v-if="isHomepageCalendar && !homeAsideHidden" class="pc-home-aside" data-testid="home-aside" v-cloak>
-                <div class="pc-home-bar"><span>{{ homeRecents.length ? 'Your calendars' : 'Getting started' }}</span><button type="button" class="pc-home-hide" @click="toggleHomeAside" aria-label="Hide guide" title="Hide guide"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m8 9 3 3-3 3"/></svg></button></div>
+                <div class="pc-home-bar" :class="{ 'pc-home-bar--bare': !homeRecents.length }"><span>{{ homeRecents.length ? 'Your calendars' : '' }}</span><button type="button" class="pc-home-hide" @click="toggleHomeAside" aria-label="Hide guide" title="Hide guide"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m8 9 3 3-3 3"/></svg></button></div>
                 <div class="pc-home-body">
                 <!-- Returning visitors: jump back into a recent calendar instead of reading the intro. -->
                 <template v-if="homeRecents.length">
@@ -1406,19 +1406,17 @@ Copyright (c) 2025 Kalid Azad
                     <p class="pc-home-draft">This calendar is a draft, saved only in this browser until you press Save &amp; share.</p>
                 </template>
                 <template v-else>
-                <h1>No-login shared calendars that keep everyone on the same schedule</h1>
-                <p class="pc-home-lead">Add events, send one link, and everyone sees every change.</p>
+                <h1>A shared calendar in one link</h1>
+                <p class="pc-home-lead">No sign-up, nothing to install. Everyone sees every change.</p>
                 <ol class="pc-home-steps">
                     <li><b>1</b><span>Click a day and type an event.</span></li>
-                    <li><b>2</b><span>Press <strong>Save &amp; share</strong> to get your links.</span></li>
-                    <li><b>3</b><span>Send the read-only link to your group.</span></li>
+                    <li><b>2</b><span>Press <strong>Save &amp; share</strong>.</span></li>
+                    <li><b>3</b><span>Send the link to your group.</span></li>
                 </ol>
-                <ul class="pc-home-nots" aria-label="What you skip">
-                    <li>Nothing to install</li><li>No sign-up</li><li>No password to reset</li><li>No permissions to set</li>
-                </ul>
-                <p class="pc-home-draft">This calendar is a draft, saved only in this browser until you press Save &amp; share.</p>
+                <p class="pc-home-draft">Until you press Save &amp; share, this calendar is saved only in this browser.</p>
                 </template>
                 <p class="pc-home-links"><a class="pc-home-more" href="/view/demo" data-from="home-panel">See a demo calendar →</a><a class="pc-home-more" href="#how">How pastecal works ↓</a></p>
+                <p v-if="!homeRecents.length" class="pc-home-proof"><span><strong>3,000+</strong> calendars made</span><span><strong>1,200+</strong> people a week</span><span>Made by <a href="https://betterexplained.com/about/" target="_blank" rel="noopener">Kalid Azad</a> of BetterExplained</span></p>
                 </div>
             </aside>
         </div>

@@ -4,11 +4,11 @@ const CalendarTitle = {
     template: /* html */ `
         <div class="w-full text-center">
             <!-- Show title ("New calendar" for new calendars; see Calendar.displayTitle) -->
-            <h1 v-if="!isEditing"
+            <component :is="heading" v-if="!isEditing"
                 @click="handleTitleClick"
                 :class="titleClasses">
                 {{ displayTitle }}
-            </h1>
+            </component>
             <!-- Edit mode input -->
             <input v-if="isEditing"
                 type="text"
@@ -33,6 +33,12 @@ const CalendarTitle = {
         inputRef: {
             type: String,
             default: 'titleInput'
+        },
+        // The page's main heading, except on the homepage, where the draft's "New calendar" is
+        // not what the page is about (the guide's headline is the h1 there).
+        heading: {
+            type: String,
+            default: 'h1'
         }
     },
     emits: ['update:title', 'blur', 'enter', 'click'],
