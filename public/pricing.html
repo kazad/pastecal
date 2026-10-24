@@ -130,6 +130,29 @@ details p { color: var(--muted); margin: 8px 0 0 }
   .plan.pro { order: -1 }
 }
 </style>
+<!-- Analytics, as on the calendar pages (index.html): GA4 and Clarity through GTM. Off in tests,
+     with ?no-analytics, and on preview.pastecal.com. Google gets /pricing and campaign params
+     only, and a referrer from pastecal itself becomes the bare origin, because a calendar's
+     path is its edit key. Calendar names and the paste box are masked in recordings. -->
+<script>
+(function (w, d) {
+  if (w.__TEST__ || w.location.search.includes('no-analytics') || w.location.hostname === 'preview.pastecal.com') return;
+  w.dataLayer = w.dataLayer || [];
+  w.gtag = w.gtag || function () { w.dataLayer.push(arguments); };
+  var q = new URLSearchParams(location.search), keep = new URLSearchParams();
+  q.forEach(function (v, k) { if (/^utm_[a-z]+$|^gclid$/.test(k)) keep.set(k, v); });
+  var ref = d.referrer;
+  try { if (ref && new URL(ref).host === location.host) ref = location.origin + '/'; } catch (e) { ref = ''; }
+  w.gtag('set', { page_location: location.origin + '/pricing' + (keep.toString() ? '?' + keep : ''), page_path: '/pricing', page_referrer: ref });
+  w.dataLayer.push({ 'gtm.start': new Date().getTime(), event: 'gtm.js' });
+  var add = function (src) { var s = d.createElement('script'); s.async = true; s.src = src; d.head.appendChild(s); };
+  add('https://www.googletagmanager.com/gtm.js?id=GTM-WTP9VTM');
+  // gtag.js for the custom events (utils/analytics.js); GTM already sends the page view.
+  add('https://www.googletagmanager.com/gtag/js?id=G-4J99GY9KE6');
+  w.gtag('js', new Date());
+  w.gtag('config', 'G-4J99GY9KE6', { send_page_view: false });
+})(window, document);
+</script>
 </head>
 <body>
 <header class="site">
@@ -205,11 +228,11 @@ details p { color: var(--muted); margin: 8px 0 0 }
       <label class="interval on"><input type="radio" name="interval" value="year" checked><span><b>$24 a year</b> <em>Save 33%</em></span></label>
       <label class="interval"><input type="radio" name="interval" value="month"><span><b>$2.99 a month</b></span></label>
     </div>
-    <div id="pickCals" hidden>
+    <div id="pickCals" hidden data-clarity-mask="true" data-hj-suppress>
       <h3 class="pick-h">Your calendars on this device</h3>
       <ul class="pick-list" id="pickList"></ul>
     </div>
-    <form class="pick-paste" id="pasteForm" novalidate>
+    <form class="pick-paste" id="pasteForm" novalidate data-clarity-mask="true" data-hj-suppress>
       <label for="calLink" id="pasteLabel">Paste your calendar's link</label>
       <div class="pick-row">
         <input id="calLink" type="url" inputmode="url" autocomplete="off" placeholder="pastecal.com/your-calendar">
@@ -273,7 +296,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
     <form id="waitForm" novalidate>
       <div class="field">
         <label for="email">Email</label>
-        <input type="email" id="email" name="email" required placeholder="you@example.com" autocomplete="email">
+        <input type="email" data-clarity-mask="true" data-hj-suppress id="email" name="email" required placeholder="you@example.com" autocomplete="email">
       </div>
       <div class="formrow">
         <div class="field">

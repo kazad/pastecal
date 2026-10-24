@@ -469,6 +469,13 @@ const CalendarVueApp = {
             // User has edit permissions (defensive boolean coercion)
             return !Boolean(this.isReadOnly);
         },
+        // Who is looking, as a Clarity recording label: owner (signed-in Pro owner), viewer
+        // (view link or a locked calendar), editor (can change it), new (the homepage calendar).
+        recordingRole() {
+            if (this.proOwner) return 'owner';
+            if (this.isReadOnly) return 'viewer';
+            return this.isHomepageCalendar ? 'new' : 'editor';
+        },
         // Pro trims pastecal's branding from what visitors see (view links, embeds, a locked
         // calendar's read-only face) to the "Made with pastecal" footer. The owner's own editing UI keeps it.
         hideBranding() {
@@ -1619,6 +1626,10 @@ const CalendarVueApp = {
                 if (!locked) { this.proOwner = false; return; }
                 this.refreshProOwner();
             },
+        },
+        recordingRole: {
+            handler(role) { track(a => a.tag('role', role)); },
+            immediate: true,
         },
         // The owner's first visit after locking: say once what changed, and where the editor link is.
         proOwner(isOwner) {

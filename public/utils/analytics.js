@@ -67,6 +67,19 @@ const Analytics = {
             Analytics.queue(name, params);
         },
 
+        /**
+         * Microsoft Clarity (loaded by GTM, project fu7pi5a92j). Each event becomes a Clarity
+         * custom event, so recordings and heatmaps can be filtered by it and the buying steps
+         * form a funnel. Names only: params stay with GA4 and /api/collect. A few moments
+         * also 'upgrade' the session so Clarity keeps that recording even when it samples.
+         * Calls before Clarity loads wait in the queue its own snippet drains (stub below).
+         */
+        clarity(name) {
+            if (typeof window.clarity !== 'function') return;
+            window.clarity('event', name);
+            if (Analytics.CLARITY_KEEP.includes(name)) window.clarity('upgrade', name);
+        },
+
         // Visible in devtools when debugging instrumentation.
         console(name, params) {
             if (Analytics.debug) console.log('[analytics]', name, params);
@@ -74,7 +87,21 @@ const Analytics = {
     },
 
     // Which sinks are live. Order is irrelevant; all are best-effort.
-    active: ['ga4', 'http', 'console'],
+    active: ['ga4', 'clarity', 'http', 'console'],
+
+    // Sessions Clarity should always keep: the paid funnel and the editor leak.
+    CLARITY_KEEP: ['pricing_getpro_picked', 'pro_lock_shown', 'pro_checkout_started', 'pro_checkout_failed', 'editor_abandoned'],
+
+    /**
+     * Label this visit's recording in Clarity (filters: hv, page, role). Values must be a few
+     * fixed words; never a calendar name or anything typed, since a calendar's path is its key.
+     */
+    tag(key, value) {
+        try {
+            if (!this.enabled || typeof window.clarity !== 'function') return;
+            window.clarity('set', key, String(value));
+        } catch (e) { /* observational only */ }
+    },
 
     COLLECTOR_URL: '/api/collect',
     debug: false,
@@ -220,6 +247,7 @@ const Analytics = {
                 try { localStorage.setItem('pc_hv', v); } catch (e) { /* in-memory for this visit */ }
             }
             this._hv = v;
+            this.tag('hv', v);
             if (typeof window.gtag === 'function') window.gtag('set', 'user_properties', { homepage_variant: v });
             return v;
         } catch (err) {
@@ -231,7 +259,7 @@ const Analytics = {
     loadHomepageVariant() {
         try {
             const v = localStorage.getItem('pc_hv');
-            if (this.HOMEPAGE_VARIANTS.includes(v)) this._hv = v;
+            if (this.HOMEPAGE_VARIANTS.includes(v)) { this._hv = v; this.tag('hv', v); }
         } catch (e) { /* storage blocked */ }
     },
 
@@ -534,6 +562,11 @@ if (typeof window !== 'undefined') {
     if (window.location.search.includes('debug-analytics')) {
         Analytics.debug = true;
     }
+    // Clarity's queue, the same stub its snippet defines: events and tags sent before GTM
+    // loads Clarity wait here, and Clarity drains them. Only where analytics is on.
+    if (Analytics.enabled && typeof window.clarity !== 'function') {
+        window.clarity = function () { (window.clarity.q = window.clarity.q || []).push(arguments); };
+    }
 
     // Flush on page-hide. `visibilitychange` is the only event that fires reliably
     // on mobile Safari (which often skips `unload`/`beforeunload` entirely), and
@@ -548,6 +581,10 @@ if (typeof window !== 'undefined') {
     }
 
     Analytics.loadHomepageVariant();
+    // The page kind, never the path: a calendar's path is its edit key.
+    const path = window.location.pathname;
+    Analytics.tag('page', path === '/' ? 'home' : /^\/pricing/.test(path) ? 'pricing' : /^\/view\//.test(path) ? 'view'
+        : /^\/(beta|nativecal)(\/|$)/.test(path) ? 'beta' : 'calendar');
     window.Analytics = Analytics;
 
     // Real-user page speed, one `page_perf` event per page view, sent when the page is
