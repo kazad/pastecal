@@ -42,7 +42,8 @@ function r2get(key) {
 const waitFor = async (pred, ms = 15000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { const v = await pred(); if (v) return v; await sleep(400); } return null; };
 const cal = async (id) => (await fetch(`${BASE}/cal/${enc(id)}`)).json();
 function tab(id, headers) {
-    const ws = new WebSocket(BASE.replace(/^http/, 'ws') + `/cal/${enc(id)}/ws`, headers ? { headers } : undefined); const got = [];
+    // Session cookies count on a socket only with a pastecal (dev: localhost) Origin, as a browser sends.
+    const ws = new WebSocket(BASE.replace(/^http/, 'ws') + `/cal/${enc(id)}/ws`, headers ? { headers: { Origin: BASE, ...headers } } : undefined); const got = [];
     ws.addEventListener('message', (e) => got.push(JSON.parse(e.data)));
     const wait = async (pred) => { for (let i = 0; i < 300; i++) { const m = got.find(pred); if (m) return m; await sleep(20); } throw new Error('timed out: ' + JSON.stringify(got.slice(-2))); };
     let k = 0;
