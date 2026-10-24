@@ -22,6 +22,7 @@ const AccountMenu = {
         error: '',        // a short message for the section, never blocking the menu
         shown: false,     // accountMenuShown fires once per page
         retry: false,     // /api/me failed (not a 401): fetch again on the next open
+        confirmDelete: false, // "Delete account" pressed: asking to confirm
     }),
     async api(method, path, body) {
         const init = { method, credentials: 'same-origin', headers: {} };
@@ -56,7 +57,7 @@ const AccountMenu = {
     },
     // Someone signed in or out elsewhere on the page (the share dialog): fetch again next open.
     reset() {
-        Object.assign(this.state, { status: 'idle', me: null, step: 'idle', busy: false, error: '', retry: false });
+        Object.assign(this.state, { status: 'idle', me: null, step: 'idle', busy: false, error: '', retry: false, confirmDelete: false });
     },
 };
 if (typeof window !== 'undefined') window.AccountMenu = AccountMenu;
@@ -156,10 +157,20 @@ const NavigationDropdown = {
                         <button type="button" class="pc-acct-btn" @click="portal" :disabled="acct.busy" data-testid="account-billing">Manage billing</button>
                         <button type="button" class="pc-acct-link" @click="signOut" :disabled="acct.busy" data-testid="account-signout">Sign out</button>
                     </div>
+                    <!-- Asked in place, not with confirm(): a browser dialog would also close the menu -->
+                    <div v-if="acct.confirmDelete" class="pc-acct-delete" data-testid="account-delete-confirm">
+                        <p class="pc-acct-line">Delete your Pro account? This signs you out on every device and erases your email. Your calendars and their links stay as they are.</p>
+                        <div class="pc-acct-actions">
+                            <button type="button" class="pc-acct-btn pc-acct-btn--danger" @click="deleteAccount" :disabled="acct.busy" data-testid="account-delete-yes">{{ acct.busy ? 'Deleting…' : 'Delete account' }}</button>
+                            <button type="button" class="pc-acct-link" @click="acct.confirmDelete = false" :disabled="acct.busy" data-testid="account-delete-no">Cancel</button>
+                        </div>
+                    </div>
+                    <button v-else type="button" class="pc-acct-link pc-acct-line pc-acct-delete-link" @click="acct.confirmDelete = true; acct.error = ''" :disabled="acct.busy" data-testid="account-delete">Delete account</button>
                 </template>
 
                 <template v-else-if="acct.status === 'out'">
-                    <p v-if="acct.step === 'sent'" class="pc-acct-ok pc-acct-line" data-testid="account-sent">Check your email for a sign-in link.</p>
+                    <p v-if="acct.step === 'deleted'" class="pc-acct-ok pc-acct-line" data-testid="account-deleted">Your account is deleted.</p>
+                    <p v-else-if="acct.step === 'sent'" class="pc-acct-ok pc-acct-line" data-testid="account-sent">Check your email for a sign-in link.</p>
                     <form v-else-if="acct.step === 'email'" class="pc-acct-form" @submit.prevent="sendLink" data-testid="account-email-form">
                         <label for="pc-acct-email" class="pc-acct-muted">Use the email you paid with. No password.</label>
                         <div class="pc-acct-row">
@@ -263,6 +274,26 @@ const NavigationDropdown = {
                 AccountMenu.track(a => a.accountSignedOut());
                 st.step = 'idle';
                 await AccountMenu.load(true);
+            } finally { st.busy = false; }
+        },
+        // POST /api/account/delete. Refused (409) while a subscription is still running, including one
+        // canceled but paid up to the end of its period: Stripe could charge someone who can't sign in.
+        async deleteAccount() {
+            const st = this.acct;
+            st.error = ''; st.busy = true;
+            try {
+                const r = await AccountMenu.api('POST', '/api/account/delete', {});
+                if (r.status === 200) {
+                    st.confirmDelete = false;
+                    AccountMenu.track(a => a.accountSignedOut());
+                    await AccountMenu.load(true);
+                    st.step = 'deleted';
+                    return;
+                }
+                st.confirmDelete = false;
+                if (r.status === 409) st.error = 'You still have Pro on a calendar. Cancel it in Manage billing; you can delete your account once it has ended.';
+                else if (r.status === 401) await AccountMenu.load(true);
+                else st.error = r.status === 0 ? NAV_NETWORK_ERROR : 'Something went wrong. Try again in a minute.';
             } finally { st.busy = false; }
         },
     }

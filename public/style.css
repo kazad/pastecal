@@ -1048,6 +1048,10 @@ div#Schedule,
 @media (max-width: 640px) { .pc-acct-row input { font-size: var(--pc-fs-lead) } }   /* 16px: iOS zooms smaller fields */
 .pc-acct-row input:focus { outline: none; border-color: var(--pc-link); box-shadow: 0 0 0 1px var(--pc-link) }
 .pc-acct-ok { color: var(--pc-success) }
+.pc-acct-delete-link { margin-top: var(--pc-space-2) }
+.pc-acct-delete { margin-top: var(--pc-space-2); padding-top: var(--pc-space-2); border-top: 1px solid var(--pc-field) }
+.pc-acct-btn--danger { border-color: var(--pc-danger); background: var(--pc-danger); color: #fff }
+.pc-acct-btn--danger:hover:not(:disabled) { background: color-mix(in srgb, var(--pc-danger) 85%, #000) }
 .pc-acct-err { margin: var(--pc-space-1) 0 0; color: var(--pc-danger); line-height: var(--pc-lh-tight) }
 .pc-home-links { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0 }
 .pc-demo-code { color: inherit; text-decoration: underline; text-decoration-color: var(--pc-line); text-underline-offset: 3px }
