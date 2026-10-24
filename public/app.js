@@ -502,7 +502,7 @@ const CalendarVueApp = {
         // Headline and lead for the homepage pitch. One version for now; a later test adds more,
         // keyed by experiment variant.
         tourCopy() {
-            return { title: 'Shared calendars. No login.',
+            return { title: 'The shared calendar nobody has to sign up for.',
                      lead: 'Add events, send one link, and everyone sees every change. Nothing to sign up for, nothing to install.' };
         }
     },

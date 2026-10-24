@@ -1087,7 +1087,7 @@ div#Schedule,
 }
 .pc-home-aside h1 { margin: 0 0 14px; font-size: 36px; line-height: 1.06; font-weight: 900; letter-spacing: -.02em; color: var(--pc-text); text-wrap: balance }
 /* The highlighter: one phrase only. Yellow in both themes, dark text on it. */
-.pc-hl { background: linear-gradient(transparent 55%, #ffe066 55%, #ffe066 92%, transparent 92%); color: inherit; padding: 0 4px; margin-left: -4px; -webkit-box-decoration-break: clone; box-decoration-break: clone }
+.pc-hl { background: linear-gradient(transparent 55%, #ffe066 55%, #ffe066 92%, transparent 92%); color: inherit; padding: 0 4px; margin-left: -4px; white-space: nowrap }
 :root[data-theme="dark"] .pc-hl { background: linear-gradient(transparent 55%, #8a6d00 55%, #8a6d00 92%, transparent 92%) }
 .pc-home-lead { margin: 0 0 20px; font-size: 17px; line-height: 1.5; color: var(--pc-text-muted) }
 .pc-home-steps { list-style: none; margin: 0 0 18px; padding: 0; display: grid; gap: 10px }
@@ -1608,3 +1608,24 @@ button:hover > .pc-add-event {
 .e-schedule .e-vertical-view .e-appointment { border: 0 !important; border-radius: 8px !important; box-shadow: 0 0 0 1px var(--pc-bg) !important }
 .e-schedule .e-vertical-view .e-appointment .e-subject { font-weight: 600 !important; font-size: 12.5px !important }
 .e-schedule .e-vertical-view .e-all-day-cells { background: var(--pc-bg) !important; border-color: var(--pc-line) !important }
+
+/* "How to share it": three still product scenes in the tour's style (no motion: the tour above moves). */
+.pc-share-scene { height: 150px; gap: 0 }
+.pc-ss-win { width: 296px; border: 1px solid var(--pc-line); border-radius: 10px; background: var(--pc-bg); box-shadow: var(--art-shadow); overflow: hidden }
+.pc-ss-bar { padding: 6px 10px; font-size: 10.5px; color: var(--pc-text-muted); border-bottom: 1px solid var(--pc-line) }
+.pc-ss-bar b { color: var(--pc-text) }
+.pc-ss-row { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)) }
+.pc-ss-row i { overflow: visible; height: 62px; padding: 4px 3px; border-right: 1px solid var(--pc-line); font-size: 9px; font-weight: 600; color: var(--pc-text-2); min-width: 0 }
+.pc-ss-row i:last-child { border-right: 0 }
+.pc-ss-row em, .pc-ss-phone em { display: block; margin-top: 4px; padding: 3px 5px; border-radius: 4px; font-size: 9px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: clip }
+.pc-ss-adding { position: relative; z-index: 1; width: max-content; overflow: visible !important; border: 1.5px dashed var(--pc-link); color: var(--pc-link); background: color-mix(in srgb, var(--pc-link) 12%, var(--pc-bg)) }
+.pc-ss-phone { width: 150px; padding: 10px 10px 12px; border: 1px solid var(--pc-line); border-radius: 18px; background: var(--pc-bg); box-shadow: var(--art-shadow); display: flex; flex-direction: column }
+.pc-ss-app { width: 200px; border-radius: 14px }
+.pc-ss-title { font-size: 10.5px; font-weight: 800; margin-bottom: 2px }
+.pc-ss-day { margin-top: 6px; font-size: 8.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--pc-text-muted) }
+.pc-ss-phone em small { font-size: 8px; font-weight: 600; opacity: .85; margin-left: 4px }
+.pc-ss-c3 { background: var(--pc-event-11); color: #fff }
+.pc-ss-mine { background: var(--pc-soft); color: var(--pc-text-2) !important; border: 1px solid var(--pc-line) }
+.pc-ss-badge { position: absolute; right: 14px; bottom: 12px; display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 999px; background: var(--pc-link); color: var(--pc-on-accent); font-size: 11px; font-weight: 700; box-shadow: 0 4px 12px -4px rgba(0,0,0,.35) }
+.pc-ss-badge svg { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round }
+.pc-ss-ok { background: var(--pc-success) }
