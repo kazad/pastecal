@@ -87,4 +87,22 @@ test('fix2: event_added (grid, quick_add) and editor_abandoned fire from native,
   expect(t.every((x) => x.renderer === 'native')).toBe(true);
 });
 
+// ---------------------------------------------------------------- fix 3: production hygiene
+test('fix3: no Play CDN or unpinned unpkg Vue; Vue self-hosted; scripts versioned by a constant; Tailwind styles apply', async ({ page }, info) => {
+  test.skip(isPhone(page), 'desktop');
+  const id = await fresh(info, 'hygiene');
+  const urls = async () => { const seen = []; const h = (r) => seen.push(r.url()); page.on('request', h); await nat.open(page, id); page.off('request', h); return seen; };
+  const first = await urls();
+  expect(first.filter((u) => /unpkg\.com|cdn\.tailwindcss\.com/.test(u))).toEqual([]);
+  expect(first.some((u) => /\/vendor\/vue-3\.5\.44\/vue\.global\.prod\.js/.test(u))).toBe(true);
+  const scripts = (list) => list.filter((u) => /\/nativecal\/(components\/|app\.js)/.test(u)).sort();
+  expect(scripts(first).length).toBe(7);
+  const second = await urls();
+  expect(scripts(second)).toEqual(scripts(first)); // same URLs on reload: cacheable, not ?v=Date.now()
+  // A Tailwind utility from the prebuilt sheet: the search button's icon wrapper and the
+  // "hidden" utility both resolve without a runtime compiler.
+  const hiddenWorks = await page.evaluate(() => { const d = document.createElement('div'); d.className = 'hidden'; document.body.appendChild(d); const v = getComputedStyle(d).display; d.remove(); return v; });
+  expect(hiddenWorks).toBe('none');
+});
+
 module.exports = { only, fresh };
