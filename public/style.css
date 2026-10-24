@@ -979,6 +979,23 @@ div#Schedule,
   .pc-tour-steps, .pc-tour-links, .pc-tour-faq { grid-template-columns: minmax(0, 1fr) }
   .pc-tour-inner { padding: 36px 16px 44px }
 }
+/* After the three steps: start here, or look at a real one. */
+.pc-tour-cta { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 22px; margin-top: 28px !important }
+.pc-tour-cta a { font-weight: 600; color: var(--pc-link) }
+.pc-tour-cta .pc-tour-start { background: var(--pc-link); color: var(--pc-on-accent); padding: 10px 18px; border-radius: 999px; text-decoration: none }
+.pc-tour-cta .pc-tour-start:hover { filter: brightness(1.08) }
+/* Why pastecal: what other calendars make you do, and what this one doesn't. */
+.pc-tour-why-lead { font-size: 19px; color: var(--pc-text) !important; max-width: 62ch; margin: 0 0 18px !important }
+.pc-tour-why-list { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px }
+.pc-tour-why-list li { background: var(--pc-surface, var(--pc-bg)); border: 1px solid var(--pc-line); border-radius: 12px; padding: 16px 18px }
+.pc-tour-why-list h4 { margin: 0 0 4px; font-size: 16px; font-weight: 600; color: var(--pc-text) }
+.pc-tour-why-list p { margin: 0; font-size: 14px; line-height: 1.5; color: var(--pc-text-muted) }
+.pc-tour-why-list code { font-size: 13px; color: var(--pc-text); background: var(--pc-soft); padding: 1px 6px; border-radius: 6px; white-space: nowrap }
+.pc-tour-why-list code i { color: var(--pc-link); font-style: normal; font-weight: 600 }
+.pc-tour-proof { margin: 18px 0 0 !important; font-size: 15px; color: var(--pc-text-muted) }
+.pc-tour-proof strong { color: var(--pc-text); font-size: 17px }
+@media (max-width: 860px) { .pc-tour-why-list { grid-template-columns: 1fr 1fr } }
+@media (max-width: 520px) { .pc-tour-why-list { grid-template-columns: 1fr } }
 .pc-tour-trust { list-style: none; padding: 0; margin: 14px 0 0; display: flex; flex-wrap: wrap; gap: 6px 22px; font-size: 15px; color: var(--pc-text-muted) }
 .pc-tour-trust li::before { content: "✓ "; color: var(--pc-success) }
 .pc-tour-maker { margin: 18px 0 0; font-size: 14px }
@@ -1073,7 +1090,7 @@ div#Schedule,
 .pc-home-steps li { display: grid; grid-template-columns: 24px 1fr; gap: 10px; align-items: center; font-size: 15px; color: var(--pc-text) }
 .pc-home-steps b { width: 24px; height: 24px; border-radius: 50%; background: var(--pc-soft); color: var(--pc-link); display: grid; place-items: center; font-size: 12px; font-weight: 700 }
 .pc-home-nots { list-style: none; margin: 0 0 18px; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; font-size: 14px; color: var(--pc-text-muted) }
-.pc-home-nots li::before { content: "✕"; color: #c2410c; font-size: 11px; margin-right: 7px }
+.pc-home-nots li::before { content: "✓"; color: var(--pc-success); font-size: 12px; font-weight: 700; margin-right: 7px }
 .pc-home-draft { margin: 0 0 14px; padding: 10px 12px; border: 1px solid var(--pc-line); border-radius: 10px; background: var(--pc-surface); font-size: 13.5px; line-height: 1.45; color: var(--pc-text-muted) }
 .pc-home-more { font-size: 15px; font-weight: 600; color: var(--pc-link) }
 .pc-intro-short { display: none }

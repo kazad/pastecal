@@ -2131,7 +2131,7 @@ const CalendarVueApp = {
                 return;
             }
             track(a => a.featureUsed && a.featureUsed('locked_copy'));
-            window.location.href = '/?from=locked-copy';
+            window.location.href = '/';
         },
 
         saveLocalStorage() {
@@ -4699,6 +4699,12 @@ const CalendarVueApp = {
          * ids, and leaves every other event as it is now (the old snapshot restore could
          * revert someone else's edit made in between).
          */
+        // The tour's "Start your calendar": back up to the calendar, whose first-event hint says what to do.
+        startFromTour() {
+            track(a => a.featureUsed('tour_start'));
+            window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+        },
+
         offerUndo(message) {
             this.showToast(message, 'info', {
                 actionLabel: 'Undo',

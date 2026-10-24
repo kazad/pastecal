@@ -1366,7 +1366,7 @@ Copyright (c) 2025 Kalid Azad
 
         <!-- Homepage only, narrow screens: what this is, before the calendar. -->
         <p v-if="isHomepageCalendar" class="pc-home-line" v-cloak>
-            <strong>No-login shared calendars.</strong> Tap a day to add an event, then press Save &amp; share for the link. <a href="/view/demo?from=home-line">See a demo</a> · <a href="#how">How it works&nbsp;↓</a>
+            <strong>No-login shared calendars.</strong> Tap a day to add an event, then press Save &amp; share for the link. <a href="/view/demo" data-from="home-line">See a demo</a> · <a href="#how">How it works&nbsp;↓</a>
         </p>
 
         <!-- On the homepage at 1100px+, the calendar takes two thirds and the pitch the rest. Elsewhere
@@ -1418,7 +1418,7 @@ Copyright (c) 2025 Kalid Azad
                 </ul>
                 <p class="pc-home-draft">This calendar is a draft, saved only in this browser until you press Save &amp; share.</p>
                 </template>
-                <p class="pc-home-links"><a class="pc-home-more" href="/view/demo?from=home-panel">See a demo calendar →</a><a class="pc-home-more" href="#how">How pastecal works ↓</a></p>
+                <p class="pc-home-links"><a class="pc-home-more" href="/view/demo" data-from="home-panel">See a demo calendar →</a><a class="pc-home-more" href="#how">How pastecal works ↓</a></p>
                 </div>
             </aside>
         </div>
@@ -1431,7 +1431,7 @@ Copyright (c) 2025 Kalid Azad
                      section opens with its own plain title instead of repeating it. -->
                 <h2 id="pc-tour-title" class="pc-intro-full">{{ tourCopy.title }}</h2>
                 <p class="pc-tour-lead pc-intro-full">{{ tourCopy.lead }}</p>
-                <h2 class="pc-intro-short">How pastecal works</h2>
+                <h2 class="pc-intro-short">Add events. Share a link. Done.</h2>
                 </div>
 
                 <ol class="pc-tour-steps" data-tour="steps">
@@ -1464,8 +1464,8 @@ Copyright (c) 2025 Kalid Azad
                                 <div class="pc-art-in"><span class="pc-art-dots"><i></i><i></i><i></i></span><span class="pc-art-reply">Perfect, thanks!</span></div>
                             </div>
                         </div>
-                        <h3>Send the link</h3>
-                        <p>Press Save &amp; share, then send the link to your group chat or email.</p>
+                        <h3>Share the link</h3>
+                        <p>Press Save &amp; share, then send it to your group chat or email.</p>
                     </li>
                     <li>
                         <div class="pc-tour-art pc-art-sync" role="img" aria-label="Two phones showing the same calendar. Game changes from 10am to 11am on the first phone, and the second phone updates a moment later.">
@@ -1487,15 +1487,29 @@ Copyright (c) 2025 Kalid Azad
                                 <span class="pc-art-who">Everyone</span>
                             </div>
                         </div>
-                        <h3>Stay in sync</h3>
-                        <p>When anyone changes an event, everyone sees it.</p>
+                        <h3>Everyone stays in sync</h3>
+                        <p>Change an event and everyone sees it instantly.</p>
                     </li>
                 </ol>
+                <p class="pc-tour-cta"><a class="pc-tour-start" href="#" @click.prevent="startFromTour">Start your calendar ↑</a><a href="/view/demo" data-from="home-steps">See a demo calendar →</a></p>
 
+                <div class="pc-tour-why" data-tour="why">
+                <h3 class="pc-tour-label">Why pastecal</h3>
+                <p class="pc-tour-why-lead">Most calendar services make you sign up, confirm your email and install an app. pastecal doesn't.</p>
+                <ul class="pc-tour-why-list">
+                    <li><h4>Pick any name</h4><p><code>pastecal.com/<i>your-name</i></code> is your calendar. Add events and you're done.</p></li>
+                    <li><h4>Nothing to install</h4><p>No login, no app, no password, for you or anyone you share with.</p></li>
+                    <li><h4>One link for everyone</h4><p>An edit link for helpers, a read-only link for the group chat.</p></li>
+                    <li><h4>Private when you want</h4><p>Pick a secret name nobody can guess. Edit links are kept out of search engines.</p></li>
+                    <li><h4>In their own calendar</h4><p>Subscribe in Google, Apple or Outlook, and changes show up on their own.</p></li>
+                    <li><h4>Pro when you need more</h4><p>Lock who can edit, see every change, and restore any version.</p></li>
+                </ul>
+                <p class="pc-tour-proof"><strong>3,000+</strong> calendars made since 2021 · <strong>1,200+</strong> people use pastecal every week</p>
+                </div>
                 <h3 class="pc-tour-label">How to share it</h3>
                 <div class="pc-tour-links" data-tour="share">
                     <div><svg class="pc-share-art" viewBox="0 0 160 100" aria-hidden="true"><g transform="translate(30 14)"><rect width="92" height="70" rx="10" class="c"/><path d="M0 10a10 10 0 0 1 10-10h72a10 10 0 0 1 10 10v8H0z" class="h"/><rect x="21" y="-5" width="5" height="11" rx="2.5" class="k"/><rect x="66" y="-5" width="5" height="11" rx="2.5" class="k"/><circle cx="10" cy="31" r="1.4" class="d"/><circle cx="22" cy="31" r="1.4" class="d"/><circle cx="34" cy="31" r="1.4" class="d"/><circle cx="46" cy="31" r="1.4" class="d"/><circle cx="58" cy="31" r="1.4" class="d"/><circle cx="70" cy="31" r="1.4" class="d"/><circle cx="82" cy="31" r="1.4" class="d"/><circle cx="10" cy="45" r="1.4" class="d"/><circle cx="22" cy="45" r="1.4" class="d"/><circle cx="34" cy="45" r="1.4" class="d"/><circle cx="46" cy="45" r="1.4" class="d"/><circle cx="58" cy="45" r="1.4" class="d"/><circle cx="70" cy="45" r="1.4" class="d"/><circle cx="82" cy="45" r="1.4" class="d"/><circle cx="10" cy="59" r="1.4" class="d"/><circle cx="22" cy="59" r="1.4" class="d"/><circle cx="34" cy="59" r="1.4" class="d"/><circle cx="46" cy="59" r="1.4" class="d"/><circle cx="58" cy="59" r="1.4" class="d"/><circle cx="70" cy="59" r="1.4" class="d"/><circle cx="82" cy="59" r="1.4" class="d"/><rect x="7" y="26" width="38" height="10" rx="3" class="e1"/><rect x="47" y="40" width="34" height="10" rx="3" class="e2"/><rect x="19" y="54" width="24" height="10" rx="3" class="e3"/><rect x="47" y="54" width="24" height="10" rx="3" class="new"/></g><circle cx="122" cy="80" r="17" class="b"/><svg x="112" y="70" width="20" height="20" viewBox="0 0 24 24" class="bi"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg></svg><h4>Read/write link <span>for editors</span></h4><code>pastecal.com/soccer-fall</code><p>For the people who run the calendar. Anyone with it can add and change events.</p></div>
-                    <div class="pc-tour-link-main"><svg class="pc-share-art" viewBox="0 0 160 100" aria-hidden="true"><g transform="translate(30 14)"><rect width="92" height="70" rx="10" class="c"/><path d="M0 10a10 10 0 0 1 10-10h72a10 10 0 0 1 10 10v8H0z" class="h"/><rect x="21" y="-5" width="5" height="11" rx="2.5" class="k"/><rect x="66" y="-5" width="5" height="11" rx="2.5" class="k"/><circle cx="10" cy="31" r="1.4" class="d"/><circle cx="22" cy="31" r="1.4" class="d"/><circle cx="34" cy="31" r="1.4" class="d"/><circle cx="46" cy="31" r="1.4" class="d"/><circle cx="58" cy="31" r="1.4" class="d"/><circle cx="70" cy="31" r="1.4" class="d"/><circle cx="82" cy="31" r="1.4" class="d"/><circle cx="10" cy="45" r="1.4" class="d"/><circle cx="22" cy="45" r="1.4" class="d"/><circle cx="34" cy="45" r="1.4" class="d"/><circle cx="46" cy="45" r="1.4" class="d"/><circle cx="58" cy="45" r="1.4" class="d"/><circle cx="70" cy="45" r="1.4" class="d"/><circle cx="82" cy="45" r="1.4" class="d"/><circle cx="10" cy="59" r="1.4" class="d"/><circle cx="22" cy="59" r="1.4" class="d"/><circle cx="34" cy="59" r="1.4" class="d"/><circle cx="46" cy="59" r="1.4" class="d"/><circle cx="58" cy="59" r="1.4" class="d"/><circle cx="70" cy="59" r="1.4" class="d"/><circle cx="82" cy="59" r="1.4" class="d"/><rect x="7" y="26" width="38" height="10" rx="3" class="e1"/><rect x="47" y="40" width="34" height="10" rx="3" class="e2"/><rect x="19" y="54" width="24" height="10" rx="3" class="e3"/></g><circle cx="122" cy="80" r="17" class="b"/><svg x="112" y="70" width="20" height="20" viewBox="0 0 24 24" class="bi"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg></svg><h4>Read-only link <span>for everyone</span></h4><code><a href="/view/ni191jkhnx?from=home-share" class="pc-demo-code">pastecal.com/view/ni191jkhnx</a></code><p>Send it to the group chat, post it, or embed it. People see every change but can't edit, and never see the read/write link.</p></div>
+                    <div class="pc-tour-link-main"><svg class="pc-share-art" viewBox="0 0 160 100" aria-hidden="true"><g transform="translate(30 14)"><rect width="92" height="70" rx="10" class="c"/><path d="M0 10a10 10 0 0 1 10-10h72a10 10 0 0 1 10 10v8H0z" class="h"/><rect x="21" y="-5" width="5" height="11" rx="2.5" class="k"/><rect x="66" y="-5" width="5" height="11" rx="2.5" class="k"/><circle cx="10" cy="31" r="1.4" class="d"/><circle cx="22" cy="31" r="1.4" class="d"/><circle cx="34" cy="31" r="1.4" class="d"/><circle cx="46" cy="31" r="1.4" class="d"/><circle cx="58" cy="31" r="1.4" class="d"/><circle cx="70" cy="31" r="1.4" class="d"/><circle cx="82" cy="31" r="1.4" class="d"/><circle cx="10" cy="45" r="1.4" class="d"/><circle cx="22" cy="45" r="1.4" class="d"/><circle cx="34" cy="45" r="1.4" class="d"/><circle cx="46" cy="45" r="1.4" class="d"/><circle cx="58" cy="45" r="1.4" class="d"/><circle cx="70" cy="45" r="1.4" class="d"/><circle cx="82" cy="45" r="1.4" class="d"/><circle cx="10" cy="59" r="1.4" class="d"/><circle cx="22" cy="59" r="1.4" class="d"/><circle cx="34" cy="59" r="1.4" class="d"/><circle cx="46" cy="59" r="1.4" class="d"/><circle cx="58" cy="59" r="1.4" class="d"/><circle cx="70" cy="59" r="1.4" class="d"/><circle cx="82" cy="59" r="1.4" class="d"/><rect x="7" y="26" width="38" height="10" rx="3" class="e1"/><rect x="47" y="40" width="34" height="10" rx="3" class="e2"/><rect x="19" y="54" width="24" height="10" rx="3" class="e3"/></g><circle cx="122" cy="80" r="17" class="b"/><svg x="112" y="70" width="20" height="20" viewBox="0 0 24 24" class="bi"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg></svg><h4>Read-only link <span>for everyone</span></h4><code><a href="/view/ni191jkhnx" data-from="home-share" class="pc-demo-code">pastecal.com/view/ni191jkhnx</a></code><p>Send it to the group chat, post it, or embed it. People see every change but can't edit, and never see the read/write link.</p></div>
                     <div><svg class="pc-share-art" viewBox="0 0 160 100" aria-hidden="true"><rect x="14" y="14" width="86" height="58" rx="8" class="c"/><path d="M14 22a8 8 0 0 1 8-8h70a8 8 0 0 1 8 8v2H14z" class="h"/><path d="M50 72v10M40 84h20" class="st"/><rect x="22" y="32" width="36" height="9" rx="3" class="e1"/><rect x="50" y="45" width="30" height="9" rx="3" class="e2"/><rect x="30" y="58" width="22" height="8" rx="3" class="e3"/><rect x="110" y="18" width="38" height="68" rx="8" class="c"/><path d="M123 24h12" class="st"/><rect x="116" y="34" width="26" height="9" rx="3" class="e1"/><rect x="116" y="47" width="26" height="9" rx="3" class="e2"/><rect x="116" y="60" width="18" height="8" rx="3" class="e3"/><circle cx="105" cy="50" r="15" class="b"/><svg x="95" y="40" width="20" height="20" viewBox="0 0 24 24" class="bi"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg></svg><h4>Add to phone or desktop</h4><code>pastecal.com/view/ni191jkhnx.ics</code><p>Subscribe in Google, Apple or Outlook Calendar. Events show up next to your own and stay up to date.</p></div>
                 </div>
 
@@ -1515,11 +1529,6 @@ Copyright (c) 2025 Kalid Azad
                 </div>
                 </div>
 
-                <div class="pc-tour-facts" data-tour="facts">
-                    <div><strong>No sign-ups</strong><span>for you or anyone you share with</span></div>
-                    <div><strong>Shows up in their calendar</strong><span>Google, Apple and Outlook stay in sync</span></div>
-                    <div><strong>3,000+</strong><span>calendars made since 2021</span></div>
-                </div>
                 <ul class="pc-tour-trust">
                     <li>Recent changes can be undone.</li>
                     <li>Calendars are backed up every day they change.</li>
@@ -1530,7 +1539,7 @@ Copyright (c) 2025 Kalid Azad
                 <h3 class="pc-tour-label">Pricing</h3>
                 <div class="pc-tour-plans">
                     <div><h4>Free <span>no account, no card</span></h4><p>Everything on this page: unlimited calendars, all three links, undo and daily backups. Nobody you share with pays or signs up.</p></div>
-                    <div class="pc-tour-plan-pro"><h4>Pro <span>coming soon · $24 per calendar a year</span></h4><p>For calendars you run: lock who can edit, approve suggested events, keep every change, and use your own name and colors.</p><a href="/pricing?from=home-plans">See plans and join the waitlist →</a></div>
+                    <div class="pc-tour-plan-pro"><h4>Pro <span>$24 a year or $2.99 a month, per calendar</span></h4><p>For calendars you run: lock who can edit, keep a full history and restore any version, and see how many people view and follow it.</p><a href="/pricing" data-from="home-plans">See Pro →</a></div>
                 </div>
                 </div>
 
@@ -1540,14 +1549,14 @@ Copyright (c) 2025 Kalid Azad
                     <details><summary>Is it private?</summary><p>Anyone with a link can open it, so give a private calendar a hard-to-guess name. Read/write links are never listed in search engines.</p></details>
                     <details><summary>Can I undo a change?</summary><p>Yes. Click "Edited … ago" at the top to see recent changes and put any of them back.</p></details>
                     <details><summary>Does it work on phones?</summary><p>Yes, in any phone browser. There is nothing to install.</p></details>
-                    <details><summary>Is it free?</summary><p>Yes. Making, editing and sharing calendars is free, with no trial and no card. A Pro plan with extras is in the works: <a href="/pricing?from=home-faq">see what's planned and join the waitlist</a>.</p></details>
+                    <details><summary>Is it free?</summary><p>Yes. Making, editing and sharing calendars is free, with no trial and no card. Pro adds locking, full history and stats for $24 a year per calendar: <a href="/pricing" data-from="home-faq">see Pro</a>.</p></details>
                     <details><summary>Can I put it on my website?</summary><p>Yes. Put the read-only link in an iframe and visitors see your calendar as it changes:</p><code class="pc-tour-snippet">&lt;iframe src="https://pastecal.com/view/ni191jkhnx" width="100%" height="600" style="border:0"&gt;&lt;/iframe&gt;</code></details>
                 </div>
 
                 <p class="pc-tour-end">Your calendar is ready at the top of this page. <a href="#">Back to the calendar ↑</a></p>
                 <p class="pc-tour-maker">pastecal is made by <a href="https://betterexplained.com/about" target="_blank" rel="noopener">Kalid Azad</a>, creator of BetterExplained.</p>
                 <nav class="pc-tour-footer" aria-label="About pastecal">
-                    <a href="/pricing?from=home-footer">Pricing</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="https://github.com/kazad/pastecal/issues" target="_blank" rel="noopener">Feedback</a>
+                    <a href="/pricing" data-from="home-footer">Pricing</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="https://github.com/kazad/pastecal/issues" target="_blank" rel="noopener">Feedback</a>
                 </nav>
             </div>
         </section>

@@ -580,6 +580,15 @@ if (typeof window !== 'undefined') {
         /* listener registration must never break page load */
     }
 
+    // Links say where they are with data-from ("home-plans") instead of ?from= in the address:
+    // the label is kept for this tab and read once by the page it leads to (pricing).
+    try {
+        document.addEventListener('click', (e) => {
+            const a = e.target && e.target.closest && e.target.closest('a[data-from]');
+            if (a) try { sessionStorage.setItem('pc_from', a.getAttribute('data-from')); } catch (err) { /* storage blocked */ }
+        }, true);
+    } catch (err) { /* never break page load */ }
+
     Analytics.loadHomepageVariant();
     // The page kind, never the path: a calendar's path is its edit key.
     const path = window.location.pathname;
