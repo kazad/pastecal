@@ -161,3 +161,14 @@ Pro only. Viewers can propose an event; owner/editors approve or decline.
 See the launch plan artifact and `docs/pro-launch.md` (from `pro-runbook`) for exact commands:
 Stripe live activation, live product/prices/webhook, Cloudflare Email Sending for pastecal.com,
 four secrets, deploy, one real purchase.
+
+## Running all tests
+
+`scripts/test-all.sh` runs every suite with one command: each Worker suite gets its own local
+`wrangler dev --local` (fresh `--persist-to`, ports 8700-8799 / inspector 9700-9799, settings only
+via `--var`, Firebase pointed at a dead local address), then the client unit tests (with temporary
+`node_modules` symlinks that are removed afterwards). It prints SUITE | RESULT | CHECKS | LOG PATH,
+kills every wrangler it started, and exits nonzero on any failure. `--list` shows the suites and
+their setup; `--only sync,lock,unit` runs a subset. Skipped: `stripe-sandbox-e2e`,
+`pro-browser-e2e` (real Stripe sandbox) and `cloud-journeys` (Playwright). About 4.5 minutes;
+`restore` and `copyback` are the slow ones.
