@@ -260,8 +260,10 @@ for (const r of RENDERERS) {
     test(`${r.name}: settings -- Monday first, 24-hour time`, async ({ page }, info) => {
       const id = await fresh(r, info, 'settings');
       await r.open(page, id);
-      const btn = page.locator(isPhone(page) ? '[data-testid="settings-button-mobile"]' : '[data-testid="settings-button-desktop"]').locator('visible=true');
-      await tap(page, btn.first());
+      if (isPhone(page)) {
+        await tap(page, page.getByRole('button', { name: 'Open menu' }).first());
+        await tap(page, page.getByText(/^\s*Settings\s*$/).locator('visible=true').first());
+      } else await tap(page, page.locator('[data-testid="settings-button-desktop"]').locator('visible=true').first());
       await page.locator('label:has-text("First day of week") + select').locator('visible=true').first().selectOption('1');
       await page.locator('label:has-text("Time format") + select').locator('visible=true').first().selectOption('24');
       const df = page.locator('label:has-text("Date format") + select').locator('visible=true');
@@ -399,9 +401,9 @@ for (const r of RENDERERS) {
           end: info.project.name === 'desktop-de' ? '2026-10-25T10:00:00.000Z' : '2026-11-01T16:00:00.000Z', type: 1, isAllDay: false, description: '', repeat: '', recurrencerule: '', recurrenceID: null, recurrenceException: null }]);
       await r.open(page, id);
       await r.view(page, 'Week');
-      await r.next(page);   // week of Oct 25 (Berlin DST) ...
-      if (!info.project.name === 'desktop-de') await r.next(page);   // ... or Nov 1 (New York DST)
+      // forward to the week of Oct 25 (Berlin DST) or Nov 1 (New York DST)
       const ev = r.event(page, 'Ten oclock').first();
+      for (let i = 0; i < 3 && !(await ev.count()); i++) { await r.next(page); await page.waitForTimeout(500); }
       await ev.scrollIntoViewIfNeeded();
       await page.waitForTimeout(300);
       await shot(page, `dst-week-${r.name}`, info);
