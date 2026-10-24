@@ -39,6 +39,9 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+# A deployed site (https) trusts only its own origin, so preview.pastecal.com must send its own.
+case "$BASE" in https://*) ORIGIN="$BASE" ;; esac
+
 command -v curl >/dev/null || { echo "need curl"; exit 2; }
 command -v python3 >/dev/null || { echo "need python3"; exit 2; }
 
