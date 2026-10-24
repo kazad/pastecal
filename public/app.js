@@ -268,6 +268,12 @@ const CalendarVueApp = {
             // Homepage flow: a tip on the grid until the first event of your own, then Share pulses once.
             userAddedEvent: false,
             sharePulse: false,
+            // "Start from" on the homepage draft (utils/templates.js): the template whose events are on it
+            // ({ id, date } of the month they were built for), a switch waiting for a yes, and the Save nudge.
+            template: null,
+            templateConfirm: null,
+            templateNudge: false,
+            templateChips: CalendarTemplates.list(),
             tourVariant: 'a',
             homeAsideHidden: (() => { try { return localStorage.getItem('pc_home_aside') === 'hidden'; } catch (e) { return false; } })(),
 
@@ -1624,7 +1630,8 @@ const CalendarVueApp = {
         if (this.isHomepageCalendar && this.calendar.events.length == 0) {
             // Load homepage data from localStorage
             this.loadLocalStorage();
-            if ((this.calendar.events || []).some(e => e && (e.title || e.Subject) && !Calendar.isSampleTitle(e.title || e.Subject))) this.userAddedEvent = true;
+            if ((this.calendar.events || []).some(e => e && (e.title || e.Subject) && !Calendar.isSampleTitle(e.title || e.Subject) && !CalendarTemplates.templateOf(e))) this.userAddedEvent = true;
+            this.restoreTemplate();
 
             // If still no events after loading, show the example event
             if (this.calendar.events.length == 0) {
@@ -2188,6 +2195,7 @@ const CalendarVueApp = {
 
         clearLocalStorage() {
             localStorage.removeItem("calendar");
+            try { localStorage.removeItem('pastecal_template'); } catch (e) { /* nothing to clear */ }
         },
 
         resetToDefaults() {
@@ -2443,6 +2451,122 @@ const CalendarVueApp = {
             }, 0);
         },
 
+        // ---- "Start from" templates (homepage draft only; utils/templates.js) ----
+
+        templateLabel(id) {
+            return CalendarTemplates.label(id);
+        },
+
+        templateDate(state) {
+            const [y, m] = String(state.date).split('-').map(Number);
+            return new Date(y, m - 1, 1, 12);
+        },
+
+        // The template's events still on the draft exactly as it made them. One the visitor changed
+        // (or one left from an earlier template) is theirs from then on, and nothing here removes it.
+        templateOwned(state = this.template) {
+            if (!state) return [];
+            const built = CalendarTemplates.build(state.id, this.templateDate(state));
+            if (!built) return [];
+            const pristine = new Map(built.events.map(e => [String(e.id), EventStore.normalize(e)]));
+            return (this.calendar.events || []).filter(e => {
+                const p = e && pristine.get(String(e.id));
+                return p && !Object.keys(EventStore.diff(EventStore.normalize(e), p)).length;
+            });
+        },
+
+        pickTemplate(id) {
+            if (this.template && this.template.id === id) { this.templateConfirm = null; return; }
+            // Events the visitor added or changed stay either way; ask before mixing another template in.
+            const owned = new Set(this.templateOwned().map(EventStore.keyOf));
+            const theirs = (this.calendar.events || []).some(e => e && !owned.has(EventStore.keyOf(e)) && !Calendar.isSampleTitle(e.title || e.Subject));
+            if (theirs) { this.templateConfirm = { next: id }; return; }
+            this.applyTemplate(id);
+        },
+
+        confirmTemplate() {
+            const next = this.templateConfirm && this.templateConfirm.next;
+            this.templateConfirm = null;
+            if (next) this.applyTemplate(next);
+        },
+
+        startBlank() {
+            this.applyTemplate(null);
+        },
+
+        dismissTemplateNudge() {
+            this.templateNudge = false;
+            this._templateNudgeDismissed = true;
+        },
+
+        // Swap the draft's template events for another template's (or for none) as ONE store change,
+        // so they save like any events and one Cmd+Z puts back exactly what was there.
+        applyTemplate(id) {
+            this.templateConfirm = null;
+            const anchor = (window.scheduleObj && scheduleObj.selectedDate) || new Date();
+            const next = id ? { id, date: `${anchor.getFullYear()}-${String(anchor.getMonth() + 1).padStart(2, '0')}-01` } : null;
+            const built = next && CalendarTemplates.build(id, this.templateDate(next));
+            const events = this.calendar.events || [];
+            const going = [...this.templateOwned(), ...events.filter(e => e && Calendar.isSampleTitle(e.title || e.Subject))];
+            const commands = going.map(e => ({ type: 'remove', key: EventStore.keyOf(e) }));
+            const ids = new Set(events.map(e => String(e.id)));
+            // An event of this template the visitor already changed stands in for the original.
+            if (built) built.events.filter(e => !ids.has(e.id)).forEach(e => commands.push({ type: 'add', event: e }));
+            // Back to a fresh draft: the example event returns, as on a first visit.
+            else if (going.length === events.length) this.calendar.sampleEvents().forEach(e => commands.push({ type: 'add', event: e }));
+            const before = this.template;
+            if (commands.length) {
+                const label = id ? `Started from ${CalendarTemplates.label(id)}` : 'Cleared the template';
+                const r = this.store().dispatch({ type: 'batch', commands, label }, { label });
+                if (!r.ok) return;
+                // Undoing this change also puts the template before it back (undoLastLocal).
+                const stack = this.store().undoStack;
+                (this._templateUndo = this._templateUndo || []).push({ entry: stack[stack.length - 1], state: before });
+            }
+            this.setTemplate(next);
+            if (id) {
+                this.templateNudge = !this._templateNudgeDismissed;
+                track(a => a.featureUsed('template', id));
+            }
+        },
+
+        // Point the draft at another template (or none). Its title, notes and color names follow, but
+        // only where they still read as the last template (or a fresh draft) left them: nothing the
+        // visitor typed is replaced. Never the URL name; that stays the visitor's to pick.
+        setTemplate(next) {
+            const was = this.template && CalendarTemplates.build(this.template.id, this.templateDate(this.template));
+            const now = next && CalendarTemplates.build(next.id, this.templateDate(next));
+            const plain = (i) => `Type ${i + 1}`;
+            if (!this.calendar.options) this.calendar.options = {};
+            const o = this.calendar.options;
+            if ((this.calendar.title || Calendar.DEFAULT_TITLE) === (was ? was.title : Calendar.DEFAULT_TITLE)) this.calendar.title = now ? now.title : Calendar.DEFAULT_TITLE;
+            if ((o.notes || '').trim() === (was ? was.notes : '')) o.notes = now ? now.notes : '';
+            const labels = [...(this.localSettings.typeLabels || [])];
+            for (let i = 0; i < 8; i++) {
+                if ((labels[i] || plain(i)) === (was ? was.typeLabels[i] : plain(i))) labels[i] = now ? now.typeLabels[i] : plain(i);
+            }
+            this.localSettings.typeLabels = labels;
+            this.storeTypeLabelsInCalendarOptions();
+            this.template = next;
+            if (!next) this.templateNudge = false;
+            try {
+                if (next) localStorage.setItem('pastecal_template', JSON.stringify(next));
+                else localStorage.removeItem('pastecal_template');
+            } catch (e) { /* this visit only: its events are still ordinary draft events */ }
+        },
+
+        // A reload of a templated draft: the template is still "on" while any of its events are untouched.
+        restoreTemplate() {
+            let state = null;
+            try { state = JSON.parse(localStorage.getItem('pastecal_template') || 'null'); } catch (e) { /* none */ }
+            if (state && CalendarTemplates.label(state.id) && /^\d{4}-\d{2}-\d{2}$/.test(state.date) && this.templateOwned(state).length) {
+                this.template = state;
+                this.templateNudge = true;
+            } else {
+                try { localStorage.removeItem('pastecal_template'); } catch (e) { /* nothing stored */ }
+            }
+        },
+
         // Remove the untouched example event. True when it was removed.
         dropSampleEvents() {
             const events = this.calendar.events || [];
@@ -2455,8 +2579,11 @@ const CalendarVueApp = {
         // A link name from the calendar's title, else its first event: "Soccer Fall 2026" ->
         // "soccer-fall-2026". Null when there is nothing better than the random name.
         suggestedSlug() {
-            const own = (this.calendar.events || []).find(e => e && (e.title || e.Subject) && !Calendar.isSampleTitle(e.title || e.Subject));
-            const source = (this.calendar.title && this.calendar.title !== 'New Calendar') ? this.calendar.title : (own && (own.title || own.Subject));
+            // Never from a template's title or events: the visitor picks the name, and "tigers-u10-soccer"
+            // would be taken by the second person to try the template anyway.
+            const own = (this.calendar.events || []).find(e => e && (e.title || e.Subject) && !Calendar.isSampleTitle(e.title || e.Subject) && !CalendarTemplates.templateOf(e));
+            const fromTemplate = this.template && this.calendar.title === CalendarTemplates.build(this.template.id, this.templateDate(this.template)).title;
+            const source = (this.calendar.title && this.calendar.title !== 'New Calendar' && !fromTemplate) ? this.calendar.title : (own && (own.title || own.Subject));
             if (!source) return null;
             const slug = String(source).toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
                 .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30);
@@ -2523,6 +2650,11 @@ const CalendarVueApp = {
             }, () => {
                 // does not exist, proceed
                 this.isLoading = true;
+                // Template ids ("tpl-team-3") mean something only on the draft. Saved, each event gets an id
+                // of its own, or two calendars made from one template would share iCal UIDs in a subscriber's app.
+                if (this.calendar.events.some(e => CalendarTemplates.templateOf(e))) {
+                    this.calendar.setEvents(this.calendar.events.map(e => CalendarTemplates.templateOf(e) ? { ...e, id: Utils.uuidv4() } : e));
+                }
                 CalendarDataService.createWithId(slug, this.calendar, () => {
                     // The calendar now exists on the server. Fired separately from
                     // the slug events below because those answer "did they choose a
@@ -2544,6 +2676,7 @@ const CalendarVueApp = {
                             event_count_bucket: a.bucketEvents(this.calendar?.events?.length),
                         }));
                     }
+                    if (this.template) track(a => a.featureUsed('template_saved', this.template.id));
                     // success - clear localStorage so homepage starts fresh next time
                     this.clearLocalStorage();
                     // Record in recents here rather than relying on the post-redirect
@@ -4894,7 +5027,12 @@ const CalendarVueApp = {
          */
         undoLastLocal() {
             const before = this.calendar.events.map(e => new Event(e));
+            const stack = this.store().undoStack;
+            const tpl = this._templateUndo && this._templateUndo[this._templateUndo.length - 1];
+            const templateChange = !!tpl && tpl.entry === stack[stack.length - 1];
             const undone = this.store().undo();
+            // Undoing "Started from ..." also puts back the title, notes and labels from before it.
+            if (undone && templateChange) this.setTemplate(this._templateUndo.pop().state);
             if (!undone) return null;
             this._handledUndo.push({ at: this.serverNow(), delta: this.deltaBetween(before, this.calendar.events) });
             this.showToast(`Undid: ${undone}`, 'success');
