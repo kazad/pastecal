@@ -107,10 +107,15 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--blue); outl
 .pick-row input { flex: 1 1 auto; min-width: 0; height: 44px; border: 1px solid var(--line); border-radius: 10px; padding: 0 14px; background: var(--bg); color: var(--ink); font: inherit; font-size: 16px }
 .pick-row .cta { flex: none }
 .pick-err { color: var(--soon); font-size: 14px; margin: 0; min-height: 0 }
-.pick-err:empty { display: none }
+.pick-err:empty, .pick-found:empty { display: none }
+.pick-found { color: var(--ok); font-size: 14px; font-weight: 600; margin: 0 }
 .pick-new { color: var(--muted); font-size: 15px; margin: 16px 0 0 }
 .pick-new a { color: var(--blue); font-weight: 600 }
 .plan li .soon { margin-left: 8px }
+.plan ul.coming { margin-top: 4px; color: var(--muted) }
+.plan ul:has(+ .coming-h) { flex: 0 0 auto; margin-bottom: 4px }
+.plan ul.coming li::before { content: "+"; color: var(--muted) }
+.coming-h { margin: 6px 0 0; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--soon) }
 
 .faq { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 32px }
 details { border-bottom: 1px solid var(--line); padding-block: 12px }
@@ -156,16 +161,19 @@ details p { color: var(--muted); margin: 8px 0 0 }
       <h3>Pro</h3>
       <p class="who">For a calendar you run: a team, a class, a shift schedule.</p>
       <div class="price"><strong>$24</strong><span>per calendar, per year</span></div>
-      <p class="per">Or $2.99 a month. Yearly saves 33%.</p>
+      <p class="per">That's $2 a month, billed yearly. Or $2.99 month to month.</p>
       <ul>
         <li>Everything in Free</li>
         <li>Lock editing to people you choose</li>
-        <li>Just a small “Made with pastecal” line</li>
         <li>A full history of changes, and restore any version</li>
         <li>See how many people view and follow it</li>
-        <li>Others suggest events, you approve<span class="soon">Soon</span></li>
-        <li>Secret events and subcalendars<span class="soon">Soon</span></li>
-        <li>Your logo, name and theme<span class="soon">Soon</span></li>
+        <li>Just a small “Made with pastecal” line</li>
+      </ul>
+      <p class="coming-h">Coming to Pro, at no extra cost</p>
+      <ul class="coming">
+        <li>Others suggest events, you approve</li>
+        <li>Secret events and subcalendars</li>
+        <li>Your logo, name and theme</li>
       </ul>
       <a class="cta primary" href="#get-pro" data-plan="pro">Get Pro</a>
     </div>
@@ -207,6 +215,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
         <input id="calLink" type="url" inputmode="url" autocomplete="off" placeholder="pastecal.com/your-calendar">
         <button type="submit" class="cta primary">Continue</button>
       </div>
+      <p class="pick-found" id="pasteFound" aria-live="polite"></p>
       <p class="pick-err" id="pasteErr" role="alert"></p>
     </form>
     <p class="pick-new">No calendar yet? <a href="/?from=pricing-getpro">Make one</a>, press Save &amp; share, then choose <b>Lock this calendar</b>.</p>
@@ -376,18 +385,46 @@ document.querySelectorAll('[data-plan]').forEach(a => a.addEventListener('click'
     document.getElementById('pasteLabel').textContent = 'Or paste a calendar link';
   }
   const form = document.getElementById('pasteForm'), input = document.getElementById('calLink'), err = document.getElementById('pasteErr');
-  form.addEventListener('submit', (e) => {
-    e.preventDefault(); err.textContent = '';
-    let raw = input.value.trim(), id = '';
+  // A pasted link -> {id} or {error}.
+  const parse = (raw) => {
+    if (!raw) return { error: 'Paste the link to your calendar, like pastecal.com/your-calendar.' };
+    let id = '';
     try {
       const u = new URL(/^https?:\/\//i.test(raw) ? raw : 'https://' + raw.replace(/^\/+/, ''));
       const parts = u.pathname.split('/').filter(Boolean);
-      if (parts[0] === 'view') { err.textContent = 'That is a read-only link. Paste the link you use to edit the calendar.'; return; }
+      if (parts[0] === 'view') return { error: 'That is a read-only link. Paste the link you use to edit the calendar.' };
       id = parts.length === 1 ? decodeURIComponent(parts[0]) : (!raw.includes('/') && !raw.includes('.') ? raw : '');
     } catch (x) { id = ''; }
-    if (!raw) { err.textContent = 'Paste the link to your calendar, like pastecal.com/your-calendar.'; input.focus(); return; }
-    if (!ID.test(id) || RESERVED.has(id.toLowerCase())) { err.textContent = 'That doesn\'t look like a calendar link. It should look like pastecal.com/your-calendar.'; input.focus(); return; }
-    go(id, 'paste');
+    if (!ID.test(id) || RESERVED.has(id.toLowerCase())) return { error: 'That doesn\'t look like a calendar link. It should look like pastecal.com/your-calendar.' };
+    return { id };
+  };
+  // Name the calendar as soon as the link is pasted, so they know which one they're buying for.
+  const found = document.getElementById('pasteFound'); let lookup = 0, known = {};
+  const name = async (id) => {
+    if (id in known) return known[id];
+    try {
+      const r = await fetch('/cal/' + encodeURIComponent(id), { credentials: 'same-origin' });
+      known[id] = r.status === 404 ? null : r.ok ? (((await r.json()).calendar || {}).title || id) : undefined;
+    } catch (x) { known[id] = undefined; }
+    return known[id];
+  };
+  input.addEventListener('input', () => {
+    const n = ++lookup; err.textContent = ''; found.textContent = '';
+    const p = parse(input.value.trim()); if (!p.id) return;
+    setTimeout(async () => {
+      if (n !== lookup) return;
+      const t = await name(p.id);
+      if (n !== lookup) return;
+      if (t === null) err.textContent = 'We couldn\'t find a calendar at that link.';
+      else if (t) found.textContent = '✓ ' + t;
+    }, 350);
+  });
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault(); err.textContent = '';
+    const p = parse(input.value.trim());
+    if (p.error) { err.textContent = p.error; input.focus(); return; }
+    if (await name(p.id) === null) { err.textContent = 'We couldn\'t find a calendar at that link.'; input.focus(); return; }
+    go(p.id, 'paste');
   });
   // The plan card's Get Pro: bring the picker into view and put the cursor where the next step is.
   document.querySelector('.plan.pro [data-plan=pro]').addEventListener('click', (e) => {

@@ -698,6 +698,8 @@ async function checkout(request, env, body) {
     const params = {
         mode: 'subscription',
         line_items: [{ price, quantity: 1 }],
+        // Card only (Apple Pay and Google Pay ride on it): no Cash App or bank options to scan past.
+        payment_method_types: ['card'],
         metadata: { ...meta, interval },
         subscription_data: { metadata: meta },
         success_url: `${siteUrl(env)}/pro/done?session_id={CHECKOUT_SESSION_ID}#${encodeURIComponent(calendarId)}`,

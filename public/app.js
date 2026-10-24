@@ -178,6 +178,7 @@ const CalendarVueApp = {
             showProHistory: false,
             insightWhere: 'share_panel',    // which surface opened them, for analytics
             proOwner: false,            // this browser is signed in as the Pro calendar's owner
+            shareProFocus: false,       // Share opened from Get Pro: just the lock offer
             showRecentChanges: false,   // the recent-changes dialog
             // When this browser last opened THIS calendar, captured before the visit is
             // recorded and so still pointing at the previous visit. It is what makes the
@@ -642,6 +643,7 @@ const CalendarVueApp = {
                         if (proIntent) {
                             // Once: the panel reads the chosen interval as it mounts, then the intent is done.
                             this.$nextTick(() => {
+                                this.shareProFocus = true;
                                 if (!this.showShare) this.toggleShare();
                                 this.$nextTick(() => {
                                     ProIntent.clear();
@@ -1618,10 +1620,20 @@ const CalendarVueApp = {
                 this.refreshProOwner();
             },
         },
+        // The owner's first visit after locking: say once what changed, and where the editor link is.
+        proOwner(isOwner) {
+            if (!isOwner || !this.calendar || !this.calendar.id) return;
+            const key = 'pastecal_pro_welcomed:' + String(this.calendar.id).toLowerCase();
+            try { if (localStorage.getItem(key)) return; localStorage.setItem(key, '1'); } catch (e) { return; }
+            this.showToast('Locked with Pro. Everyone can view; only people with your editor link can edit.', 'info', {
+                actionLabel: 'Editor link', action: () => { if (!this.showShare) this.toggleShare(); }, duration: 10000,
+            });
+        },
         showProStats(open) { this.focusInsight(open, 'proStatsPanel'); },
         showProHistory(open) { this.focusInsight(open, 'proHistoryPanel'); },
 
         showShare(newValue) {
+            if (!newValue) this.shareProFocus = false;   // the Get Pro view lasts until Share closes
             if (newValue && this.proTeaser) track(a => a.proStatsTeaserShown());
             if (newValue) {
                 this.updateCurrentViewURL();

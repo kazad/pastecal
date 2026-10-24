@@ -1328,6 +1328,9 @@ button:hover > .pc-add-event {
 /* ---- Pro stats and history (components/ProInsight.js) ------------------------------------ */
 .pc-pro-insight { margin: 0 0 12px }
 .pc-pro--flash { box-shadow: 0 0 0 2px var(--pc-link); transition: box-shadow var(--pc-dur) var(--pc-ease) }
+.pc-share-all { margin-top: var(--pc-space-3); padding: 0; border: 0; background: none; color: var(--pc-link); font: var(--pc-fw-medium) var(--pc-fs-small) var(--pc-font); cursor: pointer }
+.pc-share-all:hover { text-decoration: underline }
+.pc-share-all:focus-visible { outline: 2px solid var(--pc-link); outline-offset: 2px }
 .pc-teaser { display: flex; align-items: center; gap: var(--pc-space-2); width: 100%; margin: 0 0 var(--pc-space-4); padding: var(--pc-space-2) var(--pc-space-3); border: 1px solid var(--pc-line); border-radius: var(--pc-radius-md); background: var(--pc-surface); color: var(--pc-text-2); font: var(--pc-fw-medium) var(--pc-fs-small) var(--pc-font); text-align: left; cursor: pointer }
 .pc-teaser:hover { border-color: var(--pc-field); color: var(--pc-text) }
 .pc-teaser:hover .pc-teaser-go { transform: translateX(2px) }

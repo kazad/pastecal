@@ -35,6 +35,7 @@ p.bad { color: var(--bad); }
 .row input { flex: 1; min-width: 0; height: 40px; padding: 0 10px; border: 1px solid var(--field); border-radius: 8px; background: var(--bg); color: var(--ink); font: 13px var(--mono) }
 button, a.btn { display: inline-flex; align-items: center; justify-content: center; height: 40px; padding: 0 16px; border-radius: 8px; border: 1px solid var(--blue); background: var(--blue); color: #fff; font: 600 15px var(--ui); text-decoration: none; cursor: pointer; white-space: nowrap }
 a.btn { margin-top: 24px }
+button.secondary { margin-top: 10px; background: transparent; color: var(--blue) }
 .small { font-size: 14px }
 [hidden] { display: none !important }
 @media (max-width: 520px) { main { margin: 16px; padding: 24px 20px } }
@@ -52,6 +53,7 @@ a.btn { margin-top: 24px }
       <input id="link" type="text" readonly aria-label="Editor link" data-hj-suppress data-clarity-mask="true">
       <button id="copy" type="button">Copy</button>
     </div>
+    <button id="share" type="button" class="secondary" hidden>Send it to your editors</button>
     <p class="small">You can make more links, or turn one off, from Share on your calendar.</p>
   </section>
 
@@ -95,7 +97,16 @@ a.btn { margin-top: 24px }
     // pastecal_editor_link:<cal> is the plain link the Share panel shows; pastecal_done_link:<cal> also
     // keeps its id, so this page re-shows a link only while it is still live.
     var shareName = 'pastecal_editor_link:' + proCalendar.toLowerCase(), storeName = 'pastecal_done_link:' + proCalendar.toLowerCase();
-    function show(link) { $('link').value = link; $('linkbox').hidden = false; }
+    function show(link) {
+      $('link').value = link; $('linkbox').hidden = false;
+      // The phone's share sheet (Messages, WhatsApp, email) with a message ready to send.
+      if (navigator.share) {
+        var b = $('share'); b.hidden = false;
+        b.onclick = function () {
+          navigator.share({ title: calName, text: 'Here is the link to edit ' + calName + ' on pastecal. Anyone else sees it read-only.', url: link }).catch(function () {});
+        };
+      }
+    }
     function signInHint(r) {
       if (r.status === 401) msg.append(' Sign in from your calendar’s Share panel to make an editor link.');
       else msg.append(' Make an editor link from your calendar’s Share panel.');

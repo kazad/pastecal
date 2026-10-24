@@ -866,7 +866,9 @@ Copyright (c) 2025 Kalid Azad
             </div>
 
             <div v-if="showShare" class="p-2.5 text-sm w-full" v-cloak>
-                <h2 class="text-lg font-bold mb-4">Sharing & Security</h2>
+                <h2 class="text-lg font-bold mb-4">{{ shareProFocus ? 'Get Pro' : 'Sharing & Security' }}</h2>
+                <!-- Arriving from Get Pro: only the lock offer, the links one click away -->
+                <template v-if="!shareProFocus">
 
                 <!-- Free calendar, its creator: one quiet line about Pro stats. No numbers: the server keeps them Pro-only. -->
                 <button v-if="proTeaser" type="button" class="pc-teaser" @click="openProFromTeaser" data-testid="pro-stats-teaser">
@@ -1098,9 +1100,11 @@ Copyright (c) 2025 Kalid Azad
 
                 </div>
 
+                </template>
                 <!-- Pro: lock this calendar, or (owner) the editor link and billing -->
                 <pro-panel v-if="isExisting" ref="proPanel" :calendar-id="calendar.id" :calendar-title="calendar.title" :locked="lock.locked" :can-edit="canEdit"
                     @open-insight="openInsight($event, 'share_panel')" @owner="proOwner = $event"></pro-panel>
+                <button v-if="shareProFocus" type="button" class="pc-share-all" @click="shareProFocus = false" data-testid="share-show-all">Show all sharing options</button>
             </div>
 
             <div v-if="showSettings" class="w-full p-2.5 text-sm text-color-2" v-cloak>
