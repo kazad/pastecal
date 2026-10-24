@@ -31,7 +31,23 @@ const NativeCalendar = (() => {
     const wallHours = (t, dayEnd) => (dayEnd && t >= dayEnd) ? 24 : t.getHours() + t.getMinutes() / 60 + t.getSeconds() / 3600;
     const MONTH_ROW_PX = 100;           // fixed month row height, like Syncfusion
     const BAR_PX = 20, BAR_GAP = 2, DATE_HEADER_PX = 26;
-    const VIEWS = ['Day', 'Week', 'Month', '3 Months', 'Year', 'Agenda'];
+    // 'Custom' is Syncfusion's "N Months" / "N Weeks" view (customDuration / customUnit props).
+    const VIEWS = ['Day', 'Week', 'Month', 'Custom', 'Year', 'Agenda'];
+    // A view name from a setting or a link: 'week', 'Custom', '3 Months', '4 weeks', 'q', ...
+    const normView = (v) => {
+        const s = String(v || '').trim().toLowerCase();
+        if (!s) return null;
+        if (/^\d+\s*(week|month)s?$/.test(s) || s === 'custom' || s === 'c' || s === 'q' || s === 'quarter') return 'Custom';
+        return { day: 'Day', d: 'Day', week: 'Week', w: 'Week', month: 'Month', m: 'Month', year: 'Year', y: 'Year', agenda: 'Agenda', a: 'Agenda' }[s] || null;
+    };
+    // 'YYYY-MM-DD' as a LOCAL date (new Date('2026-10-29') would be UTC midnight, the day before in the Americas).
+    const parseDay = (v) => {
+        if (!v) return null;
+        if (v instanceof Date) return isNaN(v) ? null : new Date(v.getFullYear(), v.getMonth(), v.getDate());
+        const m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(String(v));
+        if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+        const d = new Date(v); return isNaN(d) ? null : new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    };
     const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
@@ -146,12 +162,15 @@ const NativeCalendar = (() => {
             startHour: { type: String, default: '05:00' },
             readOnly: { type: Boolean, default: false },
             initialView: { type: String, default: 'Month' },
+            initialDate: { type: [String, Date], default: null },
+            customDuration: { type: [Number, String], default: 3 },
+            customUnit: { type: String, default: 'Months' },
         },
         emits: ['update:events', 'event-click', 'event-create', 'view-change'],
         data() {
             return {
-                view: VIEWS.includes(this.initialView) ? this.initialView : 'Month',
-                date: startOfDay(new Date()),
+                view: normView(this.initialView) || 'Month',
+                date: parseDay(this.initialDate) || startOfDay(new Date()),
                 now: new Date(),
                 pickerOpen: false, pickerYear: new Date().getFullYear(),
                 showEarlyHours: false,
@@ -169,6 +188,10 @@ const NativeCalendar = (() => {
             },
             first() { return Number(this.firstDayOfWeek) || 0; },
             weekdayOrder() { return [0, 1, 2, 3, 4, 5, 6].map(i => (i + this.first) % 7); },
+            views() { return VIEWS; },
+            customN() { const n = parseInt(this.customDuration, 10); const max = this.customWeeks ? 52 : 24; return n >= 1 ? Math.min(n, max) : 3; },
+            customWeeks() { return /^week/i.test(String(this.customUnit || '')); },
+            customLabel() { return `${this.customN} ${this.customWeeks ? 'Week' : 'Month'}${this.customN === 1 ? '' : 's'}`; },
             title() {
                 const d = this.date, M = MONTHS[d.getMonth()];
                 if (this.view === 'Day') return `${M} ${d.getDate()}, ${d.getFullYear()}`;
@@ -178,8 +201,14 @@ const NativeCalendar = (() => {
                     if (s.getMonth() !== e.getMonth()) return `${MONTHS[s.getMonth()]} ${s.getDate()} - ${MONTHS[e.getMonth()]} ${e.getDate()}, ${e.getFullYear()}`;
                     return `${MONTHS[s.getMonth()]} ${s.getDate()} - ${e.getDate()}, ${e.getFullYear()}`;
                 }
-                if (this.view === '3 Months') {
-                    const e = addMonths(d, 2);
+                if (this.view === 'Custom' && this.customWeeks) {
+                    const s = startOfWeek(d, this.first), e = addDays(s, 7 * this.customN - 1);
+                    if (s.getFullYear() !== e.getFullYear()) return `${MONTHS[s.getMonth()]} ${s.getDate()}, ${s.getFullYear()} - ${MONTHS[e.getMonth()]} ${e.getDate()}, ${e.getFullYear()}`;
+                    return `${MONTHS[s.getMonth()]} ${s.getDate()} - ${MONTHS[e.getMonth()]} ${e.getDate()}, ${e.getFullYear()}`;
+                }
+                if (this.view === 'Custom') {
+                    if (this.customN === 1) return `${M} ${d.getFullYear()}`;
+                    const e = addMonths(d, this.customN - 1);
                     return e.getFullYear() === d.getFullYear() ? `${M} - ${MONTHS[e.getMonth()]} ${e.getFullYear()}` : `${M} ${d.getFullYear()} - ${MONTHS[e.getMonth()]} ${e.getFullYear()}`;
                 }
                 if (this.view === 'Year') return String(d.getFullYear());
@@ -187,9 +216,11 @@ const NativeCalendar = (() => {
             },
             // ---- month / 3 months --------------------------------------------------------
             monthWeeks() {
-                if (this.view !== 'Month' && this.view !== '3 Months') return [];
-                const m0 = new Date(this.date.getFullYear(), this.date.getMonth(), 1);
-                const mEnd = addMonths(m0, this.view === 'Month' ? 1 : 3);
+                if (this.view !== 'Month' && this.view !== 'Custom') return [];
+                const byWeeks = this.view === 'Custom' && this.customWeeks;
+                // N weeks: one continuous grid from the week holding the date. N months: whole months.
+                const m0 = byWeeks ? startOfWeek(this.date, this.first) : new Date(this.date.getFullYear(), this.date.getMonth(), 1);
+                const mEnd = byWeeks ? addDays(m0, 7 * this.customN) : addMonths(m0, this.view === 'Month' ? 1 : this.customN);
                 const weeks = [];
                 for (let ws = startOfWeek(m0, this.first); ws < mEnd; ws = addDays(ws, 7)) {
                     const days = [0, 1, 2, 3, 4, 5, 6].map(i => addDays(ws, i));
@@ -278,6 +309,9 @@ const NativeCalendar = (() => {
         },
         watch: {
             view(v) { this.$emit('view-change', { view: v, date: this.date }); },
+            // The app's default view (settings, or the calendar's own default once it has loaded).
+            initialView(v) { const n = normView(v); if (n && n !== this.view) this.setView(n); },
+            initialDate(v) { const d = parseDay(v); if (d) this.date = d; },
         },
         mounted() {
             this._tick = setInterval(() => { this.now = new Date(); }, 60000);
@@ -300,15 +334,17 @@ const NativeCalendar = (() => {
         },
         methods: {
             // ---- navigation --------------------------------------------------------------
-            setView(v) { this.view = v; this.pickerOpen = false; this.$nextTick(() => this.scrollToWorkHours()); },
+            setView(v) { this.view = normView(v) || v; this.pickerOpen = false; this.$nextTick(() => this.scrollToWorkHours()); },
             step(dir) {
                 const d = this.date;
                 if (this.view === 'Day') this.date = addDays(d, dir);
                 else if (this.view === 'Week' || this.view === 'Agenda') this.date = addDays(d, 7 * dir);
                 else if (this.view === 'Month') this.date = new Date(d.getFullYear(), d.getMonth() + dir, Math.min(d.getDate(), 28));
-                else if (this.view === '3 Months') this.date = new Date(d.getFullYear(), d.getMonth() + 3 * dir, 1);
+                else if (this.view === 'Custom' && this.customWeeks) this.date = addDays(d, 7 * this.customN * dir);
+                else if (this.view === 'Custom') this.date = new Date(d.getFullYear(), d.getMonth() + this.customN * dir, 1);
                 else if (this.view === 'Year') this.date = new Date(d.getFullYear() + dir, d.getMonth(), 1);
             },
+            viewLabel(v) { return v === 'Custom' ? this.customLabel : v; },
             goToday() { this.date = startOfDay(new Date()); this.pickerOpen = false; },
             togglePicker() { this.pickerOpen = !this.pickerOpen; this.pickerYear = this.date.getFullYear(); },
             pickMonth(m) { this.date = new Date(this.pickerYear, m, 1); this.pickerOpen = false; },
@@ -492,18 +528,18 @@ const NativeCalendar = (() => {
       <button class="nc-icon-btn" aria-label="Change view" data-testid="view-menu" @click="viewMenu = !viewMenu">
         <nc-icon name="ellipsis-vertical" :size="20"></nc-icon></button>
       <div v-if="viewMenu" class="nc-view-menu">
-        <button v-for="v in ['Day','Week','Month','3 Months','Year','Agenda']" :key="v" :class="{ on: view === v }"
-          :data-testid="'view-' + v.replace(' ', '')" @click="setView(v); viewMenu = false">{{ v }}</button>
+        <button v-for="v in views" :key="v" :class="{ on: view === v }"
+          :data-testid="'view-' + viewLabel(v).replace(' ', '')" @click="setView(v); viewMenu = false">{{ viewLabel(v) }}</button>
       </div>
     </div>
     <div class="nc-views" role="tablist">
-      <button v-for="v in ['Day','Week','Month','3 Months','Year','Agenda']" :key="v" role="tab" :aria-selected="view === v"
-        :class="{ on: view === v }" :data-testid="'view-' + v.replace(' ', '')" @click="setView(v)">{{ v2 ? v : v.toUpperCase() }}</button>
+      <button v-for="v in views" :key="v" role="tab" :aria-selected="view === v"
+        :class="{ on: view === v }" :data-testid="'view-' + viewLabel(v).replace(' ', '')" @click="setView(v)">{{ v2 ? viewLabel(v) : viewLabel(v).toUpperCase() }}</button>
     </div>
   </div>
 
-  <!-- Month & 3 Months -->
-  <div v-if="view === 'Month' || view === '3 Months'" class="nc-month" data-testid="month-view-grid">
+  <!-- Month & N Months / N Weeks -->
+  <div v-if="view === 'Month' || view === 'Custom'" class="nc-month" data-testid="month-view-grid">
     <div class="nc-month-head">
       <div v-for="i in weekdayOrder" :key="i" class="nc-weekday"
         :class="{ today: now.getDay() === i && monthWeeks.some(w => w.days.some(d => isToday(d))) }">{{ weekdayName(i, v2 && isPhone) }}</div>

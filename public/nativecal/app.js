@@ -224,7 +224,42 @@ const CalendarVueApp = {
             return this.COLORS.some((color, index) => color !== this.DEFAULT_COLORS[index]);
         },
         calendarAutoViewLabel() {
-            return 'Month'; // Could be dynamic based on screen size etc.
+            // "Auto" means each viewer's personal default.
+            const v = this.globalSettings.defaultView || 'Month';
+            return v === 'Custom' ? this.personalCustomViewLabel : v;
+        },
+        // ---- the view the calendar opens on (ported from the nativecal-parity fork's resolvedDefaultView) ----
+        // Precedence, as in the main app's applyDefaultView: ?view= (or ?v=) > the calendar's own default
+        // (forces every viewer; only for a saved calendar) > the personal default > Month.
+        urlParams() { try { return new URLSearchParams(window.location.search); } catch (e) { return new URLSearchParams(); } },
+        resolvedInitialView() {
+            const fromUrl = this.urlParams.get('view') || this.urlParams.get('v');
+            if (fromUrl) return fromUrl;
+            const cal = this.calendar && this.calendar.options && this.calendar.options.defaultView;
+            if (cal && cal !== 'Auto' && (this.isExisting || this.isReadOnly)) return cal;
+            return this.globalSettings.defaultView || 'Month';
+        },
+        // ?date=YYYY-MM-DD (or ?d=): the day the calendar opens on.
+        resolvedInitialDate() { return this.urlParams.get('date') || this.urlParams.get('d') || null; },
+        // "N Months" / "N Weeks": ?dur= and ?unit= for this visit, else the calendar's, else personal.
+        resolvedCustomDuration() {
+            const n = parseInt(this.urlParams.get('dur'), 10);
+            if (n > 0) return n;
+            const v = String(this.urlParams.get('view') || this.urlParams.get('v') || '').toLowerCase();
+            const m = /^(\d+)\s*(week|month)s?$/.exec(v);
+            if (m) return parseInt(m[1], 10);
+            if (v === 'q' || v === 'quarter') return 3;
+            return (this.calendar && this.calendar.options && this.calendar.options.customViewDuration) || this.globalSettings.customViewDuration || 3;
+        },
+        resolvedCustomUnit() {
+            const u = String(this.urlParams.get('unit') || '').toLowerCase();
+            if (/^weeks?$/.test(u)) return 'Weeks';
+            if (/^months?$/.test(u)) return 'Months';
+            const v = String(this.urlParams.get('view') || this.urlParams.get('v') || '').toLowerCase();
+            const m = /^\d+\s*(week|month)s?$/.exec(v);
+            if (m) return m[1] === 'week' ? 'Weeks' : 'Months';
+            if (v === 'q' || v === 'quarter') return 'Months';
+            return (this.calendar && this.calendar.options && this.calendar.options.customViewUnit) || this.globalSettings.customViewUnit || 'Months';
         },
         calendarCustomViewLabel() {
             return `${this.calendar.options.customViewDuration || 3} ${this.calendar.options.customViewUnit || 'Months'}`;
@@ -658,7 +693,10 @@ const CalendarVueApp = {
 
         // Apply default view to schedule (if no URL override)
         applyDefaultView() {
-             console.log('[applyDefaultView] NativeCal: Stubbed');
+            // The calendar takes its view from :initial-view (resolvedInitialView) and follows it when
+            // it changes; this re-applies it on demand (a ?view= link always wins).
+            const cal = this.$refs.nativeCal;
+            if (cal && typeof cal.setView === 'function') cal.setView(this.resolvedInitialView);
         },
 
         // Apply theme based on user preference and system settings
@@ -718,7 +756,8 @@ const CalendarVueApp = {
 
         // Update the custom view in the schedule when duration/unit changes
         updateCustomViewInSchedule(shouldRefresh = false) {
-             console.log('[updateCustomViewInSchedule] NativeCal: Stubbed');
+            // Nothing to rebuild: NativeCalendar reads :custom-duration / :custom-unit
+            // (resolvedCustomDuration / resolvedCustomUnit) reactively, label and grid included.
         },
 
         // Get the actual Syncfusion view name for a given default view setting

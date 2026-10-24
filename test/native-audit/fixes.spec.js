@@ -6,7 +6,7 @@
 const { test, expect, f, sf, nat, isPhone, tap, shot, serverEvents, byTitle, soon } = require('./harness');
 
 const only = (info, project = 'desktop-en') => test.skip(info.project.name !== project, `${project} only`);
-async function fresh(info, tag, events = f.baseEvents()) { const id = `fix-${tag}-${info.project.name}`.toLowerCase(); await f.reset(id, events); return id; }
+async function fresh(info, tag, events = f.baseEvents(), options = {}) { const id = `fix-${tag}-${info.project.name}`.toLowerCase(); await f.reset(id, events, 'Audit calendar', options); return id; }
 
 /** Delete the whole "Team standup" series from a second (Syncfusion) tab and wait for the server. */
 async function deleteSeriesElsewhere(context, id) {
@@ -158,5 +158,47 @@ for (const [project, dstDay, before, utcOn, utcBefore] of [
     await shot(page, `fix4-dst-${project}`, info);
   });
 }
+
+// ---------------------------------------------------------------- fix 5: links, default view, custom views
+const title = async (page) => (await page.locator('[data-testid="current-date-range"]').innerText()).trim();
+const onView = (page) => page.locator('.nc-views [aria-selected="true"]').innerText();
+
+test('fix5: ?view=week&date= and ?view=day&date= open that week / day', async ({ page }, info) => {
+  only(info);
+  const id = await fresh(info, 'url');
+  await nat.open(page, id, '?view=week&date=2026-10-29');
+  await expect.poll(() => title(page)).toBe('October 25 - 31, 2026');
+  await expect(nat.event(page, 'Busy 1').first()).toBeVisible();
+  await nat.open(page, id, '?view=day&date=2026-11-03');
+  await expect.poll(() => title(page)).toBe('November 3, 2026');
+});
+
+test("fix5: the calendar's default view opens for everyone; Auto falls back to the personal default", async ({ page }, info) => {
+  only(info);
+  const id = await fresh(info, 'defview', f.baseEvents(), { defaultView: 'Week' });
+  await nat.open(page, id);
+  await expect.poll(() => onView(page)).toMatch(/^week$/i);
+  const id2 = await fresh(info, 'defview2', f.baseEvents(), {});
+  await page.addInitScript(() => { try { localStorage.setItem('pastecal_global_settings', JSON.stringify({ defaultView: 'Agenda' })); } catch (e) {} });
+  await nat.open(page, id2);
+  await expect.poll(() => onView(page)).toMatch(/^agenda$/i);
+});
+
+test('fix5: custom N-weeks / N-months views from the calendar settings (label, span, next)', async ({ page }, info) => {
+  only(info);
+  const id = await fresh(info, 'custom', f.baseEvents(), { defaultView: 'Custom', customViewDuration: 2, customViewUnit: 'Weeks' });
+  await nat.open(page, id);
+  await expect.poll(() => onView(page)).toMatch(/^2 weeks$/i);
+  await expect.poll(() => title(page)).toBe('October 18 - October 31, 2026');
+  expect(await page.locator('.nc-week-row').count()).toBe(2);
+  await nat.next(page);
+  await expect.poll(() => title(page)).toBe('November 1 - November 14, 2026');
+  const id2 = await fresh(info, 'custom2', f.baseEvents(), { defaultView: 'Custom', customViewDuration: 2, customViewUnit: 'Months' });
+  await nat.open(page, id2);
+  await expect.poll(() => onView(page)).toMatch(/^2 months$/i);
+  await expect.poll(() => title(page)).toBe('October - November 2026');
+  await nat.next(page);
+  await expect.poll(() => title(page)).toBe('December 2026 - January 2027');
+});
 
 module.exports = { only, fresh };
