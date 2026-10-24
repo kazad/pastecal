@@ -231,6 +231,7 @@ function proInsightError(r) {
     if (r.status === 401) return 'Sign in as the owner to see this. Use the email you paid with.';
     if (r.status === 403 && r.data && r.data.error === 'pro-only') return 'This is part of Pro. Lock the calendar to turn it on.';
     if (r.status === 403) return 'Only the calendar’s owner can see this.';
+    if (r.status === 503 && r.data && r.data.error === 'stats-unavailable') return 'Stats start counting soon.';
     if (r.status === 503) return 'Saved versions aren’t available right now. Try again later.';
     return 'Something went wrong. Try again in a minute.';
 }

@@ -222,6 +222,24 @@ test('the same five tabs in the same order, and the row never scrolls', async ({
   }
 });
 
+// The Worker answers 503 stats-unavailable when the room isn't counting yet (Insight.js statsPayload;
+// e.g. preview reaching production rooms). The tab must not show zeros, nor an error: one muted line.
+test('Stats when the calendar is not counted yet: no number tiles, no "0", one muted line', async ({ browser, request }) => {
+  const { id } = await seed(request);
+  const { ctx, page } = await open(browser, `/${id}?backend=cf`);
+  await page.route('**/api/stats?*', (r) => r.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ ok: false, error: 'stats-unavailable' }) }));
+  await page.getByTestId('settings-button-desktop').click();
+  await page.getByTestId('side-tab-stats').click();
+  const line = page.getByTestId('stats-free-unavailable');
+  await expect(line).toHaveText('Stats start counting soon.');
+  await expect(line).not.toHaveAttribute('role', 'alert');
+  await expect(page.getByTestId('stats-free-views')).toHaveCount(0);
+  await expect(page.getByTestId('stats-free-followers')).toHaveCount(0);
+  await expect(page.getByTestId('stats-free')).not.toContainText(/\b0\b/);
+  await expect(page.getByTestId('stats-teaser')).toContainText('More with Pro');
+  await ctx.close();
+});
+
 test('draft: Share, Activity and Stats say what they will hold, with one Save & share button', async ({ browser }) => {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await ctx.addInitScript(() => { window.__TEST__ = true; });

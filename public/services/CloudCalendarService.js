@@ -69,15 +69,32 @@ class CloudCalendarService extends CalendarDataService {
     static baseUrl = null;
     static _base() { return this.baseUrl || (typeof location !== 'undefined' ? location.origin : 'http://localhost:8787'); }
     static _url(id, suffix = '') { return `${this._base()}/cal/${encodeURIComponent(id)}${suffix}`; }
+    // Where this page was opened from, as a category the calendar's stats count: an embed, a search
+    // engine, or another site. Only the category leaves the browser, never the other site's address.
+    // '' means direct (typed, bookmarked, pastecal itself, or an app that strips the referrer).
+    static _source() {
+        try {
+            if (typeof window !== 'undefined' && window.self !== window.top) return 'embed';
+            const ref = typeof document !== 'undefined' && document.referrer;
+            if (!ref) return '';
+            const h = new URL(ref).hostname.toLowerCase();
+            if (h === location.hostname || /(^|\.)pastecal\.com$/.test(h)) return '';
+            if (/(^|\.)(google|bing|duckduckgo|yahoo|ecosia|baidu|yandex|search\.brave|startpage|qwant)\./.test(h)) return 'search';
+            return 'site';
+        } catch (e) { return ''; }
+    }
     static _wsUrl(id) {
-        let authorParam = '';
+        const q = new URLSearchParams();
         try {
             if (typeof AuthorSignal !== 'undefined' && typeof AuthorSignal.uid === 'function') {
                 const uid = AuthorSignal.uid();
-                if (uid) authorParam = `?author=${encodeURIComponent(uid)}`;
+                if (uid) q.set('author', uid);
             }
         } catch (e) {}
-        return this._url(id, '/ws' + authorParam).replace(/^http/, 'ws');
+        const src = this._source();
+        if (src) q.set('src', src);
+        const qs = q.toString();
+        return this._url(id, '/ws' + (qs ? '?' + qs : '')).replace(/^http/, 'ws');
     }
 
     static RECONNECT = { baseMs: 500, maxMs: 30000 };
@@ -529,7 +546,8 @@ class CloudCalendarService extends CalendarDataService {
             if (stopped) return;
             try {
                 if (typeof document === 'undefined' || document.visibilityState !== 'hidden') {
-                    let r = await fetch(`${this._base()}/cal/view/${encodeURIComponent(slug)}`);
+                    const src = this._source();
+                    let r = await fetch(`${this._base()}/cal/view/${encodeURIComponent(slug)}${src ? '?src=' + src : ''}`);
                     if (r.status === 404) r = await fetch(this._url(slug));
                     if (r.ok) {
                         const out = await r.json();

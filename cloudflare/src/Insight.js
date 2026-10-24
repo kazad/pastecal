@@ -4,7 +4,11 @@
  *
  *   GET  /api/pro/stats?calendar=<id>&days=30|90|365
  *        -> {days:[{day, views, visitors, followers}], countries:[{code, count}],
- *            cities:[{name, country, count}], totals:{views, visitors, followers, followersToday}}
+ *            cities:[{name, country, count}],
+ *            apps:{google, apple, outlook, other},       follower-days by calendar app (a share, not people)
+ *            hours:[24 numbers],                         counted views by UTC hour; the client shifts to the owner's zone
+ *            sources:{embed, search, site, direct},      counted views by where they came from
+ *            totals:{views, visitors, followers, followersToday}}
  *   GET  /api/pro/versions?calendar=<id>
  *        -> [{date, day, kind:'daily'|'restore-point', v, events, savedAt}]  newest first
  *   GET  /api/pro/versions/preview?calendar=<id>&date=<date>
@@ -35,15 +39,17 @@
  *   GET  /api/stats?calendar=<id>  -> {views, viewsPrev, followers}
  * views: the last 7 days (today included); viewsPrev: the 7 before them; followers: calendar apps on
  * the busiest of the last 7 days (as the Pro headline: apps don't all fetch every day). Totals only:
- * per-day rows and places stay Pro. Errors: 400 bad-calendar, 404 no-calendar, 403 locked (a Pro
- * calendar: its owner reads /api/pro/stats).
+ * per-day rows, places, apps, hours and sources stay Pro. Errors: 400 bad-calendar, 404 no-calendar, 403 locked (a Pro
+ * calendar: its owner reads /api/pro/stats), 503 {ok:false, error:'stats-unavailable'} (the room isn't counting
+ * yet: it runs code from before stats, as production rooms do for preview until production deploys).
+ * /api/pro/stats answers the same 503 then. Never zeros in place of a missing answer.
  *
  * Also here, because the Worker is the only one that may say so: hitHeaders(), which marks a
  * forwarded calendar read as a countable hit for RoomInsight.countHit.
  */
 import { LockClient } from './LockClient.js';
 import { sameSite } from './Accounts.js';
-import { VERSION_RE, snapshotPrefix, savedAtMs } from './RoomInsight.js';
+import { VERSION_RE, snapshotPrefix, savedAtMs, sourceOf } from './RoomInsight.js';
 
 const validId = (id) => typeof id === 'string' && id.length >= 1 && id.length <= 200 && !/[.#$\[\]\/\u0000-\u001f\u007f]/.test(id);
 const json = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
@@ -62,11 +68,28 @@ export function isBot(request) {
 
 // Headers that mark a forwarded calendar read as a hit ('view' or 'follow'), with the place it came
 // from (request.cf; wrangler dev fills it with this machine's place). null for bots. City is
-// URI-encoded: header values must be Latin-1.
+// URI-encoded: header values must be Latin-1. A view also carries where it came from, as a category
+// only (RoomInsight.sourceOf): the Referer and the page's ?ref= host stop here.
 export function hitHeaders(request, env, kind) {
     if (isBot(request)) return null;
     const country = (request.cf && request.cf.country) || '', city = (request.cf && request.cf.city) || '';
-    return { 'X-PC-Hit': kind, 'X-PC-Geo-Country': String(country).slice(0, 2), 'X-PC-Geo-City': encodeURIComponent(String(city).slice(0, 80)) };
+    const h = { 'X-PC-Hit': kind, 'X-PC-Geo-Country': String(country).slice(0, 2), 'X-PC-Geo-City': encodeURIComponent(String(city).slice(0, 80)) };
+    if (kind === 'view') {
+        const url = new URL(request.url);
+        // The page sends where it was opened from as a category only (?src=embed|search|site), so no other
+        // site's hostname reaches a URL or a log. ?embed / ?ref still work for older pages.
+        const src = url.searchParams.get('src') || '';
+        h['X-PC-Source'] = /^(embed|search|site|direct)$/.test(src) ? src : sourceOf({ dest: request.headers.get('Sec-Fetch-Dest') || '', embed: url.searchParams.get('embed') || '',
+            ref: url.searchParams.get('ref') || '', referer: request.headers.get('Referer') || '', host: url.host });
+    }
+    return h;
+}
+// The page's source markers (?embed=1, ?ref=<host>), removed from a URL before it goes to a room.
+export const SOURCE_PARAMS = ['embed', 'ref', 'src'];
+export function withoutSourceParams(u) {
+    const url = new URL(u);
+    for (const k of SOURCE_PARAMS) url.searchParams.delete(k);
+    return url.toString();
 }
 
 // Who may read: a Pro calendar's owner. Returns {userId} or {res} (a refusal).
@@ -119,6 +142,16 @@ async function listVersions(env, id, since) {
     return out.filter((x) => (x.savedAt ? Date.parse(x.savedAt) : 0) >= since).sort(newestFirst);
 }
 
+// A room's stats answer, or null when it isn't one: a non-200, or a body without days[] and totals{}.
+// A room running older code (preview's Worker reaches production rooms until production deploys)
+// has no stats route and answers the path with the calendar itself; summing that would show zeros.
+async function statsPayload(r) {
+    if (!r.ok) return null;
+    const body = await r.json().catch(() => null);
+    return body && Array.isArray(body.days) && body.totals && typeof body.totals === 'object' ? body : null;
+}
+const statsUnavailable = () => json({ ok: false, error: 'stats-unavailable' }, 503);
+
 // The free headline counts (see the top). The room is reached by the exact id, never through the
 // directory, so a view link's id finds no calendar. The lock is read from the room itself, which is
 // what decides whether the edit link may write.
@@ -129,9 +162,9 @@ async function freeStats(env, id) {
     if (!ls.ok) return json({ error: 'unavailable' }, 502);
     if ((await ls.json()).locked) return json({ error: 'locked' }, 403);
     const r = await room(env, id).fetch(`${roomUrl(id, 'stats')}?days=14`);
-    if (r.status === 404) return json({ error: 'no-calendar' }, 404);
-    if (!r.ok) return json({ error: 'unavailable' }, 502);
-    const days = (await r.json()).days || [];
+    const stats = await statsPayload(r);              // lock-status found the calendar: anything else is "not counting yet"
+    if (!stats) return statsUnavailable();
+    const days = stats.days;
     const last = days.slice(-7), prev = days.slice(-14, -7);
     const sum = (rows) => rows.reduce((a, d) => a + (Number(d.views) || 0), 0);
     return json({ views: sum(last), viewsPrev: sum(prev), followers: last.reduce((a, d) => Math.max(a, Number(d.followers) || 0), 0) });
@@ -182,7 +215,8 @@ export async function handleInsight(request, env, url, sessionUserId) {
             const days = url.searchParams.has('days') ? Number(url.searchParams.get('days')) : 30;
             if (!DAYS.has(days)) return json({ error: 'bad-days' }, 400);
             const r = await room(env, id).fetch(`${roomUrl(id, 'stats')}?days=${days}`);
-            return json(await r.json(), r.status);
+            const stats = await statsPayload(r);
+            return stats ? json(stats) : statsUnavailable();
         }
         if (!env.BACKUPS) return json({ error: 'no-backups' }, 503);
         if (path === '/api/pro/versions') return json(await listVersions(env, id, gate.lockedAt));

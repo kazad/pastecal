@@ -181,7 +181,7 @@ const CalendarVueApp = {
             shareProFocus: false,       // Share opened from Get Pro: just the lock offer
             showRecentChanges: false,   // the Activity tab of the side panel (id 'changes')
             showStatsInfo: false,       // the Stats tab when it can't show Pro stats: a draft, a free calendar, a non-owner
-            freeStats: null,            // the Stats tab's free counts: {id, loading, error, none, views, viewsPrev, followers}
+            freeStats: null,            // the Stats tab's free counts: {id, loading, error, none, unavailable, views, viewsPrev, followers}
             proOwnerChecked: false,     // /api/pro/status has answered for this lock, so "not the owner" is known
             notesEditing: false,        // Notes reads by default; Edit swaps in the textarea
             settingsScope: 'calendar',  // Settings: 'calendar' (everyone) or 'me' (this device)
@@ -346,7 +346,7 @@ const CalendarVueApp = {
         // The free Stats tiles' comparison: "↑ 12%", "↓ 8%", "Same", or null with no earlier week to compare.
         freeStatsDelta() {
             const f = this.freeStats;
-            const d = f && !f.loading && !f.error ? ProInsightMath.delta(f.views, f.viewsPrev) : null;
+            const d = f && !f.loading && !f.error && !f.unavailable ? ProInsightMath.delta(f.views, f.viewsPrev) : null;
             return d && { dir: d.dir, text: d.dir === 'flat' ? d.text : (d.dir === 'up' ? '↑ ' : '↓ ') + d.text.slice(1) };
         },
         // A view link or locked calendar with notes opens with them pinned beside the grid.
@@ -3322,15 +3322,18 @@ const CalendarVueApp = {
             if (!id) return;
             const keep = this.freeStats && this.freeStats.id === id && !this.freeStats.error ? this.freeStats : null;
             this.freeStats = { id, views: 0, viewsPrev: 0, followers: 0, ...keep, loading: !keep, error: false };
-            let data = null, offline = false;
+            let data = null, offline = false, unavailable = false;
             try {
                 const res = await fetch(`/api/stats?calendar=${encodeURIComponent(id)}`, { credentials: 'same-origin' });
                 data = res.ok ? await res.json().catch(() => null) : null;
+                // 503 stats-unavailable: this calendar isn't being counted yet. Never shown as zeros.
+                if (res.status === 503) unavailable = ((await res.json().catch(() => null)) || {}).error === 'stats-unavailable';
             } catch (e) { offline = true; }
             if (!this.freeStats || this.freeStats.id !== id) return;      // another calendar opened meanwhile
             // No numbers to show (not stored here, or locked meanwhile): just the Pro list, no error.
             this.freeStats = data
                 ? { id, loading: false, error: false, views: Number(data.views) || 0, viewsPrev: Number(data.viewsPrev) || 0, followers: Number(data.followers) || 0 }
+                : unavailable ? { id, loading: false, error: false, unavailable: true }
                 : keep ? { ...keep, loading: false } : { id, loading: false, error: offline, none: !offline };
         },
         /** Notes' Edit and Add notes. The textarea is bound as before, so typing saves the same way. */

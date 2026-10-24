@@ -1298,6 +1298,7 @@
                         <template v-else>
                             <div v-if="!(freeStats && freeStats.none)" class="pc-free-stats" data-testid="stats-free" :aria-busy="!freeStats || freeStats.loading ? 'true' : 'false'">
                                 <p v-if="freeStats && freeStats.error" class="pc-side-hint" role="alert">We couldn’t load the numbers. Check your connection and try again.</p>
+                                <p v-else-if="freeStats && freeStats.unavailable" class="pc-side-hint" data-testid="stats-free-unavailable">Stats start counting soon.</p>
                                 <div v-else class="pc-free-tiles">
                                     <div class="pc-free-tile" data-testid="stats-free-views">
                                         <span class="pc-free-num">{{ freeStats && !freeStats.loading ? freeStats.views.toLocaleString() : '–' }}</span>

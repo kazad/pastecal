@@ -8,12 +8,13 @@
  *      history entry, after writing the current state to R2 as a restore point.
  *
  * Internal routes (only Worker code reaches them; see INSIGHT_ROUTES in CalendarRoom.fetch):
- *   GET  http://internal/cal/<id>/stats?days=30|90|365  -> {days:[{day, views, visitors, followers}], countries, cities, totals}
+ *   GET  http://internal/cal/<id>/stats?days=30|90|365  -> {days:[{day, views, visitors, followers}], countries, cities,
+ *                                                           apps, hours, sources, totals}
  *   POST http://internal/cal/<id>/restore-version {version}   -> {ok, v} | {ok:false, error}
  *   GET  http://internal/cal/<id>/stats-dump             -> every stats row, for tests (the Worker serves it in dev mode only)
  *
- * Privacy. Stored: counts, a country tally and a city tally per day. Never stored: IPs, user agents,
- * names, or which visitor saw what. To tell "the same visitor again today" from "someone new" the
+ * Privacy. Stored: counts, a country tally and a city tally per day, and three category tallies per day
+ * (see "Breakdowns" below). Never stored: IPs, user agents, referrers, names, or which visitor saw what. To tell "the same visitor again today" from "someone new" the
  * room keeps, for the current UTC day only, a set of 8-byte hashes: 4 bytes of SHA-256(dailySalt +
  * network) then 4 bytes of SHA-256(dailySalt + network + UA). The salt is random, made the first time
  * the room is reached on a new day, and deleted with that set when the day rolls over -- so
@@ -47,6 +48,20 @@
  * a conservative lower bound: the largest single-day count for that place in the range (distinct
  * networks that day). A place is shown only if some one day reached the threshold; the count shown is
  * the sum of daily counts (visitor-days).
+ *
+ * Breakdowns (per UTC day, counts only; each one is a fixed small set of categories, never a string the
+ * visitor sent):
+ *   - apps: {google, apple, outlook, other}, +1 in the follower's app each time a follower is counted
+ *     (so the dedup, the 4th-UA collapse and the daily cap above apply to it unchanged: one app fetching
+ *     the feed 5 times a day is 1). The app comes from appOf(User-Agent) at that moment; the UA is then
+ *     dropped like always. Over a range the report sums days (follower-days): read it as a share, not
+ *     as people -- one iPhone subscribed all month is 30 there and 1 in the followers headline.
+ *   - hours: 24 numbers, counted views by UTC hour of day. The client shifts them to the owner's time
+ *     zone (a whole-hour shift; half-hour zones round).
+ *   - sources: {embed, search, site, direct}, +1 per counted view. The Worker derives it (sourceOf, from
+ *     Sec-Fetch-Dest, the referrer host and an embed marker the page may send) and forwards only the
+ *     category, as X-PC-Source; the room never sees which site or search engine it was.
+ * None is thresholded like places: a category or an hour can't name a place or a person.
  */
 
 export const STATS = {
@@ -61,6 +76,8 @@ export const STATS = {
     minCountryVisitors: 3,        // the same for a country
     top: 20,
 };
+export const APPS = ['google', 'apple', 'outlook', 'other'];
+export const SOURCES = ['embed', 'search', 'site', 'direct'];
 export const INSIGHT_ROUTES = new Set(['stats', 'stats-dump', 'restore-version']);
 // A version is a daily snapshot (2026-10-23) or a restore point written just before a restore:
 // 2026-10-23T140509123Z-3fa9c1 (to the millisecond, plus a random suffix), or 2026-10-23T140509Z from
@@ -80,6 +97,10 @@ export function initInsight(sql) {
     sql.exec(`CREATE TABLE IF NOT EXISTS stats_salt (k INTEGER PRIMARY KEY CHECK (k = 1), day TEXT NOT NULL, salt TEXT NOT NULL)`);
     // Per-visitor views today (capped at STATS.maxViewsPerVisitor); added after the table existed.
     try { sql.exec(`ALTER TABLE stats_seen ADD COLUMN views INTEGER NOT NULL DEFAULT 0`); } catch { /* already there */ }
+    // Breakdowns (category tallies, JSON); added after the table existed. NULL (older rows) reads as empty.
+    for (const col of ['apps_json', 'hours_json', 'sources_json']) {
+        try { sql.exec(`ALTER TABLE stats_daily ADD COLUMN ${col} TEXT DEFAULT NULL`); } catch { /* already there */ }
+    }
     // Start times of the last hour's restores (RESTORE limits).
     sql.exec(`CREATE TABLE IF NOT EXISTS restore_log (at INTEGER NOT NULL)`);
 }
@@ -114,6 +135,52 @@ export function ipPrefix(ip) {
     return groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, '')).join(':') + '::/64';
 }
 const sha = async (s) => hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)));
+
+// Which calendar app a follower's User-Agent is (one of APPS). Real strings seen on ICS fetches:
+//   google   Google-Calendar-Importer                    (Google's servers, for every Google Calendar user)
+//   apple    iOS/26.6 (23G71) dataaccessd/1.0, macOS/26.6.2 (25G83) dataaccessd/1.0,
+//            Mac OS X/10.15.7 (19H15) CalendarAgent/954, iOS/17.5 (21F79) accountsd/1.0
+//   outlook  Microsoft Office/16.0 (Windows NT 10.0; Microsoft Outlook 16.0.17928; Pro), Outlook-iOS/1.0,
+//            Microsoft.Exchange/15.20 (Windows NT 10.0), ExchangeWebServices/15.0, Microsoft Outlook Calendar
+//   other    ICSx5/2.2.5 (ical4j/3.2.19 okhttp/4.12.0 Android/14), Thunderbird, Fastmail, DAVx5, Proton, ...
+// Microsoft is tested before Apple: Outlook for Mac says "Macintosh; Mac OS X". Apple is keyed on its
+// calendar daemons and the "<os>/<version> (<build>)" shape they lead with, never on OS words alone
+// (Thunderbird on a Mac says "Intel Mac OS X" too).
+export function appOf(ua) {
+    ua = String(ua || '');
+    if (/Google-?Calendar/i.test(ua)) return 'google';
+    if (/Outlook|Microsoft[ .-]?Exchange|ExchangeWebServices|Microsoft Office\//i.test(ua)) return 'outlook';
+    if (/dataaccessd|CalendarAgent|CalendarStore|accountsd|iCal\/|^(iOS|iPadOS|macOS|Mac[ _]OS[ _]X|watchOS|visionOS)\/[\d.]+ \(/i.test(ua)) return 'apple';
+    return 'other';
+}
+
+// Where a view came from (one of SOURCES), for the Worker (Insight.hitHeaders); only the result is
+// forwarded. dest: Sec-Fetch-Dest. embed: the page's own marker (?embed=1, when it runs in a frame).
+// ref: the page's document.referrer host (?ref=), else the Referer header's host. host: this request's
+// host, which counts as pastecal itself. The calendar's data and socket requests come from pastecal's
+// page, so without the page's markers their Referer is pastecal: 'direct'.
+const SEARCH_HOST = /(^|\.)(google\.[a-z.]{2,7}|bing\.com|duckduckgo\.com|search\.yahoo\.(com|co\.jp)|yahoo\.com|yandex\.[a-z.]{2,6}|ya\.ru|baidu\.com|ecosia\.org|search\.brave\.com|startpage\.com|qwant\.com|naver\.com|kagi\.com|seznam\.cz|sogou\.com)$/;
+const NOT_SEARCH = /^(mail|calendar|docs|drive|sites|groups|classroom|meet|chat|maps)\.google\./;
+// Mail and messaging on the web: a link someone sent you is "direct", as it is from apps that strip the referrer.
+const MESSAGE_HOST = /(^|\.)(mail\.google\.com|outlook\.(live|office|office365)\.com|mail\.yahoo\.com|web\.whatsapp\.com|web\.telegram\.org|teams\.microsoft\.com|app\.slack\.com|discord\.com|messenger\.com|mail\.proton\.me)$/;
+export function refHost(s) {
+    s = String(s || '').trim().toLowerCase();
+    if (!s) return '';
+    if (/^[a-z][a-z0-9+.-]*:/.test(s)) { try { s = new URL(s).hostname; } catch { return ''; } }
+    s = s.replace(/^\[|\]$/g, '').replace(/\.$/, '');
+    return /^[a-z0-9.:-]{1,253}$/.test(s) ? s : '';
+}
+export function sourceOf({ dest = '', embed = '', ref = '', referer = '', host = '' } = {}) {
+    if (embed === '1' || /^(iframe|frame|embed|object)$/i.test(dest)) return 'embed';
+    const h = refHost(ref) || refHost(referer);
+    if (!h) return 'direct';
+    const self = refHost(host);
+    if ((self && h === self) || /(^|\.)pastecal\.com$/.test(h) || /^(localhost|127\.0\.0\.1|::1)(:\d+)?$/.test(h)) return 'direct';
+    if (MESSAGE_HOST.test(h)) return 'direct';
+    if (SEARCH_HOST.test(h) && !NOT_SEARCH.test(h)) return 'search';
+    return 'site';
+}
+const parseHours = (s) => { try { const a = JSON.parse(s || 'null'); if (Array.isArray(a) && a.length === 24) return a.map((n) => Number(n) || 0); } catch { /* bad row */ } return Array(24).fill(0); };
 
 // Called by CalendarRoom.fetch when the Worker marked the request as a hit (X-PC-Hit: view|follow).
 // The Worker strips any X-PC-* a client sent, sets the marker only on calendar reads by non-bots, and
@@ -160,20 +227,32 @@ export async function countHit(room, request) {
     sql.exec(`INSERT INTO stats_daily (day, views, visitors, followers) VALUES (?, ?, ?, ?)
         ON CONFLICT(day) DO UPDATE SET views = views + excluded.views, visitors = visitors + excluded.visitors, followers = followers + excluded.followers`,
         today, views, visitors, followers);
-    if (kind !== 'v' || !newNetwork) return;
-    // Places are tallied once per network per day, not per view or per user agent: one person
-    // reloading, or switching browsers, must not move a city toward the threshold alone.
-    const country = clean(request.headers.get('X-PC-Geo-Country'), 2).toUpperCase();
-    let city = ''; try { city = clean(decodeURIComponent(request.headers.get('X-PC-Geo-City') || ''), 80); } catch { /* bad escape */ }
-    if (!country && !city) return;
-    const row = sql.exec(`SELECT countries_json, cities_json FROM stats_daily WHERE day = ?`, today).one();
-    const countries = parseObj(row.countries_json), cities = parseObj(row.cities_json);
-    if (/^[A-Z]{2}$/.test(country)) countries[country] = (countries[country] || 0) + 1;
-    if (city) {
-        const key = `${city}|${/^[A-Z]{2}$/.test(country) ? country : ''}`;
-        if (key in cities || Object.keys(cities).length < STATS.maxCitiesPerDay) cities[key] = (cities[key] || 0) + 1;
+    // The breakdowns and places, in the same synchronous step (see "Breakdowns" and "Places" at the top).
+    const row = sql.exec(`SELECT countries_json, cities_json, apps_json, hours_json, sources_json FROM stats_daily WHERE day = ?`, today).one();
+    const set = {};
+    const bump = (col, key) => { const o = parseObj(row[col]); o[key] = (o[key] || 0) + 1; set[col] = json(o); };
+    if (followers) bump('apps_json', appOf(ua));
+    if (views) {
+        const hours = parseHours(row.hours_json);
+        hours[new Date(now).getUTCHours()] += 1;
+        set.hours_json = json(hours);
+        const src = request.headers.get('X-PC-Source');
+        bump('sources_json', SOURCES.includes(src) ? src : 'direct');
     }
-    sql.exec(`UPDATE stats_daily SET countries_json = ?, cities_json = ? WHERE day = ?`, json(countries), json(cities), today);
+    if (kind === 'v' && newNetwork) {
+        // Places are tallied once per network per day, not per view or per user agent: one person
+        // reloading, or switching browsers, must not move a city toward the threshold alone.
+        const country = clean(request.headers.get('X-PC-Geo-Country'), 2).toUpperCase();
+        let city = ''; try { city = clean(decodeURIComponent(request.headers.get('X-PC-Geo-City') || ''), 80); } catch { /* bad escape */ }
+        const countries = parseObj(row.countries_json), cities = parseObj(row.cities_json);
+        if (/^[A-Z]{2}$/.test(country)) { countries[country] = (countries[country] || 0) + 1; set.countries_json = json(countries); }
+        if (city) {
+            const key = `${city}|${/^[A-Z]{2}$/.test(country) ? country : ''}`;
+            if (key in cities || Object.keys(cities).length < STATS.maxCitiesPerDay) { cities[key] = (cities[key] || 0) + 1; set.cities_json = json(cities); }
+        }
+    }
+    const cols = Object.keys(set);
+    if (cols.length) sql.exec(`UPDATE stats_daily SET ${cols.map((c) => `${c} = ?`).join(', ')} WHERE day = ?`, ...cols.map((c) => set[c]), today);
 }
 // Today's visitors/followers so far (the rows of that kind in stats_seen, up to maxSeenPerDay).
 const todayCount = (sql, day, col) => sql.exec(`SELECT ${col} AS n FROM stats_daily WHERE day = ?`, day).toArray()[0]?.n || 0;
@@ -185,15 +264,20 @@ export function statsReport(room, days) {
     rollover(room);
     const today = dayOf(Date.now());
     const from = dayOf(Date.parse(today) - (days - 1) * 86400000);
-    const rows = room.sql.exec(`SELECT day, views, visitors, followers, countries_json, cities_json FROM stats_daily WHERE day >= ? ORDER BY day`, from).toArray();
+    const rows = room.sql.exec(`SELECT day, views, visitors, followers, countries_json, cities_json, apps_json, hours_json, sources_json
+        FROM stats_daily WHERE day >= ? ORDER BY day`, from).toArray();
     const byDay = new Map(rows.map((r) => [r.day, r]));
     const out = [], countries = {}, cities = {}, countryPeak = {}, cityPeak = {};
+    const apps = Object.fromEntries(APPS.map((k) => [k, 0])), sources = Object.fromEntries(SOURCES.map((k) => [k, 0])), hours = Array(24).fill(0);
     for (let i = days - 1; i >= 0; i--) {
         const day = dayOf(Date.parse(today) - i * 86400000), r = byDay.get(day);
         out.push({ day, views: r ? r.views : 0, visitors: r ? r.visitors : 0, followers: r ? r.followers : 0 });
         if (!r) continue;
         for (const [k, n] of Object.entries(parseObj(r.countries_json))) { countries[k] = (countries[k] || 0) + n; countryPeak[k] = Math.max(countryPeak[k] || 0, n); }
         for (const [k, n] of Object.entries(parseObj(r.cities_json))) { cities[k] = (cities[k] || 0) + n; cityPeak[k] = Math.max(cityPeak[k] || 0, n); }
+        for (const [k, n] of Object.entries(parseObj(r.apps_json))) if (k in apps) apps[k] += Number(n) || 0;
+        for (const [k, n] of Object.entries(parseObj(r.sources_json))) if (k in sources) sources[k] += Number(n) || 0;
+        parseHours(r.hours_json).forEach((n, h) => { hours[h] += n; });
     }
     // Distinct visitors over the range >= the largest one-day count (each day counts distinct networks).
     const shown = (o, peak, min) => Object.fromEntries(Object.entries(o).filter(([k]) => peak[k] >= min));
@@ -203,6 +287,9 @@ export function statsReport(room, days) {
         countries: top(shown(countries, countryPeak, STATS.minCountryVisitors)).map(([code, count]) => ({ code, count })),
         cities: top(shown(cities, cityPeak, STATS.minCityVisitors))
             .map(([k, count]) => { const [name, country] = k.split('|'); return { name, country: country || null, count }; }),
+        apps,           // follower-days by app over the range (a share; see "Breakdowns")
+        hours,          // counted views by UTC hour, [0..23]
+        sources,        // counted views by where they came from
         totals: {
             views: out.reduce((a, d) => a + d.views, 0),
             visitors: out.reduce((a, d) => a + d.visitors, 0),        // a sum of daily uniques: one person on 3 days counts 3

@@ -31,7 +31,7 @@ export { Waitlist } from './Waitlist.js';
 export { Accounts } from './Accounts.js';
 import { handleAccounts, sessionUserId as accountsSessionUserId } from './Accounts.js';
 import { PLANS } from './Waitlist.js';
-import { handleInsight, hitHeaders } from './Insight.js';
+import { handleInsight, hitHeaders, withoutSourceParams } from './Insight.js';
 import { handleTestInboxEmail, handleTestInboxAdmin } from './TestInbox.js';
 import { timingSafeEqual } from './Stripe.js';
 import { allowedOrigins, noindexEverywhere, ROBOTS_DISALLOW_ALL } from './Site.js';
@@ -89,10 +89,12 @@ async function sessionUserId(request, env, { socket = false } = {}) {
 }
 
 // A request to forward to a room, without any X-PC-* header the client sent (rooms trust them).
-// `userId` is set only from sessionUserId; `hit` only from hitHeaders (stats, Insight.js).
+// `userId` is set only from sessionUserId; `hit` only from hitHeaders (stats, Insight.js). The Referer
+// is dropped too: rooms never use it, and stats get only the category hitHeaders derived from it.
 function forRoom(request, url = request.url, userId = null, hit = null) {
     const headers = new Headers(request.headers);
     for (const k of [...headers.keys()]) if (k.toLowerCase().startsWith('x-pc-')) headers.delete(k);
+    headers.delete('Referer');
     if (userId) headers.set('X-PC-User', userId);
     if (hit) for (const [k, v] of Object.entries(hit)) headers.set(k, v);
     return new Request(url, new Request(request, { headers }));
@@ -426,7 +428,7 @@ async function route(request, env) {
             // Never pass on a client's X-PC-User; on the WebSocket, set it from the session.
             const userId = m[2] === '/ws' ? await sessionUserId(request, env, { socket: true }) : null;
             const hit = request.method === 'GET' && (!m[2] || m[2] === '/ws') ? hitHeaders(request, env, 'view') : null;
-            return withCors(await room.fetch(forRoom(request, request.url, userId, hit)));
+            return withCors(await room.fetch(forRoom(request, withoutSourceParams(request.url), userId, hit)));
         }
 
         // 7. Static assets & Single Page App rewrites
