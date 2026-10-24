@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Help · pastecal</title>
+<meta name="description" content="How to share a pastecal calendar, keep it private, undo a change, add it to your phone, and the keyboard shortcuts.">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/legal.css">
+<style>
+kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px solid var(--pc-line); border-bottom-width: 2px; border-radius: 6px; background: var(--pc-soft); font: 600 13px/1.4 var(--pc-font); text-align: center }
+.keys { display: grid; grid-template-columns: max-content 1fr; gap: 10px 18px; align-items: center; margin: 0 }
+.keys dd { margin: 0 }
+</style>
+<script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>
+</head>
+<body><main>
+<a class="top" href="/"><img src="/img/pastecal.logo.svg" alt="">pastecal</a>
+<h1>Help</h1>
+<p class="updated">Quick answers. Anything else: <a href="mailto:support@pastecal.com">support@pastecal.com</a>.</p>
+
+<h2>Make a calendar</h2>
+<p>Click any day and type an event, or press <kbd>⌘</kbd> <kbd>E</kbd> and type something like "Practice Tuesday 5pm". When it looks right, press <b>Save &amp; share</b> and pick a name. Until then the calendar is a draft, saved only in this browser.</p>
+
+<h2>Share it</h2>
+<p>Every calendar has two links. The <b>edit link</b> (pastecal.com/<i>your-name</i>) is for people who help run it: anyone with it can add and change events. The <b>read-only link</b> is for everyone else: they see every change but can't edit. Both are in <b>Share</b>, next to the calendar.</p>
+
+<h2>Keep it private</h2>
+<p>Calendars aren't listed anywhere, and edit links are kept out of search engines, so only people with a link can open one. For a private calendar, pick a hard-to-guess name. To stop anyone else from editing, <a href="/pricing">Pro</a> locks the calendar to you and the people you choose.</p>
+
+<h2>Undo a change</h2>
+<p>Press <kbd>⌘</kbd> <kbd>Z</kbd> (<kbd>Ctrl</kbd> <kbd>Z</kbd> on Windows), or open <b>Activity</b> next to the calendar to see recent changes and undo any of them. Calendars are also backed up every day they change.</p>
+
+<h2>On your phone</h2>
+<p>pastecal works in any phone browser, with nothing to install. To see events in your phone's own calendar, with its reminders, open <b>Share</b> and choose <b>Add to a calendar app</b>: Google, Apple or Outlook. Changes show up there on their own (Google checks every few hours).</p>
+
+<h2>Several calendars</h2>
+<p>Click the pastecal logo to jump between the calendars you've opened in this browser, or to start a new one.</p>
+
+<h2>Put it on a website</h2>
+<p>Use the read-only link in an iframe and visitors see the calendar as it changes: <code>&lt;iframe src="https://pastecal.com/view/<i>your-view-id</i>" width="100%" height="600" style="border:0"&gt;&lt;/iframe&gt;</code></p>
+
+<h2>Keyboard shortcuts</h2>
+<dl class="keys">
+  <dt><kbd>⌘</kbd> <kbd>E</kbd></dt><dd>Add an event by typing</dd>
+  <dt><kbd>⌘</kbd> <kbd>Z</kbd></dt><dd>Undo your last change</dd>
+  <dt><kbd>Esc</kbd></dt><dd>Close a popup or panel</dd>
+</dl>
+<nav class="foot"><a href="/">Make a calendar</a><a href="/pricing">Pricing</a><a href="/about">About</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="mailto:support@pastecal.com">Contact</a></nav>
+</main></body></html>

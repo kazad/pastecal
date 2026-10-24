@@ -79,14 +79,14 @@ const NavigationDropdown = {
                 </span>
             </a>
             <!-- Help lives here, not as a header icon: the header keeps the calendar's own actions -->
-            <button type="button" @click="$emit('open-help')" data-testid="nav-help"
+            <a href="/help" target="_blank" rel="noopener" data-testid="nav-help"
                 class="pc-nav-row flex items-center w-full text-left text-color-2 hover:bg-theme-hover transition-colors cursor-pointer group">
                 <span class="pc-nav-plus" aria-hidden="true">?</span>
                 <span class="min-w-0">
                     <span class="block font-semibold group-hover:text-blue-500 transition-colors">Help</span>
-                    <span class="block text-xs text-color-1">How it works, sharing, shortcuts</span>
+                    <span class="block text-xs text-color-1">Sharing, privacy, undo, shortcuts</span>
                 </span>
-            </button>
+            </a>
 
             <!-- Calendars grouped by ownership: yours first, then ones you visited -->
             <div v-if="recentCalendars.length > 0" class="pc-nav-list">
