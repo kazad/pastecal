@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pricing · pastecal</title>
-<!-- Draft of the per-account pricing (Pro One / Pro / Team). Not linked or indexed until the plans
+<!-- Draft of the per-account pricing (Pro Single / Pro Unlimited / Team). Not linked or indexed until the plans
      exist in Stripe and the backend; /pricing stays the live page with the working checkout. -->
 <meta name="robots" content="noindex">
 <meta name="description" content="pastecal is free for everyone who uses it. Pro is for the person who runs the calendar: lock editing, see stats, and get your own pastecal.com/@name. No per-seat pricing.">
@@ -138,7 +138,7 @@ footer a { color: var(--muted); text-decoration: none }
 </section>
 
 <div class="toggle"><div class="seg" role="group" aria-label="Billing">
-  <button type="button" data-bill="year" aria-pressed="true">Yearly <em>2 months free</em></button>
+  <button type="button" data-bill="year" aria-pressed="true">Yearly <em>save 30%</em></button>
   <button type="button" data-bill="month" aria-pressed="false">Monthly</button>
 </div></div>
 
@@ -158,46 +158,46 @@ footer a { color: var(--muted); text-decoration: none }
   </div>
 
   <div class="plan">
-    <h3>Pro One</h3>
+    <h3>Pro Single</h3>
     <p class="who">One calendar you run: a room, a team, a schedule.</p>
-    <div class="price"><strong>$19</strong><span>/ year</span></div>
-    <p class="per" data-year="Billed yearly. That's $1.58 a month." data-month="Yearly only.">Billed yearly. That's $1.58 a month.</p>
+    <div class="price"><strong>$24</strong><span>/ year</span></div>
+    <p class="per" data-year="That's $2 a month, billed yearly." data-month="Yearly only.">That's $2 a month, billed yearly.</p>
     <ul>
       <li><b>Lock editing</b> on one calendar</li>
       <li>Full stats: views by day, followers by app, places</li>
       <li>Full history, restore any version</li>
       <li>A short <code>pastecal.com/name</code> link that's yours</li>
     </ul>
-    <a class="btn" href="/pricing#get-pro" data-plan="pro-one">Get Pro One</a>
+    <a class="btn" href="/pricing#get-pro" data-plan="pro-single">Get Pro Single</a>
   </div>
 
   <div class="plan best">
     <span class="badge">Best value</span>
-    <h3>Pro</h3>
+    <h3>Pro Unlimited</h3>
     <p class="who">Everyone who runs more than one calendar.</p>
-    <div class="price"><strong data-year="$48" data-month="$5">$48</strong><span data-year="/ year" data-month="/ month">/ year</span></div>
-    <p class="per" data-year="That's $4 a month." data-month="Or $48 a year, 2 months free.">That's $4 a month.</p>
+    <div class="price"><strong data-year="$49" data-month="$6">$49</strong><span data-year="/ year" data-month="/ month">/ year</span></div>
+    <p class="per" data-year="That's about $4 a month." data-month="Or $49 a year, save 30%.">That's about $4 a month.</p>
     <ul>
       <li><b>Unlimited</b> locked calendars</li>
       <li><b>Your own name:</b> <code>pastecal.com/@you</code></li>
+      <li><b>Up to 3 co-owners</b></li>
       <li>Up to 10 short <code>pastecal.com/name</code> links</li>
       <li>Full stats, history and restore on all of them</li>
-      <li>New Pro features, at no extra cost</li>
-    </ul>
-    <a class="btn primary" href="#waitlist" data-plan="pro">Get Pro</a>
+          </ul>
+    <a class="btn primary" href="#waitlist" data-plan="pro-unlimited">Get Pro Unlimited</a>
   </div>
 
   <div class="plan">
     <h3>Team</h3>
     <p class="who">Buildings, schools, clubs, offices.</p>
-    <div class="price"><strong data-year="$390" data-month="$39">$390</strong><span data-year="/ year" data-month="/ month">/ year</span></div>
+    <div class="price"><strong data-year="$290" data-month="$29">$290</strong><span data-year="/ year" data-month="/ month">/ year</span></div>
     <p class="per" data-year="One price for the whole team." data-month="One price for the whole team.">One price for the whole team.</p>
     <ul>
-      <li>Everything in Pro</li>
-      <li><b>Several owners</b> and admins</li>
+      <li>Everything in Pro Unlimited</li>
+      <li><b>Up to 10 admins</b></li>
       <li>Your logo, no pastecal branding, in embeds too</li>
       <li>Who changed what, kept for a year</li>
-      <li>Pay by invoice, priority support</li>
+      <li>Receipts and invoices in your organization's name</li>
     </ul>
     <a class="btn" href="#waitlist" data-plan="team">Talk to us</a>
   </div>
@@ -214,7 +214,7 @@ footer a { color: var(--muted); text-decoration: none }
   <div class="promise"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 4.5a3.5 3.5 0 0 1 0 7M19 20a6 6 0 0 0-3-5.2"/></svg>
     <b>Nobody pays per person</b><p>Everyone you share with stays free, with no account. One price, however many people use it.</p></div>
   <div class="promise"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
-    <b>Your calendar never goes down</b><p>Stop paying and it stays up, shared and complete. It just unlocks.</p></div>
+    <b>Your calendar never goes offline</b><p>Stop paying and, after 30 days, it freezes as view-only: still online, feeds still working. Reopen it whenever you like.</p></div>
   <div class="promise"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
     <b>Your price never goes up</b><p>Early subscribers keep their price for as long as they stay. New features come included.</p></div>
   <div class="promise"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>
@@ -229,13 +229,13 @@ footer a { color: var(--muted); text-decoration: none }
     <p>With Pro, put every calendar under your name, as many as you like.</p></div>
   <div class="name-card"><b>Short links, first come</b>
     <code>pastecal.com/<i>rooftop</i></code>
-    <p>Anyone can still claim a short name for free. Pro locks up to 10 of them so they stay yours; Pro One locks one.</p></div>
+    <p>Anyone can still claim a short name for free. Pro Unlimited locks up to 10 of them, each tied to a calendar you run; Pro Single locks one.</p></div>
 </div>
 
 <h2>Compare plans</h2>
 <div class="gridwrap">
   <table>
-    <thead><tr><th>Feature</th><th>Free</th><th>Pro One</th><th class="best">Pro</th><th>Team</th></tr></thead>
+    <thead><tr><th>Feature</th><th>Free</th><th>Pro Single</th><th class="best">Pro Unlimited</th><th>Team</th></tr></thead>
     <tbody>
       <tr class="group"><td colspan="5">Sharing</td></tr>
       <tr><td>Calendars<small>Open to edit with the link, as today</small></td><td>Unlimited</td><td>Unlimited</td><td class="best">Unlimited</td><td>Unlimited</td></tr>
@@ -245,7 +245,7 @@ footer a { color: var(--muted); text-decoration: none }
       <tr><td>Locked calendars<small>Only you and people you choose can edit</small></td><td class="n">—</td><td>1</td><td class="best">Unlimited</td><td>Unlimited</td></tr>
       <tr><td><code>pastecal.com/@name</code></td><td class="n">—</td><td class="n">—</td><td class="best y">✓</td><td class="y">✓</td></tr>
       <tr><td>Locked short links (<code>pastecal.com/name</code>)</td><td class="n">—</td><td>1</td><td class="best">10</td><td>25</td></tr>
-      <tr><td>Several owners and admins</td><td class="n">—</td><td class="n">—</td><td class="best n">—</td><td class="y">✓</td></tr>
+      <tr><td>Co-owners and admins</td><td class="n">—</td><td class="n">—</td><td class="best">3</td><td>10</td></tr>
       <tr class="group"><td colspan="5">Insight</td></tr>
       <tr><td>Views this week and follower count</td><td class="y">✓</td><td class="y">✓</td><td class="best y">✓</td><td class="y">✓</td></tr>
       <tr><td>Views by day, followers by app, places<small>Counts only, never who</small></td><td class="n">—</td><td class="y">✓</td><td class="best y">✓</td><td class="y">✓</td></tr>
@@ -254,7 +254,7 @@ footer a { color: var(--muted); text-decoration: none }
       <tr><td>Colors, labels and dark mode</td><td class="y">✓</td><td class="y">✓</td><td class="best y">✓</td><td class="y">✓</td></tr>
       <tr><td>pastecal branding<small>On the calendar and in embeds</small></td><td>Small footer</td><td>Small footer</td><td class="best">Small footer</td><td>None, your logo</td></tr>
       <tr class="group"><td colspan="5">Help</td></tr>
-      <tr><td>Support</td><td>Email</td><td>Email</td><td class="best">Email</td><td>Priority, pay by invoice</td></tr>
+      <tr><td>Support</td><td>Email</td><td>Email</td><td class="best">Email</td><td>Email, invoices</td></tr>
     </tbody>
   </table>
 </div>
@@ -262,9 +262,9 @@ footer a { color: var(--muted); text-decoration: none }
 <h2>Questions</h2>
 <div class="faq">
   <details><summary>Does everyone I share with need to pay?</summary><p>No. Only the person who runs the calendar pays. Everyone else uses it free, with no account.</p></details>
-  <details><summary>Which plan do I need?</summary><p>Free if anyone with the link can edit. Pro One to lock a single calendar. Pro once you run two or more, or want your own name. Team for a group with several owners.</p></details>
-  <details><summary>What happens if I cancel?</summary><p>Your calendars stay up with everything in them. Locked ones unlock and go back to the free plan.</p></details>
-  <details><summary>Can I upgrade from Pro One to Pro?</summary><p>Anytime. What you've paid is credited toward Pro.</p></details>
+  <details><summary>Which plan do I need?</summary><p>Free if anyone with the link can edit. Pro Single to lock one calendar. Pro Unlimited once you run two or more, want your own name, or share the work with a co-owner. Team for an organization.</p></details>
+  <details><summary>What happens if I cancel?</summary><p>Nothing disappears. For 30 days everything works as before. Then locked calendars freeze as view-only, still online with feeds working, until you reopen them or resubscribe.</p></details>
+  <details><summary>Can I upgrade from Pro Single?</summary><p>Anytime. What you've paid is credited toward Pro Unlimited.</p></details>
   <details><summary>Do I need an account?</summary><p>Only the person who pays, so we know who owns what. It's made from the email you give at checkout, and you sign in with an emailed link, no password.</p></details>
   <details><summary>Can I see who looked at my calendar?</summary><p>No. Stats are counts and places, never names or who viewed what.</p></details>
   <details><summary>What happens to my existing links?</summary><p>They keep working. Moving a calendar under your <code>@name</code> leaves the old link pointing to it.</p></details>
