@@ -468,12 +468,12 @@ const CalendarVueApp = {
             // User has edit permissions (defensive boolean coercion)
             return !Boolean(this.isReadOnly);
         },
-        // Pro removes pastecal's branding from what visitors see (view links, embeds, a locked
-        // calendar's read-only face). The owner's own editing UI keeps it.
+        // Pro trims pastecal's branding from what visitors see (view links, embeds, a locked
+        // calendar's read-only face) to the "Made with pastecal" footer. The owner's own editing UI keeps it.
         hideBranding() {
             return !!(this.isReadOnly && this.lock.pro);
         },
-        // The footer's Report link (shown when branding is hidden). The page's own path, so a view link
+        // The footer's Report link (shown when branding is trimmed). The page's own path, so a view link
         // reports its view code and never reveals the edit name behind it.
         reportUrl() {
             return '/report?cal=' + encodeURIComponent(window.location.pathname.replace(/^\/+/, ''));
