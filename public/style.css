@@ -1629,3 +1629,69 @@ button:hover > .pc-add-event {
 .pc-ss-badge { position: absolute; right: 14px; bottom: 12px; display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 999px; background: var(--pc-link); color: var(--pc-on-accent); font-size: 11px; font-weight: 700; box-shadow: 0 4px 12px -4px rgba(0,0,0,.35) }
 .pc-ss-badge svg { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round }
 .pc-ss-ok { background: var(--pc-success) }
+||||||| da7fdac
+
+
+/* ==========================================================================
+   Side panel (index.html .pc-side): Notes, Share, Changes, Settings and the rest,
+   one at a time. Three shapes from one element:
+     1100px+   docked in the homepage guide's column (.pc-home-split); the calendar
+               narrows and keeps its top.
+     768-1099  a drawer over the calendar's right side, with a backdrop.
+     <768      a bottom sheet with a handle look, over a dimmed calendar.
+   Kept apart from the Syncfusion overrides above; nothing here styles the grid.
+   ========================================================================== */
+.pc-side { position: relative; min-height: 420px; border: 1px solid var(--pc-line); border-radius: 8px; background: var(--pc-bg); color: var(--pc-text) }
+/* The body scrolls inside an absolute layer, so a long Settings never makes the row (and the calendar) taller. */
+.pc-side-inner { position: absolute; inset: 0; display: flex; flex-direction: column; border-radius: inherit; overflow: hidden }
+.pc-side-handle { display: none }
+.pc-side-bar { flex: none; display: flex; align-items: stretch; gap: 4px; min-height: 48px; padding: 0 6px 0 8px; border-bottom: 1px solid var(--pc-line); background: var(--pc-soft) }
+.pc-side-tabs { flex: 1; min-width: 0; display: flex; align-items: stretch; gap: 2px; overflow-x: auto; scrollbar-width: none }
+.pc-side-tabs::-webkit-scrollbar { display: none }
+.pc-side-tab { flex: none; padding: 0 10px; border: 0; background: none; font: 500 14px/1 var(--pc-font); color: var(--pc-text-muted); cursor: pointer; white-space: nowrap }
+.pc-side-tab:hover { color: var(--pc-text) }
+.pc-side-tab[aria-selected="true"] { font-weight: 700; color: var(--pc-text); box-shadow: inset 0 -2px 0 var(--pc-link) }
+.pc-side-tab:focus-visible, .pc-side-close:focus-visible { outline: 2px solid var(--pc-link); outline-offset: -2px; border-radius: 6px }
+.pc-side-title { flex: 1; min-width: 0; margin: 0; padding-left: 12px; align-self: center; font-size: 16px; font-weight: 700; color: var(--pc-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.pc-side-close { flex: none; align-self: center; display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 8px; background: none; color: var(--pc-text-muted); cursor: pointer }
+.pc-side-close:hover { background: var(--pc-hover); color: var(--pc-text) }
+.pc-side-body { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 18px 20px 22px }
+.pc-side-notes { display: flex; flex-direction: column; gap: 8px; height: 100% }
+.pc-side-hint { margin: 0; font-size: 13px; line-height: 1.45; color: var(--pc-text-muted) }
+.pc-side-notes-input { flex: 1; min-height: 220px; width: 100%; padding: 10px 12px; border: 1px solid var(--pc-field); border-radius: 8px; background: var(--pc-bg); color: var(--pc-text); font-size: 14px; line-height: 1.55; resize: none }
+.pc-side-notes-input:focus { outline: none; border-color: var(--pc-link); box-shadow: var(--pc-focus-ring) }
+.pc-side-notes-read { font-size: 14px; line-height: 1.6; color: var(--pc-text); overflow-wrap: anywhere }
+.pc-side-notes-read a { color: var(--pc-link) }
+/* Viewers: the pinned notes read as part of the page, a quieter panel than the editor's. */
+.pc-side--notes:not(:has(.pc-side-tabs)) { background: var(--pc-surface) }
+.pc-side--notes:not(:has(.pc-side-tabs)) .pc-side-bar { background: transparent; border-bottom: 0; min-height: 52px; padding-top: 6px }
+.pc-side--notes:not(:has(.pc-side-tabs)) .pc-side-body { padding-top: 6px }
+.pc-side-scrim { display: none }
+/* Header buttons light up while their tab is open. */
+.pc-hdr-on { color: var(--pc-link) !important; background: color-mix(in srgb, var(--pc-link) 12%, transparent); border-radius: 8px }
+
+@media (min-width: 1100px) {
+  /* The guide's column, the same width. */
+  .pc-home--side .pc-side { align-self: stretch }
+  .pc-side--stats, .pc-side--history { min-height: 560px }
+}
+@media (max-width: 1099px) {
+  .pc-side { position: fixed; z-index: 900; min-height: 0; box-shadow: var(--pc-shadow-xl) }
+  .pc-side-scrim { display: block; position: fixed; inset: 0; z-index: 899; background: var(--pc-scrim) }
+}
+@media (min-width: 768px) and (max-width: 1099px) {
+  .pc-side { top: 12px; right: 12px; bottom: 12px; width: min(420px, calc(100vw - 24px)) }
+}
+@media (max-width: 767px) {
+  .pc-side { left: 0; right: 0; bottom: 0; height: min(64vh, 560px); height: min(64dvh, 560px); border-radius: 18px 18px 0 0; border-bottom: 0; padding-bottom: env(safe-area-inset-bottom) }
+  .pc-side-handle { display: flex; justify-content: center; flex: none; padding: 8px 0 2px }
+  .pc-side-handle::before { content: ""; width: 40px; height: 5px; border-radius: 3px; background: var(--pc-line) }
+  .pc-side-bar { background: transparent; padding: 0 6px 0 10px }
+  .pc-side-tab { font-size: 15px; padding: 0 11px; min-height: 44px }
+  .pc-side-body { padding: 16px 16px 24px }
+  .pc-side-notes-input { font-size: 16px }   /* iOS zooms smaller fields */
+}
+@media (prefers-reduced-motion: no-preference) {
+  @media (max-width: 767px) { .pc-side { animation: pc-sheet-in .2s var(--pc-ease, ease-out) } }
+}
+@keyframes pc-sheet-in { from { transform: translateY(24px); opacity: .6 } to { transform: none; opacity: 1 } }

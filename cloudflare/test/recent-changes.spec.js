@@ -38,8 +38,8 @@ test('two quick edits of one event list as one row, with no "0 events added"', a
 
   await page.locator('button[aria-label="Settings"]').click();
   await page.locator('button:has-text("Recent changes")').click();
-  const modal = page.locator('.pc-modal');
-  await expect(modal.locator('h3:has-text("Recent changes")')).toBeVisible();
+  const modal = page.getByTestId('recent-changes');   // the side panel's Changes tab (was a dialog)
+  await expect(modal.locator('h2:has-text("Recent changes")')).toBeVisible();
   await expect(modal.getByText('Edited "Team lunch v2" 2 times')).toBeVisible();
   await expect(modal.getByText(/\b0 events?\b/)).toHaveCount(0);
   await page.screenshot({ path: 'snapshots/cf-recent-changes.png' });
