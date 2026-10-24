@@ -598,6 +598,11 @@ export class CalendarRoom extends DurableObject {
             : addedEvents.length ? 'added'
             : (beforeTitle && !s.title) ? 'title-cleared'
             : 'edited';
+        // A write that changed no event (settings, a renamed calendar) is not a change Recent
+        // changes can show or undo: recording it listed "0 events added" between two real
+        // edits. Same rule as Firebase's history trigger (changeKind). The version above
+        // still moves, since a tab reads any other ack as a conflict.
+        if (!removedEvents.length && !changedEvents.length && !addedEvents.length && kind !== 'title-cleared') return;
 
         const entry = {
             savedAt: s.lastEditedAt,

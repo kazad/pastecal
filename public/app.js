@@ -3382,6 +3382,7 @@ const CalendarVueApp = {
                         ...addedEvents.map(keyOf),
                     ])].sort();
                     const n = lost.length;
+                    if (this.isEmptyChange(r, { lost, edited, added })) return null;
 
                     return {
                         key: r.key,
@@ -3422,7 +3423,7 @@ const CalendarVueApp = {
                     };
                 });
 
-                this.undoEntries = this.collapseSessions(detailed).slice(0, 10);
+                this.undoEntries = this.collapseSessions(detailed.filter(Boolean)).slice(0, 10);
                 // An old calendar may predate the lastEditedAt stamp; the log still knows.
                 const newest = this.undoEntries[0];
                 if (newest && newest.savedAt > (this.lastEditedAt || 0)) {
@@ -3851,7 +3852,22 @@ const CalendarVueApp = {
             const c = entry.changed || 0;
             if (c > 0) return c === 1 ? '1 event edited' : `${c} events edited`;
             const ad = entry.added || 0;
-            return ad === 1 ? '1 event added' : `${ad} events added`;
+            if (ad > 0) return ad === 1 ? '1 event added' : `${ad} events added`;
+            if (entry.kind === 'title-cleared') return 'Calendar title cleared';
+            // Nothing to name: a write that changed no event (see isEmptyChange).
+            return null;
+        },
+
+        /**
+         * A history entry that changed no event, so there is nothing to list or undo. Rooms
+         * on Cloudflare stored one for every settings-only write (the option defaults a tab
+         * fills in on load go out right after its first edit), listed as "0 events added".
+         * They no longer record them, but entries already stored are skipped here.
+         */
+        isEmptyChange(r, row) {
+            if (['wiped', 'deleted', 'title-cleared'].includes(r.kind)) return false;
+            return !row.lost.length && !row.edited.length && !row.added.length
+                && !(r.removed || 0) && !(r.changed || 0) && !(r.added || 0);
         },
 
         /**
