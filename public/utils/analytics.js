@@ -527,7 +527,8 @@ const Analytics = {
 // Silence analytics wherever the page itself is silenced, so the seam and the
 // GTM loader in index.html can never disagree.
 if (typeof window !== 'undefined') {
-    if (window.__TEST__ || window.location.search.includes('no-analytics')) {
+    // The staging copy (preview.pastecal.com) is silenced too.
+    if (window.__TEST__ || window.location.search.includes('no-analytics') || window.location.hostname === 'preview.pastecal.com') {
         Analytics.enabled = false;
     }
     if (window.location.search.includes('debug-analytics')) {

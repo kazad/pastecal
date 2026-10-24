@@ -9,7 +9,8 @@
  * the bottom of this file the ONE switch -- `CalendarDataService = CloudCalendarService` --
  * runs when the flag is on, so every `CalendarDataService.x` in the apps lands here.
  *
- * Flag: `?backend=cf` (remembered in localStorage), or hostname new.pastecal.com.
+ * Flag: `?backend=cf` (remembered in localStorage), or one of our Cloudflare hosts: pastecal.com,
+ *       www, new.pastecal.com, and the staging copy preview.pastecal.com (which must never fall back to Firebase).
  *       `?backend=firebase` turns it off again. Off = this file does nothing at all.
  *
  * How a save works. The app hands us its whole calendar (as it does for Firebase); we diff
@@ -53,13 +54,15 @@ class CloudCalendarService extends CalendarDataService {
     static enabled(loc = (typeof location !== 'undefined' ? location : null), store = CloudCalendarService._store()) {
         // On the live site it is always on: ?backend=firebase would open Firebase's stale, world-writable
         // copy, a way around a Pro lock. The query flag works only elsewhere (localhost, dev).
-        if (loc && (loc.hostname === 'pastecal.com' || loc.hostname === 'www.pastecal.com' || loc.hostname === 'new.pastecal.com')) return true;
+        if (loc && CloudCalendarService.HOSTS.includes(loc.hostname)) return true;
         let q = null;
         try { q = loc && new URLSearchParams(loc.search).get('backend'); } catch (e) { /* no query */ }
         if (q === 'firebase') { try { store && store.removeItem('pastecal_backend'); } catch (e) { /* ignore */ } return false; }
         if (q === 'cf') { try { store && store.setItem('pastecal_backend', 'cf'); } catch (e) { /* ignore */ } return true; }
         try { return !!store && store.getItem('pastecal_backend') === 'cf'; } catch (e) { return false; }
     }
+    // Our Cloudflare deployments. preview.pastecal.com is staging: Firebase there would be PRODUCTION data.
+    static HOSTS = ['pastecal.com', 'www.pastecal.com', 'new.pastecal.com', 'preview.pastecal.com'];
     static _store() { try { return typeof localStorage !== 'undefined' ? localStorage : null; } catch (e) { return null; } }
 
     // Where the Worker is. Same origin as the page unless a test points it elsewhere.

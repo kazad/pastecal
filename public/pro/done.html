@@ -104,7 +104,7 @@ a.btn { margin-top: 24px }
       }
       api('POST', '/api/pro/editor-links', { calendarId: proCalendar, label: 'Editors' }).then(function (c) {
         if (c.status !== 200 || !c.data.url_fragment_key) return signInHint(c);
-        var link = 'https://pastecal.com' + calPath + '#k=' + c.data.url_fragment_key;
+        var link = location.origin + calPath + '#k=' + c.data.url_fragment_key;
         try {
           localStorage.setItem(shareName, link);
           localStorage.setItem(storeName, JSON.stringify({ id: c.data.id, link: link }));
@@ -134,5 +134,6 @@ a.btn { margin-top: 24px }
   });
 })();
 </script>
+<script src="/utils/preview.js"></script>
 </body>
 </html>

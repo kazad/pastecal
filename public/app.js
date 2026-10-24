@@ -3224,7 +3224,8 @@ const CalendarVueApp = {
                         rows = cloudRows;
                     }
                 }
-                if (!rows.length && typeof firebase !== 'undefined' && firebase.database) {
+                // Never on the staging copy: Firebase there is production's data for a same-named calendar.
+                if (!rows.length && typeof firebase !== 'undefined' && firebase.database && !(typeof PreviewSite !== 'undefined' && PreviewSite.is())) {
                     // Only the newest 20 entries are ever shown, so only they are downloaded:
                     // a calendar's history is 10-20x the calendar itself.
                     const snap = await firebase.database()
@@ -3372,6 +3373,7 @@ const CalendarVueApp = {
          */
         watchLastEdited(calendarId) {
             if (!calendarId || typeof firebase === 'undefined') return;
+            if (typeof PreviewSite !== 'undefined' && PreviewSite.is()) return;   // staging: never production Firebase
             if (this._lastEditedRef && this._lastEditedId === calendarId) return;
             this.unwatchLastEdited();   // a different calendar: drop the old listener
 

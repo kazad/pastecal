@@ -1992,7 +1992,8 @@ const CalendarVueApp = {
                 // On the calendar itself (CalendarDataService._lastEditedAt); /history_meta once
                 // for a calendar not edited since that field existed.
                 let at = this.calendar.lastEditedAt || null;
-                if (!at && !this._lastEditMetaRead) {
+                // Not on the staging copy (preview.pastecal.com): its Firebase would be production's.
+                if (!at && !this._lastEditMetaRead && location.hostname !== 'preview.pastecal.com') {
                     this._lastEditMetaRead = true;
                     this._lastEditMeta = (await firebase.database().ref('/history_meta/' + this.calendar.id + '/lastEditedAt').once('value')).val();
                 }
