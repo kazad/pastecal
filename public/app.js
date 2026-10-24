@@ -1954,6 +1954,10 @@ const CalendarVueApp = {
             // the new file arrives.
             const link = document.getElementById('syncfusion-theme');
             if (!link) return;
+            // A switch whose sheet is still loading is stale once the setting changes again
+            // (light -> dark -> light before the dark file arrives): drop it, or its late onload
+            // swaps in the wrong theme and leaves two sheets claiming the id.
+            if (this._themeLoading) { this._themeLoading.onload = null; this._themeLoading.remove(); this._themeLoading = null; }
             const file = dark ? 'material-dark.css' : 'material.css';
             const url = new URL(link.href, location.href);
             if (url.pathname.endsWith('/' + file)) return;
@@ -1961,7 +1965,10 @@ const CalendarVueApp = {
             const next = link.cloneNode();
             next.removeAttribute('id');
             next.href = url.href;
+            this._themeLoading = next;
             next.onload = () => {
+                if (this._themeLoading !== next) return;
+                this._themeLoading = null;
                 link.remove();
                 next.id = 'syncfusion-theme';
                 if (window.scheduleObj) window.scheduleObj.refreshLayout();
