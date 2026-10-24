@@ -1,6 +1,6 @@
 # pastecal Pro: launch runbook
 
-**Run order (not the section order):** a → b → c1–c4 → e1–e3 (deploy, then smoke test with billing off) → d1–d4 (turn billing on) → the second smoke test in e3 → f. Section g is for emergencies.
+**Run order (not the section order):** a → b → c1–c4 → e1–e3 (deploy, then smoke test with billing off) → d1–d4 (turn billing on) → the second smoke test in e3 → f → Test inbox (optional). Section g is for emergencies.
 
 Every command fits on one line and is safe to paste into zsh. Prices: **$24/year and $2.99/month, no trial.**
 
@@ -393,6 +393,34 @@ stripe refunds create --live --payment-intent=<pi_…> --reason=requested_by_cus
    - Open an existing calendar and a `/view/<id>` link.
    - Edit an event and see it sync to a second tab.
    - Run `./scripts/stats.sh health` now and again in ~30 minutes.
+
+---
+
+## Test inbox (after the deploy)
+
+The Worker has an `email()` handler (`cloudflare/src/TestInbox.js`). Mail that Email Routing hands it for `test@`, `test-signin@`, `test-welcome@` or `test-weekly@pastecal.com` is kept for 7 days (500 messages at most) with its subject, plain text and the receiving side's SPF/DKIM/DMARC verdicts. Any other address that reaches the handler is rejected (`unknown address`). Read it with `GET /api/admin/test-inbox?to=<address>&limit=20` and clear it with `DELETE /api/admin/test-inbox?to=<address>`, both `Authorization: Bearer $IMPORT_SECRET`.
+
+**One-time setup, after the deploy in (e).** One literal routing rule per address. Do **not** use the catch-all rule for this: it would also take mail for every other address, which must keep bouncing. These rules leave the existing support@ forward alone.
+
+```zsh
+wr email routing rules create pastecal.com --name "test inbox: test@" --match-type literal --match-field to --match-value test@pastecal.com --action-type worker --action-value pastecal-sync
+wr email routing rules create pastecal.com --name "test inbox: test-signin@" --match-type literal --match-field to --match-value test-signin@pastecal.com --action-type worker --action-value pastecal-sync
+wr email routing rules create pastecal.com --name "test inbox: test-welcome@" --match-type literal --match-field to --match-value test-welcome@pastecal.com --action-type worker --action-value pastecal-sync
+wr email routing rules create pastecal.com --name "test inbox: test-weekly@" --match-type literal --match-field to --match-value test-weekly@pastecal.com --action-type worker --action-value pastecal-sync
+wr email routing rules list pastecal.com
+```
+
+The list must show the four rules with action `worker` → `pastecal-sync`, the support@ forward unchanged, and the catch-all unchanged. (Flags checked against `wrangler email routing rules create --help`, wrangler 4.142.0; the command is open beta.) To add an address later, add it to `TEST_ADDRESS` in `TestInbox.js` *and* create its rule.
+
+**Check it** (sends one real sign-in email to test-signin@ and uses one of that address's 5-an-hour sign-in emails):
+
+```zsh
+scripts/test-signin-email.sh
+```
+
+It prints the subject, the SPF/DKIM/DMARC verdicts and whether the link has the right shape (never the token), and exits 0 only if all three verdicts are `pass`. Unverified until this first run: that Email Sending from login@pastecal.com to an address on the same zone goes through Email Routing like outside mail. If it times out, send a plain mail to test@pastecal.com from Gmail and read it with `curl -H "Authorization: Bearer $(gcloud secrets versions access latest --secret=CLOUDFLARE_IMPORT_SECRET --project pastecal-web)" "https://pastecal.com/api/admin/test-inbox?to=test@pastecal.com&limit=1"` to tell routing problems from sending problems.
+
+To remove the inbox: `wr email routing rules list pastecal.com`, then `wr email routing rules delete pastecal.com <rule-id>` for each test rule.
 
 ---
 
