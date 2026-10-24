@@ -1349,6 +1349,9 @@ Copyright (c) 2025 Kalid Azad
                     Click any day to add your first event
                 </div>
             </div>
+            <!-- Pro hides pastecal's branding from visitors, but a page with no sign of who hosts it is a
+                 phishing kit's dream: one quiet line says where it lives and how to report it. -->
+            <p v-if="hideBranding" class="pc-hosted-note" data-testid="hosted-note" v-cloak>Hosted on pastecal · <a :href="reportUrl" target="_blank" rel="noopener" data-testid="report-link">Report</a></p>
             <p v-if="isHomepageCalendar" class="pc-draft-note" v-cloak>
                 <span>This calendar is a draft, saved only in this browser. Press <b>Save &amp; share</b> to get a link anyone can open.</span>
                 <span class="pc-draft-links"><button v-if="homeAsideHidden" type="button" class="pc-show-guide" @click="toggleHomeAside"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m10 15-3-3 3-3"/></svg>Show guide</button><a href="#how">How pastecal works ↓</a></span>

@@ -97,6 +97,7 @@ function clientOptions(o) {
 const LOCK_ROUTES = new Set(['lock', 'unlock', 'rotate-editor-key', 'lock-status', 'can-edit', 'set-view-id',
     'create-editor-link', 'list-editor-links', 'revoke-editor-link', 'set-pro-settings', 'dev-legacy-key']);
 export const MAX_EDITOR_LINKS = 20;
+const MAX_AUTH_FAILS = 5;                // wrong editor keys on one socket before it is closed (1008)
 const LINK_TOUCH_MS = 3600 * 1000;          // last_used_at is written at most once an hour per link
 
 // ---- Pro display settings (owner-only) ----
@@ -621,14 +622,16 @@ export class CalendarRoom extends DurableObject {
     }
 
     // ---- limits ---------------------------------------------------------------------------
-    overRate(ws) {
+    // tabOnly: count against this socket's budget alone (a failed editor key must never use up the
+    // calendar's shared budget: that would let a stranger lock the owner out).
+    overRate(ws, { tabOnly = false } = {}) {
         const now = Date.now();
         this.saves = this.saves.filter((t) => now - t < 60000);
-        if (this.saves.length >= LIMITS.savesPerMinute) return 'this calendar is saving too often';
+        if (!tabOnly && this.saves.length >= LIMITS.savesPerMinute) return 'this calendar is saving too often';
         const tab = ws.deserializeAttachment() || {};
         const mine = (tab.saves || []).filter((t) => now - t < 60000);
         if (mine.length >= LIMITS.savesPerMinutePerTab) return 'this tab is saving too often';
-        mine.push(now); this.saves.push(now);
+        mine.push(now); if (!tabOnly) this.saves.push(now);
         ws.serializeAttachment({ ...tab, saves: mine });
         return null;
     }
@@ -1067,11 +1070,24 @@ export class CalendarRoom extends DurableObject {
         }
         if (m.t === 'auth') {
             // An editor link's key, sent over the socket: never in a URL, which logs and analytics record.
+            // Guessing: each failure counts against this socket's rate limit, and the 5th closes it (1008).
+            if ((tab.authFails || 0) >= MAX_AUTH_FAILS) return;
             const link = tab.isViewOnly ? null : await this.keyMatches(m.key);
             // A key revoked earlier (while this tab was closed) says so, so the tab forgets it.
             const revoked = !link && !tab.isViewOnly && this.lock ? await this.keyRevoked(m.key) : false;
             let next = ws.deserializeAttachment() || {};                  // re-read: the await may have let other messages in
             if (link) { next = { ...next, keyId: link.id }; ws.serializeAttachment(next); this.touchLink(link); }
+            else if (m.key) {
+                const rate = this.overRate(ws, { tabOnly: true });     // a wrong key uses up this tab's budget
+                next = ws.deserializeAttachment() || {};
+                next = { ...next, authFails: (next.authFails || 0) + 1 }; ws.serializeAttachment(next);
+                if (next.authFails >= MAX_AUTH_FAILS) {
+                    try { ws.send(json({ t: 'auth', ok: false, reason: 'too-many-tries', locked: !!this.lock, canEdit: this.canWrite(next), role: this.roleOf(next) })); } catch { /* gone */ }
+                    try { ws.close(1008, 'too many wrong editor keys'); } catch { /* gone */ }
+                    return;
+                }
+                if (rate) return refuse('rate_limited', rate);
+            }
             return ws.send(json({ t: 'auth', ok: !!link, locked: !!this.lock, canEdit: this.canWrite(next), role: this.roleOf(next), ...(revoked ? { reason: 'link-revoked' } : {}) }));
         }
 

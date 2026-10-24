@@ -292,5 +292,26 @@ assert.match(first.url_fragment_key, /^[A-Za-z0-9_-]{22}$/);
 assert.deepEqual((await getJ(`/api/pro/editor-links?calendar=${enc(paid)}`, owner.cookie)).body.map((l) => l.label), ['Editors']);
 step('a billing lock (createLink:false) starts with no links; the owner\'s first named link is the only one');
 
+// Guessing editor keys: the 5th wrong key on one socket closes it (1008); failures use only that
+// socket's rate budget, so the owner still saves, and the right key on a new socket still works.
+{
+    const gid = `test-perms-guess-${run}`;
+    assert.equal((await fetch(`${BASE}/cal/${enc(gid)}`, { method: 'POST', body: JSON.stringify({ title: 'Guess', events: [] }) })).status, 201);
+    const KEY = (await admin(gid, 'lock', { ownerId: owner.userId })).body.editorKey;
+    const guesser = calTab(gid); await guesser.ready;
+    const closed = new Promise((res) => guesser.ws.addEventListener('close', (e) => res(e.code)));
+    for (let i = 0; i < 4; i++) { const a = await guesser.authKey(`wrong-${i}-${'x'.repeat(20)}`); assert.equal(a.ok, false); assert.equal(a.canEdit, false); }
+    const last = await guesser.authKey('wrong-5-xxxxxxxxxxxxxxxxxxxx');
+    assert.deepEqual([last.ok, last.reason], [false, 'too-many-tries']);
+    assert.equal(await closed, 1008, 'closed with 1008 (policy violation)');
+    const ownerG = calTab(gid, { headers: { 'X-Dev-Session-User': owner.userId } }); await ownerG.ready;
+    assert.equal((await ownerG.save([{ type: 'add', event: ev('g1', 'owner still saves', 2) }])).t, 'ack');
+    const right = calTab(gid); await right.ready;
+    const ok = await right.authKey(KEY);
+    assert.deepEqual([ok.ok, ok.canEdit], [true, true]);
+    for (const t of [ownerG, right]) t.ws.close();
+    step('editor-key guessing: 4 wrong keys answer ok:false, the 5th answers reason "too-many-tries" and closes the socket (1008); the owner still saves; the right key on a new socket works');
+}
+
 for (const t of [tA, tB, ownerTab, otherTab, anon, viewTab, fresh, late, lateView, lt]) t.ws.close();
 console.log(`\n${n} checks passed`); process.exit(0);

@@ -473,6 +473,11 @@ const CalendarVueApp = {
         hideBranding() {
             return !!(this.isReadOnly && this.lock.pro);
         },
+        // The footer's Report link (shown when branding is hidden). The page's own path, so a view link
+        // reports its view code and never reveals the edit name behind it.
+        reportUrl() {
+            return '/report?cal=' + encodeURIComponent(window.location.pathname.replace(/^\/+/, ''));
+        },
 
         // Homepage calendar (no slug and not an existing saved calendar)
         isHomepageCalendar() {
@@ -2692,11 +2697,11 @@ const CalendarVueApp = {
             // Convert URLs to hyperlinks safely
             // Match URLs starting with http://, https://, or ftp://
             notes = notes.replace(/(\b(https?|ftp):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/ig,
-                '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
+                '<a href="$1" target="_blank" rel="ugc nofollow noopener noreferrer">$1</a>');
 
             // Match URLs starting with "www." not preceded by '://'
             notes = notes.replace(/(^|\s)(www\.[\S]+(\b|$))/ig,
-                '$1<a href="http://$2" target="_blank" rel="noopener noreferrer">$2</a>');
+                '$1<a href="http://$2" target="_blank" rel="ugc nofollow noopener noreferrer">$2</a>');
 
             // Convert line breaks to <br> tags
             notes = notes.replace(/\n/g, "<br>");
