@@ -6,8 +6,8 @@ const CalendarTitle = {
             <!-- Show title ("New calendar" for new calendars; see Calendar.displayTitle) -->
             <component :is="heading" v-if="!isEditing"
                 @click="handleTitleClick"
-                :class="titleClasses">
-                {{ displayTitle }}
+                :class="titleClasses" :title="isReadOnly ? null : 'Rename this calendar'">
+                {{ shownTitle }}
             </component>
             <!-- Edit mode input -->
             <input v-if="isEditing"
@@ -46,6 +46,13 @@ const CalendarTitle = {
         displayTitle() {
             return Calendar.displayTitle(this.title);
         },
+        // Still the default name: invite a real one, quietly (muted text and a pencil, no prompt).
+        isUnnamed() {
+            return !this.isReadOnly && (!this.title || !String(this.title).trim() || this.title === 'New Calendar');
+        },
+        shownTitle() {
+            return this.isUnnamed ? 'Name this calendar' : this.displayTitle;
+        },
         brandingClass() {
             return this.mode === 'mobile'
                 ? 'text-base font-bold text-color-2 leading-tight'
@@ -60,7 +67,7 @@ const CalendarTitle = {
                 : 'font-bold max-w-[150px] md:max-w-xs text-center inline-block leading-tight py-1';
 
             const interactive = !this.isReadOnly
-                ? 'cursor-pointer hover:text-blue-500 transition-colors px-1 py-0.5 rounded hover:bg-[var(--bg-interactive-hover)]'
+                ? 'pc-title-edit' + (this.isUnnamed ? ' pc-title-unnamed' : '')
                 : 'px-1';
 
             return [base, interactive].filter(Boolean).join(' ');

@@ -986,6 +986,18 @@ const CalendarVueApp = {
 
         // custom display for types
         scheduleObj.popupOpen = (args) => {
+            // Deleting needs no "Are you sure?": the Undo toast that follows covers it. Syncfusion's
+            // confirm is pressed for the person, unseen, so its own delete path (one occurrence, the
+            // series, several selected) runs unchanged. The "this event or the series?" choice stays.
+            if (args.type === 'DeleteAlert') {
+                document.body.classList.add('pc-skip-confirm');
+                requestAnimationFrame(() => {
+                    const del = args.element && args.element.querySelector('.e-quick-dialog-delete');
+                    if (del) del.click();
+                    setTimeout(() => document.body.classList.remove('pc-skip-confirm'), 400);
+                });
+                return;
+            }
             if (args.type === 'QuickInfo' && args.data) ScheduleAdapter.showTitle(args.element, args.data);
             // The date line opens the editor (click handler by appendTo below); say so on hover.
             if (args.type === 'QuickInfo' && args.data && !scheduleObj.readonly) {

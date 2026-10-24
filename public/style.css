@@ -1966,3 +1966,24 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
   .pc-tpl-note > span { flex: 1 1 100%; padding-right: 28px }
   .pc-tpl-x { position: absolute; top: 4px; right: 4px }
 }
+/* The delete confirm is pressed automatically (app.js popupOpen); never show it while that happens. */
+.pc-skip-confirm .e-quick-dialog, .pc-skip-confirm .e-quick-dialog + .e-dlg-overlay, .pc-skip-confirm .e-dlg-container:has(.e-quick-dialog) { opacity: 0 !important; pointer-events: none !important }
+
+/* Calendar name in the header: a pill on hover with a pencil, so it reads as editable. An unnamed
+   calendar says "Name this calendar", muted, with the pencil always showing. */
+.pc-title-edit { position: relative; cursor: pointer; padding: 4px 30px 4px 12px !important; border-radius: 10px; transition: background .15s }
+.pc-title-edit::after { content: ""; position: absolute; right: 9px; top: 50%; width: 14px; height: 14px; margin-top: -7px; opacity: 0; transition: opacity .15s;
+  background: currentColor; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17 3a2.8 2.8 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M17 3a2.8 2.8 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z'/%3E%3C/svg%3E") center / contain no-repeat }
+.pc-title-edit:hover { background: color-mix(in srgb, var(--pc-text) 7%, transparent) }
+.pc-title-edit:hover::after, .pc-title-unnamed::after { opacity: .6 }
+.pc-title-unnamed { color: var(--pc-text-muted) !important; font-weight: 600 !important }
+.pc-title-unnamed:hover { color: var(--pc-text) !important }
+
+/* Real words from users. */
+.pc-home-proof .pc-quote { font-size: 14px; line-height: 1.5; color: var(--pc-text-2); margin-bottom: 6px }
+.pc-home-proof .pc-quote i { display: block; font-style: normal; font-size: 12.5px; color: var(--pc-text-muted); margin-top: 2px }
+.pc-tour-quotes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 18px }
+.pc-tour-quotes blockquote { margin: 0; padding: 16px 18px; border-radius: 12px; background: var(--pc-soft); font-size: 16px; line-height: 1.5; color: var(--pc-text) }
+.pc-tour-quotes cite { display: block; margin-top: 8px; font-style: normal; font-size: 13px; color: var(--pc-text-muted) }
+@media (max-width: 640px) { .pc-tour-quotes { grid-template-columns: 1fr } }
