@@ -64,7 +64,10 @@ button.btn[disabled] { opacity: .6; cursor: default; }
       msg.textContent = 'You’re signed in.';
       go.href = res.d.next || '/';
       go.hidden = false;
-      if (res.d.next) location.replace(res.d.next);
+      if (res.d.next) {
+        try { sessionStorage.setItem('pastecal_signed_in_to', res.d.next); } catch (e) { /* storage blocked: Share opens by hand */ }
+        location.replace(res.d.next);
+      }
     }).catch(offline);
   });
 })();

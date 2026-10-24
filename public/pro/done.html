@@ -69,7 +69,16 @@ a.btn { margin-top: 24px }
   }
   var calPath = '/' + encodeURIComponent(proCalendar);
   go.href = calPath;
-  $('calname').textContent = proCalendar;
+  // Its name as this browser knows it (the calendar list), else its address.
+  var calName = proCalendar;
+  try {
+    ['myCalendars', 'recentCalendars'].forEach(function (k) {
+      (JSON.parse(localStorage.getItem(k) || '[]') || []).forEach(function (c) {
+        if (calName === proCalendar && c && c.id && String(c.id).toLowerCase() === proCalendar.toLowerCase() && c.title) calName = String(c.title).replace(/ \(View Only\)$/, '');
+      });
+    });
+  } catch (e) { /* storage blocked: the address it is */ }
+  $('calname').textContent = calName;
 
   function api(method, path, body) {
     var init = { method: method, credentials: 'same-origin', headers: {} };
@@ -79,7 +88,7 @@ a.btn { margin-top: 24px }
   }
 
   function locked() {
-    var span = document.createElement('span'); span.className = 'cal'; span.textContent = proCalendar;
+    var span = document.createElement('span'); span.className = 'cal'; span.textContent = calName;
     msg.textContent = ''; msg.append(span, ' is locked. Only you and people with your editor link can change it.');
     // This page never turns off a link the owner may already have sent out: it makes the first
     // link only when the calendar has none, and otherwise points to Share.

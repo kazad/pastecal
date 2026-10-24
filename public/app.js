@@ -625,6 +625,18 @@ const CalendarVueApp = {
                         // The logo menu's "Stats" for this calendar, clicked on another page.
                         const insight = typeof ProInsightIntent !== 'undefined' ? ProInsightIntent.take(this.calendar.id) : null;
                         if (insight) this.$nextTick(() => this.openInsight(insight, 'logo_menu'));
+                        // A sign-in link opened in another browser carries the plan they were buying (?pro=).
+                        // It continues to payment only right after that sign-in, never from a shared link.
+                        try {
+                            const q = new URLSearchParams(location.search), plan = q.get('pro');
+                            if ((plan === 'year' || plan === 'month') && typeof ProIntent !== 'undefined') {
+                                const fresh = sessionStorage.getItem('pastecal_signed_in_to') || '';
+                                sessionStorage.removeItem('pastecal_signed_in_to');
+                                if (!ProIntent.get(this.calendar.id)) ProIntent.set(this.calendar.id, plan, fresh.endsWith('?pro=' + plan));
+                                q.delete('pro');
+                                history.replaceState(history.state, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash);
+                            }
+                        } catch (e) { /* storage blocked: Share still opens below if the intent was kept */ }
                         // Back from a Pro sign-in link: reopen Share, where "Lock this calendar" now continues.
                         const proIntent = typeof ProIntent !== 'undefined' ? ProIntent.get(this.calendar.id) : null;
                         if (proIntent) {
@@ -2876,6 +2888,9 @@ const CalendarVueApp = {
         },
 
         toggleRecents() {
+            // On desktop, pointing at the logo already opened the menu: the click that follows
+            // must keep it open, not close it again.
+            if (this.showRecents && Date.now() - (this.recentsHoverOpenedAt || 0) < 1500) { this.recentsHoverOpenedAt = 0; return; }
             this.showRecents = !this.showRecents;
         },
 
@@ -2887,6 +2902,7 @@ const CalendarVueApp = {
             // Only handle hover on non-touch devices
             if (!('ontouchstart' in window)) {
                 clearTimeout(this.hoverTimeout);
+                if (!this.showRecents) this.recentsHoverOpenedAt = Date.now();
                 this.showRecents = true;
             }
         },

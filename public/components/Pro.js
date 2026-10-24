@@ -23,7 +23,8 @@ const PRO_MESSAGES = {
 // the dialog when the link brings them back. Holds the calendar id and a time, nothing personal.
 const PRO_INTENT_KEY = 'pastecal_pro_intent';
 const ProIntent = {
-    set(id, interval) { try { localStorage.setItem(PRO_INTENT_KEY, JSON.stringify({ id, interval, t: Date.now() })); } catch (e) { /* storage blocked */ } },
+    // go: they already pressed Lock and only had to sign in, so continue to payment once they're back.
+    set(id, interval, go = false) { try { localStorage.setItem(PRO_INTENT_KEY, JSON.stringify({ id, interval, go, t: Date.now() })); } catch (e) { /* storage blocked */ } },
     get(id) {
         try {
             const v = JSON.parse(localStorage.getItem(PRO_INTENT_KEY) || 'null');
@@ -149,7 +150,7 @@ const ProPanel = {
                 </p>
                 <div v-else class="pc-pro-row">
                     <button type="button" class="pc-pro-btn" @click="lockNow" :disabled="busy" data-testid="pro-lock-btn">
-                        {{ busy ? 'One moment…' : 'Lock this calendar' }}
+                        {{ going ? 'Taking you to payment…' : busy ? 'One moment…' : 'Lock this calendar' }}
                     </button>
                     <span v-if="me" class="pc-pro-muted">Signed in as <span data-hj-suppress data-clarity-mask="true">{{ me.email }}</span> · <a href="#" @click.prevent="signOut">Sign out</a></span>
                 </div>
@@ -212,6 +213,7 @@ const ProPanel = {
         calendarId: String,
         locked: Boolean,      // from the live snapshot
         canEdit: Boolean,     // this tab may change the calendar
+        calendarTitle: String, // named on Stripe's page, so the payer sees which calendar it's for
     },
     // open-insight: 'stats' | 'history' (owner only). owner: whether this browser owns the calendar,
     // so the app can offer History from Recent changes.
@@ -225,6 +227,8 @@ const ProPanel = {
             step: 'idle',         // idle | email | sent
             email: '',
             busy: false,
+            going: false,         // signed in from a Lock press: on the way to Stripe
+            autoGo: false,
             error: '',
             editorLink: '',
             copied: false,
@@ -262,8 +266,14 @@ const ProPanel = {
     mounted() {
         const intent = ProIntent.get(this.calendarId);
         if (intent && intent.interval) this.interval = intent.interval;
+        this.autoGo = !!(intent && intent.go);
         this.refresh();
+        // Waiting on the email: they may sign in and pay in another tab or browser. Coming back here
+        // shows where things stand instead of "Check your email".
+        this._onFocus = () => { if (this.step === 'sent') this.refresh(); };
+        window.addEventListener('focus', this._onFocus);
     },
+    beforeUnmount() { window.removeEventListener('focus', this._onFocus); },
     methods: {
         async refresh() {
             if (!this.calendarId) return;
@@ -273,6 +283,13 @@ const ProPanel = {
             ]);
             if (st.status === 200) this.status = st.data;
             this.me = me.status === 200 ? me.data : null;
+            // Back from the sign-in link they asked for when they pressed Lock: no second press.
+            if (this.autoGo && this.me && this.mode === 'offer') {
+                this.autoGo = false; this.busy = true; this.going = true;
+                try { await this.checkout(); } finally { this.busy = false; this.going = false; }
+            }
+            this.autoGo = false;
+            if (this.step === 'sent' && (this.me || this.mode === 'owner')) this.step = 'idle';
         },
         focusEmail() { this.$nextTick(() => { this.$refs.email && this.$refs.email.focus(); }); },
         // The owner's own copy of the last link they made here, so it can be copied again later.
@@ -294,7 +311,7 @@ const ProPanel = {
         },
         async checkout() {
             proTrack((a) => a.proCheckoutStarted(this.interval));
-            const r = await proApi('POST', '/api/pro/checkout', { calendarId: this.calendarId, interval: this.interval });
+            const r = await proApi('POST', '/api/pro/checkout', { calendarId: this.calendarId, interval: this.interval, title: this.calendarTitle || '' });
             if (r.status === 200 && r.data.url) { ProIntent.clear(); location.href = r.data.url; return; }
             const reason = r.status === 0 ? 'network' : (r.data.error || String(r.status));
             proTrack((a) => a.proCheckoutFailed(reason));
@@ -310,10 +327,11 @@ const ProPanel = {
             if (!this.email) return;
             this.busy = true;
             try {
-                const next = '/' + encodeURIComponent(this.calendarId);
+                // Buying: the link brings the choice along, so it finishes even in another browser.
+                const next = '/' + encodeURIComponent(this.calendarId) + (this.mode === 'offer' ? `?pro=${this.interval}` : '');
                 const r = await proApi('POST', '/api/auth/start', { email: this.email, next });
                 if (r.status === 200 && r.data.ok) {
-                    ProIntent.set(this.calendarId, this.interval);
+                    ProIntent.set(this.calendarId, this.interval, this.mode === 'offer');
                     this.step = 'sent';
                     proTrack((a) => a.proSignInSent(this.mode === 'locked' ? 'owner_signin' : 'share_panel'));
                     return;

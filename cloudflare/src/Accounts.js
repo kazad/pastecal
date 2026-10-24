@@ -84,14 +84,18 @@ const TEST_INBOX_RETAIN_MS = 7 * 24 * 3600 * 1000, TEST_INBOX_MAX = 500;   // se
 const validId = (id) => typeof id === 'string' && id.length >= 1 && id.length <= 200 && !/[.#$\[\]\/\u0000-\u001f\u007f]/.test(id);
 const validEmail = (e) => e.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
 // Where a sign-in link may send people afterwards: exactly "/" or "/<calendar>" (one segment, a valid
-// calendar id once decoded, no query). Never /pro/done (it makes editor links), /signin, or another site.
+// calendar id once decoded; the only query allowed is ?pro=year|month, see safeNext). Never /pro/done (it makes editor links), /signin, or another site.
 const RESERVED_NEXT = new Set(['signin', 'pro', 'pricing', 'view', 'beta', 'nativecal', 'api', 'cal', 'report', 'explore']);
+// A calendar path, optionally with ?pro=year|month: the lock the person was buying when they asked
+// for the link, so they can finish it even if the email opens in another browser.
 function safeNext(raw) {
     if (raw === '/') return '/';
-    if (typeof raw !== 'string' || raw.length > 700 || !/^\/[^/?#\\\s]+$/.test(raw)) return null;
-    let id; try { id = decodeURIComponent(raw.slice(1)); } catch { return null; }
+    if (typeof raw !== 'string' || raw.length > 700) return null;
+    const m = /^\/([^/?#\\\s]+)(\?pro=(?:year|month))?$/.exec(raw);
+    if (!m) return null;
+    let id; try { id = decodeURIComponent(m[1]); } catch { return null; }
     if (!validId(id) || RESERVED_NEXT.has(id.toLowerCase())) return null;
-    return '/' + encodeURIComponent(id);
+    return '/' + encodeURIComponent(id) + (m[2] || '');
 }
 
 function randomToken() {
@@ -408,13 +412,16 @@ export function sameSite(request, env) {
 const sessionCookie = (token, maxAge) => `pc_session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${maxAge}`;
 
 // The one place a sign-in email leaves. Never logs the link: Workers Logs are on.
-async function sendSignInEmail(env, to, token) {
+async function sendSignInEmail(env, to, token, next) {
     const link = `${siteUrl(env)}/signin#t=${token}`;
-    const subject = 'Your pastecal sign-in link';
-    const text = `Here is your link to sign in to pastecal:\n\n${link}\n\n`
+    // Asked for in the middle of buying Pro: say what the link finishes.
+    const buying = typeof next === 'string' && /\?pro=/.test(next);
+    const subject = buying ? 'Your pastecal sign-in link: finish locking your calendar' : 'Your pastecal sign-in link';
+    const lead = buying ? 'Here is your link to sign in and finish locking your calendar. It takes you straight to payment:' : 'Here is your link to sign in to pastecal:';
+    const text = `${lead}\n\n${link}\n\n`
         + `It works once and expires in 15 minutes.\n\n`
         + `If you didn't ask to sign in, you can ignore this email. Nothing will change.\n`;
-    const html = `<p>Here is your link to sign in to pastecal:</p><p><a href="${link}">Sign in to pastecal</a></p>`
+    const html = `<p>${lead}</p><p><a href="${link}">${buying ? 'Sign in and continue' : 'Sign in to pastecal'}</a></p>`
         + `<p>It works once and expires in 15 minutes.</p><p>If you didn't ask to sign in, you can ignore this email. Nothing will change.</p>`;
     await sendEmail(env, to, subject, text, html, 'sign-in');
 }
@@ -533,7 +540,7 @@ async function route(request, env, url, path) {
         // Only "/" or a calendar on this site: no open redirect, and no /pro/... page (see safeNext).
         const next = safeNext(body.next);
         const token = await accounts(env).issueLoginToken(email, next);
-        if (token) await sendSignInEmail(env, email, token);
+        if (token) await sendSignInEmail(env, email, token, next);
         return json({ ok: true });
     }
     if (path === '/api/auth/peek') {
@@ -697,8 +704,11 @@ async function checkout(request, env, body) {
         cancel_url: `${siteUrl(env)}/${encodeURIComponent(back)}`,
         expires_at: Math.floor((Date.now() + CHECKOUT_HOLD_MS) / 1000),
     };
-    // Test mode (staging): say which card to use, right above Stripe's Pay button.
-    if (cfg.livemode === false) params.custom_text = { submit: { message: TEST_CARD_HINT } };
+    // Right above Stripe's Pay button: which calendar this is for (the title is the payer's own, shown
+    // only to them), and on staging which test card to use.
+    const title = typeof body.title === 'string' ? body.title.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 60) : '';
+    const forWhat = `Pro for ${title ? `“${title}” (${siteHost(env)}/${back})` : `${siteHost(env)}/${back}`}.`;
+    params.custom_text = { submit: { message: cfg.livemode === false ? `${forWhat} ${TEST_CARD_HINT}` : forWhat } };
     // Stripe limits client_reference_id's characters; calendar names can be anything, and metadata has the real id.
     if (/^[A-Za-z0-9_-]{1,200}$/.test(calendarId)) params.client_reference_id = calendarId;
     if (customer) params.customer = customer; else params.customer_email = user.email;

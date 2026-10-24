@@ -153,6 +153,7 @@ const NavigationDropdown = {
                             :aria-label="'Stats for ' + c.title" data-testid="account-stats">Stats</button>
                     </div>
                     <p v-if="proCalendars.length === 0" class="pc-acct-muted pc-acct-line">No Pro calendars right now.</p>
+                    <a href="/pricing?from=account-menu#get-pro" class="pc-acct-link pc-acct-line" data-testid="account-get-pro">{{ proCalendars.length ? 'Get Pro for another calendar' : 'Get Pro for a calendar' }}</a>
                     <div class="pc-acct-actions">
                         <button type="button" class="pc-acct-btn" @click="portal" :disabled="acct.busy" data-testid="account-billing">Manage billing</button>
                         <button type="button" class="pc-acct-link" @click="signOut" :disabled="acct.busy" data-testid="account-signout">Sign out</button>

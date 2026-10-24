@@ -101,6 +101,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--blue); outl
 .pick-list .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; min-width: 0 }
 .pick-list .t small { display: block; color: var(--muted); font-weight: 400; font-size: 13px; overflow: hidden; text-overflow: ellipsis }
 .pick-list .cta { flex: none; padding: 7px 14px }
+.pick-tag { display: inline-block; margin-left: 8px; font-size: 12px; font-weight: 700; color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); border-radius: 999px; padding: 1px 8px; vertical-align: 1px }
 .pick-paste { margin-top: 20px; gap: 6px }
 .pick-row { display: flex; gap: 8px }
 .pick-row input { flex: 1 1 auto; min-width: 0; height: 44px; border: 1px solid var(--line); border-radius: 10px; padding: 0 14px; background: var(--bg); color: var(--ink); font: inherit; font-size: 16px }
@@ -361,6 +362,15 @@ document.querySelectorAll('[data-plan]').forEach(a => a.addEventListener('click'
       t.className = 't'; t.textContent = c.title || c.id; sub.textContent = location.host + '/' + c.id; t.appendChild(sub);
       b.type = 'button'; b.className = 'cta primary'; b.textContent = 'Get Pro'; b.addEventListener('click', () => go(c.id, c.mine ? 'mine' : 'recent'));
       li.append(t, b); list.appendChild(li);
+      // Already Pro, or locked by someone else: say so instead of offering to buy it again.
+      fetch('/api/pro/status?calendar=' + encodeURIComponent(c.id), { credentials: 'same-origin' }).then(r => r.ok ? r.json() : null).then(st => {
+        if (!st || !st.locked) return;
+        const tag = document.createElement('span'); tag.className = 'pick-tag';
+        // Signed out, the owner can't be told apart from anyone else, so it simply says it has Pro.
+        tag.textContent = 'Has Pro';
+        const a = document.createElement('a'); a.className = 'cta'; a.href = '/' + encodeURIComponent(c.id); a.textContent = 'Open'; b.replaceWith(a);
+        t.firstChild.after(tag);
+      }).catch(() => {});
     }
     document.getElementById('pickCals').hidden = false;
     document.getElementById('pasteLabel').textContent = 'Or paste a calendar link';

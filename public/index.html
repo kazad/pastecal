@@ -402,7 +402,8 @@ Copyright (c) 2025 Kalid Azad
                     <div class="relative" v-click-outside="closeRecents" @mouseenter="handleDropdownMouseEnter"
                         @mouseleave="handleDropdownMouseLeave">
                         <div class="flex items-center space-x-2">
-                            <a @click.prevent="toggleRecents" class="flex items-center group cursor-pointer">
+                            <!-- .stop: the phone header's click-outside (hidden, still listening) would close the menu at once -->
+                            <a @click.prevent.stop="toggleRecents" class="flex items-center group cursor-pointer">
                                 <img class="h-8 w-8 mr-1.5 flex-shrink-0 dark:brightness-150"
                                     src="/img/pastecal.logo.svg" alt="pastecal">
                                 <div class="flex flex-col">
@@ -1098,7 +1099,7 @@ Copyright (c) 2025 Kalid Azad
                 </div>
 
                 <!-- Pro: lock this calendar, or (owner) the editor link and billing -->
-                <pro-panel v-if="isExisting" ref="proPanel" :calendar-id="calendar.id" :locked="lock.locked" :can-edit="canEdit"
+                <pro-panel v-if="isExisting" ref="proPanel" :calendar-id="calendar.id" :calendar-title="calendar.title" :locked="lock.locked" :can-edit="canEdit"
                     @open-insight="openInsight($event, 'share_panel')" @owner="proOwner = $event"></pro-panel>
             </div>
 

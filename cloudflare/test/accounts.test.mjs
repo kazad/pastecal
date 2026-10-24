@@ -123,7 +123,12 @@ assert.equal(await nextFor('/a/b'), null, 'one segment only');
 assert.equal(await nextFor('/%2F%2Fevil.example'), null, 'a slash hidden in an escape');
 assert.equal(await nextFor('/'), '/');
 assert.equal(await nextFor('/Team%20NU%C3%91EZ'), '/Team%20NU%C3%91EZ', 'an encoded calendar name');
-step('next is only ever "/" or one calendar on pastecal (no open redirect, no /pro/ or /signin, no query)');
+assert.equal(await nextFor('/team?pro=year'), '/team?pro=year', 'the plan being bought rides along');
+assert.equal(await nextFor('/team?pro=month'), '/team?pro=month');
+assert.equal(await nextFor('/team?pro=lifetime'), null, 'only year or month');
+assert.equal(await nextFor('/team?pro=year&x=1'), null, 'nothing after it');
+assert.equal(await nextFor('/pro/done?pro=year'), null);
+step('next is only ever "/" or one calendar on pastecal, optionally ?pro=year|month (no open redirect, no /pro/ or /signin, no other query)');
 
 assert.equal((await me()).status, 401);
 assert.equal((await me('pc_session=garbage')).status, 401);
