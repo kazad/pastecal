@@ -1086,15 +1086,18 @@ const CalendarVueApp = {
             this._editorCommitted = true;
             const events = [...this.calendar.events];
             const { _occurrenceOf, _occurrenceStart, _followingOf, ...data } = eventData;
+            // As in the main app, a color (type) counts as used only when it was changed.
+            const was = events.find(e => e.id === (_occurrenceOf || _followingOf || data.id) && !e.recurrenceID);
+            if (Number(data.type || 1) !== Number((was && was.type) || 1)) track(a => a.featureUsed('event_type', 'popup'));
             // The series this edit belongs to can vanish while the editor is open (deleted in
             // another tab). Never drop the edit: keep it as a new event and say so.
-            const orphaned = (asSeries) => {
+            const orphaned = (asSeries, wasRepeating = true) => {
                 events.push(new Event(this.toStoredEvent({ ...data, id: Utils.uuidv4(), recurrenceID: null, recurrenceException: '',
                     recurrencerule: asSeries ? data.recurrencerule : '' }, null)));
                 this.calendar.setEvents(events);
                 if (typeof AuthorSignal !== 'undefined') AuthorSignal.touch(this.calendar.id);
                 this.closeEditor();
-                this.showToast(`The repeating event was deleted elsewhere, so "${data.title || '(No title)'}" was saved as a ${asSeries ? 'new repeating' : 'separate'} event`, 'info');
+                this.showToast(`${wasRepeating ? 'The repeating event' : 'This event'} was deleted elsewhere, so "${data.title || '(No title)'}" was saved as a ${asSeries ? 'new repeating' : 'separate'} event`, 'info');
             };
 
             if (_followingOf) {
@@ -1126,15 +1129,14 @@ const CalendarVueApp = {
                 const i = events.findIndex(e => e.id === data.id && !e.recurrenceID === !data.recurrenceID);
                 if (i !== -1) events[i] = new Event(this.toStoredEvent({ ...events[i], ...data }, events[i]));
                 else {
-                    // The row changed under the open editor (someone else saved it). Keep the
-                    // user's edit rather than dropping it silently.
-                    events.push(new Event(this.toStoredEvent(data, null)));
+                    // The row was deleted under the open editor (in another tab). Keep the user's
+                    // edit, as a new event, and say so rather than bringing it back silently.
+                    return orphaned(!!data.recurrencerule, !!data.recurrencerule);
                 }
             } else {
                 events.push(new Event(this.toStoredEvent(data, null)));
                 track(a => a.eventAdded('grid', this.calendar));
             }
-            if (Number(data.type) > 1) track(a => a.featureUsed('event_type', 'popup'));
             this.calendar.setEvents(events);
             if (typeof AuthorSignal !== 'undefined') AuthorSignal.touch(this.calendar.id);
             this.closeEditor();

@@ -20,7 +20,7 @@ async function deleteSeriesElsewhere(context, id) {
 }
 
 // ---------------------------------------------------------------- fix 1: no silent data loss
-for (const scope of ['this', 'following']) {
+for (const scope of ['this', 'following', 'all']) {
   test(`fix1: edit "${scope}" occurrence after the series was deleted elsewhere is kept and reported`, async ({ page, context }, info) => {
     only(info);
     const id = await fresh(info, `race-${scope}`);
@@ -85,6 +85,28 @@ test('fix2: event_added (grid, quick_add) and editor_abandoned fire from native,
   const names = t.filter((x) => ['event_added', 'editor_abandoned'].includes(x.name)).map((x) => `${x.name}${x.source ? ':' + x.source : ''}`);
   expect(names).toEqual(['event_added:grid', 'editor_abandoned', 'event_added:grid', 'event_added:quick_add']);
   expect(t.every((x) => x.renderer === 'native')).toBe(true);
+});
+
+test('fix2: feature_used event_type fires when a color is changed, not on every save of a colored event', async ({ page }, info) => {
+  only(info);
+  const id = await fresh(info, 'analytics3');
+  await nat.open(page, id);
+  await recordAnalytics(page);
+  await nat.openPopover(page, 'Dentist'); // type 1
+  await nat.editFromPopover(page);
+  await nat.setTitle(page, 'Dentist visit');
+  await nat.save(page);
+  await nat.openPopover(page, 'Quarterly planning'); // type 7 already
+  await nat.editFromPopover(page);
+  await nat.setTitle(page, 'Quarterly planning 2');
+  await nat.save(page);
+  expect((await tracked(page)).filter((t) => t.feature === 'event_type')).toHaveLength(0);
+  await nat.openPopover(page, 'Dentist visit');
+  await nat.editFromPopover(page);
+  await tap(page, page.locator('[data-testid="editor-color"]').locator('visible=true').first());
+  await tap(page, page.locator('[data-testid="editor-color-3"]').locator('visible=true').first());
+  await nat.save(page);
+  expect((await tracked(page)).filter((t) => t.feature === 'event_type')).toHaveLength(1);
 });
 
 // ---------------------------------------------------------------- fix 3: production hygiene
