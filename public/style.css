@@ -1078,10 +1078,11 @@ div#Schedule,
 }
 @media (min-width: 1100px) {
   .pc-home-split { display: grid; grid-template-columns: minmax(0, 1fr) clamp(320px, 28vw, 420px); gap: 16px; align-items: stretch }
-  .pc-home-split .pc-draft-note { display: none }
   .pc-home-aside { display: flex; flex-direction: column; border: 1px solid var(--pc-line); border-radius: 8px; background: var(--pc-soft); overflow: hidden }
   /* The aside carries the headline on wide screens, so the section below starts at the steps. */
   .pc-home-split ~ .pc-tour .pc-intro-full { display: none }
+  /* The guide already links to the tour; the draft line under the calendar keeps only its warning. */
+  .pc-home-split:has(.pc-home-aside) .pc-draft-links a { display: none }
   .pc-home-split ~ .pc-tour .pc-intro-short { display: block }
 }
 .pc-home-aside h1 { margin: 0 0 10px; font-size: 25px; line-height: 1.18; font-weight: 750; letter-spacing: -.01em; color: var(--pc-text); text-wrap: balance }
