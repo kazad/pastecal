@@ -500,3 +500,27 @@ Read-only checks against production:
 - The admin routes with no secret, or a wrong one → `403 forbidden`.
 
 `/api/auth/start` is called only with `--with-email` (it sends an email). Before the Pro deploy, the Pro checks report `NOT-DEPLOYED` and the script exits 0. `--expect-deployed` makes them fail, and `--expect-billing` also fails on 503.
+
+---
+
+## Staging (preview.pastecal.com)
+
+**STATUS (2026-10-23, branch `pro-staging`):** done: `env.staging` in `cloudflare/wrangler.jsonc` (Worker `pastecal-staging`, own DOs, R2 `pastecal-backups-staging`, dataset `pastecal_events_staging`, limiter namespace 2001, no Firebase, `SITE_URL`, `BILLING_TEST_MODE=1`, custom domain `preview.pastecal.com`, `run_worker_first: true`); server `cloudflare/src/Site.js` (links from SITE_URL, Origin allowlist, test keys only on staging's own host, live keys refused on staging, noindex + `Disallow: /` robots.txt); client (preview host = Cloudflare backend, no Firebase sign-in/history reads, no analytics, test-mode banner, checkout test-card hint, editor links from `location.origin`). Tests: `cloudflare/test/site.test.mjs`, `cloudflare/test/stripe-unit.test.mjs`, `test/unit/staging-config.test.js`, `test/unit/preview-site.test.js`; full unit suite passes. Verified locally with `wrangler dev --env staging`. **Left:** run accounts/billing wrangler suites; screenshot of the Pro panel hint; smoke-test calendars on staging. Note: production deploys now warn about multiple environments; use `wr deploy --env=""` for production to be explicit.
+
+Prerequisite: Email Sending for pastecal.com (section b) — with dev mode off there is no outbox, so sign-in needs real email. Staging sends from `login@pastecal.com` with subjects prefixed `[Preview]`.
+
+Run from `~/worktrees/pastecal-pro-staging/cloudflare` (alias `wr` from section 0):
+
+1. `wr r2 bucket create pastecal-backups-staging`
+2. `dig +short preview.pastecal.com` — must print nothing (an existing record makes the custom-domain deploy fail).
+3. `wr deploy --env staging` — creates the Worker, its DNS record and certificate.
+4. `stripe switch acct_1UTqVZEPgWTHeJ7W && stripe whoami` — must be the sandbox "pastecal dev".
+5. `sed -n 's/^STRIPE_SECRET_KEY=//p' ~/worktrees/pastecal-pro/cloudflare/.dev.vars.stripe | tr -d '\r"' | wr secret put STRIPE_SECRET_KEY --env staging`
+6. `print -r -- price_1UTr8UEPgWTHeJ7W3PQwUvXH | wr secret put STRIPE_PRICE_PRO_YEARLY --env staging`
+7. `print -r -- price_1UTr8bEPgWTHeJ7WOtXnUtB1 | wr secret put STRIPE_PRICE_PRO_MONTHLY --env staging`
+8. `umask 077 && openssl rand -hex 32 > ~/.pastecal-staging-import-secret && wr secret put IMPORT_SECRET --env staging < ~/.pastecal-staging-import-secret`
+9. `WH=$(stripe webhook_endpoints create --url=https://preview.pastecal.com/api/stripe/webhook --description="pastecal staging (pastecal-staging)" --enabled-events=checkout.session.completed --enabled-events=customer.subscription.created --enabled-events=customer.subscription.updated --enabled-events=customer.subscription.deleted --enabled-events=invoice.payment_failed --enabled-events=charge.refunded --enabled-events=charge.dispute.created 2>/dev/null | jq -er .secret) && print -r -- "$WH" | wr secret put STRIPE_WEBHOOK_SECRET --env staging; unset WH`
+10. `wr secret list --env staging` — want exactly IMPORT_SECRET, the four STRIPE_* names; never FIREBASE_SA.
+11. Smoke: create a calendar and a view link on staging first, then `scripts/pro-smoke.sh --base https://preview.pastecal.com --calendar <cal> --view-slug <view> --expect-billing`.
+
+Reset staging data: Durable Object data persists across deploys. Realistic options: change `env.staging.name` (e.g. `pastecal-staging-2`) and redeploy (fresh, empty DOs; delete the old Worker afterwards with `wr delete --name pastecal-staging` — unverified whether that removes its DO storage immediately), or add an admin reset route later.
