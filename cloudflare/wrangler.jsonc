@@ -106,7 +106,10 @@
         { "tag": "v4", "new_sqlite_classes": ["Accounts"] }
       ],
       // Its own namespace, so staging traffic never spends production's per-IP budget.
-      "ratelimits": [{ "name": "CREATE_LIMITER", "namespace_id": "2001", "simple": { "limit": 10, "period": 60 } }],
+      "ratelimits": [
+        { "name": "CREATE_LIMITER", "namespace_id": "2001", "simple": { "limit": 10, "period": 60 } },
+        { "name": "COLLECT_LIMITER", "namespace_id": "2002", "simple": { "limit": 60, "period": 60 } }
+      ],
       "vars": {
         "SITE_URL": "https://preview.pastecal.com",   // links in emails and Stripe redirects; the allowed Origin
         "BILLING_TEST_MODE": "1",                     // Stripe TEST keys only, and only on preview.pastecal.com

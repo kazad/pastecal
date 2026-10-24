@@ -11,13 +11,14 @@
 # empty unless the suite is the copy-back test, so nothing reaches Firebase, Stripe or pastecal.com.
 # Every wrangler this script starts is killed on exit, and the unit-test node_modules symlinks are
 # removed again. Logs: /tmp/pastecal-test-all-<timestamp>/. Exits nonzero if any suite failed.
-# Works with macOS bash 3.2. Status: complete; last full run 2026-10-23, all 20 run suites passed in 264s.
+# Works with macOS bash 3.2 and Linux. Status: complete; last full run 2026-10-23 (Linux, Node 22), all 25 run suites passed in 246s.
 
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CF="$ROOT/cloudflare"
 NODE="${NODE:-$HOME/.nvm/versions/node/v22.18.0/bin/node}"
+[ -x "$NODE" ] || NODE="$HOME/.local/share/mise/installs/node/22/bin/node"   # Linux box: mise, Node 22 (.nvmrc)
 MAIN_REPO="${MAIN_REPO:-/Users/kazad/Dropbox/computer/Projects/pastecal}"
 WRANGLER="node_modules/.bin/wrangler"   # relative to cloudflare/, as the tests expect
 RUN_DIR="/tmp/pastecal-test-all-$(date +%Y%m%d-%H%M%S)"
@@ -28,12 +29,16 @@ DEAD_FIREBASE="http://127.0.0.1:9"
 SUITES="
 stripe-unit|none
 collector|none
+site|none
+headers|none
+ics-safety|none
 sync|plain
 stress|plain
 phase3|plain
 firebase-sync|plain
 cloud-service|plain
 waitlist|plain
+hardening|plain
 archive|plain+persist
 backup|plain+persist
 copyback|copyback (fake Firebase on 9099, started by the test)
@@ -45,6 +50,7 @@ accounts|billing (fake Stripe vars + LOCK_API_BASE)
 billing|billing x3 (BASE, NOKEYS_BASE, TESTKEY_BASE; fake Stripe started by the test)
 welcome|billing
 pro-health|billing
+test-inbox|billing
 stripe-sandbox-e2e|SKIP: needs the real Stripe sandbox, its secret key and \`stripe listen\`
 pro-browser-e2e|SKIP: needs the real Stripe sandbox (same setup as stripe-sandbox-e2e) and Playwright
 cloud-journeys|SKIP: Playwright browser suite for the main app; not run here (browser test, see docs/pro-plan.md rule 6)
@@ -198,9 +204,9 @@ run_one() {
   reset_ports
   persist=$(mktemp -d "$RUN_DIR/persist-$name.XXXX")
   case "$name" in
-    stripe-unit|collector)
+    stripe-unit|collector|site|headers|ics-safety)
       run_node "$name" "$log" "$CF" "$NODE" "test/$name.test.mjs" ;;
-    sync|stress|phase3|firebase-sync|cloud-service|waitlist|archive|backup)
+    sync|stress|phase3|firebase-sync|cloud-service|waitlist|hardening|archive|backup)
       # shellcheck disable=SC2086
       start_wrangler "$name" "$persist" $PLAIN_VARS || { record "$name" FAIL - "$RUN_DIR/wrangler-$name.log"; return; }
       run_node "$name" "$log" "$CF" BASE="$LAST_BASE" PERSIST="$persist" IMPORT_SECRET="$SECRET" "$NODE" "test/$name.test.mjs" ;;
@@ -219,7 +225,7 @@ run_one() {
       # shellcheck disable=SC2086
       start_wrangler "$name" "$persist" $PRO_VARS || { record "$name" FAIL - "$RUN_DIR/wrangler-$name.log"; return; }
       run_node "$name" "$log" "$CF" BASE="$LAST_BASE" PERSIST="$persist" IMPORT_SECRET="$SECRET" "$NODE" "test/$name.test.mjs" ;;
-    accounts|welcome|pro-health|billing)
+    accounts|welcome|pro-health|test-inbox|billing)
       take_port FAKE_PORT; fake_stripe_vars
       # shellcheck disable=SC2086
       start_wrangler "$name" "$persist" $BILLING_VARS $STRIPE_VARS || { record "$name" FAIL - "$RUN_DIR/wrangler-$name.log"; return; }

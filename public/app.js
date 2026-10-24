@@ -2029,7 +2029,7 @@ const CalendarVueApp = {
         makeOwnCopy() {
             const src = JSON.parse(JSON.stringify(this.calendar));
             const copy = {
-                id: Utils.randomID(8),
+                id: Utils.randomID(10),
                 title: `Copy of ${Calendar.displayTitle ? Calendar.displayTitle(src.title) : (src.title || 'calendar')}`,
                 events: (src.events || []).map((e) => ({ ...e, secret: undefined })),
                 options: { ...(src.options || {}), publicViewId: undefined },
