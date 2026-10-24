@@ -251,6 +251,10 @@ class CloudCalendarService extends CalendarDataService {
             case 'ack': return this._onAck(room, m);
             case 'error': return this._onError(room, m);
             case 'auth': return this._onAuth(room, m);
+            case 'pro': {                                // the owner changed the display settings
+                room.lock = { ...room.lock, proSettings: m.settings || null };
+                return this._notifyLock(room);
+            }
         }
     }
 
@@ -325,7 +329,7 @@ class CloudCalendarService extends CalendarDataService {
             return;
         }
         if (m.calendar && m.calendar.id) {
-            room.lock = { locked: !!m.locked, pro: !!m.pro, canEdit: m.canEdit !== false };
+            room.lock = { locked: !!m.locked, pro: !!m.pro, canEdit: m.canEdit !== false, proSettings: m.proSettings || null };
         }
         if (!m.calendar || !m.calendar.id) {            // no such calendar: the app treats it as a new one
             room.closed = true;
@@ -533,7 +537,7 @@ class CloudCalendarService extends CalendarDataService {
                     if (r.status === 404) r = await fetch(this._url(slug));
                     if (r.ok) {
                         const out = await r.json();
-                        if (out.v !== v && out.calendar && out.calendar.id) { v = out.v; callback({ ...out.calendar, events: out.calendar.events }, { locked: !!out.locked, pro: !!out.pro }); }
+                        if (out.v !== v && out.calendar && out.calendar.id) { v = out.v; callback({ ...out.calendar, events: out.calendar.events }, { locked: !!out.locked, pro: !!out.pro, proSettings: out.proSettings || null }); }
                     }
                 }
             } catch (e) { /* offline: try again next time */ }
