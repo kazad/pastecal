@@ -1880,3 +1880,17 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
   .pc-hdr-btn.pc-hdr-on { background: var(--pc-bg); color: var(--pc-link) !important; box-shadow: 0 1px 2px rgba(0,0,0,.12), 0 0 0 1px var(--pc-line) }
   @media (max-width: 1499px) { .pc-hdr-btn:not([aria-label="Toggle notes"]) { width: 32px } }
 }
+
+/* Quick add: examples under the text box as quiet chips in the UI font; room between the two steps. */
+.pc-qa-examples { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 22px }
+.pc-qa-try { font-size: 12px; font-weight: 600; color: var(--pc-text-muted); margin-right: 2px }
+.pc-qa-chip { height: 28px; padding: 0 11px; border: 1px solid var(--pc-line); border-radius: 999px; background: var(--pc-soft);
+  font: 500 12.5px/1 var(--pc-font); color: var(--pc-text-2); cursor: pointer; white-space: nowrap }
+.pc-qa-chip:hover { border-color: var(--pc-link); color: var(--pc-link) }
+
+/* No hairline under the header: the calendar card's own edge separates them (one line, not three). */
+@media (min-width: 768px) { topbar.md\:flex { border-bottom: 0 !important; margin-bottom: 4px } }
+
+/* View switcher pills: real horizontal padding, one 30px height. */
+.e-schedule .e-schedule-toolbar .e-views .e-tbar-btn { height: 30px !important; min-height: 30px; padding: 0 12px !important; margin: 0 1px }
+.e-schedule .e-schedule-toolbar .e-views .e-tbar-btn-text { padding: 0 !important; line-height: 30px }

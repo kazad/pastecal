@@ -18,15 +18,25 @@ const QuickAddDialog = {
                                  placeholder="Meet John tomorrow 2pm for 1 hour"
                                  rows="2"
                                  @keydown.enter.prevent="handleEnter"
-                                 class="w-full p-2 bg-1 border border-color-default rounded-lg text-sm mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                 class="w-full p-2 bg-1 border border-color-default rounded-lg text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
                         </textarea>
+                        <!-- Examples belong to step 1: they show what you can type. -->
+                        <div class="pc-qa-examples">
+                            <span class="pc-qa-try">Try</span>
+                            <button type="button"
+                                    v-for="ex in examples"
+                                    :key="ex"
+                                    @click="useExample(ex)"
+                                    :title="'Use: ' + ex"
+                                    class="pc-qa-chip">{{ ex }}</button>
+                        </div>
 
                         <div class="flex items-baseline gap-2 mb-1.5">
                             <span class="flex items-center justify-center shrink-0 h-5 w-5 rounded-full bg-blue-600 text-white text-xs font-bold">2</span>
                             <label class="text-sm font-medium">Check the details</label>
                         </div>
 
-                        <div class="rounded mb-4 flex flex-col gap-2 pl-7">
+                        <div class="rounded mb-6 flex flex-col gap-3 pl-7">
                             <div class="flex items-center gap-2">
                                 <label for="qa-subject" class="w-14 shrink-0 text-sm opacity-70">Subject</label>
                                 <input id="qa-subject"
@@ -95,18 +105,6 @@ const QuickAddDialog = {
                                data-testid="qa-needs-date" class="text-sm text-amber-600">
                                 Add a date — type one (e.g. "tomorrow 2pm") or pick it under Start.
                             </p>
-                        </div>
-
-                        <div class="mb-4 text-sm">
-                            <div class="text-xs text-color-1 mb-1.5">Examples</div>
-                            <div class="flex flex-wrap gap-1.5">
-                                <button type="button"
-                                        v-for="ex in examples"
-                                        :key="ex"
-                                        @click="useExample(ex)"
-                                        :title="'Use: ' + ex"
-                                        class="text-left px-2.5 py-1 rounded-full border border-color-default text-color-2 font-mono text-xs hover:border-blue-500 hover:bg-[var(--bg-interactive-hover)] transition-colors">{{ ex }}</button>
-                            </div>
                         </div>
 
                         <div class="flex justify-end gap-2">

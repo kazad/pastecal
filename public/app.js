@@ -1285,6 +1285,20 @@ const CalendarVueApp = {
         });
 
         scheduleObj.appendTo('#Schedule');
+
+        // Desktop: the calendar fills the window below the header (the side panel stretches to
+        // match), instead of stopping at Syncfusion's default height with empty page below.
+        // Phones keep the natural height and scroll.
+        const fitScheduleHeight = () => {
+            const el = document.getElementById('Schedule');
+            if (!el || window.innerWidth < 768) return;
+            const top = el.getBoundingClientRect().top + window.scrollY;
+            const h = Math.max(520, Math.round(window.innerHeight - top - 14)) + 'px';
+            if (scheduleObj.height !== h) scheduleObj.height = h;
+        };
+        let fitTimer;
+        window.addEventListener('resize', () => { clearTimeout(fitTimer); fitTimer = setTimeout(fitScheduleHeight, 120); });
+        requestAnimationFrame(fitScheduleHeight);
         // A locked calendar's grid is read-only, so a double-click on a day opens nothing at all.
         // Say why, instead of leaving people clicking at a calendar that ignores them.
         try {
