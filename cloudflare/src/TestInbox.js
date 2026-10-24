@@ -15,7 +15,8 @@
  *
  * Stored in the Accounts Durable Object (table test_inbox): it already exists as one global SQLite
  * object, so this needs no new class, binding or migration (a migration is a one-way deploy step),
- * and the volume (a few test mails a day) is nothing. Message bodies are never logged.
+ * and the volume (a few test mails a day) is nothing. Message bodies are never logged, and sign-in tokens
+ * in them are replaced by [token:<length>] before storing (redactTokens).
  */
 import { timingSafeEqual } from './Stripe.js';
 
@@ -128,6 +129,9 @@ export function parseAuthResults(value) {
     return out;
 }
 
+// `#t=<token>` / `?t=` / `&t=` → `#t=[token:<length>]`.
+export const redactTokens = (text) => text.replace(/([#?&]t=)([A-Za-z0-9_-]{16,})/g, (_, k, t) => `${k}[token:${t.length}]`);
+
 // --- The handler ----------------------------------------------------------------------------------
 
 async function readCapped(stream, cap) {
@@ -154,7 +158,9 @@ export async function handleTestInboxEmail(message, env) {
         const h = message.headers;
         const authResults = h.get('authentication-results') || '';
         const arc = h.get('arc-authentication-results') || '';
-        let text = parseMessageText(bytes);
+        // Sign-in tokens are never stored in the clear (they are live for 15 minutes): keep only where the
+        // token sat (fragment or query) and its length, which is all a check needs.
+        let text = redactTokens(parseMessageText(bytes));
         if (text.length > TEXT_CAP) text = text.slice(0, TEXT_CAP);
         await accounts(env).addTestMail({
             to, from: String(message.from || '').toLowerCase(), subject: decodeHeader(h.get('subject') || '').slice(0, 500),

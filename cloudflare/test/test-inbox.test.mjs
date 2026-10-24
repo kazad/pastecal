@@ -75,10 +75,11 @@ r = await deliver('test-weekly@pastecal.com', eml(['From: login@pastecal.com', '
         '--outer', 'Content-Type: text/plain; name=a.txt', 'Content-Disposition: attachment; filename=a.txt', '', 'attachment text, not the body', '--outer--', ''].join('\r\n')));
 assert.equal(r.status, 200);
 m = (await inbox('?to=test-weekly@pastecal.com'))[0];
-assert.equal(m.text, 'Here is your link:\nSign in (https://pastecal.com/signin#t=AAAAAAAAAAAAAAAAAAAAAA)\nTom & Jerry <3');
+assert.equal(m.text, 'Here is your link:\nSign in (https://pastecal.com/signin#t=[token:22])\nTom & Jerry <3', 'the sign-in token is redacted');
+assert.ok(!JSON.stringify(m).includes('AAAAAAAAAAAAAAAAAAAAAA'), 'the raw token is stored nowhere');
 assert.deepEqual(m.auth, { spf: 'none', dkim: 'pass', dmarc: 'pass' }, 'from ARC-Authentication-Results when there is no Authentication-Results');
 assert.equal(m.headers.arcAuthenticationResults, true); assert.equal(m.headers.authenticationResults, null);
-step('html-only (base64, nested multipart/mixed): tags and styles stripped, links kept, entities decoded; attachments ignored; ARC verdicts as fallback');
+step('html-only (base64, nested multipart/mixed): tags and styles stripped, links kept (token redacted to [token:22]), entities decoded; attachments ignored; ARC verdicts as fallback');
 
 // Over 200 KB: stored, truncated.
 r = await deliver('test@pastecal.com', eml(['From: a@example.com', 'To: test@pastecal.com', 'Subject: Big', 'Content-Type: text/plain'], 'y'.repeat(300 * 1024)));

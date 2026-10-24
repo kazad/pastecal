@@ -82,7 +82,7 @@ With ACCOUNTS_DEV_MODE=1, sign-in emails go to a dev outbox: `GET /api/admin/acc
 ## Done
 
 - **Lock** (server): every write path enforces it; editor key auth; admin routes. `cloudflare/test/lock.test.mjs` (11 checks).
-- **Accounts**: magic link sign-in, rolling 365-day sessions (renewed on use), CSRF checks. `accounts.test.mjs` (11).
+- **Accounts**: magic link sign-in, rolling 365-day sessions (renewed on use), CSRF checks. `accounts.test.mjs` (18). Test inbox for test@/test-*@pastecal.com: `test-inbox.test.mjs` (7).
 - **Billing**: Checkout yearly/monthly, signed webhook, portal, one buyer at a time. `billing.test.mjs` (16, fake Stripe).
 - **Sandbox end to end** with real Stripe test mode: `stripe-sandbox-e2e.mjs` (6).
 - **Polish**: restyled editor/popups, sample event, color names, header, toolbar.

@@ -10,7 +10,8 @@
 # What it does: POST BASE_URL/api/auth/start {email: ADDRESS} (Origin: BASE_URL), then polls
 # GET BASE_URL/api/admin/test-inbox?to=ADDRESS for up to 2 minutes for a message newer than the
 # ones already there. Prints its subject, sender, SPF/DKIM/DMARC verdicts, and whether the sign-in
-# link has the expected shape. It never prints the link or its token.
+# link has the expected shape. It never prints the link or its token (the inbox stores the token
+# redacted as [token:<length>] anyway).
 #
 # Admin secret: $PRO_HEALTH_SECRET if set, else
 #   gcloud secrets versions access latest --secret=CLOUDFLARE_IMPORT_SECRET --project pastecal-web
@@ -88,7 +89,7 @@ a=m.get("auth") or {}
 text=m.get("text") or ""
 links=re.findall(r"https?://\S+", text)
 signin=[l for l in links if "/signin" in l]
-shape=re.compile(r"^https://pastecal\.com/signin#t=[A-Za-z0-9_-]{22}$")
+shape=re.compile(r"^https://pastecal\.com/signin#t=\[token:22\]$")   # the inbox stores the token redacted
 link_ok=len(signin)==1 and bool(shape.match(signin[0].rstrip(").,")))
 no_query=all("?" not in l for l in signin)
 print("Subject:      %s" % m.get("subject"))
@@ -98,7 +99,7 @@ print("SPF:          %s" % a.get("spf"))
 print("DKIM:         %s" % a.get("dkim"))
 print("DMARC:        %s" % a.get("dmarc"))
 print("DKIM-Signature header present: %s" % ("yes" if (m.get("headers") or {}).get("dkimSignature") else "no"))
-print("Sign-in link: %s" % ("ok (https://pastecal.com/signin#t=<22-character token, not shown>)" if link_ok
+print("Sign-in link: %s" % ("ok (https://pastecal.com/signin#t=<22-character token>)" if link_ok
     else "UNEXPECTED (%d sign-in link(s); expected one https://pastecal.com/signin#t=<token>, token in the fragment)" % len(signin)))
 if not no_query: print("Sign-in link: has a query string (a token must never be in the query)")
 auth_ok=all(a.get(k)=="pass" for k in ("spf","dkim","dmarc"))
