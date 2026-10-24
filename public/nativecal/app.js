@@ -1066,36 +1066,43 @@ const CalendarVueApp = {
 
         handleSaveEvent(eventData) {
             const events = [...this.calendar.events];
-            const { _occurrenceOf, _occurrenceStart, ...data } = eventData;
+            const { _occurrenceOf, _occurrenceStart, _followingOf, ...data } = eventData;
+            // The series this edit belongs to can vanish while the editor is open (deleted in
+            // another tab). Never drop the edit: keep it as a new event and say so.
+            const orphaned = (asSeries) => {
+                events.push(new Event(this.toStoredEvent({ ...data, id: Utils.uuidv4(), recurrenceID: null, recurrenceException: '',
+                    recurrencerule: asSeries ? data.recurrencerule : '' }, null)));
+                this.calendar.setEvents(events);
+                if (typeof AuthorSignal !== 'undefined') AuthorSignal.touch(this.calendar.id);
+                this.closeEditor();
+                this.showToast(`The repeating event was deleted elsewhere, so "${data.title || '(No title)'}" was saved as a ${asSeries ? 'new repeating' : 'separate'} event`, 'info');
+            };
 
-            if (data._followingOf) {
-                const { _followingOf, ...rest } = data;
+            if (_followingOf) {
                 const series = events.find(e => e.id === _followingOf && !e.recurrenceID);
-                if (series) {
-                    const { events: cut, remaining } = this._cutSeries(series, _occurrenceStart);
-                    let rule = rest.recurrencerule;
-                    // Unchanged COUNT rule: the new part repeats only what was left.
-                    const norm = (r) => String(r || '').split(';').filter(p => p.includes('=')).sort().join(';');
-                    if (remaining !== null && norm(rule) === norm(series.recurrencerule)) rule = rule.replace(/COUNT=\d+/, `COUNT=${remaining}`);
-                    cut.push(new Event(this.toStoredEvent({ ...rest, id: Utils.uuidv4(), recurrencerule: rule, recurrenceException: '' }, null)));
-                    this._applyEvents(cut);
-                    if (typeof AuthorSignal !== 'undefined') AuthorSignal.touch(this.calendar.id);
-                    this.closeEditor();
-                    return;
-                }
+                if (!series) return orphaned(true);
+                const { events: cut, remaining } = this._cutSeries(series, _occurrenceStart);
+                let rule = data.recurrencerule;
+                // Unchanged COUNT rule: the new part repeats only what was left.
+                const norm = (r) => String(r || '').split(';').filter(p => p.includes('=')).sort().join(';');
+                if (remaining !== null && norm(rule) === norm(series.recurrencerule)) rule = rule.replace(/COUNT=\d+/, `COUNT=${remaining}`);
+                cut.push(new Event(this.toStoredEvent({ ...data, id: Utils.uuidv4(), recurrencerule: rule, recurrenceException: '' }, null)));
+                this._applyEvents(cut);
+                if (typeof AuthorSignal !== 'undefined') AuthorSignal.touch(this.calendar.id);
+                this.closeEditor();
+                return;
             }
             if (_occurrenceOf) {
                 // "Edit Event" on one occurrence: an exception row plus a stamp on the series.
-                const i = events.findIndex(e => e.id === _occurrenceOf);
-                if (i !== -1) {
-                    const series = events[i];
-                    const stamp = this._stamp(_occurrenceStart);
-                    const list = String(series.recurrenceException || '').split(',').map(s => s.trim()).filter(Boolean);
-                    if (!list.includes(stamp)) list.push(stamp);
-                    events[i] = new Event({ ...series, recurrenceException: list.join(',') });
-                    events.push(new Event({ ...this.toStoredEvent(data, null), id: Utils.uuidv4(), recurrenceID: series.id,
-                        recurrencerule: series.recurrencerule, recurrenceException: stamp }));
-                }
+                const i = events.findIndex(e => e.id === _occurrenceOf && !e.recurrenceID);
+                if (i === -1) return orphaned(false);
+                const series = events[i];
+                const stamp = this._stamp(_occurrenceStart);
+                const list = String(series.recurrenceException || '').split(',').map(s => s.trim()).filter(Boolean);
+                if (!list.includes(stamp)) list.push(stamp);
+                events[i] = new Event({ ...series, recurrenceException: list.join(',') });
+                events.push(new Event({ ...this.toStoredEvent(data, null), id: Utils.uuidv4(), recurrenceID: series.id,
+                    recurrencerule: series.recurrencerule, recurrenceException: stamp }));
             } else if (data.id) {
                 const i = events.findIndex(e => e.id === data.id && !e.recurrenceID === !data.recurrenceID);
                 if (i !== -1) events[i] = new Event(this.toStoredEvent({ ...events[i], ...data }, events[i]));
