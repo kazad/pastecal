@@ -93,8 +93,12 @@
       },
       "durable_objects": {
         "bindings": [
-          { "name": "CALENDARS", "class_name": "CalendarRoom" },
-          { "name": "DIRECTORY", "class_name": "CalendarDirectory" },
+          // The beta runs on the live site's calendars: these two are pastecal-sync's own Durable Objects,
+          // so every read and write is handled by the live server code; only the pages and this Worker's
+          // routing are the beta's. Accounts, the waitlist and Stripe (test mode) stay separate, and
+          // checkout is off here (BETA_REAL_DATA) so a test card can never lock a real calendar.
+          { "name": "CALENDARS", "class_name": "CalendarRoom", "script_name": "pastecal-sync" },
+          { "name": "DIRECTORY", "class_name": "CalendarDirectory", "script_name": "pastecal-sync" },
           { "name": "WAITLIST", "class_name": "Waitlist" },
           { "name": "ACCOUNTS", "class_name": "Accounts" }
         ]
@@ -113,6 +117,7 @@
       "vars": {
         "SITE_URL": "https://preview.pastecal.com",   // links in emails and Stripe redirects; the allowed Origin
         "BILLING_TEST_MODE": "1",                     // Stripe TEST keys only, and only on preview.pastecal.com
+        "BETA_REAL_DATA": "1",                        // live calendars: Pro checkout refused here (Accounts.js checkout)
         // Never Firebase: no copy-back and nowhere to write (and no FIREBASE_SA secret on staging).
         "FIREBASE_DB_URL": "",
         "COPY_BACK": ""

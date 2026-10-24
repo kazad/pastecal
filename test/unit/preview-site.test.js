@@ -45,7 +45,7 @@ test('the banner: preview only, not in an embed, gone for the session once dismi
 });
 
 test('the copy names the test card, date and CVC, and says data may be reset', () => {
-  assert.equal(PreviewSite.BANNER_TEXT, 'Preview site · Payments are in test mode: use card 4242 4242 4242 4242, any future date, any CVC. Data here may be reset.');
+  assert.equal(PreviewSite.BANNER_TEXT, 'Beta · The new pastecal design, on your real calendars. Changes you make here are real. Pro is bought on pastecal.com.');
   assert.match(PreviewSite.CHECKOUT_HINT, /4242 4242 4242 4242, any future date, any CVC/);
 });
 

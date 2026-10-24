@@ -48,7 +48,13 @@ test('staging is its own Worker on preview.pastecal.com only', () => {
 test('staging lists every binding production has (none are inherited), pointing at its own resources', () => {
     const names = (arr, key = 'name') => (arr || []).map((b) => b[key] || b.binding).sort();
     assert.deepEqual(names(st.durable_objects.bindings), names(cfg.durable_objects.bindings));
-    assert.deepEqual(st.durable_objects.bindings, cfg.durable_objects.bindings);
+    // The beta runs on the live calendars and names (pastecal-sync's own objects, run by the live code);
+    // accounts and the waitlist stay its own, so test-mode billing never meets real data.
+    const by = Object.fromEntries(st.durable_objects.bindings.map((b) => [b.name, b]));
+    assert.equal(by.CALENDARS.script_name, 'pastecal-sync');
+    assert.equal(by.DIRECTORY.script_name, 'pastecal-sync');
+    assert.ok(!by.ACCOUNTS.script_name && !by.WAITLIST.script_name, 'own accounts and waitlist');
+    assert.equal(st.vars.BETA_REAL_DATA, '1', 'checkout is refused on the beta');
     assert.deepEqual(st.migrations, cfg.migrations, 'same classes, same migration tags');
     assert.deepEqual(names(st.ratelimits), names(cfg.ratelimits));
     assert.notEqual(st.ratelimits[0].namespace_id, cfg.ratelimits[0].namespace_id, 'own rate-limit namespace');

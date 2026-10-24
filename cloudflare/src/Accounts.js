@@ -748,6 +748,9 @@ async function claimCheckout(request, env, body) {
 }
 
 async function checkout(request, env, body) {
+    // The beta (preview.pastecal.com) runs on live calendars with Stripe in test mode: a test card must
+    // never lock a real calendar, so Pro is bought on pastecal.com.
+    if (env.BETA_REAL_DATA) return json({ error: 'buy-on-live', message: 'Pro is bought on pastecal.com. The beta shows the new design on your real calendars.' }, 403);
     const cfg = stripeConfig(env, new URL(request.url).hostname);
     if (!cfg) return json({ error: 'billing-not-configured' }, 503);
     const userId = await sessionUserId(request, env);
