@@ -3,46 +3,134 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Help · pastecal</title>
-<meta name="description" content="How to share a pastecal calendar, keep it private, undo a change, add it to your phone, and the keyboard shortcuts.">
+<meta name="description" content="How to use pastecal: quick start, link types, features, privacy, phone use and keyboard shortcuts.">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/legal.css">
 <style>
+html { scroll-behavior: smooth; scroll-padding-top: 76px }
 kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px solid var(--pc-line); border-bottom-width: 2px; border-radius: 6px; background: var(--pc-soft); font: 600 13px/1.4 var(--pc-font); text-align: center }
-.keys { display: grid; grid-template-columns: max-content 1fr; gap: 10px 18px; align-items: center; margin: 0 }
+code { font: 500 .88em/1.4 var(--pc-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); background: var(--pc-soft); border: 1px solid var(--pc-line); border-radius: 5px; padding: 1px 5px; overflow-wrap: anywhere }
+main.help { max-width: 1020px }
+.layout { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 48px; align-items: start }
+.toc { position: sticky; top: 24px; font-size: 15px }
+.toc b { display: block; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--pc-text-muted); margin-bottom: 8px }
+.toc a { display: block; padding: 5px 10px; margin-left: -10px; border-radius: 8px; color: var(--pc-text); text-decoration: none }
+.toc a:hover, .toc a.on { background: var(--pc-soft); color: var(--pc-link) }
+.doc { min-width: 0; max-width: 700px }
+.doc section { padding-top: 6px }
+.doc h2 { margin: 36px 0 8px; padding-top: 4px }
+.doc section:first-child h2 { margin-top: 0 }
+.doc h3 { font-size: 16px; margin: 20px 0 2px }
+.doc p { margin: 6px 0 }
+.steps { list-style: none; counter-reset: s; padding: 0; margin: 10px 0 0; display: grid; gap: 10px }
+.steps li { counter-increment: s; position: relative; padding: 12px 14px 12px 54px; border: 1px solid var(--pc-line); border-radius: 12px; background: var(--pc-surface, var(--pc-bg)) }
+.steps li::before { content: counter(s); position: absolute; left: 14px; top: 12px; width: 28px; height: 28px; border-radius: 50%; background: var(--pc-accent); color: var(--pc-on-accent, #fff); font-weight: 700; display: grid; place-items: center }
+.steps li > b:first-child { display: block }
+.tw { overflow-x: auto; margin: 12px 0; border: 1px solid var(--pc-line); border-radius: 12px }
+table { border-collapse: collapse; width: 100%; font-size: 15px; line-height: 1.5 }
+th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--pc-line) }
+tr:last-child td { border-bottom: 0 }
+th { background: var(--pc-soft); font-size: 13px; color: var(--pc-text-muted); font-weight: 600 }
+td:first-child { font-weight: 600; white-space: nowrap }
+td:nth-child(2) { min-width: 210px }
+.warn { margin: 10px 0; padding: 10px 14px; border-radius: 10px; background: var(--pc-warning-soft); border: 1px solid var(--pc-line); font-size: 15px }
+.feat { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 0 }
+.feat li { padding: 9px 0; border-bottom: 1px solid var(--pc-line) }
+.feat li:last-child { border-bottom: 0 }
+.feat b { font-weight: 700 }
+.keys { display: grid; grid-template-columns: max-content 1fr; gap: 10px 18px; align-items: center; margin: 10px 0 0 }
 .keys dd { margin: 0 }
+.keys dt { white-space: nowrap }
+@media (max-width: 820px) {
+  .layout { display: block }
+  .toc { position: sticky; top: 0; z-index: 5; margin: 0 -18px 12px; padding: 8px 18px; background: var(--pc-bg); border-bottom: 1px solid var(--pc-line); display: flex; gap: 6px; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch }
+  .toc b { display: none }
+  .toc a { margin: 0; padding: 6px 12px; border: 1px solid var(--pc-line); border-radius: 999px; font-size: 14px; flex: none }
+  html { scroll-padding-top: 64px }
+  .tw { border: 0; overflow: visible }
+  table, tbody, tr, td { display: block }
+  thead { display: none }
+  tr { border: 1px solid var(--pc-line); border-radius: 12px; padding: 4px 0; margin-bottom: 10px }
+  td, td:nth-child(2) { border: 0; padding: 4px 14px; min-width: 0; white-space: normal }
+  td:first-child { font-size: 16px; padding-top: 10px }
+  td[data-l]:not([data-l=""])::before { content: attr(data-l); display: block; font-size: 12px; color: var(--pc-text-muted); font-weight: 600 }
+  h1 { font-size: 30px }
+}
 </style>
 <script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>
 </head>
-<body><main>
+<body><main class="help">
 <a class="top" href="/"><img src="/img/pastecal.logo.svg" alt="">pastecal</a>
 <h1>Help</h1>
-<p class="updated">Quick answers. Anything else: <a href="mailto:support@pastecal.com">support@pastecal.com</a>.</p>
+<p class="updated">Everything about pastecal, in one page. Stuck? <a href="mailto:support@pastecal.com">support@pastecal.com</a>.</p>
+<div class="layout">
+<nav class="toc" aria-label="On this page"><b>On this page</b>
+<a href="#quick-start">Quick start</a><a href="#links">Link types</a><a href="#features">Features</a><a href="#privacy">Privacy &amp; locking</a><a href="#phone">On your phone</a><a href="#shortcuts">Shortcuts</a><a href="#contact">Contact</a></nav>
+<div class="doc">
 
-<h2>Make a calendar</h2>
-<p>Click any day and type an event, or press <kbd>⌘</kbd> <kbd>E</kbd> and type something like "Practice Tuesday 5pm". When it looks right, press <b>Save &amp; share</b> and pick a name. Until then the calendar is a draft, saved only in this browser.</p>
+<section id="quick-start"><h2>Quick start</h2>
+<p>pastecal is a shared calendar with no login. Anyone with the link can use it.</p>
+<ol class="steps">
+<li><b>Add events</b>Click any day and type, or press <kbd>⌘</kbd> <kbd>E</kbd> and type something like <code>Practice Tuesday 5pm</code>.</li>
+<li><b>Save &amp; share</b>Press <b>Save &amp; share</b> and pick a name. Until then the calendar is a draft, saved only in this browser.</li>
+<li><b>Send the link</b>Copy the link from <b>Share</b> and send it. Use the edit link for helpers and the view-only link for everyone else.</li>
+</ol></section>
 
-<h2>Share it</h2>
-<p>Every calendar has two links. The <b>edit link</b> (pastecal.com/<i>your-name</i>) is for people who help run it: anyone with it can add and change events. The <b>read-only link</b> is for everyone else: they see every change but can't edit. Both are in <b>Share</b>, next to the calendar.</p>
+<section id="links"><h2>Link types</h2>
+<p>Every calendar has several links. Find them in <b>Share</b>.</p>
+<div class="tw"><table>
+<thead><tr><th>Link</th><th>Looks like</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td data-l="">Edit link</td><td data-l="Looks like"><code>pastecal.com/&lt;name&gt;</code></td><td data-l="What it does">Anyone with it can view and edit. Share it only with people who help run the calendar.</td></tr>
+<tr><td data-l="">View-only link</td><td data-l="Looks like"><code>pastecal.com/view/&lt;id&gt;</code></td><td data-l="What it does">People can view but not edit. They see every change. You can rename it.</td></tr>
+<tr><td data-l="">This view</td><td data-l="Looks like">Any link plus <code>?date=YYYY-MM-DD&amp;view=day|week|month|year|agenda</code></td><td data-l="What it does">Opens on a date and view. For a custom range use <code>&amp;view=custom&amp;dur=3&amp;unit=weeks|months</code>. Example: <code>?date=2026-03-01&amp;view=custom&amp;dur=3&amp;unit=weeks</code></td></tr>
+<tr><td data-l="">Calendar feed</td><td data-l="Looks like"><code>pastecal.com/view/&lt;id&gt;.ics</code></td><td data-l="What it does">Shows events in Google, Apple or Outlook calendar. View only. Google refreshes every few hours.</td></tr>
+<tr><td data-l="">Feed with edit access</td><td data-l="Looks like">Feed made from the edit link</td><td data-l="What it does">Same as the feed, but it carries the edit link.</td></tr>
+<tr><td data-l="">Embed</td><td data-l="Looks like"><code>&lt;iframe&gt;</code> snippet</td><td data-l="What it does">Puts the calendar on a website. Uses the view-only link.</td></tr>
+</tbody></table></div>
+<p class="warn"><b>Careful:</b> a feed with edit access contains your edit link. Anyone who gets the feed can edit. Use the plain feed unless you need it.</p>
+<p>Embed snippet:</p>
+<p><code>&lt;iframe src="https://pastecal.com/view/&lt;id&gt;" width="100%" height="600" style="border:0"&gt;&lt;/iframe&gt;</code></p>
+</section>
 
-<h2>Keep it private</h2>
-<p>Calendars aren't listed anywhere, and edit links are kept out of search engines, so only people with a link can open one. For a private calendar, pick a hard-to-guess name. To stop anyone else from editing, <a href="/pricing">Pro</a> locks the calendar to you and the people you choose.</p>
+<section id="features"><h2>Features</h2>
+<ul class="feat">
+<li><b>Templates.</b> Start from a ready-made calendar, like Shared space, Who's out, Family, Sports team, Volunteer shifts, Guest visits or Club or class, instead of a blank one.</li>
+<li><b>Type your events.</b> Press <kbd>⌘</kbd> <kbd>E</kbd> (<kbd>Ctrl</kbd> <kbd>E</kbd> on Windows) and write it the way you'd say it: <code>Practice Tuesday 5pm</code>.</li>
+<li><b>Colors and labels.</b> Give events a color and a label to tell groups apart.</li>
+<li><b>Search and color filters.</b> Search by text, or filter to one or more colors.</li>
+<li><b>Notes.</b> Add details to any event: places, links, who brings snacks.</li>
+<li><b>Activity.</b> See recent changes and undo any of them.</li>
+<li><b>Stats.</b> Basic stats are free. <a href="/pricing">Pro</a> adds more.</li>
+<li><b>Settings.</b> <b>Calendar settings</b> apply to everyone who opens the calendar. <b>My settings</b> apply only on this device: first day of week, time format, date format, start hour, default view and theme.</li>
+<li><b>Dark mode.</b> Set the theme to light, dark or auto in <b>My settings</b>.</li>
+<li><b>Delete without confirming.</b> Deleting is instant. An undo toast appears so you can bring it back.</li>
+<li><b>Daily backups.</b> Calendars are backed up every day they change.</li>
+</ul></section>
 
-<h2>Undo a change</h2>
-<p>Press <kbd>⌘</kbd> <kbd>Z</kbd> (<kbd>Ctrl</kbd> <kbd>Z</kbd> on Windows), or open <b>Activity</b> next to the calendar to see recent changes and undo any of them. Calendars are also backed up every day they change.</p>
+<section id="privacy"><h2>Privacy &amp; locking</h2>
+<ul class="feat">
+<li>Calendars are unlisted. They aren't listed anywhere.</li>
+<li>Edit links are kept out of search engines.</li>
+<li>Only people with a link can open a calendar. For a private one, pick a hard-to-guess name.</li>
+<li>To stop anyone else from editing, <a href="/pricing">Pro</a> locks editing to you and the people you choose.</li>
+</ul></section>
 
-<h2>On your phone</h2>
-<p>pastecal works in any phone browser, with nothing to install. To see events in your phone's own calendar, with its reminders, open <b>Share</b> and choose <b>Add to a calendar app</b>: Google, Apple or Outlook. Changes show up there on their own (Google checks every few hours).</p>
+<section id="phone"><h2>On your phone</h2>
+<p>pastecal works in any phone browser. Nothing to install.</p>
+<p>To see events in your phone's own calendar, with its reminders, open <b>Share</b> and choose <b>Add to a calendar app</b>: Google, Apple or Outlook. Changes show up on their own. Google checks every few hours.</p>
+<p>Click the pastecal logo to jump between calendars you've opened on this device, or to start a new one.</p></section>
 
-<h2>Several calendars</h2>
-<p>Click the pastecal logo to jump between the calendars you've opened in this browser, or to start a new one.</p>
-
-<h2>Put it on a website</h2>
-<p>Use the read-only link in an iframe and visitors see the calendar as it changes: <code>&lt;iframe src="https://pastecal.com/view/<i>your-view-id</i>" width="100%" height="600" style="border:0"&gt;&lt;/iframe&gt;</code></p>
-
-<h2>Keyboard shortcuts</h2>
+<section id="shortcuts"><h2>Keyboard shortcuts</h2>
 <dl class="keys">
-  <dt><kbd>⌘</kbd> <kbd>E</kbd></dt><dd>Add an event by typing</dd>
-  <dt><kbd>⌘</kbd> <kbd>Z</kbd></dt><dd>Undo your last change</dd>
-  <dt><kbd>Esc</kbd></dt><dd>Close a popup or panel</dd>
-</dl>
+<dt><kbd>⌘</kbd> <kbd>E</kbd></dt><dd>Add an event by typing (<kbd>Ctrl</kbd> <kbd>E</kbd> on Windows)</dd>
+<dt><kbd>⌘</kbd> <kbd>Z</kbd></dt><dd>Undo your last change (<kbd>Ctrl</kbd> <kbd>Z</kbd> on Windows)</dd>
+<dt><kbd>Esc</kbd></dt><dd>Close a popup or panel</dd>
+</dl></section>
+
+<section id="contact"><h2>Contact</h2>
+<p>Questions, bugs or ideas: <a href="mailto:support@pastecal.com">support@pastecal.com</a>.</p></section>
+
+</div></div>
 <nav class="foot"><a href="/">Make a calendar</a><a href="/pricing">Pricing</a><a href="/about">About</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="mailto:support@pastecal.com">Contact</a></nav>
+<script>(function(){var l=[].slice.call(document.querySelectorAll('.toc a')),s=l.map(function(a){return document.querySelector(a.hash)});if(!window.IntersectionObserver)return;var o=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){l.forEach(function(a){a.classList.toggle('on',a.hash==='#'+e.target.id)})}})},{rootMargin:'-20% 0px -70% 0px'});s.forEach(function(x){x&&o.observe(x)})})()</script>
 </main></body></html>
