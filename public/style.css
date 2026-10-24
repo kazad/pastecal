@@ -1744,3 +1744,28 @@ button:hover > .pc-add-event {
 @media (min-width: 768px) {
   [data-testid="desktop-title-area"] > *, [data-testid="desktop-title-area"] .w-full { display: flex; align-items: center; height: 36px }
 }
+
+/* ---- Header, clean-room (desktop): one 60px bar, a hairline under it, edges aligned with the
+   calendar card and the panel, every control 36px on one center line, even 12/20px gaps. ---- */
+@media (min-width: 768px) {
+  topbar.md\:flex { min-height: 60px; padding: 0 4px 0 !important; margin: 0 0 10px; border-bottom: 1px solid var(--pc-line); column-gap: 24px }
+  topbar > section { height: 60px !important }
+  topbar logo { height: 36px !important }
+  topbar logo img { width: 28px !important; height: 28px !important; margin-right: 8px !important }
+  .pc-wordmark { font-size: 18px; font-weight: 800; letter-spacing: -.01em; color: var(--pc-link) }
+  topbar logo .text-\[10px\] { display: none !important }               /* the tiny tagline under the wordmark */
+  topbar buttonarea { margin-left: 20px !important }
+  topbar buttonarea button, topbar buttonarea .pc-add-btn { height: 34px }
+  [data-testid="desktop-title-area"] h1, [data-testid="desktop-title-area"] > div { font-size: 16px; font-weight: 700 }
+  .pc-hdr-actions { gap: 2px; margin-right: 14px; padding-right: 14px }
+  topbar > section:last-child > *:last-child { margin-right: 0 }
+}
+@media (min-width: 768px) {
+  topbar > section:first-child { align-items: center !important }
+  topbar > section:first-child > logo, topbar > section:first-child > buttonarea { align-self: center; margin-top: 0 !important }
+}
+/* Notes keeps its label (no universal icon for it); only "Edited … ago" folds to its clock icon. */
+@media (min-width: 1100px) and (max-width: 1499px) {
+  .pc-hdr-btn[aria-label="Toggle notes"] { width: auto; padding: 0 10px }
+  .pc-hdr-btn[aria-label="Toggle notes"] span { display: inline }
+}

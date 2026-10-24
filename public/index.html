@@ -406,7 +406,7 @@
                                     src="/img/pastecal.logo.svg" alt="pastecal">
                                 <div class="flex flex-col">
                                     <span
-                                        class="text-blue-500 font-medium text-sm hover:text-blue-600 transition-colors">pastecal</span>
+                                        class="pc-wordmark">pastecal</span>
                                     <span class="text-color-1 hidden xl:block -mt-0.5 text-[10px] whitespace-nowrap">no-login
                                         shared calendar</span>
                                 </div>
@@ -489,9 +489,8 @@
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l4 2"/></svg>
                         <span>{{ lastEditLabel }}</span>
                     </button>
-                    <button v-on:click="toggleSettings" aria-label="Settings" data-testid="settings-button-desktop" :class="{ 'pc-hdr-on': showSettings }" class="pc-hdr-btn" title="Settings">
+                    <button v-on:click="toggleSettings" aria-label="Settings" data-testid="settings-button-desktop" :class="{ 'pc-hdr-on': showSettings }" class="pc-hdr-btn pc-hdr-icon" title="Settings">
                         <icon name="settings"></icon>
-                        <span>Settings</span>
                     </button>
                 </div>
 
