@@ -89,8 +89,25 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--blue); outl
 .done { color: var(--ok); font-weight: 600; min-height: 1.4em; margin: 0 }
 .howto { margin-top: 32px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 4px 24px 20px }
 .howto h2 { margin: 18px 0 8px }
-.howto ol { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 6px }
-.howto p { color: var(--muted); margin: 12px 0 0 }
+.howto-sub { color: var(--muted); margin: 0 0 14px; max-width: 64ch }
+.intervals { display: flex; flex-wrap: wrap; gap: 10px }
+.interval { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 10px; padding: 9px 14px; cursor: pointer; font-weight: 400 }
+.interval.on { border-color: var(--blue); background: var(--blue-soft) }
+.interval input { accent-color: var(--blue); margin: 0 }
+.interval em { font-style: normal; font-size: 12px; font-weight: 700; color: var(--ok) }
+.pick-h { font-size: 14px; color: var(--muted); margin: 20px 0 8px; font-weight: 600 }
+.pick-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px }
+.pick-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 8px 8px 14px; min-width: 0 }
+.pick-list .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; min-width: 0 }
+.pick-list .t small { display: block; color: var(--muted); font-weight: 400; font-size: 13px; overflow: hidden; text-overflow: ellipsis }
+.pick-list .cta { flex: none; padding: 7px 14px }
+.pick-paste { margin-top: 20px; gap: 6px }
+.pick-row { display: flex; gap: 8px }
+.pick-row input { flex: 1 1 auto; min-width: 0; height: 44px; border: 1px solid var(--line); border-radius: 10px; padding: 0 14px; background: var(--bg); color: var(--ink); font: inherit; font-size: 16px }
+.pick-row .cta { flex: none }
+.pick-err { color: var(--soon); font-size: 14px; margin: 0; min-height: 0 }
+.pick-err:empty { display: none }
+.pick-new { color: var(--muted); font-size: 15px; margin: 16px 0 0 }
 .plan li .soon { margin-left: 8px }
 
 .faq { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 32px }
@@ -172,13 +189,25 @@ details p { color: var(--muted); margin: 8px 0 0 }
   </div>
 
   <section class="howto" id="get-pro" aria-labelledby="getProH">
-    <h2 id="getProH">How to get Pro</h2>
-    <ol>
-      <li><b>Open your calendar</b> on pastecal.</li>
-      <li><b>Press Share</b>, at the top right.</li>
-      <li><b>Choose Lock this calendar.</b> Pick yearly ($24) or monthly ($2.99), sign in with a link we email you, and pay with Stripe.</li>
-    </ol>
-    <p>Then share your editor link with the people who should be able to edit. Everyone else can still view.</p>
+    <h2 id="getProH">Get Pro</h2>
+    <p class="howto-sub">Pro is per calendar. Pick one, and you'll finish on that calendar: sign in with a link we email you, then pay with Stripe.</p>
+    <div class="intervals" role="radiogroup" aria-label="Billing">
+      <label class="interval on"><input type="radio" name="interval" value="year" checked><span><b>$24 a year</b> <em>Save 33%</em></span></label>
+      <label class="interval"><input type="radio" name="interval" value="month"><span><b>$2.99 a month</b></span></label>
+    </div>
+    <div id="pickCals" hidden>
+      <h3 class="pick-h">Your calendars on this device</h3>
+      <ul class="pick-list" id="pickList"></ul>
+    </div>
+    <form class="pick-paste" id="pasteForm" novalidate>
+      <label for="calLink" id="pasteLabel">Paste your calendar's link</label>
+      <div class="pick-row">
+        <input id="calLink" type="url" inputmode="url" autocomplete="off" placeholder="pastecal.com/your-calendar">
+        <button type="submit" class="cta primary">Continue</button>
+      </div>
+      <p class="pick-err" id="pasteErr" role="alert"></p>
+    </form>
+    <p class="pick-new">No calendar yet? <a href="/?from=pricing-getpro">Make one</a>, press Save &amp; share, then choose <b>Lock this calendar</b>.</p>
   </section>
 
   <h2>Compare plans</h2>
@@ -265,10 +294,10 @@ details p { color: var(--muted); margin: 8px 0 0 }
     <details><summary>What happens if I cancel?</summary><p>Pro lasts until the end of the period you paid for. Then your calendar stays, with everything in it, and goes back to the free plan, unlocked.</p></details>
     <details><summary>What if a payment fails?</summary><p>Stripe retries it, and your calendar stays locked meanwhile. If the subscription ends unpaid, the calendar goes back to the free plan, unlocked, with all its events.</p></details>
     <details><summary>Can the price change?</summary><p>It may. If it does, we'll email you before your next renewal.</p></details>
-    <details><summary>What happens to backups on the free plan?</summary><p>Every calendar is backed up daily. Restoring from a full history is being built for Pro.</p></details>
+    <details><summary>What happens to backups on the free plan?</summary><p>Every calendar is backed up daily, and you can see the last 7 days of changes. Pro keeps the full history and lets you restore any earlier version.</p></details>
     <details><summary>What is Teams?</summary><p>Up to 10 Pro calendars on one bill, with no pastecal branding and shared admins, for $100 a year or $10 a month. It opens later: join the waitlist and we'll email you once, when it does.</p></details>
     <details><summary>Can I move Pro to a different calendar?</summary><p>Email <a href="mailto:support@pastecal.com">support@pastecal.com</a> and we'll help.</p></details>
-    <details><summary>Can I see who looked at my calendar?</summary><p>No. Pro stats, being built now, will show how many people viewed it, how many follow it in a calendar app, and which countries and cities they're in. Never who they are.</p></details>
+    <details><summary>Can I see who looked at my calendar?</summary><p>No. Pro stats show how many people viewed it, how many follow it in a calendar app, and which countries and cities they're in. Never who they are.</p></details>
   </div>
 </div>
 
@@ -302,6 +331,62 @@ document.querySelectorAll('[data-plan]').forEach(a => a.addEventListener('click'
 })();
 </script>
 
+<script>
+// Get Pro: Pro belongs to one calendar, so pick it here, then finish on that calendar. The calendar
+// page reads the intent (Pro.js ProIntent, same key and shape), opens Share at "Lock this
+// calendar" with the chosen billing selected, and takes it from sign-in to Stripe.
+(() => {
+  const read = (k) => { try { const v = JSON.parse(localStorage.getItem(k)); return Array.isArray(v) ? v : []; } catch (e) { return []; } };
+  const interval = () => (document.querySelector('input[name=interval]:checked') || {}).value || 'year';
+  document.querySelectorAll('.interval input').forEach(r => r.addEventListener('change', () =>
+    document.querySelectorAll('.interval').forEach(l => l.classList.toggle('on', l.querySelector('input').checked))));
+  const ID = /^[A-Za-z0-9_-]{1,100}$/;
+  const RESERVED = new Set(['view', 'pricing', 'privacy', 'terms', 'pro', 'signin', 'report', 'explore', 'api', 'dev', 'demo', 'beta', 'nativecal', 'cal', 'index.html']);
+  const go = (id, via) => {
+    try { localStorage.setItem('pastecal_pro_intent', JSON.stringify({ id, interval: interval(), t: Date.now() })); } catch (e) { /* storage blocked: Share still opens by hand */ }
+    pcTrack('pricing_getpro_picked', { via, interval: interval() });
+    location.href = '/' + encodeURIComponent(id);
+  };
+  // Calendars you made first, then ones you opened to edit; read-only visits can't be locked from here.
+  const seen = new Set();
+  const cals = [...read('myCalendars').map(c => ({ ...c, mine: true })), ...read('recentCalendars')]
+    .filter(c => c && typeof c.id === 'string' && ID.test(c.id) && !c.view && !/ \(View Only\)$/.test(c.title || ''))
+    .filter(c => { const k = c.id.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; })
+    .slice(0, 6);
+  if (cals.length) {
+    const list = document.getElementById('pickList');
+    for (const c of cals) {
+      const li = document.createElement('li'), t = document.createElement('span'), sub = document.createElement('small'), b = document.createElement('button');
+      t.className = 't'; t.textContent = c.title || c.id; sub.textContent = location.host + '/' + c.id; t.appendChild(sub);
+      b.type = 'button'; b.className = 'cta primary'; b.textContent = 'Get Pro'; b.addEventListener('click', () => go(c.id, c.mine ? 'mine' : 'recent'));
+      li.append(t, b); list.appendChild(li);
+    }
+    document.getElementById('pickCals').hidden = false;
+    document.getElementById('pasteLabel').textContent = 'Or paste a calendar link';
+  }
+  const form = document.getElementById('pasteForm'), input = document.getElementById('calLink'), err = document.getElementById('pasteErr');
+  form.addEventListener('submit', (e) => {
+    e.preventDefault(); err.textContent = '';
+    let raw = input.value.trim(), id = '';
+    try {
+      const u = new URL(/^https?:\/\//i.test(raw) ? raw : 'https://' + raw.replace(/^\/+/, ''));
+      const parts = u.pathname.split('/').filter(Boolean);
+      if (parts[0] === 'view') { err.textContent = 'That is a read-only link. Paste the link you use to edit the calendar.'; return; }
+      id = parts.length === 1 ? decodeURIComponent(parts[0]) : (!raw.includes('/') && !raw.includes('.') ? raw : '');
+    } catch (x) { id = ''; }
+    if (!raw) { err.textContent = 'Paste the link to your calendar, like pastecal.com/your-calendar.'; input.focus(); return; }
+    if (!ID.test(id) || RESERVED.has(id.toLowerCase())) { err.textContent = 'That doesn\'t look like a calendar link. It should look like pastecal.com/your-calendar.'; input.focus(); return; }
+    go(id, 'paste');
+  });
+  // The plan card's Get Pro: bring the picker into view and put the cursor where the next step is.
+  document.querySelector('.plan.pro [data-plan=pro]').addEventListener('click', (e) => {
+    e.preventDefault();
+    document.getElementById('get-pro').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    const first = document.querySelector('#pickList .cta') || input;
+    setTimeout(() => first.focus({ preventScroll: true }), 350);
+  });
+})();
+</script>
 <script src="/utils/preview.js"></script>
 </body>
 </html>
