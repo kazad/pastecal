@@ -29,6 +29,15 @@
  * again also starts over, seeing only versions saved since the new lock -- anyone could have edited
  * the calendar while it was unlocked, so the gap is not theirs to browse either.
  *
+ * Free stats (no Pro, no sign-in): the headline counts for anyone holding an unlocked calendar's
+ * edit link -- on an unlocked calendar, knowing its real id is what lets anyone change it (view
+ * links name a different id, and the directory never tells a view link's holder the real one).
+ *   GET  /api/stats?calendar=<id>  -> {views, viewsPrev, followers}
+ * views: the last 7 days (today included); viewsPrev: the 7 before them; followers: calendar apps on
+ * the busiest of the last 7 days (as the Pro headline: apps don't all fetch every day). Totals only:
+ * per-day rows and places stay Pro. Errors: 400 bad-calendar, 404 no-calendar, 403 locked (a Pro
+ * calendar: its owner reads /api/pro/stats).
+ *
  * Also here, because the Worker is the only one that may say so: hitHeaders(), which marks a
  * forwarded calendar read as a countable hit for RoomInsight.countHit.
  */
@@ -110,6 +119,24 @@ async function listVersions(env, id, since) {
     return out.filter((x) => (x.savedAt ? Date.parse(x.savedAt) : 0) >= since).sort(newestFirst);
 }
 
+// The free headline counts (see the top). The room is reached by the exact id, never through the
+// directory, so a view link's id finds no calendar. The lock is read from the room itself, which is
+// what decides whether the edit link may write.
+async function freeStats(env, id) {
+    if (!validId(id)) return json({ error: 'bad-calendar' }, 400);
+    const ls = await room(env, id).fetch(roomUrl(id, 'lock-status'));
+    if (ls.status === 404) return json({ error: 'no-calendar' }, 404);
+    if (!ls.ok) return json({ error: 'unavailable' }, 502);
+    if ((await ls.json()).locked) return json({ error: 'locked' }, 403);
+    const r = await room(env, id).fetch(`${roomUrl(id, 'stats')}?days=14`);
+    if (r.status === 404) return json({ error: 'no-calendar' }, 404);
+    if (!r.ok) return json({ error: 'unavailable' }, 502);
+    const days = (await r.json()).days || [];
+    const last = days.slice(-7), prev = days.slice(-14, -7);
+    const sum = (rows) => rows.reduce((a, d) => a + (Number(d.views) || 0), 0);
+    return json({ views: sum(last), viewsPrev: sum(prev), followers: last.reduce((a, d) => Math.max(a, Number(d.followers) || 0), 0) });
+}
+
 // Returns a Response for the routes above, or null for every other path. `sessionUserId` is the
 // Worker's (index.js), so the dev session header works in tests exactly as for the lock routes.
 export async function handleInsight(request, env, url, sessionUserId) {
@@ -124,6 +151,13 @@ export async function handleInsight(request, env, url, sessionUserId) {
         return room(env, id).fetch(roomUrl(id, 'stats-dump'));
     }
 
+    if (path === '/api/stats') {
+        if (m !== 'GET') return json({ error: 'method' }, 405);
+        try { return await freeStats(env, url.searchParams.get('calendar')); } catch (err) {
+            console.error('[insight]', path, err && err.message);
+            return json({ error: 'internal' }, 500);
+        }
+    }
     if (path !== '/api/pro/stats' && path !== '/api/pro/versions' && path !== '/api/pro/versions/preview' && path !== '/api/pro/versions/restore') return null;
     try {
         if (path === '/api/pro/versions/restore') {

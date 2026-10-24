@@ -181,6 +181,7 @@ const CalendarVueApp = {
             shareProFocus: false,       // Share opened from Get Pro: just the lock offer
             showRecentChanges: false,   // the Activity tab of the side panel (id 'changes')
             showStatsInfo: false,       // the Stats tab when it can't show Pro stats: a draft, a free calendar, a non-owner
+            freeStats: null,            // the Stats tab's free counts: {id, loading, error, none, views, viewsPrev, followers}
             proOwnerChecked: false,     // /api/pro/status has answered for this lock, so "not the owner" is known
             notesEditing: false,        // Notes reads by default; Edit swaps in the textarea
             settingsScope: 'calendar',  // Settings: 'calendar' (everyone) or 'me' (this device)
@@ -341,6 +342,12 @@ const CalendarVueApp = {
         // Stats can show the real numbers: the owner of a Pro calendar (the server answers no one else).
         canSeeProStats() {
             return this.isExisting && this.lock.locked && this.proOwner;
+        },
+        // The free Stats tiles' comparison: "↑ 12%", "↓ 8%", "Same", or null with no earlier week to compare.
+        freeStatsDelta() {
+            const f = this.freeStats;
+            const d = f && !f.loading && !f.error ? ProInsightMath.delta(f.views, f.viewsPrev) : null;
+            return d && { dir: d.dir, text: d.dir === 'flat' ? d.text : (d.dir === 'up' ? '↑ ' : '↓ ') + d.text.slice(1) };
         },
         // A view link or locked calendar with notes opens with them pinned beside the grid.
         viewerNotesPinnable() {
@@ -3307,8 +3314,28 @@ const CalendarVueApp = {
             if (this.canSeeProStats) { this.openInsight('stats', 'side_panel'); return; }
             this.closeAllPanels();
             this.showStatsInfo = true;
-            // The free calendar's teaser: what Pro shows, no numbers. Counted where it now lives.
-            if (this.isExisting && !this.lock.locked) track(a => a.proStatsTeaserShown());
+            // A free calendar: its views and followers, then what Pro adds. Counted where it now lives.
+            if (this.isExisting && !this.lock.locked) {
+                track(a => a.proStatsTeaserShown());
+                this.loadFreeStats();
+            }
+        },
+        /** The free counts (/api/stats): anyone with an unlocked calendar's edit link. Counts only, never who. */
+        async loadFreeStats() {
+            const id = this.calendar && this.calendar.id;
+            if (!id) return;
+            const keep = this.freeStats && this.freeStats.id === id && !this.freeStats.error ? this.freeStats : null;
+            this.freeStats = { id, views: 0, viewsPrev: 0, followers: 0, ...keep, loading: !keep, error: false };
+            let data = null, offline = false;
+            try {
+                const res = await fetch(`/api/stats?calendar=${encodeURIComponent(id)}`, { credentials: 'same-origin' });
+                data = res.ok ? await res.json().catch(() => null) : null;
+            } catch (e) { offline = true; }
+            if (!this.freeStats || this.freeStats.id !== id) return;      // another calendar opened meanwhile
+            // No numbers to show (not stored here, or locked meanwhile): just the Pro list, no error.
+            this.freeStats = data
+                ? { id, loading: false, error: false, views: Number(data.views) || 0, viewsPrev: Number(data.viewsPrev) || 0, followers: Number(data.followers) || 0 }
+                : keep ? { ...keep, loading: false } : { id, loading: false, error: offline, none: !offline };
         },
         /** Notes' Edit and Add notes. The textarea is bound as before, so typing saves the same way. */
         editNotes() {
@@ -4879,15 +4906,33 @@ const CalendarVueApp = {
          *   call site says which -- an untagged copy still works, it just isn't
          *   attributed.
          */
-        // Share's click-to-copy fields: reactive "copied" state, so Vue owns the markup.
+        // Share's click-to-copy fields: reactive "copied" state, so Vue owns the markup. The async
+        // clipboard can be refused (permissions, focus, older browsers), so fall back to the
+        // execCommand path, and if that fails too, select the link so Cmd/Ctrl+C works.
         copyLink(key, text, method) {
             if (!text) { this.showToast('Nothing to copy', 'error'); return; }
             if (method) track(a => a.calendarShared(method));
-            navigator.clipboard.writeText(text).then(() => {
+            const done = () => {
                 this.copiedKey = key;
                 clearTimeout(this._copiedTimer);
-                this._copiedTimer = setTimeout(() => { this.copiedKey = null; }, 1500);
-            }).catch(() => this.showToast('Failed to copy link', 'error'));
+                this._copiedTimer = setTimeout(() => { this.copiedKey = null; }, 1600);
+            };
+            const legacy = () => {
+                const ta = document.createElement('textarea');
+                ta.value = text; ta.setAttribute('readonly', ''); ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0';
+                document.body.appendChild(ta); ta.select();
+                let ok = false;
+                try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+                ta.remove();
+                return ok;
+            };
+            const fail = () => {
+                const el = document.querySelector(`[data-copy-key="${key}"] .pc-link-url`);
+                if (el) { const r = document.createRange(); r.selectNodeContents(el); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); }
+                this.showToast('Your browser blocked copying. The link is selected: press ⌘C or Ctrl+C.', 'error');
+            };
+            const p = navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(text) : Promise.reject(new Error('no clipboard'));
+            p.then(done).catch(() => (legacy() ? done() : fail()));
         },
 
         copyToClipboard(textToCopy, buttonElement, method) {

@@ -15,7 +15,7 @@
  *   PUT  /cal/<id>/import         Full calendar replace (Bearer IMPORT_SECRET)
  *   PUT  /cal/<id>/from-firebase  Firebase sync write (same auth)
  *   /api/auth/*, /api/me, /api/pro/*, /api/stripe/webhook   Pro accounts + billing (Accounts.js)
- *   /api/pro/stats, /api/pro/versions[/preview|/restore]     Pro stats + restore (Insight.js)
+ *   /api/stats (free counts), /api/pro/stats, /api/pro/versions[/preview|/restore]   stats + restore (Insight.js)
  *   GET|DELETE /api/admin/test-inbox, and the email() handler   Test inbox for test@pastecal.com (TestInbox.js)
  *   POST /api/admin/cal/<id>/{lock,unlock,rotate-editor-key}, GET .../lock-status
  *                                 Pro lock, for support and tests (Bearer IMPORT_SECRET)

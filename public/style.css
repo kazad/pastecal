@@ -2112,3 +2112,27 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 /* Notes: Edit sits top-right and the text flows beside it; double-click the text to edit too. */
 .pc-notes-edit { float: right; margin: -4px -4px 6px 12px }
 .pc-notes-edit .pc-side-btn { height: 30px; padding: 0 10px; font-size: 13px }
+/* Stats tab, free calendar: two counts side by side (number, label under), then a compact "More with Pro". */
+.pc-free-stats { display: flex; flex-direction: column; gap: 8px; padding: 8px 0 4px }
+.pc-free-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--pc-space-2) }
+.pc-free-tile { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: var(--pc-space-3); border: 1px solid var(--pc-line); border-radius: var(--pc-radius-lg); background: var(--pc-bg) }
+.pc-free-num { color: var(--pc-text); font-size: 26px; font-weight: var(--pc-fw-bold); line-height: var(--pc-lh-tight); letter-spacing: var(--pc-tracking-tight); font-variant-numeric: tabular-nums }
+.pc-free-label { color: var(--pc-text-2); font-size: var(--pc-fs-small); font-weight: var(--pc-fw-semibold) }
+.pc-free-tile .pc-stat-delta { margin-top: 2px }
+.pc-free-fine { margin: 0; color: var(--pc-text-muted); font-size: var(--pc-fs-caption) }
+.pc-stats-teaser--compact { gap: 8px }
+.pc-free-stats + .pc-stats-teaser--compact { margin-top: 8px; padding-top: 14px; border-top: 1px solid var(--pc-line) }
+.pc-stats-more { margin: 0; color: var(--pc-text); font-size: 14px; font-weight: 600 }
+.pc-stats-list--compact { gap: 6px; margin: 0 }
+.pc-stats-list--compact li { font-size: 13px; line-height: 1.4 }
+.pc-stats-list--compact svg { width: 16px; height: 16px }
+/* Copied: the field itself says so, in green, so the click is never ambiguous. */
+.pc-link.is-copied { border-color: var(--pc-success, #1f7a4d); background: var(--pc-success-soft, #e3f3ea); color: var(--pc-success, #1f7a4d) }
+.pc-link.is-copied .pc-link-url { font-weight: 700; font-family: var(--pc-font) }
+:root[data-theme="dark"] .pc-link.is-copied { background: color-mix(in srgb, #34d399 16%, transparent); border-color: #34d399; color: #6ee7b7 }
+:root[data-theme="dark"] .pc-link.is-copied .pc-link-act { color: #6ee7b7 }
+/* Copied: the field itself says so, in green, so the click is never ambiguous. */
+.pc-link.is-copied { border-color: var(--pc-success, #1f7a4d); background: var(--pc-success-soft, #e3f3ea); color: var(--pc-success, #1f7a4d) }
+.pc-link.is-copied .pc-link-url { font-weight: 700; font-family: var(--pc-font); color: inherit }
+:root[data-theme="dark"] .pc-link.is-copied { background: color-mix(in srgb, #34d399 16%, transparent); border-color: #34d399; color: #6ee7b7 }
+:root[data-theme="dark"] .pc-link.is-copied .pc-link-act { color: #6ee7b7 }

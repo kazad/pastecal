@@ -205,10 +205,18 @@ test('the same five tabs in the same order, and the row never scrolls', async ({
     await expect(page.getByTestId('side-tab-settings')).toHaveAccessibleName('Settings');   // a gear, named
     const row = await page.$eval('.pc-side-tabs', (e) => [e.scrollWidth, e.clientWidth]);
     expect(row[0], `${viewport.width}px: no hidden tabs`).toBeLessThanOrEqual(row[1]);
-    // Stats on a free calendar: what Pro shows, no numbers, one way to get it.
+    // Stats on a free calendar: two counts side by side (/api/stats), then what Pro adds and one way to get it.
     await page.getByTestId('side-tab-stats').click();
+    const views = page.getByTestId('stats-free-views'), followers = page.getByTestId('stats-free-followers');
+    await expect(views.locator('.pc-free-num')).toHaveText(/^\d[\d,]*$/);
+    await expect(views).toContainText('Views, last 7 days');
+    await expect(followers.locator('.pc-free-num')).toHaveText(/^\d[\d,]*$/);
+    await expect(followers).toContainText('Calendar-app followers');
+    const [v, f] = [await views.boundingBox(), await followers.boundingBox()];
+    expect(Math.abs(v.y - f.y), 'tiles side by side').toBeLessThan(2);
+    expect(f.x).toBeGreaterThan(v.x + v.width - 1);
+    await expect(page.getByTestId('stats-teaser')).toContainText('More with Pro');
     await expect(page.getByTestId('stats-teaser')).toContainText('Get Pro');
-    await expect(page.getByTestId('stats-teaser')).not.toContainText(/\d+ (views|followers)/);
     await expect(page.getByTestId('stats-get-pro')).toBeVisible();
     await ctx.close();
   }
@@ -272,5 +280,34 @@ test('Changes in the panel still undoes an edit', async ({ browser, request }) =
   await changes.getByRole('button', { name: 'Undo this edit' }).first().click();
   await expect.poll(title, { timeout: 10_000 }).toBe('Game vs Hawks');
   await expect(page.locator('.e-appointment:has-text("Game vs Hawks")')).toHaveCount(1);
+  await ctx.close();
+});
+
+// Every Share field copies when you click its icon, says so in the field, and puts the full link
+// on the clipboard. Regression: the field copied but its faint check went unnoticed ("does nothing").
+test('Share: each copy field copies, shows Copied, and falls back when the clipboard is refused', async ({ browser, request }) => {
+  const { id, viewId } = await seed(request);
+  const { ctx, page } = await open(browser, `/${id}?backend=cf`);
+  await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.getByTestId('share-pill-more').click();
+  const fields = [
+    ['share-readonly-addr', `/view/${viewId}`],
+    ['share-edit-copy', `/${id}`],
+    ['share-view-copy', `/${id}?date=`],
+    ['share-feed-copy', `/view/${viewId}.ics`],
+    ['share-embed-copy', '<iframe'],
+  ];
+  for (const [testid, expected] of fields) {
+    const field = page.getByTestId(testid);
+    await field.locator('.pc-link-act').click();                       // the icon, as people click it
+    await expect(field).toContainText('Copied to clipboard');
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain(expected);
+    await expect(field).not.toContainText('Copied to clipboard', { timeout: 4000 });   // and goes back
+  }
+  // Clipboard refused: the older copy path still copies and still says Copied.
+  await page.evaluate(() => { navigator.clipboard.writeText = () => Promise.reject(new Error('NotAllowedError')); });
+  const field = page.getByTestId('share-readonly-addr');
+  await field.click();
+  await expect(field).toContainText('Copied to clipboard');
   await ctx.close();
 });
