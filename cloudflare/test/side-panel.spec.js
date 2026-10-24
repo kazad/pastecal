@@ -134,14 +134,17 @@ test('Share in the panel still copies its links', async ({ browser, request }) =
   await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.getByTestId('share-pill-more').click();
   // Ordered by what people do most: the read-only link first, then calendar apps, then helpers.
-  const order = await panel(page).locator('.pc-share-card h4').allTextContents();
+  const order = await panel(page).locator('.pc-share-item h4').allTextContents();
   expect(order).toEqual(['Send to your group', 'Add to a calendar app', 'Helpers who can edit']);
+  await expect(page.getByTestId('share-pro-card')).toContainText('Lock this calendar');
+  expect(await page.$eval('.pc-side-body', (b) => b.scrollHeight <= b.clientHeight + 1), 'Share fits without scrolling').toBe(true);
+  await expect(page.getByTestId('share-readonly-addr')).toHaveText(`pastecal.com/view/${viewId}`);
   await page.getByTestId('share-group').getByRole('button', { name: 'Copy' }).click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain(`/view/${viewId}`);
   // The rest is one click away, the full-access feed labeled for what it gives.
   await expect(page.getByTestId('share-more-options')).toHaveCount(0);
   await page.getByTestId('share-more').click();
-  await expect(page.getByTestId('share-more-options')).toContainText('Contains your edit link');
+  await expect(page.getByTestId('share-more-options')).toContainText('Gives edit access');
   await page.getByTestId('share-view-copy').click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain(`/${id}`);
   await ctx.close();

@@ -888,61 +888,76 @@
                         <p class="pc-side-empty-text">Save &amp; share gives this calendar its own link: one to edit, one for the group chat, and one for calendar apps. No sign-up for anyone.</p>
                         <button type="button" class="pc-side-btn pc-side-btn--primary" @click="share">Save &amp; share</button>
                     </div>
-                    <!-- Share, ordered by what people do most: send the read-only link, add it to a calendar
-                         app, hand helpers the edit link, then Pro. The rest (this exact view, the link's name,
-                         raw feeds) waits under "More sharing options". Same URLs and copy paths as before. -->
+                    <!-- Share, ordered by what people do most, one compact row per link so the tab fits
+                         without scrolling: send the read-only link, add it to a calendar app, hand helpers
+                         the edit link, then Pro. The rest (this exact view, the link's name, raw feeds, an
+                         embed) waits under "More sharing options". Same URLs and copy paths as before. -->
                     <div v-if="showShare && isExisting" class="pc-share" v-cloak>
                         <h2 v-if="shareProFocus" class="text-lg font-bold mb-4">Get Pro</h2>
                         <!-- Arriving from Get Pro: only the lock offer, the links one click away -->
                         <template v-if="!shareProFocus">
 
-                        <section class="pc-share-card" data-testid="share-group">
-                            <h4>Send to your group</h4>
-                            <p class="pc-share-desc">They see every change but can’t edit.</p>
-                            <!-- Older calendars may not have a read-only link yet: make one on request rather than show an empty field. -->
-                            <button v-if="!getReadOnlyURL()" type="button" class="pc-share-copy pc-share-copy--primary" :disabled="creatingReadOnly || !canEdit"
-                                @click="makeReadOnlyLink" data-testid="create-readonly">{{ creatingReadOnly ? 'Creating…' : 'Create read-only link' }}</button>
-                            <div v-else class="pc-share-link">
-                                <input type="text" :value="getReadOnlyURL()" readonly aria-label="Read-only link" class="pc-share-url">
-                                <button type="button" @click="copyToClipboard(getReadOnlyURL(), $event.currentTarget, 'copy')" class="pc-share-copy pc-share-copy--primary">
-                                    <icon name="copy" class="h-4 w-4 mr-1"></icon><span>Copy</span>
-                                </button>
-                                <button v-if="canShare()" type="button" @click="shareUrl(getReadOnlyURL(), 'Calendar')" class="pc-share-copy" aria-label="Share read-only link">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" /></svg>
-                                </button>
+                        <div class="pc-share-item" data-testid="share-group">
+                            <svg class="pc-share-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                            <div class="pc-share-main">
+                                <h4 class="pc-share-label">Send to your group</h4>
+                                <p class="pc-share-hint">They see every change but can’t edit.</p>
+                                <span v-if="getReadOnlyURL()" class="pc-share-addr" :title="getReadOnlyURL()" data-testid="share-readonly-addr">{{ shortLink(getReadOnlyURL()) }}</span>
                             </div>
-                        </section>
+                            <!-- Older calendars may not have a read-only link yet: make one on request rather than show nothing. -->
+                            <div class="pc-share-acts">
+                                <button v-if="!getReadOnlyURL()" type="button" class="pc-share-copy pc-share-copy--primary" :disabled="creatingReadOnly || !canEdit"
+                                    @click="makeReadOnlyLink" data-testid="create-readonly">{{ creatingReadOnly ? 'Creating…' : 'Create link' }}</button>
+                                <template v-else>
+                                    <button type="button" @click="copyToClipboard(getReadOnlyURL(), $event.currentTarget, 'copy')" class="pc-share-copy pc-share-copy--primary"><span>Copy</span></button>
+                                    <button v-if="canShare()" type="button" @click="shareUrl(getReadOnlyURL(), 'Calendar')" class="pc-share-copy pc-share-icon" aria-label="Share read-only link">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15"/></svg>
+                                    </button>
+                                </template>
+                            </div>
+                        </div>
 
                         <!-- The read-only feed, so subscribing never spreads edit access. webcal:// does nothing
                              when no app is registered for it, so the named apps are load-bearing. -->
-                        <section v-if="getWebcalURL()" class="pc-share-card" data-testid="share-apps">
-                            <h4>Add to a calendar app</h4>
-                            <p class="pc-share-desc">Subscribe once; changes show up on their own. Google checks every few hours.</p>
-                            <div class="pc-share-apps">
-                                <a :href="getGoogleSubscribeURL()" target="_blank" rel="noopener" @click="trackSubscribe('subscribe_google')" data-testid="subscribe-google" class="pc-share-app">Google</a>
-                                <a :href="getWebcalURL()" @click="trackSubscribe('subscribe_apple')" data-testid="subscribe-apple" class="pc-share-app">Apple</a>
-                                <a :href="getOutlookSubscribeURL()" target="_blank" rel="noopener" @click="trackSubscribe('subscribe_outlook')" data-testid="subscribe-outlook" class="pc-share-app">Outlook</a>
+                        <div v-if="getWebcalURL()" class="pc-share-item" data-testid="share-apps">
+                            <svg class="pc-share-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+                            <div class="pc-share-main">
+                                <h4 class="pc-share-label">Add to a calendar app</h4>
+                                <p class="pc-share-hint">Subscribe once; changes show up on their own.</p>
+                                <div class="pc-share-apps">
+                                    <a :href="getGoogleSubscribeURL()" target="_blank" rel="noopener" @click="trackSubscribe('subscribe_google')" data-testid="subscribe-google" class="pc-share-app">Google</a>
+                                    <a :href="getWebcalURL()" @click="trackSubscribe('subscribe_apple')" data-testid="subscribe-apple" class="pc-share-app">Apple</a>
+                                    <a :href="getOutlookSubscribeURL()" target="_blank" rel="noopener" @click="trackSubscribe('subscribe_outlook')" data-testid="subscribe-outlook" class="pc-share-app">Outlook</a>
+                                    <a :href="getWebcalURL()" @click="trackSubscribe('subscribe')" data-testid="subscribe-webcal" class="pc-share-sub" title="Opens your default calendar app">Subscribe</a>
+                                </div>
                             </div>
-                        </section>
+                        </div>
 
-                        <section v-if="canEdit" class="pc-share-card" data-testid="share-helpers">
-                            <h4>Helpers who can edit</h4>
-                            <p class="pc-share-desc" v-if="lock.locked">Locked: people with the read-only link can view. Only you and people with an editor link can change it.</p>
-                            <p class="pc-share-desc" v-else>Anyone with this link can add and change events.</p>
-                            <div class="pc-share-link">
-                                <input type="text" :value="getEditableURL()" readonly aria-label="Edit link" class="pc-share-url">
-                                <button type="button" @click="copyToClipboard(getEditableURL(), $event.currentTarget, 'copy')" class="pc-share-copy">
-                                    <icon name="copy" class="h-4 w-4 mr-1"></icon><span>Copy</span>
-                                </button>
-                                <button v-if="canShare()" type="button" @click="shareUrl(getEditableURL(), 'Calendar')" class="pc-share-copy" aria-label="Share edit link">
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" /></svg>
+                        <div v-if="canEdit" class="pc-share-item" data-testid="share-helpers">
+                            <svg class="pc-share-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+                            <div class="pc-share-main">
+                                <h4 class="pc-share-label">Helpers who can edit</h4>
+                                <p class="pc-share-hint" v-if="lock.locked">Locked: only you and people with an editor link can change it.</p>
+                                <p class="pc-share-hint" v-else>Anyone with this link can add and change events.</p>
+                                <span class="pc-share-addr" :title="getEditableURL()">{{ shortLink(getEditableURL()) }}</span>
+                            </div>
+                            <div class="pc-share-acts">
+                                <button type="button" @click="copyToClipboard(getEditableURL(), $event.currentTarget, 'copy')" class="pc-share-copy"><span>Copy</span></button>
+                                <button v-if="canShare()" type="button" @click="shareUrl(getEditableURL(), 'Calendar')" class="pc-share-copy pc-share-icon" aria-label="Share edit link">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15"/></svg>
                                 </button>
                             </div>
-                        </section>
+                        </div>
 
+                        <!-- Pro, unlocked: two lines and a link. The full offer (plans, checkout) is the Get Pro view. -->
+                        <div v-if="!lock.locked && canEdit" class="pc-share-pro" data-testid="share-pro-card">
+                            <b>Lock this calendar</b>
+                            <span>Only you and people you invite can edit. Everyone else can still view.</span>
+                            <button type="button" class="pc-pro-link" @click="shareProFocus = true" data-testid="share-get-pro">Get Pro, $24 a year →</button>
+                        </div>
                         </template>
-                        <!-- Pro: lock this calendar, or (owner) the editor link and billing -->
-                        <pro-panel v-if="isExisting" ref="proPanel" :calendar-id="calendar.id" :calendar-title="calendar.title" :locked="lock.locked" :can-edit="canEdit"
+                        <!-- Pro: the lock offer (Get Pro view), or a locked calendar's owner section and editor links -->
+                        <pro-panel v-if="isExisting && (shareProFocus || lock.locked)" ref="proPanel" :calendar-id="calendar.id" :calendar-title="calendar.title" :locked="lock.locked" :can-edit="canEdit"
                             @open-insight="openInsight($event, 'share_panel')" @owner="proOwner = $event"></pro-panel>
 
                         <template v-if="!shareProFocus">
@@ -952,43 +967,41 @@
                         </button>
                         <div v-if="shareMore" class="pc-share-more" data-testid="share-more-options">
                             <div class="pc-share-row">
-                                <div class="pc-share-row-text"><b>Link to this view</b><span>Opens at the date and view you’re looking at now.</span></div>
-                                <div class="pc-share-link">
-                                    <button type="button" class="pc-share-copy" @click="copyToClipboard(currentViewURL, $event.currentTarget, 'copy')" data-testid="share-view-copy"><icon name="copy" class="h-4 w-4 mr-1"></icon><span>Copy</span></button>
-                                    <button v-if="canShare()" type="button" @click="shareUrl(currentViewURL, 'Calendar View')" class="pc-share-copy" aria-label="Share link to this view">
-                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15" /></svg>
+                                <div class="pc-share-main"><b class="pc-share-label">Link to this view</b><span class="pc-share-hint">Opens at the date and view you’re looking at now.</span></div>
+                                <div class="pc-share-acts">
+                                    <button type="button" class="pc-share-copy" @click="copyToClipboard(currentViewURL, $event.currentTarget, 'copy')" data-testid="share-view-copy"><span>Copy</span></button>
+                                    <button v-if="canShare()" type="button" @click="shareUrl(currentViewURL, 'Calendar View')" class="pc-share-copy pc-share-icon" aria-label="Share link to this view">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15"/></svg>
                                     </button>
                                 </div>
                             </div>
 
-                            <div class="pc-share-row pc-share-row--stack">
-                                <div class="pc-share-row-text"><b>Name the read-only link</b><span>{{ getReadOnlySlug() ? 'Now pastecal.com/' + getReadOnlySlug() : 'Pick a name people can remember.' }}</span></div>
-                                <button type="button" class="pc-set-link" @click="showReadOnlySlug = !showReadOnlySlug">{{ showReadOnlySlug ? 'Cancel' : 'Change' }}</button>
+                            <div class="pc-share-row">
+                                <div class="pc-share-main"><b class="pc-share-label">Name the read-only link</b><span class="pc-share-hint">{{ getReadOnlySlug() ? 'Short: pastecal.com/' + getReadOnlySlug() : 'Pick a name people can remember.' }}</span></div>
+                                <div class="pc-share-acts"><button type="button" class="pc-share-copy" @click="showReadOnlySlug = !showReadOnlySlug">{{ showReadOnlySlug ? 'Cancel' : 'Change' }}</button></div>
                             </div>
                             <div v-if="showReadOnlySlug" class="pc-share-slug">
                                 <div class="pc-share-link">
-                                    <input type="text" v-model="readOnlySlugInput" placeholder="Enter custom name" aria-label="Custom name for the read-only link" class="pc-share-url pc-share-url--edit">
+                                    <input type="text" v-model="readOnlySlugInput" placeholder="Enter custom name" aria-label="Custom name for the read-only link" class="pc-share-url">
                                     <button type="button" @click="customizeExistingLink" :disabled="!readOnlySlugInput.trim()" class="pc-share-copy pc-share-copy--primary">Update</button>
                                 </div>
-                                <span class="pc-share-row-note">New: pastecal.com/view/{{ readOnlySlugInput || 'custom-name' }}</span>
+                                <span class="pc-share-hint">New: pastecal.com/view/{{ readOnlySlugInput || 'custom-name' }}</span>
                             </div>
 
-                            <div v-if="getReadOnlyURL()" class="pc-share-row pc-share-row--stack">
-                                <div class="pc-share-row-text"><b>Feed URL (view only):</b><span>For calendar apps not listed above.</span></div>
+                            <div v-if="getReadOnlyURL()" class="pc-share-row">
+                                <div class="pc-share-main"><b class="pc-share-label">Feed URL (view only):</b><span class="pc-share-addr" :title="getReadOnlyICSURL()">{{ shortLink(getReadOnlyICSURL()) }}</span></div>
+                                <div class="pc-share-acts"><button type="button" @click="copyToClipboard(getReadOnlyICSURL(), $event.currentTarget, 'ics')" class="pc-share-copy"><span>Copy</span></button></div>
                             </div>
-                            <div v-if="getReadOnlyURL()" class="pc-share-link">
-                                <input type="text" :value="getReadOnlyICSURL()" readonly aria-label="Read-only feed URL" class="pc-share-url">
-                                <button type="button" @click="copyToClipboard(getReadOnlyICSURL(), $event.currentTarget, 'ics')" class="pc-share-copy"><icon name="copy" class="h-4 w-4 mr-1"></icon><span>Copy</span></button>
+
+                            <div v-if="getReadOnlyURL()" class="pc-share-row">
+                                <div class="pc-share-main"><b class="pc-share-label">Embed on a website</b><span class="pc-share-hint">The read-only calendar in an iframe.</span></div>
+                                <div class="pc-share-acts"><button type="button" @click="copyToClipboard(embedCode(), $event.currentTarget, 'embed')" class="pc-share-copy" data-testid="share-embed-copy"><span>Copy code</span></button></div>
                             </div>
-                            <a v-if="getWebcalURL()" :href="getWebcalURL()" @click="trackSubscribe('subscribe')" data-testid="subscribe-webcal" class="pc-set-link">Open in my default calendar app</a>
 
                             <!-- The full-access feed carries the edit link inside it: kept, but last and labeled. -->
-                            <div v-if="canEdit" class="pc-share-row pc-share-row--stack">
-                                <div class="pc-share-row-text"><b>Feed URL (full access):</b><span class="pc-share-warn">Contains your edit link. Anyone who gets it can change the calendar.</span></div>
-                            </div>
-                            <div v-if="canEdit" class="pc-share-link">
-                                <input type="text" :value="getEditableICSURL()" readonly aria-label="Full-access feed URL" class="pc-share-url">
-                                <button type="button" @click="copyToClipboard(getEditableICSURL(), $event.currentTarget, 'ics')" class="pc-share-copy"><icon name="copy" class="h-4 w-4 mr-1"></icon><span>Copy</span></button>
+                            <div v-if="canEdit" class="pc-share-row">
+                                <div class="pc-share-main"><b class="pc-share-label">Feed URL (full access):</b><span class="pc-share-hint pc-share-warn">Gives edit access. Anyone who gets it can change the calendar.</span></div>
+                                <div class="pc-share-acts"><button type="button" @click="copyToClipboard(getEditableICSURL(), $event.currentTarget, 'ics')" class="pc-share-copy"><span>Copy</span></button></div>
                             </div>
                         </div>
                         </template>
@@ -1182,129 +1195,60 @@
                         <button type="button" class="pc-side-btn pc-side-btn--primary" @click="share">Save &amp; share</button>
                     </div>
                     <template v-else>
-                    <!-- Pro owner: every saved version, one click away, above the recent list. -->
-                    <button v-if="lock.locked && proOwner" type="button" class="pc-teaser" @click="openInsight('history', 'recent_changes')" data-testid="recent-history-link">
-                        <svg class="pc-teaser-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l4 2"/></svg>
-                        <span>Restore an earlier version</span>
-                        <span class="pc-teaser-go" aria-hidden="true">→</span>
-                    </button>
-                    <p class="pc-side-hint mb-2">
+                    <p class="pc-side-hint pc-act-lead">
                         <template v-if="unseenChangeCount">
                             {{ unseenChangeCount }}
-                            {{ unseenChangeCount === 1 ? 'change' : 'changes' }} since you were last here.
-                            Deleted and edited events can be restored.
+                            {{ unseenChangeCount === 1 ? 'change' : 'changes' }} since you were last here. Undo any of them.
                         </template>
-                        <template v-else-if="lock.locked">Everything that happened to this calendar. Deleted and edited events can be restored.</template>
-                        <template v-else>Changes from the last 7 days. Deleted and edited events can be restored.</template>
+                        <template v-else-if="lock.locked">Every change to this calendar. Undo any of them.</template>
+                        <template v-else>Changes from the last 7 days. Undo any of them.</template>
                     </p>
 
                     <!-- Grouped by day rather than as one flat list: every row in a busy
                          calendar otherwise reads "1d ago", which tells a reader who has been
                          away nothing about WHEN. The "new" badge marks the changes that landed
-                         since this browser last opened the calendar. -->
-                    <div v-for="group in changesByDay" :key="group.key" class="mb-2">
-                        <div class="flex items-center gap-2 pt-3 pb-1 px-1">
-                            <span class="text-xs font-semibold uppercase tracking-wide text-color-1">{{ group.label }}</span>
-                            <span v-if="group.unseen"
-                                class="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-theme-soft text-theme-strong">
-                                {{ group.unseen }} new
-                            </span>
-                        </div>
-                    <div class="divide-y divide-color-default -mx-1">
-                        <div v-for="entry in group.entries" :key="entry.key" class="py-3 px-1">
-                            <!-- Two different times live in this row: WHEN THE CHANGE HAPPENED
-                                 and WHEN THE EVENT IS SCHEDULED. Stacked as two bare lines they
-                                 were indistinguishable ("today 4:31 PM" above "Wed, Sep 16,
-                                 10:00 AM" reads as one nonsense range). The change time is
-                                 metadata, so it sits apart on the right; the event's own time
-                                 stays with the event it belongs to, in a calendar-shaped line. -->
-                            <div class="flex items-start justify-between gap-3">
-                                <div class="min-w-0">
-                                    <div class="text-sm text-color-2">{{ entry.what }}</div>
-
-                                    <!-- One deleted event is already named in the heading, so
-                                         only its time is added; several get the full list. -->
-                                    <div v-if="entry.lost.length === 1"
-                                        class="text-xs text-color-1 mt-1 flex items-center gap-1">
-                                        <svg class="w-3 h-3 flex-shrink-0 opacity-60" fill="none" viewBox="0 0 24 24"
-                                            stroke="currentColor" stroke-width="2" aria-hidden="true">
-                                            <rect x="3" y="5" width="18" height="16" rx="2" />
-                                            <path d="M3 10h18M8 3v4M16 3v4" stroke-linecap="round" />
-                                        </svg>
-                                        {{ entry.lost[0].when }}
-                                    </div>
-                                    <ul v-else-if="entry.lost.length" class="mt-1 space-y-0.5">
-                                        <li v-for="(ev, i) in entry.lost" :key="i"
-                                            class="text-xs text-color-1 flex items-center gap-1">
-                                            <svg class="w-3 h-3 flex-shrink-0 opacity-60" fill="none" viewBox="0 0 24 24"
-                                                stroke="currentColor" stroke-width="2" aria-hidden="true">
-                                                <rect x="3" y="5" width="18" height="16" rx="2" />
-                                                <path d="M3 10h18M8 3v4M16 3v4" stroke-linecap="round" />
-                                            </svg>
-                                            <span class="truncate">{{ ev.title }} <span class="opacity-70">· {{ ev.when }}</span></span>
-                                        </li>
-                                    </ul>
-
-                                    <!-- What changed, for an edit rather than a deletion. -->
-                                    <ul v-if="!entry.lost.length && entry.edited && entry.edited.length"
-                                        class="mt-1 space-y-0.5">
-                                        <li v-for="(ev, i) in entry.edited" :key="i" class="text-xs text-color-1">
-                                            <span v-if="entry.edited.length > 1">{{ ev.title }} — </span>{{ ev.change }}
-                                        </li>
-                                    </ul>
-
-                                    <!-- When the event was scheduled, for an addition. -->
-                                    <div v-if="!entry.lost.length && !(entry.edited || []).length
-                                               && entry.added && entry.added.length === 1"
-                                        class="text-xs text-color-1 mt-1 flex items-center gap-1">
-                                        <svg class="w-3 h-3 flex-shrink-0 opacity-60" fill="none" viewBox="0 0 24 24"
-                                            stroke="currentColor" stroke-width="2" aria-hidden="true">
-                                            <rect x="3" y="5" width="18" height="16" rx="2" />
-                                            <path d="M3 10h18M8 3v4M16 3v4" stroke-linecap="round" />
-                                        </svg>
-                                        {{ entry.added[0].when }}
-                                    </div>
-                                    <ul v-else-if="!entry.lost.length && !(entry.edited || []).length
-                                                   && entry.added && entry.added.length"
-                                        class="mt-1 space-y-0.5">
-                                        <li v-for="(ev, i) in entry.added" :key="i"
-                                            class="text-xs text-color-1 flex items-center gap-1">
-                                            <svg class="w-3 h-3 flex-shrink-0 opacity-60" fill="none" viewBox="0 0 24 24"
-                                                stroke="currentColor" stroke-width="2" aria-hidden="true">
-                                                <rect x="3" y="5" width="18" height="16" rx="2" />
-                                                <path d="M3 10h18M8 3v4M16 3v4" stroke-linecap="round" />
-                                            </svg>
-                                            <span class="truncate">{{ ev.title }} <span class="opacity-70">· {{ ev.when }}</span></span>
-                                        </li>
-                                    </ul>
+                         since this browser last opened the calendar. Each row: the event's color,
+                         what happened, its detail and the time of the change, and Undo (always
+                         shown, so it works by touch). An addition has nothing to put back, so it
+                         gets no button rather than a no-op one. -->
+                    <section v-for="group in changesByDay" :key="group.key" class="pc-act-day">
+                        <h5 class="pc-act-day-head">
+                            {{ group.label }}
+                            <span v-if="group.unseen" class="pc-act-new">{{ group.unseen }} new</span>
+                        </h5>
+                        <div v-for="entry in group.entries" :key="entry.key" class="pc-act-row">
+                            <span class="pc-act-dot" aria-hidden="true" :style="{ background: entry.type ? getTypeColor(entry.type) : 'var(--pc-field)' }"></span>
+                            <div class="pc-act-main">
+                                <div class="pc-act-what">{{ entry.what }}</div>
+                                <div class="pc-act-detail">
+                                    <template v-if="entry.lost.length === 1">{{ entry.lost[0].when }} · </template>
+                                    <template v-else-if="!entry.lost.length && (entry.edited || []).length === 1">{{ entry.edited[0].change }} · </template>
+                                    <template v-else-if="!entry.lost.length && !(entry.edited || []).length && entry.added && entry.added.length === 1">{{ entry.added[0].when }} · </template>
+                                    <span :title="entry.whenExact">{{ entry.atTime }}</span>
                                 </div>
-
-                                <!-- When the CHANGE happened, kept away from the event's own
-                                     time so the two are never read as one range. Hover gives
-                                     the full timestamp.
-                                     An addition has nothing to put back, so it is listed
-                                     without a button rather than offered a no-op Restore. -->
-                                <div class="flex flex-col items-end gap-1 flex-shrink-0">
-                                    <span class="text-xs text-color-1 whitespace-nowrap" :title="entry.whenExact">
-                                        {{ entry.atTime }}
-                                    </span>
-                                    <button v-if="entry.canRestore" @click="undoChange(entry)"
-                                        class="px-3 py-1 border border-color-default rounded text-xs whitespace-nowrap hover:bg-[var(--bg-interactive-hover)] transition-colors">
-                                        {{ entry.restoreLabel }}
-                                    </button>
-                                </div>
+                                <!-- Several events in one change: each on its own short line. -->
+                                <ul v-if="entry.lost.length > 1" class="pc-act-list">
+                                    <li v-for="(ev, i) in entry.lost" :key="i">{{ ev.title }} · {{ ev.when }}</li>
+                                </ul>
+                                <ul v-else-if="!entry.lost.length && (entry.edited || []).length > 1" class="pc-act-list">
+                                    <li v-for="(ev, i) in entry.edited" :key="i">{{ ev.title }}: {{ ev.change }}</li>
+                                </ul>
+                                <ul v-else-if="!entry.lost.length && !(entry.edited || []).length && entry.added && entry.added.length > 1" class="pc-act-list">
+                                    <li v-for="(ev, i) in entry.added" :key="i">{{ ev.title }} · {{ ev.when }}</li>
+                                </ul>
                             </div>
+                            <button v-if="entry.canRestore" type="button" @click="undoChange(entry)" class="pc-act-undo"
+                                :aria-label="entry.restoreLabel" :title="entry.restoreLabel + '. Restoring is itself a change, so it can be undone too.'">Undo</button>
                         </div>
-                    </div>
-                    </div>
+                    </section>
 
                     <p v-if="!visibleUndoEntries.length" class="pc-side-empty-text mt-2" data-testid="activity-empty">Nothing has changed in the last 7 days.</p>
 
-                    <p v-else class="pc-side-hint mt-4">
-                        Restoring is itself a change, so it can be undone too.
-                    </p>
-                    <!-- Free: the last 7 days, and for the calendar's creator only, one line about what Pro keeps. -->
-                    <p v-if="!lock.locked && isMineCalendar" class="pc-changes-foot" data-testid="recent-pro-pitch">
+                    <!-- Pro owner: every saved version. Free, the calendar's creator: one line about what Pro keeps. -->
+                    <button v-if="lock.locked && proOwner" type="button" class="pc-act-more" @click="openInsight('history', 'recent_changes')" data-testid="recent-history-link">
+                        Restore an earlier version <span class="pc-act-pro">Pro</span> <span aria-hidden="true">→</span>
+                    </button>
+                    <p v-else-if="!lock.locked && isMineCalendar" class="pc-changes-foot" data-testid="recent-pro-pitch">
                         Pro keeps every version and can restore any date.
                         <button type="button" class="pc-pro-link" @click="openProOffer">About Pro</button>
                     </p>

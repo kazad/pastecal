@@ -1345,6 +1345,32 @@ const CalendarVueApp = {
                 if (staleRetries++ < 3) relayout();
             });
         });
+        // Wide screens: the month grid fills the window instead of stopping at 5-6 rows of 100px
+        // with empty page below, and the side panel (same grid row) follows. Rows grow, never
+        // shrink below 100px; a change re-lays out once so chips sit in the taller cells.
+        const fitMonthRows = () => {
+            const sched = document.getElementById('Schedule');
+            const rows = sched ? sched.querySelectorAll('.e-month-view .e-content-table tbody tr') : [];
+            if (!rows.length) return false;
+            let h = 100;
+            if (window.innerWidth >= 1100) {
+                const rect = sched.getBoundingClientRect();
+                const chrome = rect.height - rows[0].getBoundingClientRect().height * rows.length;
+                h = Math.max(100, Math.floor((window.innerHeight - (rect.top + window.scrollY) - 12 - chrome) / rows.length));
+            }
+            const now = parseFloat(sched.style.getPropertyValue('--month-cell-h')) || 100;
+            if (Math.abs(now - h) < 2) return false;
+            sched.style.setProperty('--month-cell-h', h + 'px');
+            return true;
+        };
+        scheduleObj.addEventListener('dataBound', () => {
+            requestAnimationFrame(() => { if (fitMonthRows()) relayout(); });
+        });
+        let fitTimer = null;
+        window.addEventListener('resize', () => {
+            clearTimeout(fitTimer);
+            fitTimer = setTimeout(() => { if (fitMonthRows()) relayout(); }, 150);
+        });
         const calWrap = document.getElementById('cal2_wrap');
         if (calWrap && window.ResizeObserver) {
             let lastWidth = calWrap.offsetWidth;
@@ -2864,6 +2890,17 @@ const CalendarVueApp = {
             return SlugManager.getReadOnlySlug(this.calendar) || '';
         },
 
+        /** A link as Share shows it: pastecal.com and the path, whatever host this page is on. The full URL is what's copied. */
+        shortLink(url) {
+            return String(url || '').replace(/^[a-z]+:\/\/(www\.)?[^/]+/i, 'pastecal.com');
+        },
+
+        /** Share's "Embed on a website": the read-only calendar in an iframe (view pages allow framing). */
+        embedCode() {
+            const title = String(this.displayCalendarTitle || 'Calendar').replace(/[<>"&]/g, '');
+            return `<iframe src="${this.getReadOnlyURL()}" title="${title}" width="100%" height="640" style="border:0" loading="lazy"></iframe>`;
+        },
+
         getReadOnlyURL() {
             // Use SlugManager for centralized read-only link operations
             return SlugManager.getReadOnlyURL(this.calendar);
@@ -3118,9 +3155,7 @@ const CalendarVueApp = {
         /** From the Stats tab: Share, showing just the Pro offer (as when arriving from Get Pro). */
         getProFromStats() {
             track(a => a.proStatsTeaserClicked());
-            this.closeAllPanels();
-            this.showShare = true;
-            this.$nextTick(() => { this.shareProFocus = true; });
+            this.openProOffer();
         },
 
         /** The panel's close button, its backdrop on small screens, and Escape. */
@@ -3531,6 +3566,8 @@ const CalendarVueApp = {
                     ])].sort();
                     const n = lost.length;
                     if (this.isEmptyChange(r, { lost, edited, added })) return null;
+                    // The row's dot: the color of the first event it touched (none for calendar-level changes).
+                    const firstEvent = lostEvents[0] || (visibleEdits[0] && visibleEdits[0].to) || addedEvents[0];
 
                     return {
                         key: r.key,
@@ -3549,6 +3586,7 @@ const CalendarVueApp = {
                         // there. Listing it without a button is honest; a no-op Restore is
                         // not. (Cmd+Z can still take an addition back: undoLastChange.)
                         canRestore: delta.removed.length > 0 || delta.changed.length > 0,
+                        type: firstEvent && firstEvent.type ? firstEvent.type : null,
                         what: this.describeChange(r, lost, edited, added),
                         when: this.describeWhen(r.savedAt),
                         // Terse for the row's right-hand column; the full timestamp rides
@@ -4800,19 +4838,11 @@ const CalendarVueApp = {
             this.showToast(`Restored the version from ${label}`, 'success');
             this.loadUndoEntries();
         },
-        scrollToProPanel() {
-            const panel = this.$refs.proPanel && this.$refs.proPanel.$el;
-            if (panel && panel.scrollIntoView) {
-                panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                panel.classList.add('pc-pro--flash');
-                setTimeout(() => panel.classList.remove('pc-pro--flash'), 1600);
-            }
-        },
-        /** From Recent changes, a free calendar's creator: to the Pro offer in Share. */
+        /** From Activity, a free calendar's creator: to the Pro offer in Share (its Get Pro view). */
         openProOffer() {
-            this.showRecentChanges = false;
-            if (!this.showShare) this.toggleShare();
-            this.$nextTick(() => this.scrollToProPanel());
+            this.closeAllPanels();
+            this.showShare = true;
+            this.$nextTick(() => { this.shareProFocus = true; });
         },
         focusInsight(open, ref) {
             if (open) {
