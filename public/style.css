@@ -1007,8 +1007,8 @@ div#Schedule,
 
 /* ---- Homepage flow: grid tip, draft note, Share pulse ---- */
 .pc-grid-tip { position: absolute; z-index: 5; left: 50%; top: 96px; transform: translateX(-50%); pointer-events: none;
-  background: var(--pc-text); color: var(--pc-surface); font-size: 14px; font-weight: 600; padding: 7px 14px; border-radius: 999px;
-  box-shadow: 0 6px 18px rgba(0,0,0,.18); white-space: nowrap; animation: pc-tip-in .4s ease-out .8s both }
+  background: color-mix(in srgb, var(--pc-bg) 88%, transparent); color: var(--pc-text-muted); font-size: 13px; font-weight: 500; padding: 5px 12px; border-radius: 999px;
+  border: 1px solid var(--pc-line); white-space: nowrap; animation: pc-tip-in .4s ease-out .8s both }
 @keyframes pc-tip-in { from { opacity: 0; transform: translate(-50%, 6px) } to { opacity: 1; transform: translate(-50%, 0) } }
 .pc-draft-note { margin: 8px 4px 0; font-size: 13px; color: var(--pc-text-muted); display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center }
 .pc-draft-note > span { color: var(--pc-text-muted) }
@@ -1725,3 +1725,22 @@ button:hover > .pc-add-event {
 [data-testid="desktop-title-area"] { overflow: hidden }
 [data-testid="desktop-title-area"] h1, [data-testid="desktop-title-area"] div { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .pc-hdr-btn svg, .pc-hdr-btn icon, .pc-hdr-btn icon svg { width: 18px !important; height: 18px !important; flex: none; display: block }
+
+/* With the guide beside the calendar, it already says "Click a day": no second prompt over the grid. */
+.pc-home-split:has(.pc-home-aside) .pc-grid-tip { display: none }
+
+/* Header layout: three columns. The right one (actions + address) never shrinks, so nothing overlaps;
+   the title takes what's left in the middle and truncates. Everything shares one 36px center line. */
+@media (min-width: 768px) {
+  topbar.md\:flex { display: grid !important; grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(max-content, 1fr); align-items: center; column-gap: 16px; min-height: 52px; padding-bottom: 8px !important }
+  topbar > section { min-width: 0; height: 36px !important; display: flex; align-items: center }
+  topbar > section:last-child { justify-content: flex-end; flex-wrap: nowrap }
+  topbar > section:first-child { flex-direction: row !important }
+  [data-testid="desktop-title-area"] { justify-content: center; margin: 0 !important }
+  [data-testid="desktop-title-area"] h1, [data-testid="desktop-title-area"] > div, [data-testid="desktop-title-area"] .w-full { margin: 0 !important; line-height: 36px !important }
+  .pc-hdr-actions { flex: none; gap: 4px; margin-right: 12px; padding-right: 12px; border-right: 1px solid var(--pc-line) }
+  topbar > section:last-child > *:not(.pc-hdr-actions) { flex: none }
+}
+@media (min-width: 768px) {
+  [data-testid="desktop-title-area"] > *, [data-testid="desktop-title-area"] .w-full { display: flex; align-items: center; height: 36px }
+}
