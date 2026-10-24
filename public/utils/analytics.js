@@ -416,7 +416,36 @@ const Analytics = {
         this.track('calendar_created', {
             named: !!named,
             event_count_bucket: this.bucketEvents(calendar?.events?.length),
+            kind: this.calendarKind(calendar),
         });
+    },
+
+    /**
+     * What a calendar is for, from words in its title and event titles, so we learn which uses are
+     * common. Only the category leaves the browser, never the title or any event text.
+     */
+    CALENDAR_KINDS: [
+        ['guests', /\b(guest|visit|cabin|cottage|lake house|beach house|villa|airbnb|rental)/i],
+        ['space', /\b(room|rooftop|roof|space|hall|bookings?|reserv|studio|court|gym|lounge|common|garden|pool|bbq|grill|terrace|desk|parking|laundry)/i],
+        ['out', /\b(ooo|out of office|vacation|pto|wfh|leave|holiday|away|sick)/i],
+        ['shifts', /\b(shift|roster|rota|volunteer|on.?call|duty|coverage|schedule)/i],
+        ['sports', /\b(soccer|football|team|league|swim|tennis|hockey|baseball|basketball|rugby|cricket|volleyball|practice|game|tournament|match)/i],
+        ['family', /\b(family|kids?|mom|dad|custody|parent|baby|nanny|grandma|grandpa|pickup)/i],
+        ['school', /\b(school|class|course|tutor|homework|exam|college|student|lesson|semester)/i],
+        ['community', /\b(church|choir|mosque|temple|parish|ministry|community|club|meetup|association)/i],
+        ['care', /\b(care|caregiv|hospital|nurse|therapy|doctor|appointment|meds?)\b/i],
+        ['music', /\b(band|music|gig|concert|rehears|choir|recital|show)/i],
+        ['trip', /\b(trip|travel|wedding|itinerary|flight|reunion|party)/i],
+        ['work', /\b(work|office|meeting|project|sprint|release|deadline|client|team sync)/i],
+    ],
+    calendarKind(calendar) {
+        try {
+            const title = String(calendar?.title || '');
+            const events = (calendar?.events || []).slice(0, 40).map((e) => e.title || e.Subject || '').join(' ');
+            for (const [kind, rx] of this.CALENDAR_KINDS) if (rx.test(title)) return kind;
+            for (const [kind, rx] of this.CALENDAR_KINDS) if (rx.test(events)) return kind;
+            return 'other';
+        } catch (e) { return 'other'; }
     },
 
     /**

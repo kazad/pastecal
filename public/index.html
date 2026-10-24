@@ -579,15 +579,14 @@
                                     <!-- Everything else (edit link, subscribe, feed URLs) still
                                          lives in the full sharing panel, one click away. -->
                                     <button type="button"
-                                        class="flex items-center flex-shrink-0 ml-2 pl-2 border-l border-color-default text-color-1 hover:text-blue-500 transition-colors"
+                                        class="pc-pill-share-btn flex items-center flex-shrink-0 ml-2"
                                         @click.stop="toggleShare"
                                         :class="{ 'pc-hdr-on': showShare }"
-                                        aria-label="More sharing options"
+                                        aria-label="Share this calendar"
                                         data-testid="share-pill-more">
                                         <!-- chevronDown is a filled path, not a stroked one,
                                              so it needs fill="currentColor" to be visible. -->
-                                        <icon name="chevronDown" viewBox="0 0 16 16" fill="currentColor"
-                                            class="w-3.5 h-3.5"></icon>
+<span class="pc-pill-share">Share</span>
                                     </button>
                                 </div>
                             </template>
@@ -667,10 +666,9 @@
         <div v-if="isHomepageCalendar && !isReadOnly" class="pc-tpl" data-testid="templates" v-cloak>
             <div class="pc-tpl-row" role="group" aria-label="Start from a template">
                 <span class="pc-tpl-label">Start from:</span>
+                <button type="button" class="pc-tpl-chip" :class="{ 'is-on': !template }" :aria-pressed="!template ? 'true' : 'false'" data-testid="tpl-blank" @click="template && startBlank()">Blank</button>
                 <button v-for="t in templateChips" :key="t.id" type="button" class="pc-tpl-chip" :class="{ 'is-on': template && template.id === t.id }"
                     :aria-pressed="template && template.id === t.id ? 'true' : 'false'" :data-testid="'tpl-' + t.id" @click="pickTemplate(t.id)">{{ t.label }}</button>
-                <span v-if="!template" class="pc-tpl-or">or click any day to start from scratch</span>
-                <button v-else-if="!templateNudge && !templateConfirm" type="button" class="pc-tpl-link" data-testid="tpl-blank" @click="startBlank">Start blank</button>
             </div>
             <p v-if="templateConfirm" class="pc-tpl-note" role="alert" data-testid="tpl-confirm">
                 <span>Switch to <b>{{ templateLabel(templateConfirm.next) }}</b>? Events you added or changed stay.</span>
@@ -678,9 +676,7 @@
                 <button type="button" class="pc-tpl-link" data-testid="tpl-confirm-no" @click="templateConfirm = null">Cancel</button>
             </p>
             <p v-else-if="template && templateNudge" class="pc-tpl-note" data-testid="tpl-nudge">
-                <span><b>Looks good?</b> Save &amp; share for a link anyone can open. No sign-up.</span>
-                <button type="button" class="pc-tpl-go" data-testid="tpl-nudge-share" @click="share">Save &amp; share</button>
-                <button type="button" class="pc-tpl-link" data-testid="tpl-nudge-blank" @click="startBlank">Start blank</button>
+                <span><b>Looks good?</b> Press Save &amp; share, top right, for a link anyone can open. No sign-up.</span>
                 <button type="button" class="pc-tpl-x" aria-label="Dismiss" title="Dismiss" data-testid="tpl-nudge-dismiss" @click="dismissTemplateNudge">&times;</button>
             </p>
         </div>
@@ -740,7 +736,6 @@
                         <template v-if="canEdit">
                             <template v-if="notesEditing">
                                 <div class="pc-side-row">
-                                    <p class="pc-side-hint">Everyone with the link sees these, next to the calendar.</p>
                                     <button type="button" class="pc-side-btn pc-side-btn--primary" @click="notesEditing = false" data-testid="notes-done">Done</button>
                                 </div>
                                 <textarea ref="notesInput" aria-label="Calendar notes" class="pc-side-notes-input"
@@ -748,7 +743,6 @@
                             </template>
                             <template v-else-if="(calendar.options.notes || '').trim()">
                                 <div class="pc-side-row">
-                                    <p class="pc-side-hint">Everyone with the link sees these, next to the calendar.</p>
                                     <button type="button" class="pc-side-btn" @click="editNotes" data-testid="notes-edit">
                                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
                                         Edit
@@ -790,7 +784,7 @@
                             <!-- Filter Options -->
                             <div class="flex items-center space-x-2">
                                 <span class="text-xs text-color-1">Show</span>
-                                <div class="flex space-x-2">
+                                <div class="flex flex-wrap gap-2">
                                     <!--
                                         Real buttons, not spans: these are toggles, so they need a
                                         name, a pressed state and keyboard focus. "Off" is shown by
@@ -804,11 +798,12 @@
                                             :aria-checked="colorFilters[idx] ? 'true' : 'false'"
                                             :aria-label="typeLabelFor(idx)"
                                             :title="colorFilters[idx] ? typeLabelFor(idx) + ' (shown)' : typeLabelFor(idx) + ' (hidden)'"
-                                            class="pc-filter-dot w-5 h-5 rounded-full cursor-pointer border-2 transition-all"
-                                            :class="colorFilters[idx] ? 'opacity-100 border-color-default' : 'opacity-40 border-dashed'"
-                                            :style="colorFilters[idx]
+                                            class="pc-filter-dot cursor-pointer transition-all"
+                                            :class="[colorFilters[idx] ? 'is-on' : 'is-off', hasTypeLabel(idx) ? 'pc-filter-chip' : 'w-5 h-5 rounded-full border-2']"
+                                            :style="hasTypeLabel(idx) ? { '--dot': color } : (colorFilters[idx]
                                                 ? { backgroundColor: color, borderColor: color }
-                                                : { backgroundColor: 'transparent', borderColor: color }">
+                                                : { backgroundColor: 'transparent', borderColor: color, opacity: .4, borderStyle: 'dashed' })">
+                                            <template v-if="hasTypeLabel(idx)">{{ typeLabelFor(idx) }}</template>
                                         </button>
                                     </template>
                                 </div>
@@ -920,115 +915,109 @@
                         <h2 v-if="shareProFocus" class="text-lg font-bold mb-4">Get Pro</h2>
                         <!-- Arriving from Get Pro: only the lock offer, the links one click away -->
                         <template v-if="!shareProFocus">
-
-                        <div class="pc-share-item" data-testid="share-group">
-                            <svg class="pc-share-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
-                            <div class="pc-share-main">
-                                <h4 class="pc-share-label">Send to your group</h4>
-                                <p class="pc-share-hint">They see every change but can’t edit.</p>
-                                <span v-if="getReadOnlyURL()" class="pc-share-addr" :title="getReadOnlyURL()" data-testid="share-readonly-addr">{{ shortLink(getReadOnlyURL()) }}</span>
-                            </div>
+                        <!-- Every link is visible and is itself the copy button (GitHub-style). No captions: the
+                             label and its "can view / can edit" tag say what the link does. -->
+                        <section class="pc-links" data-testid="share-links">
+                        <div class="pc-link-item" data-testid="share-group">
+                            <div class="pc-link-head"><h4 class="pc-share-label">View-only link</h4><span class="pc-share-tag">can view</span>
+                                <button v-if="getReadOnlyURL() && canEdit" type="button" class="pc-link-extra" @click="showReadOnlySlug = !showReadOnlySlug">{{ showReadOnlySlug ? 'Cancel' : 'Rename' }}</button></div>
                             <!-- Older calendars may not have a read-only link yet: make one on request rather than show nothing. -->
-                            <div class="pc-share-acts">
-                                <button v-if="!getReadOnlyURL()" type="button" class="pc-share-copy pc-share-copy--primary" :disabled="creatingReadOnly || !canEdit"
-                                    @click="makeReadOnlyLink" data-testid="create-readonly">{{ creatingReadOnly ? 'Creating…' : 'Create link' }}</button>
-                                <template v-else>
-                                    <button type="button" @click="copyToClipboard(getReadOnlyURL(), $event.currentTarget, 'copy')" class="pc-share-copy pc-share-copy--primary"><span>Copy</span></button>
-                                    <button v-if="canShare()" type="button" @click="shareUrl(getReadOnlyURL(), 'Calendar')" class="pc-share-copy pc-share-icon" aria-label="Share read-only link">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15"/></svg>
-                                    </button>
-                                </template>
+                            <button v-if="!getReadOnlyURL()" type="button" class="pc-share-copy pc-share-copy--primary" :disabled="creatingReadOnly || !canEdit"
+                                @click="makeReadOnlyLink" data-testid="create-readonly">{{ creatingReadOnly ? 'Creating…' : 'Create link' }}</button>
+                            <template v-else>
+                            <div class="pc-link-row">
+                                <button type="button" class="pc-link" :class="{ 'is-copied': copiedKey === 'view' }" :title="'Copy ' + getReadOnlyURL()" @click="copyLink('view', getReadOnlyURL(), 'copy')" data-testid="share-readonly-addr">
+                                    <span class="pc-link-url">{{ shortLink(getReadOnlyURL()) }}</span>
+                                    <span class="pc-link-act" :aria-label="copiedKey === 'view' ? 'Copied' : 'Copy'"><template v-if="copiedKey === 'view'"><svg class="pc-link-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></template><template v-else><svg class="pc-link-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg></template></span>
+                                </button>
+                                <button v-if="canShare()" type="button" class="pc-link-share" @click="shareUrl(getReadOnlyURL(), 'Calendar')" aria-label="Share…" title="Share…"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v13"/></svg></button>
+                            </div>
+                            <div v-if="showReadOnlySlug" class="pc-share-link">
+                                <span class="pc-link-prefix">pastecal.com/view/</span>
+                                <input type="text" v-model="readOnlySlugInput" placeholder="new-name" aria-label="New name for the view-only link" class="pc-share-url" @keydown.enter="readOnlySlugInput.trim() && customizeExistingLink()">
+                                <button type="button" @click="customizeExistingLink" :disabled="!readOnlySlugInput.trim()" class="pc-share-copy pc-share-copy--primary">Save</button>
+                            </div>
+                            </template>
+                        </div>
+
+                        <div v-if="canEdit" class="pc-link-item" data-testid="share-helpers">
+                            <div class="pc-link-head"><h4 class="pc-share-label">Edit link</h4><span class="pc-share-tag pc-share-tag--warn">can edit</span><span v-if="lock.locked" class="pc-share-tag">Locked</span></div>
+                            <div class="pc-link-row">
+                                <button type="button" class="pc-link" :class="{ 'is-copied': copiedKey === 'edit' }" :title="'Copy ' + getEditableURL()" @click="copyLink('edit', getEditableURL(), 'copy')" data-testid="share-edit-copy">
+                                    <span class="pc-link-url">{{ shortLink(getEditableURL()) }}</span>
+                                    <span class="pc-link-act" :aria-label="copiedKey === 'edit' ? 'Copied' : 'Copy'"><template v-if="copiedKey === 'edit'"><svg class="pc-link-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></template><template v-else><svg class="pc-link-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg></template></span>
+                                </button>
+                                <button v-if="canShare()" type="button" class="pc-link-share" @click="shareUrl(getEditableURL(), 'Calendar')" aria-label="Share…" title="Share…"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v13"/></svg></button>
                             </div>
                         </div>
+
+                        <div class="pc-link-item" data-testid="share-view">
+                            <div class="pc-link-head"><h4 class="pc-share-label">This view</h4><span class="pc-share-tag">{{ viewLinkTag }}</span>
+                                <button type="button" class="pc-link-extra" :aria-expanded="showViewHelp ? 'true' : 'false'" @click="showViewHelp = !showViewHelp" data-testid="share-view-help">How it works</button></div>
+                            <div class="pc-link-row">
+                                <button type="button" class="pc-link" :class="{ 'is-copied': copiedKey === 'here' }" :title="'Copy ' + currentViewURL" @click="copyLink('here', currentViewURL, 'copy')" data-testid="share-view-copy">
+                                    <span class="pc-link-url">{{ shortLink(currentViewURL) }}</span>
+                                    <span class="pc-link-act" :aria-label="copiedKey === 'here' ? 'Copied' : 'Copy'"><template v-if="copiedKey === 'here'"><svg class="pc-link-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></template><template v-else><svg class="pc-link-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg></template></span>
+                                </button>
+                                <button v-if="canShare()" type="button" class="pc-link-share" @click="shareUrl(currentViewURL, 'Calendar View')" aria-label="Share…" title="Share…"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v13"/></svg></button>
+                            </div>
+                            <div v-if="showViewHelp" class="pc-link-help" data-testid="share-view-help-body">
+                                Opens at the date and view you're looking at. Edit the end of any link:
+                                <dl>
+                                    <dt><code>?date=2026-12-01</code></dt><dd>start on that day</dd>
+                                    <dt><code>&amp;view=week</code></dt><dd>day, week, month, year or agenda</dd>
+                                    <dt><code>&amp;view=custom&amp;dur=3&amp;unit=months</code></dt><dd>a span of weeks or months</dd>
+                                </dl>
+                            </div>
+                        </div>
+
+                        <div v-if="getReadOnlyURL()" class="pc-link-item" data-testid="share-feed">
+                            <div class="pc-link-head"><h4 class="pc-share-label">Calendar feed</h4><span class="pc-share-tag">.ics</span></div>
+                            <div class="pc-link-row">
+                                <button type="button" class="pc-link" :class="{ 'is-copied': copiedKey === 'feed' }" :title="'Copy ' + getReadOnlyICSURL()" @click="copyLink('feed', getReadOnlyICSURL(), 'ics')" data-testid="share-feed-copy">
+                                    <span class="pc-link-url">{{ shortLink(getReadOnlyICSURL()) }}</span>
+                                    <span class="pc-link-act" :aria-label="copiedKey === 'feed' ? 'Copied' : 'Copy'"><template v-if="copiedKey === 'feed'"><svg class="pc-link-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></template><template v-else><svg class="pc-link-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg></template></span>
+                                </button>
+                                <button v-if="canShare()" type="button" class="pc-link-share" @click="shareUrl(getReadOnlyICSURL(), 'Calendar feed')" aria-label="Share…" title="Share…"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v13"/></svg></button>
+                            </div>
+                        </div>
+                        </section>
 
                         <!-- The read-only feed, so subscribing never spreads edit access. webcal:// does nothing
                              when no app is registered for it, so the named apps are load-bearing. -->
-                        <div v-if="getWebcalURL()" class="pc-share-item" data-testid="share-apps">
-                            <svg class="pc-share-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
-                            <div class="pc-share-main">
-                                <h4 class="pc-share-label">Add to a calendar app</h4>
-                                <p class="pc-share-hint">Subscribe once; changes show up on their own.</p>
-                                <div class="pc-share-apps">
-                                    <a :href="getGoogleSubscribeURL()" target="_blank" rel="noopener" @click="trackSubscribe('subscribe_google')" data-testid="subscribe-google" class="pc-share-app">Google</a>
-                                    <a :href="getWebcalURL()" @click="trackSubscribe('subscribe_apple')" data-testid="subscribe-apple" class="pc-share-app">Apple</a>
-                                    <a :href="getOutlookSubscribeURL()" target="_blank" rel="noopener" @click="trackSubscribe('subscribe_outlook')" data-testid="subscribe-outlook" class="pc-share-app">Outlook</a>
-                                    <a :href="getWebcalURL()" @click="trackSubscribe('subscribe')" data-testid="subscribe-webcal" class="pc-share-sub" title="Opens your default calendar app">Subscribe</a>
-                                </div>
+                        <section v-if="getWebcalURL()" class="pc-links-sec" data-testid="share-apps">
+                            <h4 class="pc-share-more-title">Add to calendar app</h4>
+                            <div class="pc-share-apps pc-share-apps--grid">
+                                <a :href="getGoogleSubscribeURL()" target="_blank" rel="noopener" @click="trackSubscribe('subscribe_google')" data-testid="subscribe-google" class="pc-share-app">Google</a>
+                                <a :href="getWebcalURL()" @click="trackSubscribe('subscribe_apple')" data-testid="subscribe-apple" class="pc-share-app">Apple</a>
+                                <a :href="getOutlookSubscribeURL()" target="_blank" rel="noopener" @click="trackSubscribe('subscribe_outlook')" data-testid="subscribe-outlook" class="pc-share-app">Outlook</a>
+                                <a :href="getWebcalURL()" @click="trackSubscribe('subscribe')" data-testid="subscribe-webcal" class="pc-share-app" title="Opens your default calendar app">Other</a>
                             </div>
-                        </div>
+                        </section>
 
-                        <div v-if="canEdit" class="pc-share-item" data-testid="share-helpers">
-                            <svg class="pc-share-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-                            <div class="pc-share-main">
-                                <h4 class="pc-share-label">Helpers who can edit</h4>
-                                <p class="pc-share-hint" v-if="lock.locked">Locked: only you and people with an editor link can change it.</p>
-                                <p class="pc-share-hint" v-else>Anyone with this link can add and change events.</p>
-                                <span class="pc-share-addr" :title="getEditableURL()">{{ shortLink(getEditableURL()) }}</span>
-                            </div>
-                            <div class="pc-share-acts">
-                                <button type="button" @click="copyToClipboard(getEditableURL(), $event.currentTarget, 'copy')" class="pc-share-copy"><span>Copy</span></button>
-                                <button v-if="canShare()" type="button" @click="shareUrl(getEditableURL(), 'Calendar')" class="pc-share-copy pc-share-icon" aria-label="Share edit link">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15"/></svg>
+                        <section v-if="getReadOnlyURL()" class="pc-links-sec" data-testid="share-more-options">
+                            <h4 class="pc-share-more-title">Embed on a website</h4>
+                            <div class="pc-link-row">
+                                <button type="button" class="pc-link pc-link--code" :class="{ 'is-copied': copiedKey === 'embed' }" title="Copy embed code" @click="copyLink('embed', embedCode(), 'embed')" data-testid="share-embed-copy">
+                                    <code class="pc-link-url">{{ embedCode() }}</code>
+                                    <span class="pc-link-act"><template v-if="copiedKey === 'embed'"><svg class="pc-link-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></template><template v-else><svg class="pc-link-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg></template></span>
                                 </button>
                             </div>
-                        </div>
+                            <!-- The full-access feed carries the edit link inside it: kept, small, last and labeled. -->
+                            <button v-if="canEdit" type="button" class="pc-link-extra pc-link-extra--quiet" @click="copyLink('editfeed', getEditableICSURL(), 'ics')" data-testid="share-editfeed-copy">
+                                {{ copiedKey === 'editfeed' ? 'Copied feed with edit access' : 'Copy feed with edit access' }}</button>
+                        </section>
 
-                        <!-- Pro, unlocked: two lines and a link. The full offer (plans, checkout) is the Get Pro view. -->
-                        <div v-if="!lock.locked && canEdit" class="pc-share-pro" data-testid="share-pro-card">
-                            <b>Lock this calendar</b>
-                            <span>Only you and people you invite can edit. Everyone else can still view.</span>
-                            <button type="button" class="pc-pro-link" @click="shareProFocus = true" data-testid="share-get-pro">Get Pro, $24 a year →</button>
+                        <!-- Pro, unlocked: one line and a link. The full offer (plans, checkout) is the Get Pro view. -->
+                        <div v-if="!lock.locked && canEdit" class="pc-share-pro pc-share-pro--row" data-testid="share-pro-card">
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                            <span><b>Lock this calendar</b><br>Only you and people you choose can edit.</span>
+                            <button type="button" class="pc-pro-link" @click="shareProFocus = true" data-testid="share-get-pro">Get Pro</button>
                         </div>
                         </template>
                         <!-- Pro: the lock offer (Get Pro view), or a locked calendar's owner section and editor links -->
                         <pro-panel v-if="isExisting && (shareProFocus || lock.locked)" ref="proPanel" :calendar-id="calendar.id" :calendar-title="calendar.title" :locked="lock.locked" :can-edit="canEdit"
                             @open-insight="openInsight($event, 'share_panel')" @owner="proOwner = $event"></pro-panel>
-
-                        <template v-if="!shareProFocus">
-                        <button type="button" class="pc-share-more-btn" :aria-expanded="shareMore ? 'true' : 'false'" @click="shareMore = !shareMore" data-testid="share-more">
-                            {{ shareMore ? 'Fewer options' : 'More sharing options' }}
-                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" :style="{ transform: shareMore ? 'rotate(180deg)' : '' }"><path d="m6 9 6 6 6-6"/></svg>
-                        </button>
-                        <div v-if="shareMore" class="pc-share-more" data-testid="share-more-options">
-                            <div class="pc-share-row">
-                                <div class="pc-share-main"><b class="pc-share-label">Link to this view</b><span class="pc-share-hint">Opens at the date and view you’re looking at now.</span></div>
-                                <div class="pc-share-acts">
-                                    <button type="button" class="pc-share-copy" @click="copyToClipboard(currentViewURL, $event.currentTarget, 'copy')" data-testid="share-view-copy"><span>Copy</span></button>
-                                    <button v-if="canShare()" type="button" @click="shareUrl(currentViewURL, 'Calendar View')" class="pc-share-copy pc-share-icon" aria-label="Share link to this view">
-                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 8.25H7.5a2.25 2.25 0 0 0-2.25 2.25v9a2.25 2.25 0 0 0 2.25 2.25h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25H15m0-3-3-3m0 0-3 3m3-3V15"/></svg>
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div class="pc-share-row">
-                                <div class="pc-share-main"><b class="pc-share-label">Name the read-only link</b><span class="pc-share-hint">{{ getReadOnlySlug() ? 'Short: pastecal.com/' + getReadOnlySlug() : 'Pick a name people can remember.' }}</span></div>
-                                <div class="pc-share-acts"><button type="button" class="pc-share-copy" @click="showReadOnlySlug = !showReadOnlySlug">{{ showReadOnlySlug ? 'Cancel' : 'Change' }}</button></div>
-                            </div>
-                            <div v-if="showReadOnlySlug" class="pc-share-slug">
-                                <div class="pc-share-link">
-                                    <input type="text" v-model="readOnlySlugInput" placeholder="Enter custom name" aria-label="Custom name for the read-only link" class="pc-share-url">
-                                    <button type="button" @click="customizeExistingLink" :disabled="!readOnlySlugInput.trim()" class="pc-share-copy pc-share-copy--primary">Update</button>
-                                </div>
-                                <span class="pc-share-hint">New: pastecal.com/view/{{ readOnlySlugInput || 'custom-name' }}</span>
-                            </div>
-
-                            <div v-if="getReadOnlyURL()" class="pc-share-row">
-                                <div class="pc-share-main"><b class="pc-share-label">Feed URL (view only):</b><span class="pc-share-addr" :title="getReadOnlyICSURL()">{{ shortLink(getReadOnlyICSURL()) }}</span></div>
-                                <div class="pc-share-acts"><button type="button" @click="copyToClipboard(getReadOnlyICSURL(), $event.currentTarget, 'ics')" class="pc-share-copy"><span>Copy</span></button></div>
-                            </div>
-
-                            <div v-if="getReadOnlyURL()" class="pc-share-row">
-                                <div class="pc-share-main"><b class="pc-share-label">Embed on a website</b><span class="pc-share-hint">The read-only calendar in an iframe.</span></div>
-                                <div class="pc-share-acts"><button type="button" @click="copyToClipboard(embedCode(), $event.currentTarget, 'embed')" class="pc-share-copy" data-testid="share-embed-copy"><span>Copy code</span></button></div>
-                            </div>
-
-                            <!-- The full-access feed carries the edit link inside it: kept, but last and labeled. -->
-                            <div v-if="canEdit" class="pc-share-row">
-                                <div class="pc-share-main"><b class="pc-share-label">Feed URL (full access):</b><span class="pc-share-hint pc-share-warn">Gives edit access. Anyone who gets it can change the calendar.</span></div>
-                                <div class="pc-share-acts"><button type="button" @click="copyToClipboard(getEditableICSURL(), $event.currentTarget, 'ics')" class="pc-share-copy"><span>Copy</span></button></div>
-                            </div>
-                        </div>
-                        </template>
                         <button v-if="shareProFocus" type="button" class="pc-share-all" @click="shareProFocus = false" data-testid="share-show-all">Show all sharing options</button>
                     </div>
 
@@ -1039,14 +1028,13 @@
                     <div v-if="showSettings" class="pc-set" data-testid="settings" v-cloak>
                         <div v-if="canEdit" class="pc-seg pc-set-scope" role="group" aria-label="Settings for">
                             <button type="button" class="pc-seg-btn" :class="{ on: settingsScope === 'calendar' }" :aria-pressed="settingsScope === 'calendar' ? 'true' : 'false'"
-                                @click="settingsScope = 'calendar'" data-testid="settings-scope-calendar">This calendar</button>
+                                @click="settingsScope = 'calendar'" data-testid="settings-scope-calendar">Calendar settings</button>
                             <button type="button" class="pc-seg-btn" :class="{ on: settingsScope === 'me' }" :aria-pressed="settingsScope === 'me' ? 'true' : 'false'"
-                                @click="settingsScope = 'me'" data-testid="settings-scope-me">Just me</button>
+                                @click="settingsScope = 'me'" data-testid="settings-scope-me">My settings</button>
                         </div>
 
                         <!-- This calendar: defaults for everyone viewing it -->
                         <div v-if="canEdit && settingsScope === 'calendar'" class="pc-set-pane">
-                            <p class="pc-set-lead">For everyone with the link.</p>
 
                             <div class="pc-set-field">
                                 <div class="pc-set-label-row">
@@ -1105,7 +1093,6 @@
                                     </div>
                                 </div>
                             </div>
-                            <p class="pc-set-hint">Auto opens each person on their own default. Pick a view to start everyone on it.</p>
 
                             <label class="pc-set-check">
                                 <input type="checkbox" id="extendedHours" v-model="calendar.options.extended">
@@ -1135,7 +1122,6 @@
 
                         <!-- Just me: this device, any calendar -->
                         <div v-else class="pc-set-pane">
-                            <p class="pc-set-lead">Only on this device, for every calendar you open.</p>
                             <div class="pc-set-grid">
                                 <div class="pc-set-field">
                                     <label class="pc-set-label" for="set-first-day">First day of week</label>
@@ -1204,7 +1190,6 @@
                                     </div>
                                 </div>
                             </div>
-                            <p class="pc-set-hint">Changes apply as you make them.</p>
                         </div>
                     </div>
 
@@ -1311,7 +1296,6 @@
                                 <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
                                     <span><b>Top countries and cities</b></span></li>
                             </ul>
-                            <p class="pc-side-hint">Counts only. Stats never show who someone is.</p>
                             <button type="button" class="pc-side-btn pc-side-btn--primary" @click="getProFromStats" data-testid="stats-get-pro">Get Pro</button>
                         </div>
                     </div>
@@ -1332,8 +1316,7 @@
                         </li>
                     </ul>
                     <p v-if="recentCalendars.length > homeRecents.length" class="pc-recent-more">{{ recentCalendars.length - homeRecents.length }} more in the menu next to the logo.</p>
-                    <p class="pc-home-new"><strong>Starting a new one?</strong> Click any day on the left, then press Save &amp; share.</p>
-                    <p class="pc-home-draft">This calendar is a draft, saved only in this browser until you press Save &amp; share.</p>
+                    <p class="pc-home-new">Or click any day to start a new one.</p>
                 </template>
                 <template v-else>
                 <h1>The shared calendar <mark class="pc-hl">nobody</mark> has to sign up for.</h1>
@@ -1344,7 +1327,7 @@
                     <li><b>3</b><span>Send the link to your group.</span></li>
                 </ol>
                 </template>
-                <p class="pc-home-links"><a class="pc-home-more" href="/view/demo" data-from="home-panel">See a demo calendar →</a><a class="pc-home-more" href="#how">How pastecal works ↓</a></p>
+                <p v-if="!homeRecents.length" class="pc-home-links"><a v-if="!template" class="pc-home-more" href="/view/demo" data-from="home-panel">See a demo calendar →</a><a class="pc-home-more" href="#how">How pastecal works ↓</a></p>
                 <p v-if="!homeRecents.length" class="pc-home-proof"><span class="pc-quote">“I’ve introduced my apartment complex to it, as it has a shared space on the rooftop that we wanted people to be able to book, in an easy no-login way.” <i>A pastecal user</i></span><span><strong>3,000+</strong> calendars made since 2021</span></p>
                 </div>
             </aside>

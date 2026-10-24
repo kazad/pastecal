@@ -16,11 +16,14 @@ const CalendarTemplates = {
 
     // Chip order on the homepage. Types are slots in the default palette (app.js DEFAULT_COLORS):
     // 1 indigo, 2 pink, 3 coral, 4 green, 5 orange, 6 light blue, 7 gray.
+    // Shared space first: the most common named use (Clarity, Oct 2026) and the one people write in about.
     TEMPLATES: {
-        team: { label: 'Sports team' },
-        family: { label: 'Family' },
+        space: { label: 'Shared space' },
         out: { label: "Who's out" },
+        family: { label: 'Family' },
+        team: { label: 'Sports team' },
         shifts: { label: 'Volunteer shifts' },
+        guests: { label: 'Guest visits' },
         club: { label: 'Club or class' },
     },
 
@@ -77,10 +80,45 @@ const CalendarTemplates = {
     },
 
     _recipes: {
+        // A rooftop that residents book: evenings and weekends, one maintenance day, one building event.
+        space({ on, timed, allDay }) {
+            const sats = on(6), suns = on(0), fris = on(5);
+            timed(fris[0], 18, 0, 180, 'Apt 4B: birthday dinner', 1, 'About 12 people. Grill booked too.');
+            timed(sats[0], 11, 0, 120, 'Apt 2A: brunch', 1);
+            timed(sats[0], 16, 0, 180, 'Apt 7C: BBQ', 1, 'Will clean the grill after.');
+            timed(suns[1], 9, 0, 60, 'Morning yoga (open to all)', 5, 'Bring a mat.');
+            timed(on(3)[1], 19, 0, 120, 'Apt 5D: book club', 1);
+            allDay(on(2)[2], 1, 'Closed: deck maintenance', 7);
+            timed(sats[2], 18, 0, 180, 'Building potluck', 5, 'Everyone welcome. Bring a dish to share.');
+            timed(fris[fris.length - 1], 19, 0, 120, 'Apt 3B: movie night', 1, 'Projector from the office.');
+            return {
+                title: 'Rooftop bookings',
+                labels: { 1: 'Booked', 5: 'Building event', 7: 'Closed' },
+                notes: ['Book the rooftop: add an event with your apartment and what it is for.',
+                    'Quiet hours start at 10pm. Leave it as you found it.', 'Grill propane is in the cabinet by the door.'],
+            };
+        },
+
+        // Who is staying in the guest room, with cleaning between visits.
+        guests({ on, allDay }) {
+            const fris = on(5), mons = on(1);
+            allDay(fris[0], 3, 'Grandma and Grandpa', 1);
+            allDay(mons[1], 1, 'Cleaning', 7);
+            allDay(on(4)[1], 4, 'Chris and Jamie', 1);
+            allDay(fris[2], 2, 'Hold: maybe Aunt Rose', 5);
+            allDay(mons[mons.length - 1], 1, 'Cleaning', 7);
+            return {
+                title: 'Guest room',
+                labels: { 1: 'Staying', 5: 'Hold', 7: 'Cleaning' },
+                notes: ['Planning a visit? Add your dates as Hold, then change it to Staying once it is set.',
+                    'Wi-Fi: GuestRoom / password on the fridge.', 'Fresh sheets are in the hall closet.'],
+            };
+        },
+
         // Practice twice a week, a game every Saturday, two team events.
         team({ on, timed }) {
             const teams = ['Hawks', 'Lions', 'Rockets', 'Comets', 'Owls'];
-            const snacks = ['Lee', 'Garcia', 'Patel', 'Nguyen', 'Okafor'];
+            const snacks = ['Miller', 'Garcia', 'Brooks', 'Nguyen', 'Carter'];
             on(2).concat(on(4)).forEach((d) => timed(d, 17, 0, 75, 'Practice', 1));
             on(6).forEach((d, i) => timed(d, [9, 10, 11][i % 3], 0, 60,
                 i % 2 ? `Game at ${teams[i]}` : `Game vs ${teams[i]}`, 2, `Snacks: ${snacks[i]} family`));
@@ -117,13 +155,13 @@ const CalendarTemplates = {
         // Who is away, all-day events; nobody works from home on the offsite.
         out({ on, allDay }) {
             const mondays = on(1), fridays = on(5);
-            allDay(mondays[1], 3, 'Ana: vacation', 4);
+            allDay(mondays[1], 3, 'Alex: vacation', 4);
             allDay(on(4)[2], 2, 'Team offsite', 2);
-            allDay(fridays[fridays.length - 1], 1, 'Priya: vacation', 4);
-            on(2).forEach((d) => allDay(d, 1, 'Raj: WFH', 6));
-            allDay(mondays[0], 1, 'Lee: WFH', 6);
-            allDay(mondays[mondays.length - 1], 1, 'Lee: WFH', 6);
-            allDay(on(4)[1], 1, 'Lee: sick', 3);
+            allDay(fridays[fridays.length - 1], 1, 'Jordan: vacation', 4);
+            on(2).forEach((d) => allDay(d, 1, 'Sam: WFH', 6));
+            allDay(mondays[0], 1, 'Taylor: WFH', 6);
+            allDay(mondays[mondays.length - 1], 1, 'Taylor: WFH', 6);
+            allDay(on(4)[1], 1, 'Taylor: sick', 3);
             return {
                 title: "Who's out: Design team",
                 labels: { 2: 'Offsite', 3: 'Sick', 4: 'Vacation', 6: 'WFH' },

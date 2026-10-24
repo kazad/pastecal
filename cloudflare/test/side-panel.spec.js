@@ -77,7 +77,7 @@ test('editor: every header button and every tab opens the panel beside the calen
     await page.getByTestId(`side-tab-${tab}`).click();
     await expect(panel(page)).toHaveAttribute('data-tab', tab);
   }
-  await expect(panel(page).getByRole('heading', { name: 'Send to your group' })).toBeVisible();
+  await expect(panel(page).getByRole('heading', { name: 'View-only link' })).toBeVisible();
   await page.getByTestId('side-tab-notes').click();
   await expect(page.getByTestId('notes-read')).toContainText('Rainouts decided by 7am');   // read first
   await expect(panel(page).getByLabel('Calendar notes')).toHaveCount(0);
@@ -134,17 +134,19 @@ test('Share in the panel still copies its links', async ({ browser, request }) =
   await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.getByTestId('share-pill-more').click();
   // Ordered by what people do most: the read-only link first, then calendar apps, then helpers.
-  const order = await panel(page).locator('.pc-share-item h4').allTextContents();
-  expect(order).toEqual(['Send to your group', 'Add to a calendar app', 'Helpers who can edit']);
+  const order = await panel(page).locator('.pc-link-item h4').allTextContents();
+  expect(order).toEqual(['View-only link', 'Edit link', 'This view', 'Calendar feed']);
   await expect(page.getByTestId('share-pro-card')).toContainText('Lock this calendar');
   expect(await page.$eval('.pc-side-body', (b) => b.scrollHeight <= b.clientHeight + 1), 'Share fits without scrolling').toBe(true);
-  await expect(page.getByTestId('share-readonly-addr')).toHaveText(`pastecal.com/view/${viewId}`);
-  await page.getByTestId('share-group').getByRole('button', { name: 'Copy' }).click();
+  await expect(page.getByTestId('share-readonly-addr')).toContainText(`pastecal.com/view/${viewId}`);
+  await page.getByTestId('share-readonly-addr').click();                    // the field itself copies
+  await expect(page.getByTestId('share-readonly-addr')).toHaveClass(/is-copied/);
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain(`/view/${viewId}`);
-  // The rest is one click away, the full-access feed labeled for what it gives.
-  await expect(page.getByTestId('share-more-options')).toHaveCount(0);
-  await page.getByTestId('share-more').click();
-  await expect(page.getByTestId('share-more-options')).toContainText('Gives edit access');
+  // Nothing hidden behind a toggle; the full-access feed is labeled for what it gives.
+  await expect(page.getByTestId('share-more-options')).toBeVisible();
+  await expect(page.getByTestId('share-editfeed-copy')).toContainText('edit access');
+  await page.getByTestId('share-view-help').click();
+  await expect(page.getByTestId('share-view-help-body')).toContainText('view=week');
   await page.getByTestId('share-view-copy').click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain(`/${id}`);
   await ctx.close();
@@ -208,7 +210,7 @@ test('the same five tabs in the same order, and the row never scrolls', async ({
     expect(row[0], `${viewport.width}px: no hidden tabs`).toBeLessThanOrEqual(row[1]);
     // Stats on a free calendar: what Pro shows, no numbers, one way to get it.
     await page.getByTestId('side-tab-stats').click();
-    await expect(page.getByTestId('stats-teaser')).toContainText('Counts only');
+    await expect(page.getByTestId('stats-teaser')).toContainText('Get Pro');
     await expect(page.getByTestId('stats-teaser')).not.toContainText(/\d+ (views|followers)/);
     await expect(page.getByTestId('stats-get-pro')).toBeVisible();
     await ctx.close();

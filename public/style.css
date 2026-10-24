@@ -1987,3 +1987,93 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 .pc-tour-quotes blockquote { margin: 0; padding: 16px 18px; border-radius: 12px; background: var(--pc-soft); font-size: 16px; line-height: 1.5; color: var(--pc-text) }
 .pc-tour-quotes cite { display: block; margin-top: 8px; font-style: normal; font-size: 13px; color: var(--pc-text-muted) }
 @media (max-width: 640px) { .pc-tour-quotes { grid-template-columns: 1fr } }
+/* Stacked month chips keep a 2px gap, so two same-color events never merge into one bar. */
+.e-schedule .e-month-view .e-appointment { border-bottom: 2px solid transparent !important; background-clip: padding-box !important }
+/* No divider before the view buttons: the pills are their own group. */
+.e-schedule .e-schedule-toolbar .e-separator { display: none !important }
+/* Recent calendars in the guide are cards, not links: no underline, a lift on hover instead. */
+.pc-home-recents a, .pc-home-recents a:hover, .pc-home-recents a * { text-decoration: none !important }
+.pc-home-recents a:hover { border-color: var(--pc-link) }
+
+/* Side panel tabs: five labeled tabs fit the column (tighter padding, 14px). */
+.pc-side-tabs .pc-side-tab { padding: 0 9px }
+@media (min-width: 1100px) and (max-width: 1279px) { .pc-side-tabs .pc-side-tab { padding: 0 7px; font-size: 13.5px } }
+
+/* Selects in the app: our own chevron with room for it, not the browser's arrow jammed at the edge. */
+.pc-side select, .pc-tpl select {
+  -webkit-appearance: none; appearance: none; padding-right: 34px !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 11px center; background-size: 16px 16px }
+:root[data-theme="dark"] .pc-side select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239aa3b2' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") }
+
+/* Share: each link is a visible field with its Copy and Share buttons beside it; no captions. */
+.pc-share-item .pc-share-acts { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; margin-top: 8px; width: 100% }
+.pc-share-field { flex: 1; min-width: 0; height: 36px; display: flex; align-items: center; padding: 0 12px; border: 1px solid var(--pc-field); border-radius: var(--pc-radius-md);
+  background: var(--pc-bg); color: var(--pc-text); font: 500 13.5px/1 var(--pc-font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: all }
+.pc-share-item .pc-share-copy { height: 36px }
+.pc-share-tag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: var(--pc-soft); color: var(--pc-text-muted); font-size: 11.5px; font-weight: 600; vertical-align: 2px }
+.pc-share-tag--warn { background: var(--pc-danger-soft); color: var(--pc-danger) }
+.pc-share-more-title { margin: 18px 0 4px; font-size: 12px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--pc-text-muted) }
+/* Header address pill: a labeled Share button instead of a lone chevron. */
+.pc-pill-share-btn { height: 28px; padding: 0 12px; border-radius: 999px; background: var(--pc-link); color: var(--pc-on-accent) !important; font-weight: 600; font-size: 13px; border: 0 }
+.pc-pill-share-btn:hover { filter: brightness(1.08) }
+/* Five labeled tabs fit the narrow docked column too. */
+@media (min-width: 1100px) and (max-width: 1279px) { .pc-side-tabs .pc-side-tab { padding: 0 6px; font-size: 13px } .pc-side-close { width: 30px } }
+/* Search color filters: a named color shows its name (a chip with its dot); unnamed ones stay dots. */
+.pc-filter-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px 0 8px; border-radius: 999px; border: 1px solid var(--pc-line);
+  background: var(--pc-bg); color: var(--pc-text); font: 500 12.5px/1 var(--pc-font); white-space: nowrap }
+.pc-filter-chip::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--dot); border: 2px solid var(--dot) }
+.pc-filter-chip.is-off { color: var(--pc-text-muted); text-decoration: line-through }
+.pc-filter-chip.is-off::before { background: transparent; border-style: dashed }
+/* Link rows: label on the first line, the field + buttons on their own full-width line below. */
+.pc-share-item { flex-wrap: wrap }
+.pc-share-item .pc-share-main { flex: 1 1 0; min-width: 0 }
+.pc-share-item .pc-share-acts { flex: 1 0 100%; margin-top: 2px; padding-left: 30px }
+.pc-share-addr { font-family: var(--pc-font) !important }
+.pc-share-item { padding: 10px 0 }
+.pc-share-more .pc-share-row { padding: 5px 0 }
+.pc-share-more-title { margin-top: 12px }
+
+/* ── Share, GitHub-style: every link visible; the field is the copy button ── */
+.pc-links { display: flex; flex-direction: column; gap: 14px }
+.pc-link-item { display: flex; flex-direction: column; gap: 6px }
+.pc-link-head { display: flex; align-items: center; gap: 8px; min-height: 22px }
+.pc-link-head .pc-share-label { margin: 0; font-size: 14px; font-weight: 650 }
+.pc-link-head .pc-share-tag { margin: 0; vertical-align: 0 }
+.pc-link-extra { margin-left: auto; border: 0; background: none; padding: 2px 0; color: var(--pc-link); font: 600 13px/1 var(--pc-font); cursor: pointer }
+.pc-link-extra:hover { text-decoration: underline }
+.pc-link-extra--quiet { margin: 8px 0 0; color: var(--pc-text-muted); font-weight: 500; font-size: 12.5px; align-self: flex-start }
+.pc-link-row { display: flex; gap: 6px }
+.pc-link { flex: 1; min-width: 0; height: 38px; display: flex; align-items: center; gap: 8px; padding: 0 6px 0 12px; border: 1px solid var(--pc-field); border-radius: var(--pc-radius-md);
+  background: var(--pc-soft); color: var(--pc-text); font: 500 13.5px/1 var(--pc-font); cursor: copy; text-align: left; transition: border-color .15s, background .15s }
+.pc-link:hover { border-color: var(--pc-link); background: var(--pc-bg) }
+.pc-link:focus-visible { outline: 2px solid var(--pc-link); outline-offset: 1px }
+.pc-link-url { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.pc-link--code { height: 40px; padding-left: 12px }
+.pc-link--code .pc-link-url { font: 500 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--pc-text-muted) }
+.pc-link-act { flex: none; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 6px; color: var(--pc-text-muted) }
+.pc-link:hover .pc-link-act { color: var(--pc-link); background: var(--pc-soft) }
+.pc-link-ico { width: 16px; height: 16px }
+.pc-link.is-copied { border-color: var(--pc-success, #1f7a4d); background: var(--pc-success-soft, #e3f3ea) }
+.pc-link.is-copied .pc-link-act { color: var(--pc-success, #1f7a4d); background: transparent }
+.pc-link-share { flex: none; width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid var(--pc-field); border-radius: var(--pc-radius-md); background: var(--pc-bg); color: var(--pc-text-muted); cursor: pointer }
+.pc-link-share:hover { color: var(--pc-link); border-color: var(--pc-link) }
+.pc-link-share svg { width: 17px; height: 17px }
+.pc-link-prefix { flex: none; color: var(--pc-text-muted); font-size: 13px }
+.pc-link-help { padding: 10px 12px; border-radius: var(--pc-radius-md); background: var(--pc-soft); color: var(--pc-text-muted); font-size: 12.5px; line-height: 1.5 }
+.pc-link-help dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 10px; margin: 6px 0 0 }
+.pc-link-help dd { margin: 0 }
+.pc-link-help code { font: 500 12px ui-monospace, Menlo, monospace; color: var(--pc-text) }
+.pc-links-sec { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--pc-line); display: flex; flex-direction: column }
+.pc-links-sec .pc-share-more-title { margin: 0 0 8px }
+.pc-share-apps--grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 0 }
+.pc-share-apps--grid .pc-share-app { justify-content: center; text-align: center }
+.pc-share-pro--row { display: flex; align-items: center; gap: 12px; margin-top: 16px; padding: 12px 14px }
+.pc-share-pro--row > svg { flex: none; color: var(--pc-link) }
+.pc-share-pro--row > span { flex: 1; line-height: 1.4; font-size: 13px; color: var(--pc-text-muted) }
+.pc-share-pro--row > span b { color: var(--pc-text); font-size: 14px }
+.pc-share-pro--row .pc-pro-link { margin: 0; white-space: nowrap }
+.pc-share .pc-share-pro.pc-share-pro--row { flex-direction: row !important; align-items: center !important; text-align: left !important; margin-top: 14px; padding: 10px 14px }
+.pc-share-pro--row .pc-pro-link { margin-left: auto !important }
+.pc-links { gap: 12px }
+.pc-links-sec { margin-top: 14px; padding-top: 12px }

@@ -30,7 +30,7 @@ test('pick a template, switch, keep your own event, then Save & share saves it a
   const { ctx, page } = await open(browser);
   const row = page.getByTestId('templates');
   await expect(row).toContainText('Start from:');
-  await expect(row).toContainText('or click any day to start from scratch');
+  await expect(row).toContainText('Blank');
 
   // 1. a pick fills the month, names the colors, titles the calendar and writes notes
   await page.getByTestId('tpl-team').click();
@@ -41,7 +41,7 @@ test('pick a template, switch, keep your own event, then Save & share saves it a
   expect(d.title).toBe('Tigers U10 Soccer');
   expect(d.notes).toContain('Home field');
   expect(d.labels.slice(0, 2)).toEqual(['Practice', 'Game']);
-  await expect(page.getByTestId('tpl-nudge')).toContainText('Save & share for a link anyone can open. No sign-up.');
+  await expect(page.getByTestId('tpl-nudge')).toContainText('for a link anyone can open. No sign-up.');
   await expect(page.getByTestId('grid-tip')).toHaveCount(0);
 
   // 2. another chip replaces the template's events (nothing of yours yet, so no question)
@@ -78,7 +78,7 @@ test('pick a template, switch, keep your own event, then Save & share saves it a
   expect((await draft(page)).title).toBe('Tigers U10 Soccer');
 
   // 5. Save & share from the nudge: the name is the visitor's, never one made from the template
-  await page.getByTestId('tpl-nudge-share').click();
+  await page.getByTestId('share-new').click();
   const input = page.getByLabel('Claim custom URL');
   await expect(input).toBeVisible();
   expect(await input.inputValue()).not.toMatch(/tigers|practice/i);
@@ -111,12 +111,12 @@ test('Start blank clears the template; Cmd+Z undoes a pick and a switch', async 
   // Start blank: back to a fresh draft, example event and all
   await page.getByTestId('tpl-club').click();
   await expect(appt(page, 'Meeting').first()).toBeVisible();
-  await page.getByTestId('tpl-nudge-blank').click();
+  await page.getByTestId('tpl-blank').click();
   await expect.poll(async () => (await titles(page)).filter(isTpl)).toEqual([]);
   expect(await titles(page)).toEqual(['Your event here']);
   expect(await draft(page)).toMatchObject({ title: 'New Calendar', notes: '' });
   await expect(page.getByTestId('tpl-nudge')).toHaveCount(0);
-  await expect(page.getByTestId('templates')).toContainText('or click any day to start from scratch');
+  await expect(page.getByTestId('templates')).toContainText('Blank');
 
   // Cmd+Z right after a pick undoes it, title and notes included
   await page.getByTestId('tpl-shifts').click();
@@ -145,7 +145,7 @@ test('Start blank clears the template; Cmd+Z undoes a pick and a switch', async 
   await expect(page.getByTestId('tpl-team')).toHaveAttribute('aria-pressed', 'true');
   await page.getByTestId('tpl-out').click();
   await expect(page.getByTestId('tpl-confirm')).toHaveCount(0);   // nothing of the visitor's to ask about
-  await expect(appt(page, 'Raj: WFH').first()).toBeVisible();
+  await expect(appt(page, 'Sam: WFH').first()).toBeVisible();
   await ctx.close();
 });
 

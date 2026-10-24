@@ -254,7 +254,8 @@ const CalendarVueApp = {
 
             // Read-only slug properties
             showReadOnlySlug: false,
-            shareMore: false,           // Share's "More sharing options" is open
+            copiedKey: null,            // which Share link just copied (shows a check)
+            showViewHelp: false,        // Share's "This view" explainer is open
             creatingReadOnly: false,    // Share's "Create read-only link" is waiting on the server
             readOnlySlugInput: '',
 
@@ -283,6 +284,17 @@ const CalendarVueApp = {
     },
 
     computed: {
+        // "Week of Oct 18": what Share's "This view" link opens, read back from its own URL.
+        viewLinkTag() {
+            try {
+                const u = new URL(this.currentViewURL, location.origin);
+                const d = u.searchParams.get('date'), v = u.searchParams.get('view') || '';
+                if (!d) return 'current view';
+                const day = new Date(d + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                const name = v === 'custom' ? `${u.searchParams.get('dur')} ${u.searchParams.get('unit')}` : v.charAt(0).toUpperCase() + v.slice(1);
+                return `${name}, ${day}`;
+            } catch (e) { return 'current view'; }
+        },
         // ---- The side panel: Notes, Share, Activity, Stats, Settings (and Search, Help) ---------
         // One panel at a time, beside the calendar. The show* flags stay the source of truth
         // (the Escape key, analytics and history refreshes all read them); this names which is up.
@@ -312,7 +324,7 @@ const CalendarVueApp = {
                 { id: 'share', label: 'Share' },
                 { id: 'changes', label: 'Activity' },
                 { id: 'stats', label: 'Stats' },
-                { id: 'settings', label: 'Settings', icon: 'settings' },
+                { id: 'settings', label: 'Settings' },
             ];
         },
         // The tab that reads as selected. History (every saved version) opens from Activity, so it stays lit.
@@ -1815,7 +1827,7 @@ const CalendarVueApp = {
         },
 
         showShare(newValue) {
-            if (!newValue) { this.shareProFocus = false; this.shareMore = false; }   // the Get Pro view lasts until Share closes
+            if (!newValue) { this.shareProFocus = false; this.showViewHelp = false; }   // the Get Pro view lasts until Share closes
             if (newValue) {
                 this.updateCurrentViewURL();
                 this.startUpdateLinkTimer();
@@ -2863,6 +2875,11 @@ const CalendarVueApp = {
         // literally "Type 1".."Type 8" -- a slot index with no referent, which read aloud
         // sounds like information while conveying none. Fall back to the dot's own color
         // instead, which is at least something the user can see on screen.
+        // A color the calendar has named ("Practice"), not just the color's own name.
+        hasTypeLabel(index) {
+            const label = this.calendar?.options?.typeLabels?.[index];
+            return !!label && !/^Type \d+$/.test(label);
+        },
         typeLabelFor(index) {
             const custom = this.calendar?.options?.typeLabels;
             const label = custom && custom[index];
@@ -4862,6 +4879,17 @@ const CalendarVueApp = {
          *   call site says which -- an untagged copy still works, it just isn't
          *   attributed.
          */
+        // Share's click-to-copy fields: reactive "copied" state, so Vue owns the markup.
+        copyLink(key, text, method) {
+            if (!text) { this.showToast('Nothing to copy', 'error'); return; }
+            if (method) track(a => a.calendarShared(method));
+            navigator.clipboard.writeText(text).then(() => {
+                this.copiedKey = key;
+                clearTimeout(this._copiedTimer);
+                this._copiedTimer = setTimeout(() => { this.copiedKey = null; }, 1500);
+            }).catch(() => this.showToast('Failed to copy link', 'error'));
+        },
+
         copyToClipboard(textToCopy, buttonElement, method) {
             if (!textToCopy) {
                 this.showToast('Nothing to copy', 'error');
