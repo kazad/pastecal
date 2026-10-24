@@ -5,7 +5,7 @@
  *   POST /api/auth/start      {email, next?}     -> {ok:true} always (never says if the email is known)
  *   POST /api/auth/peek       {token}            -> {ok, email} without using the link up (the sign-in page asks
  *                                                   "Sign in as <email>?" and verifies only on a click: no login CSRF)
- *   POST /api/auth/verify     {token}            -> {ok, email, next} + Set-Cookie pc_session (30 days)
+ *   POST /api/auth/verify     {token}            -> {ok, email, next} + Set-Cookie pc_session (Max-Age 400 days)
  *   POST /api/auth/signout                       -> {ok:true}, cookie cleared
  *   POST /api/auth/signout-all                   -> {ok:true, sessionsEnded}: every session of this user, on every
  *                                                   device, ends (cookie cleared); 401 signed-out
@@ -14,7 +14,9 @@
  *                                                   but lose the link to the user. Cancels nothing: 409
  *                                                   {error:'active-subscription', calendars} while any subscription
  *                                                   is active, trialing or past_due (cancel it first). 401 signed-out
- *   GET  /api/me                                 -> {email, calendars:[{id, status, plan, interval, currentPeriodEnd}]} | 401
+ *   GET  /api/me                                 -> {email, calendars:[{id, status, plan, interval, currentPeriodEnd}]} | 401;
+ *                                                   re-sends the cookie (fresh Max-Age) when the session was renewed
+ *                                                   in the last day, so browsers keep it
  *   POST /api/pro/checkout    {calendarId, interval?:'year'|'month', editName?} -> {url} (Stripe Checkout)
  *   POST /api/pro/portal      {calendarId?}      -> {url} (Stripe Billing Portal)
  *   POST /api/pro/editor-key  {calendarId}       -> {editorKey}, shown once (owner only). Compatibility: revokes
@@ -40,12 +42,16 @@
  * renewals and a later re-subscribe never send it again.
  *
  * Tokens (sign-in links, sessions) are 128-bit random, base64url; only their SHA-256 is stored.
+ * Sessions roll: each lasts 365 days from its last renewal, and any use more than a day after the
+ * last renewal renews it (one UPDATE, at most daily). Someone who visits at least once a year never
+ * signs in again. Sign out (everywhere) and account delete still end them at once.
  * Cookie-authenticated POSTs need Content-Type: application/json and an Origin of pastecal.com.
  *
  * ACCOUNTS_DEV_MODE=1 (only ever in .dev.vars or --var, never in wrangler.jsonc) is for local tests:
  * it allows http://localhost origins, writes sign-in emails to an outbox instead of sending them,
- * lets STRIPE_API_BASE / LOCK_API_BASE point at local fakes, and opens three admin test hooks:
+ * lets STRIPE_API_BASE / LOCK_API_BASE point at local fakes, and opens these admin test hooks:
  *   GET  /api/admin/accounts/outbox?email=, POST /api/admin/accounts/expire-tokens {email, ageMs?},
+ *   POST /api/admin/accounts/age-sessions {email, ageMs} (moves that user's sessions back in time),
  *   POST /api/admin/accounts/dev-subscription {email, calendarId, status?, interval?, currentPeriodEnd?}
  *        (a subscription row without Stripe, so /api/me lists the calendar; no lock is changed).
  */
@@ -56,7 +62,9 @@ import { INTERVALS, stripeConfig, stripeRequest, verifyStripeSignature, summariz
 
 const SITE = 'https://pastecal.com';
 const LOGIN_TTL = 15 * 60 * 1000;
-const SESSION_TTL = 30 * 24 * 3600 * 1000;
+const SESSION_TTL = 365 * 24 * 3600 * 1000;   // from the last renewal (see sessionUser)
+const SESSION_RENEW_AFTER = 24 * 3600 * 1000;  // renew at most once a day per session
+const COOKIE_MAX_AGE = 400 * 24 * 3600;        // seconds; Chrome caps cookie lifetimes at 400 days
 const LOGINS_PER_EMAIL_PER_HOUR = 5;
 const LOGINS_PER_EMAIL_PER_DAY = 10;     // and no more than this a day: nobody can flood an inbox slowly either
 const ACTIVE = new Set(['active', 'trialing', 'past_due']);
@@ -69,6 +77,7 @@ const SUBSCRIPTION_EVENTS = new Set(['checkout.session.completed', 'customer.sub
 // A full refund or a dispute ends the subscription that charge paid for (which unlocks as usual).
 const CHARGE_EVENTS = new Set(['charge.refunded', 'charge.dispute.created']);
 const CHECKOUT_RESTARTS_PER_HOUR = 3;
+const TEST_INBOX_RETAIN_MS = 7 * 24 * 3600 * 1000, TEST_INBOX_MAX = 500;   // see TestInbox.js
 
 // Same rule as index.js: any name Firebase allowed.
 const validId = (id) => typeof id === 'string' && id.length >= 1 && id.length <= 200 && !/[.#$\[\]\/\u0000-\u001f\u007f]/.test(id);
@@ -112,11 +121,15 @@ export class Accounts extends DurableObject {
             CREATE TABLE IF NOT EXISTS processed_events (event_id TEXT PRIMARY KEY, at INTEGER);
             CREATE TABLE IF NOT EXISTS outbox (id INTEGER PRIMARY KEY AUTOINCREMENT, to_email TEXT, subject TEXT, text TEXT, at INTEGER);
             CREATE TABLE IF NOT EXISTS checkout_holds (calendar_id TEXT PRIMARY KEY, user_id TEXT, expires_at INTEGER);
-            CREATE TABLE IF NOT EXISTS welcome_emails (calendar_id TEXT, user_id TEXT, at INTEGER, PRIMARY KEY (calendar_id, user_id));`);
+            CREATE TABLE IF NOT EXISTS welcome_emails (calendar_id TEXT, user_id TEXT, at INTEGER, PRIMARY KEY (calendar_id, user_id));
+            CREATE TABLE IF NOT EXISTS test_inbox (id INTEGER PRIMARY KEY AUTOINCREMENT, to_addr TEXT, from_addr TEXT, subject TEXT,
+                received_at INTEGER, text TEXT, truncated INTEGER, auth_results TEXT, arc_auth_results TEXT, has_dkim_signature INTEGER);
+            CREATE INDEX IF NOT EXISTS test_inbox_to ON test_inbox(to_addr, id);`);
         // Added later (an existing table keeps its columns): which subscription came first, and the
         // Checkout Session a hold guards plus how often its buyer restarted it.
         for (const col of ['subscriptions ADD COLUMN created INTEGER', 'checkout_holds ADD COLUMN session_id TEXT',
-            'checkout_holds ADD COLUMN restarts INTEGER', 'checkout_holds ADD COLUMN window_start INTEGER']) {
+            'checkout_holds ADD COLUMN restarts INTEGER', 'checkout_holds ADD COLUMN window_start INTEGER',
+            'sessions ADD COLUMN renewed_at INTEGER']) {
             try { this.sql.exec(`ALTER TABLE ${col}`); } catch (_) { /* already there */ }
         }
     }
@@ -152,15 +165,23 @@ export class Accounts extends DurableObject {
         this.sql.exec(`UPDATE login_tokens SET used = 1 WHERE hash = ?`, hash);
         const userId = this.ensureUser(row.email);
         const session = randomToken();
-        this.sql.exec(`INSERT INTO sessions (hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)`, await sha256(session), userId, now, now + SESSION_TTL);
+        this.sql.exec(`INSERT INTO sessions (hash, user_id, created_at, expires_at, renewed_at) VALUES (?, ?, ?, ?, ?)`, await sha256(session), userId, now, now + SESSION_TTL, now);
         return { session, email: row.email, next: row.next };
     }
 
+    // A live session's user, renewing it when its last renewal is over a day old. An expired session is
+    // refused, never revived. renewedAt says when it was last renewed (the caller may re-send the cookie).
     async sessionUser(token) {
-        const hash = await sha256(token);
-        const row = this.sql.exec(`SELECT s.hash, s.user_id, s.expires_at, u.email FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.hash = ?`, hash).toArray()[0];
-        if (!row || !timingSafeEqual(row.hash, hash) || row.expires_at <= Date.now()) return null;
-        return { userId: row.user_id, email: row.email };
+        const now = Date.now(), hash = await sha256(token);
+        const row = this.sql.exec(`SELECT s.hash, s.user_id, s.expires_at, COALESCE(s.renewed_at, s.created_at) AS renewed, u.email
+            FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.hash = ?`, hash).toArray()[0];
+        if (!row || !timingSafeEqual(row.hash, hash) || row.expires_at <= now) return null;
+        let renewedAt = row.renewed;
+        if (now - renewedAt > SESSION_RENEW_AFTER) {
+            this.sql.exec(`UPDATE sessions SET expires_at = ?, renewed_at = ? WHERE hash = ?`, now + SESSION_TTL, now, hash);
+            renewedAt = now;
+        }
+        return { userId: row.user_id, email: row.email, renewedAt };
     }
 
     async endSession(token) { this.sql.exec(`DELETE FROM sessions WHERE hash = ?`, await sha256(token)); }
@@ -317,10 +338,38 @@ export class Accounts extends DurableObject {
         this.sql.exec(`DELETE FROM processed_events WHERE at < ?`, now - 60 * 24 * 3600 * 1000);   // Stripe retries for 3 days
     }
 
+    // Test inbox (TestInbox.js): kept 7 days, 500 messages at most, pruned on every insert.
+    addTestMail(m, receivedAt = Date.now()) {
+        this.sql.exec(`INSERT INTO test_inbox (to_addr, from_addr, subject, received_at, text, truncated, auth_results, arc_auth_results, has_dkim_signature)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, m.to, m.from, m.subject, receivedAt, m.text, m.truncated, m.authResults, m.arcAuthResults, m.hasDkimSignature);
+        this.sql.exec(`DELETE FROM test_inbox WHERE received_at < ?`, Date.now() - TEST_INBOX_RETAIN_MS);
+        this.sql.exec(`DELETE FROM test_inbox WHERE id NOT IN (SELECT id FROM test_inbox ORDER BY id DESC LIMIT ?)`, TEST_INBOX_MAX);
+    }
+    listTestMail(to, limit) {
+        return to ? this.sql.exec(`SELECT * FROM test_inbox WHERE to_addr = ? ORDER BY id DESC LIMIT ?`, to, limit).toArray()
+            : this.sql.exec(`SELECT * FROM test_inbox ORDER BY id DESC LIMIT ?`, limit).toArray();
+    }
+    clearTestMail(to) {
+        const where = to ? ['WHERE to_addr = ?', to] : [''];
+        const n = this.sql.exec(`SELECT COUNT(*) AS n FROM test_inbox ${where[0]}`, ...where.slice(1)).one().n;
+        this.sql.exec(`DELETE FROM test_inbox ${where[0]}`, ...where.slice(1));
+        return n;
+    }
+    // Dev mode only: placeholder messages, received ageMs ago, through the same pruning.
+    seedTestMail(to, count, ageMs) {
+        for (let i = 0; i < count; i++) this.addTestMail({ to, from: 'seed@example.com', subject: `seed ${i}`, text: '', truncated: 0,
+            authResults: '', arcAuthResults: '', hasDkimSignature: 0 }, Date.now() - ageMs);
+        return { total: this.sql.exec(`SELECT COUNT(*) AS n FROM test_inbox`).one().n };
+    }
+
     // Dev mode only (see the file header).
     addOutbox(to, subject, text) { this.sql.exec(`INSERT INTO outbox (to_email, subject, text, at) VALUES (?, ?, ?, ?)`, to, subject, text, Date.now()); }
     listOutbox(to) { return this.sql.exec(`SELECT to_email, subject, text, at FROM outbox WHERE to_email = ? ORDER BY id`, to).toArray(); }
     expireLoginTokens(email) { this.sql.exec(`UPDATE login_tokens SET expires_at = ? WHERE email = ?`, Date.now() - 1, email); }
+    ageSessions(email, ms) {
+        this.sql.exec(`UPDATE sessions SET created_at = created_at - ?, expires_at = expires_at - ?, renewed_at = COALESCE(renewed_at, created_at) - ?
+            WHERE user_id = (SELECT id FROM users WHERE email = ?)`, ms, ms, ms, email);
+    }
     ageLoginTokens(email, ms) { this.sql.exec(`UPDATE login_tokens SET created_at = created_at - ?, expires_at = expires_at - ? WHERE email = ?`, ms, ms, email); }
 }
 
@@ -438,9 +487,14 @@ async function route(request, env, url, path) {
     }
     if (path === '/api/me') {
         if (m !== 'GET') return json({ error: 'method' }, 405);
-        const userId = await sessionUserId(request, env);
-        const me = userId && await accounts(env).me(userId);
-        return me ? json(me) : json({ error: 'signed-out' }, 401);
+        // Not sessionUserId: this needs renewedAt. The socket or /api/pro/status may have renewed the
+        // session moments before on the same page load, so "renewed in the last day" re-sends the cookie
+        // (same token, fresh Max-Age), not only "renewed by this request".
+        const token = cookieToken(request);
+        const s = token && await accounts(env).sessionUser(token);
+        const me = s && await accounts(env).me(s.userId);
+        if (!me) return json({ error: 'signed-out' }, 401);
+        return json(me, 200, Date.now() - s.renewedAt < SESSION_RENEW_AFTER ? { 'Set-Cookie': sessionCookie(token, COOKIE_MAX_AGE) } : {});
     }
     if (path === '/api/pro/status') {
         if (m !== 'GET') return json({ error: 'method' }, 405);
@@ -493,7 +547,7 @@ async function route(request, env, url, path) {
         if (!looksLikeToken(body.token)) return json({ ok: false, error: 'This sign-in link is not valid. Ask for a new one.' }, 400);
         const out = await accounts(env).consumeLoginToken(body.token);
         if (!out) return json({ ok: false, error: 'This sign-in link has expired or was already used. Ask for a new one.' }, 400);
-        return json({ ok: true, email: out.email, next: out.next || null }, 200, { 'Set-Cookie': sessionCookie(out.session, SESSION_TTL / 1000) });
+        return json({ ok: true, email: out.email, next: out.next || null }, 200, { 'Set-Cookie': sessionCookie(out.session, COOKIE_MAX_AGE) });
     }
     if (path === '/api/auth/signout') {
         const token = cookieToken(request);
@@ -895,6 +949,12 @@ async function handleAdmin(request, env, url, path) {
         // ageMs: move the links back in time (as if sent that long ago), for the daily-limit test.
         if (Number.isFinite(body.ageMs) && body.ageMs > 0) await acc.ageLoginTokens(email, body.ageMs);
         else await acc.expireLoginTokens(email);
+        return json({ ok: true });
+    }
+    if (devMode(env) && path === '/api/admin/accounts/age-sessions' && request.method === 'POST') {
+        const body = (await readJson(request)) || {};
+        if (!Number.isFinite(body.ageMs) || body.ageMs <= 0) return json({ error: 'need ageMs' }, 400);
+        await acc.ageSessions(String(body.email || '').toLowerCase(), body.ageMs);
         return json({ ok: true });
     }
     if (devMode(env) && path === '/api/admin/accounts/dev-subscription' && request.method === 'POST') {

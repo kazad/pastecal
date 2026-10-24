@@ -50,11 +50,11 @@ assert.equal(r.status, 200);
 const v = await r.json();
 assert.equal(v.email, ann); assert.equal(v.next, '/team-calendar');
 const setCookie = r.headers.get('set-cookie');
-assert.match(setCookie, /^pc_session=[A-Za-z0-9_-]{22}; HttpOnly; Secure; SameSite=Lax; Path=\/; Max-Age=2592000$/);
+assert.match(setCookie, /^pc_session=[A-Za-z0-9_-]{22}; HttpOnly; Secure; SameSite=Lax; Path=\/; Max-Age=34560000$/);
 const cookie = setCookie.split(';')[0];
 r = await me(cookie);
 assert.equal(r.status, 200); assert.deepEqual(await r.json(), { email: ann, calendars: [] });
-step('verify sets a 30-day HttpOnly Secure SameSite=Lax cookie; /api/me knows the user');
+step('verify sets a 400-day (Max-Age=34560000) HttpOnly Secure SameSite=Lax cookie; /api/me knows the user');
 
 r = await post('/api/auth/verify', { token });
 assert.equal(r.status, 400); assert.match((await r.json()).error, /expired or was already used/); assert.equal(r.headers.get('set-cookie'), null);
@@ -215,5 +215,31 @@ assert.equal((await post('/api/auth/verify', { token: unusedLink })).status, 400
 const deeAgain = await signInAs(dee);
 assert.deepEqual((await (await me(deeAgain)).json()).calendars, [], 'signing up again starts fresh: old subscriptions are unlinked');
 step('POST /api/account/delete: 409 active-subscription (lists the calendars; nothing deleted) while any is active/past_due; otherwise sessions, sign-in links and the user row go, subscriptions are unlinked');
+
+// Rolling sessions: 365 days from the last renewal, renewed by any use more than a day after the last one.
+const DAY = 24 * 3600e3;
+const age = (email, ageMs) => admin('/api/admin/accounts/age-sessions', { method: 'POST', body: JSON.stringify({ email, ageMs }) });
+assert.equal((await fetch(BASE + '/api/admin/accounts/age-sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: ann, ageMs: DAY }) })).status, 403);
+const rae = `rae-${run}@example.com`;
+const raeCookie = await signInAs(rae);
+assert.equal((await age(rae, DAY + 3600e3)).status, 200);              // last used 25 hours ago
+r = await me(raeCookie);
+assert.equal(r.status, 200);
+assert.match(r.headers.get('set-cookie') || '', new RegExp(`^${raeCookie}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=34560000$`), 'same token, fresh Max-Age');
+await age(rae, 364 * DAY);                                             // without that renewal it would have expired a day ago
+r = await me(raeCookie);
+assert.equal(r.status, 200, 'renewed a year ahead by the use after a day');
+assert.match(r.headers.get('set-cookie') || '', /Max-Age=34560000$/, 'and renewed again (its last renewal is 364 days old)');
+step('a session used more than a day after its last renewal is pushed a year ahead, and /api/me re-sends the cookie');
+
+const ula = `ula-${run}@example.com`;
+const ulaCookie = await signInAs(ula);
+await age(ula, 2 * DAY);
+assert.equal((await me(ulaCookie)).status, 200, 'used after two days: fine');
+await age(ula, 365 * DAY + 3600e3);                                    // then unused for a year and an hour
+r = await me(ulaCookie);
+assert.equal(r.status, 401); assert.equal(r.headers.get('set-cookie'), null, 'an expired session is refused, never revived');
+assert.equal((await me(ulaCookie)).status, 401);
+step('a session unused for more than 365 days is refused (and not renewed by the attempt)');
 
 console.log(`\n${n} checks passed`); process.exit(0);
