@@ -80,7 +80,8 @@ Copyright (c) 2025 Kalid Azad
     <!-- Google Tag Manager -->
     <script>
         (function (w, d, s, l, i) {
-            const enableAnalytics = !(w.__TEST__ || w.location.search.includes('no-analytics'));
+            // Off on the staging copy (preview.pastecal.com) too: friends' test checkouts are not production numbers.
+            const enableAnalytics = !(w.__TEST__ || w.location.search.includes('no-analytics') || w.location.hostname === 'preview.pastecal.com');
             if (!enableAnalytics) {
                 console.log('[analytics] disabled by test mode');
                 return;
@@ -106,7 +107,7 @@ Copyright (c) 2025 Kalid Azad
          sends one; leaving it on double-counts every pageview. -->
     <script>
         (function () {
-            if (window.__TEST__ || window.location.search.includes('no-analytics')) return;
+            if (window.__TEST__ || window.location.search.includes('no-analytics') || window.location.hostname === 'preview.pastecal.com') return;
             var s = document.createElement('script');
             s.async = true;
             s.src = 'https://www.googletagmanager.com/gtag/js?id=G-4J99GY9KE6';
@@ -185,7 +186,9 @@ Copyright (c) 2025 Kalid Azad
         // Deliberately fire-and-forget: sign-in must never gate rendering a calendar. If it
         // fails (blocked third-party storage, offline, quota) the app behaves exactly as it
         // did before -- writes still work, they just carry no author signal.
-        firebase.auth().signInAnonymously().catch(function (err) {
+        // Not on the staging copy (preview.pastecal.com): it must never write to production Firebase, and
+        // with no uid AuthorSignal records nothing.
+        if (location.hostname !== 'preview.pastecal.com') firebase.auth().signInAnonymously().catch(function (err) {
             console.warn('[auth] anonymous sign-in unavailable:', err && err.code);
         });
 
@@ -201,6 +204,8 @@ Copyright (c) 2025 Kalid Azad
 
     <!-- App scripts (order matters: Utils → models/services → directives → components) -->
     <script src="/utils/analytics.js?v=1792797113"></script>
+    <!-- The staging copy (preview.pastecal.com): test-mode banner and switches. Does nothing elsewhere. -->
+    <script src="/utils/preview.js?v=1792797113"></script>
     <script src="/utils/utils.js?v=1792797113"></script>
     <script src="/models/Event.js?v=1792797113"></script>
     <script src="/services/SlugManager.js?v=1792797113"></script>
@@ -587,7 +592,7 @@ Copyright (c) 2025 Kalid Azad
                     </custom-tooltip>
                     <!-- People sent a view-only link are the best future users: one quiet invitation.
                          Also shown inside embeds, as the free plan's small credit (Pro removes it). -->
-                    <a v-if="!hideBranding" href="https://pastecal.com/" target="_top" class="pc-make-own" data-testid="make-own">Make your own calendar</a>
+                    <a v-if="!hideBranding" href="/" target="_top" class="pc-make-own" data-testid="make-own">Make your own calendar</a>
                 </div>
 
                 <div v-if="!isLoading && !isReadOnly">

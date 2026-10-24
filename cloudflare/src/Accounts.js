@@ -45,7 +45,8 @@
  * Sessions roll: each lasts 365 days from its last renewal, and any use more than a day after the
  * last renewal renews it (one UPDATE, at most daily). Someone who visits at least once a year never
  * signs in again. Sign out (everywhere) and account delete still end them at once.
- * Cookie-authenticated POSTs need Content-Type: application/json and an Origin of pastecal.com.
+ * Cookie-authenticated POSTs need Content-Type: application/json and an Origin of pastecal.com
+ * (on staging: SITE_URL's origin; see Site.js). Every link in an email or a Stripe redirect starts with siteUrl(env).
  *
  * ACCOUNTS_DEV_MODE=1 (only ever in .dev.vars or --var, never in wrangler.jsonc) is for local tests:
  * it allows http://localhost origins, writes sign-in emails to an outbox instead of sending them,
@@ -59,8 +60,8 @@ import { DurableObject } from 'cloudflare:workers';
 import { LockClient } from './LockClient.js';
 import { INTERVALS, stripeConfig, stripeRequest, verifyStripeSignature, summarizeSubscription, subscriptionIdOf, timingSafeEqual,
     eventModeMismatch, subscriptionOfInvoice, paymentOfInvoice, paymentOfInvoicePayments } from './Stripe.js';
+import { siteUrl, siteHost, allowedOrigins, isStaging } from './Site.js';
 
-const SITE = 'https://pastecal.com';
 const LOGIN_TTL = 15 * 60 * 1000;
 const SESSION_TTL = 365 * 24 * 3600 * 1000;   // from the last renewal (see sessionUser)
 const SESSION_RENEW_AFTER = 24 * 3600 * 1000;  // renew at most once a day per session
@@ -394,11 +395,12 @@ export async function sessionUserId(request, env) {
 }
 
 // CSRF: a cross-site form can't send application/json without a preflight, and browsers always
-// send Origin on POST. Production accepts only pastecal.com; dev mode also accepts localhost.
+// send Origin on POST. Production accepts only pastecal.com (+ www), staging only its SITE_URL;
+// dev mode also accepts localhost.
 export function sameSite(request, env) {
     if (!(request.headers.get('Content-Type') || '').toLowerCase().startsWith('application/json')) return false;
     const origin = request.headers.get('Origin') || '';
-    if (origin === SITE || origin === 'https://www.pastecal.com') return true;
+    if (allowedOrigins(env).includes(origin)) return true;
     // wrangler dev rewrites a same-host Origin (http://localhost:<port>) to http://<first route's host>.
     return devMode(env) && (/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) || origin === 'http://pastecal.com');
 }
@@ -407,7 +409,7 @@ const sessionCookie = (token, maxAge) => `pc_session=${token}; HttpOnly; Secure;
 
 // The one place a sign-in email leaves. Never logs the link: Workers Logs are on.
 async function sendSignInEmail(env, to, token) {
-    const link = `${SITE}/signin#t=${token}`;
+    const link = `${siteUrl(env)}/signin#t=${token}`;
     const subject = 'Your pastecal sign-in link';
     const text = `Here is your link to sign in to pastecal:\n\n${link}\n\n`
         + `It works once and expires in 15 minutes.\n\n`
@@ -423,7 +425,9 @@ async function sendEmail(env, to, subject, text, html, kind) {
     try {
         if (devMode(env)) return await accounts(env).addOutbox(to, subject, text);
         if (!env.EMAIL) { console.error(`[accounts] EMAIL binding missing; ${kind} email not sent`); return; }
-        await env.EMAIL.send({ to, from: { email: 'login@pastecal.com', name: 'pastecal' }, subject, text, ...(html ? { html } : {}) });
+        // Staging sends from the same address (the sending domain is pastecal.com), marked so nobody mistakes it.
+        const subj = isStaging(env) ? `[Preview] ${subject}` : subject;
+        await env.EMAIL.send({ to, from: { email: 'login@pastecal.com', name: 'pastecal' }, subject: subj, text, ...(html ? { html } : {}) });
     } catch (err) {
         console.error(`[accounts] ${kind} email failed:`, err && err.code, err && err.message);
     }
@@ -444,12 +448,12 @@ async function sendWelcomeEmail(env, acc, calendarId, userId, title) {
         const user = await acc.getUser(userId);
         if (!user || !user.email) return;
         const name = cleanTitle(title, cleanTitle(calendarId, 'your calendar'));
-        const link = `${SITE}/${encodeURIComponent(calendarId)}`;
+        const link = `${siteUrl(env)}/${encodeURIComponent(calendarId)}`;
         const text = `Pro is on for ${name}.\n\n`
             + `${link}\n\n`
             + `What's locked now: only you (signed in with this email) and people with an editor link can change this calendar. Everyone else can still view it.\n\n`
             + `To give someone editor access: open the calendar, choose Share, and copy the Editor link. You can reset or revoke editor links there at any time.\n\n`
-            + `To manage billing: open the calendar's Share panel, or the logo menu, and choose Manage billing. You can also sign in at pastecal.com with this email.\n\n`
+            + `To manage billing: open the calendar's Share panel, or the logo menu, and choose Manage billing. You can also sign in at ${siteHost(env)} with this email.\n\n`
             + `Questions? Write to support@pastecal.com.\n`;
         await sendEmail(env, user.email, `Pro is on for ${name}`, text, null, 'welcome');
     } catch (err) {
@@ -559,13 +563,14 @@ async function route(request, env, url, path) {
 
     if (path === '/api/pro/checkout') return checkout(request, env, body);
     if (path === '/api/pro/portal') {
-        const cfg = stripeConfig(env);
+        const cfg = stripeConfig(env, new URL(request.url).hostname);
         if (!cfg) return json({ error: 'billing-not-configured' }, 503);
         const userId = await sessionUserId(request, env);
         if (!userId) return json({ error: 'signed-out' }, 401);
         const customer = await accounts(env).customerForUser(userId);
         if (!customer) return json({ error: 'no-billing-account' }, 404);
-        const returnUrl = validId(body.calendarId) ? `${SITE}/${encodeURIComponent(body.calendarId)}` : `${SITE}/`;
+        const site = siteUrl(env);
+        const returnUrl = validId(body.calendarId) ? `${site}/${encodeURIComponent(body.calendarId)}` : `${site}/`;
         const r = await stripeRequest(cfg, 'POST', '/v1/billing_portal/sessions', { customer, return_url: returnUrl });
         if (!r.ok || !r.data.url) { console.error('[accounts] portal session failed:', r.status); return json({ error: 'stripe-error' }, 502); }
         return json({ url: r.data.url });
@@ -644,9 +649,10 @@ function roomError(r) {
 // Stripe requires a Checkout page to live at least 30 minutes from when IT creates the session,
 // so ask for 31 to absorb clock drift and network time. The per-calendar hold lasts as long.
 const CHECKOUT_HOLD_MS = 31 * 60 * 1000;
+export const TEST_CARD_HINT = 'Test mode: use card 4242 4242 4242 4242, any future date, any CVC. No real money moves.';
 
 async function checkout(request, env, body) {
-    const cfg = stripeConfig(env);
+    const cfg = stripeConfig(env, new URL(request.url).hostname);
     if (!cfg) return json({ error: 'billing-not-configured' }, 503);
     const userId = await sessionUserId(request, env);
     if (!userId) return json({ error: 'signed-out' }, 401);
@@ -687,10 +693,12 @@ async function checkout(request, env, body) {
         line_items: [{ price, quantity: 1 }],
         metadata: { ...meta, interval },
         subscription_data: { metadata: meta },
-        success_url: `${SITE}/pro/done?session_id={CHECKOUT_SESSION_ID}#${encodeURIComponent(calendarId)}`,
-        cancel_url: `${SITE}/${encodeURIComponent(back)}`,
+        success_url: `${siteUrl(env)}/pro/done?session_id={CHECKOUT_SESSION_ID}#${encodeURIComponent(calendarId)}`,
+        cancel_url: `${siteUrl(env)}/${encodeURIComponent(back)}`,
         expires_at: Math.floor((Date.now() + CHECKOUT_HOLD_MS) / 1000),
     };
+    // Test mode (staging): say which card to use, right above Stripe's Pay button.
+    if (cfg.livemode === false) params.custom_text = { submit: { message: TEST_CARD_HINT } };
     // Stripe limits client_reference_id's characters; calendar names can be anything, and metadata has the real id.
     if (/^[A-Za-z0-9_-]{1,200}$/.test(calendarId)) params.client_reference_id = calendarId;
     if (customer) params.customer = customer; else params.customer_email = user.email;
@@ -705,7 +713,7 @@ async function checkout(request, env, body) {
 // subscription's CURRENT state from Stripe and make the calendar match it.
 async function handleWebhook(request, env) {
     const raw = await request.text();
-    const cfg = stripeConfig(env);
+    const cfg = stripeConfig(env, new URL(request.url).hostname);
     if (!cfg) return json({ error: 'billing-not-configured' }, 503);
     const v = await verifyStripeSignature(cfg.webhookSecret, request.headers.get('Stripe-Signature'), raw);
     if (!v.ok) return json({ error: 'invalid-signature', reason: v.reason }, 400);

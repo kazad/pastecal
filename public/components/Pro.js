@@ -134,6 +134,7 @@ const ProPanel = {
                         <span><b>$2.99/month</b></span>
                     </label>
                 </div>
+                <p v-if="testCardHint" class="pc-pro-muted pc-pro-note" data-testid="pro-test-card">{{ testCardHint }}</p>
 
                 <form v-if="step === 'email'" class="pc-pro-email" @submit.prevent="sendLink" data-testid="pro-email-form">
                     <label for="pc-pro-email-input">Your email, so you can manage the lock later. No password.</label>
@@ -227,6 +228,8 @@ const ProPanel = {
             error: '',
             editorLink: '',
             copied: false,
+            // The staging copy only (utils/preview.js): which test card to pay with.
+            testCardHint: typeof PreviewSite !== 'undefined' && PreviewSite.is() ? PreviewSite.CHECKOUT_HINT : '',
         };
     },
     computed: {
@@ -327,7 +330,7 @@ const ProPanel = {
             try {
                 const r = await proApi('POST', '/api/pro/editor-key', { calendarId: this.calendarId });
                 if (r.status === 200 && r.data.editorKey) {
-                    this.editorLink = `https://pastecal.com/${encodeURIComponent(this.calendarId)}#k=${r.data.editorKey}`;
+                    this.editorLink = `${location.origin}/${encodeURIComponent(this.calendarId)}#k=${r.data.editorKey}`;
                     this.rememberLink(this.editorLink);
                     proTrack((a) => a.proEditorLinkMade(kind));
                     return;

@@ -15,6 +15,24 @@ assert.equal(stripeConfig({ ...base, STRIPE_SECRET_KEY: 'fake-stripe-key' }).liv
 console.error = quiet;
 step('a test-mode key (sk_test_/rk_test_) turns billing off unless ACCOUNTS_DEV_MODE=1; livemode follows the key');
 
+// Staging: BILLING_TEST_MODE=1 with a non-production SITE_URL, and only for a request to that host.
+console.error = () => {};
+const stg = { ...base, STRIPE_SECRET_KEY: 'sk_test_abc', BILLING_TEST_MODE: '1', SITE_URL: 'https://preview.pastecal.com' };
+assert.equal(stripeConfig(stg, 'preview.pastecal.com').livemode, false);
+assert.equal(stripeConfig(stg), null, 'no host: refused');
+assert.equal(stripeConfig(stg, 'pastecal.com'), null);
+assert.equal(stripeConfig(stg, 'www.pastecal.com'), null);
+assert.equal(stripeConfig(stg, 'pastecal-staging.example.workers.dev'), null, 'only SITE_URL\'s own host');
+const { SITE_URL, ...noSite } = stg;
+assert.equal(stripeConfig(noSite, 'preview.pastecal.com'), null, 'production (no SITE_URL) + BILLING_TEST_MODE: still refused');
+assert.equal(stripeConfig({ ...noSite, BILLING_TEST_MODE: '1' }, 'new.pastecal.com'), null, 'a misconfigured production never takes test keys');
+assert.equal(stripeConfig({ ...stg, SITE_URL: 'https://pastecal.com' }, 'pastecal.com'), null);
+assert.equal(stripeConfig({ ...stg, BILLING_TEST_MODE: '0' }, 'preview.pastecal.com'), null);
+assert.equal(stripeConfig({ ...stg, STRIPE_SECRET_KEY: 'sk_live_abc' }, 'preview.pastecal.com'), null, 'staging refuses a LIVE key');
+assert.equal(stripeConfig({ ...stg, STRIPE_SECRET_KEY: 'rk_live_abc' }, 'preview.pastecal.com'), null);
+console.error = quiet;
+step('BILLING_TEST_MODE: a test key works only on staging\'s own host; production hosts, no SITE_URL, or a live key: billing off');
+
 const live = { livemode: true }, test = { livemode: false }, fake = { livemode: null };
 assert.equal(eventModeMismatch(live, { livemode: false }), true);
 assert.equal(eventModeMismatch(test, { livemode: true }), true);
