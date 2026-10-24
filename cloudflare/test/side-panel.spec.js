@@ -113,7 +113,7 @@ test('Share in the panel still copies its links', async ({ browser, request }) =
   const { ctx, page } = await open(browser, `/${id}?backend=cf`);
   await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.getByTestId('share-pill-more').click();
-  const viewCard = panel(page).locator('div.bg-1', { has: page.getByText('View Only', { exact: true }) });
+  const viewCard = panel(page).locator('.pc-share-card', { has: page.getByRole('heading', { name: 'Read-only link' }) });
   await viewCard.getByRole('button', { name: 'Copy' }).first().click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain(`/view/${viewId}`);
   await ctx.close();
