@@ -57,7 +57,7 @@ function nativeVm(events) {
     },
     closeEditor() {},
   };
-  for (const name of ['toStoredEvent', 'handleEventsUpdate', 'handleSaveEvent']) {
+  for (const name of ['toStoredEvent', 'handleEventsUpdate', 'handleSaveEvent', '_applyEvents', '_declareShrink', '_rememberUndo']) {
     vm[name] = NativeApp.methods[name].bind(vm);
   }
   Object.defineProperty(vm, 'displayEvents', {

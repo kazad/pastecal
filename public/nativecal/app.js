@@ -308,6 +308,18 @@ const CalendarVueApp = {
         // Escape closes the innermost thing first -- editor, then popover -- so one
         // key backs out of a nested state in the order the user entered it.
         this._onKeydown = (e) => {
+            // Cmd/Ctrl+Z: undo this tab's last change (delete, move, save, add), as in the main
+            // app -- but not while typing (it still undoes text in an input) or with a dialog open.
+            if ((e.metaKey || e.ctrlKey) && !e.shiftKey && typeof e.key === 'string' && e.key.toLowerCase() === 'z') {
+                const el = document.activeElement;
+                const typing = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+                const dialogOpen = this.showEditor || !!this.confirmDialog || this.showQuickCreate
+                    || !!(this.$refs.quickAddDialog && this.$refs.quickAddDialog.dialogVisible);
+                if (typing || dialogOpen || !this.canEdit || !this.store().canUndo) return;
+                e.preventDefault();
+                this.undoLast();
+                return;
+            }
             if (e.key !== 'Escape') return;
             if (this.confirmDialog) { this.confirmDialog = null; return; }
             if (this.showEditor) { this.closeEditor(); return; }
@@ -999,23 +1011,65 @@ const CalendarVueApp = {
                 before.map(e => CalendarDataService._eventKey(e)).filter(k => !kept.has(k)));
         },
 
-        _applyEvents(next, undoText) {
+        /**
+         * The shared EventStore (services/EventStore.js, the one the main app uses) owns the undo
+         * stack. Native still writes the list itself; each change records the exact inverse --
+         * EventStore.changesBetween(after, before), only the rows it touched -- so undoing it
+         * keeps whatever someone else changed in the meantime.
+         */
+        store() {
+            if (!this._eventStore) {
+                this._eventStore = new EventStore({
+                    getEvents: () => this.calendar.events,
+                    commit: (list) => {
+                        const next = list.map(e => new Event(e));
+                        this._declareShrink(this.calendar.events, next);
+                        this.calendar.setEvents(next);
+                    },
+                    onError: (err, command) => {
+                        console.warn('[nativecal] undo failed:', err.message, command);
+                        track(a => a.jsError('command_failed', err.message, (command && command.label) || 'undo'));
+                        this.showToast(`Couldn't undo that: ${err.message.replace(/^\w+: /, '')}`, 'error');
+                    },
+                });
+            }
+            return this._eventStore;
+        },
+        _rememberUndo(before, next, label) {
+            if (typeof EventStore === 'undefined') return null;
+            const commands = EventStore.changesBetween(next, before);
+            if (!commands.length) return null;
+            const entry = { inverse: { type: 'batch', commands, label }, label };
+            const stack = this.store().undoStack;
+            stack.push(entry);
+            if (stack.length > 50) stack.shift();
+            return entry;
+        },
+        /** Undo one recorded change (the latest by default); returns its label or null. */
+        undoLast(entry) {
+            const stack = this.store().undoStack;
+            const target = entry || stack[stack.length - 1];
+            const i = target ? stack.lastIndexOf(target) : -1;
+            if (i === -1) return null;
+            stack.splice(i, 1);
+            const r = this.store().dispatch(target.inverse, { label: `Undo ${target.label}`, undoable: false });
+            if (!r.ok) return null;
+            this.showToast(`Undid: ${target.label}`, 'success');
+            return target.label;
+        },
+
+        /**
+         * Apply a change to the events. It can be taken back (Cmd/Ctrl+Z, and in v2 the snackbar's
+         * Undo for deletes and moves). Shrinking writes are declared, as the write gate requires.
+         */
+        _applyEvents(next, undoText, { snackbar = true } = {}) {
             this._editorCommitted = true;
             const before = this.calendar.events;
             this._declareShrink(before, next);
             this.calendar.setEvents(next);
-            if (!this.ux2 || !undoText) return;
-            const snap = (list) => new Map(list.filter(e => e && e.id).map(e => [e.id, JSON.stringify(e)]));
-            const was = snap(before), now = snap(next);
-            const touched = [...new Set([...was.keys(), ...now.keys()])].filter(id => was.get(id) !== now.get(id));
-            this.showSnackbar(undoText, () => {
-                const cur = this.calendar.events;
-                const out = cur.filter(e => !touched.includes(e.id) || was.has(e.id))
-                    .map(e => touched.includes(e.id) ? new Event(JSON.parse(was.get(e.id))) : e);
-                for (const id of touched) if (was.has(id) && !out.some(e => e.id === id)) out.push(new Event(JSON.parse(was.get(id))));
-                this._declareShrink(cur, out);
-                this.calendar.setEvents(out);
-            });
+            const entry = this._rememberUndo(before, this.calendar.events, undoText || 'change');
+            if (!this.ux2 || !undoText || !snackbar || !entry) return;
+            this.showSnackbar(undoText, () => this.undoLast(entry));
         },
 
         showSnackbar(text, undo) {
@@ -1133,7 +1187,7 @@ const CalendarVueApp = {
             const orphaned = (asSeries, wasRepeating = true) => {
                 events.push(new Event(this.toStoredEvent({ ...data, id: Utils.uuidv4(), recurrenceID: null, recurrenceException: '',
                     recurrencerule: asSeries ? data.recurrencerule : '' }, null)));
-                this.calendar.setEvents(events);
+                this._applyEvents(events, `Saved "${data.title || '(No title)'}"`, { snackbar: false });
                 if (typeof AuthorSignal !== 'undefined') AuthorSignal.touch(this.calendar.id);
                 this.closeEditor();
                 this.showToast(`${wasRepeating ? 'The repeating event' : 'This event'} was deleted elsewhere, so "${data.title || '(No title)'}" was saved as a ${asSeries ? 'new repeating' : 'separate'} event`, 'info');
@@ -1148,7 +1202,7 @@ const CalendarVueApp = {
                 const norm = (r) => String(r || '').split(';').filter(p => p.includes('=')).sort().join(';');
                 if (remaining !== null && norm(rule) === norm(series.recurrencerule)) rule = rule.replace(/COUNT=\d+/, `COUNT=${remaining}`);
                 cut.push(new Event(this.toStoredEvent({ ...data, id: Utils.uuidv4(), recurrencerule: rule, recurrenceException: '' }, null)));
-                this._applyEvents(cut);
+                this._applyEvents(cut, `Saved "${data.title || '(No title)'}"`, { snackbar: false });
                 if (typeof AuthorSignal !== 'undefined') AuthorSignal.touch(this.calendar.id);
                 this.closeEditor();
                 return;
@@ -1176,7 +1230,7 @@ const CalendarVueApp = {
                 events.push(new Event(this.toStoredEvent(data, null)));
                 track(a => a.eventAdded('grid', this.calendar));
             }
-            this.calendar.setEvents(events);
+            this._applyEvents(events, `${data.id || _occurrenceOf ? 'Saved' : 'Added'} "${data.title || '(No title)'}"`, { snackbar: false });
             if (typeof AuthorSignal !== 'undefined') AuthorSignal.touch(this.calendar.id);
             this.closeEditor();
         },
@@ -1650,8 +1704,7 @@ const CalendarVueApp = {
                 end: event.endDateTime,
                 isAllDay: !!event.isAllDay
             });
-            this.calendar.events.push(newEvent);
-            this.calendar.setEvents(this.calendar.events);
+            this._applyEvents([...this.calendar.events, newEvent], `Added "${newEvent.title || '(No title)'}"`, { snackbar: false });
             track(a => a.eventAdded('quick_add', this.calendar));
         },
 

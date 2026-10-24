@@ -200,7 +200,7 @@ function wireNative(S, calendarId, events) {
   };
   // eslint-disable-next-line no-new-func
   // The delete handler applies its change through _applyEvents, which declares the shrink.
-  for (const name of ['handleDeleteEvent', '_applyEvents', '_declareShrink']) {
+  for (const name of ['handleDeleteEvent', '_applyEvents', '_declareShrink', '_rememberUndo']) {
     // eslint-disable-next-line no-new-func
     vmApp[name] = new Function('CalendarDataService',
       `return { ${method(NATIVE, name)} }.${name};`)(S).bind(vmApp);

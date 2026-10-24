@@ -201,4 +201,40 @@ test('fix5: custom N-weeks / N-months views from the calendar settings (label, s
   await expect.poll(() => title(page)).toBe('December 2026 - January 2027');
 });
 
+// ---------------------------------------------------------------- fix 6: Cmd/Ctrl+Z undo (shared EventStore stack)
+test('fix6: Cmd/Ctrl+Z undoes a delete, an edit and an add; not while typing in a field', async ({ page }, info) => {
+  only(info);
+  const id = await fresh(info, 'undo');
+  await nat.open(page, id);
+  const blur = () => page.locator('[data-testid="current-date-range"]').click();
+  // delete -> undo
+  await nat.openPopover(page, 'Dentist');
+  await nat.deleteFromPopover(page);
+  await soon(async () => !!(await byTitle(id, 'Dentist'))).toBe(false);
+  await blur(); await page.keyboard.press('ControlOrMeta+z');
+  await soon(async () => !!(await byTitle(id, 'Dentist'))).toBe(true);
+  // edit -> undo restores the old title, same row
+  await nat.openPopover(page, 'Dentist');
+  await nat.editFromPopover(page);
+  await nat.setTitle(page, 'Orthodontist');
+  await nat.save(page);
+  await soon(async () => !!(await byTitle(id, 'Orthodontist'))).toBe(true);
+  await blur(); await page.keyboard.press('ControlOrMeta+z');
+  await soon(async () => (await byTitle(id, 'Dentist'))?.id).toBe('fx-links');
+  expect(await byTitle(id, 'Orthodontist')).toBeUndefined();
+  // add -> undo removes it
+  await nat.quickCreate(page, '2026-10-13', 'Picnic');
+  await soon(async () => !!(await byTitle(id, 'Picnic'))).toBe(true);
+  await blur(); await page.keyboard.press('ControlOrMeta+z');
+  await soon(async () => !!(await byTitle(id, 'Picnic'))).toBe(false);
+  // typing in a field: Cmd+Z belongs to the field, the calendar is untouched
+  await nat.quickCreate(page, '2026-10-14', 'Kayak');
+  await soon(async () => !!(await byTitle(id, 'Kayak'))).toBe(true);
+  await tap(page, page.locator('[data-testid="search-button-desktop"]').locator('visible=true').first());
+  const field = page.locator('input[type="search"], input[placeholder*="earch" i]').locator('visible=true').first();
+  await expect(field).toBeVisible();
+  await field.focus(); await page.keyboard.press('ControlOrMeta+z'); await page.waitForTimeout(1000);
+  expect(!!(await byTitle(id, 'Kayak'))).toBe(true);
+});
+
 module.exports = { only, fresh };
