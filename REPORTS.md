@@ -58,3 +58,35 @@ and recorded what the client sends: only an SDK stats ping (`a:"s"`) and one rea
 - Lock badge popover: it opens on mouse hover and a click on the icon toggles it shut again, so a mouse user who clicks sees it vanish.
 - Test setup note: with UNSAFE_DEV_SESSION_HEADER=on, loopback requests ignore the session cookie (header only), so the
   browser owner looks like a viewer. Run browser passes without it.
+
+## 2026-10-23 — Step 3: L3 pricing consistency
+
+**Did** (3eae5b5, e04041f)
+- Teams is **$100 a year or $10 a month** everywhere: pricing card ("Or $10 a month. Up to 10 Pro calendars."), meta
+  description, waitlist option, a new FAQ entry "What is Teams?", and terms. No page says $80 / $8 each any more.
+- **Branding removal moves to Teams**: the Pro card says "Just a small 'Made with pastecal' line"; Teams lists
+  "No pastecal branding"; compare table row is Pro —, Teams ✓; terms and the pricing lead no longer promise Pro hides branding.
+  The visitor footer on Pro calendars is now **"Made with pastecal · Report"** (merged with the old "Hosted on pastecal ·
+  Report" line; "pastecal" links to /). Pro still trims the header logo and "Make your own calendar" for visitors, as before.
+- **Privacy**: per-calendar visit counting (daily counts only, no IPs or browser details, a daily-rotated hash for
+  returning visitors, city ≥5 / country ≥3 thresholds, checked against RoomInsight.js), the welcome email, and what
+  deleting an account removes (checked against Accounts.deleteAccount).
+- **Reserved names**: `RESERVED_CALENDAR_NAMES` in cloudflare/src/SlugService.js (beta, nativecal, view, dev, api, cal,
+  report, signin, pro, pricing, explore, privacy, terms). POST /cal/<name> refuses them (409 "reserved name", before the
+  rate limit); both apps' checkExists call them taken, so the claim dialog offers other names; existing calendars and
+  /import are unaffected. Read-only link names (SlugService and functions/index.js) and sign-in `next` also reserve report and explore.
+- Tests: test/unit/reserved-names.test.js (the three lists match), test/unit/pricing-consistency.test.js (prices,
+  branding, footer, privacy), a hardening.test.mjs step for reserved names.
+
+**Tests**: full `scripts/test-all.sh`: all 25 run suites pass (unit 391 checks, 240s). Checked in the browser (sockets mocked):
+footer reads "Made with pastecal · Report", pricing and privacy pages render, 0 CSP violations.
+
+**Open issues**
+- **Self-serve account delete has no UI.** POST /api/account/delete and /api/auth/signout-all exist and are tested, but no
+  page calls them, so privacy still says to write to support. Adding a "Delete account" button to the account menu is a
+  small follow-up (it must show the 409 "cancel Pro first" message).
+- Pricing still marks "A full history of changes", "See how many people view and follow it" and the stats/restore table
+  rows **Soon**, though stats and history/restore are merged into pro. Per the "no label = available now" rule they may
+  need their labels removed before launch; left alone because L3 didn't list them and "Where people are" etc. should be confirmed first.
+- L3 says "merge with the Hosted on pastecal footer"; I read "Pro shows a small footer" as keeping Pro's trimmed header.
+  If Pro should show the full header branding too, `hideBranding()` in public/app.js is the switch.
