@@ -17,7 +17,12 @@
  *   GET  /api/me                                 -> {email, calendars:[{id, status, plan, interval, currentPeriodEnd}]} | 401;
  *                                                   re-sends the cookie (fresh Max-Age) when the session was renewed
  *                                                   in the last day, so browsers keep it
- *   POST /api/pro/checkout    {calendarId, interval?:'year'|'month', editName?} -> {url} (Stripe Checkout)
+ *   POST /api/pro/checkout    {calendarId, interval?:'year'|'month', editName?} -> {url} (Stripe Checkout).
+ *                             Signed out works too (pay first): it sets an HttpOnly pc_claim cookie whose hash rides
+ *                             on the checkout; Stripe asks for the email and the webhook finds or makes that account.
+ *   POST /api/pro/claim       {sessionId} -> {ok, signedIn, email}: /pro/done after a signed-out checkout. Needs the
+ *                             pc_claim cookie, a paid recent checkout carrying its hash, and is single-use. Signs in
+ *                             only an account that checkout made; an existing account gets a sign-in link instead.
  *   POST /api/pro/portal      {calendarId?}      -> {url} (Stripe Billing Portal)
  *   POST /api/pro/editor-key  {calendarId}       -> {editorKey}, shown once (owner only). Compatibility: revokes
  *                                                   every editor link and makes one new link labeled 'Editors'.
@@ -129,12 +134,13 @@ export class Accounts extends DurableObject {
             CREATE TABLE IF NOT EXISTS welcome_emails (calendar_id TEXT, user_id TEXT, at INTEGER, PRIMARY KEY (calendar_id, user_id));
             CREATE TABLE IF NOT EXISTS test_inbox (id INTEGER PRIMARY KEY AUTOINCREMENT, to_addr TEXT, from_addr TEXT, subject TEXT,
                 received_at INTEGER, text TEXT, truncated INTEGER, auth_results TEXT, arc_auth_results TEXT, has_dkim_signature INTEGER);
-            CREATE INDEX IF NOT EXISTS test_inbox_to ON test_inbox(to_addr, id);`);
+            CREATE INDEX IF NOT EXISTS test_inbox_to ON test_inbox(to_addr, id);
+            CREATE TABLE IF NOT EXISTS checkout_claims (claim_hash TEXT PRIMARY KEY, session_id TEXT, used_at INTEGER);`);
         // Added later (an existing table keeps its columns): which subscription came first, and the
         // Checkout Session a hold guards plus how often its buyer restarted it.
         for (const col of ['subscriptions ADD COLUMN created INTEGER', 'checkout_holds ADD COLUMN session_id TEXT',
             'checkout_holds ADD COLUMN restarts INTEGER', 'checkout_holds ADD COLUMN window_start INTEGER',
-            'sessions ADD COLUMN renewed_at INTEGER']) {
+            'sessions ADD COLUMN renewed_at INTEGER', 'users ADD COLUMN created_via TEXT']) {
             try { this.sql.exec(`ALTER TABLE ${col}`); } catch (_) { /* already there */ }
         }
     }
@@ -169,6 +175,13 @@ export class Accounts extends DurableObject {
         if (!row || !timingSafeEqual(row.hash, hash) || row.used || row.expires_at <= now) return null;
         this.sql.exec(`UPDATE login_tokens SET used = 1 WHERE hash = ?`, hash);
         const userId = this.ensureUser(row.email);
+        // An account a checkout made (pay first) was never proven to belong to this email until now:
+        // whoever typed the address at Stripe is signed out, and the account counts as verified.
+        const via = this.sql.exec(`SELECT created_via FROM users WHERE id = ?`, userId).one().created_via;
+        if (via) {
+            this.sql.exec(`DELETE FROM sessions WHERE user_id = ?`, userId);
+            this.sql.exec(`UPDATE users SET created_via = NULL WHERE id = ?`, userId);
+        }
         const session = randomToken();
         this.sql.exec(`INSERT INTO sessions (hash, user_id, created_at, expires_at, renewed_at) VALUES (?, ?, ?, ?, ?)`, await sha256(session), userId, now, now + SESSION_TTL, now);
         return { session, email: row.email, next: row.next };
@@ -190,6 +203,33 @@ export class Accounts extends DurableObject {
     }
 
     async endSession(token) { this.sql.exec(`DELETE FROM sessions WHERE hash = ?`, await sha256(token)); }
+
+    // Pay first: the owner of a checkout started signed out, found by the email typed at Stripe
+    // (never verified). A new email gets an account marked as made by this checkout (claimHash). An
+    // existing one is used as is, except that an account another unverified checkout made has its
+    // sessions ended first: someone who typed this address before can't watch a new purchase land.
+    userForCheckout(email, claimHash) {
+        const row = this.sql.exec(`SELECT id, created_via FROM users WHERE email = ?`, email).toArray()[0];
+        if (!row) {
+            const id = 'u_' + randomToken();
+            this.sql.exec(`INSERT INTO users (id, email, created_at, created_via) VALUES (?, ?, ?, ?)`, id, email, Date.now(), claimHash);
+            return { userId: id, madeHere: true };
+        }
+        if (row.created_via === claimHash) return { userId: row.id, madeHere: true };
+        if (row.created_via) this.sql.exec(`DELETE FROM sessions WHERE user_id = ?`, row.id);
+        return { userId: row.id, madeHere: false };
+    }
+    // The paid checkout's browser asks to be signed in, once. A session only for an account this
+    // checkout made; for any other account {existing} (the caller emails a sign-in link instead).
+    async claimCheckout(claimHash, sessionId, email) {
+        if (this.sql.exec(`SELECT 1 FROM checkout_claims WHERE claim_hash = ? AND used_at IS NOT NULL`, claimHash).toArray().length) return { used: true };
+        this.sql.exec(`INSERT OR REPLACE INTO checkout_claims (claim_hash, session_id, used_at) VALUES (?, ?, ?)`, claimHash, sessionId, Date.now());
+        const u = this.userForCheckout(email, claimHash);
+        if (!u.madeHere) return { existing: true };
+        const now = Date.now(), session = randomToken();
+        this.sql.exec(`INSERT INTO sessions (hash, user_id, created_at, expires_at, renewed_at) VALUES (?, ?, ?, ?, ?)`, await sha256(session), u.userId, now, now + SESSION_TTL, now);
+        return { session };
+    }
 
     ensureUser(email) {
         const row = this.sql.exec(`SELECT id FROM users WHERE email = ?`, email).toArray()[0];
@@ -276,7 +316,9 @@ export class Accounts extends DurableObject {
     holdCheckout(calendarId, userId, ms) {
         const now = Date.now();
         const row = this.sql.exec(`SELECT user_id, expires_at, session_id, restarts, window_start FROM checkout_holds WHERE calendar_id = ?`, calendarId).toArray()[0];
-        if (row && row.user_id !== userId && row.expires_at > now) return { ok: false, error: 'checkout-in-progress' };
+        // A signed-out checkout (anon:) never blocks anyone: starting one costs nothing, so honoring it
+        // would let anyone keep a calendar from its owner. If both pay, the conflict refund settles it.
+        if (row && row.user_id !== userId && row.expires_at > now && !String(row.user_id).startsWith('anon:')) return { ok: false, error: 'checkout-in-progress' };
         const mine = row && row.user_id === userId;
         const inWindow = mine && row.window_start && now - row.window_start < 3600 * 1000;
         const restarts = inWindow ? (row.restarts || 0) + 1 : 0;
@@ -410,6 +452,14 @@ export function sameSite(request, env) {
 }
 
 const sessionCookie = (token, maxAge) => `pc_session=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${maxAge}`;
+// Pay first: a random token in the browser that started a signed-out checkout. Stripe only ever sees
+// its hash, so the checkout's id (in /pro/done's URL) is useless without this browser.
+const CLAIM_MAX_AGE = 2 * 3600;
+const claimCookie = (token, maxAge) => `pc_claim=${token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${maxAge}`;
+function claimToken(request) {
+    const m = (request.headers.get('Cookie') || '').match(/(?:^|;\s*)pc_claim=([^;]+)/);
+    return m && looksLikeToken(m[1]) ? m[1] : null;
+}
 
 // The one place a sign-in email leaves. Never logs the link: Workers Logs are on.
 async function sendSignInEmail(env, to, token, next) {
@@ -569,6 +619,7 @@ async function route(request, env, url, path) {
     if (path === '/api/account/delete') return deleteAccount(request, env);
 
     if (path === '/api/pro/checkout') return checkout(request, env, body);
+    if (path === '/api/pro/claim') return claimCheckout(request, env, body);
     if (path === '/api/pro/portal') {
         const cfg = stripeConfig(env, new URL(request.url).hostname);
         if (!cfg) return json({ error: 'billing-not-configured' }, 503);
@@ -658,11 +709,55 @@ function roomError(r) {
 const CHECKOUT_HOLD_MS = 31 * 60 * 1000;
 export const TEST_CARD_HINT = 'Test mode: use card 4242 4242 4242 4242, any future date, any CVC. No real money moves.';
 
+// POST /api/pro/claim {sessionId}: /pro/done, in the browser that paid while signed out. Signs it in
+// when the checkout is paid, carries this browser's claim, is recent, was never claimed, and made a
+// new account. An email that already had an account gets a sign-in link instead: Stripe never
+// verified it, so a typed address must not open someone else's account.
+async function claimCheckout(request, env, body) {
+    const cfg = stripeConfig(env, new URL(request.url).hostname);
+    if (!cfg) return json({ error: 'billing-not-configured' }, 503);
+    const claim = claimToken(request);
+    if (!claim) return json({ error: 'no-claim' }, 403);
+    const sessionId = body.sessionId;
+    if (typeof sessionId !== 'string' || !/^cs_[A-Za-z0-9_]{1,200}$/.test(sessionId)) return json({ error: 'bad-session' }, 400);
+    const r = await stripeRequest(cfg, 'GET', `/v1/checkout/sessions/${encodeURIComponent(sessionId)}`);
+    if (!r.ok) return json({ error: r.status === 404 ? 'no-session' : 'stripe-error' }, r.status === 404 ? 404 : 502);
+    const sess = r.data, hash = await sha256(claim);
+    const mine = sess.metadata && typeof sess.metadata.claim === 'string' && timingSafeEqual(sess.metadata.claim, hash);
+    const paid = sess.status === 'complete' && (sess.payment_status === 'paid' || sess.payment_status === 'no_payment_required');
+    const recent = Number.isFinite(sess.created) && Date.now() / 1000 - sess.created < CLAIM_MAX_AGE;
+    if (!mine || !paid || !recent) return json({ error: 'not-claimable' }, 403);
+    const email = String((sess.customer_details && sess.customer_details.email) || sess.customer_email || '').trim().toLowerCase();
+    if (!validEmail(email)) return json({ error: 'no-email' }, 409);
+    const acc = accounts(env);
+    const out = await acc.claimCheckout(hash, sess.id, email);
+    if (out.used) return json({ error: 'already-claimed' }, 409);
+    const headers = new Headers({ 'Cache-Control': 'no-store' });
+    headers.append('Set-Cookie', claimCookie('', 0));
+    if (out.existing) {
+        const calendarId = sess.metadata && sess.metadata.calendar_id;
+        const token = await acc.issueLoginToken(email, safeNext('/' + encodeURIComponent(calendarId || '')) || '/');
+        if (token) await sendSignInEmail(env, email, token, null);
+        return Response.json({ ok: true, signedIn: false, email }, { headers });
+    }
+    headers.append('Set-Cookie', sessionCookie(out.session, COOKIE_MAX_AGE));
+    return Response.json({ ok: true, signedIn: true, email }, { headers });
+}
+
 async function checkout(request, env, body) {
     const cfg = stripeConfig(env, new URL(request.url).hostname);
     if (!cfg) return json({ error: 'billing-not-configured' }, 503);
     const userId = await sessionUserId(request, env);
-    if (!userId) return json({ error: 'signed-out' }, 401);
+    // Signed out: pay first. The buyer is this browser's claim token until Stripe tells us their email.
+    const claim = userId ? null : (claimToken(request) || randomToken());
+    const claimHash = claim ? await sha256(claim) : null;
+    const buyer = userId || 'anon:' + claimHash;
+    // Signed out costs nothing to repeat, and each checkout holds the calendar for 31 minutes: limit it
+    // per address so nobody can keep a calendar's real owner from buying.
+    if (!userId && env.CREATE_LIMITER) {
+        const { success } = await env.CREATE_LIMITER.limit({ key: 'checkout:' + (request.headers.get('CF-Connecting-IP') || 'unknown') });
+        if (!success) return json({ error: 'too-many-checkouts' }, 429);
+    }
     const calendarId = body.calendarId;
     if (!validId(calendarId)) return json({ error: 'bad-calendar' }, 400);
     const interval = body.interval === undefined ? 'year' : body.interval;
@@ -674,12 +769,12 @@ async function checkout(request, env, body) {
     const st = await LockClient.lockStatus(env, calendarId);
     if (st.status === 404) return json({ error: 'no-calendar' }, 404);
     if (!st.ok) return json({ error: 'unavailable' }, 502);
-    if (st.locked) return json({ error: st.ownerId === userId ? 'already-pro' : 'locked-by-other' }, 409);
+    if (st.locked) return json({ error: userId && st.ownerId === userId ? 'already-pro' : 'locked-by-other' }, 409);
 
     const acc = accounts(env);
-    const [user, customer] = await Promise.all([acc.getUser(userId), acc.customerForUser(userId)]);
-    if (!user) return json({ error: 'signed-out' }, 401);
-    const hold = await acc.holdCheckout(calendarId, userId, CHECKOUT_HOLD_MS);
+    const [user, customer] = userId ? await Promise.all([acc.getUser(userId), acc.customerForUser(userId)]) : [null, null];
+    if (userId && !user) return json({ error: 'signed-out' }, 401);
+    const hold = await acc.holdCheckout(calendarId, buyer, CHECKOUT_HOLD_MS);
     if (!hold.ok) return json({ error: hold.error }, hold.error === 'too-many-checkouts' ? 429 : 409);
     // A restart: expire the previous page first, so two pages for one calendar can never both take a payment.
     if (hold.previousSession) {
@@ -694,12 +789,13 @@ async function checkout(request, env, body) {
         }
     }
     const back = validId(body.editName) ? body.editName : calendarId;
-    const meta = { calendar_id: calendarId, user_id: userId };
+    const meta = userId ? { calendar_id: calendarId, user_id: userId } : { calendar_id: calendarId, claim: claimHash };
     const params = {
         mode: 'subscription',
         line_items: [{ price, quantity: 1 }],
         // Card only (Apple Pay and Google Pay ride on it): no Cash App or bank options to scan past.
         payment_method_types: ['card'],
+        wallet_options: { link: { display: 'never' } },   // no "save with Link" phone box or Link bank option
         metadata: { ...meta, interval },
         subscription_data: { metadata: meta },
         success_url: `${siteUrl(env)}/pro/done?session_id={CHECKOUT_SESSION_ID}#${encodeURIComponent(calendarId)}`,
@@ -713,11 +809,11 @@ async function checkout(request, env, body) {
     params.custom_text = { submit: { message: cfg.livemode === false ? `${forWhat} ${TEST_CARD_HINT}` : forWhat } };
     // Stripe limits client_reference_id's characters; calendar names can be anything, and metadata has the real id.
     if (/^[A-Za-z0-9_-]{1,200}$/.test(calendarId)) params.client_reference_id = calendarId;
-    if (customer) params.customer = customer; else params.customer_email = user.email;
+    if (customer) params.customer = customer; else if (user) params.customer_email = user.email;   // signed out: Stripe asks
     const r = await stripeRequest(cfg, 'POST', '/v1/checkout/sessions', params);
     if (!r.ok || !r.data.url) { console.error('[accounts] checkout session failed:', r.status, r.data && r.data.error && r.data.error.code); return json({ error: 'stripe-error' }, 502); }
-    if (r.data.id) await acc.setCheckoutSession(calendarId, userId, r.data.id);
-    return json({ url: r.data.url });
+    if (r.data.id) await acc.setCheckoutSession(calendarId, buyer, r.data.id);
+    return json({ url: r.data.url }, 200, claim ? { 'Set-Cookie': claimCookie(claim, CLAIM_MAX_AGE) } : {});
 }
 
 // Stripe webhook. The body is read raw before anything parses it (the signature covers the bytes).
@@ -847,7 +943,14 @@ async function applySubscription(env, acc, cfg, s) {
     if (prev && CONFLICT.has(prev.status)) return {};                   // refunded and canceled by us: final
     // Our row wins over Stripe's metadata: support may have reassigned the owner.
     const calendarId = (prev && prev.calendar_id) || s.calendarId;
-    const userId = (prev && prev.user_id) || s.userId;
+    let userId = (prev && prev.user_id) || s.userId;
+    if (!userId && s.claim && s.customer) {
+        // Pay first: the owner is the email typed at Stripe (see userForCheckout).
+        const c = await stripeRequest(cfg, 'GET', `/v1/customers/${encodeURIComponent(s.customer)}`);
+        if (c.status >= 500 || c.status === 429 || c.status === 0) return { retry: true };
+        const email = String(c.ok && c.data.email || '').trim().toLowerCase();
+        if (validEmail(email)) userId = (await acc.userForCheckout(email, s.claim)).userId;
+    }
     if (!validId(calendarId) || !userId) { console.warn('[accounts] subscription without calendar/user metadata:', s.id); return {}; }
     await acc.upsertSubscription({ ...s, calendarId, userId });
 

@@ -28,21 +28,19 @@ const ctx = (o = {}) => browser.newContext({ viewport: { width: 1280, height: 80
 const owner = await ctx(); const op = await owner.newPage();
 await op.goto(`${BASE}/${cal}?backend=cf`); await op.waitForTimeout(3000);
 
-// 1. Owner: Share -> Lock this calendar -> sign in by email link
+// 1. Owner signs in first (a returning owner, from the logo menu's "Pro owner? Sign in"). Signed-out
+//    buyers pay first instead (no email step): walked separately, see docs (pay-first walkthrough).
 await vm(op, 'vm.showShare = true'); await op.waitForTimeout(600);
 await op.locator('[data-testid=pro-panel]').waitFor({ timeout: 15000 });
 await op.screenshot({ path: `${OUT}/1-share-offer.png` });
-await op.locator('[data-testid=pro-lock-btn]').click();
-const form = op.locator('[data-testid=pro-email-form]'); await form.waitFor({ timeout: 10000 });
-await form.locator('input[type=email]').fill(email); await form.locator('button[type=submit], button').last().click();
-await op.locator('[data-testid=pro-sent]').waitFor({ timeout: 10000 });
+await fetch(`${BASE}/api/auth/start`, { method: 'POST', headers: H, body: JSON.stringify({ email, next: '/' + cal }) });
 const mail = (await admin(`/api/admin/accounts/outbox?email=${encodeURIComponent(email)}`)).emails.at(-1);
 const token = mail.text.match(/#t=([A-Za-z0-9_-]+)/)[1];
 await op.goto(`${BASE}/signin#t=${token}`);
 await op.locator('#confirm').click({ timeout: 10000 });          // the page asks "Sign in to pastecal as <email>?" first
 await op.waitForURL((u) => !u.pathname.startsWith('/signin'), { timeout: 20000 });
 assert.ok(!(await op.evaluate(() => location.hash)).includes('t='), 'token left in URL');
-step('owner asked to lock, got the sign-in email, the link signed them in and brought them back');
+step('owner got the sign-in email, the link signed them in and brought them back');
 
 // 2. Lock this calendar -> real Stripe Checkout
 await op.goto(`${BASE}/${cal}?backend=cf`); await op.waitForTimeout(3000);

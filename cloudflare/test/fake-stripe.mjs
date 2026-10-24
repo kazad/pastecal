@@ -6,6 +6,7 @@
 //            GET /stripe/v1/invoices/<id> (`invoices`), GET /stripe/v1/invoice_payments?invoice=|payment[payment_intent]=
 //            (`invoicePayments`, a list of {invoice, status, payment}), GET /stripe/v1/charges/<id> (`charges`),
 //            POST /stripe/v1/refunds (recorded in `refunds`; the same Idempotency-Key makes one refund)
+//            GET /stripe/v1/customers/<id> (`customers`, which the test sets)
 //   Lock:    the CalendarRoom lock API from the pastecal-pro-lock branch, over `cals`:
 //            GET lock-status, POST lock / unlock / rotate-editor-key
 // Everything the Worker sent is in `log`, form bodies decoded.
@@ -14,7 +15,7 @@ import crypto from 'node:crypto';
 
 export function startFakeStripe(port) {
     const subs = new Map(), cals = new Map(), log = [], hooks = { lockFails: 0, refundFails: 0, expireFails: 0 };
-    const sessions = new Map(), invoices = new Map(), invoicePayments = [], charges = new Map(), refunds = [];
+    const sessions = new Map(), invoices = new Map(), invoicePayments = [], charges = new Map(), refunds = [], customers = new Map();
     const send = (res, status, data) => { res.statusCode = status; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(data)); };
     const server = http.createServer((req, res) => {
         let raw = ''; req.on('data', (c) => (raw += c));
@@ -29,7 +30,10 @@ export function startFakeStripe(port) {
                 const missing = () => send(res, 404, { error: { type: 'invalid_request_error', code: 'resource_missing' } });
                 if (req.method === 'POST' && p === '/stripe/v1/checkout/sessions') {
                     const id = 'cs_test_' + crypto.randomBytes(6).toString('hex');
-                    sessions.set(id, { id, object: 'checkout.session', status: 'open', url: `https://checkout.stripe.test/${id}` });
+                    const metadata = {};
+                    for (const [k, v] of Object.entries(body || {})) { const mm = k.match(/^metadata\[(.+)\]$/); if (mm) metadata[mm[1]] = v; }
+                    sessions.set(id, { id, object: 'checkout.session', status: 'open', payment_status: 'unpaid', metadata,
+                        created: Math.floor(Date.now() / 1000), url: `https://checkout.stripe.test/${id}` });
                     return send(res, 200, sessions.get(id));
                 }
                 const cs = p.match(/^\/stripe\/v1\/checkout\/sessions\/([^/]+)(\/expire)?$/);
@@ -52,6 +56,8 @@ export function startFakeStripe(port) {
                     if (req.method === 'DELETE') sub.status = 'canceled';
                     return send(res, 200, sub);
                 }
+                const cu = p.match(/^\/stripe\/v1\/customers\/([^/]+)$/);
+                if (req.method === 'GET' && cu) return customers.has(cu[1]) ? send(res, 200, customers.get(cu[1])) : missing();
                 const inv = p.match(/^\/stripe\/v1\/invoices\/([^/]+)$/);
                 if (req.method === 'GET' && inv) return invoices.has(inv[1]) ? send(res, 200, invoices.get(inv[1])) : missing();
                 const ch = p.match(/^\/stripe\/v1\/charges\/([^/]+)$/);
@@ -90,7 +96,7 @@ export function startFakeStripe(port) {
     });
     const addCalendar = (id, lock = {}) => cals.set(id, { locked: false, ...lock });
     return new Promise((resolve) => server.listen(port, '127.0.0.1', () => resolve({ subs, cals, log, hooks, addCalendar,
-        sessions, invoices, invoicePayments, charges, refunds, close: () => server.close() })));
+        sessions, invoices, invoicePayments, charges, refunds, customers, close: () => server.close() })));
 }
 
 // A Stripe-Signature header the way Stripe makes one.

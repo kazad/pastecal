@@ -12,8 +12,10 @@
 <title>Pro is on · pastecal</title>
 <link rel="icon" href="/favicon.ico">
 <script>
-  var proCalendar = null;
+  var proCalendar = null, proSession = null;
   try { proCalendar = decodeURIComponent(location.hash.slice(1)) || null; } catch (e) { proCalendar = null; }
+  try { proSession = new URLSearchParams(location.search).get('session_id'); } catch (e) { proSession = null; }
+  // First thing, before anything else on the page can read or record the address.
   history.replaceState(null, '', location.pathname);
 </script>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -46,6 +48,7 @@ button.secondary { margin-top: 10px; background: transparent; color: var(--blue)
   <h1><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span id="title">Pro is on</span></h1>
   <p id="msg">Your payment went through. Locking <span class="cal" id="calname">your calendar</span>…</p>
 
+  <p id="signin-note" class="small" hidden></p>
   <section id="linkbox" hidden>
     <h2>Your editor link</h2>
     <p class="small">Share this with people who should be able to edit. Anyone else sees a read-only calendar.</p>
@@ -108,6 +111,7 @@ button.secondary { margin-top: 10px; background: transparent; color: var(--blue)
       }
     }
     function signInHint(r) {
+      if (existingAccount) return;             // the sign-in note above already says what to do
       if (r.status === 401) msg.append(' Sign in from your calendar’s Share panel to make an editor link.');
       else msg.append(' Make an editor link from your calendar’s Share panel.');
     }
@@ -134,11 +138,24 @@ button.secondary { margin-top: 10px; background: transparent; color: var(--blue)
     });
   }
 
+  // Paid while signed out (pay first): this browser started the checkout, so it may be signed in now.
+  // An email that already has an account gets a sign-in link instead (the server decides).
+  var existingAccount = false;
+  var claimed = !proSession ? Promise.resolve(null) : api('POST', '/api/pro/claim', { sessionId: proSession }).then(function (r) {
+    if (r.status === 200 && r.data.ok && !r.data.signedIn) {
+      existingAccount = true;
+      var who = document.createElement('b'); who.textContent = r.data.email;
+      $('signin-note').textContent = ''; $('signin-note').append('This email already has a pastecal account, so we sent a sign-in link to ', who, '. Open it to get your editor link and manage Pro.');
+      $('signin-note').hidden = false;
+    }
+    return r;
+  });
+
   // The webhook may land a few seconds after Stripe sends people here: ask every 1.5s for up to ~20s.
   var tries = 0;
   (function poll() {
     api('GET', '/api/pro/status?calendar=' + encodeURIComponent(proCalendar)).then(function (r) {
-      if (r.status === 200 && r.data.locked) return locked();
+      if (r.status === 200 && r.data.locked) return claimed.then(locked);
       if (++tries < 14) return setTimeout(poll, 1500);
       $('title').textContent = 'Still setting up';
       msg.textContent = 'Your payment went through, and the lock is still on its way. Refresh this page in a minute, or open your calendar and press Share.';

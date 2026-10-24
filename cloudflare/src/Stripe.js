@@ -106,6 +106,7 @@ export function summarizeSubscription(sub) {
         customer: typeof sub.customer === 'string' ? sub.customer : sub.customer && sub.customer.id,
         calendarId: sub.metadata && sub.metadata.calendar_id || null,
         userId: sub.metadata && sub.metadata.user_id || null,
+        claim: sub.metadata && sub.metadata.claim || null,     // pay first: the hash a signed-out checkout carries
         priceId: price.id || null,
         interval: (price.recurring && price.recurring.interval) || price.interval || null,
         currentPeriodEnd: item.current_period_end || sub.current_period_end || null,

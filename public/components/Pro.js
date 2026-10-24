@@ -303,9 +303,9 @@ const ProPanel = {
             this.error = ''; this.busy = true;
             try {
                 const me = await proApi('GET', '/api/me');
-                if (me.status === 401) { this.me = null; this.step = 'email'; this.focusEmail(); proTrack((a) => a.proSignInShown('share_panel')); return; }
-                if (me.status !== 200) { this.error = me.status === 0 ? 'We couldn’t reach pastecal. Check your connection and try again.' : 'Something went wrong. Try again in a minute.'; return; }
-                this.me = me.data;
+                if (me.status !== 200 && me.status !== 401) { this.error = me.status === 0 ? 'We couldn’t reach pastecal. Check your connection and try again.' : 'Something went wrong. Try again in a minute.'; return; }
+                // Signed out: pay first. Stripe asks for the email, and "Pro is on" signs them in.
+                this.me = me.status === 200 ? me.data : null;
                 await this.checkout();
             } finally { this.busy = false; }
         },

@@ -20,6 +20,7 @@
 //   node test/accounts.test.mjs && node test/billing.test.mjs
 // This file runs the fake Stripe + fake lock API on 8832 (test/fake-stripe.mjs).
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import { startFakeStripe, signStripe } from './fake-stripe.mjs';
 const BASE = process.env.BASE || 'http://localhost:8822', NOKEYS = process.env.NOKEYS_BASE || 'http://localhost:8823';
 const TESTKEY = process.env.TESTKEY_BASE || 'http://localhost:8824';
@@ -70,8 +71,88 @@ try {
     const ann = await signIn(BASE, `ann-${run}@example.com`);
     const cal = `Team ${run}`;            // a real-looking name with a space: no client_reference_id
     fake.addCalendar(cal);
-    assert.equal((await post(BASE, '/api/pro/checkout', { calendarId: cal })).status, 401);
-    step('checkout without a session is 401');
+
+    // --- Pay first: checkout while signed out, then /pro/done claims it from the same browser.
+    const sha = (v) => crypto.createHash('sha256').update(v).digest('base64url');
+    const cookieOf = (res, name) => (res.headers.getSetCookie().find((c) => c.startsWith(name + '=')) || '').split(';')[0];
+    const anonCal = `anon-${run}`; fake.addCalendar(anonCal);
+    let b0 = fake.log.length;
+    r = await post(BASE, '/api/pro/checkout', { calendarId: anonCal });
+    assert.equal(r.status, 200, 'signed out may check out');
+    const claimSet = r.headers.getSetCookie().find((c) => c.startsWith('pc_claim='));
+    assert.match(claimSet, /HttpOnly/); assert.match(claimSet, /Secure/); assert.match(claimSet, /SameSite=Lax/);
+    const claimCookie = claimSet.split(';')[0], claim = claimCookie.slice('pc_claim='.length);
+    let csA = fake.log.slice(b0).find((l) => l.path === '/stripe/v1/checkout/sessions');
+    assert.equal(csA.body['metadata[claim]'], sha(claim), 'Stripe gets only the hash of the browser token');
+    assert.equal(csA.body['subscription_data[metadata][claim]'], sha(claim));
+    assert.equal(csA.body['metadata[user_id]'], undefined); assert.equal(csA.body.customer_email, undefined); assert.equal(csA.body.customer, undefined);
+    assert.equal(csA.body['payment_method_types[0]'], 'card');
+    assert.ok(!JSON.stringify(csA.body).includes(claim), 'the token itself never leaves');
+    r = await post(BASE, '/api/pro/checkout', { calendarId: anonCal }, claimCookie);
+    assert.equal(r.status, 200, 'the same browser may restart its checkout');
+    assert.equal((await post(BASE, '/api/pro/checkout', { calendarId: anonCal })).status, 200, 'a signed-out checkout never blocks another buyer');
+    step('pay first: signed-out checkout sets an HttpOnly claim cookie; Stripe sees only its hash, no email or user; card only; it holds nobody back');
+
+    const anonSess = [...fake.sessions.values()].filter((x) => x.metadata.claim === sha(claim)).at(-1);
+    const buyer = `buyer-${run}@example.com`;
+    const claimIt = (cookie, id = anonSess.id) => post(BASE, '/api/pro/claim', { sessionId: id }, cookie);
+    assert.equal((await claimIt(null)).status, 403, 'no claim cookie');
+    assert.equal((await claimIt(claimCookie)).status, 403, 'not paid yet');
+    Object.assign(anonSess, { status: 'complete', payment_status: 'paid', customer_details: { email: buyer.toUpperCase() } });
+    assert.equal((await claimIt('pc_claim=' + 'A'.repeat(22))).status, 403, 'another browser\'s token');
+    assert.equal((await claimIt(claimCookie, 'cs_test_nope')).status, 404);
+    r = await claimIt(claimCookie);
+    assert.equal(r.status, 200); let cj = await r.json();
+    assert.equal(cj.signedIn, true); assert.equal(cj.email, buyer);
+    const buyerCookie = cookieOf(r, 'pc_session');
+    assert.ok(buyerCookie.length > 20, 'signed in'); assert.equal(cookieOf(r, 'pc_claim'), 'pc_claim=', 'claim cookie cleared');
+    assert.equal((await me(buyerCookie)).email, buyer);
+    assert.equal((await claimIt(claimCookie)).status, 409, 'single use');
+    step('claim: needs this browser\'s token and a paid checkout; signs in the new account once; the token is single-use and cleared');
+
+    // The webhook alone (no claim yet, or ever) still finds the owner by the email typed at Stripe.
+    fake.customers.set(`cus_anon_${run}`, { id: `cus_anon_${run}`, object: 'customer', email: buyer });
+    fake.subs.set(`sub_${run}_anon`, { ...sub(`sub_${run}_anon`, anonCal, null, 'active'), customer: `cus_anon_${run}`, metadata: { calendar_id: anonCal, claim: sha(claim) } });
+    assert.equal((await webhook(event('customer.subscription.created', { id: `sub_${run}_anon` }))).status, 200);
+    const buyerId = (await (await admin(BASE, `/api/admin/accounts/lookup?email=${encodeURIComponent(buyer)}`)).json()).user.id;
+    assert.equal(fake.cals.get(anonCal).locked, true); assert.equal(fake.cals.get(anonCal).ownerId, buyerId);
+    assert.deepEqual((await me(buyerCookie)).calendars.map((c) => c.id), [anonCal]);
+    step('webhook: a signed-out checkout\'s subscription locks the calendar for the account of the email typed at Stripe');
+
+    // An email that already has an account is never signed in from a checkout: it gets a sign-in link.
+    const anonCal2 = `anon2-${run}`; fake.addCalendar(anonCal2);
+    r = await post(BASE, '/api/pro/checkout', { calendarId: anonCal2 });
+    const claim2 = cookieOf(r, 'pc_claim'), sess2 = [...fake.sessions.values()].at(-1);
+    Object.assign(sess2, { status: 'complete', payment_status: 'paid', customer_details: { email: `ann-${run}@example.com` } });
+    const annMails = async () => (await (await admin(BASE, `/api/admin/accounts/outbox?email=${encodeURIComponent(`ann-${run}@example.com`)}`)).json()).emails.length;
+    const mailsBefore = await annMails();
+    r = await claimIt(claim2, sess2.id);
+    assert.equal(r.status, 200); cj = await r.json();
+    assert.equal(cj.signedIn, false); assert.equal(cookieOf(r, 'pc_session'), '', 'no session for an existing account');
+    assert.equal(await annMails(), mailsBefore + 1, 'a sign-in link went to that email instead');
+    step('claim for an email that already has an account: no session, a sign-in link is emailed instead (a typed address can\'t open an account)');
+
+    // Old checkouts can't be claimed.
+    const anonCal3 = `anon3-${run}`; fake.addCalendar(anonCal3);
+    r = await post(BASE, '/api/pro/checkout', { calendarId: anonCal3 });
+    const claim3 = cookieOf(r, 'pc_claim'), sess3 = [...fake.sessions.values()].at(-1);
+    Object.assign(sess3, { status: 'complete', payment_status: 'paid', customer_details: { email: `late-${run}@example.com` }, created: Math.floor(Date.now() / 1000) - 3 * 3600 });
+    assert.equal((await claimIt(claim3, sess3.id)).status, 403);
+    step('a checkout over 2 hours old can\'t be claimed');
+
+    // Someone who typed another person's (new) address: signed out the moment the real owner signs in.
+    const anonCal4 = `anon4-${run}`; fake.addCalendar(anonCal4);
+    const victim = `victim-${run}@example.com`;
+    r = await post(BASE, '/api/pro/checkout', { calendarId: anonCal4 });
+    const claim4 = cookieOf(r, 'pc_claim'), sess4 = [...fake.sessions.values()].at(-1);
+    Object.assign(sess4, { status: 'complete', payment_status: 'paid', customer_details: { email: victim } });
+    const squatter = cookieOf(await claimIt(claim4, sess4.id), 'pc_session');
+    assert.equal((await fetch(BASE + '/api/me', { headers: { Cookie: squatter } })).status, 200);
+    await signIn(BASE, victim);
+    assert.equal((await fetch(BASE + '/api/me', { headers: { Cookie: squatter } })).status, 401, 'the email\'s real owner signing in ends it');
+    step('an account made from a typed address is unverified: the first emailed sign-in ends every other session on it');
+
+    // The signed-in path is unchanged: checkout without a session used to be 401, now it is pay first.
 
     r = await post(BASE, '/api/pro/checkout', { calendarId: cal, interval: 'week' }, ann.cookie);
     assert.equal(r.status, 400); assert.equal((await r.json()).error, 'bad-interval');
@@ -122,7 +203,7 @@ try {
     assert.equal(r.status, 429); assert.equal((await r.json()).error, 'too-many-checkouts');
     const capPages = fake.log.filter((l) => l.path === '/stripe/v1/checkout/sessions' && l.body['metadata[calendar_id]'] === capCal).length;
     assert.equal(capPages, 4);
-    assert.equal([...fake.sessions.values()].filter((x) => x.status === 'open').length, 3, 'one open page per calendar (cal, plainCal, capCal)');
+    assert.equal([...fake.sessions.values()].filter((x) => x.status === 'open' && [cal, plainCal, capCal].includes(x.metadata.calendar_id)).length, 3, 'one open page per calendar (cal, plainCal, capCal)');
     const blocked = `blocked-${run}`; fake.addCalendar(blocked);
     assert.equal((await post(BASE, '/api/pro/checkout', { calendarId: blocked }, ann.cookie)).status, 200);
     fake.hooks.expireFails = 1;
