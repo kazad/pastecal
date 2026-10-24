@@ -297,5 +297,21 @@ const points = async (cid, cookie = owner.cookie) => (await (await get(`/api/pro
     step("a new owner sees none of the previous owner's versions (list, preview, restore 404; still in R2); the first owner re-locking starts from the new lock too");
 }
 
+// 12. A restore point named the old way (to the second: 2026-10-23T120000Z) is still listed,
+// previewed and restored.
+{
+    const { cid, p } = await proCalendar('oldname');
+    const oldName = `${today}T120000Z`;
+    seed(`${p}${oldName}.json`, { v: 3, savedAt: new Date().toISOString(), restorePointFor: '2026-03-01', calendar: { id: cid, title: 'Old-style point', options: {}, events: [ev('q1', 'q', 2)] } });
+    const pt = (await points(cid)).find((x) => x.date === oldName);
+    assert.ok(pt, 'listed'); assert.deepEqual([pt.kind, pt.day, pt.events], ['restore-point', today, 1]);
+    r = await get(`/api/pro/versions/preview?calendar=${enc(cid)}&date=${oldName}`, owner.cookie);
+    assert.equal(r.status, 200); assert.equal((await r.json()).calendar.title, 'Old-style point');
+    r = await restore(cid, oldName);
+    assert.equal(r.status, 200, await r.clone().text());
+    assert.equal((await cal(cid)).calendar.title, 'Old-style point');
+    step(`an old-style restore point (${oldName}) is listed as a restore point, previewed and restored`);
+}
+
 ownerTab.ws.close(); viewer.ws.close();
 console.log(`\n${n} checks passed`); process.exit(0);
