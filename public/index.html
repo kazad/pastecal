@@ -202,6 +202,7 @@
     <script src="/utils/analytics.js?v=1792797113"></script>
     <!-- The staging copy (preview.pastecal.com): test-mode banner and switches. Does nothing elsewhere. -->
     <script src="/utils/preview.js?v=1792797113"></script>
+    <script src="/utils/templates.js?v=1792797113"></script>
     <script src="/utils/utils.js?v=1792797113"></script>
     <script src="/models/Event.js?v=1792797113"></script>
     <script src="/services/SlugManager.js?v=1792797113"></script>
@@ -662,6 +663,29 @@
             <button type="button" class="pc-upsell-x" data-testid="pro-upsell-dismiss" aria-label="Dismiss" @click="dismissProUpsell">×</button>
         </p>
 
+        <!-- Homepage draft only: start from a template (utils/templates.js, applyTemplate in app.js), then a
+             quiet nudge toward Save & share. In the page flow, so it never covers the calendar. -->
+        <div v-if="isHomepageCalendar && !isReadOnly" class="pc-tpl" data-testid="templates" v-cloak>
+            <div class="pc-tpl-row" role="group" aria-label="Start from a template">
+                <span class="pc-tpl-label">Start from:</span>
+                <button v-for="t in templateChips" :key="t.id" type="button" class="pc-tpl-chip" :class="{ 'is-on': template && template.id === t.id }"
+                    :aria-pressed="template && template.id === t.id ? 'true' : 'false'" :data-testid="'tpl-' + t.id" @click="pickTemplate(t.id)">{{ t.label }}</button>
+                <span v-if="!template" class="pc-tpl-or">or click any day to start from scratch</span>
+                <button v-else-if="!templateNudge && !templateConfirm" type="button" class="pc-tpl-link" data-testid="tpl-blank" @click="startBlank">Start blank</button>
+            </div>
+            <p v-if="templateConfirm" class="pc-tpl-note" role="alert" data-testid="tpl-confirm">
+                <span>Switch to <b>{{ templateLabel(templateConfirm.next) }}</b>? Events you added or changed stay.</span>
+                <button type="button" class="pc-tpl-go" data-testid="tpl-confirm-yes" @click="confirmTemplate">Switch</button>
+                <button type="button" class="pc-tpl-link" data-testid="tpl-confirm-no" @click="templateConfirm = null">Cancel</button>
+            </p>
+            <p v-else-if="template && templateNudge" class="pc-tpl-note" data-testid="tpl-nudge">
+                <span><b>Looks good?</b> Save &amp; share for a link anyone can open. No sign-up.</span>
+                <button type="button" class="pc-tpl-go" data-testid="tpl-nudge-share" @click="share">Save &amp; share</button>
+                <button type="button" class="pc-tpl-link" data-testid="tpl-nudge-blank" @click="startBlank">Start blank</button>
+                <button type="button" class="pc-tpl-x" aria-label="Dismiss" title="Dismiss" data-testid="tpl-nudge-dismiss" @click="dismissTemplateNudge">&times;</button>
+            </p>
+        </div>
+
         <!-- Homepage only, narrow screens: what this is, before the calendar. -->
         <p v-if="isHomepageCalendar" class="pc-home-line" v-cloak>
             <strong>The shared calendar nobody has to sign up for.</strong> Tap a day to add an event, then press Save &amp; share. <a href="/view/demo" data-from="home-line">See a demo</a> · <a href="#how">How it works&nbsp;↓</a>
@@ -674,7 +698,7 @@
             <div id="cal2_wrap" style="width: 100%; height: 100%; position: relative;">
                 <div id="Schedule" data-testid="schedule-container"></div>
                 <!-- Homepage: one tip on the grid itself until the first event. Clicks pass through it. -->
-                <div v-if="isHomepageCalendar && !userAddedEvent && !isReadOnly" class="pc-grid-tip" data-testid="grid-tip" v-cloak>
+                <div v-if="isHomepageCalendar && !userAddedEvent && !template && !isReadOnly" class="pc-grid-tip" data-testid="grid-tip" v-cloak>
                     Click any day to add your first event
                 </div>
             </div>

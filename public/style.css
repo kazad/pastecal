@@ -1744,3 +1744,40 @@ button:hover > .pc-add-event {
 @media (min-width: 768px) {
   [data-testid="desktop-title-area"] > *, [data-testid="desktop-title-area"] .w-full { display: flex; align-items: center; height: 36px }
 }
+
+/* "Start from" templates, homepage draft only (index.html .pc-tpl, app.js applyTemplate): a row of chips
+   above the calendar, and after a pick a quiet nudge toward Save & share at its end, nearest the header's
+   button. In the page flow, never over the grid. On phones the chips scroll sideways in one row. */
+.pc-tpl { display: flex; flex-wrap: wrap; align-items: center; gap: var(--pc-space-2) var(--pc-space-4); margin: 0 0 var(--pc-space-2); min-height: 40px }
+.pc-tpl-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0 }
+.pc-tpl-label { font-size: var(--pc-fs-body); font-weight: var(--pc-fw-semibold); color: var(--pc-text-2); margin-right: 2px }
+.pc-tpl-chip { flex: none; height: 32px; padding: 0 12px; border: 1px solid var(--pc-field); border-radius: var(--pc-radius-pill); background: var(--pc-bg);
+  color: var(--pc-text); font: var(--pc-fw-semibold) 13px/1 var(--pc-font); white-space: nowrap; cursor: pointer;
+  transition: background var(--pc-dur-fast) var(--pc-ease), border-color var(--pc-dur-fast) var(--pc-ease) }
+@media (hover: hover) { .pc-tpl-chip:hover { background: var(--pc-hover); border-color: var(--pc-text-muted) } }   /* no sticky gray after a tap */
+.pc-tpl-chip.is-on { background: var(--pc-text); border-color: var(--pc-text); color: var(--pc-bg) }
+.pc-tpl-chip:focus-visible, .pc-tpl-go:focus-visible, .pc-tpl-link:focus-visible, .pc-tpl-x:focus-visible { outline: none; box-shadow: var(--pc-focus-ring) }
+.pc-tpl-or { font-size: var(--pc-fs-body); color: var(--pc-text-muted); white-space: nowrap }
+.pc-tpl-link { flex: none; padding: 4px 6px; border: 0; border-radius: var(--pc-radius-md); background: none; color: var(--pc-link);
+  font: var(--pc-fw-semibold) 13.5px/1.2 var(--pc-font); white-space: nowrap; cursor: pointer }
+.pc-tpl-link:hover { color: var(--pc-link-hover); text-decoration: underline }
+.pc-tpl-note { position: relative; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 0 0 0 auto; padding: 4px 4px 4px 14px;
+  border: 1px solid var(--pc-line); border-radius: var(--pc-radius-pill); background: var(--pc-soft); font-size: 13px; line-height: 1.35; color: var(--pc-text-muted) }
+.pc-tpl-note b { color: var(--pc-text); font-weight: var(--pc-fw-semibold) }
+.pc-tpl-go { flex: none; height: 30px; padding: 0 12px; border: 0; border-radius: var(--pc-radius-pill); background: #2563eb; color: #fff;
+  font: var(--pc-fw-bold) 13px/1 var(--pc-font); white-space: nowrap; cursor: pointer }
+.pc-tpl-go:hover { background: #1d4ed8 }
+.pc-tpl-x { flex: none; width: 28px; height: 28px; display: grid; place-items: center; border: 0; border-radius: 50%; background: none;
+  color: var(--pc-text-muted); font-size: 18px; line-height: 1; cursor: pointer }
+.pc-tpl-x:hover { background: var(--pc-hover); color: var(--pc-text) }
+@media (max-width: 767px) {
+  .pc-tpl { display: block; margin: 0 0 var(--pc-space-2) }
+  .pc-tpl-row { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain;
+    margin: 0 calc(-1 * var(--pc-space-2)); padding: 2px var(--pc-space-2) }   /* to the screen edges: body has 8px */
+  .pc-tpl-row::-webkit-scrollbar { display: none }
+  .pc-tpl-label { flex: none; white-space: nowrap }
+  .pc-tpl-or { display: none }   /* the line under it says "Tap a day" */
+  .pc-tpl-note { margin: 6px 0 0; padding: 10px 10px 10px 12px; border-radius: var(--pc-radius-lg); gap: var(--pc-space-2) }
+  .pc-tpl-note > span { flex: 1 1 100%; padding-right: 28px }
+  .pc-tpl-x { position: absolute; top: 4px; right: 4px }
+}
