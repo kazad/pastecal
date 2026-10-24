@@ -75,7 +75,7 @@ test('editor: every header button and every tab opens the panel beside the calen
     await page.getByTestId(`side-tab-${tab}`).click();
     await expect(panel(page)).toHaveAttribute('data-tab', tab);
   }
-  await expect(panel(page).getByRole('heading', { name: 'Sharing & Security' })).toBeVisible();
+  await expect(panel(page).getByRole('heading', { name: 'Read-only link' })).toBeVisible();
   await page.getByTestId('side-tab-notes').click();
   await expect(panel(page).getByLabel('Calendar notes')).toHaveValue(NOTES);
 

@@ -381,6 +381,7 @@ Copyright (c) 2025 Kalid Azad
                 <input type="text" v-model="calendar.id" @input="handleSlugInput" @keyup.enter="create"
                     class="flex-1 bg-transparent border-none focus:ring-0 p-1 text-sm font-bold text-color-2 min-w-0"
                     placeholder="your-link" aria-label="Custom URL slug" aria-describedby="url-prefix-mobile">
+                <span v-if="isHomepageCalendar" class="pc-draft-chip" title="Saved only in this browser until you press Save &amp; share">Draft</span>
                 <button @click="share"
                     :class="{ 'pc-share-pulse': sharePulse }"
                     class="bg-blue-600 text-white text-sm font-bold px-4 py-1.5 rounded-md shadow-sm whitespace-nowrap"
@@ -675,6 +676,7 @@ Copyright (c) 2025 Kalid Azad
                                         type="text" :disabled="isExisting" v-model="calendar.id" @keyup.enter="create"
                                         @input="handleSlugInput" placeholder="your-name">
 
+                                    <span v-if="isHomepageCalendar" class="pc-draft-chip" title="Saved only in this browser until you press Save &amp; share">Draft</span>
                                     <!-- Save & share: turns the draft into a real calendar and shows its links -->
                                     <button @click="share" :class="{ 'pc-share-pulse': sharePulse }" data-testid="share-new"
                                         class="ml-0.5 sm:ml-1 px-2 sm:px-3 py-1 sm:py-1.5 text-white bg-blue-600 font-bold rounded-full text-xs hover:bg-blue-700 transition-colors flex-shrink-0 shadow-sm whitespace-nowrap">
@@ -928,7 +930,7 @@ Copyright (c) 2025 Kalid Azad
                     </div>
 
                     <div v-if="showShare" class="text-sm w-full" v-cloak>
-                        <h2 class="text-lg font-bold mb-4">{{ shareProFocus ? 'Get Pro' : 'Sharing & Security' }}</h2>
+                        <h2 v-if="shareProFocus" class="text-lg font-bold mb-4">Get Pro</h2>
                         <!-- Arriving from Get Pro: only the lock offer, the links one click away -->
                         <template v-if="!shareProFocus">
 
@@ -943,7 +945,7 @@ Copyright (c) 2025 Kalid Azad
                         <div class="grid grid-cols-1 gap-4">
 
                             <!-- Edit Access (Top Left) -->
-                            <div v-if="canEdit" class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
+                            <div v-if="canEdit" class="pc-share-card">
                                 <h4 class="font-medium mb-2 inline-flex items-center gap-x-2">
 
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
@@ -952,13 +954,13 @@ Copyright (c) 2025 Kalid Azad
                                             d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125" />
                                     </svg>
 
-                                    Edit Access
+                                    Edit link
                                 </h4>
-                                <p class="text-xs text-color-1 mb-3 italic" v-if="lock.locked">
+                                <p class="pc-share-desc" v-if="lock.locked">
                                     Locked: people with this link can view. Only you and people with an editor link can change it.
                                 </p>
-                                <p class="text-xs text-color-1 mb-3 italic" v-else>
-                                    Full editing access - anyone can view and change events
+                                <p class="pc-share-desc" v-else>
+                                    For helpers. Anyone with it can add and change events.
                                 </p>
                                 <div class="flex gap-2">
                                     <input type="text" :value="getEditableURL()" readonly
@@ -980,7 +982,7 @@ Copyright (c) 2025 Kalid Azad
                             </div>
 
                             <!--  View Only (Top Right) -->
-                            <div class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
+                            <div class="pc-share-card">
                                 <h4 class="font-medium mb-2 inline-flex items-center gap-x-2">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                                         stroke="currentColor" class="size-5">
@@ -990,10 +992,10 @@ Copyright (c) 2025 Kalid Azad
                                             d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
                                     </svg>
 
-                                    View Only
+                                    Read-only link
                                 </h4>
-                                <p class="text-xs text-color-1 mb-3 italic">
-                                    Read-only access - users can view but not edit events
+                                <p class="pc-share-desc">
+                                    For the group chat. People see every change but can't edit.
                                 </p>
 
                                 <!-- View-only link (auto-created) -->
@@ -1046,7 +1048,7 @@ Copyright (c) 2025 Kalid Azad
                             </div>
 
                             <!-- Current View (Bottom Left) -->
-                            <div class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
+                            <div class="pc-share-card">
                                 <h4 class="font-medium mb-2 inline-flex items-center gap-x-2">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                                         stroke="currentColor" class="size-5">
@@ -1054,11 +1056,10 @@ Copyright (c) 2025 Kalid Azad
                                             d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
                                     </svg>
 
-                                    Current View
+                                    Link to this view
                                 </h4>
-                                <p class="text-xs text-color-1 mb-3 italic">
-                                    Share link to current date and view. Or add URL params: <code
-                                        class="bg-disabled px-1 py-0.5 rounded text-xs">?date=2024-04-01&view=week</code>
+                                <p class="pc-share-desc">
+                                    Opens at the date and view you're looking at now.
                                 </p>
                                 <div class="flex gap-2">
                                     <input type="text" :value="currentViewURL" readonly
@@ -1080,7 +1081,7 @@ Copyright (c) 2025 Kalid Azad
                             </div>
 
                             <!-- Phone/Apps (Bottom Right) -->
-                            <div class="bg-1 p-4 rounded-lg shadow-sm border border-color-default">
+                            <div class="pc-share-card">
                                 <h4 class="font-medium mb-2 inline-flex items-center gap-x-2">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                                         stroke="currentColor" class="size-5">
@@ -1089,11 +1090,10 @@ Copyright (c) 2025 Kalid Azad
                                     </svg>
 
 
-                                    On your phone
+                                    Add to a calendar app
                                 </h4>
-                                <p class="text-xs text-color-1 mb-3 italic">
-                                    Subscribe once and new events appear automatically. Nothing to install.
-                                    Google Calendar checks for changes every few hours.
+                                <p class="pc-share-desc">
+                                    Subscribe once in Google, Apple or Outlook and new events show up on their own. Google checks every few hours.
                                 </p>
 
                                 <!-- Primary: hand the feed to the OS default calendar app. Uses the

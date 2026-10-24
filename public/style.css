@@ -1087,8 +1087,13 @@ div#Schedule,
 }
 .pc-home-aside h1 { margin: 0 0 14px; font-size: 36px; line-height: 1.06; font-weight: 900; letter-spacing: -.02em; color: var(--pc-text); text-wrap: balance }
 /* The highlighter: one phrase only. Yellow in both themes, dark text on it. */
-.pc-hl { background: linear-gradient(transparent 55%, #ffe066 55%, #ffe066 92%, transparent 92%); color: inherit; padding: 0 4px; margin-left: -4px; white-space: nowrap }
-:root[data-theme="dark"] .pc-hl { background: linear-gradient(transparent 55%, #8a6d00 55%, #8a6d00 92%, transparent 92%) }
+.pc-hl { position: relative; z-index: 0; background: none; color: inherit; white-space: nowrap }
+/* A marker stroke, not a box: tilted, uneven ends, ink a little lighter where it thins. */
+.pc-hl::before { content: ""; position: absolute; z-index: -1; left: -.12em; right: -.16em; top: .5em; bottom: .02em;
+  background: linear-gradient(100deg, rgba(255, 214, 10, .55), rgba(255, 214, 10, .9) 12%, rgba(255, 205, 0, .85) 70%, rgba(255, 214, 10, .5));
+  border-radius: .5em .25em .6em .3em / .4em .6em .35em .55em; transform: rotate(-1.6deg) skewX(-6deg) }
+:root[data-theme="dark"] .pc-hl::before { background: linear-gradient(100deg, rgba(255, 204, 0, .3), rgba(255, 204, 0, .5) 12%, rgba(255, 190, 0, .45) 70%, rgba(255, 204, 0, .28)) }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pc-hl::before { background: linear-gradient(100deg, rgba(255, 204, 0, .3), rgba(255, 204, 0, .5) 12%, rgba(255, 190, 0, .45) 70%, rgba(255, 204, 0, .28)) } }
 .pc-home-lead { margin: 0 0 20px; font-size: 17px; line-height: 1.5; color: var(--pc-text-muted) }
 .pc-home-steps { list-style: none; margin: 0 0 18px; padding: 0; display: grid; gap: 10px }
 .pc-home-steps li { display: grid; grid-template-columns: 28px 1fr; gap: 12px; align-items: center; font-size: 16px; color: var(--pc-text) }
@@ -1694,3 +1699,18 @@ button:hover > .pc-add-event {
   @media (max-width: 767px) { .pc-side { animation: pc-sheet-in .2s var(--pc-ease, ease-out) } }
 }
 @keyframes pc-sheet-in { from { transform: translateY(24px); opacity: .6 } to { transform: none; opacity: 1 } }
+
+/* Share tab: four plain sections, not boxes in a box. Title, one plain line, the link and its button. */
+.pc-share-card { padding: 16px 0; border-top: 1px solid var(--pc-line) }
+.pc-share-card:first-child { border-top: 0; padding-top: 0 }
+.pc-share-card h4 { font-size: 15px; font-weight: 700; margin-bottom: 4px !important; color: var(--pc-text) }
+.pc-share-card h4 svg { color: var(--pc-link) }
+.pc-share-desc { margin: 0 0 10px; font-size: 13.5px; line-height: 1.45; color: var(--pc-text-muted) }
+.pc-share-card input[readonly] { border-radius: 8px !important; font-size: 13px !important; background: var(--pc-soft) !important; color: var(--pc-text) }
+.pc-share-card button.bg-blue-500 { border-radius: 8px !important }
+.pc-share-card .grid, .pc-side .grid.gap-4 { gap: 0 !important }
+
+/* Draft tag in the address bar, beside Save & share: where the action is, not a line under the grid. */
+.pc-draft-chip { flex: none; margin-right: 6px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .02em;
+  color: var(--pc-warning); background: var(--pc-warning-soft); cursor: help }
+.pc-draft-note > span:first-child { display: none }
