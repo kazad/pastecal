@@ -105,4 +105,36 @@ test('fix3: no Play CDN or unpinned unpkg Vue; Vue self-hosted; scripts versione
   expect(hiddenWorks).toBe('none');
 });
 
+// ---------------------------------------------------------------- fix 4: DST
+// A 10:00 event on the clock-change day must sit exactly where a 10:00 event sits the day before
+// (same week): positions are wall-clock hours, not elapsed time since midnight.
+for (const [project, dstDay, before, utcOn, utcBefore] of [
+  ['desktop-de', '2026-10-25', '2026-10-24', '2026-10-25T09:00:00.000Z', '2026-10-24T08:00:00.000Z'], // Berlin: CEST -> CET
+  ['desktop-en', '2026-11-01', '2026-10-31', '2026-11-01T15:00:00.000Z', '2026-10-31T14:00:00.000Z'], // New York: EDT -> EST
+]) {
+  test(`fix4: ${project} -- a 10:00 event on the DST day (${dstDay}) lines up with 10:00 the day before, and with the 10 AM row`, async ({ page }, info) => {
+    only(info, project);
+    const ev = (id, title, start) => ({ id, title, start, end: new Date(new Date(start).getTime() + 3600000).toISOString(), type: 1, isAllDay: false, description: '', repeat: '', recurrencerule: '', recurrenceID: null, recurrenceException: null });
+    const id = await fresh(info, 'dst', [ev('dst-on', 'Ten on DST day', utcOn), ev('dst-before', 'Ten day before', utcBefore)]);
+    await nat.open(page, id);
+    await nat.view(page, 'Week');
+    // style.top of an event block in the time grid, or null when its day is not on screen
+    const gridTop = (title) => page.evaluate((tt) => { const el = [...document.querySelectorAll('.nc-timed')].find((e) => e.textContent.includes(tt)); return el ? parseFloat(el.style.top) : null; }, title);
+    // Nov 1 2026 is a Sunday, so the two days can be in different weeks: read each where it is.
+    let onTop = null, prevTop = null;
+    for (let i = 0; i < 3 && (onTop === null || prevTop === null); i++) {
+      onTop = onTop ?? await gridTop('Ten on DST day'); prevTop = prevTop ?? await gridTop('Ten day before');
+      if (onTop === null || prevTop === null) { await nat.next(page); await page.waitForTimeout(300); }
+    }
+    if (onTop === null) { onTop = await gridTop('Ten on DST day'); }
+    // first label of the gutter ("5 AM" / "05:00") is the grid's first hour
+    const firstHour = parseInt(await page.locator('.nc-hour-label').first().innerText(), 10) || 0;
+    info.annotations.push({ type: 'tops', description: JSON.stringify({ onTop, prevTop, firstHour }) });
+    expect(prevTop).toBe((10 - firstHour) * 48);
+    expect(onTop).toBe((10 - firstHour) * 48);
+    await nat.event(page, 'Ten on DST day').first().scrollIntoViewIfNeeded();
+    await shot(page, `fix4-dst-${project}`, info);
+  });
+}
+
 module.exports = { only, fresh };

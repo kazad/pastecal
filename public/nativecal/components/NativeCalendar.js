@@ -27,6 +27,8 @@
 const NativeCalendar = (() => {
     const DAY_MS = 86400000;
     const HOUR_PX = 48;                 // Syncfusion: two 24px slots per hour
+    // Hours on the clock face (0-24) of a time within one day; `dayEnd` (next midnight) reads as 24.
+    const wallHours = (t, dayEnd) => (dayEnd && t >= dayEnd) ? 24 : t.getHours() + t.getMinutes() / 60 + t.getSeconds() / 3600;
     const MONTH_ROW_PX = 100;           // fixed month row height, like Syncfusion
     const BAR_PX = 20, BAR_GAP = 2, DATE_HEADER_PX = 26;
     const VIEWS = ['Day', 'Week', 'Month', '3 Months', 'Year', 'Agenda'];
@@ -218,9 +220,11 @@ const NativeCalendar = (() => {
                     const dayEnd = addDays(day, 1); const items = [];
                     for (const o of occs) {
                         if (isLong(o) || o.end <= day || o.start >= dayEnd) continue;
-                        const a = Math.max(o.start, day), b = Math.min(o.end, dayEnd);
-                        const top = ((a - day) / 3600000 - this.firstHour) * HOUR_PX;
-                        const height = Math.max(((b - a) / 3600000) * HOUR_PX, 18);
+                        // Wall-clock hours, not elapsed time since midnight: on a DST day midnight to
+                        // 10:00 is 9 or 11 hours, and the event would sit an hour off its label.
+                        const a = wallHours(new Date(Math.max(o.start, day)), dayEnd), b = wallHours(new Date(Math.min(o.end, dayEnd)), dayEnd);
+                        const top = (a - this.firstHour) * HOUR_PX;
+                        const height = Math.max((b - a) * HOUR_PX, 18);
                         if (top + height <= 0) continue;
                         items.push({ occ: o, top: Math.max(top, 0), height: top < 0 ? height + top : height });
                     }
@@ -228,7 +232,7 @@ const NativeCalendar = (() => {
                 });
                 return { allDay: allDayBars, timed, allDayLanes: allDayBars.reduce((m, b) => Math.max(m, b.lane + 1), 0) };
             },
-            nowTop() { return ((this.now - startOfDay(this.now)) / 3600000 - this.firstHour) * HOUR_PX; },
+            nowTop() { return (wallHours(this.now) - this.firstHour) * HOUR_PX; },
             // ---- year --------------------------------------------------------------------
             yearMonths() {
                 if (this.view !== 'Year') return [];
@@ -442,9 +446,11 @@ const NativeCalendar = (() => {
                 } else if (d.mode === 'move') {
                     const minutes = ((d.top - d.top0) / HOUR_PX) * 60;
                     const shift = d.targetDay ? dayIndex(d.targetDay) - dayIndex(start) : 0;
-                    start = new Date(addDays(start, shift).getTime() + minutes * 60000); end = new Date(addDays(end, shift).getTime() + minutes * 60000);
+                    // The grid is drawn in wall-clock hours, so a drag moves the clock time (DST-safe).
+                    const wall = (t) => { const x = addDays(t, shift); x.setMinutes(x.getMinutes() + Math.round(minutes)); return x; };
+                    start = wall(start); end = wall(end);
                 } else {
-                    end = new Date(start.getTime() + (d.height / HOUR_PX) * 3600000);
+                    end = new Date(start); end.setMinutes(end.getMinutes() + Math.round((d.height / HOUR_PX) * 60));
                 }
                 if (start.getTime() === d.occ.start.getTime() && end.getTime() === d.occ.end.getTime()) return;
                 // An all-day end goes out in the display shape (through 23:59:59.999 of the last day), the

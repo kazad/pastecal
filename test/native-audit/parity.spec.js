@@ -411,7 +411,7 @@ for (const r of RENDERERS) {
       const evTop = (await ev.boundingBox()).y;
       const label = r === nat ? page.locator('.nc-hour-label', { hasText: /^(10 AM|10:00|10)$/ }).first() : page.locator('.e-time-cells-wrap .e-time-slots', { hasText: /^(10 AM|10:00)$/ }).first();
       const lb = await label.boundingBox();
-      const rowTop = r === nat ? lb.y + lb.height / 2 : lb.y;
+      const rowTop = lb.y; // native: the label box is the whole 48px hour row (its text sits at the top)
       info.annotations.push({ type: 'dst-offset-px', description: String(Math.round(evTop - rowTop)) });
       expect(Math.abs(evTop - rowTop)).toBeLessThan(14);
     });
