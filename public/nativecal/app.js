@@ -332,6 +332,19 @@ const CalendarVueApp = {
                 this.undoLast();
                 return;
             }
+            // Left/right arrows page the calendar (ported from the nativecal-parity fork, G12) --
+            // only with nothing open and focus outside any field.
+            if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+                const el = document.activeElement;
+                const typing = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+                const open = this.showEditor || this.showPopover || this.showQuickCreate || !!this.confirmDialog || this.isPanelOpen()
+                    || !!(this.$refs.quickAddDialog && this.$refs.quickAddDialog.dialogVisible);
+                const cal = this.$refs.nativeCal;
+                if (typing || open || !cal || typeof cal.step !== 'function') return;
+                e.preventDefault();
+                cal.step(e.key === 'ArrowLeft' ? -1 : 1);
+                return;
+            }
             if (e.key !== 'Escape') return;
             if (this.confirmDialog) { this.confirmDialog = null; return; }
             if (this.showEditor) { this.closeEditor(); return; }

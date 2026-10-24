@@ -270,4 +270,36 @@ test('fix7: switching a color off hides its events (and keeps hiding after the p
   await expect(nat.event(page, 'Team standup').first()).toBeVisible();
 });
 
+// ---------------------------------------------------------------- fix 8: keyboard + screen reader
+test('fix8: events are role=button with a spoken label, reachable with Tab, Enter opens them; arrows page the calendar', async ({ page }, info) => {
+  only(info);
+  const id = await fresh(info, 'a11y');
+  await nat.open(page, id);
+  const lunch = nat.event(page, 'Lunch with Sam').first();
+  await expect(lunch).toHaveAttribute('role', 'button');
+  await expect(lunch).toHaveAttribute('tabindex', '0');
+  await expect(lunch).toHaveAttribute('aria-label', 'Lunch with Sam, Saturday, October 24, 12:00 PM to 1:00 PM');
+  await expect(nat.event(page, 'Conference').first()).toHaveAttribute('aria-label', 'Conference, Tuesday, October 20 to Friday, October 23, all day');
+  // Tab reaches an event
+  await page.locator('[data-testid="current-date-range"]').focus();
+  let reached = '';
+  for (let i = 0; i < 80 && !reached; i++) {
+    await page.keyboard.press('Tab');
+    reached = await page.evaluate(() => document.activeElement?.closest('.nc-bar, .nc-timed, .nc-agenda-item')?.getAttribute('aria-label') || '');
+  }
+  expect(reached).not.toBe('');
+  await lunch.focus();
+  await page.keyboard.press('Enter');
+  await expect(nat.popover(page)).toBeVisible();
+  await expect(nat.popover(page)).toContainText('Lunch with Sam');
+  await page.keyboard.press('Escape');
+  await expect(nat.popover(page)).toHaveCount(0);
+  // week view: timed blocks too
+  await nat.view(page, 'Week');
+  await expect(nat.event(page, 'Lunch with Sam').first()).toHaveAttribute('aria-label', /^Lunch with Sam, Saturday, October 24, 12:00 PM to 1:00 PM$/);
+  await page.locator('body').click({ position: { x: 640, y: 5 } });
+  await page.keyboard.press('ArrowRight');
+  await expect.poll(async () => (await page.locator('[data-testid="current-date-range"]').innerText()).trim()).toBe('October 25 - 31, 2026');
+});
+
 module.exports = { only, fresh };

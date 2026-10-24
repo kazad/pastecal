@@ -529,3 +529,8 @@ html[data-ux="2"][data-theme="dark"] :is(.nc-timed, .nc-bar.tint) :is(.nc-bar-ti
 /* Dark: every event block as the main app draws it -- 6px corners, a 1px grey outline. */
 html[data-ux="2"][data-theme="dark"] :is(.nc-bar, .nc-timed) { border-radius: 6px; box-shadow: inset 0 0 0 1px #616161; }
 html[data-ux="2"][data-theme="dark"] .nc-bar :is(.nc-bar-time, .nc-recur) { opacity: 1; }
+
+/* Keyboard: events are focusable (Tab) and open with Enter/Space; show where focus is. */
+.nc-bar:focus-visible, .nc-timed:focus-visible, .nc-agenda-item:focus-visible {
+    outline: 2px solid var(--nc-today, #1a73e8); outline-offset: 1px; z-index: 5;
+}

@@ -354,6 +354,19 @@ const NativeCalendar = (() => {
                 else if (this.view === 'Custom') this.date = new Date(d.getFullYear(), d.getMonth() + this.customN * dir, 1);
                 else if (this.view === 'Year') this.date = new Date(d.getFullYear() + dir, d.getMonth(), 1);
             },
+            // What a screen reader says for an event, as the main app's grid does:
+            // "Team standup, Monday, October 12, 9:00 AM to 10:00 AM" (dates in the browser's language).
+            ariaLabel(o) {
+                const day = (d) => d.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+                const title = o.title || '(No title)';
+                if (o.allDay) {
+                    const last = addDays(o.end, -1);
+                    return dayIndex(last) > dayIndex(o.start) ? `${title}, ${day(o.start)} to ${day(last)}, all day` : `${title}, ${day(o.start)}, all day`;
+                }
+                const sameDay = dayIndex(o.start) === dayIndex(new Date(o.end.getTime() - 1));
+                return sameDay ? `${title}, ${day(o.start)}, ${this.time(o.start)} to ${this.time(o.end)}`
+                    : `${title}, ${day(o.start)} ${this.time(o.start)} to ${day(o.end)} ${this.time(o.end)}`;
+            },
             viewLabel(v) { return v === 'Custom' ? this.customLabel : v; },
             goToday() { this.date = startOfDay(new Date()); this.pickerOpen = false; },
             togglePicker() { this.pickerOpen = !this.pickerOpen; this.pickerYear = this.date.getFullYear(); },
@@ -565,7 +578,7 @@ const NativeCalendar = (() => {
         <div v-for="b in w.bars" :key="b.occ.key + w.key" class="nc-bar" :style="barStyle(b)"
           :class="{ long: b.occ.allDay || isMultiDayTimed(b.occ), tint: isTint(b), 'clip-l': b.clippedLeft, 'clip-r': b.clippedRight }"
           :data-testid="'event-' + b.occ.event.id" :title="b.occ.title"
-          @mousedown="startDrag($event, b.occ, 'month')" @click.stop="clickEvent(b.occ, $event)">
+          @mousedown="startDrag($event, b.occ, 'month')" @click.stop="clickEvent(b.occ, $event)" tabindex="0" role="button" :aria-label="ariaLabel(b.occ)" @keydown.enter.prevent="clickEvent(b.occ, $event)" @keydown.space.prevent="clickEvent(b.occ, $event)">
           <template v-if="b.occ.allDay || isMultiDayTimed(b.occ)">
             <span v-if="!b.occ.allDay && !b.clippedLeft" class="nc-bar-time">{{ time(b.occ.start) }}</span>
             <span class="nc-bar-title center">{{ b.occ.title }}</span>
@@ -595,7 +608,7 @@ const NativeCalendar = (() => {
         <div class="nc-allday" :style="{ height: (8 + gridLayout.allDayLanes * (22)) + 'px' }">
           <div v-for="d in gridDays" :key="d.getTime()" class="nc-allday-cell" :data-day="d.getTime()" @click="clickCell(d, $event)" @dblclick="clickCell(d, $event, undefined, true)"></div>
           <div v-for="b in gridLayout.allDay" :key="b.occ.key" class="nc-bar long" :style="gridBarStyle(b, gridDays.length)"
-            :data-testid="'event-' + b.occ.event.id" @click.stop="clickEvent(b.occ, $event)">
+            :data-testid="'event-' + b.occ.event.id" @click.stop="clickEvent(b.occ, $event)" tabindex="0" role="button" :aria-label="ariaLabel(b.occ)" @keydown.enter.prevent="clickEvent(b.occ, $event)" @keydown.space.prevent="clickEvent(b.occ, $event)">
             <span v-if="!b.occ.allDay && !b.clippedLeft" class="nc-bar-time">{{ time(b.occ.start) }}</span>
             <span class="nc-bar-title center">{{ b.occ.title }}</span>
             <span v-if="!b.occ.allDay && !b.clippedRight" class="nc-bar-time">{{ time(b.occ.end) }}</span>
@@ -618,7 +631,7 @@ const NativeCalendar = (() => {
               data-testid="create-preview" :style="{ top: drag.top + 'px', height: drag.height + 'px' }">{{ createLabel() }}</div>
             <div v-for="it in gridLayout.timed[i]" :key="it.occ.key" class="nc-timed" :style="timedStyle(it)"
               :data-testid="'event-' + it.occ.event.id"
-              @mousedown="startDrag($event, it.occ, 'move', { top0: it.top, top: it.top, height: it.height })" @click.stop="clickEvent(it.occ, $event)">
+              @mousedown="startDrag($event, it.occ, 'move', { top0: it.top, top: it.top, height: it.height })" @click.stop="clickEvent(it.occ, $event)" tabindex="0" role="button" :aria-label="ariaLabel(it.occ)" @keydown.enter.prevent="clickEvent(it.occ, $event)" @keydown.space.prevent="clickEvent(it.occ, $event)">
               <div class="nc-timed-title">{{ it.occ.title }} <nc-icon v-if="it.occ.recurring" class="nc-recur" name="repeat" :size="11" :stroke-width="2.5"></nc-icon></div>
               <div v-if="it.height > 34" class="nc-timed-time">{{ time(it.occ.start) }} - {{ time(it.occ.end) }}</div>
               <div class="nc-resize" @mousedown.stop="startDrag($event, it.occ, 'resize', { height0: it.height, height: it.height, top: it.top, top0: it.top })"></div>
@@ -651,7 +664,7 @@ const NativeCalendar = (() => {
       <div class="nc-agenda-date" :class="{ today: isToday(day.d) }"><div class="n">{{ day.d.getDate() }}</div><div class="w">{{ weekdayName(day.d.getDay(), true) }}</div></div>
       <div class="nc-agenda-items">
         <div v-for="it in day.items" :key="it.key" class="nc-agenda-item" :style="{ borderLeftColor: color(it.occ.type) }"
-          :data-testid="'event-' + it.occ.event.id" @click="clickEvent(it.occ, $event)">
+          :data-testid="'event-' + it.occ.event.id" @click="clickEvent(it.occ, $event)" tabindex="0" role="button" :aria-label="ariaLabel(it.occ)" @keydown.enter.prevent="clickEvent(it.occ, $event)" @keydown.space.prevent="clickEvent(it.occ, $event)">
           <div class="t">{{ it.occ.title }} <nc-icon v-if="it.occ.recurring" class="nc-recur dark" name="repeat" :size="11" :stroke-width="2.5"></nc-icon></div>
           <div class="w">{{ it.when }}</div>
         </div>
