@@ -106,24 +106,21 @@ test('a setting changed in the panel still applies at once', async ({ browser, r
   const { id } = await seed(request);
   const { ctx, page } = await open(browser, `/${id}?backend=cf`);
   await page.getByTestId('settings-button-desktop').click();
-  // Two sub-tabs, neither scrolls: "This calendar" first, "Just me" one click away.
-  await expect(page.getByTestId('settings-scope-calendar')).toHaveAttribute('aria-pressed', 'true');
-  await expect(panel(page).getByLabel('Default view')).toBeVisible();
-  await expect(panel(page).getByLabel('First day of week')).toHaveCount(0);
-  const fits = () => page.$eval('.pc-side-body', (b) => b.scrollHeight <= b.clientHeight + 1);
-  expect(await fits(), 'This calendar fits without scrolling').toBe(true);
-  await page.getByTestId('settings-scope-me').click();
-  expect(await fits(), 'Just me fits without scrolling').toBe(true);
+  // One page, two sections: "This calendar" then "Just me", and it fits without scrolling.
+  await expect(page.getByTestId('settings-calendar')).toContainText('This calendar');
+  await expect(page.getByTestId('settings-me')).toContainText('Just me');
+  await expect(panel(page).getByLabel('Default view', { exact: true })).toBeVisible();
+  await expect(panel(page).getByLabel('First day of week')).toBeVisible();
+  expect(await page.$eval('.pc-side-body', (b) => b.scrollHeight <= b.clientHeight + 1), 'Settings fits without scrolling').toBe(true);
   await panel(page).getByLabel('First day of week').selectOption('1');   // Monday
   await expect.poll(() => page.evaluate(() => scheduleObj.firstDayOfWeek)).toBe(1);
   await expect(page.locator('.e-month-view .e-header-cells').first()).toContainText('Monday');
   await panel(page).getByLabel('First day of week').selectOption('0');
   await expect.poll(() => page.evaluate(() => scheduleObj.firstDayOfWeek)).toBe(0);
   // A calendar setting still binds to the calendar.
-  await page.getByTestId('settings-scope-calendar').click();
-  await panel(page).getByLabel('Default view').selectOption('Week');
+  await panel(page).getByLabel('Default view', { exact: true }).selectOption('Week');
   await expect.poll(() => page.evaluate(() => document.querySelector('#app')._vnode.component.proxy.calendar.options.defaultView)).toBe('Week');
-  await panel(page).getByLabel('Default view').selectOption({ index: 0 })   // Auto;
+  await panel(page).getByLabel('Default view', { exact: true }).selectOption({ index: 0 })   // Auto;
   await expect.poll(() => page.evaluate(() => document.querySelector('#app')._vnode.component.proxy.calendar.options.defaultView)).toBe(null);
   await ctx.close();
 });
@@ -136,7 +133,7 @@ test('Share in the panel still copies its links', async ({ browser, request }) =
   // Ordered by what people do most: the read-only link first, then calendar apps, then helpers.
   const order = await panel(page).locator('.pc-link-item h4').allTextContents();
   expect(order).toEqual(['View-only link', 'Edit link', 'This view', 'Calendar feed']);
-  await expect(page.getByTestId('share-pro-card')).toContainText('Lock this calendar');
+  await expect(page.getByTestId('share-pro-card')).toContainText('Go Pro');
   expect(await page.$eval('.pc-side-body', (b) => b.scrollHeight <= b.clientHeight + 1), 'Share fits without scrolling').toBe(true);
   await expect(page.getByTestId('share-readonly-addr')).toContainText(`pastecal.com/view/${viewId}`);
   await page.getByTestId('share-readonly-addr').click();                    // the field itself copies

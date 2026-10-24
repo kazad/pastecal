@@ -2077,3 +2077,38 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 .pc-share-pro--row .pc-pro-link { margin-left: auto !important }
 .pc-links { gap: 12px }
 .pc-links-sec { margin-top: 14px; padding-top: 12px }
+
+/* Settings: one page, two labeled sections (no sub-tabs). Compact rows so both fit without scrolling. */
+.pc-set-h { display: flex; align-items: baseline; gap: 8px; margin: 0 0 10px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--pc-text-muted) }
+.pc-set-h span { font-weight: 500; letter-spacing: 0; text-transform: none; font-size: 12px; opacity: .8 }
+.pc-set-pane + .pc-set-pane { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--pc-line) }
+.pc-set input[type="text"], .pc-set select { height: 32px !important; font-size: 13.5px !important }
+.pc-set .pc-set-field { margin-bottom: 10px }
+.pc-set .pc-set-field { margin-bottom: 8px }
+.pc-set .pc-set-label, .pc-set .pc-set-label-row { margin-bottom: 4px !important }
+.pc-set .pc-set-colors, .pc-set [aria-labelledby="set-colors-label"] { row-gap: 6px !important }
+.pc-set .pc-set-grid { row-gap: 8px !important }
+.pc-set-pane + .pc-set-pane { margin-top: 12px; padding-top: 12px }
+.pc-set-h { margin-bottom: 8px }
+.pc-side-tabs .pc-side-tab { padding: 0 8px }
+.pc-set-check--cell { align-self: end; height: 32px; display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 13.5px }
+.pc-share-apps--grid .pc-share-app { display: inline-flex; align-items: center; gap: 4px }
+.pc-app-ext { width: 12px; height: 12px; opacity: .55; flex: none }
+.pc-share-app:hover .pc-app-ext { opacity: 1 }
+.pc-set-check--cell { white-space: nowrap }
+@media (min-width: 1100px) and (max-width: 1279px) { .pc-side-tabs .pc-side-tab { padding: 0 5px; font-size: 13px } }
+/* Share: Go Pro card, the benefits as a short checked list. */
+.pc-share .pc-share-pro.pc-gopro { display: block !important; margin-top: 14px; padding: 12px 14px; text-align: left !important }
+.pc-gopro-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px }
+.pc-gopro-head b { font-size: 14.5px; color: var(--pc-text) }
+.pc-gopro-price { color: var(--pc-text-muted); font-size: 12.5px }
+.pc-gopro-btn { margin-left: auto; height: 30px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--pc-link); color: var(--pc-on-accent, #fff); font: 600 13px/1 var(--pc-font); cursor: pointer }
+.pc-gopro-btn:hover { filter: brightness(1.08) }
+.pc-gopro-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 12.5px; line-height: 1.35; color: var(--pc-text-muted) }
+.pc-gopro-list li { display: flex; gap: 6px; align-items: flex-start }
+.pc-gopro-list svg { width: 13px; height: 13px; flex: none; margin-top: 2px; color: var(--pc-link) }
+.pc-gopro-list b { color: var(--pc-text); font-weight: 600 }
+.pc-link-head .pc-link-extra--quiet { margin: 0 0 0 auto; align-self: center }
+/* Notes: Edit sits top-right and the text flows beside it; double-click the text to edit too. */
+.pc-notes-edit { float: right; margin: -4px -4px 6px 12px }
+.pc-notes-edit .pc-side-btn { height: 30px; padding: 0 10px; font-size: 13px }

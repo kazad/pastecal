@@ -14,8 +14,8 @@ const IDS = T.list().map((t) => t.id);
 const DATES = [];
 for (const y of [2026, 2027]) for (let m = 0; m < 12; m++) DATES.push(new Date(y, m, 1), new Date(y, m, 15, 13), new Date(y, m + 1, 0, 23, 30));
 
-test('five templates, in the chip order the homepage shows', () => {
-    assert.deepEqual(T.list().map((t) => t.label), ['Sports team', 'Family', "Who's out", 'Volunteer shifts', 'Club or class']);
+test('seven templates, in the chip order the homepage shows', () => {
+    assert.deepEqual(T.list().map((t) => t.label), ['Shared space', "Who's out", 'Family', 'Sports team', 'Volunteer shifts', 'Guest visits', 'Club or class']);
     assert.equal(T.build('nope', new Date()), null);
 });
 
