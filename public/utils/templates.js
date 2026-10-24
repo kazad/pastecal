@@ -8,7 +8,8 @@
  * the events through the EventStore, so undo and saving treat them like any others.
  *
  * Event ids are "tpl-<template>-<n>": EventStore keeps only its own fields, so the id is how the app
- * tells a template's untouched events from ones the visitor added or changed.
+ * tells a template's untouched events from ones the visitor added or changed. Only on the draft: Save
+ * & share gives each a fresh id (app.js create()), so saved calendars never share iCal UIDs.
  */
 const CalendarTemplates = {
     PREFIX: 'tpl-',

@@ -93,6 +93,7 @@ test('pick a template, switch, keep your own event, then Save & share saves it a
   expect(savedTitles.some((t) => /^Game (vs|at) /.test(t))).toBe(true);
   expect(savedTitles).not.toContain('Piano: Maya');
   expect(savedTitles).not.toContain('Your event here');
+  expect(saved.events.filter((e) => /^tpl-/.test(String(e.id)))).toEqual([]);   // ids of their own, so iCal UIDs never collide
   expect(saved.title).toBe('Tigers U10 Soccer');
   expect(saved.options.notes).toContain('Rainouts decided by 7am');
   expect(saved.options.typeLabels[0]).toBe('Practice');

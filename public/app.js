@@ -2607,6 +2607,11 @@ const CalendarVueApp = {
             }, () => {
                 // does not exist, proceed
                 this.isLoading = true;
+                // Template ids ("tpl-team-3") mean something only on the draft. Saved, each event gets an id
+                // of its own, or two calendars made from one template would share iCal UIDs in a subscriber's app.
+                if (this.calendar.events.some(e => CalendarTemplates.templateOf(e))) {
+                    this.calendar.setEvents(this.calendar.events.map(e => CalendarTemplates.templateOf(e) ? { ...e, id: Utils.uuidv4() } : e));
+                }
                 CalendarDataService.createWithId(slug, this.calendar, () => {
                     // The calendar now exists on the server. Fired separately from
                     // the slug events below because those answer "did they choose a
