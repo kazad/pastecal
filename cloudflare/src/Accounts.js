@@ -77,6 +77,7 @@ const SUBSCRIPTION_EVENTS = new Set(['checkout.session.completed', 'customer.sub
 // A full refund or a dispute ends the subscription that charge paid for (which unlocks as usual).
 const CHARGE_EVENTS = new Set(['charge.refunded', 'charge.dispute.created']);
 const CHECKOUT_RESTARTS_PER_HOUR = 3;
+const TEST_INBOX_RETAIN_MS = 7 * 24 * 3600 * 1000, TEST_INBOX_MAX = 500;   // see TestInbox.js
 
 // Same rule as index.js: any name Firebase allowed.
 const validId = (id) => typeof id === 'string' && id.length >= 1 && id.length <= 200 && !/[.#$\[\]\/\u0000-\u001f\u007f]/.test(id);
@@ -120,7 +121,10 @@ export class Accounts extends DurableObject {
             CREATE TABLE IF NOT EXISTS processed_events (event_id TEXT PRIMARY KEY, at INTEGER);
             CREATE TABLE IF NOT EXISTS outbox (id INTEGER PRIMARY KEY AUTOINCREMENT, to_email TEXT, subject TEXT, text TEXT, at INTEGER);
             CREATE TABLE IF NOT EXISTS checkout_holds (calendar_id TEXT PRIMARY KEY, user_id TEXT, expires_at INTEGER);
-            CREATE TABLE IF NOT EXISTS welcome_emails (calendar_id TEXT, user_id TEXT, at INTEGER, PRIMARY KEY (calendar_id, user_id));`);
+            CREATE TABLE IF NOT EXISTS welcome_emails (calendar_id TEXT, user_id TEXT, at INTEGER, PRIMARY KEY (calendar_id, user_id));
+            CREATE TABLE IF NOT EXISTS test_inbox (id INTEGER PRIMARY KEY AUTOINCREMENT, to_addr TEXT, from_addr TEXT, subject TEXT,
+                received_at INTEGER, text TEXT, truncated INTEGER, auth_results TEXT, arc_auth_results TEXT, has_dkim_signature INTEGER);
+            CREATE INDEX IF NOT EXISTS test_inbox_to ON test_inbox(to_addr, id);`);
         // Added later (an existing table keeps its columns): which subscription came first, and the
         // Checkout Session a hold guards plus how often its buyer restarted it.
         for (const col of ['subscriptions ADD COLUMN created INTEGER', 'checkout_holds ADD COLUMN session_id TEXT',
@@ -332,6 +336,30 @@ export class Accounts extends DurableObject {
         const now = Date.now();
         this.sql.exec(`INSERT OR IGNORE INTO processed_events (event_id, at) VALUES (?, ?)`, id, now);
         this.sql.exec(`DELETE FROM processed_events WHERE at < ?`, now - 60 * 24 * 3600 * 1000);   // Stripe retries for 3 days
+    }
+
+    // Test inbox (TestInbox.js): kept 7 days, 500 messages at most, pruned on every insert.
+    addTestMail(m, receivedAt = Date.now()) {
+        this.sql.exec(`INSERT INTO test_inbox (to_addr, from_addr, subject, received_at, text, truncated, auth_results, arc_auth_results, has_dkim_signature)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, m.to, m.from, m.subject, receivedAt, m.text, m.truncated, m.authResults, m.arcAuthResults, m.hasDkimSignature);
+        this.sql.exec(`DELETE FROM test_inbox WHERE received_at < ?`, Date.now() - TEST_INBOX_RETAIN_MS);
+        this.sql.exec(`DELETE FROM test_inbox WHERE id NOT IN (SELECT id FROM test_inbox ORDER BY id DESC LIMIT ?)`, TEST_INBOX_MAX);
+    }
+    listTestMail(to, limit) {
+        return to ? this.sql.exec(`SELECT * FROM test_inbox WHERE to_addr = ? ORDER BY id DESC LIMIT ?`, to, limit).toArray()
+            : this.sql.exec(`SELECT * FROM test_inbox ORDER BY id DESC LIMIT ?`, limit).toArray();
+    }
+    clearTestMail(to) {
+        const where = to ? ['WHERE to_addr = ?', to] : [''];
+        const n = this.sql.exec(`SELECT COUNT(*) AS n FROM test_inbox ${where[0]}`, ...where.slice(1)).one().n;
+        this.sql.exec(`DELETE FROM test_inbox ${where[0]}`, ...where.slice(1));
+        return n;
+    }
+    // Dev mode only: placeholder messages, received ageMs ago, through the same pruning.
+    seedTestMail(to, count, ageMs) {
+        for (let i = 0; i < count; i++) this.addTestMail({ to, from: 'seed@example.com', subject: `seed ${i}`, text: '', truncated: 0,
+            authResults: '', arcAuthResults: '', hasDkimSignature: 0 }, Date.now() - ageMs);
+        return { total: this.sql.exec(`SELECT COUNT(*) AS n FROM test_inbox`).one().n };
     }
 
     // Dev mode only (see the file header).

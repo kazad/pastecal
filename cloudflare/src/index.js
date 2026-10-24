@@ -16,6 +16,7 @@
  *   PUT  /cal/<id>/from-firebase  Firebase sync write (same auth)
  *   /api/auth/*, /api/me, /api/pro/*, /api/stripe/webhook   Pro accounts + billing (Accounts.js)
  *   /api/pro/stats, /api/pro/versions[/preview|/restore]     Pro stats + restore (Insight.js)
+ *   GET|DELETE /api/admin/test-inbox, and the email() handler   Test inbox for test@pastecal.com (TestInbox.js)
  *   POST /api/admin/cal/<id>/{lock,unlock,rotate-editor-key}, GET .../lock-status
  *                                 Pro lock, for support and tests (Bearer IMPORT_SECRET)
  *                                 (+ dev-legacy-key with ACCOUNTS_DEV_MODE=1: a test hook for the key migration)
@@ -30,6 +31,7 @@ export { Accounts } from './Accounts.js';
 import { handleAccounts, sessionUserId as accountsSessionUserId } from './Accounts.js';
 import { PLANS } from './Waitlist.js';
 import { handleInsight, hitHeaders } from './Insight.js';
+import { handleTestInboxEmail, handleTestInboxAdmin } from './TestInbox.js';
 import { timingSafeEqual } from './Stripe.js';
 
 // Admin routes: Authorization: Bearer <IMPORT_SECRET>, compared in constant time. Callers check IMPORT_SECRET is set.
@@ -107,6 +109,11 @@ function withCors(response) {
 }
 
 export default {
+    // Inbound mail from Email Routing: only the test inbox addresses are routed here.
+    async email(message, env) {
+        await handleTestInboxEmail(message, env);
+    },
+
     async fetch(request, env) {
         if (request.method === 'OPTIONS') {
             return new Response(null, {
@@ -183,6 +190,10 @@ export default {
         // Pro accounts and billing: /api/auth/*, /api/me, /api/pro/*, /api/stripe/webhook, /api/admin/accounts/*
         const accountsRes = await handleAccounts(request, env, url);
         if (accountsRes) return accountsRes;
+
+        // Test inbox admin: GET|DELETE /api/admin/test-inbox (Bearer IMPORT_SECRET)
+        const inboxRes = await handleTestInboxAdmin(request, env, url);
+        if (inboxRes) return inboxRes;
 
         // Telemetry: POST /api/collect -> Analytics Engine
         if (request.method === 'POST' && path === '/api/collect') return handleCollect(request, env);
