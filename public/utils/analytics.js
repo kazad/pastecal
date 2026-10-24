@@ -380,7 +380,9 @@ const Analytics = {
         this._firstEventSent = true;
         this.track('event_added', {
             ...(first ? { first_event_seconds: Math.round(performance.now() / 1000) } : {}),
-            source, // 'quick_add' | 'grid' | 'popup' | 'paste'
+            // Not 'source': GA4 reads an event param named source as the traffic source, which put
+            // ~6,600 sessions under 'Unassigned / grid'. How the event was made goes in add_via.
+            add_via: source, // 'quick_add' | 'grid' | 'popup' | 'paste'
             event_count_bucket: this.bucketEvents(calendar?.events?.length),
         });
     },

@@ -446,7 +446,7 @@ returns)
     ;;
 
 adds)
-    emit "$(report "$(mk 'customEvent:source' 'eventCount' \
+    emit "$(report "$(mk 'customEvent:add_via' 'eventCount' \
         "$(only_events 'event_added')")")" "source,count"
     dimension_warning source
     ;;

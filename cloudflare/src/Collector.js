@@ -37,7 +37,7 @@ export function toDataPoints(body, country = '') {
                 str(p.browser, 12),
                 str(p.device, 12),
                 str(country, 4),
-                str(p.source ?? p.method ?? p.code ?? p.kind ?? p.reason ?? p.where, 40),
+                str(p.add_via ?? p.source ?? p.method ?? p.code ?? p.kind ?? p.reason ?? p.where, 40),
                 str(p.cached, 4),
                 str(p.hv, 8),
             ],
