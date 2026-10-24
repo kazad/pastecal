@@ -59,10 +59,65 @@
   "analytics_engine_datasets": [{ "binding": "EVENTS", "dataset": "pastecal_events" }],
   // Sign-in links for Pro owners (Cloudflare Email Service). pastecal.com must be onboarded for sending.
   "send_email": [{ "name": "EMAIL", "allowed_sender_addresses": ["login@pastecal.com"] }],
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
   // Secrets (wrangler secret put): IMPORT_SECRET -- lets the Firebase shadow copy write;
   // FIREBASE_SA -- a service account key (JSON) that lets the room write to Firebase.
   // Billing (Accounts.js; off with a 503 until all are set): STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
   // STRIPE_PRICE_PRO_YEARLY, STRIPE_PRICE_PRO_MONTHLY. ACCOUNTS_DEV_MODE, STRIPE_API_BASE and
   // LOCK_API_BASE are for local tests only (.dev.vars / --var); never set them here.
+
+  // STAGING: preview.pastecal.com, for friends trying Pro with Stripe TEST cards. Deploy with
+  // `wrangler deploy --env staging` (docs/pro-launch.md, "Staging"). Its own Worker name, so every
+  // Durable Object (calendars, directory, waitlist, accounts) is a separate, empty set from production.
+  // Bindings are NOT inherited by environments: every one is listed here on purpose, and
+  // test/unit/staging-config.test.js checks that this block can never reach production data.
+  "env": {
+    "staging": {
+      "name": "pastecal-staging",
+      "workers_dev": false,           // one address only: preview.pastecal.com
+      "preview_urls": false,
+      // A Custom Domain: on deploy, Wrangler creates the DNS record and certificate for this host in the
+      // pastecal.com zone (same account). It fails if a DNS record for the host already exists.
+      "routes": [{ "pattern": "preview.pastecal.com", "custom_domain": true }],
+      "assets": {
+        "directory": "../public",
+        "binding": "ASSETS",
+        "not_found_handling": "single-page-application",
+        // Every path reaches the Worker, so robots.txt and X-Robots-Tag: noindex cover static pages too.
+        "run_worker_first": true
+      },
+      "durable_objects": {
+        "bindings": [
+          { "name": "CALENDARS", "class_name": "CalendarRoom" },
+          { "name": "DIRECTORY", "class_name": "CalendarDirectory" },
+          { "name": "WAITLIST", "class_name": "Waitlist" },
+          { "name": "ACCOUNTS", "class_name": "Accounts" }
+        ]
+      },
+      "migrations": [
+        { "tag": "v1", "new_sqlite_classes": ["CalendarRoom"] },
+        { "tag": "v2", "new_sqlite_classes": ["CalendarDirectory"] },
+        { "tag": "v3", "new_sqlite_classes": ["Waitlist"] },
+        { "tag": "v4", "new_sqlite_classes": ["Accounts"] }
+      ],
+      // Its own namespace, so staging traffic never spends production's per-IP budget.
+      "ratelimits": [{ "name": "CREATE_LIMITER", "namespace_id": "2001", "simple": { "limit": 10, "period": 60 } }],
+      "vars": {
+        "SITE_URL": "https://preview.pastecal.com",   // links in emails and Stripe redirects; the allowed Origin
+        "BILLING_TEST_MODE": "1",                     // Stripe TEST keys only, and only on preview.pastecal.com
+        // Never Firebase: no copy-back and nowhere to write (and no FIREBASE_SA secret on staging).
+        "FIREBASE_DB_URL": "",
+        "COPY_BACK": ""
+        // ACCOUNTS_DEV_MODE stays OFF here: it opens the outbox and the admin test hooks.
+      },
+      "r2_buckets": [{ "binding": "BACKUPS", "bucket_name": "pastecal-backups-staging" }],
+      "analytics_engine_datasets": [{ "binding": "EVENTS", "dataset": "pastecal_events_staging" }],
+      // Same sender as production: pastecal.com is the onboarded sending domain (runbook b1-b3).
+      "send_email": [{ "name": "EMAIL", "allowed_sender_addresses": ["login@pastecal.com"] }],
+      "observability": { "enabled": true }
+      // Secrets (wrangler secret put NAME --env staging): IMPORT_SECRET (its own), STRIPE_SECRET_KEY
+      // (sandbox sk_test_/rk_test_), STRIPE_WEBHOOK_SECRET (sandbox endpoint), STRIPE_PRICE_PRO_YEARLY and
+      // STRIPE_PRICE_PRO_MONTHLY (sandbox prices). Never FIREBASE_SA.
+    }
+  }
 }
