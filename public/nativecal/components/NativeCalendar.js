@@ -162,6 +162,8 @@ const NativeCalendar = (() => {
             startHour: { type: String, default: '05:00' },
             readOnly: { type: Boolean, default: false },
             initialView: { type: String, default: 'Month' },
+            // Color filter (the search panel's dots): color slots (0-based) whose events are hidden.
+            hiddenSlots: { type: Array, default: () => [] },
             initialDate: { type: [String, Date], default: null },
             customDuration: { type: [Number, String], default: 3 },
             customUnit: { type: String, default: 'Months' },
@@ -189,6 +191,14 @@ const NativeCalendar = (() => {
             first() { return Number(this.firstDayOfWeek) || 0; },
             weekdayOrder() { return [0, 1, 2, 3, 4, 5, 6].map(i => (i + this.first) % 7); },
             views() { return VIEWS; },
+            // What is drawn: the events minus the filtered-out colors. Drags still edit `events`,
+            // so a hidden event is never dropped from the list the grid hands back.
+            shownEvents() {
+                if (!this.hiddenSlots.length) return this.events;
+                const n = this.palette.length;
+                const slot = (e) => { const t = parseInt(e.type || 1, 10); return Number.isFinite(t) && t >= 1 && t <= n ? t - 1 : 0; };
+                return this.events.filter(e => !this.hiddenSlots.includes(slot(e)));
+            },
             customN() { const n = parseInt(this.customDuration, 10); const max = this.customWeeks ? 52 : 24; return n >= 1 ? Math.min(n, max) : 3; },
             customWeeks() { return /^week/i.test(String(this.customUnit || '')); },
             customLabel() { return `${this.customN} ${this.customWeeks ? 'Week' : 'Month'}${this.customN === 1 ? '' : 's'}`; },
@@ -224,7 +234,7 @@ const NativeCalendar = (() => {
                 const weeks = [];
                 for (let ws = startOfWeek(m0, this.first); ws < mEnd; ws = addDays(ws, 7)) {
                     const days = [0, 1, 2, 3, 4, 5, 6].map(i => addDays(ws, i));
-                    const occs = occurrencesBetween(this.events, ws, addDays(ws, 7));
+                    const occs = occurrencesBetween(this.shownEvents, ws, addDays(ws, 7));
                     const bars = layoutWeekBars(occs, ws, 7);
                     const maxLanes = Math.floor((MONTH_ROW_PX - DATE_HEADER_PX - 16) / (BAR_PX + BAR_GAP));
                     const hidden = [0, 0, 0, 0, 0, 0, 0];
@@ -245,7 +255,7 @@ const NativeCalendar = (() => {
             gridLayout() {
                 const days = this.gridDays; if (!days.length) return { allDay: [], timed: [], allDayLanes: 0 };
                 const s = days[0], e = addDays(days[days.length - 1], 1);
-                const occs = occurrencesBetween(this.events, s, e);
+                const occs = occurrencesBetween(this.shownEvents, s, e);
                 const allDayBars = layoutWeekBars(occs.filter(isLong), s, days.length);
                 const timed = days.map(day => {
                     const dayEnd = addDays(day, 1); const items = [];
@@ -268,7 +278,7 @@ const NativeCalendar = (() => {
             yearMonths() {
                 if (this.view !== 'Year') return [];
                 const y = this.date.getFullYear();
-                const occs = occurrencesBetween(this.events, new Date(y, 0, 1), new Date(y + 1, 0, 8));
+                const occs = occurrencesBetween(this.shownEvents, new Date(y, 0, 1), new Date(y + 1, 0, 8));
                 const marks = new Map();
                 for (const o of occs) {
                     const last = o.allDay ? addDays(o.end, -1) : new Date(o.end.getTime() - 1);
@@ -284,7 +294,7 @@ const NativeCalendar = (() => {
             agendaDays() {
                 if (this.view !== 'Agenda') return [];
                 const s = this.date, e = addDays(s, 7);
-                const occs = occurrencesBetween(this.events, s, e);
+                const occs = occurrencesBetween(this.shownEvents, s, e);
                 const days = [];
                 for (let d = s; d < e; d = addDays(d, 1)) {
                     const next = addDays(d, 1);

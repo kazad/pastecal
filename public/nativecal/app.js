@@ -223,6 +223,18 @@ const CalendarVueApp = {
         hasCustomColors() {
             return this.COLORS.some((color, index) => color !== this.DEFAULT_COLORS[index]);
         },
+        // ---- color filter (the main app's isEventVisible / hidden-events banner, for the native grid) ----
+        // Persists after the search panel closes, as in the main app; the banner says so.
+        hiddenColorSlots() {
+            const out = [];
+            for (let i = 0; i < this.COLORS.length; i++) if (this.colorFilters[i] === false) out.push(i);
+            return out;
+        },
+        isColorFilterActive() { return this.hiddenColorSlots.length > 0; },
+        hiddenEventsMessage() {
+            const labels = this.hiddenColorSlots.map(i => (this.localSettings.typeLabels && this.localSettings.typeLabels[i]) || `Type ${i + 1}`);
+            return labels.length === 1 ? `${labels[0]} events are hidden.` : 'Some event types are hidden by a filter.';
+        },
         calendarAutoViewLabel() {
             // "Auto" means each viewer's personal default.
             const v = this.globalSettings.defaultView || 'Month';
@@ -1636,8 +1648,8 @@ const CalendarVueApp = {
 
         toggleSearch() {
             if (this.showSearch) {
+                // Filters stay on after the panel closes, as in the main app; the banner says so.
                 this.showSearch = false;
-                this.resetColorFilters();
             } else {
                 this.closeAllPanels();
                 this.showSearch = true;

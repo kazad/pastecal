@@ -237,4 +237,37 @@ test('fix6: Cmd/Ctrl+Z undoes a delete, an edit and an add; not while typing in 
   expect(!!(await byTitle(id, 'Kayak'))).toBe(true);
 });
 
+// ---------------------------------------------------------------- fix 7: color filter
+test('fix7: switching a color off hides its events (and keeps hiding after the panel closes); a drag meanwhile keeps the hidden rows; Show all', async ({ page }, info) => {
+  only(info);
+  const id = await fresh(info, 'filter');
+  await nat.open(page, id);
+  await expect(nat.event(page, 'Team standup').first()).toBeVisible();
+  await tap(page, page.locator('[data-testid="search-button-desktop"]').locator('visible=true').first());
+  const dots = page.locator('span[class*="rounded-full"][class*="cursor-pointer"]').locator('visible=true');
+  await tap(page, dots.nth(1)); // color 2: Team standup, DST EU overnight
+  await expect(nat.event(page, 'Team standup')).toHaveCount(0);
+  await expect(nat.event(page, 'Lunch with Sam').first()).toBeVisible();
+  await page.keyboard.press('Escape');
+  await tap(page, page.locator('[data-testid="search-button-desktop"]').locator('visible=true').first()); // close the panel
+  await expect(page.locator('[data-testid="hidden-events-banner"]')).toContainText('hidden');
+  await shot(page, 'fix7-banner', info);
+  await expect(nat.event(page, 'Team standup')).toHaveCount(0);
+  // a drag while filtered must not drop the hidden events
+  const before = (await serverEvents(id)).length;
+  await nat.view(page, 'Week');
+  const ev = nat.event(page, 'Lunch with Sam').first();
+  await ev.scrollIntoViewIfNeeded();
+  const b = await ev.boundingBox();
+  await page.mouse.move(b.x + b.width / 2, b.y + 10); await page.mouse.down();
+  for (let i = 1; i <= 8; i++) { await page.mouse.move(b.x + b.width / 2, b.y + 10 + 6 * i); await page.waitForTimeout(20); }
+  await page.mouse.up();
+  await soon(async () => (await byTitle(id, 'Lunch with Sam')).start).not.toBe('2026-10-24T16:00:00.000Z');
+  expect((await serverEvents(id)).length).toBe(before);
+  expect(!!(await serverEvents(id)).find((e) => e.id === 'fx-standup')).toBe(true);
+  await tap(page, page.getByRole('button', { name: 'Show all events' }));
+  await nat.view(page, 'Month');
+  await expect(nat.event(page, 'Team standup').first()).toBeVisible();
+});
+
 module.exports = { only, fresh };
