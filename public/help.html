@@ -6,6 +6,7 @@
 <meta name="description" content="How to use pastecal: quick start, link types, features, privacy, phone use and keyboard shortcuts.">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/legal.css">
 <style>
+:root { --site-max: 1052px }
 html { scroll-behavior: smooth; scroll-padding-top: 76px }
 kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px solid var(--pc-line); border-bottom-width: 2px; border-radius: 6px; background: var(--pc-soft); font: 600 13px/1.4 var(--pc-font); text-align: center }
 code { font: 500 .88em/1.4 var(--pc-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); background: var(--pc-soft); border: 1px solid var(--pc-line); border-radius: 5px; padding: 1px 5px; overflow-wrap: anywhere }
@@ -42,7 +43,7 @@ td:nth-child(2) { min-width: 210px }
 .keys dt { white-space: nowrap }
 @media (max-width: 820px) {
   .layout { display: block }
-  .toc { position: sticky; top: 0; z-index: 5; margin: 0 -18px 12px; padding: 8px 18px; background: var(--pc-bg); border-bottom: 1px solid var(--pc-line); display: flex; gap: 6px; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch }
+  .toc { position: sticky; top: 0; z-index: 5; margin: 0 -16px 12px; padding: 8px 16px; background: var(--pc-bg); border-bottom: 1px solid var(--pc-line); display: flex; gap: 6px; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch }
   .toc b { display: none }
   .toc a { margin: 0; padding: 6px 12px; border: 1px solid var(--pc-line); border-radius: 999px; font-size: 14px; flex: none }
   html { scroll-padding-top: 64px }
@@ -57,9 +58,22 @@ td:nth-child(2) { min-width: 210px }
 }
 </style>
 <script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>
+<link rel="stylesheet" href="/site.css">
 </head>
-<body><main class="help">
-<a class="top" href="/"><img src="/img/pastecal.logo.svg" alt="">pastecal</a>
+<body>
+<!-- site-header -->
+<header class="site-header">
+  <div class="site-header__in">
+    <a class="site-brand" href="/" data-from="site-header"><img src="/img/pastecal.logo.svg" alt="" width="26" height="26">pastecal</a>
+    <nav class="site-nav" aria-label="Site">
+      <a class="site-link" href="/help" data-from="site-header">Help</a>
+      <a class="site-link" href="/pricing" data-from="site-header">Pricing</a>
+      <a class="site-cta" href="/" data-from="site-header">Make a calendar</a>
+    </nav>
+  </div>
+</header>
+<!-- /site-header -->
+<main class="help">
 <h1>Help</h1>
 <p class="updated">Everything about pastecal, in one page. Stuck? <a href="mailto:support@pastecal.com">support@pastecal.com</a>.</p>
 <div class="layout">
@@ -131,6 +145,21 @@ td:nth-child(2) { min-width: 210px }
 <p>Questions, bugs or ideas: <a href="mailto:support@pastecal.com">support@pastecal.com</a>.</p></section>
 
 </div></div>
-<nav class="foot"><a href="/">Make a calendar</a><a href="/pricing">Pricing</a><a href="/about">About</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="mailto:support@pastecal.com">Contact</a></nav>
 <script>(function(){var l=[].slice.call(document.querySelectorAll('.toc a')),s=l.map(function(a){return document.querySelector(a.hash)});if(!window.IntersectionObserver)return;var o=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){l.forEach(function(a){a.classList.toggle('on',a.hash==='#'+e.target.id)})}})},{rootMargin:'-20% 0px -70% 0px'});s.forEach(function(x){x&&o.observe(x)})})()</script>
-</main></body></html>
+</main><!-- site-footer -->
+<footer class="site-footer">
+  <div class="site-footer__in">
+    <nav class="site-footer__links" aria-label="Footer">
+      <a href="/" data-from="site-footer">Make a calendar</a>
+      <a href="/pricing" data-from="site-footer">Pricing</a>
+      <a href="/help" data-from="site-footer">Help</a>
+      <a href="/about" data-from="site-footer">About</a>
+      <a href="/privacy" data-from="site-footer">Privacy</a>
+      <a href="/terms" data-from="site-footer">Terms</a>
+      <a href="/report" data-from="site-footer">Report a calendar</a>
+    </nav>
+    <p class="site-footer__fine">© pastecal</p>
+  </div>
+</footer>
+<!-- /site-footer -->
+</body></html>

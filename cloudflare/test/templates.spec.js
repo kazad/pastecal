@@ -46,6 +46,8 @@ test('pick a template, switch, keep your own event, then Save & share saves it a
 
   // 2. another chip replaces the template's events (nothing of yours yet, so no question)
   await page.getByTestId('tpl-family').click();
+  await expect(page.getByTestId('tpl-undo')).toHaveCount(0);            // nothing changed by you: nothing to undo
+  await expect(page.locator('.pc-toast')).toHaveCount(0);
   await expect(appt(page, 'Piano: Maya').first()).toBeVisible();
   await expect(appt(page, 'Practice')).toHaveCount(0);
   d = await draft(page);
@@ -76,7 +78,7 @@ test('pick a template, switch, keep your own event, then Save & share saves it a
   expect(now).not.toContain('Piano: Maya');
   expect(now).not.toContain('Piano: Maya (moved)');               // edited template events go too
   expect((await draft(page)).title).toBe('Tigers U10 Soccer');
-  await page.getByRole('button', { name: 'Undo' }).locator('visible=true').first().click();
+  await page.getByTestId('tpl-undo').click();                          // edits were replaced, so Undo is offered
   await expect(appt(page, 'Piano: Maya (moved)').first()).toBeVisible();   // Undo brings back the edit
   now = await titles(page);
   expect(now).toContain('Bake sale');

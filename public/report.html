@@ -7,15 +7,27 @@
 <meta name="robots" content="noindex">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/legal.css">
 <script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>
+<link rel="stylesheet" href="/site.css">
 </head>
-<body><main>
-<a class="top" href="/"><img src="/img/pastecal.logo.svg" alt="">pastecal</a>
+<body>
+<!-- site-header -->
+<header class="site-header">
+  <div class="site-header__in">
+    <a class="site-brand" href="/" data-from="site-header"><img src="/img/pastecal.logo.svg" alt="" width="26" height="26">pastecal</a>
+    <nav class="site-nav" aria-label="Site">
+      <a class="site-link" href="/help" data-from="site-header">Help</a>
+      <a class="site-link" href="/pricing" data-from="site-header">Pricing</a>
+      <a class="site-cta" href="/" data-from="site-header">Make a calendar</a>
+    </nav>
+  </div>
+</header>
+<!-- /site-header -->
+<main>
 <h1>Report a calendar</h1>
 <p>Calendars on pastecal are made by the people who share them, not by pastecal. If a calendar is pretending to be someone it isn't, asks for passwords or payment, or links to something harmful, please tell us.</p>
 <p>Email <a href="mailto:support@pastecal.com">support@pastecal.com</a> with the calendar's link and what's wrong with it.</p>
 <p id="cal-line" hidden>The calendar you came from: <code id="cal-link"></code></p>
 <p>Don't enter passwords or card details on a calendar page. pastecal's sign-in page is pastecal.com/signin.</p>
-<nav class="foot"><a href="/">Make a calendar</a><a href="/pricing">Pricing</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></nav>
 </main>
 <script>
 // Shows the link of the calendar the visitor came from (set by the "Report" link), as text only.
@@ -27,4 +39,20 @@ try {
     }
 } catch (e) { /* old browser: the page still says what to do */ }
 </script>
+<!-- site-footer -->
+<footer class="site-footer">
+  <div class="site-footer__in">
+    <nav class="site-footer__links" aria-label="Footer">
+      <a href="/" data-from="site-footer">Make a calendar</a>
+      <a href="/pricing" data-from="site-footer">Pricing</a>
+      <a href="/help" data-from="site-footer">Help</a>
+      <a href="/about" data-from="site-footer">About</a>
+      <a href="/privacy" data-from="site-footer">Privacy</a>
+      <a href="/terms" data-from="site-footer">Terms</a>
+      <a href="/report" data-from="site-footer">Report a calendar</a>
+    </nav>
+    <p class="site-footer__fine">© pastecal</p>
+  </div>
+</footer>
+<!-- /site-footer -->
 </body></html>

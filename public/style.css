@@ -2136,3 +2136,25 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 .pc-link.is-copied .pc-link-url { font-weight: 700; font-family: var(--pc-font); color: inherit }
 :root[data-theme="dark"] .pc-link.is-copied { background: color-mix(in srgb, #34d399 16%, transparent); border-color: #34d399; color: #6ee7b7 }
 :root[data-theme="dark"] .pc-link.is-copied .pc-link-act { color: #6ee7b7 }
+
+/* Toast: one compact dark row, message + action + close (Gmail-style snackbar). */
+.pc-toast { pointer-events: auto; display: flex; align-items: center; gap: 4px; max-width: 100%; min-height: 44px; padding: 6px 6px 6px 16px;
+  border-radius: 12px; background: #1f2328; color: #f3f4f6; box-shadow: 0 10px 30px -10px rgba(0,0,0,.45); font: 500 14px/1.35 var(--pc-font) }
+:root[data-theme="dark"] .pc-toast { background: #e9ecf1; color: #14171c }
+.pc-toast-ico { width: 18px; height: 18px; flex: none; margin-right: 6px; color: #f87171 }
+.pc-toast-msg { margin: 0; padding: 4px 6px 4px 0; flex: 1 1 auto; min-width: 0 }
+.pc-toast-act { flex: none; height: 32px; padding: 0 12px; border: 0; border-radius: 8px; background: none; color: #8ab4ff; font: 700 14px/1 var(--pc-font); cursor: pointer }
+:root[data-theme="dark"] .pc-toast-act { color: #0b5cad }
+.pc-toast-act:hover { background: rgba(255,255,255,.1) }
+.pc-toast-x { flex: none; width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 8px; background: none; color: inherit; opacity: .65; cursor: pointer }
+.pc-toast-x:hover { opacity: 1; background: rgba(255,255,255,.1) }
+.pc-toast-x svg { width: 16px; height: 16px }
+/* Stats on a draft: an example, visibly marked, so people see what they'll get. */
+.pc-stats-sample { position: relative }
+.pc-stats-sample .pc-free-tiles { opacity: .92 }
+.pc-sample-tag { display: inline-block; margin-bottom: 8px; padding: 2px 9px; border-radius: 999px; background: var(--pc-soft); color: var(--pc-text-muted); font: 700 11.5px/1.5 var(--pc-font); letter-spacing: .04em; text-transform: uppercase }
+.pc-sample-bars { display: grid; grid-template-columns: repeat(7, 1fr); align-items: end; gap: 6px; height: 72px; margin: 14px 0 4px; padding: 0 2px }
+.pc-sample-bars span { display: block; border-radius: 5px 5px 2px 2px; background: color-mix(in srgb, var(--pc-link) 55%, transparent) }
+.pc-sample-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; color: var(--pc-text-muted); font-size: 11px; text-align: center }
+.pc-stats-sample .pc-side-btn { margin-top: 12px }
+.pc-stats-sample .pc-sample-tag { align-self: flex-start; width: auto }

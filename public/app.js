@@ -273,6 +273,7 @@ const CalendarVueApp = {
             // "Start from" on the homepage draft (utils/templates.js): the template whose events are on it
             // ({ id, date } of the month they were built for), a switch waiting for a yes, and the Save nudge.
             template: null,
+            templateUndo: false,        // the template row's Undo, shown briefly after a switch that replaced edited events
             templateNudge: false,
             templateChips: CalendarTemplates.list(),
             tourVariant: 'a',
@@ -2531,6 +2532,8 @@ const CalendarVueApp = {
             // Every template event goes, edited or not (Undo brings them back); events the visitor made stay.
             const fromTemplate = (e) => e && String(e.id).startsWith(CalendarTemplates.PREFIX);
             const going = events.filter(e => fromTemplate(e) || (e && Calendar.isSampleTitle(e.title || e.Subject)));
+            // Only a switch that discards the visitor's own edits offers Undo; an untouched template has nothing to undo.
+            const editedGone = going.filter(fromTemplate).length > this.templateOwned().length;
             const commands = going.map(e => ({ type: 'remove', key: EventStore.keyOf(e) }));
             if (built) built.events.forEach(e => commands.push({ type: 'add', event: e }));
             // Back to a fresh draft: the example event returns, as on a first visit.
@@ -2545,10 +2548,9 @@ const CalendarVueApp = {
                 (this._templateUndo = this._templateUndo || []).push({ entry: stack[stack.length - 1], state: before });
             }
             this.setTemplate(next);
-            if (commands.length && before) {
-                this.showToast(id ? `Switched to ${CalendarTemplates.label(id)}` : 'Template cleared', 'info',
-                    { actionLabel: 'Undo', action: () => this.undoLastLocal(), duration: 6000 });
-            }
+            clearTimeout(this._templateUndoTimer);
+            this.templateUndo = commands.length > 0 && editedGone;
+            if (this.templateUndo) this._templateUndoTimer = setTimeout(() => { this.templateUndo = false; }, 8000);
             if (id) {
                 this.templateNudge = !this._templateNudgeDismissed;
                 track(a => a.featureUsed('template', id));

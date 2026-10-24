@@ -6,9 +6,22 @@
 <meta name="description" content="The short rules for using pastecal.">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/legal.css">
 <script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>
+<link rel="stylesheet" href="/site.css">
 </head>
-<body><main>
-<a class="top" href="/"><img src="/img/pastecal.logo.svg" alt="">pastecal</a>
+<body>
+<!-- site-header -->
+<header class="site-header">
+  <div class="site-header__in">
+    <a class="site-brand" href="/" data-from="site-header"><img src="/img/pastecal.logo.svg" alt="" width="26" height="26">pastecal</a>
+    <nav class="site-nav" aria-label="Site">
+      <a class="site-link" href="/help" data-from="site-header">Help</a>
+      <a class="site-link" href="/pricing" data-from="site-header">Pricing</a>
+      <a class="site-cta" href="/" data-from="site-header">Make a calendar</a>
+    </nav>
+  </div>
+</header>
+<!-- /site-header -->
+<main>
 <h1>Terms</h1>
 <p class="updated">Last updated October 23, 2026</p>
 
@@ -36,5 +49,20 @@
 
 <h2>Contact</h2>
 <p>Questions: <a href="mailto:support@pastecal.com">support@pastecal.com</a>.</p>
-<nav class="foot"><a href="/">Make a calendar</a><a href="/pricing">Pricing</a><a href="/about">About</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="mailto:support@pastecal.com">Contact</a></nav>
-</main></body></html>
+</main><!-- site-footer -->
+<footer class="site-footer">
+  <div class="site-footer__in">
+    <nav class="site-footer__links" aria-label="Footer">
+      <a href="/" data-from="site-footer">Make a calendar</a>
+      <a href="/pricing" data-from="site-footer">Pricing</a>
+      <a href="/help" data-from="site-footer">Help</a>
+      <a href="/about" data-from="site-footer">About</a>
+      <a href="/privacy" data-from="site-footer">Privacy</a>
+      <a href="/terms" data-from="site-footer">Terms</a>
+      <a href="/report" data-from="site-footer">Report a calendar</a>
+    </nav>
+    <p class="site-footer__fine">© pastecal</p>
+  </div>
+</footer>
+<!-- /site-footer -->
+</body></html>

@@ -5,8 +5,10 @@
 <title>Pricing · pastecal</title>
 <meta name="description" content="pastecal is free to use. Pro locks editing to people you choose: $24 a year or $2.99 a month per calendar. Teams, for up to 10 calendars with no pastecal branding, is $100 a year or $10 a month.">
 <link rel="icon" href="/favicon.ico">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
+<script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/tokens.css">
 <style>
+:root { --site-max: 1080px }
 /* Layout: the app's own look (system type, pastecal blue). Three plan cards, then one feature
    grid, then the waitlist. Pro is the recommended plan, so it carries the only emphasis. */
 :root {
@@ -22,14 +24,6 @@
   --blue: #6b9bff; --blue-ink: #0b1220; --blue-soft: #1b2436; --ok: #34d399; --soon: #f5c451; --soon-bg: #3a300f; color-scheme: dark }
 * { box-sizing: border-box }
 body { background: var(--bg); color: var(--ink); font: 16px/1.55 var(--ui); margin: 0 }
-.site { display: flex; align-items: center; justify-content: space-between; gap: 12px; max-width: 1080px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 14px }
-.brand { display: inline-flex; align-items: center; gap: 8px; color: var(--blue); font-weight: 700; font-size: 18px; text-decoration: none }
-.site nav { display: flex; align-items: center; gap: 16px; font-size: 15px }
-.site nav a { color: var(--muted); text-decoration: none; font-weight: 600 }
-.site nav a:hover { color: var(--ink) }
-.site nav .make { color: var(--blue-ink); background: var(--blue); border-radius: 999px; padding: 7px 14px }
-.site nav .make:hover { color: var(--blue-ink); filter: brightness(1.08) }
-@media (max-width: 420px) { .site nav a:not(.make) { display: none } }
 .col { max-width: 1080px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 16px 64px }
 .mock { background: var(--blue-soft); color: var(--muted); font-size: 13px; text-align: center; padding-block: 6px }
 h1 { margin: 0; font-size: clamp(30px, 4.4vw, 44px); line-height: 1.1; text-wrap: balance }
@@ -167,12 +161,21 @@ details p { color: var(--muted); margin: 8px 0 0 }
   w.gtag('config', 'G-4J99GY9KE6', { send_page_view: false });
 })(window, document);
 </script>
+<link rel="stylesheet" href="/site.css">
 </head>
 <body>
-<header class="site">
-  <a class="brand" href="/" data-from="pricing-header"><img src="/img/pastecal.logo.svg" alt="" width="26" height="26">pastecal</a>
-  <nav><a href="/view/demo" data-from="pricing-header">See a demo</a><a class="make" href="/" data-from="pricing-header">Make a calendar</a></nav>
+<!-- site-header -->
+<header class="site-header">
+  <div class="site-header__in">
+    <a class="site-brand" href="/" data-from="site-header"><img src="/img/pastecal.logo.svg" alt="" width="26" height="26">pastecal</a>
+    <nav class="site-nav" aria-label="Site">
+      <a class="site-link" href="/help" data-from="site-header">Help</a>
+      <a class="site-link" href="/pricing" data-from="site-header">Pricing</a>
+      <a class="site-cta" href="/" data-from="site-header">Make a calendar</a>
+    </nav>
+  </div>
 </header>
+<!-- /site-header -->
 
 <div class="col">
   <h1>Free for everyone you share with. Pro when it matters.</h1>
@@ -483,5 +486,21 @@ document.querySelectorAll('[data-plan]').forEach(a => a.addEventListener('click'
 })();
 </script>
 <script src="/utils/preview.js"></script>
+<!-- site-footer -->
+<footer class="site-footer">
+  <div class="site-footer__in">
+    <nav class="site-footer__links" aria-label="Footer">
+      <a href="/" data-from="site-footer">Make a calendar</a>
+      <a href="/pricing" data-from="site-footer">Pricing</a>
+      <a href="/help" data-from="site-footer">Help</a>
+      <a href="/about" data-from="site-footer">About</a>
+      <a href="/privacy" data-from="site-footer">Privacy</a>
+      <a href="/terms" data-from="site-footer">Terms</a>
+      <a href="/report" data-from="site-footer">Report a calendar</a>
+    </nav>
+    <p class="site-footer__fine">© pastecal</p>
+  </div>
+</footer>
+<!-- /site-footer -->
 </body>
 </html>

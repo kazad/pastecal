@@ -1,11 +1,10 @@
+/* --site-max is the full column for the shared header and footer (680 text + 16px gutters). */
+:root { --site-max: 712px }
 /* Privacy and Terms pages: plain reading pages on the app's own tokens (tokens.css). */
 body { margin: 0; background: var(--pc-bg); color: var(--pc-text); font: 17px/1.65 "Figtree", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif }
-main { max-width: 680px; margin: 0 auto; padding: 40px max(18px, env(safe-area-inset-right, 0px)) 64px max(18px, env(safe-area-inset-left, 0px)) }
-.top { display: flex; align-items: center; gap: 10px; margin-bottom: 28px; font-weight: 700; color: var(--pc-link); text-decoration: none }
-.top img { width: 28px; height: 28px }
+main { max-width: 680px; margin: 0 auto; padding: 24px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px)) }
 h1 { font-size: 34px; line-height: 1.15; margin: 0 0 6px }
 .updated { color: var(--pc-text-muted); margin: 0 0 28px; font-size: 15px }
 h2 { font-size: 20px; margin: 30px 0 6px }
 p, li { color: var(--pc-text) } ul { padding-left: 22px }
 a { color: var(--pc-link) }
-.foot { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--pc-line); font-size: 15px; display: flex; gap: 18px; flex-wrap: wrap }

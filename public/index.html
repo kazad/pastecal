@@ -673,6 +673,7 @@
                 <button type="button" class="pc-tpl-chip" :class="{ 'is-on': !template }" :aria-pressed="!template ? 'true' : 'false'" data-testid="tpl-blank" @click="template && startBlank()">Blank</button>
                 <button v-for="t in templateChips" :key="t.id" type="button" class="pc-tpl-chip" :class="{ 'is-on': template && template.id === t.id }"
                     :aria-pressed="template && template.id === t.id ? 'true' : 'false'" :data-testid="'tpl-' + t.id" @click="pickTemplate(t.id)">{{ t.label }}</button>
+                <button v-if="templateUndo" type="button" class="pc-tpl-link" data-testid="tpl-undo" @click="templateUndo = false; undoLastLocal()">Undo</button>
             </div>
 
             <p v-if="template && templateNudge" class="pc-tpl-note" data-testid="tpl-nudge">
@@ -1277,9 +1278,16 @@
                     <!-- Stats for everyone but a Pro calendar's owner. A free calendar's editors see two counts
                          (/api/stats: views this week, calendar-app followers), then what Pro adds. Counts, never who. -->
                     <div v-if="showStatsInfo" data-testid="stats-info" v-cloak>
-                        <div v-if="!isExisting" class="pc-side-empty" data-testid="stats-draft">
-                            <p class="pc-side-empty-title">Views show up here once you share it.</p>
-                            <p class="pc-side-empty-text">With Pro, see how many people open the calendar and follow it in their calendar apps.</p>
+                        <!-- A draft has no visitors yet: show what Stats will look like, clearly marked as an example. -->
+                        <div v-if="!isExisting" class="pc-free-stats pc-stats-sample" data-testid="stats-draft">
+                            <span class="pc-sample-tag">Example</span>
+                            <div class="pc-free-tiles">
+                                <div class="pc-free-tile"><span class="pc-free-num">480</span><span class="pc-free-label">Views, last 7 days</span><span class="pc-stat-delta is-up">↑ 18% vs the week before</span></div>
+                                <div class="pc-free-tile"><span class="pc-free-num">23</span><span class="pc-free-label">Calendar-app followers</span></div>
+                            </div>
+                            <div class="pc-sample-bars" aria-hidden="true"><span style="height:32%"></span><span style="height:43%"></span><span style="height:39%"></span><span style="height:51%"></span><span style="height:73%"></span><span style="height:100%"></span><span style="height:62%"></span></div>
+                            <div class="pc-sample-days" aria-hidden="true"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
+                            <p class="pc-free-fine">Counts only. Never who. Your real numbers start once you share it.</p>
                             <button type="button" class="pc-side-btn pc-side-btn--primary" @click="share">Save &amp; share</button>
                         </div>
                         <p v-else-if="lock.locked && !proOwnerChecked" class="pc-side-hint" aria-live="polite">Loading…</p>

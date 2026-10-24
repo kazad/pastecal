@@ -8,8 +8,9 @@
 <meta name="robots" content="noindex">
 <meta name="description" content="pastecal is free for everyone who uses it. Pro is for the person who runs the calendar: lock editing, see stats, and get your own pastecal.com/@name. No per-seat pricing.">
 <link rel="icon" href="/favicon.ico">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/tokens.css">
 <style>
+:root { --site-max: 1120px }
 :root {
   --bg: #f6f7f9; --surface: #ffffff; --ink: #141a24; --muted: #5c6577; --line: #e4e7ec;
   --blue: #0277bd; --blue-ink: #ffffff; --blue-soft: #eaf3fb; --ok: #1f7a4d; --hl: #fff1a8;
@@ -26,17 +27,9 @@ body { background: var(--bg); color: var(--ink); font: 16px/1.55 var(--ui); marg
 a { color: var(--blue) }
 .wrap { max-width: 1120px; margin: 0 auto; padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px)) }
 .draft { background: var(--hl); color: var(--ink); font-size: 13.5px; text-align: center; padding: 7px 16px }
-.site { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 16px }
-.brand { display: inline-flex; align-items: center; gap: 8px; color: #3f51b5; font-weight: 800; font-size: 19px; text-decoration: none }
-:root[data-theme="dark"] .brand { color: #8f9cff }
-.site nav { display: flex; align-items: center; gap: 18px; font-size: 15px }
-.site nav a { color: var(--muted); text-decoration: none; font-weight: 600 }
-.site nav a:hover { color: var(--ink) }
 .btn { display: inline-flex; align-items: center; justify-content: center; height: 44px; padding: 0 20px; border-radius: 999px; font: 700 15px/1 var(--ui); text-decoration: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer }
 .btn.primary { background: var(--blue); border-color: var(--blue); color: var(--blue-ink) }
 .btn:hover { filter: brightness(1.06) }
-.site nav .btn { height: 36px; padding: 0 16px; font-size: 14px; color: var(--blue-ink) }
-@media (max-width: 480px) { .site nav a:not(.btn) { display: none } }
 
 .hero { text-align: center; padding: 48px 0 8px }
 .hero h1 { margin: 0 auto; max-width: 18ch; font-size: clamp(34px, 5.6vw, 58px); line-height: 1.05; letter-spacing: -.02em; text-wrap: balance }
@@ -109,8 +102,6 @@ details p { margin: 8px 0 0; color: var(--muted) }
 .final { margin: 80px 0 0; padding: 44px 24px; border-radius: 20px; background: var(--blue-soft); text-align: center }
 .final h2 { margin: 0 0 8px }
 .final .cta-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-top: 20px }
-footer { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 20px; padding: 40px 0 48px; font-size: 14px }
-footer a { color: var(--muted); text-decoration: none }
 :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px }
 
 @media (max-width: 980px) { .plans, .promises { grid-template-columns: repeat(2, minmax(0, 1fr)) } }
@@ -122,14 +113,23 @@ footer a { color: var(--muted); text-decoration: none }
 }
 </style>
 <script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>
+<link rel="stylesheet" href="/site.css">
 </head>
 <body>
 <div class="draft">Draft pricing for review. These plans aren't on sale yet; today's plans are on <a href="/pricing">/pricing</a>.</div>
-<div class="wrap">
-<header class="site">
-  <a class="brand" href="/" data-from="pricing-header"><img src="/img/pastecal.logo.svg" alt="" width="26" height="26">pastecal</a>
-  <nav><a href="/help">Help</a><a href="/view/demo" data-from="pricing-header">Demo</a><a class="btn primary" href="/" data-from="pricing-header">Make a calendar</a></nav>
+<!-- site-header -->
+<header class="site-header">
+  <div class="site-header__in">
+    <a class="site-brand" href="/" data-from="site-header"><img src="/img/pastecal.logo.svg" alt="" width="26" height="26">pastecal</a>
+    <nav class="site-nav" aria-label="Site">
+      <a class="site-link" href="/help" data-from="site-header">Help</a>
+      <a class="site-link" href="/pricing" data-from="site-header">Pricing</a>
+      <a class="site-cta" href="/" data-from="site-header">Make a calendar</a>
+    </nav>
+  </div>
 </header>
+<!-- /site-header -->
+<div class="wrap">
 
 <section class="hero">
   <h1>Free for everyone who uses it. <mark>Pro</mark> when it's yours to run.</h1>
@@ -276,7 +276,6 @@ footer a { color: var(--muted); text-decoration: none }
   <div class="cta-row"><a class="btn primary" href="/" data-plan="final-free">Make a calendar</a><a class="btn" href="/pricing#waitlist" data-plan="final-wait">Join the Pro waitlist</a></div>
 </section>
 
-<footer><a href="/">Make a calendar</a><a href="/help">Help</a><a href="/about">About</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="mailto:support@pastecal.com">Contact</a></footer>
 </div>
 
 <script src="/utils/analytics.js"></script>
@@ -294,5 +293,21 @@ footer a { color: var(--muted); text-decoration: none }
 })();
 </script>
 <script src="/utils/preview.js"></script>
+<!-- site-footer -->
+<footer class="site-footer">
+  <div class="site-footer__in">
+    <nav class="site-footer__links" aria-label="Footer">
+      <a href="/" data-from="site-footer">Make a calendar</a>
+      <a href="/pricing" data-from="site-footer">Pricing</a>
+      <a href="/help" data-from="site-footer">Help</a>
+      <a href="/about" data-from="site-footer">About</a>
+      <a href="/privacy" data-from="site-footer">Privacy</a>
+      <a href="/terms" data-from="site-footer">Terms</a>
+      <a href="/report" data-from="site-footer">Report a calendar</a>
+    </nav>
+    <p class="site-footer__fine">© pastecal</p>
+  </div>
+</footer>
+<!-- /site-footer -->
 </body>
 </html>
