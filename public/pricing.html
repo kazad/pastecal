@@ -117,6 +117,11 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--blue); outl
 .plan ul.coming li::before { content: "+"; color: var(--muted) }
 .coming-h { margin: 6px 0 0; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--soon) }
 
+.indev { margin-top: 48px }
+.indev ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px }
+.indev li { padding: 14px 16px; border-radius: 12px; background: var(--surface); border: 1px dashed var(--line); color: var(--muted); font-size: 15px }
+.indev li b { display: block; color: var(--ink); font-size: 16px; margin-bottom: 2px }
+@media (max-width: 640px) { .indev ul { grid-template-columns: minmax(0, 1fr) } }
 .faq { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 32px }
 details { border-bottom: 1px solid var(--line); padding-block: 12px }
 summary { cursor: pointer; font-weight: 600 }
@@ -181,9 +186,10 @@ details p { color: var(--muted); margin: 8px 0 0 }
       <p class="per">No account, no card.</p>
       <ul>
         <li>Unlimited calendars</li>
-        <li>Unlimited people, no accounts</li>
-        <li>Read/write, read-only and calendar app links</li>
+        <li>Unlimited people, no login required</li>
+        <li>Edit, view-only and calendar app links</li>
         <li>Undo and daily backups</li>
+        <li>Basic stats: views this week, followers</li>
       </ul>
       <a class="cta" href="/" data-plan="free">Make a calendar</a>
     </div>
@@ -198,10 +204,10 @@ details p { color: var(--muted); margin: 8px 0 0 }
         <li>Everything in Free</li>
         <li>Lock editing to people you choose</li>
         <li>A full history of changes, and restore any version</li>
-        <li>See how many people view and follow it</li>
+        <li>Full stats: views by day, followers, places</li>
         <li>Just a small “Made with pastecal” line</li>
       </ul>
-      <p class="coming-h">Coming to Pro, at no extra cost</p>
+      <p class="coming-h">In development, included when ready</p>
       <ul class="coming">
         <li>Others suggest events, you approve</li>
         <li>Secret events and subcalendars</li>
@@ -212,7 +218,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
 
     <div class="plan">
       <h3>Teams</h3>
-      <p class="who">For clubs, schools and offices with several calendars.</p>
+      <p class="who">For clubs, schools and offices with several calendars. <span class="soon" style="margin-left:0">In development</span></p>
       <div class="price"><strong>$100</strong><span>per year</span></div>
       <p class="per">Or $10 a month. Up to 10 Pro calendars.</p>
       <ul>
@@ -260,17 +266,13 @@ details p { color: var(--muted); margin: 8px 0 0 }
       <tbody>
         <tr class="group"><td colspan="4">Sharing</td></tr>
         <tr><td>Calendars</td><td>Unlimited</td><td class="pro">1 Pro calendar</td><td>Up to 10</td></tr>
-        <tr><td>People who can view and edit<small>No accounts for anyone</small></td><td>Unlimited</td><td class="pro">Unlimited</td><td>Unlimited</td></tr>
-        <tr><td>Read/write, read-only and calendar app links</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td></tr>
+        <tr><td>People who can view and edit<small>No login required</small></td><td>Unlimited</td><td class="pro">Unlimited</td><td>Unlimited</td></tr>
+        <tr><td>Edit, view-only and calendar app links</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td></tr>
         <tr><td>Embed on your website</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td></tr>
-        <tr><td>Choose your read-only link name</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Choose your view-only link name</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td></tr>
 
         <tr class="group"><td colspan="4">Control</td></tr>
         <tr><td>Lock editing to people you choose<small>They edit with an editor link you share. Everyone else can view, as today</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td></tr>
-        <tr><td>Suggested events<span class="soon">Soon</span><small>Visitors suggest, you approve or decline</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td></tr>
-        <tr><td>Secret events<span class="soon">Soon</span><small>Seen only by people who can edit</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td></tr>
-        <tr><td>Subcalendars<span class="soon">Soon</span><small>Layers like "Games" and "Practice" people can turn on and off</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td></tr>
-        <tr><td>Shared admins across calendars<span class="soon">Soon</span></td><td class="n">—</td><td class="pro n">—</td><td class="y">✓</td></tr>
 
         <tr class="group"><td colspan="4">Safety</td></tr>
         <tr><td>Undo and recent changes</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td></tr>
@@ -278,28 +280,38 @@ details p { color: var(--muted); margin: 8px 0 0 }
         <tr><td>Restore any earlier version</td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td></tr>
 
         <tr class="group"><td colspan="4">Insight</td></tr>
+        <tr><td>Views this week and follower count</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td></tr>
         <tr><td>Calendar stats<small>Views and visitors by day, and how many people follow it in a calendar app</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td></tr>
         <tr><td>Where people are<small>Countries and cities your visitors come from</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td></tr>
         <tr><td>Private by design<small>Counts only. Never names, addresses or who viewed what</small></td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td></tr>
-        <tr><td>Stats across all your calendars<span class="soon">Soon</span></td><td class="n">—</td><td class="pro n">—</td><td class="y">✓</td></tr>
 
         <tr class="group"><td colspan="4">Look</td></tr>
         <tr><td>Event colors and category labels</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td></tr>
         <tr><td>No pastecal branding<small>On the calendar and in embeds. Pro shows one small “Made with pastecal” line</small></td><td class="n">—</td><td class="pro n">—</td><td class="y">✓</td></tr>
-        <tr><td>Custom branding<span class="soon">Soon</span><small>Your logo and name at the top of the calendar and in embeds</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td></tr>
-        <tr><td>Custom theme<span class="soon">Soon</span><small>Your colors and font, and light or dark mode for embeds, so it matches your site</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td></tr>
 
         <tr class="group"><td colspan="4">Help</td></tr>
         <tr><td>Support<small>support@pastecal.com</small></td><td>Email</td><td class="pro">Email</td><td>Email</td></tr>
       </tbody>
     </table>
   </div>
-  <p class="legend"><span class="soon" style="margin-left:0">Soon</span> means it's being built for Pro.</p>
+  <p class="legend">Everything above works today.</p>
+
+  <section class="indev" aria-labelledby="devH">
+    <h2 id="devH">In development</h2>
+    <p class="howto-sub">Being built now. Pro subscribers get these at no extra cost when they ship.</p>
+    <ul>
+      <li><b>Suggested events</b>Visitors suggest, you approve or decline.</li>
+      <li><b>Secret events</b>Seen only by people who can edit.</li>
+      <li><b>Subcalendars</b>Layers like "Games" and "Practice" people can turn on and off.</li>
+      <li><b>Your logo and theme</b>Your name, logo and colors on the calendar and in embeds.</li>
+      <li><b>Teams</b>Several calendars and shared admins on one bill, with no pastecal branding. <a href="#waitlist">Join the waitlist</a></li>
+    </ul>
+  </section>
 
   <section class="wait" id="waitlist" aria-labelledby="waitH">
     <div class="wait-copy">
       <h2 id="waitH">Join the waitlist</h2>
-      <p>For Teams, and for the Pro features marked Soon. We'll email you once, when they open.</p>
+      <p>For Teams, and for the Pro features in development. We'll email you once, when they open.</p>
       <p class="wait-ideas">Have an idea for Pro, or something pastecal should do better? Add it to the form. We read every one.</p>
     </div>
     <form id="waitForm" novalidate>
@@ -310,7 +322,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
       <div class="formrow">
         <div class="field">
           <label for="plan">Plan</label>
-          <select id="plan" name="plan"><option value="teams">Teams, $100 a year or $10 a month</option><option value="pro">Pro features marked Soon</option><option value="unsure">Not sure yet</option></select>
+          <select id="plan" name="plan"><option value="teams">Teams, $100 a year or $10 a month</option><option value="pro">Pro features in development</option><option value="unsure">Not sure yet</option></select>
         </div>
         <div class="field">
           <label for="use">Mostly for</label>
@@ -336,7 +348,6 @@ details p { color: var(--muted); margin: 8px 0 0 }
     <details><summary>How do I cancel?</summary><p>Sign in and open Manage billing. You can cancel there any time.</p></details>
     <details><summary>What happens if I cancel?</summary><p>Pro lasts until the end of the period you paid for. Then your calendar stays, with everything in it, and goes back to the free plan, unlocked.</p></details>
     <details><summary>What if a payment fails?</summary><p>Stripe retries it, and your calendar stays locked meanwhile. If the subscription ends unpaid, the calendar goes back to the free plan, unlocked, with all its events.</p></details>
-    <details><summary>Can the price change?</summary><p>It may. If it does, we'll email you before your next renewal.</p></details>
     <details><summary>What happens to backups on the free plan?</summary><p>Every calendar is backed up daily, and you can see the last 7 days of changes. Pro keeps the full history and lets you restore any earlier version.</p></details>
     <details><summary>What is Teams?</summary><p>Up to 10 Pro calendars on one bill, with no pastecal branding and shared admins, for $100 a year or $10 a month. It opens later: join the waitlist and we'll email you once, when it does.</p></details>
     <details><summary>Can I move Pro to a different calendar?</summary><p>Email <a href="mailto:support@pastecal.com">support@pastecal.com</a> and we'll help.</p></details>
