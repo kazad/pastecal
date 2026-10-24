@@ -629,7 +629,17 @@ const CalendarVueApp = {
                         const proIntent = typeof ProIntent !== 'undefined' ? ProIntent.get(this.calendar.id) : null;
                         if (proIntent) {
                             // Once: the panel reads the chosen interval as it mounts, then the intent is done.
-                            this.$nextTick(() => { if (!this.showShare) this.toggleShare(); this.$nextTick(() => ProIntent.clear()); });
+                            this.$nextTick(() => {
+                                if (!this.showShare) this.toggleShare();
+                                this.$nextTick(() => {
+                                    ProIntent.clear();
+                                    // The lock offer sits at the bottom of Share: below the fold on a phone.
+                                    setTimeout(() => {
+                                        const panel = [...document.querySelectorAll('[data-testid=pro-panel]')].find(el => el.offsetParent);
+                                        if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                    }, 400);
+                                });
+                            });
                         }
                     }
                     this.visitCounted = true;
