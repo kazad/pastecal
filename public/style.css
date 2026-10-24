@@ -1925,3 +1925,7 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 /* View switcher pills: real horizontal padding, one 30px height. */
 .e-schedule .e-schedule-toolbar .e-views .e-tbar-btn { height: 30px !important; min-height: 30px; padding: 0 12px !important; margin: 0 1px }
 .e-schedule .e-schedule-toolbar .e-views .e-tbar-btn-text { padding: 0 !important; line-height: 30px }
+/* Wordmark in the logo's own indigo (pastecal.logo.svg #3f51b5), so icon and name read as one mark.
+   Dark mode brightens the icon (dark:brightness-150), so the name lightens to match. */
+.pc-wordmark { color: #3f51b5 !important }
+:root[data-theme="dark"] .pc-wordmark { color: #8f9cff !important }
