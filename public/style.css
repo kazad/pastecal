@@ -854,14 +854,104 @@ div#Schedule,
 .pc-tour-steps li { counter-increment: pc-step }
 .pc-tour-steps h3::before { content: counter(pc-step) ". "; color: var(--pc-link) }
 .pc-tour-steps p { margin: 0 }
-.pc-tour-art { height: 116px; margin-bottom: 12px; border: 1px solid var(--pc-line); border-radius: 12px; background: var(--pc-surface); display: flex; align-items: center; justify-content: center; gap: 14px; overflow: hidden }
-.pc-tour-mini { display: grid; grid-template-columns: repeat(7, 40px); gap: 4px }
-.pc-tour-mini span { height: 24px; border-radius: 4px; background: var(--pc-soft); color: #fff; font-size: 8px; font-weight: 700; display: grid; place-items: center }
-.pc-tour-mini .on { background: #3f51b5 } .pc-tour-mini .alt { background: #e0245e }
-.pc-tour-chip { border: 1px solid var(--pc-line); border-radius: 999px; padding: 6px 14px; font-size: 14px; color: var(--pc-text-muted); background: var(--pc-soft) }
-.pc-tour-chip b { color: var(--pc-text) }
-.pc-tour-phone { width: 70px; height: 96px; border: 2px solid var(--pc-line); border-radius: 12px; background: var(--pc-soft); padding: 14px 6px 6px }
-.pc-tour-phone span { display: block; background: #3f51b5; color: #fff; font-size: 9px; font-weight: 700; border-radius: 4px; padding: 3px 4px; line-height: 1.2 }
+/* Tour illustrations: miniature, product-accurate scenes (month grid, Save & share, two phones).
+   The resting styles are the finished scene; the animations only replay how it got there, so
+   prefers-reduced-motion simply turns them off. One 9s loop shared by all three cards. */
+.pc-tour-art { --art-dur: 9s; --art-shadow: 0 1px 2px rgba(0,0,0,.06), 0 10px 26px -8px rgba(30,40,80,.18);
+  position: relative; height: 184px; margin-bottom: 14px; border: 1px solid var(--pc-line); border-radius: 14px;
+  background: radial-gradient(110% 80% at 50% 0%, color-mix(in srgb, var(--pc-link) 10%, transparent), transparent 70%), var(--pc-surface);
+  display: flex; align-items: center; justify-content: center; gap: 10px; overflow: hidden; contain: layout paint;
+  font-family: var(--pc-font); color: var(--pc-text); line-height: 1.2; user-select: none }
+[data-theme="dark"] .pc-tour-art { --art-shadow: 0 1px 0 rgba(255,255,255,.04) inset, 0 14px 30px -10px rgba(0,0,0,.7) }
+.pc-tour-art :is(s, i, em, b) { font-style: normal; text-decoration: none }
+.pc-tour-art .c1 { background: var(--pc-event-1); color: #fff }
+.pc-tour-art .c2 { background: var(--pc-event-2); color: #fff }
+
+/* 1. Add events: a month window, a pointer, a quick-add popover, a new chip */
+.pc-art-win { position: relative; width: 292px; padding: 0 6px 6px; border: 1px solid var(--pc-line); border-radius: 10px; background: var(--pc-bg); box-shadow: var(--art-shadow) }
+.pc-art-bar { display: flex; align-items: center; justify-content: space-between; height: 26px; padding: 0 2px; font-size: 11.5px }
+.pc-art-bar b { font-weight: 700 }
+.pc-art-bar span { font-size: 9.5px; font-weight: 600; color: var(--pc-link); background: color-mix(in srgb, var(--pc-link) 14%, transparent); padding: 2px 7px; border-radius: 999px }
+.pc-art-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-auto-rows: 14px 50px 50px; border-left: 1px solid var(--pc-line); border-top: 1px solid var(--pc-line) }
+.pc-art-grid s, .pc-art-grid i { border-right: 1px solid var(--pc-line); border-bottom: 1px solid var(--pc-line); min-width: 0 }
+.pc-art-grid s { font-size: 8px; font-weight: 600; letter-spacing: .06em; color: var(--pc-text-muted); text-align: center; line-height: 13px }
+.pc-art-grid i { position: relative; padding: 3px 2px 0; font-size: 9px; font-weight: 600; color: var(--pc-text-2) }
+.pc-art-grid i:nth-child(7n+1), .pc-art-grid i:nth-child(7n) { background: var(--pc-weekend) }
+.pc-art-grid em { display: block; margin-top: 3px; padding: 2px 2px; border-radius: 3px; font-size: 8px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: clip }
+.pc-art-today { color: var(--pc-link) !important }
+.pc-art-target { animation: pc-art-cell var(--art-dur) var(--pc-ease) infinite }
+.pc-art-new { animation: pc-art-pop-in var(--art-dur) var(--pc-ease) infinite; transform-origin: left center }
+.pc-art-pop { position: absolute; left: 128px; top: 104px; display: flex; align-items: center; height: 26px; padding: 0 9px; border: 1px solid color-mix(in srgb, var(--pc-link) 55%, var(--pc-line)); border-radius: 8px;
+  background: var(--pc-bg); box-shadow: var(--pc-shadow-md); font-size: 11.5px; font-weight: 600; white-space: nowrap; opacity: 0; animation: pc-art-popover var(--art-dur) var(--pc-ease) infinite }
+.pc-art-typed { animation: pc-art-type var(--art-dur) steps(16, end) infinite }
+.pc-art-caret { width: 1.5px; height: 13px; margin-left: 1px; background: var(--pc-link); animation: pc-art-blink .8s steps(1) infinite }
+.pc-art-cursor { position: absolute; left: calc(50% - 146px + 104px); top: 132px; fill: var(--pc-text); stroke: var(--pc-bg); stroke-width: 1.6; stroke-linejoin: round; transform: translate(14px, 16px);
+  filter: drop-shadow(0 2px 3px rgba(0,0,0,.25)); animation: pc-art-cursor var(--art-dur) var(--pc-ease) infinite }
+@keyframes pc-art-cursor { 0% { transform: translate(70px, 40px); opacity: 0 } 6% { opacity: 1 } 15% { transform: translate(0, 0) } 17% { transform: scale(.82) } 19% { transform: scale(1) } 62% { transform: translate(0, 0) } 72%, 92% { transform: translate(14px, 16px); opacity: 1 } 100% { transform: translate(14px, 16px); opacity: 0 } }
+@keyframes pc-art-cell { 0%, 16% { background: transparent } 18%, 60% { background: color-mix(in srgb, var(--pc-link) 16%, transparent) } 70%, 100% { background: transparent } }
+@keyframes pc-art-popover { 0%, 17% { opacity: 0; transform: translateY(4px) } 20%, 56% { opacity: 1; transform: none } 60%, 100% { opacity: 0; transform: translateY(-3px) } }
+@keyframes pc-art-type { 0%, 21% { clip-path: inset(0 100% 0 0) } 46%, 100% { clip-path: inset(0 0 0 0) } }
+@keyframes pc-art-pop-in { 0%, 58% { opacity: 0; transform: scale(.6) } 63% { opacity: 1; transform: scale(1.08); box-shadow: 0 0 0 3px color-mix(in srgb, var(--pc-event-1) 35%, transparent) } 68% { transform: scale(1) } 80%, 93% { opacity: 1; box-shadow: 0 0 0 0 transparent } 100% { opacity: 0 } }
+@keyframes pc-art-blink { 50% { opacity: 0 } }
+
+/* 2. Send the link: the real header pill + Save & share, then the link landing in a group chat */
+.pc-art-send { flex-direction: column; gap: 10px; padding: 0 14px }
+.pc-art-head { position: relative; display: flex; align-items: center; gap: 6px; width: 284px; padding: 5px 5px 5px 10px; border: 1px solid var(--pc-line); border-radius: 999px; background: var(--pc-bg); box-shadow: var(--art-shadow) }
+.pc-art-url { flex: 1; min-width: 0; font-size: 11.5px; color: var(--pc-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.pc-art-url b { color: var(--pc-text); font-weight: 700 }
+.pc-art-btn { flex: none; padding: 5px 10px; border-radius: 999px; background: #2563eb; color: #fff; font-size: 10.5px; font-weight: 700; box-shadow: 0 1px 2px rgba(0,0,0,.15); animation: pc-art-press var(--art-dur) var(--pc-ease) infinite }
+.pc-art-copied { position: absolute; right: 4px; top: calc(100% + 5px); padding: 3px 8px; border-radius: 999px; background: var(--pc-snackbar); color: var(--pc-on-snackbar); font-size: 9.5px; font-weight: 600; opacity: 0; animation: pc-art-toast var(--art-dur) var(--pc-ease) infinite }
+.pc-art-chat { display: flex; flex-direction: column; gap: 5px; width: 284px; padding: 8px 10px 10px; border: 1px solid var(--pc-line); border-radius: 12px; background: var(--pc-bg); box-shadow: var(--art-shadow) }
+.pc-art-room { font-size: 9px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--pc-text-muted) }
+.pc-art-out { align-self: flex-end; max-width: 200px; padding: 6px 8px 7px; border-radius: 12px 12px 3px 12px; background: #2563eb; color: #fff; font-size: 11px; font-weight: 600; animation: pc-art-bubble var(--art-dur) var(--pc-ease) infinite; transform-origin: right bottom }
+.pc-art-card { display: flex; align-items: center; gap: 5px; margin-top: 5px; padding: 4px 7px; border-radius: 7px; background: rgba(255,255,255,.18); font-weight: 700; font-size: 10.5px; white-space: nowrap }
+.pc-art-card svg { flex: none; fill: none; stroke: currentColor; stroke-width: 2.2 }
+.pc-art-in { position: relative; align-self: flex-start; height: 22px; display: grid }
+.pc-art-in > span { grid-area: 1 / 1; display: flex; align-items: center; padding: 0 9px; border-radius: 12px 12px 12px 3px; background: var(--pc-hover); font-size: 11px; font-weight: 600; color: var(--pc-text) }
+.pc-art-dots { gap: 3px; opacity: 0; animation: pc-art-dots var(--art-dur) linear infinite }
+.pc-art-dots i { width: 4px; height: 4px; border-radius: 50%; background: var(--pc-text-muted) }
+.pc-art-reply { animation: pc-art-reply var(--art-dur) var(--pc-ease) infinite; transform-origin: left bottom }
+@keyframes pc-art-press { 0%, 8% { transform: none; box-shadow: 0 1px 2px rgba(0,0,0,.15) } 10% { transform: scale(.92) } 13% { transform: none; box-shadow: 0 0 0 4px rgba(37,99,235,.3) } 22%, 100% { box-shadow: 0 1px 2px rgba(0,0,0,.15) } }
+@keyframes pc-art-toast { 0%, 11% { opacity: 0; transform: translateY(-3px) } 14%, 30% { opacity: 1; transform: none } 34%, 100% { opacity: 0 } }
+@keyframes pc-art-bubble { 0%, 30% { opacity: 0; transform: translateY(8px) scale(.94) } 36%, 93% { opacity: 1; transform: none } 100% { opacity: 0 } }
+@keyframes pc-art-dots { 0%, 44% { opacity: 0 } 46%, 56% { opacity: 1 } 58%, 100% { opacity: 0 } }
+@keyframes pc-art-reply { 0%, 57% { opacity: 0; transform: scale(.9) } 62%, 93% { opacity: 1; transform: none } 100% { opacity: 0 } }
+
+/* 3. Stay in sync: an edit on one phone shows up on the other */
+.pc-art-sync { gap: 4px; padding-bottom: 6px }
+.pc-art-phone { position: relative; display: flex; flex-direction: column; gap: 4px; width: 96px; height: 146px; padding: 18px 7px 7px; border: 1.5px solid var(--pc-field); border-radius: 16px; background: var(--pc-bg); box-shadow: var(--art-shadow) }
+.pc-art-phone::before { content: ""; position: absolute; top: 6px; left: 50%; width: 26px; height: 4px; margin-left: -13px; border-radius: 4px; background: var(--pc-line) }
+.pc-art-day { font-size: 10px; font-weight: 700; padding-bottom: 2px; border-bottom: 1px solid var(--pc-line) }
+.pc-art-ev { display: flex; gap: 3px; padding: 4px 5px; border-radius: 4px; font-size: 9.5px; font-weight: 600; white-space: nowrap }
+.pc-art-ev b { font-weight: 700 }
+.pc-art-t { display: inline-grid }
+.pc-art-t > span { grid-area: 1 / 1 }
+.pc-art-t .o { opacity: 0 }
+.pc-art-day2 { margin-top: 4px }
+.pc-tour-art .c3 { background: var(--pc-event-11); color: #fff }
+.pc-art-line { height: 5px; width: 80%; border-radius: 3px; background: var(--pc-line) }
+.pc-art-line.s { width: 55% }
+.pc-art-who { position: absolute; left: 0; right: 0; bottom: -17px; text-align: center; font-size: 9.5px; font-weight: 600; color: var(--pc-text-muted) }
+.pc-art-tap { position: absolute; left: 42px; top: 70px; width: 18px; height: 18px; border-radius: 50%; background: color-mix(in srgb, var(--pc-text) 35%, transparent); opacity: 0; animation: pc-art-tap var(--art-dur) ease-out infinite }
+.pc-art-badge { position: absolute; right: 6px; top: 16px; padding: 2px 6px; border-radius: 999px; background: var(--pc-success); color: var(--pc-bg); font-size: 8.5px; font-weight: 700; box-shadow: 0 2px 6px rgba(0,0,0,.2); animation: pc-art-badge var(--art-dur) var(--pc-ease) infinite }
+.pc-art-b .pc-art-change { box-shadow: 0 0 0 2px color-mix(in srgb, var(--pc-event-2) 40%, transparent); animation: pc-art-glow var(--art-dur) var(--pc-ease) infinite }
+.pc-art-a .o { animation: pc-art-old-a var(--art-dur) steps(1) infinite } .pc-art-a .n { animation: pc-art-new-a var(--art-dur) steps(1) infinite }
+.pc-art-b .o { animation: pc-art-old-b var(--art-dur) steps(1) infinite } .pc-art-b .n { animation: pc-art-new-b var(--art-dur) steps(1) infinite }
+.pc-art-wire { flex: none; margin-top: -40px; overflow: visible }
+.pc-art-wire path { fill: none; stroke: var(--pc-text-muted); stroke-width: 1.5; stroke-dasharray: 3 4 }
+.pc-art-wire circle { fill: var(--pc-link); offset-path: path("M4 22 Q30 -4 56 22"); offset-distance: 100%; opacity: 0; animation: pc-art-travel var(--art-dur) ease-in-out infinite }
+@keyframes pc-art-tap { 0%, 16% { opacity: 0; transform: scale(.4) } 19% { opacity: 1; transform: scale(1) } 26%, 100% { opacity: 0; transform: scale(1.8) } }
+@keyframes pc-art-old-a { 0%, 21% { opacity: 1 } 22%, 100% { opacity: 0 } }
+@keyframes pc-art-new-a { 0%, 21% { opacity: 0 } 22%, 100% { opacity: 1 } }
+@keyframes pc-art-old-b { 0%, 41% { opacity: 1 } 42%, 100% { opacity: 0 } }
+@keyframes pc-art-new-b { 0%, 41% { opacity: 0 } 42%, 100% { opacity: 1 } }
+@keyframes pc-art-travel { 0%, 24% { offset-distance: 0%; opacity: 0 } 27% { opacity: 1 } 40% { offset-distance: 100%; opacity: 1 } 43%, 100% { offset-distance: 100%; opacity: 0 } }
+@keyframes pc-art-glow { 0%, 41% { box-shadow: 0 0 0 0 transparent } 44% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--pc-event-2) 45%, transparent) } 60%, 92% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--pc-event-2) 30%, transparent) } 100% { box-shadow: 0 0 0 0 transparent } }
+@keyframes pc-art-badge { 0%, 42% { opacity: 0; transform: translateY(3px) } 46%, 92% { opacity: 1; transform: none } 100% { opacity: 0 } }
+
+@media (prefers-reduced-motion: reduce) {
+  .pc-tour-art *, .pc-tour-art *::before { animation: none !important }
+}
 .pc-tour-label { margin-top: 40px !important; margin-bottom: 12px !important; font-size: 13px !important; text-transform: uppercase; letter-spacing: .08em; color: var(--pc-link) !important }
 .pc-tour-links { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px }
 .pc-tour-links > div { border: 1px solid var(--pc-line); border-radius: 12px; background: var(--pc-surface); padding: 14px 16px }
