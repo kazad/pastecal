@@ -5,7 +5,7 @@
     "calendars": {
       "$id": {
         ".read": true,
-        ".write": true
+        ".write": false
       }
     },
     "calendars_readonly": {
@@ -27,7 +27,7 @@
     "calendar_authors": {
       "$calendarId": {
         "$uid": {
-          ".write": "auth != null && auth.uid === $uid && newData.exists()",
+          ".write": false,
           ".read": false,
           ".validate": "newData.hasChildren(['firstSeen', 'lastSeen', 'editCount']) && newData.child('lastSeen').val() === now && ((!data.exists() && newData.child('editCount').val() === 1) || (data.exists() && newData.child('editCount').val() === data.child('editCount').val() + 1)) && newData.parent().parent().parent().child('calendars').child($calendarId).exists()",
           "firstSeen": {
@@ -68,7 +68,7 @@
     "pro_interest": {
       ".read": false,
       "$entry": {
-        ".write": "!data.exists()",
+        ".write": false,
         ".validate": "newData.hasChildren(['email', 'at'])",
         "email": {
           ".validate": "newData.isString() && newData.val().length <= 200 && newData.val().matches(/^[^@ ]+@[^@ ]+[.][^@ ]+$/)"
