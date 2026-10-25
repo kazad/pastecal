@@ -120,7 +120,7 @@ const ProPanel = {
         <section class="pc-pro" data-testid="pro-panel" v-if="mode !== 'hidden'">
             <div class="pc-pro-head">
                 <span class="pc-pro-icon" v-html="svg"></span>
-                <h4 v-if="mode === 'owner'">{{ status.trial ? 'Pro trial' : 'Locked with Pro' }}</h4>
+                <h4 v-if="mode === 'owner'">Locked with Pro</h4>
                 <h4 v-else-if="mode === 'lapsed'" data-testid="pro-lapsed-title">{{ status.lapsedTrial ? 'Trial ended' : 'Pro ended' }} — read-only</h4>
                 <h4 v-else-if="mode === 'paused'">Editing is paused</h4>
                 <h4 v-else-if="mode === 'locked'">This calendar is locked</h4>

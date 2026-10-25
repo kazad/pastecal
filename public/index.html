@@ -916,7 +916,7 @@
                          the edit link, then Pro. The rest (this exact view, the link's name, raw feeds, an
                          embed) waits under "More sharing options". Same URLs and copy paths as before. -->
                     <div v-if="showShare && isExisting" class="pc-share" v-cloak>
-                        <h2 v-if="shareProFocus" class="text-lg font-bold mb-4">Get Pro</h2>
+                        <h2 v-if="shareProFocus && !lock.locked && !lock.paused" class="text-lg font-bold mb-4">Get Pro</h2>
                         <!-- Arriving from Get Pro: only the lock offer, the links one click away -->
                         <template v-if="!shareProFocus">
                         <!-- Every link is visible and is itself the copy button (GitHub-style). No captions: the

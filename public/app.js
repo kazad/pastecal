@@ -1801,10 +1801,12 @@ const CalendarVueApp = {
         'lock.locked': {
             handler(locked) {
                 this.proOwnerChecked = false;
-                if (!locked) { this.proOwner = false; return; }
+                if (!locked) { this.proOwner = false; if (this.showShare) this.refreshProTrial(); return; }
                 this.refreshProOwner();
             },
         },
+        // Pro ended and the owner opened it: the Go Pro card is back, without the trial it already had.
+        'lock.paused'(paused) { if (!paused && this.showShare) this.refreshProTrial(); },
         recordingRole: {
             handler(role) { track(a => a.tag('role', role)); },
             immediate: true,
