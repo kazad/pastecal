@@ -260,7 +260,7 @@ test('draft: Share, Activity and Stats say what they will hold, with one Save & 
   await page.waitForTimeout(600);
   await page.getByTestId('settings-button-desktop').click();
   expect(await tabIds(page)).toEqual(TABS);
-  for (const [tab, testid, text] of [['share', 'share-draft', 'once you save it'], ['changes', 'activity-draft', 'once you share it'], ['stats', 'stats-draft', 'Your real numbers start once you share it'], ['plus', 'plus-draft', 'Save it first']]) {
+  for (const [tab, testid, text] of [['share', 'share-draft', 'once you save it'], ['changes', 'activity-draft', 'once you share it'], ['stats', 'stats-draft', 'Numbers start once you share'], ['plus', 'plus-draft', 'Save it first']]) {
     await page.getByTestId(`side-tab-${tab}`).click();
     await expect(page.getByTestId(testid)).toContainText(text);
     await expect(page.getByTestId(testid).getByRole('button')).toHaveText(['Save & share']);
