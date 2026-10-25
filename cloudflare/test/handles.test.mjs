@@ -28,6 +28,8 @@ const post = (path, body, cookie) => fetch(BASE + path, {
 });
 const pj = async (path, body, cookie) => { const r = await post(path, body, cookie); return { status: r.status, d: await r.json().catch(() => ({})) }; };
 const get = (path, cookie) => fetch(BASE + path, { headers: cookie ? { Cookie: cookie } : {} });
+// A link-preview fetcher: only these get per-calendar tags (people get the static page, no lookup).
+const bot = (path) => fetch(BASE + path, { headers: { 'User-Agent': 'Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)' } });
 const admin = (path, init = {}) => fetch(BASE + path, { ...init, headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' } });
 const outbox = async (email) => (await (await admin(`/api/admin/accounts/outbox?email=${enc(email)}`)).json()).emails;
 const userIdOf = async (email) => (await (await admin(`/api/admin/accounts/lookup?email=${enc(email)}`)).json()).user.id;
@@ -220,7 +222,7 @@ try {
     assert.match(await noEditId(res, club, 'short feed'), /X-WR-CALNAME:Book club/);
     assert.equal(JSON.parse(await noEditId(await get(`/cal/view/${s1}`), club, 'short view')).calendar.title, 'Book club');
     {   // a short link previews as its calendar (og-cards: run_worker_first sends it to the Worker), never with the edit id
-        const html = await noEditId(await get(`/${s1}`, null), club, 'short page');
+        const html = await noEditId(await bot(`/${s1}`), club, 'short page');
         const head = html.slice(0, html.indexOf('</head>'));
         assert.match(head, /<meta property="og:title" content="Book club">/);
         assert.match(head, new RegExp(`<link rel="canonical" href="http://localhost:\\d+/${s1}">|<link rel="canonical" href="https://[^/]+/${s1}">`));
@@ -334,7 +336,7 @@ try {
         const look = await (await get(`/api/lookup?slug=${tname}`)).json();
         assert.deepEqual(look, { found: true, actualSlug: tname, isReadOnly: true, ended: true }, 'a tombstone, never a target');
         {   // link previews of a tombstone: the generic tags and the site card, and no room is made for the name
-            const head = (await (await get(`/${tname}`)).text()).split('</head>')[0];
+            const head = (await (await bot(`/${tname}`)).text()).split('</head>')[0];
             assert.ok(!head.includes('Tigers U10') && !head.includes(`/og/${tname}`), 'no calendar tags on an ended link');
             assert.equal((await get(`/og/${tname}.png`)).headers.get('x-preview'), 'static');
             assert.equal((await admin(`/api/admin/cal/${enc(tname)}/lock-status`)).status, 404, 'no room was created for the ended name');
@@ -380,7 +382,7 @@ try {
         const evil = `Tigers "U10" <script>alert(1)</script></title><img src=x onerror=alert(2)> & co`;
         const made = await pj('/api/names/calendar', { name: 'tigers', title: evil }, xena.cookie);
         assert.equal(made.status, 200, JSON.stringify(made.d));
-        const res = await get(`/@${xh}/tigers`);
+        const res = await bot(`/@${xh}/tigers`);
         assert.equal(res.status, 200);
         const html = await noEditId(res, made.d.calendarId, '@ page');
         const head = html.slice(0, html.indexOf('</head>'));
@@ -517,7 +519,7 @@ try {
             assert.ok(!/\/og\/[^"]*\.png/.test(head), `${p}: no calendar card tags`);
         }
         const junk = `wp-admin-${run}`;
-        const r = await get(`/${junk}`);
+        const r = await bot(`/${junk}`);
         assert.equal(r.status, 200);
         assert.ok(!(await r.text()).includes(`/og/${junk}`), 'an unknown name gets the generic tags');
         assert.equal((await admin(`/api/admin/cal/${enc(junk)}/lock-status`)).status, 404, 'and no room');

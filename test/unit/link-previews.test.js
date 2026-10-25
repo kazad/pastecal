@@ -158,8 +158,8 @@ const page = () => new Response(fs.readFileSync(path.join(__dirname, '../../publ
 test('calendar pages: tags about the calendar; edit and view links share the view-safe values', async () => {
     const { previewPage } = await src('page.js');
     const env = fakeEnv({ lookup: { ut6uc46ub4: { found: true, isReadOnly: true, targetId: 'choir', actualSlug: 'ut6uc46ub4' }, choir: { found: true, isReadOnly: false, targetId: 'choir', actualSlug: 'choir' } }, rooms: { choir: choir() } });
-    const edit = await (await previewPage(new Request('https://pastecal.com/choir'), env, page(), { kind: 'edit', id: 'choir' }, NOW)).text();
-    const view = await (await previewPage(new Request('https://pastecal.com/view/ut6uc46ub4'), env, page(), { kind: 'view', id: 'ut6uc46ub4' }, NOW)).text();
+    const edit = await (await previewPage(new Request('https://pastecal.com/choir', { headers: { 'User-Agent': 'Slackbot-LinkExpanding 1.0' } }), env, page(), { kind: 'edit', id: 'choir' }, NOW)).text();
+    const view = await (await previewPage(new Request('https://pastecal.com/view/ut6uc46ub4', { headers: { 'User-Agent': 'Slackbot-LinkExpanding 1.0' } }), env, page(), { kind: 'view', id: 'ut6uc46ub4' }, NOW)).text();
     assert.match(edit, /og:title" content="Riverside &quot;Youth&quot; &lt;Choir&gt; &amp; Friends"/);
     assert.match(edit, /og:description" content="Sun Oct 25 · Sectionals · Tue Oct 27 · Full &lt;b&gt;rehearsal&lt;\/b&gt; · Sun Nov 1 · Concert"/);
     assert.match(edit, /og:image" content="https:\/\/pastecal\.com\/og\/choir\.png\?v=7-20261024-AmericaLosAn"/);
@@ -170,7 +170,8 @@ test('calendar pages: tags about the calendar; edit and view links share the vie
 });
 
 test('a missing, failing or slow calendar leaves the page exactly as it was', async () => {
-    const { previewPage, PAGE_BUDGET_MS } = await src('page.js');
+    const { previewPage, BOT_BUDGET_MS } = await src('page.js');
+    const PAGE_BUDGET_MS = BOT_BUDGET_MS;     // only preview fetchers wait for a calendar; people never do
     const original = await page().text();
     const cases = {
         missing: fakeEnv(),
@@ -185,17 +186,17 @@ test('a missing, failing or slow calendar leaves the page exactly as it was', as
     for (const [name, env] of Object.entries(cases)) {
         const kind = name === 'viewOfEditName' ? 'view' : 'edit';
         const t = Date.now();
-        const res = await previewPage(new Request('https://pastecal.com/choir'), env, page(), { kind, id: 'choir' }, NOW);
+        const res = await previewPage(new Request('https://pastecal.com/choir', { headers: { 'User-Agent': 'Slackbot-LinkExpanding 1.0' } }), env, page(), { kind, id: 'choir' }, NOW);
         assert.equal(res.status, 200, name);
         assert.equal(await res.text(), original, name);
         assert.ok(Date.now() - t < PAGE_BUDGET_MS + 250, `${name}: waits no longer than the budget`);
     }
     // Not HTML (a 404 from the assets, say): passed through untouched.
     const notHtml = new Response('nope', { status: 404 });
-    assert.equal(await previewPage(new Request('https://pastecal.com/x'), fakeEnv(), notHtml, { kind: 'edit', id: 'x' }, NOW), notHtml);
+    assert.equal(await previewPage(new Request('https://pastecal.com/x', { headers: { 'User-Agent': 'Slackbot-LinkExpanding 1.0' } }), fakeEnv(), notHtml, { kind: 'edit', id: 'x' }, NOW), notHtml);
 });
 
-test('link-preview fetchers wait longer than people for the real tags (a miss is cached by them)', async () => {
+test('link-preview fetchers wait longer than the page budget for the real tags (a miss is cached by them); people get the static page', async () => {
     const { previewPage, PAGE_BUDGET_MS, BOT_BUDGET_MS } = await src('page.js');
     const env = fakeEnv({ delayMs: PAGE_BUDGET_MS + 200, lookup: { choir: { found: true, targetId: 'choir' } }, rooms: { choir: choir() } });
     assert.ok(BOT_BUDGET_MS >= 1500);
@@ -255,4 +256,52 @@ test('the app sends its time zone: on create (when the calendar has none) and wi
     assert.match(cloud, /Intl\.DateTimeFormat\(\)\.resolvedOptions\(\)\.timeZone/);
     assert.match(cloud, /!body\.options\.tz\) body\.options = \{ \.\.\.body\.options, tz \}/, 'never replaces a tz the options already carry');
     assert.match(cloud, /t: 'save', id, v: room\.v, commands, author, writer, \.\.\.\(tz \? \{ tz \} : \{\}\)/);
+});
+
+// ---- cost: only link-preview fetchers get per-calendar tags; people get the static page with no lookup ----
+function stubEnv(cal) {
+    const calls = { directory: 0, room: 0 };
+    const env = {
+        DIRECTORY: { idFromName: () => 'g', get: () => ({ fetch: async () => { calls.directory++; return Response.json({ found: true, targetId: 'room-1', isReadOnly: false }); } }) },
+        CALENDARS: { idFromName: () => 'r', get: () => ({ fetch: async () => { calls.room++; return Response.json(cal); } }) },
+    };
+    return { env, calls };
+}
+const pageRes = () => new Response(fs.readFileSync(path.join(__dirname, '../../public/index.html'), 'utf8'), { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+const req = (ua) => new Request('https://pastecal.com/soccer', { headers: { 'User-Agent': ua } });
+const previewCal = { v: 4, title: 'U10 Soccer', tz: 'America/Los_Angeles', colors: null, zoneSamples: [], pro: false, hideBranding: false,
+    events: [{ id: 'p', title: 'Practice', start: at('2026-10-27', 17), end: at('2026-10-27', 18), type: 1 }] };
+
+test('a person opening a calendar link gets the static page at once: no directory or room lookup', async () => {
+    const { previewPage } = await src('page.js');
+    const { env, calls } = stubEnv(previewCal);
+    for (const ua of ['Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15',
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1', '']) {
+        const html = await (await previewPage(req(ua), env, pageRes(), { kind: 'edit', id: 'soccer' }, NOW)).text();
+        assert.ok(html.includes('The shared calendar nobody has to sign up for</title>'), 'the static tags');
+        assert.ok(!html.includes('U10 Soccer'));
+    }
+    assert.deepEqual(calls, { directory: 0, room: 0 }, 'zero lookups for people');
+});
+
+test('link-preview fetchers get the calendar\'s tags, and the rendered tags are cached briefly', async () => {
+    const { previewPage, isPreviewBot } = await src('page.js');
+    const bots = ['facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)', 'Twitterbot/1.0', 'Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)',
+        'Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)', 'WhatsApp/2.23.20.0', 'LinkedInBot/1.0', 'TelegramBot (like TwitterBot)',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_1) AppleWebKit/601.2.4 (KHTML, like Gecko) Version/9.0.1 Safari/601.2.4 facebookexternalhit/1.1 Facebot Twitterbot/1.0',
+        'Mozilla/5.0 (compatible; Applebot/0.1)', 'Mozilla/5.0 (compatible; Googlebot/2.1)', 'Mozilla/5.0 (compatible; bingbot/2.0)', 'SkypeUriPreview Preview/0.5',
+        'Mozilla/5.0 (compatible; Embedly/0.2)', 'LinkPreview/1.0', 'OpenGraph.xyz checker'];
+    for (const ua of bots) assert.ok(isPreviewBot(req(ua)), ua);
+    const store = new Map();
+    globalThis.caches = { default: { match: async (k) => (store.has(k.url) ? new Response(store.get(k.url)) : undefined), put: async (k, r) => { store.set(k.url, await r.text()); } } };
+    try {
+        const { env, calls } = stubEnv(previewCal);
+        const html = await (await previewPage(req(bots[2]), env, pageRes(), { kind: 'edit', id: 'soccer' }, NOW)).text();
+        assert.ok(html.includes('<title>U10 Soccer · pastecal</title>'));
+        assert.match(html, /<meta name="description" content="Tue Oct 27 · Practice">/);
+        assert.deepEqual(calls, { directory: 1, room: 1 });
+        const again = await (await previewPage(req(bots[0]), env, pageRes(), { kind: 'edit', id: 'soccer' }, NOW)).text();
+        assert.ok(again.includes('<title>U10 Soccer · pastecal</title>'));
+        assert.deepEqual(calls, { directory: 1, room: 1 }, 'the second fetch is served from the cache');
+    } finally { delete globalThis.caches; }
 });

@@ -12,9 +12,14 @@ import { isoDay, dayOf } from './time.js';
 
 export const PAGE_BUDGET_MS = 400;        // a person opening the link
 export const BOT_BUDGET_MS = 2000;        // a link-preview fetcher: it caches what it gets, so a miss sticks
-// The fetchers behind link previews (and search engines): they may wait longer for the real tags.
-const PREVIEW_BOTS = /facebookexternalhit|facebot|twitterbot|slackbot|discordbot|whatsapp|linkedinbot|telegrambot|applebot|googlebot|bingbot|embedly|redditbot|skypeuripreview|mastodon|pinterest|iframely|vkshare|quora link preview|outbrain|w3c_validator/i;
-export const pageBudget = (request) => (PREVIEW_BOTS.test(request.headers.get('User-Agent') || '') ? BOT_BUDGET_MS : PAGE_BUDGET_MS);
+// The fetchers behind link previews (and search engines), in one place. Only these get per-calendar tags:
+// a person opening a link gets the static page at once, with no directory or room lookup (the app sets its
+// own title). iMessage previews with a Safari UA that names facebookexternalhit/Twitterbot; "LinkPreview"
+// and the og checkers (opengraph.xyz, metatags.io, ...) name themselves.
+export const PREVIEW_BOTS = /facebookexternalhit|facebot|twitterbot|slackbot|discordbot|whatsapp|linkedinbot|telegrambot|applebot|googlebot|bingbot|embedly|redditbot|skypeuripreview|mastodon|pinterest|iframely|vkshare|quora link preview|outbrain|w3c_validator|linkpreview|opengraph|metatags|preview\.?(bot|app)|snapchat|viber|line\/|kakaotalk|zoominfobot|yahoo! slurp|duckduckbot/i;
+export const isPreviewBot = (request) => PREVIEW_BOTS.test(request.headers.get('User-Agent') || '');
+export const pageBudget = (request) => (isPreviewBot(request) ? BOT_BUDGET_MS : PAGE_BUDGET_MS);
+export const META_CACHE_SECONDS = 120;    // the rendered tags per calendar link: bots re-fetch, but rarely within this
 export const timeout = (ms) => new Promise((_, reject) => setTimeout(() => reject(new Error('preview timeout')), ms));
 
 // The address the tags point at: https, on the host the page was asked for (production: pastecal.com).
@@ -61,6 +66,13 @@ export function cardStamp(cal, now) {
  */
 export async function previewPage(request, env, assetRes, target, now = Date.now(), { url = null, fallback = null } = {}) {
     if (!assetRes.ok || !(assetRes.headers.get('Content-Type') || '').includes('text/html')) return assetRes;
+    // People: the static page (with the fallback tags if the caller has them), and not one lookup.
+    if (!isPreviewBot(request)) {
+        if (!fallback) return assetRes;
+        const res = new Response(injectMeta(await assetRes.text(), fallback), assetRes);
+        res.headers.delete('Content-Length'); res.headers.delete('ETag');
+        return res;
+    }
     const html = await assetRes.text();
     const plain = () => {
         if (!fallback) return new Response(html, assetRes);
@@ -68,10 +80,18 @@ export async function previewPage(request, env, assetRes, target, now = Date.now
         res.headers.delete('Content-Length'); res.headers.delete('ETag');
         return res;
     };
+    const cache = typeof caches !== 'undefined' ? caches.default : null;
+    const origin = publicOrigin(new URL(request.url));
+    // Keyed on the link and the day (events pass); a short TTL covers edits.
+    const key = new Request(`https://meta-cache.pastecal.internal/${target.kind}/${encodeURIComponent(target.id)}/${isoDay(dayOf(now, 'UTC'))}?o=${encodeURIComponent(origin)}&u=${encodeURIComponent(url || '')}`);
+    const send = (block) => { const res = new Response(injectMeta(html, block), assetRes); res.headers.delete('Content-Length'); res.headers.delete('ETag'); return res; };
     try {
+        const hit = cache && await cache.match(key).catch(() => null);
+        if (hit) return send(await hit.text());
         const cal = await Promise.race([loadPreview(env, target), timeout(pageBudget(request))]);
         if (!cal) return plain();
-        const block = calendarMeta(publicOrigin(new URL(request.url)), target, { title: displayTitle(cal), description: describe(cal, now), stamp: cardStamp(cal, now), url });
+        const block = calendarMeta(origin, target, { title: displayTitle(cal), description: describe(cal, now), stamp: cardStamp(cal, now), url });
+        if (cache) await cache.put(key, new Response(block, { headers: { 'Cache-Control': `max-age=${META_CACHE_SECONDS}` } })).catch(() => {});
         const res = new Response(injectMeta(html, block), assetRes);
         res.headers.delete('Content-Length');
         res.headers.delete('ETag');                  // the asset's ETag names the generic page, not this one

@@ -68,7 +68,10 @@ assert.match(botHead, /<title>U10 Soccer · pastecal<\/title>/);
 assert.match(botHead, /<meta name="description" content="Tue Nov 3 · Practice">/, 'the LA date, not the UTC one');
 const img = /<meta property="og:image" content="[^"]*(\/og\/[^"?]+\.png\?v=[^"]+)"/.exec(botHead)[1];
 assert.equal((await fetch(BASE + img.replace(/&amp;/g, '&'))).headers.get('content-type'), 'image/png');
-step('a link-preview fetcher gets the calendar\'s title, LA-dated description and card');
+const personHead = await head(PERSON);
+assert.ok(personHead.includes('The shared calendar nobody has to sign up for</title>') && !personHead.includes('U10 Soccer'), 'people: the static page');
+assert.ok(!personHead.includes(`/og/${cal}`));
+step('a link-preview fetcher gets the calendar\'s title, LA-dated description and card; a person\'s browser gets the static page');
 
 console.log(`\n${n} checks passed`);
 process.exit(0);
