@@ -1153,6 +1153,8 @@ div#Schedule,
 .pc-home-split #Schedule.e-schedule { overflow: visible }
 /* The month grid is 5-6 fixed-height rows; 80vh left a dead block under it on tall screens */
 .pc-home-split div#Schedule { min-height: 0 }
+/* The wrapper's height:100% would take the whole stretched row and push the footer line below the window */
+.pc-home-split #cal2_wrap { height: auto !important }
 .pc-home-split .e-quick-popup-wrapper { z-index: 20 }
 .pc-home-bar { display: flex; align-items: center; justify-content: space-between; padding: 6px 6px 6px 16px; border-bottom: 1px solid var(--pc-line); background: var(--pc-surface); font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--pc-text-muted) }
 .pc-home-body { padding: 20px 22px 24px; overflow: auto; display: flex; flex-direction: column; flex: 1 }

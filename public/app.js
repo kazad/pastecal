@@ -1439,7 +1439,11 @@ const CalendarVueApp = {
             if (window.innerWidth >= 1100) {
                 const rect = sched.getBoundingClientRect();
                 const chrome = rect.height - rows[0].getBoundingClientRect().height * rows.length;
-                h = Math.max(100, Math.floor((window.innerHeight - (rect.top + window.scrollY) - 12 - chrome) / rows.length));
+                // The one line under the calendar (pageFooter) fits in the window too, or every page scrolls.
+                const foot = document.querySelector('.pc-home-cal > .pc-view-footer, .pc-home-cal > .pc-edit-footer, .pc-home-cal > .pc-hosted-note');
+                const cs = foot && getComputedStyle(foot);
+                const footH = foot ? foot.offsetHeight + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom) : 0;
+                h = Math.max(100, Math.floor((window.innerHeight - (rect.top + window.scrollY) - 12 - chrome - footH) / rows.length));
             }
             const now = parseFloat(sched.style.getPropertyValue('--month-cell-h')) || 100;
             if (Math.abs(now - h) < 2) return false;
@@ -1449,6 +1453,7 @@ const CalendarVueApp = {
         scheduleObj.addEventListener('dataBound', () => {
             requestAnimationFrame(() => { if (fitMonthRows()) relayout(); });
         });
+        this._refitMonthRows = () => { if (fitMonthRows()) relayout(); };
         let fitTimer = null;
         window.addEventListener('resize', () => {
             clearTimeout(fitTimer);
@@ -1789,6 +1794,8 @@ const CalendarVueApp = {
     },
 
     watch: {
+        // The footer line appears once loading ends (or changes with Pro): give the month grid its room.
+        pageFooter() { this.$nextTick(() => { if (this._refitMonthRows) this._refitMonthRows(); }); },
         // The homepage pitch is an experiment: pick (or recall) this browser's variant
         // once the page is known to be the homepage, then report which parts of it are read.
         isHomepageCalendar: {
