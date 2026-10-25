@@ -226,6 +226,7 @@ const CalendarVueApp = {
             proUnlimitedBusy: false,
             proUnlimitedFull: false,    // Pro with its 10 used: the card offers the owner's @name instead
             proHandle: '',
+            shareNames: null,           // the owner's own links for this calendar ({handle, atName, shortNames}, /api/pro/status): Share leads with them
             proBilling: null,           // /api/pro/config: true = trial and checkout; false = "Join the beta"; null = not known yet (neither shows)
             pausedOwner: false,         // this browser owns the paused (Pro ended) calendar it's looking at: offer the way back
             proTrialActive: false,      // this browser owns the calendar and it is on its free trial (trial_feature_used)
@@ -1938,7 +1939,7 @@ const CalendarVueApp = {
         'lock.locked': {
             handler(locked) {
                 this.proOwnerChecked = false;
-                if (!locked) { this.proOwner = false; if (this.showShare) this.refreshProTrial(); return; }
+                if (!locked) { this.proOwner = false; this.shareNames = null; if (this.showShare) this.refreshProTrial(); return; }
                 this.refreshProOwner();
             },
         },
@@ -3236,6 +3237,32 @@ const CalendarVueApp = {
             return SlugManager.getReadOnlyURL(this.calendar);
         },
 
+        /** /api/pro/status (here, or from the Pro panel after a change): the owner's @link and short links for
+         *  this calendar. Only its owner gets them, and only they are shown them. */
+        onProNames(st) {
+            if (!st || !st.isOwner || !this.calendar) { this.shareNames = null; return; }
+            const shortNames = Array.isArray(st.shortNames) ? st.shortNames.filter((n) => typeof n === 'string') : [];
+            this.shareNames = (st.handle && st.atName) || shortNames.length ? { handle: st.handle || '', atName: st.atName || '', shortNames } : null;
+        },
+        /** "Share to view": one link, the best this calendar has: its @link, else a short link, else its view link.
+         *  All three open the view-only calendar. */
+        shareViewURL() {
+            const n = this.shareNames, origin = window.location.origin;
+            if (n && n.handle && n.atName) return `${origin}/@${n.handle}/${encodeURIComponent(n.atName)}`;
+            if (n && n.shortNames.length) return `${origin}/${encodeURIComponent(n.shortNames[0])}`;
+            return this.getReadOnlyURL();
+        },
+        /** Share's "Other links": the calendar's other view-only addresses, listed compactly under the main one. */
+        otherViewLinks() {
+            const n = this.shareNames, origin = window.location.origin, main = this.shareViewURL();
+            const all = [];
+            if (n && n.handle && n.atName) all.push(`${origin}/@${n.handle}/${encodeURIComponent(n.atName)}`);
+            if (n) for (const s of n.shortNames) all.push(`${origin}/${encodeURIComponent(s)}`);
+            const view = this.getReadOnlyURL();
+            if (view) all.push(view);
+            return all.filter((u) => u !== main);
+        },
+
         getReadOnlyNotes() {
             // Escaped, then only http(s)/www/email become links (Utils.linkify), then line breaks.
             return Utils.linkify(this.calendar.options?.notes || '', { style: false }).replace(/\n/g, "<br>");
@@ -3686,7 +3713,7 @@ const CalendarVueApp = {
          * gets used, and lumping them together would hide the answer.
          */
         copyShareLink() {
-            const readOnly = this.getReadOnlyURL();
+            const readOnly = this.shareViewURL();
             const url = readOnly || this.getEditableURL();
             if (!url) return;
 
@@ -5326,6 +5353,7 @@ const CalendarVueApp = {
                 const data = res.ok ? await res.json() : null;
                 if (this.calendar && this.calendar.id === id) {
                     this.proOwner = !!(data && data.isOwner);
+                    this.onProNames(data);
                     this.proTrialActive = !!(data && data.isOwner && data.trial);
                     this.trialFeatureUsed('lock');          // the owner on their locked calendar: the lock in use
                 }

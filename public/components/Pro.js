@@ -378,7 +378,8 @@ const ProPanel = {
 
                 <!-- Pro: this calendar's short links (pastecal.com/@handle/<name>, pastecal.com/<name>) -->
                 <div v-if="status.plan === 'unlimited' || status.atName || (status.shortNames || []).length" class="pc-pro-sub" data-testid="pro-short-links">
-                    <h5>Short links</h5>
+                    <h5>Your links</h5>
+                    <p class="pc-pro-muted">They open the view-only calendar. Share copies the first one.</p>
                     <p v-if="status.atName" class="pc-pro-linkline"><a :href="'/@' + status.handle + '/' + status.atName" target="_blank" rel="noopener" data-testid="pro-at-link">{{ host }}/@{{ status.handle }}/{{ status.atName }}</a></p>
                     <p v-for="n in (status.shortNames || [])" :key="n" class="pc-pro-linkline"><a :href="'/' + n" target="_blank" rel="noopener" data-testid="pro-short-link">{{ host }}/{{ n }}</a>
                         <button type="button" class="pc-pro-link pc-pro-release" @click="nameChange('/api/names/short/release', { name: n })" :disabled="busy" data-testid="pro-short-release">Release</button></p>
@@ -454,7 +455,8 @@ const ProPanel = {
     components: { 'pro-beta-join': ProBetaJoin },
     // open-insight: 'stats' | 'history' (owner only). owner: whether this browser owns the calendar,
     // so the app can offer History from Recent changes.
-    emits: ['open-insight', 'owner'],
+    // names: the status, after each load, so Share can lead with the calendar's @link or short link.
+    emits: ['open-insight', 'owner', 'names'],
     data() {
         return {
             svg: PRO_LOCK_SVG,
@@ -563,7 +565,7 @@ const ProPanel = {
             if (!this.unlimitedOn) this.plan = 'single';
             // Billing off: no trial or checkout to continue to. The panel shows the Pro beta list instead.
             if (!billing) { this.wantTrial = false; this.autoGo = false; }
-            if (st.status === 200) this.status = st.data;
+            if (st.status === 200) { this.status = st.data; this.$emit('names', st.data); }
             if (this.status && this.status.lapsedMode) this.lapsedMode = this.status.lapsedMode;
             this.me = me.status === 200 ? me.data : null;
             if ((me.status === 200 || me.status === 401) && typeof AccountMenu !== 'undefined') AccountMenu.hint(me.status === 200);   // the site header's Account link

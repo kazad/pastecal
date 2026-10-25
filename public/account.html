@@ -133,7 +133,7 @@ select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); borde
       </div>
       <div id="hasHandle" hidden>
         <a class="big-link" id="handleLink" target="_blank" rel="noopener" data-testid="handle-link-own"></a>
-        <p id="handleNote">Your public page lists the calendars you choose to show.</p>
+        <p id="handleNote">Your public page lists the calendars you choose to show. Links under your name open the view-only calendar.</p>
         <div id="newCal">
           <h2 style="margin-top:18px" id="newCalH">New calendar</h2>
           <p>Upgraded and locked to you, at its own pastecal.com/@you/… link. As many as you like.</p>
@@ -148,7 +148,7 @@ select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); borde
 
     <section class="card" id="shortCard" hidden data-testid="account-short-card">
       <h2 id="shortH">Short links</h2>
-      <p>Your own <b>pastecal.com/name</b> for any of your calendars. Change where one points any time.</p>
+      <p>Your own <b>pastecal.com/name</b> for any of your calendars. It opens the view-only calendar; you and your editors keep the edit link. Change where one points any time.</p>
       <ul class="list" id="shortList"></ul>
       <form class="inline" id="shortForm" novalidate>
         <span class="field"><span class="pre">pastecal.com/</span><input id="shortInput" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="30" aria-label="Short name" placeholder="name" data-testid="short-input"></span>

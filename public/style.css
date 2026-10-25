@@ -2138,6 +2138,14 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 .pc-link:hover .pc-link-act { color: var(--pc-link); background: var(--pc-soft) }
 .pc-link-ico { width: 16px; height: 16px }
 .pc-link.is-copied { border-color: var(--pc-success, #1f7a4d); background: var(--pc-success-soft, #e3f3ea) }
+/* Share's other view-only addresses: one compact line under "Share to view" */
+.pc-other-links { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-top: -6px; font-size: 12.5px }
+.pc-other-h { color: var(--pc-text-muted); font-weight: 600 }
+.pc-other-link { border: 0; background: none; padding: 0; color: var(--pc-text-2); font: 500 12.5px/1.4 var(--pc-font); cursor: copy; overflow-wrap: anywhere; text-align: left }
+.pc-other-link:hover { color: var(--pc-link); text-decoration: underline }
+.pc-other-link.is-copied { color: var(--pc-success, #1f7a4d) }
+.pc-link-note { margin: -2px 0 0; color: var(--pc-text-muted); font-size: 12.5px; line-height: 1.4 }
+.pc-pill-tag { margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: var(--pc-soft); color: var(--pc-text-muted); font-size: 10.5px; font-weight: 600 }
 .pc-link.is-copied .pc-link-act { color: var(--pc-success, #1f7a4d); background: transparent }
 .pc-link-share { flex: none; width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid var(--pc-field); border-radius: var(--pc-radius-md); background: var(--pc-bg); color: var(--pc-text-muted); cursor: pointer }
 .pc-link-share:hover { color: var(--pc-link); border-color: var(--pc-link) }

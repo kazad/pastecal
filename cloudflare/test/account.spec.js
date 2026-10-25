@@ -121,6 +121,16 @@ test('Pro from /pricing (fake Stripe), claim @name, create a calendar under it',
   expect(st.locked).toBe(true);
   // The owner's panel shows its short link.
   await expect(page.getByTestId('pro-at-link').first()).toHaveText(new RegExp(`/@${handle}/soccer$`), { timeout: 15_000 });
+  // Share leads with the @link, called view-only: the panel's one "Share to view" link, and the header pill.
+  await expect(page.locator('[data-testid=share-group] h4')).toHaveText('Share to view');
+  await expect(page.getByTestId('share-readonly-addr')).toContainText(`pastecal.com/@${handle}/soccer`);
+  await expect(page.getByTestId('share-edit-note')).toContainText('view-only');
+  await expect(page.getByTestId('share-pill-url')).toContainText(`pastecal.com/@${handle}/soccer`);
+  await expect(page.getByTestId('share-pill-url')).toContainText('view only');
+  expect(await page.getByTestId('share-pill-url').innerText()).not.toContain(calendarId);
+  await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.getByTestId('share-pill-existing').click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toMatch(new RegExp(`/@${handle}/soccer$`));
   await ctx.close();
 });
 
