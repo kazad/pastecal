@@ -346,7 +346,7 @@ const ProPanel = {
                 <p class="pc-pro-trial-line" data-testid="plus-plan-line">
                     <template v-if="status.trial"><span data-testid="pro-trial-line">{{ plan }} trial · {{ trialLeft }}</span> ·
                         <a v-if="!status.trial.hasCard && billing !== false" href="#" class="pc-link" @click.prevent="keepPro" data-testid="pro-keep-trial">Keep {{ plan }}</a>
-                        <span v-else-if="status.trial.hasCard" class="pc-pro-muted">card on file, {{ plan }} continues</span></template>
+                        <span v-else-if="status.trial.hasCard" class="pc-pro-muted" data-testid="pro-first-charge">kept: first charge $29 on {{ trialEndDay }}</span></template>
                     <template v-else>{{ plan }}<span v-if="renewal" class="pc-pro-muted" data-testid="pro-renewal"> · {{ renewal }}</span></template>
                 </p>
                 <div v-if="status.trial && keepOpen" class="pc-pro-keep" data-testid="pro-keep-plans">
@@ -422,6 +422,7 @@ const ProPanel = {
             keepOpen: false,      // Keep Pro pressed: the plan choice and the checkout button show
             trialSurface: '',
             wantTrial: false,     // opened from "Try Pro free" (ProIntent 'trial')
+            wantKeep: false,      // opened from the reminder's Keep link (ProIntent 'keep')
             lapsedMode: 'readonly',
             billing: null,        // /api/pro/config: false = Pro can't be bought yet, so the offer is the Pro beta list
             // The staging copy only (utils/preview.js): which test card to pay with.
@@ -446,6 +447,10 @@ const ProPanel = {
             return end && end * 1000 - Date.now() > 49 * 3600 * 1000
                 ? 'Pay on Stripe’s secure page. Your free days still count: the first charge is when the trial ends.'
                 : 'Pay on Stripe’s secure page. Billing starts today.';
+        },
+        trialEndDay() {
+            const end = this.status && this.status.trial && this.status.trial.endsAt;
+            return end ? new Date(end * 1000).toLocaleDateString(undefined, { month: 'long', day: 'numeric' }) : '';
         },
         trialLeft() {
             const end = this.status && this.status.trial && this.status.trial.endsAt;
@@ -482,6 +487,8 @@ const ProPanel = {
         // Pro is yearly only; an old 'month' intent becomes yearly.
         this.autoGo = !!(intent && intent.go);
         this.wantTrial = !!(intent && intent.interval === 'trial');
+        // The trial reminder's "Keep Plus" link (?pro=keep): open on Keep, or ask the owner to sign in first.
+        this.wantKeep = !!(intent && intent.interval === 'keep');
         this.trialSurface = (intent && intent.surface) || this.surface;
         this.refresh();
         // Waiting on the email: they may sign in and pay in another tab or browser. Coming back here
@@ -521,6 +528,12 @@ const ProPanel = {
                 return;
             }
             this.wantTrial = false;
+            if (this.wantKeep) {
+                // Signed in as the owner: the $29 Keep button first. Signed out: the sign-in form, whose link comes back here.
+                if (this.mode === 'owner' || this.mode === 'lapsed') { this.wantKeep = false; ProIntent.clear(); if (billing) this.keepOpen = true; }
+                else if (this.mode === 'locked' && !this.me) { this.step = 'email'; this.focusEmail(); }
+                else this.wantKeep = false;
+            }
             // Back from the sign-in link they asked for when they pressed Lock: no second press.
             if (this.autoGo && this.me && this.mode === 'offer') {
                 this.autoGo = false; this.busy = true; this.going = true;
@@ -642,10 +655,10 @@ const ProPanel = {
             this.busy = true;
             try {
                 // Buying: the link brings the choice along, so it finishes even in another browser.
-                const next = '/' + encodeURIComponent(this.calendarId) + (this.mode === 'offer' ? `?pro=${this.interval}` : '');
+                const next = '/' + encodeURIComponent(this.calendarId) + (this.mode === 'offer' ? `?pro=${this.interval}` : this.wantKeep ? '?pro=keep' : '');
                 const r = await proApi('POST', '/api/auth/start', { email: this.email, next });
                 if (r.status === 200 && r.data.ok) {
-                    ProIntent.set(this.calendarId, this.interval, this.mode === 'offer');
+                    ProIntent.set(this.calendarId, this.wantKeep ? 'keep' : this.interval, this.mode === 'offer');
                     this.step = 'sent';
                     proTrack((a) => a.proSignInSent(this.mode === 'locked' ? 'owner_signin' : 'share_panel'));
                     return;
