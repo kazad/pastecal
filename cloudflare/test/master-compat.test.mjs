@@ -33,7 +33,7 @@ async function capture(g) {
     const text = async (r) => ({ status: r.status, body: await r.text() });
     out.get = await text(await fetch(`${BASE}/cal/${enc(id)}`, { headers: ip(1) }));
     out.history = await text(await fetch(`${BASE}/cal/${enc(id)}/history`, { headers: ip(1) }));
-    out.authors = await text(await fetch(`${BASE}/cal/${enc(id)}/authors`, { headers: ip(1) }));
+    out.authors = await text(await fetch(`${BASE}/cal/${enc(id)}/authors`, { headers: { ...ip(1), Authorization: `Bearer ${SECRET}` } }));   // admin-only now
     out.view = await text(await fetch(`${BASE}/cal/view/${enc(g.viewId)}`, { headers: ip(2) }));
     const ics = await fetch(`${BASE}/${enc(id)}.ics`, { headers: { ...ip(3), 'User-Agent': 'Google-Calendar-Importer' } });
     out.icsStatus = ics.status; out.icsEtag = ics.headers.get('etag'); out.icsType = ics.headers.get('content-type');

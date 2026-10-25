@@ -197,7 +197,9 @@ assert.equal(latest.changedEvents[0].to.title, 'Kickoff (Rescheduled)');
 step('history table records structured delta with from/to');
 
 // Check author tracking: GET /cal/<id>/authors
-const authorsRes = await (await fetch(`${BASE}/cal/${encodeURIComponent(calId)}/authors`)).json();
+// Admin only (Bearer): author uids are what lets an editor of record upgrade, so they are never public.
+assert.equal((await fetch(`${BASE}/cal/${encodeURIComponent(calId)}/authors`)).status, 403);
+const authorsRes = await (await fetch(`${BASE}/cal/${encodeURIComponent(calId)}/authors`, { headers: { Authorization: `Bearer ${SECRET}` } })).json();
 assert.ok(Array.isArray(authorsRes), 'Authors returns an array');
 const authorEntry = authorsRes.find((a) => a.uid === authorUid);
 assert.ok(authorEntry, 'Author uid is recorded');

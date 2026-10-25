@@ -671,6 +671,13 @@
             </button>
         </div>
 
+        <!-- Someone other than its creator upgraded this calendar, in the last 7 days: the creator's browser (and other
+             editors of record) can undo it (checkUpgradeNotice; the server decides who sees it). -->
+        <p v-if="upgradeNotice" class="pc-upsell" data-testid="upgrade-notice" role="status" v-cloak>
+            <span>Someone upgraded this calendar on {{ upgradeNotice.day }}. Not expected?</span>
+            <button type="button" class="pc-link pc-upsell-go" data-testid="upgrade-undo" :disabled="upgradeNotice.busy" @click="undoUpgrade">Undo</button>
+        </p>
+
         <!-- Pro, quietly, on your own calendar after someone else changed it (maybeShowProUpsell). -->
         <p v-if="proUpsell" class="pc-upsell" data-testid="pro-upsell" v-cloak>
             <span>Changed since your last visit. Want only your team to edit?</span>

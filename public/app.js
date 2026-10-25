@@ -249,6 +249,7 @@ const CalendarVueApp = {
             showPlus: false,            // the side panel's Plus tab: what an upgrade adds, or the owner's plan, editors and billing
             plusAutoJoin: false,        // billing off and they pressed "Join the beta" elsewhere: the Plus tab opens on the email field
             proPlan: null,              // the lock's plan id (/api/pro/status), for planName: 'pro' is Plus
+            upgradeNotice: null,        // {day, busy}: someone else upgraded it in the last 7 days and this browser may undo it
             showRecentChanges: false,   // the Activity tab of the side panel (id 'changes')
             showStatsInfo: false,       // the Stats tab when it can't show Pro stats: a draft, a free calendar, a non-owner
             freeStats: null,            // the Stats tab's free counts: {id, loading, error, none, unavailable, views, viewsPrev, followers}
@@ -1924,8 +1925,9 @@ const CalendarVueApp = {
         'lock.locked': {
             handler(locked) {
                 this.proOwnerChecked = false;
-                if (!locked) { this.proOwner = false; if (this.showPlus) this.refreshProTrial(); return; }
+                if (!locked) { this.proOwner = false; this.upgradeNotice = null; if (this.showPlus) this.refreshProTrial(); return; }
                 this.refreshProOwner();
+                this.checkUpgradeNotice();
             },
         },
         // The plan ended and the owner opened it: the offer is back, without the trial it already had.
@@ -5317,6 +5319,37 @@ const CalendarVueApp = {
         },
         /** Activity's line for a free calendar's creator. */
         openProOffer() { this.openPlusTab('share'); },
+        /** Someone other than its creator upgraded this calendar lately: may this browser undo it? Only the
+         *  server knows (it checks this browser's author uid), so ask; the notice shows only on a yes. */
+        async checkUpgradeNotice(retried = false) {
+            const id = this.calendar && this.calendar.id;
+            this.upgradeNotice = null;
+            if (!id || !this.lock.locked || typeof proAuthor !== 'function') return;
+            // The author uid comes from an anonymous sign-in that may still be on its way: look once more shortly.
+            if (!proAuthor()) { if (!retried) setTimeout(() => this.checkUpgradeNotice(true), 4000); return; }
+            try {
+                const r = await fetch('/api/pro/upgrade-notice', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ calendarId: id, author: proAuthor() }) });
+                const d = r.ok ? await r.json() : null;
+                if (d && d.notice && this.calendar && this.calendar.id === id && this.lock.locked) {
+                    this.upgradeNotice = { day: new Date(d.notice.at).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }), busy: false };
+                }
+            } catch (e) { /* offline: no notice */ }
+        },
+        async undoUpgrade() {
+            if (!this.upgradeNotice || !window.confirm('Undo this upgrade? The calendar goes back to a free calendar anyone with the link can edit, and any payment is refunded.')) return;
+            this.upgradeNotice.busy = true;
+            let r = null;
+            try {
+                r = await fetch('/api/pro/undo-upgrade', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ calendarId: this.calendar.id, author: proAuthor() }) });
+            } catch (e) { /* offline */ }
+            const d = r ? await r.json().catch(() => ({})) : {};
+            if (r && r.ok) { this.upgradeNotice = null; this.showToast('Upgrade undone. Anyone with the link can edit again.', 'success'); return; }
+            if (this.upgradeNotice) this.upgradeNotice.busy = false;
+            this.showToast(d.message || (r ? 'That didn’t work. Write to support@pastecal.com and we’ll sort it out.' : 'We couldn’t reach pastecal. Check your connection and try again.'), 'error');
+            if (r && r.status === 410) this.upgradeNotice = null;
+        },
         /** A plan id's display name (Pro.js planName), for templates: 'pro' is Plus, 'unlimited' is Pro. */
         planName(plan) { return planName(plan); },
         focusInsight(open, ref) {

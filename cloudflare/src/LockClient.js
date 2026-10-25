@@ -5,7 +5,8 @@
  *   unlock(id, ownerId, {lapse}) -> {status, ok, paused}  lapse: billing ended it, so it pauses unless the owner chose 'open'
  *   setLapsedMode(id, owner, mode) -> {status, ok, mode, paused}  'readonly' | 'open' (locked owner, or the paused calendar's owner)
  *   rotateEditorKey(id, owner) -> {status, ok, editorKey?}     revokes every editor link, makes one 'Editors' link
- *   lockStatus(id)             -> {status, locked, ownerId, plan, lockedAt, title, lapsed:{ownerId, mode, at}|null, lapsedMode}
+ *   lockStatus(id)             -> {status, locked, ownerId, plan, lockedAt, title, lapsed:{ownerId, mode, at}|null, lapsedMode, lapsedModeChosen}
+ *   editorOfRecord(id, uid)    -> {status, ok, known, editor, creator}   made it, or edited on 2+ days (else the top author)
  *   createEditorLink(id, owner, label) -> {status, ok, id, label, createdAt, editorKey}   409 too-many-links / not-locked, 403 not-owner
  *   listEditorLinks(id, owner)         -> {status, ok, links:[{id, label, createdAt, lastUsedAt}]}
  *   revokeEditorLink(id, owner, linkId) -> {status, ok}                                   404 no-link
@@ -40,10 +41,14 @@ export const LockClient = {
     // Billing has no browser to show a key to: no 'Editors' link is made (the owner makes links later).
     // takeover: support only (reassign), may lock a calendar paused for its previous owner.
     lock: (env, id, ownerId, { takeover = false } = {}) => call(env, id, 'lock', 'POST', { ownerId, plan: 'pro', createLink: false, ...(takeover ? { takeover: true } : {}) }),
-    unlock: (env, id, ownerId, { lapse = false } = {}) => call(env, id, 'unlock', 'POST', { ownerId, ...(lapse ? { lapse: true } : {}) }),
+    // trial: a trial ended unpaid, so it ends open unless the owner chose read-only.
+    // undo: the 7-day undo of someone else's upgrade (Activity says "Upgrade undone").
+    unlock: (env, id, ownerId, { lapse = false, trial = false, undo = false } = {}) => call(env, id, 'unlock', 'POST', { ownerId, ...(lapse ? { lapse: true } : {}), ...(trial ? { trial: true } : {}), ...(undo ? { undo: true } : {}) }),
     setLapsedMode: (env, id, ownerId, mode) => call(env, id, 'set-lapsed-mode', 'POST', { ownerId, mode }),
     rotateEditorKey: (env, id, ownerId) => call(env, id, 'rotate-editor-key', 'POST', { ownerId }),
     lockStatus: (env, id) => call(env, id, 'lock-status', 'GET'),
+    // Has this author uid run the calendar (created it, or edited it on 2+ days; else the top author)?
+    editorOfRecord: (env, id, uid) => call(env, id, 'editor-of-record', 'POST', { uid: typeof uid === 'string' ? uid : '' }),
     createEditorLink: (env, id, ownerId, label) => call(env, id, 'create-editor-link', 'POST', { ownerId, label }),
     listEditorLinks: (env, id, ownerId) => call(env, id, 'list-editor-links', 'POST', { ownerId }),
     revokeEditorLink: (env, id, ownerId, linkId) => call(env, id, 'revoke-editor-link', 'POST', { ownerId, id: linkId }),

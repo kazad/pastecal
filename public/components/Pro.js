@@ -118,6 +118,12 @@ function trialFeature(id, feature) {
     if (id && TrialUsage.once(id, feature)) proTrack((a) => a.trialFeatureUsed(feature));
 }
 
+// This browser's author uid (services/AuthorSignal.js): trial and checkout are for an editor of record (the
+// browser that made the calendar, or one that edited it on 2+ days); the server checks it. Never shown anywhere.
+function proAuthor() {
+    try { return typeof AuthorSignal !== 'undefined' && AuthorSignal.uid ? AuthorSignal.uid() || '' : ''; } catch (e) { return ''; }
+}
+
 function proTrack(fn) {
     try { if (typeof Analytics !== 'undefined' && Analytics) fn(Analytics); } catch (e) { /* observational only */ }
 }
@@ -273,7 +279,7 @@ const ProPanel = {
                         <button type="button" class="pc-btn pc-btn--primary pc-plus-main" @click="startTrial" :disabled="busy" data-testid="pro-trial-btn">{{ busy ? 'One moment…' : 'Start 30-day free trial' }}</button>
                         <p class="pc-pro-muted pc-pro-note">No card needed.<template v-if="me"> As <span data-hj-suppress data-clarity-mask="true">{{ me.email }}</span>.</template></p>
                     </template>
-                    <p class="pc-pro-muted pc-pro-note">When the trial ends, the calendar stays view-only until you choose: keep Plus, or open it to everyone.</p>
+                    <p class="pc-pro-muted pc-pro-note">When the trial ends, nothing is charged and it’s a free calendar again, unless you keep Plus.</p>
                     <p v-if="step === 'idle'" class="pc-pro-muted pc-plus-or">or <button type="button" class="pc-link" @click="lockNow" :disabled="busy" data-testid="pro-lock-btn">{{ going ? 'taking you to payment…' : 'upgrade now: $29/year' }}</button></p>
                 </div>
 
@@ -379,6 +385,7 @@ const ProPanel = {
                     <a href="#" class="pc-link" @click.prevent="signOut">Sign out</a>
                     <span v-if="me" class="pc-pro-muted" data-hj-suppress data-clarity-mask="true">{{ me.email }}</span>
                 </div>
+                <p class="pc-pro-muted pc-pro-note" data-testid="plus-any-device">It’s yours, not this browser’s: sign in with your email on any device to manage it.</p>
             </template>
 
             <p v-if="error" class="pc-pro-err" role="alert" data-testid="pro-error">{{ error }}</p>
@@ -541,11 +548,12 @@ const ProPanel = {
         },
         async checkout() {
             proTrack((a) => a.proCheckoutStarted(this.interval));
-            const r = await proApi('POST', '/api/pro/checkout', { calendarId: this.calendarId, interval: this.interval, title: this.calendarTitle || '' });
+            const r = await proApi('POST', '/api/pro/checkout', { calendarId: this.calendarId, interval: this.interval, title: this.calendarTitle || '', author: proAuthor() });
             if (r.status === 200 && r.data.url) { ProIntent.clear(); location.href = r.data.url; return; }
             const reason = r.status === 0 ? 'network' : (r.data.error || String(r.status));
             proTrack((a) => a.proCheckoutFailed(reason));
             if (r.status === 401) { this.me = null; this.step = 'email'; this.focusEmail(); return; }
+            if (r.status === 403 && r.data.error === 'not-an-editor') { this.error = r.data.message; return; }
             if (r.status === 503) { this.error = 'Upgrades aren’t available yet. Nothing was charged.'; return; }
             if (r.status === 409 && r.data.error === 'already-pro') { this.error = 'This calendar is already upgraded.'; this.refresh(); return; }
             if (r.status === 409) { this.error = 'Someone else has already locked this calendar.'; this.refresh(); return; }
@@ -558,7 +566,7 @@ const ProPanel = {
             if (!this.me) { this.trialStep = 'email'; this.$nextTick(() => { this.$refs.trialEmail && this.$refs.trialEmail.focus(); }); return; }
             this.busy = true;
             try {
-                const r = await proApi('POST', '/api/pro/trial', { calendarId: this.calendarId });
+                const r = await proApi('POST', '/api/pro/trial', { calendarId: this.calendarId, author: proAuthor() });
                 if (r.status === 200 && r.data.ok) {
                     ProIntent.clear();
                     if (!r.data.already) { proTrack((a) => a.trialStarted(this.trialSurface || this.surface)); TrialUsage.flag(this.calendarId, 'trialing', true); }
@@ -569,7 +577,7 @@ const ProPanel = {
                 if (e === 'trial-used-calendar' || e === 'trial-used-account') { this.error = r.data.message; this.refresh(); return; }
                 if (e === 'locked-by-other') { this.error = 'Someone else has already locked this calendar.'; this.refresh(); return; }
                 if (e === 'already-pro') { this.refresh(); return; }
-                if (e === 'buy-on-live') { this.error = r.data.message; return; }
+                if (e === 'buy-on-live' || e === 'not-an-editor') { this.error = r.data.message; return; }
                 if (r.status === 404) { this.error = 'Save this calendar first. Then you can try Plus on it.'; return; }
                 if (r.status === 503) { this.error = 'Upgrades aren’t available yet.'; return; }
                 this.error = r.status === 0 ? 'We couldn’t reach pastecal. Check your connection and try again.' : 'Something went wrong. Try again in a minute.';
