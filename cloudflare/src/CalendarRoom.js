@@ -78,6 +78,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import EventStore from '../../public/services/EventStore.js';
 import { initInsight, countHit, insightRoute, INSIGHT_ROUTES } from './RoomInsight.js';
+import { planName } from './Plans.js';
 
 export const LIMITS = {
     savesPerMinute: 60,          // per calendar: far above people, far below a loop
@@ -427,7 +428,7 @@ export class CalendarRoom extends DurableObject {
             } else {
                 this.sql.exec(`DELETE FROM lapse`); this.lapse = null;
             }
-            this.recordLockChange('unlocked', this.paused() ? 'Pro ended. Editing paused by the owner' : 'Unlocked');
+            this.recordLockChange('unlocked', this.paused() ? `${planName(l.plan)} ended. Editing paused by the owner` : 'Unlocked');
             await this.scheduleCopyBack();
             return Response.json({ ok: true, paused: this.paused() });
         }
@@ -465,7 +466,7 @@ export class CalendarRoom extends DurableObject {
             // Billing locks with createLink:false: there is no browser to show a key to, and the owner
             // makes links from the calendar. The admin route still gets one 'Editors' key.
             const made = body.createLink !== false && !this.links.size ? this.createLink('Editors', k) : null;
-            this.recordLockChange('locked', 'Locked with Pro');
+            this.recordLockChange('locked', `Upgraded with ${planName(plan)}`);
             // Claim this calendar's own name (and view link) in the directory now, so a case variant
             // registered earlier can't keep its lookups. (A name held by another LOCKED calendar stays.)
             this.ctx.waitUntil(this.registerInDirectory(this.state.id, false, null, true));

@@ -60,7 +60,8 @@
  *   GET  /api/pro/config                         -> {billing}: true only when Stripe is configured (keys and both prices).
  *                                                   False: the site offers "Join the beta" (the waitlist) instead of
  *                                                   the trial and checkout. Public, cached 60 seconds.
- *   GET  /api/pro/status?calendar=<id>           -> {locked, pro, isOwner, paused, lapsedOwner, trialUsed}; the owner also
+ *   GET  /api/pro/status?calendar=<id>           -> {locked, pro, plan, isOwner, paused, lapsedOwner, trialUsed}; plan is the
+ *                                                   lock's plan id (null unlocked; Plans.js names it); the owner also
  *                                                   gets lapsedMode, and trial:{endsAt, hasCard} while trialing; the
  *                                                   paused calendar's owner gets lapsedTrial (its Pro was a trial)
  *   POST /api/stripe/webhook                     Stripe events (signed), see handleWebhook
@@ -95,6 +96,7 @@ import { LockClient } from './LockClient.js';
 import { INTERVALS, stripeConfig, stripeRequest, verifyStripeSignature, summarizeSubscription, subscriptionIdOf, timingSafeEqual,
     eventModeMismatch, subscriptionOfInvoice, paymentOfInvoice, paymentOfInvoicePayments } from './Stripe.js';
 import { siteUrl, siteHost, allowedOrigins, isStaging } from './Site.js';
+import { planName } from './Plans.js';
 
 const LOGIN_TTL = 15 * 60 * 1000;
 const SESSION_TTL = 365 * 24 * 3600 * 1000;   // from the last renewal (see sessionUser)
@@ -720,12 +722,14 @@ async function route(request, env, url, path) {
         if (!st.ok && st.status >= 500) return json({ error: 'unavailable' }, 502);
         const locked = !!st.locked, isOwner = !!(locked && userId && st.ownerId === userId);
         const lapsed = !locked && st.lapsed ? st.lapsed : null;
-        const out = { locked, pro: locked && st.plan === 'pro', isOwner, paused: !!(lapsed && lapsed.mode === 'readonly'),
+        // plan: the lock's plan id, for its display name (Plans.js): 'pro' is Plus, 'unlimited' is Pro.
+        const out = { locked, pro: locked && st.plan === 'pro', plan: locked ? (st.plan || 'pro') : null, isOwner, paused: !!(lapsed && lapsed.mode === 'readonly'),
             lapsedOwner: !!(lapsed && userId && lapsed.ownerId === userId), trialUsed: await accounts(env).trialUsedForCalendar(id) };
         if (out.lapsedOwner) {
             // Which words the owner sees: "Trial ended" or "Pro ended".
             const sub = await accounts(env).subscriptionFor(id, userId);
             out.lapsedTrial = !!(sub && sub.trial_end && !sub.has_payment_method);
+            out.plan = (sub && sub.plan) || 'pro';           // which plan ended, for "Plus ended" / "Pro ended"
         }
         if (isOwner) {
             out.lapsedMode = st.lapsedMode || 'readonly';

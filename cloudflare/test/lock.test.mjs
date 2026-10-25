@@ -203,8 +203,8 @@ for (const [what, url, init] of [
 for (const m of [...anon.got, ...owner.got, ...spoof.got]) for (const secret of [KEY, KEY_HASH, OWNER]) if (JSON.stringify(m).includes(secret)) leaks.push(`ws ${m.t} leaks`);
 assert.deepEqual(leaks, []);
 const hist = await (await fetch(`${BASE}/cal/${enc(id)}/history`)).json();
-assert.ok(hist.some((h) => h.kind === 'locked' && h.label === 'Locked with Pro'));
-step('no editor key, key hash or ownerId in GET /cal, history, authors, lookups, ICS, the view, or any socket message; history shows "Locked with Pro"');
+assert.ok(hist.some((h) => h.kind === 'locked' && h.label === 'Upgraded with Plus'));
+step('no editor key, key hash or ownerId in GET /cal, history, authors, lookups, ICS, the view, or any socket message; history shows "Upgraded with Plus"');
 
 // 10. Rotation: the old key stops working at once, including on sockets already authenticated.
 assert.equal((await admin(id, 'rotate-editor-key', { ownerId: 'someone-else' })).status, 403);

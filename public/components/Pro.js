@@ -17,6 +17,13 @@
 
 const PRO_LOCK_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
 
+// The name a person sees for a plan id (the lock's plan, /api/me's plan). Ids stay as they are:
+// 'pro' is Plus, 'unlimited' is Pro, 'teams' is Teams; anything else reads as Plus.
+// Twin of planName in cloudflare/src/Plans.js (test/unit/plan-name.test.js).
+function planName(plan) {
+    return plan === 'unlimited' ? 'Pro' : plan === 'teams' ? 'Teams' : 'Plus';
+}
+
 const PRO_MESSAGES = {
     lockedVisitor: 'Only the owner and invited editors can change this calendar.',
     lockedEditor: 'Locked · you can edit',
