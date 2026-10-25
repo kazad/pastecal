@@ -710,7 +710,20 @@
         <div class="pc-home" :class="{ 'pc-home-split': (isHomepageCalendar && !homeAsideHidden) || sideDocked, 'pc-home--side': sideDocked }">
             <div class="pc-home-cal">
             <!-- Printing (Ctrl+P, or Print in Share): the calendar's name and dates on top, a QR code to its view link below. -->
-            <div class="pc-print-only pc-print-head" aria-hidden="true" v-cloak><div class="pc-print-title">{{ displayCalendarTitle }}</div><div class="pc-print-range">{{ printRange }}</div></div>
+            <div class="pc-print-only pc-print-head" aria-hidden="true" v-cloak><div class="pc-print-title">{{ displayCalendarTitle }}</div><div class="pc-print-range">{{ printMonth && printMonth.label }}</div></div>
+            <!-- The printed month (app.preparePrint): drawn from the same events, so titles wrap and the weeks fill the page. -->
+            <div v-if="printMonth" class="pc-print-only pc-print-cal" aria-hidden="true" v-cloak :style="{ '--print-rows': printMonth.weeks.length }">
+                <div class="pc-pm-dows"><div v-for="d in printMonth.dows" :key="d">{{ d }}</div></div>
+                <div class="pc-pm-weeks">
+                    <div v-for="(w, wi) in printMonth.weeks" :key="wi" class="pc-pm-week">
+                        <div v-for="d in w" :key="d.key" class="pc-pm-day" :class="{ 'is-out': !d.inMonth }">
+                            <div class="pc-pm-num">{{ d.num }}</div>
+                            <div v-for="(e, ei) in d.events" :key="ei" class="pc-pm-ev" :style="{ background: e.color, color: e.on }"><b v-if="e.time">{{ e.time }}</b> {{ e.title }}</div>
+                            <div v-if="d.more" class="pc-pm-more">+{{ d.more }} more</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
             <div id="cal2_wrap" style="width: 100%; height: 100%; position: relative;">
                 <div id="Schedule" data-testid="schedule-container"></div>
                 <!-- Whenever a color filter is on, say so on the calendar itself, not only in the search panel:
@@ -719,7 +732,7 @@
                 <div class="pc-print-only pc-print-foot" aria-hidden="true" v-cloak>
                     <span v-if="printQr" class="pc-print-qr" v-html="printQr"></span>
                     <div class="pc-print-note"><b v-if="printLink">Scan to add it to your phone calendar.</b><br v-if="printLink"><span v-if="printLink">{{ printLink }}</span><br v-if="printLink"><span class="pc-print-fine">Changes show up on their own. Printed {{ printDate }}</span></div>
-                    <span class="pc-print-brand">pastecal</span>
+                    <span class="pc-print-brand"><img src="/img/pastecal.logo.svg" alt="" width="14" height="14">pastecal</span>
                 </div>
                 <div v-if="isColorFilterActive" data-testid="hidden-events-banner" class="pc-hidden-pill" role="status" v-cloak>
                     <span>{{ hiddenEventsMessage }}</span>

@@ -81,7 +81,7 @@
     --pc-fs-section: clamp(22px, 2.6vw, 28px);   /* section headings on site pages and the homepage tour */
     --pc-fs-hero: clamp(32px, 5vw, 52px);        /* the one hero heading per page */
     /* Paper, for printing: the same in both themes (style.css @media print). */
-    --pc-paper: #ffffff; --pc-ink: #111111; --pc-ink-2: #555555; --pc-ink-muted: #777777; --pc-ink-faint: #999999; --pc-paper-line: #cccccc; --pc-paper-rule: #dddddd;
+    --pc-paper: #ffffff; --pc-ink: #111111; --pc-ink-2: #555555; --pc-ink-muted: #777777; --pc-ink-faint: #999999; --pc-paper-line: #cccccc; --pc-paper-rule: #dddddd; --pc-paper-tint: #f6f7f9;
     --pc-fw-regular: 400; --pc-fw-medium: 500; --pc-fw-semibold: 600; --pc-fw-bold: 700;
     --pc-lh-tight: 1.25; --pc-lh-body: 1.5;
     --pc-tracking-caps: .06em; --pc-tracking-tight: -.01em;

@@ -338,7 +338,7 @@ const CalendarVueApp = {
             MAX_COLORS: MAX_COLORS,
             colorFilters: COLORS.map(() => true), // allow all color types by default
             searchOpenId: null,   // the search result shown open, if any
-            printRange: '', printLink: '', printQr: '', printDate: '',   // the printed page's header and footer (preparePrint)
+            printMonth: null, printLink: '', printQr: '', printDate: '',   // the printed page's header and footer (preparePrint)
             FREE_CHANGES_DAYS: 30,   // how far back Recent changes reaches on a free calendar (visibleUndoEntries)
             // Bumped on every scheduler dataBound so hiddenEventCount, which reads the
             // visible date range off scheduleObj, recomputes when the view moves.
@@ -774,10 +774,7 @@ const CalendarVueApp = {
         // available for the pre-appendTo configuration block below, not just applied after.
         this.loadGlobalSettings();
         // Printing: fill the print header/footer first; the QR library loads once the page is idle, not before.
-        // The grid sizes events in pixels for the screen; lay it out at the paper's width (landscape, 10mm margins,
-        // about 980px) while printing, then back. (style.css .pc-printing)
-        window.addEventListener('beforeprint', () => { this.preparePrint(); document.documentElement.classList.add('pc-printing'); try { window.scheduleObj && scheduleObj.refreshLayout && scheduleObj.refreshLayout(); } catch (e) { /* prints at screen layout */ } });
-        window.addEventListener('afterprint', () => { document.documentElement.classList.remove('pc-printing'); try { window.scheduleObj && scheduleObj.refreshLayout && scheduleObj.refreshLayout(); } catch (e) { /* */ } });
+        window.addEventListener('beforeprint', () => { this.preparePrint(); });
         setTimeout(() => { try { if (typeof qrcode !== 'function') { const sc = document.createElement('script'); sc.src = '/vendor/qrcode-generator-1.4.4/qrcode.js'; sc.async = true; document.head.appendChild(sc); } } catch (e) { /* no QR, still prints */ } }, 4000);
         this.$nextTick(() => this.fitSlugBox());   // after the title font is in: see fitSlugBox
         if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => this.fitSlugBox());
@@ -2996,8 +2993,7 @@ const CalendarVueApp = {
         // and its QR code, if the small QR library has loaded (it loads once the page is idle; see mounted).
         preparePrint() {
             try {
-                const range = document.querySelector('#Schedule .e-date-range .e-tbar-btn-text');
-                this.printRange = range ? range.textContent.trim() : '';
+                this.printMonth = this.buildPrintMonth();
                 const view = this.isReadOnly ? (location.origin + location.pathname) : (this.shareViewURL() || this.getReadOnlyURL() || '');
                 this.printLink = view ? view.replace(/^https?:\/\//, '').replace(/\?.*$/, '') : '';
                 this.printDate = new Date().toLocaleDateString();
@@ -3006,6 +3002,48 @@ const CalendarVueApp = {
                 const scan = this.subscribePageURL() || view;
                 if (scan && typeof qrcode === 'function') { const q = qrcode(0, 'M'); q.addData(scan.replace(/\?.*$/, '')); q.make(); this.printQr = q.createSvgTag({ cellSize: 3, margin: 0, scalable: true }); }
             } catch (e) { /* print without the footer extras */ }
+        },
+
+        // The month being looked at, as weeks of days with their events (repeats expanded), for the printed page.
+        // As many events as fit in a day on paper; the rest are "+N more".
+        buildPrintMonth() {
+            const sch = window.scheduleObj;
+            if (!sch || !sch.getEvents) return null;
+            const sel = new Date(sch.selectedDate || Date.now());
+            const first = new Date(sel.getFullYear(), sel.getMonth(), 1);
+            const fdow = Number(sch.firstDayOfWeek) || 0;
+            const start = new Date(first); start.setDate(1 - ((first.getDay() - fdow + 7) % 7));
+            const last = new Date(sel.getFullYear(), sel.getMonth() + 1, 0);
+            const weeks = Math.ceil(((last - start) / 864e5 + 1) / 7);
+            const end = new Date(start); end.setDate(start.getDate() + weeks * 7);
+            const loc = navigator.language || 'en-US';
+            const en = /^en/i.test(loc);
+            const time = (d) => { const t = d.toLocaleTimeString(loc, { hour: 'numeric', minute: '2-digit' }); return en ? t.replace(':00', '').replace(/\s?([AP])M/i, (m, x) => x.toLowerCase() + 'm') : t; };
+            const evs = (sch.getEvents(start, end, true) || []).map((e) => ({ s: new Date(e.StartTime), e: new Date(e.EndTime), all: !!e.IsAllDay, title: e.Subject || '(No title)', type: e.Type }))
+                .sort((a, b) => (b.all - a.all) || (a.s - b.s));
+            const day0 = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+            const out = [];
+            for (let w = 0; w < weeks; w++) {
+                const row = [];
+                for (let i = 0; i < 7; i++) {
+                    const d = new Date(start); d.setDate(start.getDate() + w * 7 + i);
+                    const t = d.getTime(), next = new Date(d); next.setDate(d.getDate() + 1);
+                    const on = evs.filter((e) => e.all ? (day0(e.s) <= t && t < Math.max(day0(e.e), day0(e.s) + 1)) : (e.s < next && e.e > d && (day0(e.s) === t || e.e - e.s > 864e5 || day0(e.s) < t)));
+                    // What fits in a day (mm): a one-line event is ~5.3, a wrapped one ~8.6 (about 24 characters a line);
+                    // past that, the last ones become "+N more".
+                    const room = (146 / weeks) - 5.5;
+                    const tall = (e) => ((e.all ? 0 : 7) + e.title.length > 24 ? 8.6 : 5.3);
+                    let used = 0, fit = 0;
+                    for (const e of on) { const h = tall(e); const moreLine = fit + 1 < on.length ? 4 : 0; if (used + h + moreLine > room) break; used += h; fit++; }
+                    const shown = on.slice(0, fit);
+                    row.push({ key: t, num: d.getDate() === 1 ? d.toLocaleDateString(loc, { month: 'short', day: 'numeric' }) : d.getDate(), inMonth: d.getMonth() === sel.getMonth(),
+                        events: shown.map((e) => { const color = this.getTypeColor(e.type); return { title: e.title, time: e.all || day0(e.s) !== t ? '' : time(e.s), color, on: ScheduleAdapter.onColor(color) }; }),
+                        more: on.length - shown.length });
+                }
+                out.push(row);
+            }
+            const dows = Array.from({ length: 7 }, (_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return d.toLocaleDateString(loc, { weekday: 'short' }); });
+            return { label: sel.toLocaleDateString(loc, { month: 'long', year: 'numeric' }), dows, weeks: out };
         },
 
         showDraftBlock(popup) {
