@@ -419,7 +419,7 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-home-hide { align-self: center }
 .pc-home-body { padding: var(--pc-space-5) var(--pc-space-5) var(--pc-space-6) }
 .pc-home-pane { display: flex; flex-direction: column; min-width: 0 }
-.pc-home-aside h1 { margin: 0 0 var(--pc-space-3); font-size: var(--pc-fs-section); line-height: 1.12; font-weight: 900; letter-spacing: -.02em; color: var(--pc-text); text-wrap: balance }
+.pc-home-aside h1 { margin: 0 0 var(--pc-space-3); font-size: var(--pc-fs-section); line-height: 1.12; font-weight: 900; letter-spacing: -.02em; color: var(--pc-text); text-wrap: pretty }
 /* The headline's emphasized word: plain text now (no marker stroke; restraint). */
 .pc-hl { background: none; color: inherit; white-space: nowrap }
 .pc-home-steps { list-style: none; margin: 0 0 18px; padding: 0; display: grid; gap: 10px }
