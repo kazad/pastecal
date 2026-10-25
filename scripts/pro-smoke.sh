@@ -91,7 +91,8 @@ title() { python3 -c 'import re,sys; m=re.search(r"<title>([^<]*)</title>", open
 # A Pro API route that answers like the pre-Pro site (HTML SPA fallback, or 405 from static assets).
 not_deployed() { is_html || { [ "$CODE" = 405 ] && ! is_json; }; }
 
-HOME_TITLE="pastecal: A shared calendar in one link"
+# The homepage title this checkout ships (so a copy change never makes the smoke test cry wolf).
+HOME_TITLE="$(python3 -c 'import re,sys; m=re.search(r"<title>(.*?)</title>", open(sys.argv[1]).read(), re.S); print(m.group(1).strip() if m else "")' "$(dirname "$0")/../public/index.html")"
 
 # --- 1. Pages --------------------------------------------------------------------------------
 # The assets use the single-page-app fallback: a missing page is 200 with the homepage, so the
@@ -108,11 +109,11 @@ check_page /pricing  "Pricing · pastecal"     0
 check_page /signin   "Sign in · pastecal"     1
 check_page /pro/done "Pro is on · pastecal"   1
 
-# --- 2. /api/pro/status reveals only {isOwner, locked, pro} ------------------------------------
+# --- 2. /api/pro/status reveals only yes/no flags: {isOwner, locked, pro, paused, lapsedOwner, trialUsed} ---
 req GET "/api/pro/status?calendar=$CAL"
 if not_deployed; then record NOT-DEPLOYED "GET /api/pro/status" "HTTP $CODE $CTYPE"
-elif [ "$CODE" = 200 ] && is_json && [ "$(jget 'sorted(j.keys())')" = '["isOwner", "locked", "pro"]' ]; then
-    record PASS "GET /api/pro/status" "200, keys exactly isOwner/locked/pro ($(jget 'j'))"
+elif [ "$CODE" = 200 ] && is_json && [ "$(jget 'sorted(j.keys())')" = '["isOwner", "lapsedOwner", "locked", "paused", "pro", "trialUsed"]' ] && [ "$(jget 'all(isinstance(v, bool) for v in j.values())')" = 'True' ]; then
+    record PASS "GET /api/pro/status" "200, only yes/no flags ($(jget 'j'))"
 else record FAIL "GET /api/pro/status" "HTTP $CODE, body $(head -c 160 "$TMP/body")"; fi
 
 # --- 3. /api/me without a cookie is 401 ------------------------------------------------------
