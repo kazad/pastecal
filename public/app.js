@@ -738,7 +738,14 @@ const CalendarVueApp = {
         scheduleObj.actionBegin = (args) => {
             if (!['eventCreate', 'eventChange', 'eventRemove'].includes(args.requestType)) return;
             args.cancel = true;
+            this.editorSaved = true;
             this.applyScheduleAction(args);
+        };
+        // An editor that closes without a save is the "this was confusing or fiddly" signal.
+        scheduleObj.popupClose = (args) => {
+            if (args.type !== 'Editor') return;
+            if (!this.editorSaved) track(a => a.editorAbandoned());
+            this.editorSaved = false;
         };
         // The user's change is measured from the event as it was when they started (see
         // ScheduleAdapter.noteStart), so a field someone else changed meanwhile is kept.
@@ -781,6 +788,7 @@ const CalendarVueApp = {
             }
 
             if (args.type === 'Editor') {
+                this.editorSaved = false;
                 ScheduleAdapter.noteStart(args.data);
 
                 // Configure datetime pickers with strictMode and the user's chosen date format.
@@ -1265,12 +1273,17 @@ const CalendarVueApp = {
         // refused until a reload. The list keeps this write's own additions and edits,
         // and the service re-sends them along with any deletion the user named, so local
         // and server converge on the same list.
-        CalendarDataService.onSyncRefused = ({ before, removing, recovered, events }) => {
-            // The rows put back, not the net shrink: an addition in the same write offsets
-            // the count without making the loss any smaller.
-            const n = recovered ?? removing;
-            this.showToast(`Recovered ${n} event${n === 1 ? '' : 's'} that were about to be lost`, 'error');
-            track(a => a.syncRefused({ before, removing }));
+        CalendarDataService.onSyncRefused = ({ before, removing, recovered, events, code, message }) => {
+            if (code) {
+                this.showToast(`Server refused update: ${message || code}`, 'error');
+                track(a => a.syncRefused({ before, removing: 0, code, message }));
+            } else {
+                // The rows put back, not the net shrink: an addition in the same write offsets
+                // the count without making the loss any smaller.
+                const n = recovered ?? removing;
+                this.showToast(`Recovered ${n} event${n === 1 ? '' : 's'} that were about to be lost`, 'error');
+                track(a => a.syncRefused({ before, removing, code: 'undeclared_removal' }));
+            }
             if (Array.isArray(events)) {
                 this.applyRemoteCalendar({ ...this.calendar, events: JSON.parse(JSON.stringify(events)) },
                     { replace: true });
@@ -1330,7 +1343,11 @@ const CalendarVueApp = {
             // Nor while a dialog is open: focus there is often on a button, not an input,
             // and an undo landing under the scheduler's open editor changes the event it
             // is about to save. Tooltips are popups too but block nothing.
-            const dialogOpen = !!document.querySelector('.e-popup-open:not(.e-tooltip-wrap), .pc-modal, [aria-modal="true"]')
+            // aria-modal only counts while the dialog is showing: Syncfusion leaves it set on
+            // dialogs it has closed (hidden), which used to disable this shortcut for good.
+            const modalShowing = [...document.querySelectorAll('[aria-modal="true"]')]
+                .some((m) => m.getClientRects().length > 0 && getComputedStyle(m).visibility !== 'hidden');
+            const dialogOpen = modalShowing || !!document.querySelector('.e-popup-open:not(.e-tooltip-wrap), .pc-modal')
                 || !!(this.$refs.quickAddDialog && this.$refs.quickAddDialog.dialogVisible)
                 || this.showRecentChanges;
             if (dialogOpen) return;
@@ -2313,7 +2330,9 @@ const CalendarVueApp = {
          * editable feed would spread write access further than anyone intended.
          */
         getSubscribeICSURL() {
-            return this.getReadOnlyICSURL() || this.getEditableICSURL();
+            // No fallback to the editable feed: these URLs go to Google, Microsoft and the OS,
+            // so without a read-only link the subscribe buttons hide (their v-if) instead.
+            return this.getReadOnlyICSURL();
         },
 
         /**

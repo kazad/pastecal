@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pricing: Free, Pro, Teams</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--primary:#3f51b5;--soft:#eef2ff;--ink:#121826;--muted:#4b5563;--border:#e5e7eb;--card:#fff;--page:#fafbfc;--good:#15803d;--warn-bg:#fff7e6;--warn-ink:#8a5a00;--font:'Plus Jakarta Sans',system-ui,sans-serif}
+@media(prefers-color-scheme:dark){:root{--ink:#f9fafb;--muted:#a3adbd;--border:#2e3545;--card:#181f2c;--page:#0f141e;--soft:#1e1b4b;--warn-bg:#2b2410;--warn-ink:#f1c76b;--good:#4ade80}}
+*{box-sizing:border-box}[hidden]{display:none!important}
+body{margin:0;background:var(--page);color:var(--ink);font-family:var(--font);line-height:1.5}
+.demo-bar{background:var(--warn-bg);color:var(--warn-ink);border-bottom:1px solid var(--border);padding:10px 16px;font-size:13px}
+.wrap{max-width:1000px;margin:0 auto;padding:36px 16px 72px}
+.notice{background:var(--soft);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin:0 0 18px;font-size:14px}
+h1{font-size:34px;line-height:1.15;margin:0 0 10px;text-align:center;letter-spacing:-.02em}
+.sub{text-align:center;color:var(--muted);max-width:600px;margin:0 auto 28px;font-size:17px}
+.plans{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.plan{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:22px;display:flex;flex-direction:column;position:relative}
+.plan.hi{border:2px solid var(--primary);box-shadow:0 10px 30px rgba(63,81,181,.14)}
+.ribbon{position:absolute;top:-11px;left:18px;background:var(--primary);color:#fff;font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px}
+.plan h3{margin:0;font-size:20px}.plan .for{margin:2px 0 12px;color:var(--muted);font-size:14px;min-height:42px}
+.price{font-size:38px;font-weight:800;letter-spacing:-.02em}.price small{font-size:15px;font-weight:600;color:var(--muted)}
+.per{color:var(--muted);font-size:13px;margin-bottom:14px;min-height:20px}
+.cta{margin-top:auto;width:100%;padding:11px 14px;border-radius:10px;border:2px solid var(--primary);background:var(--primary);color:#fff;font:inherit;font-weight:700;cursor:pointer}
+.cta.ghost{background:transparent;color:var(--primary)}.cta.on{background:var(--good);border-color:var(--good);color:#fff}
+.free-note{margin-top:auto;font-size:14px;color:var(--muted);padding:11px 0;text-align:center;font-weight:600}
+.tablewrap{margin-top:34px;overflow-x:auto;border:1px solid var(--border);border-radius:16px;background:var(--card)}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:14px}
+thead th{position:sticky;top:0;background:var(--card);padding:14px 10px;text-align:center;font-size:15px;border-bottom:1px solid var(--border)}
+thead th:first-child{text-align:left;padding-left:18px}
+td,tbody th{padding:11px 10px;border-bottom:1px solid var(--border)}
+tbody th{text-align:left;font-weight:500;padding-left:18px;width:46%}
+td{text-align:center;width:18%}
+td.mid,thead th.mid{background:rgba(63,81,181,.06)}
+tr.grp th{background:var(--soft);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:9px 18px;text-align:left}
+.ck{color:var(--good);font-weight:800;font-size:17px}.no{color:var(--muted);opacity:.5}.tx{font-size:13px;color:var(--ink)}
+.soon{font-size:10px;font-weight:700;color:var(--warn-ink);background:var(--warn-bg);border-radius:999px;padding:1px 7px;margin-left:6px;vertical-align:1px}
+.notify{max-width:560px;margin:30px auto 0;text-align:center}
+.opts{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-bottom:12px}.opts label{font-weight:600}
+.row{display:flex;gap:8px}.row input{flex:1;min-width:0;padding:11px 12px;border:1px solid var(--border);border-radius:8px;font:inherit;background:var(--card);color:var(--ink)}
+.row .cta{width:auto;margin:0;padding:10px 20px}
+.tiny{font-size:12px;color:var(--muted);margin:8px 0 0}.done{display:none;text-align:center;color:var(--good);margin-top:24px}
+.legend{font-size:13px;color:var(--muted);margin:10px 4px 0}
+@media(max-width:760px){.plans{grid-template-columns:1fr}h1{font-size:27px}.plan .for{min-height:0}}
+</style></head><body>
+<div class="demo-bar"><b>DEMO, not live.</b> Plan contents and the Free/Pro/Teams split are my assumptions. “Soon” marks anything not built yet.</div>
+<div class="wrap">
+<div class="notice"><b>Paid plans aren’t open yet.</b> These are the planned plans and prices and may change before launch. Pick the ones you’d want and we’ll send one email when they open. Every calendar stays free in the meantime.</div>
+<h1>Free for everyone. Pro when it matters.</h1>
+<p class="sub">Free keeps everything it has today. Pro and Teams add control, safety and a polished look on your own site.</p>
+<div class="plans">
+ <section class="plan"><h3>Free</h3><p class="for">Every calendar, no account</p><div class="price">$0</div><div class="per">Always</div><div class="free-note">What you use today</div></section>
+ <section class="plan hi"><div class="ribbon">Most popular</div><h3>Pro</h3><p class="for">One calendar you control, backed up, on-brand</p><div class="price">$24<small> /year</small></div><div class="per">$2 a month</div><button class="cta" data-plan="Pro">Notify me about Pro</button></section>
+ <section class="plan"><h3>Teams</h3><p class="for">Up to 5 calendars, with tools for groups</p><div class="price">$80<small> /year</small></div><div class="per">$6.67 a month · $16 per calendar</div><button class="cta ghost" data-plan="Teams">Notify me about Teams</button></section>
+</div>
+<div class="tablewrap"><table>
+<thead><tr><th>Compare features</th><th>Free</th><th class="mid">Pro</th><th>Teams</th></tr></thead>
+<tbody>
+<tr class="grp"><th colspan="4">Your calendar</th></tr>
+<tr><th scope="row">Unlimited events, all views, recurring events, search</th><td><span class="ck" aria-label="Included">✓</span></td><td class="mid"><span class="ck" aria-label="Included">✓</span></td><td><span class="ck" aria-label="Included">✓</span></td></tr>
+<tr><th scope="row">No account needed; share by link</th><td><span class="ck" aria-label="Included">✓</span></td><td class="mid"><span class="ck" aria-label="Included">✓</span></td><td><span class="ck" aria-label="Included">✓</span></td></tr>
+<tr><th scope="row">Subscribe in Google, Outlook and Apple</th><td><span class="ck" aria-label="Included">✓</span></td><td class="mid"><span class="ck" aria-label="Included">✓</span></td><td><span class="ck" aria-label="Included">✓</span></td></tr>
+<tr><th scope="row">Dark mode, custom colors and labels</th><td><span class="ck" aria-label="Included">✓</span></td><td class="mid"><span class="ck" aria-label="Included">✓</span></td><td><span class="ck" aria-label="Included">✓</span></td></tr>
+<tr class="grp"><th colspan="4">Control who changes it</th></tr>
+<tr><th scope="row">Only you can edit; everyone else views <span class="soon">soon</span></th><td><span class="no" aria-label="Not included">–</span></td><td class="mid"><span class="ck" aria-label="Included">✓</span></td><td><span class="ck" aria-label="Included">✓</span></td></tr>
+<tr><th scope="row">Reserved custom URL, permanently <span class="soon">soon</span></th><td><span class="no" aria-label="Not included">–</span></td><td class="mid"><span class="ck" aria-label="Included">✓</span></td><td><span class="ck" aria-label="Included">✓</span></td></tr>
+<tr><th scope="row">Visitors suggest changes, you approve <span class="soon">soon</span></th><td><span class="no" aria-label="Not included">–</span></td><td class="mid"><span class="ck" aria-label="Included">✓</span></td><td><span class="ck" aria-label="Included">✓</span></td></tr>
+<tr><th scope="row">Several people can publish <span class="soon">soon</span></th><td><span class="no" aria-label="Not included">–</span></td><td class="mid"><span class="no" aria-label="Not included">–</span></td><td><span class="ck" aria-label="Included">✓</span></td></tr>
+<tr><th scope="row">Staff-only draft events <span class="soon">soon</span></th><td><span class="no" aria-label="Not included">–</span></td><td class="mid"><span class="no" aria-label="Not included">–</span></td><td><span class="ck" aria-label="Included">✓</span></td></tr>
+<tr><th scope="row">Volunteer and shift sign-ups, no login <span class="soon">soon</span></th><td><span class="no" aria-label="Not included">–</span></td><td class="mid"><span class="no" aria-label="Not included">–</span></td><td><span class="ck" aria-label="Included">✓</span></td></tr>
+<tr class="grp"><th colspan="4">Never lose anything</th></tr>
+<tr><th scope="row">Change history and one-click restore</th><td><span class="tx">30 days</span></td><td class="mid"><span class="tx">Unlimited</span></td><td><span class="tx">Unlimited</span></td></tr>
+<tr><th scope="row">Daily automatic backups, download any time <span class="soon">soon</span></th><td><span class="no" aria-label="Not included">–</span></td><td class="mid"><span class="ck" aria-label="Included">✓</span></td><td><span class="ck" aria-label="Included">✓</span></td></tr>
+<tr><th scope="row">Export everything (ICS and spreadsheet) <span class="soon">soon</span></th><td><span class="no" aria-label="Not included">–</span></td><td class="mid"><span class="ck" aria-label="Included">✓</span></td><td><span class="ck" aria-label="Included">✓</span></td></tr>
+<tr class="grp"><th colspan="4">On your own site</th></tr>
+<tr><th scope="row">Embed on Squarespace, Wix, WordPress <span class="soon">soon</span></th><td><span class="tx">Small “Made with PasteCal” link</span></td><td class="mid"><span class="ck" aria-label="Included">✓</span></td><td><span class="ck" aria-label="Included">✓</span></td></tr>
+<tr><th scope="row">Remove PasteCal branding <span class="soon">soon</span></th><td><span class="no" aria-label="Not included">–</span></td><td class="mid"><span class="ck" aria-label="Included">✓</span></td><td><span class="ck" aria-label="Included">✓</span></td></tr>
+<tr><th scope="row">Match your colors and fonts <span class="soon">soon</span></th><td><span class="no" aria-label="Not included">–</span></td><td class="mid"><span class="ck" aria-label="Included">✓</span></td><td><span class="ck" aria-label="Included">✓</span></td></tr>
+<tr><th scope="row">Several calendars on one embed page <span class="soon">soon</span></th><td><span class="no" aria-label="Not included">–</span></td><td class="mid"><span class="no" aria-label="Not included">–</span></td><td><span class="ck" aria-label="Included">✓</span></td></tr>
+<tr class="grp"><th colspan="4">Plan and support</th></tr>
+<tr><th scope="row">Locked calendars included <span class="soon">soon</span></th><td><span class="no" aria-label="Not included">–</span></td><td class="mid"><span class="tx">1</span></td><td><span class="tx">Up to 5</span></td></tr>
+<tr><th scope="row">Vote on what we build next <span class="soon">soon</span></th><td><span class="no" aria-label="Not included">–</span></td><td class="mid"><span class="ck" aria-label="Included">✓</span></td><td><span class="ck" aria-label="Included">✓</span></td></tr>
+<tr><th scope="row">Receipts and invoices for your team <span class="soon">soon</span></th><td><span class="no" aria-label="Not included">–</span></td><td class="mid"><span class="no" aria-label="Not included">–</span></td><td><span class="ck" aria-label="Included">✓</span></td></tr>
+</tbody></table></div>
+<p class="legend">Teams includes everything in Pro. Free never loses a feature it has today; the history window is the only limit.</p>
+<form class="notify" id="nform">
+ <div class="opts"><label><input type="checkbox" data-p="Pro"> Pro</label><label><input type="checkbox" data-p="Teams"> Teams</label></div>
+ <div class="row"><input type="email" required placeholder="you@example.com" aria-label="Email"><button class="cta">Notify me</button></div>
+ <p class="tiny">One email when paid plans open. Nothing else, and no card needed. Unsubscribe or ask us to delete your email any time.</p>
+</form>
+<div class="done" id="ndone"><b>Check your inbox.</b> We sent a link to confirm your email. Until you confirm, we won’t save it.</div>
+</div>
+<script>
+const boxes=[...document.querySelectorAll('[data-p]')],btns=[...document.querySelectorAll('button[data-plan]')];
+function sync(){btns.forEach(b=>{const on=boxes.find(x=>x.dataset.p===b.dataset.plan).checked;b.classList.toggle('on',on);b.textContent=on?"✓ You'll be notified about "+b.dataset.plan:'Notify me about '+b.dataset.plan})}
+btns.forEach(b=>b.onclick=()=>{const x=boxes.find(x=>x.dataset.p===b.dataset.plan);x.checked=!x.checked;sync()});
+boxes.forEach(x=>x.onchange=sync);
+document.getElementById('nform').onsubmit=e=>{e.preventDefault();e.target.style.display='none';document.getElementById('ndone').style.display='block'};
+</script></body></html>

@@ -45,6 +45,19 @@ test.describe('Subscribe links', () => {
     expect(decodeURIComponent(outlook)).toContain('/view/');
   });
 
+  test('without a read-only link there is no subscribe URL, so the edit link cannot leak', async ({ page }) => {
+    // getSubscribeICSURL used to fall back to the editable feed, which then went to Google,
+    // Outlook and the OS handler. Calendar with no read-only link: nothing to hand out.
+    await page.goto('/');
+    await page.waitForFunction(`document.querySelector('#app')._vnode.component.proxy`);
+    const urls = await page.evaluate(`(() => {
+      const vm = document.querySelector('#app')._vnode.component.proxy;
+      vm.calendar.id = 'editsecret123'; vm.calendar.options = {};
+      return [vm.getSubscribeICSURL(), vm.getWebcalURL(), vm.getGoogleSubscribeURL(), vm.getOutlookSubscribeURL()];
+    })()`);
+    expect(urls).toEqual([null, null, null, null]);
+  });
+
   test('Google gets an encoded webcal url', async ({ page }) => {
     await openShare(page, 'rldispatch');
 

@@ -176,3 +176,30 @@ test('Cmd+Z on a calendar with no history says so instead of doing nothing', asy
   await pressUndo(page);
   await expect(page.getByText('Nothing to undo')).toBeVisible({ timeout: 8_000 });
 });
+
+test('Cmd+Z still works when a closed dialog leaves aria-modal behind', async ({ page }) => {
+  // Syncfusion keeps aria-modal="true" on dialogs it has closed (hidden). That used to read
+  // as "a dialog is open" and silently disabled the shortcut.
+  await freshCalendar(page);
+  await seed(page, ['Standup', 'Design review']);
+  await page.evaluate(`document.body.insertAdjacentHTML('beforeend',
+    '<div role="dialog" aria-modal="true" style="display:none"></div>')`);
+  await deleteEvent(page, 'Design review');
+  await expect.poll(() => titlesOnServer(page), { timeout: 10_000 }).not.toContain('Design review');
+
+  await pressUndo(page);
+  await expect.poll(() => titlesOnServer(page), { timeout: 15_000 }).toContain('Design review');
+});
+
+test('Cmd+Z is still blocked while a dialog is actually showing', async ({ page }) => {
+  await freshCalendar(page);
+  await seed(page, ['Standup', 'Design review']);
+  await deleteEvent(page, 'Design review');
+  await expect.poll(() => titlesOnServer(page), { timeout: 10_000 }).not.toContain('Design review');
+  await page.evaluate(`document.body.insertAdjacentHTML('beforeend',
+    '<div role="dialog" aria-modal="true" style="position:fixed;top:0;left:0;width:50px;height:50px"></div>')`);
+
+  await pressUndo(page);
+  await page.waitForTimeout(2000);
+  expect(await titlesOnServer(page)).not.toContain('Design review');
+});

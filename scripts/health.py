@@ -188,6 +188,36 @@ if gb_24h is not None:
     if gb_24h > 0.33:
         flag(f'database downloads {gb_24h:.2f} GB in 24h -- over the free-tier pace (~0.33 GB/day)')
 
+# ---------------------------------------------------------------- 5. Cloudflare health
+cf_status = {}
+try:
+    req = urllib.request.Request('https://pastecal.com/api/directory/stats', headers={'User-Agent': 'pastecal-health/1.0'})
+    with urllib.request.urlopen(req, timeout=10) as r:
+        stats = json.loads(r.read())
+        cf_status['directory_records'] = stats.get('total', 0)
+        if stats.get('total', 0) < 10000:
+            flag(f"Cloudflare directory count low: {stats.get('total')} records (expected ~17k)")
+except Exception as e:
+    flag(f"Cloudflare directory stats failed: {e}")
+
+try:
+    req = urllib.request.Request('https://pastecal.com/api/lookup?slug=25980', headers={'User-Agent': 'pastecal-health/1.0'})
+    with urllib.request.urlopen(req, timeout=10) as r:
+        lookup = json.loads(r.read())
+        cf_status['lookup_ok'] = lookup.get('found', False)
+        if not lookup.get('found'):
+            flag("Cloudflare slug lookup for sample calendar '25980' returned not found")
+except Exception as e:
+    flag(f"Cloudflare slug lookup failed: {e}")
+
+try:
+    req = urllib.request.Request('https://pastecal.com/cal/25980/history', headers={'User-Agent': 'pastecal-health/1.0'})
+    with urllib.request.urlopen(req, timeout=10) as r:
+        hist = json.loads(r.read())
+        cf_status['history_entries'] = len(hist) if isinstance(hist, list) else 0
+except Exception as e:
+    flag(f"Cloudflare DO history check failed: {e}")
+
 # ---------------------------------------------------------------- report
 print('pastecal health --', time.strftime('%Y-%m-%d %H:%M %Z'))
 print()
@@ -224,6 +254,10 @@ print(f"               edited:  {edited['day']:>9}   {edited['week']:>9}   {edit
 if gb_24h is not None:
     wk = f', {gb_week / 7e9:.2f} GB/day over the week before' if gb_week else ''
     print(f"COST           database downloads {gb_24h:.2f} GB in 24h{wk} (free tier ~0.33 GB/day)")
+if cf_status:
+    print(f"CLOUDFLARE     directory: {cf_status.get('directory_records', '?')} records, "
+          f"lookup: {'ok' if cf_status.get('lookup_ok') else 'FAIL'}, "
+          f"history query: {cf_status.get('history_entries', '?')} entries")
 print()
 print('Read-only. Sources: database (REST, gcloud login), GA4 (stats.sh), Cloud Monitoring.')
 sys.exit(1 if attention else 0)

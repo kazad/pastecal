@@ -23,6 +23,18 @@
         "destination": "/dev/design.html"
       },
       {
+        "source": "/pro",
+        "destination": "/pro.html"
+      },
+      {
+        "source": "/preview",
+        "destination": "/preview.html"
+      },
+      {
+        "source": "/preview/**",
+        "destination": "/preview.html"
+      },
+      {
         "source": "/beta",
         "destination": "/nativecal/index.html"
       },

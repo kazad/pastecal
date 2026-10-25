@@ -431,15 +431,19 @@ const CalendarVueApp = {
         // write's own additions and edits, minus deletions the user named. Merging it
         // against the baseline would read the dropped rows as deleted-by-us and drop them
         // again. The service re-sends that list itself, so the watcher's echo is a no-op.
-        CalendarDataService.onSyncRefused = ({ removing, recovered, events }) => {
+        CalendarDataService.onSyncRefused = ({ removing, recovered, events, code, message }) => {
             // Restore first: the service swallows a throw from here, and a missing toast
             // ref must not cost the user the recovery itself.
             if (Array.isArray(events)) {
                 this.calendar.import({ events: JSON.parse(JSON.stringify(events)) });
             }
-            // The rows put back, not the net shrink (an addition offsets the count).
-            const n = recovered ?? removing;
-            this.showToast(`Recovered ${n} event${n === 1 ? '' : 's'} that were about to be lost`, 'error');
+            if (code) {
+                this.showToast(`Server refused update: ${message || code}`, 'error');
+            } else {
+                // The rows put back, not the net shrink (an addition offsets the count).
+                const n = recovered ?? removing;
+                this.showToast(`Recovered ${n} event${n === 1 ? '' : 's'} that were about to be lost`, 'error');
+            }
         };
 
         // extended hours button

@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pastecal — Header Redesign Concepts (Pro / Premium)</title>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <style>
+        :root {
+            --brand-purple: #3f51b5;
+            --brand-purple-hover: #303f9f;
+            --brand-purple-soft: #eef2ff;
+            --brand-purple-border: #c7d2fe;
+            --bg-page: #f8fafc;
+            --bg-card: #ffffff;
+            --border-light: #e2e8f0;
+            --text-dark: #0f172a;
+            --text-muted: #64748b;
+        }
+
+        [data-theme="dark"] {
+            --bg-page: #0b0f19;
+            --bg-card: #131b2e;
+            --border-light: #1e293b;
+            --text-dark: #f8fafc;
+            --text-muted: #94a3b8;
+            --brand-purple-soft: #1e1b4b;
+            --brand-purple-border: #312e81;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg-page);
+            color: var(--text-dark);
+            margin: 0;
+            padding: 24px;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .concept-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-light);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+            margin-bottom: 40px;
+        }
+
+        .calendar-mockup {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            border-top: 1px solid var(--border-light);
+            background: var(--bg-card);
+            height: 240px;
+        }
+
+        .cal-day-cell {
+            border-right: 1px solid var(--border-light);
+            padding: 8px 10px;
+            font-size: 13px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .cal-day-cell:last-child {
+            border-right: none;
+        }
+
+        .event-chip {
+            font-size: 11.5px;
+            font-weight: 600;
+            padding: 3px 7px;
+            border-radius: 5px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="max-w-6xl mx-auto mb-8 flex items-center justify-between">
+        <div>
+            <div class="flex items-center gap-2">
+                <span class="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950 dark:text-indigo-300 dark:border-indigo-800">
+                    Design Exploration
+                </span>
+                <span class="text-xs text-slate-500">October 2026</span>
+            </div>
+            <h1 class="text-2xl font-extrabold tracking-tight mt-1">Pastecal Header Redesigns (Pro / Premium)</h1>
+            <p class="text-sm text-slate-500">Comparing three high-end header architectures using Plus Jakarta Sans and Pastecal's signature purple.</p>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <button onclick="toggleTheme()" class="px-3.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 transition flex items-center gap-1.5">
+                <span id="themeIcon">🌙</span> <span id="themeLabel">Toggle Dark Mode</span>
+            </button>
+            <a href="/" class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold transition">Back to App</a>
+        </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- CONCEPT 1: The Modern Floating Command Bar (Recommended) -->
+    <!-- ========================================================================= -->
+    <div class="max-w-6xl mx-auto concept-card">
+        <div class="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/60 dark:bg-slate-900/60">
+            <div>
+                <span class="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">Concept 1 (Recommended)</span>
+                <h3 class="font-bold text-base">The Floating Command Bar</h3>
+                <p class="text-xs text-slate-500">Elevated glassmorphism bar with unified tool clusters, bold purple primary CTA, and crisp document title.</p>
+            </div>
+            <span class="text-xs bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-semibold px-2 py-0.5 rounded-md">High Polish</span>
+        </div>
+
+        <!-- The Live Header Mockup -->
+        <div class="p-3 bg-slate-100/70 dark:bg-slate-950/70">
+            <header class="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-xl px-4 py-2.5 shadow-sm flex items-center justify-between gap-4">
+                
+                <!-- Left: Logo + Tools Cluster -->
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-2 cursor-pointer group">
+                        <div class="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-950 flex items-center justify-center border border-indigo-100 dark:border-indigo-900">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                                <rect x="3" y="4" width="18" height="17" rx="3" stroke="#3f51b5" stroke-width="2.2"/>
+                                <line x1="3" y1="9" x2="21" y2="9" stroke="#3f51b5" stroke-width="2.2"/>
+                                <circle cx="8" cy="14" r="1.5" fill="#3f51b5"/>
+                                <circle cx="12" cy="14" r="1.5" fill="#3f51b5"/>
+                                <circle cx="16" cy="14" r="1.5" fill="#3f51b5"/>
+                            </svg>
+                        </div>
+                        <div class="flex flex-col">
+                            <div class="flex items-center gap-1">
+                                <span class="font-extrabold text-[15px] tracking-tight text-slate-900 dark:text-white">pastecal</span>
+                                <svg class="w-3 h-3 text-slate-400 group-hover:text-indigo-600 transition" fill="currentColor" viewBox="0 0 16 16">
+                                    <path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/>
+                                </svg>
+                            </div>
+                            <span class="text-[10px] text-slate-400 font-medium -mt-0.5">shared calendar</span>
+                        </div>
+                    </div>
+
+                    <!-- Divider -->
+                    <div class="h-5 w-px bg-slate-200 dark:bg-slate-800"></div>
+
+                    <!-- Secondary Utility Cluster -->
+                    <div class="flex items-center bg-slate-100 dark:bg-slate-800/80 p-0.5 rounded-lg border border-slate-200/60 dark:border-slate-700/60">
+                        <button class="p-1.5 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-700 rounded-md transition" title="Search (/)">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        </button>
+                        <button class="p-1.5 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-700 rounded-md transition" title="Settings">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path></svg>
+                        </button>
+                        <button class="p-1.5 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-white dark:hover:bg-slate-700 rounded-md transition" title="Help">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        </button>
+                    </div>
+
+                    <!-- Primary + New Event in Pastecal Purple -->
+                    <button class="px-3.5 py-1.5 bg-[#3f51b5] hover:bg-[#303f9f] text-white rounded-lg text-xs font-bold transition shadow-sm flex items-center gap-1.5">
+                        <span class="text-sm leading-none">+</span>
+                        <span>New Event</span>
+                        <kbd class="ml-1 text-[10px] bg-indigo-900/40 text-indigo-100 px-1 py-0.5 rounded font-mono">⌘E</kbd>
+                    </button>
+                </div>
+
+                <!-- Center: Clean Document Title + Notes Badge -->
+                <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition">
+                        <h2 class="font-bold text-[15px] tracking-tight text-slate-800 dark:text-slate-100">Fall Dance Rehearsals</h2>
+                        <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                    </div>
+                    <button class="px-2 py-1 text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 bg-slate-100 dark:bg-slate-800/80 rounded-md border border-slate-200/60 dark:border-slate-700/60 transition flex items-center gap-1">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                        <span>Notes</span>
+                    </button>
+                </div>
+
+                <!-- Right: Sleek Share Pill & Pro Badge -->
+                <div class="flex items-center gap-3">
+                    <span class="text-[11px] text-slate-400 hidden lg:inline">Edited 3m ago</span>
+
+                    <!-- Unified Share Capsule -->
+                    <div class="flex items-center bg-slate-100 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 rounded-lg p-0.5 text-xs">
+                        <div class="px-2.5 py-1 flex items-center gap-1.5 font-medium text-slate-600 dark:text-slate-300">
+                            <span class="text-slate-400 mono">pastecal.com/</span><span class="font-bold text-slate-800 dark:text-slate-100">dance</span>
+                        </div>
+                        <button class="px-2.5 py-1 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 font-bold rounded-md shadow-xs hover:bg-slate-50 transition border border-slate-200/60 dark:border-slate-600 flex items-center gap-1">
+                            <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                            <span>Share</span>
+                        </button>
+                    </div>
+
+                    <!-- Pro Status Tag -->
+                    <a href="/pro" class="px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-indigo-950 dark:text-indigo-300 hover:bg-indigo-100 transition">
+                        PRO
+                    </a>
+                </div>
+
+            </header>
+        </div>
+
+        <!-- Integrated Calendar Grid Preview -->
+        <div class="calendar-mockup">
+            <div class="cal-day-cell">
+                <span class="text-xs font-bold text-slate-400">Sun 18</span>
+            </div>
+            <div class="cal-day-cell">
+                <span class="text-xs font-bold text-slate-400">Mon 19</span>
+                <div class="event-chip bg-indigo-600 text-white">4:00 PM Warmup</div>
+            </div>
+            <div class="cal-day-cell">
+                <span class="text-xs font-bold text-slate-400">Tue 20</span>
+                <div class="event-chip bg-emerald-600 text-white">5:30 PM Ballet I</div>
+            </div>
+            <div class="cal-day-cell">
+                <span class="text-xs font-bold text-slate-400">Wed 21</span>
+            </div>
+            <div class="cal-day-cell bg-indigo-50/20 dark:bg-indigo-950/20">
+                <span class="text-xs font-bold text-indigo-600 dark:text-indigo-400">Thu 22 (Today)</span>
+                <div class="event-chip bg-indigo-600 text-white">6:00 PM Dress Rehearsal</div>
+                <div class="event-chip bg-amber-600 text-white">7:30 PM Staff Debrief</div>
+            </div>
+            <div class="cal-day-cell">
+                <span class="text-xs font-bold text-slate-400">Fri 23</span>
+            </div>
+            <div class="cal-day-cell">
+                <span class="text-xs font-bold text-slate-400">Sat 24</span>
+                <div class="event-chip bg-rose-600 text-white">10:00 AM Showcase</div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- ========================================================================= -->
+    <!-- CONCEPT 2: The Studio / Team Workspace Header -->
+    <!-- ========================================================================= -->
+    <div class="max-w-6xl mx-auto concept-card">
+        <div class="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/60 dark:bg-slate-900/60">
+            <div>
+                <span class="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">Concept 2</span>
+                <h3 class="font-bold text-base">The Team & Studio Workspace</h3>
+                <p class="text-xs text-slate-500">Includes calendar switcher for 5-cal bundles, live active presence counter, and permission lock status.</p>
+            </div>
+            <span class="text-xs bg-indigo-100 text-indigo-800 dark:bg-indigo-950 dark:text-indigo-300 font-semibold px-2 py-0.5 rounded-md">Multi-Calendar Power</span>
+        </div>
+
+        <div class="p-3 bg-slate-100/70 dark:bg-slate-950/70">
+            <header class="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-xl px-4 py-2.5 shadow-sm flex items-center justify-between gap-4">
+                
+                <!-- Left: Studio Brand & Calendar Selector -->
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-2">
+                        <div class="w-8 h-8 rounded-lg bg-[#3f51b5] text-white flex items-center justify-center font-bold text-sm shadow-sm">
+                            PC
+                        </div>
+                        <div class="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 cursor-pointer border border-slate-200/60 dark:border-slate-700">
+                            <span class="font-bold text-xs text-slate-800 dark:text-slate-100">Durango Dance Academy</span>
+                            <span class="text-slate-400 text-xs">/</span>
+                            <span class="font-semibold text-xs text-indigo-600 dark:text-indigo-400">Studio A (Main)</span>
+                            <svg class="w-3 h-3 text-slate-400 ml-1" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/></svg>
+                        </div>
+                    </div>
+
+                    <button class="px-3 py-1 bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-xs font-bold rounded-lg border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 transition flex items-center gap-1">
+                        <span>+ Add Event</span>
+                    </button>
+                </div>
+
+                <!-- Center: Presence & View Controls -->
+                <div class="flex items-center gap-2">
+                    <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 text-[11px] text-emerald-700 dark:text-emerald-300 font-semibold">
+                        <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span>4 viewers online</span>
+                    </div>
+
+                    <div class="flex items-center gap-1 text-xs text-slate-500 font-medium px-2 py-1 rounded-md bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700">
+                        <span>🔒 Admin Protected</span>
+                    </div>
+                </div>
+
+                <!-- Right: Actions -->
+                <div class="flex items-center gap-2">
+                    <button class="px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 rounded-lg hover:bg-slate-200 transition">
+                        Subscribe iCal
+                    </button>
+                    <button class="px-3 py-1.5 text-xs font-bold text-white bg-[#3f51b5] hover:bg-[#303f9f] rounded-lg shadow-sm transition">
+                        Share Schedule
+                    </button>
+                </div>
+
+            </header>
+        </div>
+
+        <div class="calendar-mockup">
+            <div class="cal-day-cell"><span class="text-xs font-bold text-slate-400">Sun</span></div>
+            <div class="cal-day-cell"><span class="text-xs font-bold text-slate-400">Mon</span></div>
+            <div class="cal-day-cell"><span class="text-xs font-bold text-slate-400">Tue</span></div>
+            <div class="cal-day-cell"><span class="text-xs font-bold text-slate-400">Wed</span></div>
+            <div class="cal-day-cell"><span class="text-xs font-bold text-slate-400">Thu</span></div>
+            <div class="cal-day-cell"><span class="text-xs font-bold text-slate-400">Fri</span></div>
+            <div class="cal-day-cell"><span class="text-xs font-bold text-slate-400">Sat</span></div>
+        </div>
+    </div>
+
+
+    <!-- ========================================================================= -->
+    <!-- CONCEPT 3: The Edge-to-Edge Minimalist (Notion / Cron Style) -->
+    <!-- ========================================================================= -->
+    <div class="max-w-6xl mx-auto concept-card">
+        <div class="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50/60 dark:bg-slate-900/60">
+            <div>
+                <span class="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">Concept 3</span>
+                <h3 class="font-bold text-base">The Minimalist Edge-to-Edge Header</h3>
+                <p class="text-xs text-slate-500">Flush border with inline search trigger, view pills, and subtle utility clustering.</p>
+            </div>
+            <span class="text-xs bg-slate-200 text-slate-700 dark:bg-slate-800 dark:text-slate-300 font-semibold px-2 py-0.5 rounded-md">Ultra Clean</span>
+        </div>
+
+        <div>
+            <header class="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 px-6 py-3 flex items-center justify-between gap-4">
+                
+                <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-2">
+                        <span class="font-extrabold text-base tracking-tight text-[#3f51b5]">pastecal</span>
+                        <span class="text-slate-300 dark:text-slate-700 font-mono">/</span>
+                        <span class="font-bold text-sm text-slate-800 dark:text-slate-100">volunteer-crew</span>
+                    </div>
+
+                    <!-- Search trigger bar -->
+                    <div class="hidden sm:flex items-center gap-2 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md text-xs text-slate-400 w-44 cursor-pointer hover:bg-slate-200/80 transition">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+                        <span>Search events...</span>
+                        <kbd class="ml-auto text-[10px] bg-white dark:bg-slate-700 px-1 py-0.5 rounded border border-slate-200 dark:border-slate-600 font-mono">/</kbd>
+                    </div>
+                </div>
+
+                <!-- Center: Month Switcher -->
+                <div class="flex items-center gap-2">
+                    <button class="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                    </button>
+                    <span class="font-bold text-sm text-slate-800 dark:text-slate-100">October 2026</span>
+                    <button class="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                    </button>
+                </div>
+
+                <!-- Right: Primary Action -->
+                <div class="flex items-center gap-3">
+                    <div class="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300">
+                        <button class="px-2.5 py-1 bg-white dark:bg-slate-700 text-slate-900 dark:text-white rounded-md shadow-xs">Month</button>
+                        <button class="px-2.5 py-1 hover:text-slate-900 transition">Week</button>
+                        <button class="px-2.5 py-1 hover:text-slate-900 transition">Agenda</button>
+                    </div>
+                    <button class="px-3.5 py-1.5 bg-[#3f51b5] text-white text-xs font-bold rounded-lg hover:bg-[#303f9f] transition shadow-xs">
+                        + Event
+                    </button>
+                </div>
+
+            </header>
+        </div>
+
+        <div class="calendar-mockup">
+            <div class="cal-day-cell"><span class="text-xs font-bold text-slate-400">Sun</span></div>
+            <div class="cal-day-cell"><span class="text-xs font-bold text-slate-400">Mon</span></div>
+            <div class="cal-day-cell"><span class="text-xs font-bold text-slate-400">Tue</span></div>
+            <div class="cal-day-cell"><span class="text-xs font-bold text-slate-400">Wed</span></div>
+            <div class="cal-day-cell"><span class="text-xs font-bold text-slate-400">Thu</span></div>
+            <div class="cal-day-cell"><span class="text-xs font-bold text-slate-400">Fri</span></div>
+            <div class="cal-day-cell"><span class="text-xs font-bold text-slate-400">Sat</span></div>
+        </div>
+    </div>
+
+    <script>
+        function toggleTheme() {
+            const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+            document.documentElement.setAttribute('data-theme', isDark ? 'light' : 'dark');
+            document.getElementById('themeIcon').textContent = isDark ? '🌙' : '☀️';
+            document.getElementById('themeLabel').textContent = isDark ? 'Toggle Dark Mode' : 'Toggle Light Mode';
+        }
+    </script>
+</body>
+</html>
