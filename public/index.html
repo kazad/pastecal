@@ -317,7 +317,7 @@
                         @update:title="calendar.title = $event" @click="editTitle = true" @blur="editTitle = false"
                         @enter="editTitle = false">
                     </calendar-title>
-                    <lock-badge v-if="lock.locked && !editTitle" :can-edit="lock.canEdit" @copy="makeOwnCopy"></lock-badge>
+                    <lock-badge v-if="(lock.locked || lock.paused) && !editTitle" :can-edit="lock.canEdit" :paused="lock.paused" @copy="makeOwnCopy"></lock-badge>
                     <button v-if="!editTitle" v-on:click="toggleNotes" aria-label="Toggle notes" :aria-expanded="showNotes ? 'true' : 'false'" :class="{ 'pc-hdr-on': showNotes }"
                         class="text-color-1 hover:text-blue-500 p-1 transition-colors flex items-center justify-center flex-shrink-0">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
@@ -475,7 +475,7 @@
                     @update:title="calendar.title = $event" @click="editTitle = true" @blur="editTitle = false"
                     @enter="setTitle($event)">
                 </calendar-title>
-                <lock-badge v-if="lock.locked && !editTitle" :can-edit="lock.canEdit" @copy="makeOwnCopy"></lock-badge>
+                <lock-badge v-if="(lock.locked || lock.paused) && !editTitle" :can-edit="lock.canEdit" :paused="lock.paused" @copy="makeOwnCopy"></lock-badge>
 
 
             </section>
@@ -527,17 +527,20 @@
                                 data-testid="share-pill-readonly">
                                 <!-- Share Icon (a lock on a locked calendar) -->
                                 <div class="text-color-1 flex-shrink-0 mr-1.5">
-                                    <svg v-if="lock.locked" class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                    <svg v-if="lock.locked || lock.paused" class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                                     <icon v-else name="share" class="w-5 h-5"></icon>
                                 </div>
                                 <!-- Text -->
                                 <div class="text-color-2 text-xs font-bold" data-testid="readonly-pill-label">
-                                    {{ lock.locked ? 'Locked' : 'View only' }}
+                                    {{ lock.paused ? 'Paused' : lock.locked ? 'Locked' : 'View only' }}
                                 </div>
                             </div>
                         </template>
                         <template #content>
-                            <p class="leading-relaxed" v-if="lock.locked">
+                            <p class="leading-relaxed" v-if="lock.paused">
+                                Editing is paused by the owner. You can still view it and follow it in your calendar app.
+                            </p>
+                            <p class="leading-relaxed" v-else-if="lock.locked">
                                 Only the owner and invited editors can change this calendar.
                             </p>
                             <p class="leading-relaxed" v-else>
@@ -1018,10 +1021,13 @@
                                 <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg><span><b>Stats</b>: views per day, followers, places</span></li>
                                 <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg><span><b>Custom links</b> and more ways to make it yours</span></li>
                             </ul>
+                            <!-- Saved calendars only (a draft shows Save & share instead of this card). One trial per calendar. -->
+                            <button v-if="!proTrialUsed" type="button" class="pc-gopro-trial" @click="startProTrial" data-testid="share-try-pro">Try Pro free for 30 days. No card needed.</button>
                         </div>
                         </template>
-                        <!-- Pro: the lock offer (Get Pro view), or a locked calendar's owner section and editor links -->
-                        <pro-panel v-if="isExisting && (shareProFocus || lock.locked)" ref="proPanel" :calendar-id="calendar.id" :calendar-title="calendar.title" :locked="lock.locked" :can-edit="canEdit"
+                        <!-- Pro: the lock offer (Get Pro view), or a locked calendar's owner section and editor links;
+                             after Pro ended, the paused calendar's choices (owner) or why nobody can edit (everyone else) -->
+                        <pro-panel v-if="isExisting && (shareProFocus || lock.locked || lock.paused)" ref="proPanel" :calendar-id="calendar.id" :calendar-title="calendar.title" :locked="lock.locked" :paused="lock.paused" :can-edit="canEdit"
                             @open-insight="openInsight($event, 'share_panel')" @owner="proOwner = $event"></pro-panel>
                         <button v-if="shareProFocus" type="button" class="pc-share-all" @click="shareProFocus = false" data-testid="share-show-all">Show all sharing options</button>
                     </div>

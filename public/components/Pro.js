@@ -7,7 +7,9 @@
 //   POST /api/auth/start {email, next} -> {ok}   (a sign-in link by email)
 //   POST /api/pro/checkout {calendarId, interval} -> {url}   503 / 409 handled
 //   POST /api/pro/editor-key {calendarId} -> {editorKey}     ROTATES the key
-//   POST /api/pro/portal {calendarId}  -> {url}
+//   POST /api/pro/portal {calendarId, flow?} -> {url}         flow 'add-card': Keep Pro during a trial
+//   POST /api/pro/trial {calendarId}   -> {ok, trialEnd}      30 days free, no card (409 trial-used-calendar/-account)
+//   POST /api/pro/lapsed-mode {calendarId, mode} -> {ok, mode, paused}   'readonly' | 'open', after Pro ends
 //   POST /api/auth/signout
 // Analytics get the step and the reason only: never the email, the calendar name or a key.
 
@@ -17,6 +19,7 @@ const PRO_MESSAGES = {
     lockedVisitor: 'Only the owner and invited editors can change this calendar.',
     lockedEditor: 'Locked · you can edit',
     keyReset: 'This editor link was reset by the owner. Ask them for the new one.',
+    paused: 'Editing is paused by the owner.',
 };
 
 // Set when someone asks for a sign-in link from the share dialog, so the calendar reopens
@@ -99,11 +102,11 @@ const LockBadge = {
             </span>
         </span>
     `,
-    props: { canEdit: Boolean },
+    props: { canEdit: Boolean, paused: Boolean },
     emits: ['copy'],
     data() { return { open: false, svg: PRO_LOCK_SVG }; },
     computed: {
-        label() { return this.canEdit ? PRO_MESSAGES.lockedEditor : PRO_MESSAGES.lockedVisitor; },
+        label() { return this.paused ? PRO_MESSAGES.paused : this.canEdit ? PRO_MESSAGES.lockedEditor : PRO_MESSAGES.lockedVisitor; },
     },
     mounted() {
         this._close = () => { this.open = false; };
@@ -117,9 +120,29 @@ const ProPanel = {
         <section class="pc-pro" data-testid="pro-panel" v-if="mode !== 'hidden'">
             <div class="pc-pro-head">
                 <span class="pc-pro-icon" v-html="svg"></span>
-                <h4 v-if="mode === 'owner'">Locked with Pro</h4>
+                <h4 v-if="mode === 'owner'">{{ status.trial ? 'Pro trial' : 'Locked with Pro' }}</h4>
+                <h4 v-else-if="mode === 'lapsed'" data-testid="pro-lapsed-title">{{ status.lapsedTrial ? 'Trial ended' : 'Pro ended' }} — read-only</h4>
+                <h4 v-else-if="mode === 'paused'">Editing is paused</h4>
                 <h4 v-else-if="mode === 'locked'">This calendar is locked</h4>
                 <h4 v-else>Lock this calendar</h4>
+            </div>
+
+            <!-- Unlocked, editable, saved, never trialed: 30 days free, no card. Signing in starts it. -->
+            <div v-if="mode === 'offer' && !trialUsed" class="pc-pro-trial" data-testid="pro-trial-box">
+                <p class="pc-pro-lead"><b>Try Pro free for 30 days.</b> No card needed. When it ends, you choose: keep Pro, or a free calendar.</p>
+                <form v-if="trialStep === 'email'" class="pc-pro-email" @submit.prevent="sendTrialLink" data-testid="pro-trial-email-form">
+                    <label for="pc-pro-trial-email">Your email. The link we send starts your trial. No password.</label>
+                    <div class="pc-pro-row">
+                        <input id="pc-pro-trial-email" ref="trialEmail" type="email" v-model.trim="email" required autocomplete="email" placeholder="you@example.com">
+                        <button type="submit" class="pc-pro-btn" :disabled="busy">{{ busy ? 'Sending…' : 'Send link' }}</button>
+                    </div>
+                </form>
+                <p v-else-if="trialStep === 'sent'" class="pc-pro-ok" data-testid="pro-trial-sent">Check your email. The link starts your trial and brings you back here.</p>
+                <div v-else class="pc-pro-row">
+                    <button type="button" class="pc-pro-btn" @click="startTrial" :disabled="busy" data-testid="pro-trial-btn">{{ busy ? 'One moment…' : 'Start free trial' }}</button>
+                    <span v-if="me" class="pc-pro-muted">as <span data-hj-suppress data-clarity-mask="true">{{ me.email }}</span></span>
+                </div>
+                <p class="pc-pro-muted pc-pro-or">Or pay now:</p>
             </div>
 
             <!-- Unlocked, editable: the offer -->
@@ -158,8 +181,9 @@ const ProPanel = {
             </template>
 
             <!-- Locked, and this browser is not signed in as the owner -->
-            <template v-if="mode === 'locked'">
-                <p class="pc-pro-lead">Only the owner and people with an editor link can change it. Everyone else can view.</p>
+            <template v-if="mode === 'locked' || mode === 'paused'">
+                <p v-if="mode === 'paused'" class="pc-pro-lead" data-testid="pro-paused">Editing is paused by the owner. You can still view it and follow it in your calendar app.</p>
+                <p v-else class="pc-pro-lead">Only the owner and people with an editor link can change it. Everyone else can view.</p>
                 <form v-if="step === 'email'" class="pc-pro-email" @submit.prevent="sendLink">
                     <label for="pc-pro-email-input2">Are you the owner? Sign in with the email you paid with.</label>
                     <div class="pc-pro-row">
@@ -172,8 +196,22 @@ const ProPanel = {
                 <a v-else href="#" class="pc-pro-link" @click.prevent="step = 'email'; focusEmail()">Owner? Sign in to manage it</a>
             </template>
 
+            <!-- Pro ended (trial or paid) and the calendar is paused: its owner chooses -->
+            <template v-if="mode === 'lapsed'">
+                <p class="pc-pro-lead">Everyone can still view it and follow it in their calendar app. Nobody can edit it, you included.</p>
+                <div class="pc-pro-row">
+                    <button type="button" class="pc-pro-btn pc-pro-btn--quiet" @click="openToEveryone" :disabled="busy" data-testid="pro-open-btn">Open to everyone</button>
+                    <button type="button" class="pc-pro-btn" @click="keepProAfter" :disabled="busy" data-testid="pro-keep-btn">{{ going ? 'Taking you to payment…' : 'Keep Pro' }}</button>
+                </div>
+                <p class="pc-pro-muted pc-pro-note">Open to everyone: a free calendar anyone with the edit link can change. Keep Pro: locked again for you, $24 a year.</p>
+                <p v-if="testCardHint" class="pc-pro-muted pc-pro-note">{{ testCardHint }}</p>
+            </template>
+
             <!-- The owner -->
             <template v-if="mode === 'owner'">
+                <p v-if="status.trial" class="pc-pro-trial-line" data-testid="pro-trial-line">Pro trial · {{ trialLeft }} ·
+                    <a v-if="!status.trial.hasCard" href="#" class="pc-pro-link" @click.prevent="keepPro" data-testid="pro-keep-trial">Keep Pro</a>
+                    <span v-else>card on file, Pro continues</span></p>
                 <p class="pc-pro-lead">Only you and people with your editor link can change it. Everyone else can view.
                     <span v-if="renewal" data-testid="pro-renewal">{{ renewal }}</span></p>
 
@@ -200,6 +238,14 @@ const ProPanel = {
                     <p class="pc-pro-warn">A new link turns off the old one. Anyone still using it will see a view-only calendar.</p>
                 </div>
 
+                <div class="pc-pro-sub" data-testid="pro-lapse-choice">
+                    <h5>If Pro ends</h5>
+                    <label class="pc-pro-choice"><input type="radio" value="readonly" v-model="lapsedMode" @change="saveLapsedMode" name="pc-pro-lapse">
+                        <span><b>Read-only.</b> Everyone can view; nobody edits until you decide.</span></label>
+                    <label class="pc-pro-choice"><input type="radio" value="open" v-model="lapsedMode" @change="saveLapsedMode" name="pc-pro-lapse">
+                        <span><b>Open to everyone.</b> A free calendar anyone with the edit link can change.</span></label>
+                </div>
+
                 <div class="pc-pro-row pc-pro-foot">
                     <button type="button" class="pc-pro-btn pc-pro-btn--quiet" @click="portal" :disabled="busy">Manage billing</button>
                     <a href="#" class="pc-pro-link" @click.prevent="signOut">Sign out</a>
@@ -213,6 +259,7 @@ const ProPanel = {
     props: {
         calendarId: String,
         locked: Boolean,      // from the live snapshot
+        paused: Boolean,      // from the live snapshot: Pro ended and the owner left it read-only
         canEdit: Boolean,     // this tab may change the calendar
         calendarTitle: String, // named on Stripe's page, so the payer sees which calendar it's for
     },
@@ -233,6 +280,9 @@ const ProPanel = {
             error: '',
             editorLink: '',
             copied: false,
+            trialStep: 'idle',    // idle | email | sent ("Try Pro free")
+            wantTrial: false,     // opened from "Try Pro free" (ProIntent 'trial')
+            lapsedMode: 'readonly',
             // The staging copy only (utils/preview.js): which test card to pay with.
             testCardHint: typeof PreviewSite !== 'undefined' && PreviewSite.is() ? PreviewSite.CHECKOUT_HINT : '',
         };
@@ -240,13 +290,22 @@ const ProPanel = {
     computed: {
         mode() {
             if (this.status && this.status.isOwner) return 'owner';
+            if (this.status && this.status.lapsedOwner && !this.locked) return 'lapsed';
+            if (this.paused || (this.status && this.status.paused && !this.locked)) return 'paused';
             if (this.locked || (this.status && this.status.locked)) return 'locked';
             if (!this.canEdit) return 'hidden';
             return 'offer';
         },
+        trialUsed() { return !!(this.status && this.status.trialUsed); },
+        trialLeft() {
+            const end = this.status && this.status.trial && this.status.trial.endsAt;
+            if (!end) return '';
+            const days = Math.max(0, Math.ceil((end * 1000 - Date.now()) / 86400000));
+            return days === 1 ? '1 day left' : `${days} days left`;
+        },
         renewal() {
             const c = this.me && (this.me.calendars || []).find((x) => x.id === this.calendarId);
-            if (!c || !c.currentPeriodEnd) return '';
+            if (!c || !c.currentPeriodEnd || c.status === 'trialing') return '';     // a trial shows its own line
             const ms = c.currentPeriodEnd < 1e12 ? c.currentPeriodEnd * 1000 : c.currentPeriodEnd;
             const d = new Date(ms).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
             return c.status === 'active' || c.status === 'trialing' ? `Renews ${d}.` : `Pro ends ${d}.`;
@@ -254,6 +313,7 @@ const ProPanel = {
     },
     watch: {
         locked() { this.refresh(); },
+        paused() { this.refresh(); },
         mode: {
             handler(m, old) {
                 if (m === old) return;
@@ -266,8 +326,9 @@ const ProPanel = {
     },
     mounted() {
         const intent = ProIntent.get(this.calendarId);
-        if (intent && intent.interval) this.interval = intent.interval;
+        if (intent && (intent.interval === 'year' || intent.interval === 'month')) this.interval = intent.interval;
         this.autoGo = !!(intent && intent.go);
+        this.wantTrial = !!(intent && intent.interval === 'trial');
         this.refresh();
         // Waiting on the email: they may sign in and pay in another tab or browser. Coming back here
         // shows where things stand instead of "Check your email".
@@ -283,13 +344,24 @@ const ProPanel = {
                 proApi('GET', '/api/me'),
             ]);
             if (st.status === 200) this.status = st.data;
+            if (this.status && this.status.lapsedMode) this.lapsedMode = this.status.lapsedMode;
             this.me = me.status === 200 ? me.data : null;
+            // "Try Pro free": back from its sign-in link (verify already started it; this explains a refusal),
+            // or from the Go Pro card (signed out: straight to the email box).
+            if (this.wantTrial && this.mode === 'offer') {
+                const go = this.autoGo; this.wantTrial = false; this.autoGo = false;
+                if (go && this.me) { await this.startTrial(); return; }
+                if (!this.me && !this.trialUsed) { this.trialStep = 'email'; this.$nextTick(() => { this.$refs.trialEmail && this.$refs.trialEmail.focus(); }); }
+                return;
+            }
+            this.wantTrial = false;
             // Back from the sign-in link they asked for when they pressed Lock: no second press.
             if (this.autoGo && this.me && this.mode === 'offer') {
                 this.autoGo = false; this.busy = true; this.going = true;
                 try { await this.checkout(); } finally { this.busy = false; this.going = false; }
             }
             this.autoGo = false;
+            if (this.trialStep === 'sent' && (this.me || this.mode === 'owner')) this.trialStep = 'idle';
             if (this.step === 'sent' && (this.me || this.mode === 'owner')) this.step = 'idle';
         },
         focusEmail() { this.$nextTick(() => { this.$refs.email && this.$refs.email.focus(); }); },
@@ -322,6 +394,58 @@ const ProPanel = {
             if (r.status === 409) { this.error = 'Someone else has already locked this calendar.'; this.refresh(); return; }
             if (r.status === 0) { this.error = 'We couldn’t reach pastecal. Check your connection and try again.'; return; }
             this.error = 'Something went wrong. Nothing was charged. Try again in a minute.';
+        },
+        // ---- the 30-day trial and after Pro ----
+        async startTrial() {
+            this.error = '';
+            if (!this.me) { this.trialStep = 'email'; this.$nextTick(() => { this.$refs.trialEmail && this.$refs.trialEmail.focus(); }); return; }
+            this.busy = true;
+            try {
+                const r = await proApi('POST', '/api/pro/trial', { calendarId: this.calendarId });
+                if (r.status === 200 && r.data.ok) { ProIntent.clear(); await this.refresh(); return; }
+                if (r.status === 401) { this.me = null; this.trialStep = 'email'; return; }
+                const e = r.data.error;
+                if (e === 'trial-used-calendar' || e === 'trial-used-account') { this.error = r.data.message; this.refresh(); return; }
+                if (e === 'locked-by-other') { this.error = 'Someone else has already locked this calendar.'; this.refresh(); return; }
+                if (e === 'already-pro') { this.refresh(); return; }
+                if (e === 'buy-on-live') { this.error = r.data.message; return; }
+                if (r.status === 404) { this.error = 'Save this calendar first. Then you can try Pro on it.'; return; }
+                if (r.status === 503) { this.error = 'Pro isn’t available yet.'; return; }
+                this.error = r.status === 0 ? 'We couldn’t reach pastecal. Check your connection and try again.' : 'Something went wrong. Try again in a minute.';
+            } finally { this.busy = false; }
+        },
+        async sendTrialLink() {
+            this.error = '';
+            if (!this.email) return;
+            this.busy = true;
+            try {
+                const r = await proApi('POST', '/api/auth/start', { email: this.email, next: '/' + encodeURIComponent(this.calendarId) + '?pro=trial' });
+                if (r.status === 200 && r.data.ok) { ProIntent.set(this.calendarId, 'trial', true); this.trialStep = 'sent'; return; }
+                this.error = r.status === 0 ? 'We couldn’t reach pastecal. Check your connection and try again.'
+                    : (r.data.error && r.status < 500 ? r.data.error : 'Something went wrong. Try again in a minute.');
+            } finally { this.busy = false; }
+        },
+        // During the trial: add a card in Stripe's Billing Portal; Pro then simply continues.
+        keepPro() { return this.portal('add-card'); },
+        // After Pro ended: buy it again (the paused calendar's owner may; checkout locks it again).
+        async keepProAfter() {
+            this.busy = true; this.going = true;
+            try { await this.checkout(); } finally { this.busy = false; this.going = false; }
+        },
+        async openToEveryone() {
+            if (!window.confirm('Open this calendar to everyone? Anyone with the edit link will be able to change it.')) return;
+            this.error = ''; this.busy = true;
+            try {
+                const r = await proApi('POST', '/api/pro/lapsed-mode', { calendarId: this.calendarId, mode: 'open' });
+                if (r.status === 200) { await this.refresh(); return; }
+                if (r.status === 401 || r.status === 403) { this.error = 'Sign in as the owner to change this.'; this.refresh(); return; }
+                this.error = r.status === 0 ? 'We couldn’t reach pastecal. Check your connection and try again.' : 'Something went wrong. Try again in a minute.';
+            } finally { this.busy = false; }
+        },
+        async saveLapsedMode() {
+            this.error = '';
+            const r = await proApi('POST', '/api/pro/lapsed-mode', { calendarId: this.calendarId, mode: this.lapsedMode });
+            if (r.status !== 200) { this.error = r.status === 0 ? 'We couldn’t reach pastecal. Check your connection and try again.' : 'That didn’t save. Try again in a minute.'; this.refresh(); }
         },
         async sendLink() {
             this.error = '';
@@ -369,10 +493,10 @@ const ProPanel = {
             if (el) { el.focus(); el.select(); }
             this.error = 'Press Ctrl+C (or ⌘C) to copy the link.';
         },
-        async portal() {
+        async portal(flow) {
             this.error = ''; this.busy = true;
             try {
-                const r = await proApi('POST', '/api/pro/portal', { calendarId: this.calendarId });
+                const r = await proApi('POST', '/api/pro/portal', { calendarId: this.calendarId, ...(flow === 'add-card' ? { flow } : {}) });
                 if (r.status === 200 && r.data.url) { proTrack((a) => a.proPortalOpened()); location.href = r.data.url; return; }
                 if (r.status === 503) this.error = 'Billing isn’t available right now. Try again later.';
                 else if (r.status === 404) this.error = 'We couldn’t find a billing account for this email.';

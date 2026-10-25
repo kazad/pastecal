@@ -1449,6 +1449,13 @@ button:hover > .pc-add-event {
 .pc-pro-err { margin: 10px 0 0; color: var(--pc-danger); font-size: 13.5px }
 .pc-pro-sub { margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--pc-line) }
 .pc-pro-sub h5 { margin: 0; font-size: 14px; font-weight: 600 }
+/* The 30-day trial: its offer box, the owner's "Pro trial · N days left" line, and the "If Pro ends" choice */
+.pc-pro-trial { padding-bottom: 10px; border-bottom: 1px solid var(--pc-line) }
+.pc-pro-or { margin-top: 8px }
+.pc-pro-trial-line { margin: 0; font-size: 14px; font-weight: 600; color: var(--pc-text) }
+.pc-pro-choice { display: flex; gap: 8px; align-items: flex-start; margin-top: 6px; font-size: 13px; color: var(--pc-text-muted); cursor: pointer }
+.pc-pro-choice input { margin: 2px 0 0; accent-color: var(--pc-link) }
+.pc-pro-choice b { color: var(--pc-text); font-weight: 600 }
 .pc-pro-warn { margin: 8px 0 0; color: var(--pc-text-muted); font-size: 12.5px }
 .pc-pro-foot { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--pc-line) }
 /* A title with the lock beside it: size to the text so the lock sits next to it, not across the bar. */
@@ -2108,6 +2115,9 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 .pc-gopro-list li { display: flex; gap: 6px; align-items: flex-start }
 .pc-gopro-list svg { width: 13px; height: 13px; flex: none; margin-top: 2px; color: var(--pc-link) }
 .pc-gopro-list b { color: var(--pc-text); font-weight: 600 }
+/* "Try Pro free": a quiet link-style line under the Go Pro list (saved, never-trialed calendars) */
+.pc-gopro-trial { display: block; margin: 8px 0 0; padding: 0; border: 0; background: none; color: var(--pc-link); font: 600 12.5px/1.35 var(--pc-font); cursor: pointer; text-align: left }
+.pc-gopro-trial:hover { text-decoration: underline }
 .pc-link-head .pc-link-extra--quiet { margin: 0 0 0 auto; align-self: center }
 /* Notes: Edit sits top-right and the text flows beside it; double-click the text to edit too. */
 .pc-notes-edit { float: right; margin: -4px -4px 6px 12px }

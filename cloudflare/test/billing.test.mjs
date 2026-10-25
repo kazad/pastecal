@@ -226,7 +226,7 @@ try {
     assert.equal(r.status, 200);
     assert.equal(fake.cals.get(cal).locked, true); assert.equal(fake.cals.get(cal).ownerId, ann.userId);
     let mine = await me(ann.cookie);
-    assert.deepEqual(mine.calendars, [{ id: cal, status: 'active', plan: 'pro', interval: 'year', priceId: 'price_fake_yearly', currentPeriodEnd: 1830000000 }]);
+    assert.deepEqual(mine.calendars, [{ id: cal, status: 'active', plan: 'pro', interval: 'year', priceId: 'price_fake_yearly', currentPeriodEnd: 1830000000, trialEnd: null }]);
     step('a signed subscription.created locks the calendar for its owner; /api/me lists it with status and interval');
 
     const calls = lockCalls(cal).length;
@@ -239,12 +239,13 @@ try {
 
     // --- Status, editor key, portal
     const s1 = await status(cal, ann.cookie);
-    assert.deepEqual(s1, { locked: true, pro: true, isOwner: true });
+    // Trial fields: the owner also learns what happens when Pro ends (lapsedMode, default read-only).
+    assert.deepEqual(s1, { locked: true, pro: true, isOwner: true, paused: false, lapsedOwner: false, trialUsed: false, lapsedMode: 'readonly' });
     const s2 = await status(cal);
-    assert.deepEqual(s2, { locked: true, pro: true, isOwner: false });
-    assert.deepEqual(Object.keys(s2).sort(), ['isOwner', 'locked', 'pro']);
-    assert.deepEqual(await status(`missing-${run}`), { locked: false, pro: false, isOwner: false });
-    step('status says {locked, pro, isOwner} and nothing else (no owner id, no key)');
+    assert.deepEqual(s2, { locked: true, pro: true, isOwner: false, paused: false, lapsedOwner: false, trialUsed: false });
+    assert.deepEqual(Object.keys(s2).sort(), ['isOwner', 'lapsedOwner', 'locked', 'paused', 'pro', 'trialUsed']);
+    assert.deepEqual(await status(`missing-${run}`), { locked: false, pro: false, isOwner: false, paused: false, lapsedOwner: false, trialUsed: false });
+    step('status says {locked, pro, isOwner, paused, lapsedOwner, trialUsed} and nothing else (no owner id, no key)');
 
     const bob = await signIn(BASE, `bob-${run}@example.com`);
     assert.equal((await post(BASE, '/api/pro/editor-key', { calendarId: cal })).status, 401);
@@ -299,10 +300,14 @@ try {
     assert.equal(r.status, 200); assert.equal(fake.cals.get(cal).locked, true);
     assert.equal((await me(ann.cookie)).calendars.find((c) => c.id === cal).status, 'past_due');
     fake.subs.get(`sub_${run}_a`).status = 'canceled';
+    const b4 = fake.log.length;
     assert.equal((await webhook(event('customer.subscription.deleted', { id: `sub_${run}_a` }))).status, 200);
     assert.equal(fake.cals.get(cal).locked, false);
-    assert.deepEqual(await status(cal, ann.cookie), { locked: false, pro: false, isOwner: false });
-    step('a failed payment keeps the lock (past_due); cancellation unlocks');
+    // A paid cancel falls back like a lapsed trial: the room is told lapse:true (paused unless the owner chose open).
+    const unlockCall = fake.log.slice(b4).find((l) => l.path === `/lockfake/cal/${cal}/unlock`);
+    assert.deepEqual(unlockCall.body, { ownerId: ann.userId, lapse: true });
+    assert.deepEqual(await status(cal, ann.cookie), { locked: false, pro: false, isOwner: false, paused: false, lapsedOwner: false, trialUsed: false });
+    step('a failed payment keeps the lock (past_due); cancellation unlocks with lapse:true (the read-only fallback)');
 
     // --- Support: reassign a paid calendar to another email.
     const newOwner = `cara-${run}@example.com`;
