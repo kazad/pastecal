@@ -26,6 +26,7 @@
       "/createPublicLink",
       "/*.ics",
       "/view/*.ics",
+      "/@*",          // Pro Unlimited names: pastecal.com/@handle[/name] (Names.js); never an editable calendar
       "/beta",
       "/beta/*",
       "/nativecal/*"

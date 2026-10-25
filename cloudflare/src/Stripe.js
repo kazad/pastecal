@@ -117,6 +117,7 @@ export function summarizeSubscription(sub) {
         trial: !!(sub.metadata && sub.metadata.trial === '1'),  // started by POST /api/pro/trial (no card)
         trialEnd: Number.isFinite(sub.trial_end) ? sub.trial_end : null,
         hasPaymentMethod: !!sub.default_payment_method,
+        cancelAtPeriodEnd: !!sub.cancel_at_period_end,   // canceled in the portal: it ends at currentPeriodEnd, no renewal
         priceId: price.id || null,
         interval: (price.recurring && price.recurring.interval) || price.interval || null,
         currentPeriodEnd: item.current_period_end || sub.current_period_end || null,

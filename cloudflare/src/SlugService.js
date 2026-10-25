@@ -22,8 +22,29 @@ export const RESERVED_WORDS = new Set([
 // them. Only creation: an existing calendar keeps working. The apps' checkExists lists match.
 export const RESERVED_CALENDAR_NAMES = new Set([
     'beta', 'nativecal', 'view', 'dev', 'api', 'cal',
-    'report', 'signin', 'pro', 'pricing', 'explore', 'privacy', 'terms', 'contact',
+    'report', 'signin', 'pro', 'pricing', 'explore', 'privacy', 'terms', 'contact', 'account',
 ]);
+
+// Every top-level entry of public/ (a page, a folder, a file), without its extension. A short name
+// (pastecal.com/<name>) must never shadow one; test/unit/names.test.js keeps this list complete.
+export const STATIC_PAGE_NAMES = new Set([
+    '_headers', 'about', 'app', 'components', 'contact', 'demo', 'design-ideas', 'dev', 'directives', 'help', 'img', 'index',
+    'js-old-components', 'legal', 'models', 'nativecal', 'poll', 'pricing', 'pricing-next', 'privacy', 'pro', 'report', 'robots',
+    'selftest', 'services', 'signin', 'site', 'style', 'tailwind', 'terms', 'tokens', 'utils', 'vendor', 'account', 'handle',
+]);
+
+// Pro Unlimited names. A handle (pastecal.com/@handle) and a top-level short name (pastecal.com/<name>):
+// 3-30 of a-z, 0-9 and "-", starting and ending with a letter or digit, never a reserved or site name.
+// A name under a handle (pastecal.com/@handle/<name>): 1-40 of the same.
+const NAME_RE = /^[a-z0-9](?:[a-z0-9-]{1,28}[a-z0-9])$/;
+const LINK_RE = /^[a-z0-9](?:[a-z0-9-]{0,38}[a-z0-9])?$/;
+export function nameProblem(raw, kind) {
+    const s = String(raw ?? '').trim().toLowerCase();
+    const re = kind === 'link' ? LINK_RE : NAME_RE;
+    if (!re.test(s)) return kind === 'link' ? 'Use 1 to 40 letters, numbers or dashes.' : 'Use 3 to 30 letters, numbers or dashes.';
+    if (kind !== 'link' && (RESERVED_WORDS.has(s) || RESERVED_CALENDAR_NAMES.has(s) || STATIC_PAGE_NAMES.has(s))) return 'That name is reserved. Try another.';
+    return null;
+}
 
 export const SlugService = {
     normalizeSlug(slug) {

@@ -10,7 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-export const PAGES = ['pricing', 'pricing-next', 'help', 'about', 'privacy', 'terms', 'report', 'contact', 'signin'].map(n => `public/${n}.html`);
+export const PAGES = ['pricing', 'pricing-next', 'help', 'about', 'privacy', 'terms', 'report', 'contact', 'signin', 'account', 'handle'].map(n => `public/${n}.html`);
 // The homepage has the app's own header, and ends with the same site footer (inside its markers).
 export const FOOTER_ONLY = ['public/index.html'];
 export const syncFooter = (html, footer = partial('footer.html')) => html.replace(markerRe('site-footer'), () => block('site-footer', footer));

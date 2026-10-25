@@ -130,6 +130,15 @@ export class CalendarDirectory extends DurableObject {
             return Response.json({ ok: true, slug, actualSlug: slug, isReadOnly: !!isReadOnly, targetId });
         }
 
+        // A read-only name now opens another calendar (a Pro Unlimited short name remapped by its owner).
+        if (request.method === 'POST' && path === '/retarget') {
+            const body = await request.json().catch(() => null);
+            if (!body || !body.slug || !body.targetId) return Response.json({ ok: false }, { status: 400 });
+            const norm = SlugService.normalizeSlug(body.slug);
+            this.sql.exec(`UPDATE directory SET target_id = ? WHERE normalized = ? AND is_readonly = 1`, String(body.targetId).trim(), norm);
+            return Response.json({ ok: true });
+        }
+
         if (request.method === 'POST' && path === '/remove') {
             const body = await request.json().catch(() => null);
             if (!body || !body.slug) return Response.json({ ok: false }, { status: 400 });

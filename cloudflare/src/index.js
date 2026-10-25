@@ -2,6 +2,8 @@
  * pastecal-sync Worker: routes calendar requests to Durable Objects and static assets.
  *
  *   GET  /:id.ics, /view/:id.ics  iCalendar subscription feed (RFC 5545, ETag 304 caching)
+ *   GET  /@handle[/<name>[.ics]]  Pro Unlimited names: handle page, a calendar's view page, its feed (Names.js)
+ *   GET  /api/account, POST /api/names/*   /account's data and name changes (Names.js)
  *   GET  /api/lookup              Case-insensitive calendar / view lookup
  *   POST /lookupCalendar          Firebase callable compatible lookup endpoint
  *   POST /api/create-view         Create a view-only slug / random publicViewId
@@ -34,6 +36,7 @@ export { CalendarDirectory } from './CalendarDirectory.js';
 export { Waitlist } from './Waitlist.js';
 export { Accounts } from './Accounts.js';
 import { handleAccounts, sessionUserId as accountsSessionUserId } from './Accounts.js';
+import { handleNames, serveAt } from './Names.js';
 import { PLANS } from './Waitlist.js';
 import { handleInsight, hitHeaders, withoutSourceParams } from './Insight.js';
 import { handleTestInboxEmail, handleTestInboxAdmin } from './TestInbox.js';
@@ -132,6 +135,40 @@ function withStagingHeaders(response) {
     return res;
 }
 
+// The iCalendar feed of the calendar in room `targetId`, named `actualSlug` (a view or short name keeps
+// its own name: the feed never shows an edit id). `fileName` overrides the download name.
+async function serveFeed(request, env, targetId, actualSlug, fileName = actualSlug) {
+    const room = env.CALENDARS.get(env.CALENDARS.idFromName(targetId));
+    // Counted as a follow inside the room, during the read it already does (Insight.js hitHeaders).
+    const hit = hitFor(request, env, 'follow');
+    const roomRes = await room.fetch(new Request(`http://internal/cal/${encodeURIComponent(targetId)}`, hit ? { headers: {
+        ...hit, 'CF-Connecting-IP': request.headers.get('CF-Connecting-IP') || '', 'User-Agent': request.headers.get('User-Agent') || '' } } : {}));
+    if (!roomRes.ok) return new Response('Calendar not found', { status: 404 });
+    const roomData = await roomRes.json();
+    const cal = roomData?.calendar;
+    if (!cal || !cal.id) return new Response('Calendar not found', { status: 404 });
+
+    const etag = '"' + await sha1Hex(JSON.stringify(cal.events ?? null)) + '"';
+    if (request.headers.get('if-none-match') === etag) {
+        return new Response(null, {
+            status: 304,
+            headers: { 'ETag': etag, 'Cache-Control': 'public, max-age=300' }
+        });
+    }
+
+    const icsText = ICSService.generateICS(cal, actualSlug);
+    return new Response(icsText, {
+        status: 200,
+        headers: {
+            'Content-Type': 'text/calendar; charset=utf-8',
+            // The name may hold quotes or non-ASCII ("TEAM NUÑEZ"): an ASCII fallback plus the RFC 5987 form.
+            'Content-Disposition': `inline; filename="${fileName.replace(/[^A-Za-z0-9._-]/g, '_')}.ics"; filename*=UTF-8''${encodeURIComponent(fileName)}.ics`,
+            'ETag': etag,
+            'Cache-Control': 'public, max-age=300'
+        }
+    });
+}
+
 export default {
     // Inbound mail from Email Routing: only the test inbox addresses are routed here.
     async email(message, env) {
@@ -164,7 +201,14 @@ async function route(request, env) {
         const url = new URL(request.url);
         const path = url.pathname;
 
-        // 1. ICS Feed: /:slug.ics and /view/:slug.ics
+        // Pro Unlimited names: pastecal.com/@handle[/<name>[.ics]] (before slug routing; a new calendar
+        // can't start with "@"). null: an old calendar whose id starts with "@" keeps its address.
+        if (path.startsWith('/@')) {
+            const at = await serveAt(request, env, url, { serveFeed });
+            if (at) return at;
+        }
+
+        // 1. ICS Feed: /:slug.ics and /view/:slug.ics (a short name is a read-only directory row too)
         const icsMatch = path.match(/^(\/view)?\/([^/]+)\.ics$/i);
         if (icsMatch) {
             let slug = '';
@@ -186,37 +230,12 @@ async function route(request, env) {
                     console.error('[Worker ICS] directory lookup error:', e);
                 }
             }
-
-            const room = env.CALENDARS.get(env.CALENDARS.idFromName(targetId));
-            // Counted as a follow inside the room, during the read it already does (Insight.js hitHeaders).
-            const hit = hitFor(request, env, 'follow');
-            const roomRes = await room.fetch(new Request(`http://internal/cal/${encodeURIComponent(targetId)}`, hit ? { headers: {
-                ...hit, 'CF-Connecting-IP': request.headers.get('CF-Connecting-IP') || '', 'User-Agent': request.headers.get('User-Agent') || '' } } : {}));
-            if (!roomRes.ok) return new Response('Calendar not found', { status: 404 });
-            const roomData = await roomRes.json();
-            const cal = roomData?.calendar;
-            if (!cal || !cal.id) return new Response('Calendar not found', { status: 404 });
-
-            const etag = '"' + await sha1Hex(JSON.stringify(cal.events ?? null)) + '"';
-            if (request.headers.get('if-none-match') === etag) {
-                return new Response(null, {
-                    status: 304,
-                    headers: { 'ETag': etag, 'Cache-Control': 'public, max-age=300' }
-                });
-            }
-
-            const icsText = ICSService.generateICS(cal, actualSlug);
-            return new Response(icsText, {
-                status: 200,
-                headers: {
-                    'Content-Type': 'text/calendar; charset=utf-8',
-                    // The name may hold quotes or non-ASCII ("TEAM NUÑEZ"): an ASCII fallback plus the RFC 5987 form.
-                    'Content-Disposition': `inline; filename="${actualSlug.replace(/[^A-Za-z0-9._-]/g, '_')}.ics"; filename*=UTF-8''${encodeURIComponent(actualSlug)}.ics`,
-                    'ETag': etag,
-                    'Cache-Control': 'public, max-age=300'
-                }
-            });
+            return serveFeed(request, env, targetId, actualSlug);
         }
+
+        // Account page data and Pro Unlimited names: /api/account, /api/names/*
+        const namesRes = await handleNames(request, env, url);
+        if (namesRes) return namesRes;
 
         // Pro stats and restore (before the accounts handler, which owns the rest of /api/pro/*).
         const insightRes = await handleInsight(request, env, url, sessionUserId);
@@ -435,8 +454,14 @@ async function route(request, env) {
             if (m[2] === '/ws' && request.headers.get('Upgrade') !== 'websocket') {
                 return new Response('expected a WebSocket', { status: 426 });
             }
-            if (request.method === 'POST' && !m[2] && RESERVED_CALENDAR_NAMES.has(id.toLowerCase())) {
+            if (request.method === 'POST' && !m[2] && (RESERVED_CALENDAR_NAMES.has(id.toLowerCase()) || id.startsWith('@'))) {
                 return withCors(Response.json({ ok: false, error: 'reserved name' }, { status: 409 }));
+            }
+            // A read-only name (a view link, or a Pro Unlimited short name) already answers at this address.
+            if (request.method === 'POST' && !m[2]) {
+                const dir = getDirectory(env);
+                const look = dir ? await (await dir.fetch(`http://internal/lookup?slug=${encodeURIComponent(id)}`)).json().catch(() => ({})) : {};
+                if (look.found && look.isReadOnly) return withCors(Response.json({ ok: false, error: 'name taken' }, { status: 409 }));
             }
             if (request.method === 'POST' && !m[2] && env.CREATE_LIMITER) {
                 const { success } = await env.CREATE_LIMITER.limit({ key: request.headers.get('CF-Connecting-IP') || 'unknown' });

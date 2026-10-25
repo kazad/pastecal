@@ -495,7 +495,7 @@ document.querySelectorAll('[data-plan]').forEach(a => a.addEventListener('click'
   document.querySelectorAll('.interval input').forEach(r => r.addEventListener('change', () =>
     document.querySelectorAll('.interval').forEach(l => l.classList.toggle('on', l.querySelector('input').checked))));
   const ID = /^[A-Za-z0-9_-]{1,100}$/;
-  const RESERVED = new Set(['view', 'pricing', 'privacy', 'terms', 'pro', 'signin', 'report', 'explore', 'api', 'dev', 'demo', 'beta', 'nativecal', 'cal', 'index.html']);
+  const RESERVED = new Set(['view', 'pricing', 'privacy', 'terms', 'pro', 'signin', 'report', 'explore', 'api', 'dev', 'demo', 'beta', 'nativecal', 'cal', 'account', 'index.html']);
   const go = (id, via) => {
     try { localStorage.setItem('pastecal_pro_intent', JSON.stringify({ id, interval: 'year', t: Date.now() })); } catch (e) { /* storage blocked: Share still opens by hand */ }
     pcTrack('pricing_getpro_picked', { via, interval: 'year' });
