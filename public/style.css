@@ -1176,7 +1176,7 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
 /* The address pill: a labeled Share button, and the Draft tag beside Save & share. */
 .pc-addr-share-btn { padding: 0 12px }
 .pc-addr-share-btn.pc-hdr-on { background: var(--pc-primary); color: var(--pc-on-primary) !important }   /* stays filled while Share is open */
-.pc-draft-chip { margin-right: 6px; letter-spacing: .02em; cursor: help }   /* + .pc-pill */
+.pc-draft-chip { margin-left: 8px; margin-right: 6px; letter-spacing: .02em; cursor: help }   /* + .pc-pill; 8px from the calendar name */
 /* The calendar's name: a pill on hover with a pencil, so it reads as editable. An unnamed calendar
    says "Name this calendar", muted, with the pencil always showing. (CalendarTitle.js) */
 .pc-title-edit { position: relative; cursor: pointer; padding: 4px 30px 4px 12px !important; border-radius: var(--pc-radius-control); transition: background .15s }   /* beats Tailwind padding */
