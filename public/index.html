@@ -204,12 +204,11 @@
         if (!window.pcNoProdSideEffects) firebase.initializeApp(firebaseConfig);
 
         // Anonymous sign-in. NOT a login and not a permission check -- calendars stay
-        // open read/write to everyone, which is the product. This only gives each browser
-        // a stable id that the SERVER asserts, so "who most likely created this calendar"
-        // has an answer if a slug is ever leaked or taken over.
-        //
-        // A localStorage id would be simpler and useless: the client would be claiming its
-        // own identity, so anyone could send someone else's. auth.uid cannot be forged.
+        // open read/write to everyone, which is the product. On the Firebase backend it keys
+        // the calendar_authors records (the rules let a browser write only under its own uid).
+        // The Cloudflare backend identifies a browser by its pastecal id instead (a random id in
+        // localStorage, services/AuthorSignal.js); a browser that already had a Firebase uid adopts
+        // it once as that id, so the calendars it created stay recognizably its own.
         //
         // Deliberately fire-and-forget: sign-in must never gate rendering a calendar. If it
         // fails (blocked third-party storage, offline, quota) the app behaves exactly as it

@@ -6,10 +6,10 @@
  * that is the product, not an oversight. This only leaves a trail, and the trail is
  * consulted by a human running internal/scripts/authors.js, never by the app.
  *
- * Why Firebase anonymous auth rather than a random id in localStorage: a localStorage id
- * is a number the client claims about itself, so anyone could send someone else's and the
- * records would be worthless as evidence precisely when they mattered. `auth.uid` is
- * asserted by Firebase, and the security rules only let a browser write under its own uid.
+ * On the Firebase backend these records are keyed by the Firebase anonymous uid (`auth.uid`
+ * is asserted by Firebase, and the security rules only let a browser write under its own uid).
+ * On the Cloudflare backend the author is this browser's pastecal id (uid() below): a random
+ * id kept in localStorage, adopting an existing Firebase uid once for continuity.
  * The rules also pin every timestamp to the server clock and every write to one edit --
  * see docs/author-signal.md for exactly what that does and does not prevent.
  *
@@ -31,8 +31,91 @@ const AuthorSignal = {
     _lastWrite: {},   // calendarId -> timestamp of our last write
     _seeded: {},      // calendarId -> true once firstSeen has been attempted this page load
 
-    /** The current browser's Firebase uid, or null if sign-in has not completed/failed. */
+    // ---- This browser's pastecal id (owner decision, Oct 2026) ----
+    // What the Cloudflare backend records as a calendar's author (the creator, editors of record) and
+    // what trial, checkout, Pro locks and the 7-day undo send: a random id pastecal makes once and keeps
+    // in localStorage. Not the Firebase anonymous uid: on the Cloudflare backend the uid is client-sent
+    // anyway, and Firebase being blocked (an ad blocker, no third-party storage, a slow restore) must
+    // never leave a creator unrecognizable. Continuity: a browser that already has a Firebase uid adopts
+    // it, once, as its pastecal id, so calendars it created (recorded under that uid) stay its own.
+    STORAGE_KEY: 'pastecal_browser_id',
+    WAIT_MS: 2000,     // the longest the Firebase restore is waited for before a fresh id is made
+    _id: null,         // the id, also when localStorage can't keep it (then it lasts this page load)
+    _waiters: null,    // [resolve] while the Firebase restore is pending
+    _fbState: 'unknown',   // 'unknown' -> 'pending' (listening) -> 'settled'
+
+    _store() { try { return typeof localStorage !== 'undefined' ? localStorage : null; } catch (e) { return null; } },
+    _keep(id) {
+        this._id = id;
+        try { const ls = this._store(); if (ls) ls.setItem(this.STORAGE_KEY, id); } catch (e) { /* this page load only */ }
+        const w = this._waiters; this._waiters = null;
+        if (w) w.forEach((r) => r(id));
+        return id;
+    },
+    _fresh() {
+        try { if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID(); } catch (e) { /* older browser */ }
+        return 'pc-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+    },
+    /** A Firebase uid this browser already has, read without waiting: a restored user, or Firebase's own
+     *  localStorage record (firebase:authUser:<key>:[DEFAULT]). null if none. */
+    _legacyUidNow() {
+        const fb = this.firebaseUid();
+        if (fb) return fb;
+        try {
+            const ls = this._store();
+            for (let i = 0; ls && i < ls.length; i++) {
+                const k = ls.key(i);
+                if (k && k.indexOf('firebase:authUser:') === 0) { const u = JSON.parse(ls.getItem(k) || 'null'); if (u && typeof u.uid === 'string' && u.uid) return u.uid; }
+            }
+        } catch (e) { /* unreadable: none */ }
+        return null;
+    },
+    /** Firebase is loaded here and may still be restoring a user from IndexedDB: listen once. */
+    _watchFirebase() {
+        if (this._fbState !== 'unknown') return this._fbState === 'pending';
+        this._fbState = 'settled';
+        try {
+            if (typeof window !== 'undefined' && window.pcNoProdSideEffects) return false;     // no Firebase app on staging / local CF
+            if (typeof firebase === 'undefined' || !firebase.apps || !firebase.apps.length || !firebase.auth) return false;
+            const auth = firebase.auth();
+            this._fbState = 'pending';
+            const settle = (user) => {
+                if (this._fbState !== 'pending') return;
+                this._fbState = 'settled';
+                if (!this._id) this._keep(user && user.uid ? user.uid : this._fresh());
+            };
+            const off = auth.onAuthStateChanged((user) => { settle(user); try { off && off(); } catch (e) {} });
+            setTimeout(() => settle(null), this.WAIT_MS);
+            return true;
+        } catch (e) { this._fbState = 'settled'; return false; }
+    },
+    /**
+     * This browser's pastecal id, or null for a moment on the first visit while an existing Firebase
+     * user may still be restoring (ready() waits for it; idNow() decides at once).
+     */
     uid() {
+        if (this._id) return this._id;
+        try { const ls = this._store(); const v = ls && ls.getItem(this.STORAGE_KEY); if (v) return (this._id = v); } catch (e) { /* none kept */ }
+        const legacy = this._legacyUidNow();
+        if (legacy) return this._keep(legacy);
+        if (this._watchFirebase()) return null;
+        return this._keep(this._fresh());
+    },
+    /** The id now, making one if the Firebase restore hasn't answered yet (creating a calendar can't wait). */
+    uidNow() { return this.uid() || this._keep(this._fresh()); },
+    /** The id, waiting up to WAIT_MS for an existing Firebase user to restore. Always resolves to an id. */
+    ready() {
+        const id = this.uid();
+        if (id) return Promise.resolve(id);
+        return new Promise((resolve) => {
+            (this._waiters = this._waiters || []).push(resolve);
+            setTimeout(() => resolve(this.uidNow()), this.WAIT_MS + 50);
+        });
+    },
+
+    /** The current browser's Firebase uid (the Firebase backend's calendar_authors records, which the
+     *  database rules key by auth.uid), or null if sign-in has not completed/failed. */
+    firebaseUid() {
         try {
             const user = firebase.auth().currentUser;
             return user ? user.uid : null;
@@ -55,7 +138,7 @@ const AuthorSignal = {
         // and this data exists to be read by a human during an incident, so noise in
         // it is worse than a gap. Same gate analytics.js already uses.
         if (typeof window !== 'undefined' && window.__TEST__) return null;
-        return this.uid(); // null if not signed in yet; the next edit will catch it
+        return this.firebaseUid(); // the rules key these records by auth.uid; null if not signed in yet
     },
 
     /**
@@ -144,3 +227,4 @@ const AuthorSignal = {
 if (typeof window !== 'undefined') {
     window.AuthorSignal = AuthorSignal;
 }
+if (typeof module !== 'undefined' && module.exports) module.exports = AuthorSignal;

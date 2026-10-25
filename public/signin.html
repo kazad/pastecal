@@ -75,8 +75,11 @@ p.bad { color: var(--bad); }
 (function () {
   var title = document.getElementById('title'), msg = document.getElementById('msg'), go = document.getElementById('go'), confirm = document.getElementById('confirm');
   function fail(text) { title.textContent = 'That link didn’t work'; msg.textContent = text; msg.className = 'bad'; confirm.hidden = true; go.textContent = 'Back to pastecal'; go.hidden = false; }
+  // This browser's pastecal id (services/AuthorSignal.js), if it has one: a trial link's verify starts the
+  // trial only for an editor of record of that calendar.
+  function browserId() { try { return localStorage.getItem('pastecal_browser_id') || ''; } catch (e) { return ''; } }
   function post(path) {
-    return fetch(path, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: signinToken }) })
+    return fetch(path, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: signinToken, author: browserId() }) })
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); });
   }
   var offline = function () { fail('We couldn’t reach pastecal. Check your connection and open the link again.'); };

@@ -122,18 +122,16 @@ function trialFeature(id, feature) {
     if (id && TrialUsage.once(id, feature)) proTrack((a) => a.trialFeatureUsed(feature));
 }
 
-// This browser's author uid (services/AuthorSignal.js): trial and checkout are for an editor of record (the
-// browser that made the calendar, or one that edited it on 2+ days); the server checks it. Never shown anywhere.
+// This browser's pastecal id (services/AuthorSignal.js uid): trial, checkout, Pro locks and the undo are for an
+// editor of record (the browser that made the calendar, or one that edited it on 2+ days); the server checks it.
+// Never shown anywhere.
 function proAuthor() {
     try { return typeof AuthorSignal !== 'undefined' && AuthorSignal.uid ? AuthorSignal.uid() || '' : ''; } catch (e) { return ''; }
 }
-// The same, waiting up to 3 seconds for it: on a fresh page load (back from a sign-in link) the anonymous
-// sign-in is still being restored, and asking without the uid would refuse the calendar's own creator.
-async function proAuthorReady(ms = 3000) {
-    for (const t0 = Date.now(); Date.now() - t0 < ms; await new Promise((r) => setTimeout(r, 100))) {
-        const uid = proAuthor();
-        if (uid) return uid;
-    }
+// The same, never empty: on a first visit an existing Firebase user may still be restoring (its uid becomes
+// this browser's id, so it is waited for briefly); otherwise the id is made at once.
+async function proAuthorReady() {
+    try { if (typeof AuthorSignal !== 'undefined' && AuthorSignal.ready) return (await AuthorSignal.ready()) || ''; } catch (e) { /* below */ }
     return proAuthor();
 }
 

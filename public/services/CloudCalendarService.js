@@ -544,8 +544,10 @@ class CloudCalendarService extends CalendarDataService {
     /** First save of a new calendar: POST /cal/<id>, accepted only into an empty room. */
     static createWithId(key, value, success) {
         const body = this._sanitizeForFirebase({ title: value.title, options: value.options, events: value.events });
-        // The creating browser's author uid: recorded as the creator, which is who may upgrade it (never shown).
-        const author = this._authorUid();
+        // The creating browser's pastecal id: recorded as the creator, which is who may upgrade it (never shown).
+        // Decided now (never null): a creation can't wait for a Firebase restore.
+        let author = null;
+        try { author = typeof AuthorSignal !== 'undefined' && AuthorSignal.uidNow ? AuthorSignal.uidNow() : this._authorUid(); } catch (e) { author = this._authorUid(); }
         if (author) body.author = author;
         return fetch(this._url(key), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
             .then(async (r) => {
