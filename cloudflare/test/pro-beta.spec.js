@@ -1,7 +1,7 @@
 // @ts-check
 /**
  * Pro (beta), early access: while Stripe isn't configured (GET /api/pro/config -> {billing:false}), every place
- * Pro is offered says "Join the Pro beta" and puts the email on the Pro waitlist instead of the trial or checkout.
+ * Pro is offered says "Join the beta" and puts the email on the Pro waitlist instead of the trial or checkout.
  * With billing on, the offer is the trial and checkout as before. Pro carries a small "Beta" tag either way.
  *
  * Run against BOTH servers; each test skips on the other mode:
@@ -18,7 +18,7 @@ const { test, expect } = require('@playwright/test');
 
 const SECRET = process.env.IMPORT_SECRET || 'dev-secret';
 const ALLOW = new Set(['localhost', '127.0.0.1', 'fonts.googleapis.com', 'fonts.gstatic.com', 'www.gstatic.com', 'cdn.jsdelivr.net']);
-const DONE = 'You’re on the list. We’ll email you when your Pro beta trial is ready.';
+const DONE = 'You’re on the list. We’ll email you when your trial is ready.';
 const run = Date.now().toString(36);
 
 let shared;
@@ -69,17 +69,19 @@ async function waitlistRows(request) {
 
 // ---------- billing off ----------
 
-test('billing off: the Share card offers "Join the Pro beta", and joining stores a waitlist row', async ({ browser, request }) => {
+test('billing off: the Share card offers "Join the beta", and joining stores a waitlist row', async ({ browser, request }) => {
   test.skip(await billingOf(request) !== false, 'needs a server without Stripe');
   const { id } = await seed(request);
   const { ctx, page } = await open(browser, `/${id}?backend=cf`);
   await openShare(page);
   const card = page.getByTestId('share-pro-card');
-  await expect(card).toContainText('Go Pro');
+  await expect(card).toContainText('Upgrade');
+  await expect(card).toContainText('Plus · $29 a year');
+  await expect(card.getByTestId('pro-beta-btn')).toHaveText('Join the beta');
   await expect(card.getByTestId('share-pro-beta-tag')).toHaveText('Beta');
   await expect(page.getByTestId('share-try-pro')).toHaveCount(0);
   await expect(page.getByTestId('share-get-pro')).toHaveCount(0);
-  await expect(card.getByText(/Try Pro free|Get Pro|Lock this calendar/)).toHaveCount(0);
+  await expect(card.getByText(/Try Plus free|Try Pro free|Get Pro|Lock this calendar/)).toHaveCount(0);
 
   await card.getByTestId('pro-beta-btn').click();
   const email = card.getByTestId('pro-beta-email');
@@ -109,7 +111,7 @@ test('billing off: Stats and the Pro panel offer the beta, never the trial or ch
   await openShare(page);
   await page.getByTestId('side-tab-stats').click();
   const teaser = page.getByTestId('stats-teaser');
-  await expect(teaser).toContainText('More with Pro');
+  await expect(teaser).toContainText('More with Plus');
   await expect(teaser.getByTestId('stats-pro-beta-tag')).toHaveText('Beta');
   await expect(page.getByTestId('stats-get-pro')).toHaveCount(0);
   await teaser.getByTestId('pro-beta-btn').click();
@@ -119,7 +121,7 @@ test('billing off: Stats and the Pro panel offer the beta, never the trial or ch
   await expect(teaser.getByTestId('pro-beta-done')).toHaveText(DONE);
   expect(await page.evaluate(() => window.__tracked.filter((e) => e.name === 'pro_beta_joined').map((e) => e.params))).toEqual([{ beta_surface: 'stats' }]);
 
-  // The upsell line ("Join the Pro beta →") and every other way into the Pro offer open the panel on the beta form.
+  // The upsell line ("Join the beta →") and every other way into the Pro offer open the panel on the beta form.
   await page.evaluate(() => document.querySelector('#app')._vnode.component.proxy.openProUpsell());
   const panel = page.getByTestId('pro-panel');
   await expect(panel).toBeVisible();
@@ -135,22 +137,23 @@ test('billing off: Stats and the Pro panel offer the beta, never the trial or ch
   await ctx.close();
 });
 
-test('billing off: pricing says "Join the Pro beta", hides Get Pro, and the waitlist stores it as the Pro beta', async ({ browser, request }) => {
+test('billing off: pricing says "Join the beta", hides Get Plus, and the waitlist stores it as the Pro beta', async ({ browser, request }) => {
   test.skip(await billingOf(request) !== false, 'needs a server without Stripe');
   const { ctx, page } = await open(browser, '/pricing');
   const cta = page.locator('.plan.pro .cta');
-  await expect(cta).toHaveText('Join the Pro beta');
+  await expect(cta).toHaveText('Join the beta');
+  await expect(page.locator('#plan option[value=pro]')).toHaveText('Plus beta, early access');
   await expect(page.locator('.plan.pro .badge')).toHaveText('Beta');
   await expect(page.locator('thead th.pro .beta-tag')).toHaveText('Beta');
   await expect(page.locator('#get-pro')).toBeHidden();
-  await expect(page.getByText('Pro is in beta: features may change.')).toHaveCount(1);
+  await expect(page.getByText('Plus and Pro are in beta: features may change.')).toHaveCount(1);
   await cta.click();
   await expect(page.locator('#plan')).toHaveValue('pro');
   await expect(page.locator('#email')).toBeFocused();
   const addr = `beta-pricing-${run}@example.com`;
   await page.locator('#email').fill(addr);
   await page.locator('#waitBtn').click();
-  await expect(page.locator('#done')).toHaveText("You're on the list. We'll email you when your Pro beta trial is ready.");
+  await expect(page.locator('#done')).toHaveText("You're on the list. We'll email you when your trial is ready.");
   const row = (await waitlistRows(request)).find((r) => r.email === addr);
   expect(row && row.plan).toBe('pro');
   expect(row.page).toBe('/pricing');
@@ -174,7 +177,8 @@ test('billing on: the trial and checkout are offered as before, with the Beta ta
   await openShare(page);
   const card = page.getByTestId('share-pro-card');
   await expect(card.getByTestId('share-pro-beta-tag')).toHaveText('Beta');
-  await expect(page.getByTestId('share-try-pro')).toHaveText('Try Pro free for 30 days. No card needed.');
+  await expect(page.getByTestId('share-try-pro')).toHaveText('Try Plus free for 30 days. No card needed.');
+  await expect(page.getByTestId('share-get-pro')).toHaveText('Upgrade');
   await expect(page.getByTestId('share-get-pro')).toBeVisible();
   await expect(card.getByTestId('pro-beta-btn')).toHaveCount(0);
   await page.getByTestId('share-get-pro').click();
@@ -191,10 +195,10 @@ test('billing on: the trial and checkout are offered as before, with the Beta ta
   await ctx.close();
 });
 
-test('billing on: pricing keeps Get Pro and the picker, with the Beta tag', async ({ browser, request }) => {
+test('billing on: pricing keeps Get Plus and the picker, with the Beta tag', async ({ browser, request }) => {
   test.skip(await billingOf(request) !== true, 'needs a server with (fake) Stripe vars');
   const { ctx, page } = await open(browser, '/pricing');
-  await expect(page.locator('.plan.pro .cta')).toHaveText('Get Pro');
+  await expect(page.locator('.plan.pro .cta')).toHaveText('Get Plus');
   await expect(page.locator('.plan.pro .cta')).toBeVisible();
   await expect(page.locator('.plan.pro .badge')).toHaveText('Beta');
   await expect(page.locator('thead th.pro .beta-tag')).toHaveText('Beta');

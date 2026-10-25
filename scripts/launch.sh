@@ -7,7 +7,7 @@
 #
 # Steps (billing stays OFF through the deploy, as the runbook says; the webhook secret goes last):
 #   1. Pre-checks: tools, git (launch-prep, clean, code == the tested commit), live version, secrets
-#   2. Stripe LIVE catalog: product + price pro_yearly ($24/yr; Pro Single is yearly only), reused if
+#   2. Stripe LIVE catalog: product + price plus_yearly ($29/yr, the Plus plan; yearly only), reused if
 #      they exist; the Dashboard checklists (activation, customer portal) for the owner
 #   3. Dry run: bundle, list the bindings, check them
 #   4. Deploy launch-prep to pastecal-sync, then scripts/pro-smoke.sh --expect-deployed (billing off)
@@ -31,7 +31,7 @@ SITE="https://pastecal.com"
 WEBHOOK_URL="$SITE/api/stripe/webhook"
 EXPECTED_LIVE="71aaca32"          # prod-counting-live 30001ea, live before the launch
 # The commit whose code (cloudflare/src, wrangler.jsonc, public/) passed the full test run.
-TESTED_CODE="f1728bc"
+TESTED_CODE="64dd69d"
 LIVE_ACCOUNT="acct_1CN6CpEBwAK7H2Dz"
 EVENTS="checkout.session.completed customer.subscription.created customer.subscription.updated customer.subscription.deleted customer.subscription.trial_will_end invoice.payment_failed charge.refunded charge.dispute.created"
 NODE="${NODE:-$HOME/.nvm/versions/node/v22.18.0/bin/node}"
@@ -152,9 +152,9 @@ if step 1 "Pre-checks" "Tools, git state, the live version (must be $EXPECTED_LI
 fi
 
 # ---------------------------------------------------------------- 2. Stripe live catalog
-if step 2 "Stripe LIVE: product, prices, Dashboard checklists" "Reuses the live price with lookup key pro_yearly if it exists (checks amount and interval), creates whatever is missing. Then the Dashboard-only settings, which you do by hand."; then
+if step 2 "Stripe LIVE: product, prices, Dashboard checklists" "Reuses the live price with lookup key plus_yearly if it exists (checks amount and interval), creates whatever is missing. Then the Dashboard-only settings, which you do by hand."; then
     stripe_auth
-    for spec in "pro_yearly 2400 year Pro yearly"; do
+    for spec in "plus_yearly 2900 year Plus yearly"; do
         set -- $spec; key="$1"; amount="$2"; interval="$3"; nick="$4 $5"
         cur="$(st prices list --lookup-keys="$key" --active=true)" || { st_err; die "listing prices failed"; }
         if [ "$(jq '.data | length' <<<"$cur")" -gt 0 ]; then
@@ -249,7 +249,7 @@ if step 5 "Turn billing on: secrets, then the live webhook" "STRIPE_SECRET_KEY (
         note "secret STRIPE_SECRET_KEY set"
     fi
     say "5b. Price ids (not secret)."
-    for pair in "STRIPE_PRICE_PRO_YEARLY pro_yearly"; do
+    for pair in "STRIPE_PRICE_PRO_YEARLY plus_yearly"; do
         set -- $pair
         p="$(price_id "$2")" || true
         [ -n "$p" ] || { st_err; die "no live price with lookup key $2 (step 2)"; }
@@ -297,6 +297,8 @@ fi
 
 # ---------------------------------------------------------------- 6. post-checks
 if step 6 "Post-checks (read-only)" "GETs against pastecal.com (curl's user agent is a bot, so nothing is counted), the secret names, and the live webhook endpoint."; then
+    # A real browser, desktop and phone, read-only, analytics blocked: the live files must be this tested checkout.
+    if (cd "$ROOT" && node scripts/launch-smoke.mjs --base "https://pastecal.com" --billing any); then ok "browser smoke passed"; else warn "browser smoke reported failures: read them (rollback: step 7)"; fi
     code() { curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$@"; }
     title() { curl -s --max-time 20 "$1" | grep -o '<title>[^<]*' | head -1 | sed 's/<title>//'; }
     for p in / /pricing /contact; do

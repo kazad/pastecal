@@ -2188,7 +2188,7 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 .pc-gopro-btn { margin-left: auto; height: 30px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--pc-link); color: var(--pc-on-accent, #fff); font: 600 13px/1 var(--pc-font); cursor: pointer }
 .pc-gopro-btn:hover { filter: brightness(1.08) }
 .pc-gopro-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 12.5px; line-height: 1.35; color: var(--pc-text-muted) }
-.pc-gopro-list li { display: flex; gap: 6px; align-items: flex-start }
+.pc-gopro-list li { display: flex; gap: 6px; align-items: flex-start; text-wrap: pretty }
 .pc-gopro-list svg { width: 13px; height: 13px; flex: none; margin-top: 2px; color: var(--pc-link) }
 .pc-gopro-list b { color: var(--pc-text); font-weight: 600 }
 /* "Try Pro free": a quiet link-style line under the Go Pro list (saved, never-trialed calendars) */
