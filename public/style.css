@@ -1417,3 +1417,7 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
 .pc-home-recents li { position: relative }
 .pc-home-recents li.has-remove > a { padding-right: 44px }
 .pc-recent-remove { position: absolute; top: 50%; right: 8px; transform: translateY(-50%); color: var(--pc-text-muted) }
+
+.pc-set-copy { margin-top: var(--pc-space-4); padding-top: var(--pc-space-4); border-top: 1px solid var(--pc-line) }
+.pc-set-copy-hint { margin: 0 0 8px; font-size: var(--pc-fs-sm); color: var(--pc-text-2) }
+.pc-view-footer .pc-link { margin-left: 8px; font-weight: var(--pc-fw-semibold); white-space: nowrap }

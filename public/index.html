@@ -607,7 +607,7 @@
                                     <!-- What it copies: the view-only link (the @link or short link when it has one). -->
                                     <div v-else-if="shareViewURL()" class="text-color-1 text-xs truncate max-w-[150px] md:max-w-xs" data-testid="share-pill-url">
                                         <span v-text="shortLink(shareViewURL()).replace(/^(pastecal\.com\/)(.*)$/, '$1')"></span><span class="font-bold text-color-2" v-text="shortLink(shareViewURL()).replace(/^pastecal\.com\//, '')"></span>
-                                        <span class="pc-pill-tag">view only</span>
+                                        <span class="pc-pill-tag" title="The link to share for viewing. This page is the edit page.">view link</span>
                                     </div>
                                     <div v-else class="text-color-1 text-xs truncate max-w-[150px] md:max-w-xs" data-testid="share-pill-url">
                                         pastecal.com/<span class="font-bold text-color-2" v-text="calendar.id"></span>
@@ -736,8 +736,11 @@
                  own. Pro trims it to "Made with pastecal · Report" (removing it is a Teams feature, and a page
                  with no sign of who hosts it is a phishing kit's dream: it says where it lives and how to report
                  it). Inside someone's page: a tiny corner credit. An edit link: quiet links, no pitch. -->
-            <p v-if="pageFooter === 'viewer'" class="pc-view-footer" data-testid="view-footer" v-cloak><img src="/img/pastecal.logo.svg" alt="" width="16" height="16" class="dark:brightness-150"><span>Made with pastecal: free shared calendars, no login required.</span><a href="/?from=view-footer" data-from="view-footer" target="_top" data-testid="view-footer-cta">Make your own →</a></p>
-            <p v-else-if="pageFooter === 'pro'" class="pc-hosted-note" data-testid="hosted-note" v-cloak>Made with <a href="/" target="_blank" rel="noopener" data-testid="made-with">pastecal</a> · <a :href="reportUrl" target="_blank" rel="noopener" data-testid="report-link">Report</a></p>
+            <!-- Under a calendar you didn't make: one quiet line. "Make one like this" starts a new calendar with
+                 the same colors and type names, no events (makeOwnCopy 'style'). -->
+            <p v-if="showMakeOwn" class="pc-view-footer" data-testid="view-footer" v-cloak><img src="/img/pastecal.logo.svg" alt="" width="16" height="16" class="dark:brightness-150"><span>Made with pastecal. Free, no sign-up.</span><button type="button" class="pc-link" @click="makeOwnCopy('style', pageFooter === 'viewer' ? 'view-footer' : 'edit-footer')" data-testid="view-footer-cta">Make one like this →</button></p>
+            <p v-if="pageFooter === 'viewer' && !showMakeOwn" class="pc-view-footer" data-testid="view-footer-plain" v-cloak><img src="/img/pastecal.logo.svg" alt="" width="16" height="16" class="dark:brightness-150"><span>Made with pastecal. Free, no sign-up.</span></p>
+            <p v-if="pageFooter === 'pro'" class="pc-hosted-note" data-testid="hosted-note" v-cloak>Made with <a href="/" target="_blank" rel="noopener" data-testid="made-with">pastecal</a> · <a :href="reportUrl" target="_blank" rel="noopener" data-testid="report-link">Report</a></p>
             <a v-else-if="pageFooter === 'embed'" class="pc-embed-credit" href="/?from=view-embed" data-from="view-embed" target="_blank" rel="noopener" data-testid="embed-credit" v-cloak>pastecal</a>
             <nav v-else-if="pageFooter === 'editor'" class="pc-edit-footer" aria-label="pastecal" data-testid="edit-footer" v-cloak><a href="/">pastecal · Simple shared calendars</a><a href="/pricing" data-from="edit-footer">Pricing</a><a href="/help">Help</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></nav>
             <p v-if="isHomepageCalendar" class="pc-draft-note" v-cloak>
@@ -1167,6 +1170,12 @@
                                         </select>
                                     </div>
                                 </div>
+                            </div>
+                            <!-- A copy of this calendar (events, colors, type names) as a new draft: next season, or your own. -->
+                            <div v-if="isExisting" class="pc-set-field pc-set-copy" data-testid="settings-copy">
+                                <span class="pc-set-label">Make a copy</span>
+                                <p class="pc-set-copy-hint">A new calendar with these events and colors, for next season or your own use. This one stays as it is.</p>
+                                <button type="button" class="pc-btn pc-btn--sm" @click="makeOwnCopy('full', 'settings')" data-testid="settings-copy-btn">Make a copy</button>
                             </div>
 
                                     <!-- 

@@ -210,7 +210,7 @@ export const ICSService = {
         return assigned;
     },
 
-    createEventBlock(event, dtstamp, overriddenSlots, occurrence) {
+    createEventBlock(event, dtstamp, overriddenSlots, occurrence, viewUrl = '') {
         if (occurrence === undefined && event.recurrenceID) {
             const stamp = this.occurrenceOriginal(event);
             const shape = { allDay: !!event.isAllDay, anchorMs: NaN };
@@ -242,8 +242,12 @@ export const ICSService = {
             `DTSTART${dateParam}:${start}`,
             `DTEND${dateParam}:${end}`,
             `SUMMARY:${this.escapeText(event.title)}`,
-            `DESCRIPTION:${this.escapeText(event.description)}`
+            // The calendar's VIEW link (never the edit link: a calendar app shows notes to anyone who sees
+            // the event), after the event's own notes. Everyone following in Google/Apple/Outlook sees where
+            // the calendar lives, and where to make their own.
+            `DESCRIPTION:${this.escapeText([event.description || '', viewUrl ? `Calendar: ${viewUrl}` : ''].filter(Boolean).join('\n\n'))}`
         ];
+        if (viewUrl) eventLines.push(`URL:${viewUrl}`);
 
         if (isOccurrence) {
             eventLines.push(`RECURRENCE-ID${occurrence.allDay ? ';VALUE=DATE' : ''}:${occurrence.slot}`);
@@ -261,7 +265,8 @@ export const ICSService = {
         return eventLines.map(line => this.foldLine(line)).join('\r\n');
     },
 
-    generateICS(calendarData, id) {
+    // opts.viewUrl: the calendar's view-only link, added to every event (createEventBlock).
+    generateICS(calendarData, id, opts = {}) {
         const raw = calendarData?.events;
         const allEvents = Array.isArray(raw)
             ? raw
@@ -279,7 +284,7 @@ export const ICSService = {
 
         const events = renderable.map(event => this.createEventBlock(event, dtstamp,
             event.recurrenceID ? null : overridden.get(event.id),
-            event.recurrenceID ? (occurrences.get(event) || null) : undefined));
+            event.recurrenceID ? (occurrences.get(event) || null) : undefined, opts.viewUrl || ''));
 
         const name = this.escapeText(calendarData?.title || id);
 

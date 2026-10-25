@@ -152,7 +152,13 @@ async function serveFeed(request, env, targetId, actualSlug, fileName = actualSl
     const cal = roomData?.calendar;
     if (!cal || !cal.id) return new Response('Calendar not found', { status: 404 });
 
-    const etag = '"' + await sha1Hex(JSON.stringify(cal.events ?? null)) + '"';
+    // The view link every event carries (ICSService): the calendar's view id, never its edit name.
+    const viewId = cal.options && typeof cal.options.publicViewId === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(cal.options.publicViewId) ? cal.options.publicViewId : '';
+    const at = new URL(request.url);   // https on every real host (a dev server may hand the Worker http)
+    const origin = /^(localhost|127\.0\.0\.1)$/.test(at.hostname) ? at.origin : `https://${at.host}`;
+    const viewUrl = viewId ? `${origin}/view/${viewId}` : '';
+    // "v2": the feed's format changed (event links), so every calendar app refetches once.
+    const etag = '"' + await sha1Hex('v2' + viewUrl + JSON.stringify(cal.events ?? null)) + '"';
     if (request.headers.get('if-none-match') === etag) {
         return new Response(null, {
             status: 304,
@@ -160,7 +166,7 @@ async function serveFeed(request, env, targetId, actualSlug, fileName = actualSl
         });
     }
 
-    const icsText = ICSService.generateICS(cal, actualSlug);
+    const icsText = ICSService.generateICS(cal, actualSlug, { viewUrl });
     return new Response(icsText, {
         status: 200,
         headers: {
