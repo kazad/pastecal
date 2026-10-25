@@ -1188,7 +1188,7 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
    Quick add (components/QuickAddDialog.js): describe it, then check the details
    ========================================================================================= */
 .pc-qa-step { display: flex; align-items: center; justify-content: center; flex: none; width: 20px; height: 20px; border-radius: 50%;
-  background: var(--pc-primary); color: var(--pc-on-primary); font-size: var(--pc-fs-xs); font-weight: var(--pc-fw-bold) }
+  background: var(--pc-soft); color: var(--pc-text-2); font-size: var(--pc-fs-xs); font-weight: var(--pc-fw-bold) }   /* neutral step numbers */
 .pc-qa-examples { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 22px }
 .pc-qa-try { margin-right: 2px; font-size: var(--pc-fs-xs); font-weight: var(--pc-fw-semibold); color: var(--pc-text-muted) }
 /* All day is a switch (.pc-toggle); while on, the times stay (blank, dimmed) so the height holds. */
@@ -1198,7 +1198,7 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
   div.pc-qa-dialog { width: auto; flex: 1 1 auto; min-width: 0; margin: 0 12px; padding: 16px; max-height: calc(100dvh - 24px); overflow-y: auto; overflow-x: hidden }
   .pc-qa-dialog .pc-qa-fields { padding-left: 0 }
   .pc-qa-dialog .pc-qa-date { width: auto; flex: 1 1 0; min-width: 0 }
-  .pc-qa-dialog .pc-qa-time { width: 6.75rem; min-width: 0 }
+  .pc-qa-dialog .pc-qa-time { width: 7.75rem; min-width: 0; padding-right: 6px }   /* "05:00 PM" and its clock icon fit */
 }
 
 /* =========================================================================================
