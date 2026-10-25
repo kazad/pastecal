@@ -557,6 +557,12 @@ const CalendarVueApp = {
         },
 
         /** This browser created the calendar (it's under "Your calendars"). */
+        // "Make one like this" under a calendar this browser didn't make (an invitation, a view link).
+        // Never on your own calendars, never in an embed (it has its own small credit), never while loading.
+        showMakeOwn() {
+            return !this.isLoading && !this.embedded && !this.isMineCalendar && !this.isHomepageCalendar
+                && (this.pageFooter === 'viewer' || this.pageFooter === 'editor');
+        },
         isMineCalendar() {
             const id = String((this.calendar && this.calendar.id) || '').toLowerCase();
             return !!id && (this.recentCalendars || []).some(r => r && r.mine && String(r.id).toLowerCase() === id);
@@ -2501,13 +2507,19 @@ const CalendarVueApp = {
         // the homepage, under a new name, for the visitor to Save & share as their own. Nothing
         // touches the original. A draft they already had with events of their own is kept aside
         // (pastecal_previous_draft) rather than silently replaced.
-        makeOwnCopy() {
+        // Also from Settings ("Make a copy", for next season or your own use), and, as 'style', from the
+        // "Make one like this" line under a calendar you didn't make: same colors and type names, no events.
+        makeOwnCopy(mode = 'full', from = 'locked') {
             const src = JSON.parse(JSON.stringify(this.calendar));
-            const copy = {
+            const o = src.options || {};
+            const copy = mode === 'style'
+                ? { id: Utils.randomID(10), title: 'New Calendar', events: [],
+                    options: { ...(Array.isArray(o.colors) ? { colors: o.colors } : {}), ...(Array.isArray(o.typeLabels) ? { typeLabels: o.typeLabels } : {}) } }
+                : {
                 id: Utils.randomID(10),
                 title: `Copy of ${Calendar.displayTitle ? Calendar.displayTitle(src.title) : (src.title || 'calendar')}`,
                 events: (src.events || []).map((e) => ({ ...e, secret: undefined })),
-                options: { ...(src.options || {}), publicViewId: undefined },
+                options: { ...o, publicViewId: undefined },
             };
             try {
                 const prev = JSON.parse(localStorage.getItem('calendar') || 'null');
@@ -2518,8 +2530,8 @@ const CalendarVueApp = {
                 this.showToast && this.showToast("Couldn't make a copy: this browser blocks saving.", 'error');
                 return;
             }
-            track(a => a.featureUsed && a.featureUsed('locked_copy'));
-            window.location.href = '/';
+            track(a => a.featureUsed && a.featureUsed(from === 'locked' ? 'locked_copy' : `copy_${mode}_${from}`));
+            (window.top || window).location.href = '/?from=' + encodeURIComponent(from);
         },
 
         saveLocalStorage() {

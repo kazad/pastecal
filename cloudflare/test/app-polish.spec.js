@@ -431,3 +431,55 @@ test('your calendars: remove one you opened, never one you made', async ({ brows
   await expect(rows.first()).toContainText('Made here');
   await ctx.close();
 });
+
+// ---- Invited people: "Make one like this" under a calendar you didn't make; "Make a copy" in Settings ----
+async function seedWithView(request) {
+  const id = `test-own-${Date.now()}-${Math.floor(Math.random() * 1e5)}`;
+  const d = new Date(); const at = (day, h) => new Date(d.getFullYear(), d.getMonth(), day, h).toISOString();
+  const events = [{ id: 'e1', title: 'Practice', start: at(10, 17), end: at(10, 18), type: 1 }, { id: 'e2', title: 'Game', start: at(14, 9), end: at(14, 10), type: 2 }];
+  expect((await request.post(`/cal/${id}`, { data: { title: 'Tigers', options: { typeLabels: ['Practice', 'Game'] }, events } })).status()).toBe(201);
+  const view = await (await request.post('/api/create-view', { data: { sourceCalendarId: id } })).json();
+  return { id, viewId: view.publicViewId };
+}
+
+test('make one like this: from a view link, a new draft with the same type names and no events', async ({ browser, request }) => {
+  const { viewId } = await seedWithView(request);
+  const { ctx, page } = await open(browser, { path: `/view/${viewId}?backend=cf` });
+  const cta = page.getByTestId('view-footer-cta');
+  await expect(cta).toHaveText(/Make one like this/);
+  await cta.click();
+  await page.waitForURL((u) => u.pathname === '/');
+  await page.waitForFunction(() => window.__appMounted && window.scheduleObj, null, { timeout: 20_000 });
+  const draft = await page.evaluate(() => { const vm = document.querySelector('#app')._vnode.component.proxy; return { labels: vm.displayTypeLabels.slice(0, 2), titles: vm.calendar.events.map((e) => e.title) }; });
+  expect(draft.labels).toEqual(['Practice', 'Game']);
+  expect(draft.titles).not.toContain('Practice');
+  expect(draft.titles).not.toContain('Game');
+  await ctx.close();
+});
+
+test('the line shows on an edit link you were sent, not on a calendar you made', async ({ browser, request }) => {
+  const { id } = await seedWithView(request);
+  const sent = await open(browser, { path: `/${id}?backend=cf` });
+  await expect(sent.page.getByTestId('view-footer-cta')).toBeVisible();
+  await sent.ctx.close();
+  const mine = await open(browser, { path: `/${id}?backend=cf` });
+  await mine.page.evaluate((cid) => localStorage.setItem('myCalendars', JSON.stringify([{ id: cid, title: 'Tigers', lastVisited: new Date().toISOString() }])), id);
+  await mine.page.reload();
+  await mine.page.waitForFunction(() => window.__appMounted && window.scheduleObj, null, { timeout: 20_000 });
+  await mine.page.waitForTimeout(800);
+  await expect(mine.page.getByTestId('view-footer-cta')).toHaveCount(0);
+  await mine.ctx.close();
+});
+
+test('make a copy (Settings): a new draft with the same events, named "Copy of …"', async ({ browser, request }) => {
+  const { id } = await seedWithView(request);
+  const { ctx, page } = await open(browser, { path: `/${id}?backend=cf` });
+  await page.getByTestId('settings-button-desktop').click();
+  await page.getByTestId('settings-copy-btn').click();
+  await page.waitForURL((u) => u.pathname === '/');
+  await page.waitForFunction(() => window.__appMounted && window.scheduleObj, null, { timeout: 20_000 });
+  const draft = await page.evaluate(() => { const vm = document.querySelector('#app')._vnode.component.proxy; return { title: vm.calendar.title, titles: vm.calendar.events.map((e) => e.title).sort() }; });
+  expect(draft.title).toBe('Copy of Tigers');
+  expect(draft.titles).toEqual(['Game', 'Practice']);
+  await ctx.close();
+});
