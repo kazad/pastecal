@@ -70,11 +70,9 @@ test('view link: View only badge, Add to my calendar with the Share subscribe UR
 
   const footer = page.getByTestId('view-footer');
   await expect(footer).toBeVisible();
-  await expect(footer).toContainText('Made with pastecal: free shared calendars, no login required.');
-  const cta = page.getByTestId('view-footer-cta');
-  await expect(cta).toHaveText('Make your own →');
-  await expect(cta).toHaveAttribute('href', '/?from=view-footer');
-  await expect(cta).toHaveAttribute('data-from', 'view-footer');
+  await expect(footer).toContainText('Made with pastecal. Free, no sign-up.');
+  // "Make one like this" (Oct 25 2026): a new draft with this calendar's colors and type names (app-polish.spec.js).
+  await expect(page.getByTestId('view-footer-cta')).toHaveText('Make one like this →');
   await expect(page.getByTestId('edit-footer')).toHaveCount(0);
 
   // Notes stay pinned beside the calendar.
@@ -101,7 +99,7 @@ test('phone: the view link shows the badge and Add to my calendar in its header,
   const m = await page.getByTestId('view-add-to-cal-menu').boundingBox();
   expect(m && m.x >= 0 && m.x + m.width <= 390, 'the menu fits the screen').toBe(true);
   await expect(visible(page, 'make-own-mobile')).toHaveAttribute('data-from', 'view-header');
-  await expect(page.getByTestId('view-footer-cta')).toHaveAttribute('href', '/?from=view-footer');
+  await expect(page.getByTestId('view-footer-cta')).toHaveText('Make one like this →');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'no sideways scroll').toBe(true);
   await ctx.close();
 });
@@ -114,14 +112,16 @@ test('embed: a tiny corner credit instead of the footer line', async ({ browser,
   await ctx.close();
 });
 
-test('edit link: the footer is quiet links only, with no Make your own', async ({ browser, request }) => {
+// Was "no pitch on an edit link". Since Oct 25 2026, an edit link someone sent you gets the same one line
+// ("Make one like this"), above the quiet links; a calendar this browser made never does (app-polish.spec.js).
+test('edit link someone sent you: one "Make one like this" line above the quiet links', async ({ browser, request }) => {
   const { id } = await seed(request);
   const { ctx, page } = await open(browser, `/${id}?backend=cf`);
   const footer = page.getByTestId('edit-footer');
   await expect(footer).toBeVisible();
   await expect(footer.getByRole('link')).toHaveText(['pastecal · Simple shared calendars', 'Pricing', 'Help', 'Privacy', 'Terms']);
   await expect(page.getByText('Make your own')).toHaveCount(0);
-  await expect(page.getByTestId('view-footer')).toHaveCount(0);
+  await expect(page.getByTestId('view-footer-cta')).toHaveText('Make one like this →');
   await expect(page.getByTestId('view-only-badge')).toHaveCount(0);
   await ctx.close();
 });
