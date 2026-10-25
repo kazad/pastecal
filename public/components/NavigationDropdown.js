@@ -317,7 +317,7 @@ const NavigationDropdown = {
                     return;
                 }
                 st.confirmDelete = false;
-                if (r.status === 409) st.error = 'You still have Pro on a calendar. Cancel it in Manage billing; you can delete your account once it has ended.';
+                if (r.status === 409) st.error = 'You still have a paid plan on a calendar. Cancel it in Manage billing; you can delete your account once it has ended.';
                 else if (r.status === 401) await AccountMenu.load(true);
                 else st.error = r.status === 0 ? NAV_NETWORK_ERROR : 'Something went wrong. Try again in a minute.';
             } finally { st.busy = false; }
