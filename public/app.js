@@ -344,7 +344,6 @@ const CalendarVueApp = {
             DEFAULT_COLORS: DEFAULT_COLORS,
             // What an unnamed category is called in the editor, the quick-add swatches,
             // Settings and the filter dots, while its color is still the default.
-            DEFAULT_COLOR_NAMES: ['Blue', 'Pink', 'Coral', 'Green', 'Orange', 'Sky', 'Gray', 'Charcoal'],
             EXTRA_COLORS: EXTRA_COLORS,
             MAX_COLORS: MAX_COLORS,
             colorFilters: COLORS.map(() => true), // allow all color types by default
@@ -479,12 +478,12 @@ const CalendarVueApp = {
             return Calendar.displayTitle(this.calendar.title);
         },
 
-        // Category names as shown: a label someone set, else the color's name (see
+        // Category names as shown: a label someone set, else "Type N" (see
         // typeLabelFor). Stored labels are never rewritten.
         displayTypeLabels() {
             return this.COLORS.map((_, i) => this.typeLabelFor(i));
         },
-        // Which of those a calendar actually named ("Practice"); the rest are a color's own name.
+        // Which of those a calendar actually named ("Practice"); the rest show as "Type N".
         namedTypes() {
             return this.COLORS.map((_, i) => this.hasTypeLabel(i));
         },
@@ -2935,7 +2934,6 @@ const CalendarVueApp = {
             });
         },
 
-        // Clicking the name selects all of it, so typing replaces the random name instead of appending.
         // The desktop name box is as wide as the name, so its dashed underline ends where the name does
         // and the pencil sits right after it. Measured, because letters differ in width.
         fitSlugBox() {
@@ -2948,9 +2946,18 @@ const CalendarVueApp = {
                 el.style.width = Math.ceil(Math.max(w, 60) + 4) + 'px';
             } catch (err) { /* layout nicety only */ }
         },
+        // Clicking the name selects all of it, so typing replaces the random name instead of appending.
+        // At once, not on a timer: a fast typist beat the timer and appended. A click focuses on mouse
+        // down, and the mouse up would collapse the selection, so that one mouse up is cancelled.
         selectSlug(e) {
             const el = e && e.target;
-            if (el && el.select) setTimeout(() => { try { el.select(); } catch (err) { /* */ } }, 0);
+            if (!el || !el.setSelectionRange) return;
+            try { el.setSelectionRange(0, el.value.length); } catch (err) { /* */ }
+            this._slugKeepSelection = true;
+        },
+        keepSlugSelection(e) {
+            if (this._slugKeepSelection && e.type === 'mouseup') e.preventDefault();
+            this._slugKeepSelection = false;   // one mouse up, or a blur, ends it
         },
         handleSlugInput() {
             this.userHasEditedSlug = true;
@@ -3055,7 +3062,7 @@ const CalendarVueApp = {
 
         getTypes() {
             // First check if we have custom labels in calendar.options.typeLabels
-            // An untouched "Type N" label shows as its color's name (typeLabelFor).
+            // An untouched label shows as "Type N" (typeLabelFor).
             return Array(this.COLORS.length).fill().map((_, i) => {
                 let id = i + 1;
                 // Syncfusion renders item text as HTML, and labels are set by anyone with the edit link.
@@ -3112,7 +3119,7 @@ const CalendarVueApp = {
         // literally "Type 1".."Type 8" -- a slot index with no referent, which read aloud
         // sounds like information while conveying none. Fall back to the dot's own color
         // instead, which is at least something the user can see on screen.
-        // A color the calendar has named ("Practice"), not just the color's own name.
+        // A color the calendar has named ("Practice"), not just "Type N".
         hasTypeLabel(index) {
             const label = this.calendar?.options?.typeLabels?.[index];
             return !!label && !/^Type \d+$/.test(label);
@@ -3121,7 +3128,7 @@ const CalendarVueApp = {
             const custom = this.calendar?.options?.typeLabels;
             const label = custom && custom[index];
             if (label && !/^Type \d+$/.test(label)) return label;
-            return this.colorNameFor(index);
+            return `Type ${index + 1}`;   // not the color's name: "Sky" told people nothing
         },
 
         // The Week/Day corner toggle for the hours before the start hour (see renderCell).
@@ -3136,35 +3143,6 @@ const CalendarVueApp = {
                 : { text: 'Earlier', title: `Show the hours before ${at}` };
         },
 
-        // Nearest plain-English name for a palette color, so a dot has a spoken label
-        // even when its type was never given one.
-        colorNameFor(index) {
-            // The default palette has fixed names (the hue math below would call #d0442f
-            // "Red" next to #e3165b's "Pink", and #27282f "Black"). Only while the slot
-            // still has its default color -- a recolored slot is named by its new color.
-            const color = (this.COLORS[index] || '').toLowerCase();
-            const fixed = this.DEFAULT_COLOR_NAMES[index];
-            if (fixed && color === (this.DEFAULT_COLORS[index] || '').toLowerCase()) return fixed;
-            const hex = color.replace('#', '');
-            if (hex.length !== 6) return `Type ${index + 1}`;
-            const r = parseInt(hex.slice(0, 2), 16);
-            const g = parseInt(hex.slice(2, 4), 16);
-            const b = parseInt(hex.slice(4, 6), 16);
-            const max = Math.max(r, g, b), min = Math.min(r, g, b);
-            if (max - min < 30) return max > 160 ? 'Light gray' : (max < 80 ? 'Black' : 'Gray');
-
-            let hue;
-            const d = max - min;
-            if (max === r) hue = ((g - b) / d + (g < b ? 6 : 0)) * 60;
-            else if (max === g) hue = ((b - r) / d + 2) * 60;
-            else hue = ((r - g) / d + 4) * 60;
-
-            const names = [
-                [15, 'Red'], [45, 'Orange'], [70, 'Yellow'], [160, 'Green'],
-                [200, 'Teal'], [250, 'Blue'], [290, 'Purple'], [340, 'Pink'], [360, 'Red'],
-            ];
-            return (names.find(([limit]) => hue <= limit) || [0, 'Red'])[1];
-        },
 
         updateCurrentViewURL() {
             const currentView = scheduleObj.currentView;

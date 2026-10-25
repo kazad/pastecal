@@ -101,12 +101,12 @@ test('quick add with no named colors keeps the plain Color swatches', async ({ b
   await ctx.close();
 });
 
-test('the full event editor\'s type dropdown already shows the names', async ({ browser }) => {
+test('the full event editor\'s type dropdown shows the names, and "Type N" for unnamed ones', async ({ browser }) => {
   const { ctx, page } = await open(browser);
   await page.evaluate(`${VM}.updateTypeLabel(1, 'Practice')`);
   const types = await page.evaluate(`${VM}.getTypes().map(t => t.text)`);
   expect(types[0]).toBe('Practice');
-  expect(types[1]).not.toMatch(/^Type \d+$/);    // unnamed: the color's own name, never "Type 2"
+  expect(types[1]).toBe('Type 2');    // unnamed: "Type 2", not a color name like "Sky" (owner's call, Oct 25 2026)
   await ctx.close();
 });
 
@@ -343,6 +343,11 @@ for (const viewport of [DESKTOP, PHONE]) {
     await expect(input).toBeFocused();
     await page.keyboard.type('soccer-fall');
     await expect(input).toHaveValue('soccer-fall');
+    // Clicking the name itself does the same (the mouse up must not undo the selection).
+    await page.locator('body').click({ position: { x: 5, y: 600 } });
+    await input.click();
+    await page.keyboard.type('soccer-spring');
+    await expect(input).toHaveValue('soccer-spring');
     if (!phone) {   // the box ends where the name does, so the pencil sits right after it
       const box = await input.boundingBox(), pen = await page.getByTestId('slug-pencil').boundingBox();
       expect(pen.x - (box.x + box.width)).toBeLessThan(8);

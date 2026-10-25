@@ -428,7 +428,7 @@
             <div v-show="isNewCalendar"
                 class="pc-m-claim flex items-center bg-1 border border-color-default rounded-lg p-2">
                 <span class="text-color-1 text-sm pl-1 pr-1 font-medium" id="url-prefix-mobile">pastecal.com/</span>
-                <input id="slug-m" type="text" v-model="calendar.id" @input="handleSlugInput" @keyup.enter="create" @focus="selectSlug"
+                <input id="slug-m" type="text" v-model="calendar.id" @input="handleSlugInput" @keyup.enter="create" @focus="selectSlug" @mouseup="keepSlugSelection" @blur="keepSlugSelection"
                     class="pc-slug-edit flex-1 bg-transparent border-none focus:ring-0 p-1 text-sm font-bold text-color-2 min-w-0"
                     placeholder="your-link" aria-label="Calendar link name (you can change it)" aria-describedby="url-prefix-mobile">
                 <label for="slug-m" class="pc-slug-pencil" title="Change the name" data-testid="slug-pencil-mobile"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></label>
@@ -648,7 +648,7 @@
                                     <input id="slug"
                                         class="pc-slug-edit bg-transparent border-none focus:ring-0 p-0 text-sm font-bold text-color-2 focus:outline-none placeholder:text-theme-muted min-w-0"
                                         type="text" :disabled="isExisting" v-model="calendar.id" @keyup.enter="create"
-                                        @input="handleSlugInput" @focus="selectSlug" placeholder="your-name"
+                                        @input="handleSlugInput" @focus="selectSlug" @mouseup="keepSlugSelection" @blur="keepSlugSelection" placeholder="your-name"
                                         aria-label="Calendar link name (you can change it)">
                                     <!-- The name looked like plain text: the pencil and the dashed underline say it can be typed over. -->
                                     <label for="slug" class="pc-slug-pencil" title="Change the name" data-testid="slug-pencil"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></label>
@@ -1114,7 +1114,7 @@
                                                 @change="updateEventColor(index, $event.target.value)"
                                                 :aria-label="'Color picker for ' + displayTypeLabels[index]">
                                         </span>
-                                        <!-- An untouched "Type N" shows empty, with the color's name as
+                                        <!-- An untouched "Type N" shows empty, with "Type N" as
                                              the placeholder; clearing a label goes back to that. -->
                                         <input :value="/^Type \d+$/.test(label) ? '' : label" @input="updateTypeLabel(index+1, $event.target.value)"
                                             :aria-label="'Label for type ' + (index + 1)"
