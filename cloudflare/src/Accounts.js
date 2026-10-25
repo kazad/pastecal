@@ -65,6 +65,10 @@
  *                                                   mergeProSettings in CalendarRoom.js; 400 {error:'bad-settings', message})
  *     Owner routes answer 401 signed-out, 400 bad-calendar, 404 no-calendar, 409 not-locked, 403 not-owner;
  *     editor-links also 400 bad-label, 409 too-many-links (20 live), 404 no-link.
+ *   GET  /api/pro/config                         -> {billing, unlimited}: billing is true only when Stripe is configured (keys
+ *                                                   and the Pro yearly price); unlimited also needs STRIPE_PRICE_UNLIMITED_YEARLY.
+ *                                                   False: the site offers "Join the Pro beta" (the waitlist) instead of
+ *                                                   the trial and checkout. Public, cached 60 seconds.
  *   GET  /api/pro/status?calendar=<id>           -> {locked, pro, isOwner, paused, lapsedOwner, trialUsed}, plus unlimited:true
  *                                                   when the signed-in person has an active Pro Unlimited; the owner also
  *                                                   gets lapsedMode, plan:'single'|'unlimited', and trial:{endsAt, hasCard} while trialing; the
@@ -693,6 +697,14 @@ function formatDay(t) {
 
 // Does this subscription's payer have a card Stripe will charge (the subscription's own, or the customer's
 // default)? null when Stripe can't say. Used so trial emails never promise "nothing is charged" falsely.
+// Pro can be bought here: Stripe is configured with the yearly price (Pro Single is yearly only; a monthly
+// price, if set, is still honored for old links). Off, every Pro offer is "Join the Pro beta"
+// (GET /api/pro/config), and checkout and the trial answer 503 billing-not-configured as before.
+function billingOn(env, host) {
+    const cfg = stripeConfig(env, host);
+    return !!(cfg && cfg.prices.year);
+}
+
 async function payerHasCard(cfg, s) {
     if (s.hasPaymentMethod) return true;
     if (!cfg || !s.customer) return false;
@@ -726,7 +738,7 @@ async function sendTrialReminder(env, acc, cfg, s) {
             return await sendEmail(env, user.email, `Your Pro trial ends ${day}`, text, null, 'trial-reminder');
         }
         const text = `Your Pro trial for ${name} ends ${day}.\n\n`
-            + `Keep Pro: $24 a year or $2.99 a month, and nothing changes.\n${keep}\n\n`
+            + `Keep Pro: $24 a year, and nothing changes.\n${keep}\n\n`
             + `If you do nothing, nothing is charged. On ${day} Pro ends and the calendar becomes read-only: everyone can still view it and its calendar feed keeps working, but nobody can edit it. `
             + `You can then open it to everyone (a free calendar, editable by anyone with the link) or keep Pro, from the calendar's Share panel.\n\n`
             + `Questions? Write to support@pastecal.com.\n`;
@@ -774,6 +786,12 @@ async function route(request, env, url, path) {
         const me = s && await accounts(env).me(s.userId);
         if (!me) return json({ error: 'signed-out' }, 401);
         return json(me, 200, Date.now() - s.renewedAt < SESSION_RENEW_AFTER ? { 'Set-Cookie': sessionCookie(token, COOKIE_MAX_AGE) } : {});
+    }
+    if (path === '/api/pro/config') {
+        if (m !== 'GET') return json({ error: 'method' }, 405);
+        const cfg = stripeConfig(env, url.hostname);
+        return json({ billing: billingOn(env, url.hostname), unlimited: !!(cfg && cfg.prices.year && cfg.unlimitedPrices.year) },
+            200, { 'Cache-Control': 'public, max-age=60' });
     }
     if (path === '/api/pro/status') {
         if (m !== 'GET') return json({ error: 'method' }, 405);
@@ -1372,7 +1390,7 @@ async function applySubscription(env, acc, cfg, s) {
 }
 
 // ---- Pro Unlimited ------------------------------------------------------------------------------
-// One subscription per account ($79/year or $8/month) that pays for every calendar its owner locks
+// One subscription per account ($48/year or $5/month) that pays for every calendar its owner locks
 // under it. The Stripe subscription names no calendar (metadata.plan='unlimited', and lock_calendar
 // when it was bought from a calendar's Share panel); unlimited_locks records which calendars it covers.
 //   - While it is active, POST /api/pro/lock {calendarId} locks any calendar the owner can lock (not

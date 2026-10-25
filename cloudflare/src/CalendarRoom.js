@@ -209,7 +209,9 @@ export class CalendarRoom extends DurableObject {
             try { this.sql.exec(`ALTER TABLE editor_links ADD COLUMN suspended_for TEXT`); } catch (_) {}
             this.sql.exec(`CREATE TABLE IF NOT EXISTS pro_settings (k INTEGER PRIMARY KEY CHECK (k = 1), owner TEXT, data TEXT, updated_at INTEGER)`);
             this.sql.exec(`CREATE TABLE IF NOT EXISTS lapse (k INTEGER PRIMARY KEY CHECK (k = 1), owner TEXT NOT NULL, mode TEXT NOT NULL, lapsed_at INTEGER)`);
-            initInsight(this.sql);       // stats + restore (RoomInsight.js)
+            // Stats + restore tables (RoomInsight.js): additive only. If they can't be made, the calendar
+            // still opens; it just isn't counted (countHit is skipped while statsReady is false).
+            try { initInsight(this.sql); this.statsReady = true; } catch (e) { this.statsReady = false; console.error('[stats] init failed:', e && e.message); }
             this.load();
         });
     }
@@ -736,7 +738,7 @@ export class CalendarRoom extends DurableObject {
             if (url.hostname !== 'internal' || isViewOnly) return new Response('not found', { status: 404 });
             return insightRoute(this, suffix, request);
         }
-        if (request.headers.get('X-PC-Hit')) countHit(this, request).catch(() => { /* stats never fail a request */ });
+        if (this.statsReady && request.headers.get('X-PC-Hit')) countHit(this, request).catch((e) => console.error('[stats] count failed:', e && e.message));   // never awaited: stats never fail or delay a request
         if (LOCK_ROUTES.has(suffix)) {
             // Only Worker code calls these (stub.fetch('http://internal/...')). Public requests are
             // forwarded with their real host, and the Worker's allowlist never forwards these

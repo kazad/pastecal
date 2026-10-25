@@ -56,6 +56,9 @@ try {
     for (const c of [c1, c2, c3, c4]) await createCalendar(c);
     const ann = await signIn(`ann-unl-${run}@example.com`);
 
+    // --- With both Unlimited prices set, the site may sell it (/api/pro/config).
+    assert.deepEqual(await (await fetch(BASE + '/api/pro/config')).json(), { billing: true, unlimited: true });
+
     // --- Checkout: plan + interval; bought from c1, which it locks once active.
     assert.equal((await post('/api/pro/checkout', { plan: 'teams', interval: 'year' }, ann.cookie)).status, 400, 'unknown plan');
     let r = await post('/api/pro/checkout', { plan: 'unlimited', interval: 'year', calendarId: c1 }, ann.cookie);

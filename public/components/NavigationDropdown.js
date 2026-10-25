@@ -175,7 +175,7 @@ const NavigationDropdown = {
                     </div>
                     <p v-if="proCalendars.length === 0" class="pc-acct-muted pc-acct-line">No Pro calendars right now.</p>
                     <p v-if="acct.me.plan === 'unlimited'" class="pc-acct-muted pc-acct-line" data-testid="account-unlimited-hint">To lock another calendar, open it and choose Share.</p>
-                    <a v-else href="/pricing#get-pro" data-from="account-menu" class="pc-acct-link pc-acct-line" data-testid="account-get-pro">{{ proCalendars.length ? 'Get Pro for another calendar' : 'Get Pro for a calendar' }}</a>
+                    <a v-else href="/pricing#get-pro" data-from="account-menu" class="pc-acct-link pc-acct-line" data-testid="account-get-pro">{{ billing === false ? 'Join the Pro beta' : proCalendars.length ? 'Get Pro for another calendar' : 'Get Pro for a calendar' }}</a>
                     <div class="pc-acct-actions">
                         <button type="button" class="pc-acct-btn" @click="portal" :disabled="acct.busy" data-testid="account-billing">Manage billing</button>
                         <button type="button" class="pc-acct-link" @click="signOut" :disabled="acct.busy" data-testid="account-signout">Sign out</button>
@@ -211,8 +211,11 @@ const NavigationDropdown = {
     `,
     props: ['recentCalendars', 'onDraft'],
     emits: ['go-homepage', 'start-over', 'toggle-pin', 'remove-recent', 'open-stats', 'open-help'],
-    data() { return { acct: AccountMenu.state }; },
-    mounted() { AccountMenu.load(); },     // never blocks opening: the section shows its own loading line
+    data() { return { acct: AccountMenu.state, billing: null }; },   // billing: /api/pro/config (Pro.js ProBilling)
+    mounted() {
+        AccountMenu.load();
+        if (typeof ProBilling !== 'undefined') ProBilling.load().then((b) => { this.billing = b; });
+    },     // never blocks opening: the section shows its own loading line
     computed: {
         // The plan, at the top of the section: "Pro Unlimited · renews Oct 24, 2027", "Pro Single", or just the account.
         planLabel() {

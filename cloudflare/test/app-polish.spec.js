@@ -44,40 +44,19 @@ async function openQuickAdd(page) {
   await expect(page.locator('textarea[aria-label="Event description"]')).toBeVisible();
 }
 
-// ---- 1. The shortcut chip ----
+// ---- 1. The shortcut lives in the tooltip; the button stays plain ----
 
 for (const [platform, want] of [['MacIntel', '⌘E'], ['Win32', 'Ctrl E']]) {
-  test(`"+ Add event" shows ${want} on ${platform}`, async ({ browser }) => {
+  test(`"+ Add event" names ${want} in its tooltip on ${platform}`, async ({ browser }) => {
     const { ctx, page } = await open(browser, { platform });
-    const chip = page.getByTestId('desktop-add-event-button').getByTestId('add-event-shortcut');
-    await expect(chip).toBeVisible();
-    await expect(chip).toHaveText(want);
-    await expect(chip).toHaveAttribute('aria-hidden', 'true');
-    // inside the button, at its right edge
-    const btn = await page.getByTestId('desktop-add-event-button').locator('.pc-add-event').boundingBox();
-    const box = await chip.boundingBox();
-    expect(box.x + box.width).toBeLessThanOrEqual(btn.x + btn.width);
-    expect(btn.x + btn.width - (box.x + box.width)).toBeLessThan(20);
-    // and the shortcut it names works
+    const btn = page.getByTestId('desktop-add-event-button');
+    await expect(btn).toHaveAttribute('title', `Add event (${want})`);
+    await expect(btn).toHaveText(/^\s*\+\s*Add event\s*$/);
     await page.keyboard.press(platform === 'MacIntel' ? 'Meta+e' : 'Control+e');
     await expect(page.locator('textarea[aria-label="Event description"]')).toBeVisible();
     await ctx.close();
   });
 }
-
-test('narrow desktop (1000px): no chip, so "+ Add event" stays clear of the title', async ({ browser }) => {
-  const { ctx, page } = await open(browser, { viewport: { width: 1000, height: 800 } });
-  await expect(page.getByTestId('desktop-add-event-button')).toBeVisible();
-  await expect(page.getByTestId('desktop-add-event-button').getByTestId('add-event-shortcut')).toBeHidden();
-  await ctx.close();
-});
-
-test('phone: no shortcut chip', async ({ browser }) => {
-  const { ctx, page } = await open(browser, { viewport: PHONE });
-  await expect(page.getByRole('button', { name: 'Add event' }).first()).toBeVisible();   // the phone's own Add button
-  for (const chip of await page.getByTestId('add-event-shortcut').all()) await expect(chip).toBeHidden();
-  await ctx.close();
-});
 
 // ---- 2. Named colors in quick add ----
 

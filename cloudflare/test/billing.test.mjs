@@ -66,6 +66,11 @@ try {
     r = await fetch(NOKEYS + '/api/stripe/webhook', { method: 'POST', body: '{}', headers: { 'Stripe-Signature': signStripe(WHSEC, '{}') } });
     assert.equal(r.status, 503);
     step('without Stripe keys, checkout, portal and the webhook answer 503 billing-not-configured');
+    // /api/pro/config tells the site which Pro offer to show: the trial and checkout, or "Join the Pro beta".
+    assert.deepEqual(await (await fetch(NOKEYS + '/api/pro/config')).json(), { billing: false, unlimited: false });
+    assert.deepEqual(await (await fetch(BASE + '/api/pro/config')).json(), { billing: true, unlimited: false });
+    assert.equal((await post(BASE, '/api/pro/config', {}, nk.cookie)).status, 405);
+    step('/api/pro/config: billing true with Stripe keys and the yearly price, false without');
 
     // --- Checkout
     const ann = await signIn(BASE, `ann-${run}@example.com`);
@@ -403,6 +408,7 @@ try {
     // only the TESTKEY instance below shows the refusal). And a test key outside dev mode turns billing off.
     r = await fetch(TESTKEY + '/api/stripe/webhook', { method: 'POST', body: '{}', headers: { 'Stripe-Signature': signStripe(WHSEC, '{}') } });
     assert.equal(r.status, 503); assert.deepEqual(await r.json(), { error: 'billing-not-configured' });
+    assert.deepEqual(await (await fetch(TESTKEY + '/api/pro/config')).json(), { billing: false, unlimited: false });
     step('a test-mode Stripe key without dev mode: billing answers 503 billing-not-configured');
 } finally {
     fake.close();

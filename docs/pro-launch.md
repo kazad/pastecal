@@ -1,10 +1,60 @@
 # pastecal Pro: launch runbook
 
-**Run order (not the section order):** a → b → c1–c4 → e1–e3 (deploy, then smoke test with billing off) → d1–d4 (turn billing on) → the second smoke test in e3 → f → Test inbox (optional). Section g is for emergencies.
+## Launch order (final, 2026-10-24)
 
-Every command fits on one line and is safe to paste into zsh. Prices: **$24/year and $2.99/month, no trial.**
+**Ship branch `launch-prep`** from `~/worktrees/pc-launch` (= `pro` + `prod-counting-live` merged, so it is a strict
+superset of what production runs). Production before launch: Worker `pastecal-sync`, version **71aaca32** = branch
+`prod-counting-live` 30001ea (homepage-tour 6e6a63d + per-calendar counting). The code tested is commit **8f86dd1**
+(`TESTED_CODE` in `scripts/launch.sh`); any later change to `cloudflare/src`, `wrangler.jsonc` or `public/` means re-testing.
 
-What ships: Worker `pastecal-sync` from the `pro` branch. It adds:
+**One command walks the whole launch**, each step confirmed (y / s / q), resumable with `--from N`:
+
+```zsh
+~/worktrees/pc-launch/scripts/launch.sh
+```
+
+| # | Step | Section below |
+|---|---|---|
+| 0 | Before the day: Email Sending onboarded (b1-b3); sandbox loop proven (a) | (a), (b) |
+| 1 | Pre-checks: launch-prep, clean, code == 8f86dd1, live version 71aaca32 (or a later secret-only change), no dev/staging secret on production | (e1) |
+| 2 | Stripe LIVE catalog: `pro_yearly` $24/yr + `pro_monthly` $2.99/mo (reused if present, amount/interval checked); Dashboard checklists: activation, payment methods **card only**, portal (privacy/terms URLs, business name pastecal), restricted key | (c1)-(c4) |
+| 3 | `wrangler deploy --dry-run --env=""`, bindings checked | (e1) |
+| 4 | Deploy launch-prep to pastecal-sync (**billing off**), `scripts/pro-smoke.sh --expect-deployed` | (e2), (e3) |
+| 5 | Secrets: `STRIPE_SECRET_KEY` (wrangler hidden prompt), price ids, `CONTACT_NOTIFY_TO` (hidden prompt), then the live webhook endpoint (8 events) and `STRIPE_WEBHOOK_SECRET` **last** (piped from `stripe`, never shown); `pro-smoke.sh --expect-billing` | (d) |
+| 6 | Read-only post-checks: `/`, `/pricing`, `/contact`, `/cal/view/demo`, `/demo.ics`, `/api/pro/status?calendar=demo`, stats-dump 403, secret names, the live webhook endpoint; then the one real purchase + refund | (f) |
+| 7 | Rollback notes; after launch: `git push origin launch-prep:master` (fast-forward on GitHub; keep local master's unpushed 94ad206 on a branch first) | (g) |
+
+**Rollback: `wrangler rollback` to 71aaca32 will be refused.** This deploy creates the `Accounts` Durable Object
+class (migration v4), and Cloudflare blocks rollbacks across a Durable Object migration. Use the kill switches (g1, g2)
+first. To get the pre-launch code back, deploy branch **`rollback-prep`** (`~/worktrees/pc-rollback`, commit 5350971):
+production's code with the Accounts class, binding and v4 migration kept. It dry-runs clean, and a calendar written by
+launch-prep reads byte-identically on it (master-compat in reverse). It does not enforce Pro locks and has no billing
+routes, so turn billing off first.
+
+What the production config adds over live (`git diff prod-counting-live launch-prep -- cloudflare/wrangler.jsonc`):
+`ACCOUNTS` + migration v4, `send_email` `EMAIL` (login@pastecal.com), `COLLECT_LIMITER` (namespace 1002), and the
+`env.staging` block (preview only). Every live binding is kept: CALENDARS, DIRECTORY, WAITLIST, BACKUPS
+(pastecal-backups), EVENTS (pastecal_events), CREATE_LIMITER, ASSETS, FIREBASE_DB_URL, COPY_BACK="*". The top level sets
+no `SITE_URL` on purpose: `Site.js` falls back to https://pastecal.com and treats only a non-production SITE_URL as
+staging. It never sets `BETA_REAL_DATA`, `BILLING_TEST_MODE` or `ACCOUNTS_DEV_MODE`. The beta banner and test-card hint
+(`public/utils/preview.js`) act only on the host preview.pastecal.com.
+
+Tests run on launch-prep (2026-10-24, Node 22, fresh `wrangler dev` per suite, Firebase off, fake Stripe):
+`scripts/test-all.sh`: all 25 runnable suites pass (unit 461 checks; copyback flaked once under load, then passed alone);
+trial, contact, free-stats, history and stats-breakdowns pass; browser suites side-panel, templates, day-click,
+theme-switch, trackers-eu, phone, subscribe-viewer, event-visuals and app-polish: 54/54 pass. master-compat: rooms,
+history, .ics, view links, waitlist and stats written by prod-counting-live's code read identically on launch-prep
+(pro adds `locked/pro/paused/proSettings` with free values to a calendar read).
+
+The trial funnel (first-party, EU included): `./scripts/stats.sh trials -d 7`.
+
+---
+
+Prices: **$24/year and $2.99/month, with a 30-day trial (no card) per calendar** (`POST /api/pro/trial`).
+
+The sections below are the reference for each step; every command fits on one line and is safe to paste into zsh.
+
+What ships: Worker `pastecal-sync` from the `launch-prep` branch (`pro` + production's counting). It adds:
 
 - an `Accounts` Durable Object (migration **v4**)
 - the `send_email` binding `EMAIL` (sender `login@pastecal.com`)
@@ -28,7 +78,7 @@ Section (f) checks that none of them is set.
 
 ```zsh
 alias wr="$HOME/.nvm/versions/node/v22.18.0/bin/node $HOME/worktrees/pastecal-pro/cloudflare/node_modules/.bin/wrangler"
-cd ~/worktrees/pastecal-pro/cloudflare
+cd ~/worktrees/pc-launch/cloudflare
 wr whoami
 stripe whoami
 ```
@@ -72,8 +122,8 @@ Expected (created 2026-10-24 in "pastecal dev"): `price_1UUGsJEPgWTHeJ7WYY9yZ5V4
 
 ```zsh
 UPROD=$(stripe products create --name="pastecal Pro Unlimited" --description="Lock every calendar you run: one subscription per account." 2>/dev/null | jq -er .id) && echo $UPROD
-stripe prices create --product="$UPROD" --currency=usd --unit-amount=7900 "--recurring[interval]=year" --lookup-key=unlimited_yearly --nickname="Pro Unlimited yearly" 2>/dev/null | jq -r .id
-stripe prices create --product="$UPROD" --currency=usd --unit-amount=800 "--recurring[interval]=month" --lookup-key=unlimited_monthly --nickname="Pro Unlimited monthly" 2>/dev/null | jq -r .id
+stripe prices create --product="$UPROD" --currency=usd --unit-amount=4800 "--recurring[interval]=year" --lookup-key=unlimited_yearly --nickname="Pro Unlimited yearly" 2>/dev/null | jq -r .id
+stripe prices create --product="$UPROD" --currency=usd --unit-amount=500 "--recurring[interval]=month" --lookup-key=unlimited_monthly --nickname="Pro Unlimited monthly" 2>/dev/null | jq -r .id
 ```
 
 Every Stripe command in this file was checked with `--help` / `--dry-run`. Add `--dry-run` to any of them to preview the request without sending it. Quote bracket flags (`"--recurring[interval]=year"`), because zsh treats `[...]` as a glob.
@@ -247,14 +297,14 @@ stripe prices create --live --product="$PROD" --currency=usd --unit-amount=2400 
 stripe prices create --live --product="$PROD" --currency=usd --unit-amount=299 "--recurring[interval]=month" --lookup-key=pro_monthly --nickname="Pro monthly" 2>/dev/null | jq -r .id
 ```
 
-Pro Unlimited ($79 a year or $8 a month), its own product:
+Pro Unlimited ($48 a year or $5 a month), its own product:
 
 ```zsh
 stripe prices list --live --lookup-keys=unlimited_yearly --lookup-keys=unlimited_monthly 2>/dev/null | jq -r '.data[] | [.id, .lookup_key, .unit_amount, .recurring.interval] | @tsv'
 # only if empty:
 UPROD=$(stripe products create --live --name="pastecal Pro Unlimited" --description="Lock every calendar you run: one subscription per account." 2>/dev/null | jq -er .id) && echo $UPROD
-stripe prices create --live --product="$UPROD" --currency=usd --unit-amount=7900 "--recurring[interval]=year" --lookup-key=unlimited_yearly --nickname="Pro Unlimited yearly" 2>/dev/null | jq -r .id
-stripe prices create --live --product="$UPROD" --currency=usd --unit-amount=800 "--recurring[interval]=month" --lookup-key=unlimited_monthly --nickname="Pro Unlimited monthly" 2>/dev/null | jq -r .id
+stripe prices create --live --product="$UPROD" --currency=usd --unit-amount=4800 "--recurring[interval]=year" --lookup-key=unlimited_yearly --nickname="Pro Unlimited yearly" 2>/dev/null | jq -r .id
+stripe prices create --live --product="$UPROD" --currency=usd --unit-amount=500 "--recurring[interval]=month" --lookup-key=unlimited_monthly --nickname="Pro Unlimited monthly" 2>/dev/null | jq -r .id
 ```
 
 How Pro Unlimited bills (Accounts.js, "Pro Unlimited"):
@@ -280,7 +330,7 @@ Dashboard → Developers → API keys → **Create restricted key** named "paste
 - `GET /v1/subscriptions/<id>`, `DELETE /v1/subscriptions/<id>` (cancel now: a second payer for a locked calendar, a duplicate, a full refund or a dispute; and a Single moved under Pro Unlimited, with `prorate`/`invoice_now`)
 - `GET /v1/invoices/<id>`, `GET /v1/invoice_payments`, `GET /v1/charges/<id>`, `POST /v1/refunds` (refund a payment that could not get the lock)
 
-Grant **Checkout Sessions: Write**, **Customer portal: Write**, **Subscriptions: Write**, **Invoices: Read**, **Charges: Read**, **Refunds: Write**, and nothing else. The exact permission labels are unverified, so prove the set in the sandbox first (a3). If live checkout answers `502 stripe-error` and `wr tail` shows a 403 permission error, add the one Stripe names. Copy the key and go straight to d1. Do not paste it anywhere else.
+Grant **Checkout Sessions: Write**, **Customer portal: Write**, **Subscriptions: Write**, **Customers: Write** (the trial does `POST /v1/customers` and `POST /v1/subscriptions`), **Invoices: Read**, **Charges: Read**, **Refunds: Write**, and nothing else. The exact permission labels are unverified, so prove the set in the sandbox first (a3). If live checkout answers `502 stripe-error` and `wr tail` shows a 403 permission error, add the one Stripe names. Copy the key and go straight to d1. Do not paste it anywhere else.
 
 ### c5. Live webhook endpoint: done in d4, **after** the deploy
 
@@ -288,7 +338,7 @@ The endpoint's signing secret (`whsec_…`) is returned **only once, when the en
 
 ---
 
-## (d) Worker secrets: run after (e), from `~/worktrees/pastecal-pro/cloudflare`, in the live Stripe context
+## (d) Worker secrets: run after (e), from `~/worktrees/pc-launch/cloudflare`, in the live Stripe context
 
 `wr secret put NAME` reads the value from a hidden prompt, or from a pipe (the docs say "The `put` command can also receive piped input"). Either way the value never shows on screen. Each `put` takes effect immediately on the deployed Worker.
 
@@ -325,7 +375,7 @@ Check what is set. This shows names only, never values:
 wr secret list
 ```
 
-Want exactly `FIREBASE_SA`, `IMPORT_SECRET`, `STRIPE_PRICE_PRO_MONTHLY`, `STRIPE_PRICE_PRO_YEARLY`, `STRIPE_PRICE_UNLIMITED_MONTHLY`, `STRIPE_PRICE_UNLIMITED_YEARLY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and **none** of the four dev-only names.
+Want exactly `CONTACT_NOTIFY_TO`, `FIREBASE_SA`, `IMPORT_SECRET`, `STRIPE_PRICE_PRO_MONTHLY`, `STRIPE_PRICE_PRO_YEARLY`, `STRIPE_PRICE_UNLIMITED_MONTHLY`, `STRIPE_PRICE_UNLIMITED_YEARLY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and **none** of the four dev-only names.
 
 ---
 
@@ -335,12 +385,12 @@ The deploy is all-or-nothing, with no staged rollout. Deploy with billing **off*
 
 ### e1. Pre-flight
 
-- Deploy from the `pro` worktree, never from the Dropbox checkout. On 2026-10-23 the Dropbox checkout had uncommitted `cloudflare/` work, `BackupService.js` and an hourly cron, which is not in `pro` and not live. Production runs version `ca0b6a70…`: fetch handler only, bindings CALENDARS, DIRECTORY, WAITLIST, BACKUPS, EVENTS, CREATE_LIMITER and ASSETS, secrets FIREBASE_SA and IMPORT_SECRET.
+- Deploy from the `launch-prep` worktree (`~/worktrees/pc-launch`), never from the Dropbox checkout or `pro`. Production runs version `71aaca32` (prod-counting-live 30001ea): fetch handler only, bindings CALENDARS, DIRECTORY, WAITLIST, BACKUPS, EVENTS, CREATE_LIMITER and ASSETS, secrets FIREBASE_SA and IMPORT_SECRET.
 - `git status` must print nothing. The `log` must show the commit you mean to ship.
 
 ```zsh
-cd ~/worktrees/pastecal-pro && git status --short && git log --oneline -3 && cd cloudflare
-wr deploy --dry-run
+cd ~/worktrees/pc-launch && git status --short && git log --oneline -3 && cd cloudflare
+wr deploy --dry-run --env=""
 wr deployments list
 ```
 
@@ -350,12 +400,15 @@ wr deployments list
 
 ### e2. Make master match what ships, then deploy
 
-`master` is an ancestor of `pro`, so this is a fast-forward and rewrites no history:
+Deploy first; move master after the launch has settled (step 7 of `scripts/launch.sh`):
 
 ```zsh
-cd ~/worktrees/pastecal-pro && git push origin pro:master
-cd ~/worktrees/pastecal-pro/cloudflare && wr deploy --message "Pro: accounts, magic link, Stripe billing (billing off until secrets)"
+cd ~/worktrees/pc-launch/cloudflare && wr deploy --env="" --message "Pro launch: launch-prep (billing off until secrets)"
+cd ~/worktrees/pc-launch && git push origin launch-prep:master
 ```
+
+`origin/master` is an ancestor of `launch-prep`, so the push is a fast-forward. Local `master` has an unpushed commit
+94ad206 (a snapshot of the Dropbox checkout, not what is live): keep it on a branch before `git branch -f master launch-prep`.
 
 A push to master does not deploy. Only `.github/workflows/uptime.yml` runs on GitHub, so `wr deploy` is the deploy.
 
@@ -459,7 +512,7 @@ To remove the inbox: `wr email routing rules list pastecal.com`, then `wr email 
 
 ## (g) Rollback and kill switches
 
-Steps g1–g3 run from `~/worktrees/pastecal-pro/cloudflare`. Each change takes effect in seconds.
+Steps g1–g3 run from `~/worktrees/pc-launch/cloudflare`. Each change takes effect in seconds.
 
 ### g1. Stop new sales only (recommended first move)
 
@@ -498,7 +551,7 @@ To also stop Stripe sending events, disable the endpoint in the Dashboard (Devel
 `wr rollback` cannot cross migration v4 (see e2). Instead:
 
 - **If the bug is in Pro code:** fix forward. Or turn billing off (g2) and leave the routes inert: with no session and no billing, they only answer 401/503.
-- **If the bug is in shared code (sync, rooms) and you need the old behavior now:** deploy the previous code **forward** with the Accounts class kept.
+- **If the bug is in shared code (sync, rooms) and you need the old behavior now:** deploy the previous code **forward** with the Accounts class kept. This is already built and tested: branch `rollback-prep` (`~/worktrees/pc-rollback`; `cd ~/worktrees/pc-rollback/cloudflare && wr deploy --env=""`). By hand, the steps are:
   1. Check out the last good commit.
   2. Copy back `src/Accounts.js`, `src/Stripe.js` and `src/LockClient.js` from `pro`.
   3. Add `export { Accounts } from './Accounts.js';` next to the other class exports at the top of `src/index.js`, as on `pro`.

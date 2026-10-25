@@ -104,6 +104,11 @@ function forRoom(request, url = request.url, userId = null, hit = null) {
     return new Request(url, new Request(request, { headers }));
 }
 
+// hitHeaders, but a failure there only skips counting: it never fails the read (from prod-counting-live).
+function hitFor(request, env, kind) {
+    try { return hitHeaders(request, env, kind); } catch (e) { console.error('[stats] hit headers failed:', e && e.message); return null; }
+}
+
 const ADMIN_LOCK_OPS = new Set(['lock', 'unlock', 'rotate-editor-key', 'lock-status']);
 
 function getDirectory(env) {
@@ -184,7 +189,7 @@ async function route(request, env) {
 
             const room = env.CALENDARS.get(env.CALENDARS.idFromName(targetId));
             // Counted as a follow inside the room, during the read it already does (Insight.js hitHeaders).
-            const hit = hitHeaders(request, env, 'follow');
+            const hit = hitFor(request, env, 'follow');
             const roomRes = await room.fetch(new Request(`http://internal/cal/${encodeURIComponent(targetId)}`, hit ? { headers: {
                 ...hit, 'CF-Connecting-IP': request.headers.get('CF-Connecting-IP') || '', 'User-Agent': request.headers.get('User-Agent') || '' } } : {}));
             if (!roomRes.ok) return new Response('Calendar not found', { status: 404 });
@@ -408,7 +413,7 @@ async function route(request, env) {
             const subPath = viewMatch[2] === '/ws' ? '/ws' : '';
             const roomUrl = new URL(`http://internal/cal/${encodeURIComponent(targetId)}${subPath}`);
             roomUrl.searchParams.set('view', viewId);
-            return withCors(await room.fetch(forRoom(request, roomUrl, null, request.method === 'GET' ? hitHeaders(request, env, 'view') : null)));
+            return withCors(await room.fetch(forRoom(request, roomUrl, null, request.method === 'GET' ? hitFor(request, env, 'view') : null)));
         }
 
         // 6. Regular /cal/<id> endpoints
@@ -441,7 +446,7 @@ async function route(request, env) {
             const room = env.CALENDARS.get(env.CALENDARS.idFromName(id));
             // Never pass on a client's X-PC-User; on the WebSocket, set it from the session.
             const userId = m[2] === '/ws' ? await sessionUserId(request, env, { socket: true }) : null;
-            const hit = request.method === 'GET' && (!m[2] || m[2] === '/ws') ? hitHeaders(request, env, 'view') : null;
+            const hit = request.method === 'GET' && (!m[2] || m[2] === '/ws') ? hitFor(request, env, 'view') : null;
             return withCors(await room.fetch(forRoom(request, withoutSourceParams(request.url), userId, hit)));
         }
 

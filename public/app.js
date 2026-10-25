@@ -149,6 +149,7 @@ const COMPONENT_REGISTRY = {
     'lock-badge': LockBadge,                   // Pro lock icon + popover beside the title
     'add-to-calendar': AddToCalendar,          // View link: subscribe menu in the header
     'pro-panel': ProPanel,                     // Share dialog: Lock this calendar / owner panel
+    'pro-beta-join': ProBetaJoin,              // "Join the Pro beta" while billing is off (Go Pro card, Stats)
     'pro-stats': ProStats,                     // Pro owner: views, visitors, followers, places
     'pro-history': ProHistory                  // Pro owner: saved versions, preview, restore
 };
@@ -213,6 +214,8 @@ const CalendarVueApp = {
             proTrialUsed: false,
             proUnlimited: false,        // the signed-in person has Pro Unlimited: the Go Pro card locks with one click
             proUnlimitedBusy: false,
+            proBilling: null,           // /api/pro/config: true = trial and checkout; false = "Join the Pro beta"; null = not known yet (neither shows)
+            pausedOwner: false,         // this browser owns the paused (Pro ended) calendar it's looking at: offer the way back
             proTrialActive: false,      // this browser owns the calendar and it is on its free trial (trial_feature_used)
             proSurface: 'share',        // where the Pro offer was opened from: 'share' | 'stats' | 'lock' (trial_started)        // this calendar already had its one free trial (/api/pro/status), so the Go Pro card doesn't offer it
             lockedOut: false,
@@ -588,6 +591,11 @@ const CalendarVueApp = {
                 return this.spansRange(start, ms(e.end), range);
             }).length;
         },
+        // An unset default view is undefined in saved calendars; the select's Auto option is null.
+        calendarDefaultView: {
+            get() { return this.calendar.options.defaultView ?? null; },
+            set(v) { this.calendar.options.defaultView = v; }
+        },
         calendarAutoViewLabel() {
             return 'Month'; // Could be dynamic based on screen size etc.
         },
@@ -678,6 +686,9 @@ const CalendarVueApp = {
         // DOM render and doesn't reactively update them when set later — so settings must be
         // available for the pre-appendTo configuration block below, not just applied after.
         this.loadGlobalSettings();
+        // Can Pro be bought yet? Decides between the trial/checkout and "Join the Pro beta" everywhere Pro is offered.
+        if (typeof ProBilling !== 'undefined') ProBilling.load().then((b) => { this.proBilling = b; });
+        else this.proBilling = true;
 
         // Undo bookkeeping, deliberately non-reactive. (This tab's own undo stack is the
         // EventStore's.) _handledUndo and _undoneHistoryKeys let the /history fallback skip changes this session already
@@ -1504,6 +1515,8 @@ const CalendarVueApp = {
                 const cs = foot && getComputedStyle(foot);
                 const footH = foot ? foot.offsetHeight + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom) : 0;
                 h = Math.max(100, Math.floor((window.innerHeight - (rect.top + window.scrollY) - 12 - chrome - footH) / rows.length));
+                // The homepage has "How pastecal works" below: keep rows modest so it peeks into view.
+                if (document.getElementById('how')) h = Math.min(h, 116);
             }
             const now = parseFloat(sched.style.getPropertyValue('--month-cell-h')) || 100;
             if (Math.abs(now - h) < 2) return false;
@@ -1913,7 +1926,10 @@ const CalendarVueApp = {
             },
         },
         // Pro ended and the owner opened it: the Go Pro card is back, without the trial it already had.
-        'lock.paused'(paused) { if (!paused && this.showShare) this.refreshProTrial(); },
+        'lock.paused'(paused) {
+            if (!paused && this.showShare) this.refreshProTrial();
+            this.checkPausedOwner();
+        },
         recordingRole: {
             handler(role) { track(a => a.tag('role', role)); },
             immediate: true,
@@ -2120,9 +2136,6 @@ const CalendarVueApp = {
             const params = new URLSearchParams(window.location.search);
             if (!params.has('view') && !params.has('v')) {
                 let defaultView = this.calendar?.options?.defaultView || this.globalSettings.defaultView || 'Month';
-                // On a phone the month grid cuts every event to its start time, so a new
-                // homepage calendar opens on the week, where events can be read.
-                if (this.isHomepageCalendar && !this.userAddedEvent && window.innerWidth < 640) defaultView = 'Week';
                 const actualViewName = this.getActualViewName(defaultView);
 
                 const viewIndex = scheduleObj.views.findIndex(v => {
@@ -2351,7 +2364,7 @@ const CalendarVueApp = {
             this.calendar.events = [];
             this.calendar.options = {
                 notes: '',
-                defaultView: 'month'    // phones still open on Week (applyDefaultView)
+                defaultView: 'month'
             };
             this.calendar.setEvents(this.calendar.sampleEvents());
             // Reset local settings to defaults
@@ -3142,6 +3155,17 @@ const CalendarVueApp = {
         },
 
         /** Records which subscribe path was used, so the rate is measurable. */
+        // A paused calendar opens in the view-only layout, which has no Share button. Its owner still needs
+        // the "Pro ended" choices (Open to everyone / Keep Pro), so ask the server whether this is the owner.
+        async checkPausedOwner() {
+            if (!this.lock.paused || !this.calendar || !this.calendar.id) { this.pausedOwner = false; return; }
+            try {
+                const r = await fetch('/api/pro/status?calendar=' + encodeURIComponent(this.calendar.id), { credentials: 'same-origin' });
+                const st = r.ok ? await r.json() : null;
+                this.pausedOwner = !!(st && st.lapsedOwner);
+            } catch (e) { this.pausedOwner = false; }
+        },
+
         trackSubscribe(method) {
             track(a => a.calendarShared(method));
         },
@@ -4117,6 +4141,8 @@ const CalendarVueApp = {
             this.proSurface = 'lock';
             this.proUpsell = false;
             track(a => a.proUpsellClicked());
+            // Billing not on yet: Share's Pro view, where the Pro beta email field is already open.
+            if (this.proBilling === false) { this.openProOffer('lock'); this.proSurface = 'lock'; return; }
             if (!this.showShare) this.toggleShare();
             let tries = 0;
             const reveal = () => {

@@ -88,6 +88,7 @@ export function hitHeaders(request, env, kind) {
 export const SOURCE_PARAMS = ['embed', 'ref', 'src'];
 export function withoutSourceParams(u) {
     const url = new URL(u);
+    if (!SOURCE_PARAMS.some((k) => url.searchParams.has(k))) return u;   // forwarded exactly as it came (from prod-counting-live)
     for (const k of SOURCE_PARAMS) url.searchParams.delete(k);
     return url.toString();
 }

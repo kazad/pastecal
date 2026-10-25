@@ -109,7 +109,9 @@ test('a setting changed in the panel still applies at once', async ({ browser, r
   // One page, two sections: "This calendar" then "Only me", and it fits without scrolling.
   await expect(page.getByTestId('settings-calendar')).toContainText('This calendar');
   await expect(page.getByTestId('settings-me')).toContainText('Only me');
-  await expect(panel(page).getByLabel('Default view', { exact: true })).toBeVisible();
+  await expect(panel(page).getByLabel('Default view for everyone')).toBeVisible();
+  // A calendar that never set one shows Auto, not a blank select.
+  expect(await panel(page).getByLabel('Default view for everyone').evaluate((e) => e.options[e.selectedIndex]?.text || '')).toMatch(/^Auto/);
   await expect(panel(page).getByLabel('First day of week')).toBeVisible();
   expect(await page.$eval('.pc-side-body', (b) => b.scrollHeight <= b.clientHeight + 1), 'Settings fits without scrolling').toBe(true);
   await panel(page).getByLabel('First day of week').selectOption('1');   // Monday
@@ -118,9 +120,9 @@ test('a setting changed in the panel still applies at once', async ({ browser, r
   await panel(page).getByLabel('First day of week').selectOption('0');
   await expect.poll(() => page.evaluate(() => scheduleObj.firstDayOfWeek)).toBe(0);
   // A calendar setting still binds to the calendar.
-  await panel(page).getByLabel('Default view', { exact: true }).selectOption('Week');
+  await panel(page).getByLabel('Default view for everyone').selectOption('Week');
   await expect.poll(() => page.evaluate(() => document.querySelector('#app')._vnode.component.proxy.calendar.options.defaultView)).toBe('Week');
-  await panel(page).getByLabel('Default view', { exact: true }).selectOption({ index: 0 })   // Auto;
+  await panel(page).getByLabel('Default view for everyone').selectOption({ index: 0 })   // Auto;
   await expect.poll(() => page.evaluate(() => document.querySelector('#app')._vnode.component.proxy.calendar.options.defaultView)).toBe(null);
   await ctx.close();
 });
@@ -141,7 +143,7 @@ test('Share in the panel still copies its links', async ({ browser, request }) =
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain(`/view/${viewId}`);
   // Nothing hidden behind a toggle; the full-access feed is labeled for what it gives.
   await expect(page.getByTestId('share-more-options')).toBeVisible();
-  await expect(page.getByTestId('share-editfeed-copy')).toContainText('edit access');
+  await expect(page.getByTestId('share-editfeed-copy')).toContainText('Edit link .ics');
   await page.getByTestId('share-view-help').click();
   await expect(page.getByTestId('share-view-help-body')).toContainText('view=week');
   await page.getByTestId('share-view-copy').click();
@@ -216,8 +218,16 @@ test('the same five tabs in the same order, and the row never scrolls', async ({
     expect(Math.abs(v.y - f.y), 'tiles side by side').toBeLessThan(2);
     expect(f.x).toBeGreaterThan(v.x + v.width - 1);
     await expect(page.getByTestId('stats-teaser')).toContainText('More with Pro');
-    await expect(page.getByTestId('stats-teaser')).toContainText('Get Pro');
-    await expect(page.getByTestId('stats-get-pro')).toBeVisible();
+    await expect(page.getByTestId('stats-teaser')).toContainText('Beta');
+    // Billing on (Stripe configured): Get Pro. Off (a plain local server): Join the Pro beta, and no Get Pro.
+    const { billing } = await (await page.request.get('/api/pro/config')).json();
+    if (billing) {
+      await expect(page.getByTestId('stats-teaser')).toContainText('Get Pro');
+      await expect(page.getByTestId('stats-get-pro')).toBeVisible();
+    } else {
+      await expect(page.getByTestId('stats-teaser').getByTestId('pro-beta-btn')).toHaveText('Join the Pro beta');
+      await expect(page.getByTestId('stats-get-pro')).toHaveCount(0);
+    }
     await ctx.close();
   }
 });
