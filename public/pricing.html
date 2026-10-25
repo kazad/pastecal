@@ -40,6 +40,8 @@ h2 { font-size: clamp(22px, 2.6vw, 28px); letter-spacing: -.01em; margin: 64px 0
 .plan { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 24px 20px 20px; display: flex; flex-direction: column }
 .plan.pro { border: 2px solid var(--blue); box-shadow: 0 10px 30px -18px color-mix(in srgb, var(--blue) 60%, transparent) }
 .badge { position: absolute; top: -12px; left: 20px; background: var(--blue); color: var(--blue-ink); font-size: 12px; font-weight: 800; border-radius: 999px; padding: 3px 10px }
+.explain { max-width: 760px; color: var(--muted); line-height: 1.6; margin: 4px 0 18px }
+.explain b { color: var(--ink) }
 .plan .size { margin: 2px 0 6px; font-size: 15px; line-height: 1.45 }
 .badge.dev { background: var(--soon-bg); color: var(--soon); border: 1px solid color-mix(in srgb, var(--soon) 25%, transparent) }
 .plan h3 { margin: 0; font-size: 18px }
@@ -311,22 +313,25 @@ details p { color: var(--muted); margin: 8px 0 0 }
   </section>
 
   <h2 id="compare">Compare plans</h2>
+  <p class="explain">Every plan makes unlimited free calendars. <b>A Pro calendar</b> has all the extras: its name is reserved for you, you choose who edits, and you get full stats and history. <b>Pro Single</b> gives you one. <b>Pro Unlimited</b> gives you 10 with short names, like <code>pastecal.com/soccer</code>, and as many as you want under your own name, like <code>pastecal.com/@you/soccer</code>.</p>
   <p class="swipe">Swipe the table to see every plan.</p>
   <div class="gridwrap">
     <table>
       <thead><tr><th>Feature</th><th>Free</th><th class="pro">Pro Single <span class="beta-tag">Beta</span></th><th>Pro Unlimited <span class="beta-tag">Beta</span></th><th>Teams</th></tr></thead>
       <tbody>
+        <tr class="group"><td colspan="5"><span>Pro calendars</span></td></tr>
+        <tr><td>Pro calendars with a short name<small>Like <code>pastecal.com/soccer</code>, reserved for you</small></td><td class="n">—</td><td class="pro">1</td><td>10</td><td>10</td></tr>
+        <tr><td>Pro calendars under your name <span class="soon">In development</span><small>Like <code>pastecal.com/@you/soccer</code></small></td><td class="n">—</td><td class="pro n">—</td><td>Unlimited</td><td>Unlimited</td></tr>
+
         <tr class="group"><td colspan="5"><span>Sharing</span></td></tr>
-        <tr><td>Calendars</td><td>Unlimited</td><td class="pro">Unlimited</td><td>Unlimited</td><td>Unlimited</td></tr>
+        <tr><td>Free calendars<small>Anyone with the edit link can change them</small></td><td>Unlimited</td><td class="pro">Unlimited</td><td>Unlimited</td><td>Unlimited</td></tr>
         <tr><td>People who can view and edit<small>No login required</small></td><td>Unlimited</td><td class="pro">Unlimited</td><td>Unlimited</td><td>Unlimited</td></tr>
         <tr><td>Edit, view-only and calendar app links</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
         <tr><td>Embed on your website</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
         <tr><td>Choose your view-only link name</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
 
         <tr class="group"><td colspan="5"><span>Control</span></td></tr>
-        <tr><td>Lock editing to people you choose<small>They edit with an editor link you share. Everyone else can view, as today</small></td><td class="n">—</td><td class="pro">1 calendar</td><td>10, plus unlimited under @name</td><td>Every calendar <span class="soon">In development</span></td></tr>
-        <tr><td>Your own name: <code>pastecal.com/@name</code> <span class="soon">In development</span><small>As many links as you like under it, like <code>@name/soccer</code></small></td><td class="n">—</td><td class="pro n">—</td><td>Unlimited links</td><td>Unlimited links</td></tr>
-        <tr><td>Locked short links<small>A <code>pastecal.com/name</code> link only you control</small></td><td class="n">—</td><td class="pro">1</td><td>Up to 10</td><td>Up to 10</td></tr>
+        <tr><td>Lock editing to people you choose<small>They edit with an editor link you share. Everyone else can view, as today</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
         <tr><td>Co-owners and admins <span class="soon">In development</span></td><td class="n">—</td><td class="pro n">—</td><td>3 co-owners</td><td>10 admins</td></tr>
         <tr><td>Suggested events <span class="soon">In development</span><small>Others suggest, you approve or decline</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
         <tr><td>Secret events <span class="soon">In development</span><small>Seen only by people who can edit</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
