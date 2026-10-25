@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 
 const root = path.join(__dirname, '..', '..');
-const PAGES = ['pricing', 'pricing-next', 'help', 'about', 'privacy', 'terms', 'report', 'signin'].map(n => `public/${n}.html`);
+const PAGES = ['pricing', 'pricing-next', 'help', 'about', 'privacy', 'terms', 'report', 'contact', 'signin'].map(n => `public/${n}.html`);
 const partial = (n) => fs.readFileSync(path.join(root, 'scripts/site-chrome', n), 'utf8').trim();
 const FIX = 'Run `node scripts/sync-site-chrome.mjs` to fix it.';
 
@@ -25,7 +25,7 @@ for (const rel of PAGES) {
 
 test('the footer links to every page the header and footer promise', () => {
     const footer = partial('footer.html');
-    for (const href of ['/', '/pricing', '/help', '/about', '/privacy', '/terms', '/report']) {
+    for (const href of ['/', '/pricing', '/help', '/about', '/privacy', '/terms', '/report', '/contact']) {
         assert.ok(footer.includes(`href="${href}"`), `footer is missing ${href}`);
     }
 });

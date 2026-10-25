@@ -22,7 +22,7 @@ export const RESERVED_WORDS = new Set([
 // them. Only creation: an existing calendar keeps working. The apps' checkExists lists match.
 export const RESERVED_CALENDAR_NAMES = new Set([
     'beta', 'nativecal', 'view', 'dev', 'api', 'cal',
-    'report', 'signin', 'pro', 'pricing', 'explore', 'privacy', 'terms',
+    'report', 'signin', 'pro', 'pricing', 'explore', 'privacy', 'terms', 'contact',
 ]);
 
 export const SlugService = {

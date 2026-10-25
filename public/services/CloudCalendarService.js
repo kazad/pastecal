@@ -518,7 +518,7 @@ class CloudCalendarService extends CalendarDataService {
 
     /** Is this name taken? First check directory, then HEAD /cal/<id>: 404 = free. */
     static async checkExists(id, callback_yes, callback_no) {
-        if (['beta', 'nativecal', 'view', 'dev', 'api', 'cal', 'report', 'signin', 'pro', 'pricing', 'explore', 'privacy', 'terms'].includes(String(id || '').toLowerCase())) { callback_yes(); return; }
+        if (['beta', 'nativecal', 'view', 'dev', 'api', 'cal', 'report', 'signin', 'pro', 'pricing', 'explore', 'privacy', 'terms', 'contact'].includes(String(id || '').toLowerCase())) { callback_yes(); return; }
         try {
             const lookup = await this.lookupCalendar(id);
             if (lookup.data?.found) { callback_yes(); return; }

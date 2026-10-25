@@ -3,10 +3,11 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Report a calendar · pastecal</title>
-<meta name="description" content="How to report a calendar hosted on pastecal.">
+<meta name="description" content="Report a calendar hosted on pastecal.">
 <meta name="robots" content="noindex">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/legal.css">
 <script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>
+<style>.report-go { display: inline-block; padding: 11px 20px; border-radius: 10px; background: var(--pc-link); color: #fff; font-weight: 700; text-decoration: none }</style>
 <link rel="stylesheet" href="/site.css">
 </head>
 <body>
@@ -25,17 +26,19 @@
 <main>
 <h1>Report a calendar</h1>
 <p>Calendars on pastecal are made by the people who share them, not by pastecal. If a calendar is pretending to be someone it isn't, asks for passwords or payment, or links to something harmful, please tell us.</p>
-<p>Email <a href="mailto:support@pastecal.com">support@pastecal.com</a> with the calendar's link and what's wrong with it.</p>
 <p id="cal-line" hidden>The calendar you came from: <code id="cal-link"></code></p>
+<p><a class="report-go" id="report-go" href="/contact?type=report">Send a report</a></p>
 <p>Don't enter passwords or card details on a calendar page. pastecal's sign-in page is pastecal.com/signin.</p>
 </main>
 <script>
-// Shows the link of the calendar the visitor came from (set by the "Report" link), as text only.
+// Shows the link of the calendar the visitor came from (set by the "Report" link), as text only,
+// and carries it to the contact form, which opens set to "Report a calendar".
 try {
     var cal = new URLSearchParams(location.search).get('cal') || '';
     if (cal && cal.length <= 300 && !/[\s<>"']/.test(cal)) {
         document.getElementById('cal-link').textContent = 'https://pastecal.com/' + cal.replace(/^\/+/, '');
         document.getElementById('cal-line').hidden = false;
+        document.getElementById('report-go').href = '/contact?type=report&cal=' + encodeURIComponent(cal.replace(/^\/+/, ''));
     }
 } catch (e) { /* old browser: the page still says what to do */ }
 </script>
@@ -49,6 +52,7 @@ try {
       <a href="/about" data-from="site-footer">About</a>
       <a href="/privacy" data-from="site-footer">Privacy</a>
       <a href="/terms" data-from="site-footer">Terms</a>
+      <a href="/contact" data-from="site-footer">Contact</a>
       <a href="/report" data-from="site-footer">Report a calendar</a>
     </nav>
     <p class="site-footer__fine">© pastecal</p>

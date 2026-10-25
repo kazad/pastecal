@@ -10,7 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-export const PAGES = ['pricing', 'pricing-next', 'help', 'about', 'privacy', 'terms', 'report', 'signin'].map(n => `public/${n}.html`);
+export const PAGES = ['pricing', 'pricing-next', 'help', 'about', 'privacy', 'terms', 'report', 'contact', 'signin'].map(n => `public/${n}.html`);
 const partial = (n) => fs.readFileSync(path.join(root, 'scripts/site-chrome', n), 'utf8').trim();
 export const block = (name, html) => `<!-- ${name} -->\n${html}\n<!-- /${name} -->`;
 export const markerRe = (name) => new RegExp(`<!-- ${name} -->[\\s\\S]*?<!-- /${name} -->`);

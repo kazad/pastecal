@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contact · pastecal</title>
+<meta name="description" content="Send pastecal a question, a problem, an idea, or a report about a calendar.">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/legal.css">
+<script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>
+<style>
+/* The contact form (POST /api/contact, cloudflare/src/Contact.js). Field styles follow pricing.html's waitlist form, on tokens.css;
+   the button matches the header's site-cta. */
+.lead { color: var(--pc-text-muted) }
+.cform { display: flex; flex-direction: column; gap: 16px; margin: 24px 0 8px; background: var(--pc-surface); border: 1px solid var(--pc-line); border-radius: 14px; padding: 22px }
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0 }
+.field label { font-size: 15px; font-weight: 600 }
+.opt { font-weight: 400; color: var(--pc-text-muted) }
+.cform input, .cform select, .cform textarea { box-sizing: border-box; width: 100%; height: 46px; border: 1px solid var(--pc-line); border-radius: 10px; padding: 0 14px; background: var(--pc-bg); color: var(--pc-text); font: inherit; font-size: 16px }
+.cform textarea { height: auto; min-height: 132px; padding: 11px 14px; resize: vertical; line-height: 1.45 }
+.cform select { appearance: none; -webkit-appearance: none; cursor: pointer; padding-right: 38px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--pc-text-muted) 50%), linear-gradient(135deg, var(--pc-text-muted) 50%, transparent 50%);
+  background-position: calc(100% - 20px) 50%, calc(100% - 14px) 50%; background-size: 6px 6px; background-repeat: no-repeat }
+.cform input:focus, .cform select:focus, .cform textarea:focus { outline: 2px solid var(--pc-link); outline-offset: 1px; border-color: var(--pc-link) }
+.cform .bad { border-color: var(--pc-danger) }
+.hint { font-size: 14px; color: var(--pc-text-muted); margin: 0 }
+.warn { font-size: 15px; margin: 0; color: var(--pc-text-muted) }
+.cform[hidden], .thanks[hidden] { display: none }
+.hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden }
+.send { align-self: flex-start; height: 48px; padding: 0 22px; border: 0; border-radius: 10px; background: var(--pc-link); color: #fff; font: inherit; font-size: 16px; font-weight: 700; cursor: pointer }
+.send:disabled { opacity: .6; cursor: default }
+.status { margin: -4px 0 0; font-weight: 600 }
+.status:empty { display: none }
+.status.err { color: var(--pc-danger) }
+.thanks { margin: 24px 0 8px; background: var(--pc-surface); border: 1px solid var(--pc-line); border-radius: 14px; padding: 22px }
+.thanks p { margin: 0 0 8px; font-weight: 600; font-size: 19px }
+.thanks button { background: none; border: 0; padding: 0; color: var(--pc-link); font: inherit; cursor: pointer; text-decoration: underline }
+@media (max-width: 480px) { .cform { padding: 16px } .send { align-self: stretch } }
+</style>
+<link rel="stylesheet" href="/site.css">
+</head>
+<body>
+<!-- site-header -->
+<header class="site-header">
+  <div class="site-header__in">
+    <a class="site-brand" href="/" data-from="site-header"><img src="/img/pastecal.logo.svg" alt="" width="26" height="26">pastecal</a>
+    <nav class="site-nav" aria-label="Site">
+      <a class="site-link" href="/help" data-from="site-header">Help</a>
+      <a class="site-link" href="/pricing" data-from="site-header">Pricing</a>
+      <a class="site-cta" href="/" data-from="site-header">Make a calendar</a>
+    </nav>
+  </div>
+</header>
+<!-- /site-header -->
+<main>
+<h1>Contact</h1>
+<p class="lead">Most answers are on the <a href="/help">Help page</a>, and ideas are welcome in <a href="https://github.com/kazad/pastecal/discussions">GitHub Discussions</a>.</p>
+
+<form id="contactForm" class="cform" novalidate>
+  <div class="field">
+    <label for="type">What's this about?</label>
+    <select id="type" name="type">
+      <option value="question">Question</option>
+      <option value="broken">Something's broken</option>
+      <option value="idea">Idea</option>
+      <option value="billing">Billing</option>
+      <option value="report">Report a calendar</option>
+    </select>
+  </div>
+  <div class="field">
+    <label for="message">Message</label>
+    <textarea id="message" name="message" rows="5" maxlength="2000" placeholder="What's going on?" data-clarity-mask="true" data-hj-suppress></textarea>
+  </div>
+  <div class="field">
+    <label for="calendar">Calendar link <span class="opt" id="calOpt">optional</span></label>
+    <input id="calendar" name="calendar" type="url" inputmode="url" autocomplete="off" maxlength="300" placeholder="pastecal.com/your-calendar" data-clarity-mask="true" data-hj-suppress>
+    <p class="warn" id="warn" hidden>Don't enter passwords or card details on a calendar page. pastecal's sign-in page is pastecal.com/signin.</p>
+  </div>
+  <div class="field">
+    <label for="email">Your email <span class="opt">optional</span></label>
+    <input id="email" name="email" type="email" autocomplete="email" maxlength="254" placeholder="you@example.com" data-clarity-mask="true" data-hj-suppress>
+    <p class="hint">Only if you want a reply.</p>
+  </div>
+  <div class="hp" aria-hidden="true"><label for="website">Website</label><input id="website" name="website" tabindex="-1" autocomplete="off"></div>
+  <button class="send" type="submit" id="sendBtn">Send</button>
+  <p class="status" id="status" role="status"></p>
+</form>
+<div class="thanks" id="thanks" hidden>
+  <p>Thanks. We'll take a look.</p>
+  <button type="button" id="again">Send another</button>
+</div>
+</main>
+<script src="/utils/analytics.js"></script>
+<script>
+(() => {
+  const opened = performance.now();         // the fill-time check uses the page's own clock, not the server's
+  const $ = (id) => document.getElementById(id);
+  const form = $('contactForm'), type = $('type'), cal = $('calendar'), msg = $('message'), email = $('email'), status = $('status'), btn = $('sendBtn');
+  const LINK = /^(?:https?:\/\/)?(?:www\.)?pastecal\.com\/(?:view\/)?[A-Za-z0-9_-]{1,100}\/?(?:[?#].*)?$/i;
+
+  const showType = () => {
+    const report = type.value === 'report';
+    $('calOpt').hidden = report; $('warn').hidden = !report;
+    btn.textContent = report ? 'Send report' : 'Send';
+  };
+  // /contact?type=report&cal=<id or view/id>: the "Report" link on a calendar fills these in.
+  try {
+    const q = new URLSearchParams(location.search), t = q.get('type'), c = q.get('cal') || '';
+    if ([...type.options].some(o => o.value === t)) type.value = t;
+    if (c && c.length <= 200 && /^(view\/)?[A-Za-z0-9_-]+$/.test(c.replace(/^\/+/, ''))) cal.value = 'pastecal.com/' + c.replace(/^\/+/, '');
+  } catch (e) { /* old browser: the form still works */ }
+  showType();
+  type.addEventListener('change', showType);
+
+  const fail = (text, field) => {
+    status.className = 'status err'; status.textContent = text;
+    if (field) { field.classList.add('bad'); field.focus(); }
+  };
+  form.addEventListener('input', (e) => e.target.classList.remove('bad'));
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const link = cal.value.trim(), report = type.value === 'report';
+    if (report && !link) return fail("Paste the calendar's link, like pastecal.com/your-calendar.", cal);
+    if (link && !LINK.test(link)) return fail("That isn't a pastecal calendar link. Paste one like pastecal.com/your-calendar, or leave it empty.", cal);
+    if (!msg.value.trim()) return fail('Write a message.', msg);
+    if (email.value.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim())) return fail('Check the email address, or leave it empty.', email);
+    const body = { type: type.value, calendar: link, message: msg.value, email: email.value.trim(), website: $('website').value, elapsed: Math.round(performance.now() - opened) };
+    btn.disabled = true; status.className = 'status'; status.textContent = 'Sending…';
+    try {
+      const r = await fetch('/api/contact', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const out = await r.json().catch(() => ({}));
+      if (!r.ok || !out.ok) throw new Error(out.error || "Couldn't send it. Check your connection and try again.");
+      try { window.Analytics && Analytics.track('contact_submitted', { type: body.type }); } catch (err) { /* never block the thanks */ }
+      form.reset(); showType(); status.textContent = '';
+      form.hidden = true; $('thanks').hidden = false;
+    } catch (err) {
+      fail(err.message && err.message !== 'Failed to fetch' ? err.message : "Couldn't send it. Check your connection and try again.");
+    }
+    btn.disabled = false;
+  });
+  $('again').addEventListener('click', () => { $('thanks').hidden = true; form.hidden = false; type.focus(); });
+})();
+</script>
+<!-- site-footer -->
+<footer class="site-footer">
+  <div class="site-footer__in">
+    <nav class="site-footer__links" aria-label="Footer">
+      <a href="/" data-from="site-footer">Make a calendar</a>
+      <a href="/pricing" data-from="site-footer">Pricing</a>
+      <a href="/help" data-from="site-footer">Help</a>
+      <a href="/about" data-from="site-footer">About</a>
+      <a href="/privacy" data-from="site-footer">Privacy</a>
+      <a href="/terms" data-from="site-footer">Terms</a>
+      <a href="/contact" data-from="site-footer">Contact</a>
+      <a href="/report" data-from="site-footer">Report a calendar</a>
+    </nav>
+    <p class="site-footer__fine">© pastecal</p>
+  </div>
+</footer>
+<!-- /site-footer -->
+</body></html>
