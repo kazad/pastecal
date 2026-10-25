@@ -110,6 +110,24 @@ test('the full event editor\'s type dropdown already shows the names', async ({ 
   await ctx.close();
 });
 
+// Red team, Oct 24 2026: category labels are set by anyone with the edit link and the editor's color
+// dropdown renders item text as HTML, so a label must show as text and never run.
+test('a category label with HTML in it shows as text in the editor\'s color dropdown and never runs', async ({ browser }) => {
+  const { ctx, page } = await open(browser);
+  const evil = '<img src=x onerror="window.__xss=1">';
+  await page.evaluate((l) => document.querySelector('#app')._vnode.component.proxy.updateTypeLabel(1, l), evil);
+  await page.evaluate(() => scheduleObj.openEditor({ StartTime: new Date(), EndTime: new Date(Date.now() + 3600e3) }, 'Add'));
+  const btn = page.locator('.e-schedule-dialog .e-dropdown-btn').first();
+  await expect(btn).toBeVisible();
+  await btn.click();
+  const item = page.locator('.e-dropdown-popup .e-item').first();
+  await expect(item).toContainText('<img');
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => window.__xss)).toBeUndefined();
+  expect(await page.locator('.e-dropdown-popup img').count()).toBe(0);
+  await ctx.close();
+});
+
 // ---- 3. All day ----
 
 for (const viewport of [DESKTOP, PHONE]) {

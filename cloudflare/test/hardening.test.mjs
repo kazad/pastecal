@@ -177,5 +177,36 @@ function tab(id) {
     step('reserved calendar names are refused on create; an existing one still reads');
 }
 
+// Red team, Oct 24 2026: a free calendar's view link and case-insensitive lookups could be taken over by
+// creating another calendar carrying its publicViewId, or a case variant of its name.
+{
+    const lookup = async (slug) => (await fetch(`${BASE}/api/lookup?slug=${encodeURIComponent(slug)}`)).json();
+    // (The earlier rate-limit step used up this IP's create-view budget, so the victim carries its view id from creation.)
+    const victim = uniq('victim'), v = { publicViewId: uniq('vid') };
+    assert.equal((await create(victim, { title: 'Victim', options: { publicViewId: v.publicViewId }, events: [ev('v1', 'Real event')] })).status, 201);
+    await new Promise((r) => setTimeout(r, 400));
+    const before = await lookup(v.publicViewId);
+    assert.ok(before.found, 'the view id leads somewhere');
+    const attacker = uniq('attacker');
+    assert.equal((await create(attacker, { title: 'Hijack', options: { publicViewId: v.publicViewId }, events: [ev('a1', 'Fake event')] })).status, 201);
+    await new Promise((r) => setTimeout(r, 400));                 // registration runs after the response
+    const after = await lookup(v.publicViewId);
+    assert.deepEqual(after, before, 'the view id still leads to the victim');
+    const ics = await (await fetch(`${BASE}/view/${encodeURIComponent(v.publicViewId)}.ics`)).text();
+    assert.match(ics, /SUMMARY:Real event/); assert.doesNotMatch(ics, /Fake event/);
+    step("another calendar can't take over a free calendar's view link by carrying its view id");
+
+    const name = uniq('casecal');
+    assert.equal((await create(name, { title: 'Original', events: [ev('o1', 'Original event')] })).status, 201);
+    await new Promise((r) => setTimeout(r, 300));
+    const was = await lookup(name.toUpperCase());
+    const twin = name.toUpperCase();
+    const t = await create(twin, { title: 'Twin', events: [ev('t1', 'Twin event')] });
+    await new Promise((r) => setTimeout(r, 400));
+    const now = await lookup(name.toUpperCase());
+    assert.equal(now.actualSlug || now.targetId, was.actualSlug || was.targetId, `case-insensitive lookups still lead to the original (twin create: ${t.status})`);
+    step("a case variant can't take over a free calendar's case-insensitive lookups");
+}
+
 console.log('hardening tests passed');
 process.exit(0);
