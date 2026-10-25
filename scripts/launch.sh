@@ -297,6 +297,8 @@ fi
 
 # ---------------------------------------------------------------- 6. post-checks
 if step 6 "Post-checks (read-only)" "GETs against pastecal.com (curl's user agent is a bot, so nothing is counted), the secret names, and the live webhook endpoint."; then
+    # A real browser, desktop and phone, read-only, analytics blocked: the live files must be this tested checkout.
+    if (cd "$ROOT" && node scripts/launch-smoke.mjs --base "https://pastecal.com" --billing any); then ok "browser smoke passed"; else warn "browser smoke reported failures: read them (rollback: step 7)"; fi
     code() { curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$@"; }
     title() { curl -s --max-time 20 "$1" | grep -o '<title>[^<]*' | head -1 | sed 's/<title>//'; }
     for p in / /pricing /contact; do
