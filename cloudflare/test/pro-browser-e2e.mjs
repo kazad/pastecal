@@ -31,6 +31,7 @@ await op.goto(`${BASE}/${cal}?backend=cf`); await op.waitForTimeout(3000);
 // 1. Owner signs in first (a returning owner, from the logo menu's "Pro owner? Sign in"). Signed-out
 //    buyers pay first instead (no email step): walked separately, see docs (pay-first walkthrough).
 await vm(op, 'vm.showShare = true'); await op.waitForTimeout(600);
+await op.locator('[data-testid=share-get-pro]').click({ timeout: 15000 });   // Share -> "Get Pro" shows the lock offer
 await op.locator('[data-testid=pro-panel]').waitFor({ timeout: 15000 });
 await op.screenshot({ path: `${OUT}/1-share-offer.png` });
 await fetch(`${BASE}/api/auth/start`, { method: 'POST', headers: H, body: JSON.stringify({ email, next: '/' + cal }) });
@@ -45,6 +46,7 @@ step('owner got the sign-in email, the link signed them in and brought them back
 // 2. Lock this calendar -> real Stripe Checkout
 await op.goto(`${BASE}/${cal}?backend=cf`); await op.waitForTimeout(3000);
 await vm(op, 'vm.showShare = true'); await op.waitForTimeout(800);
+await op.locator('[data-testid=share-get-pro]').click({ timeout: 15000 });
 await op.locator('[data-testid=pro-lock-btn]').click();
 await op.waitForURL(/checkout\.stripe\.com/, { timeout: 30000 });
 await op.waitForTimeout(3000); await op.screenshot({ path: `${OUT}/2-stripe-checkout.png` });
@@ -53,7 +55,7 @@ step('"Lock this calendar" opened the real Stripe Checkout page');
 // 3. Pay (test card via API: Checkout keeps card fields in a secure iframe), then the webhook locks it
 const ownerId = (await admin(`/api/admin/accounts/lookup?email=${encodeURIComponent(email)}`)).user.id;
 const cust = stripeJson(['customers', 'create', '--email', email, '-d', 'payment_method=pm_card_visa', '-d', 'invoice_settings[default_payment_method]=pm_card_visa']);
-const sub = stripeJson(['subscriptions', 'create', '--customer', cust.id, '-d', 'items[0][price]=price_1UTr8UEPgWTHeJ7W3PQwUvXH', '-d', `metadata[calendar_id]=${cal}`, '-d', `metadata[user_id]=${ownerId}`]);
+const sub = stripeJson(['subscriptions', 'create', '--customer', cust.id, '-d', `items[0][price]=${process.env.PRICE_YEARLY || 'price_1UTr8UEPgWTHeJ7W3PQwUvXH'}`, '-d', `metadata[calendar_id]=${cal}`, '-d', `metadata[user_id]=${ownerId}`]);
 assert.equal(sub.status, 'active');
 await op.goto(`${BASE}/pro/done#${encodeURIComponent(cal)}`);
 const doneKey = await until(async () => { const t = await op.locator('[data-testid=pro-editor-link], input').first().inputValue().catch(() => ''); return /#k=/.test(t) ? t : null; }, 40000);
@@ -99,11 +101,26 @@ await op.waitForURL(/billing\.stripe\.com/, { timeout: 30000 });
 await op.waitForTimeout(2500); await op.screenshot({ path: `${OUT}/7-portal.png` });
 step('"Manage billing" opened the real Stripe customer portal');
 
-// 8. Cancel -> the visitor's open page unlocks live
+// 8. Cancel -> Pro ends: read-only (paused) for everyone; the owner is offered Open / Keep Pro
 execFileSync('stripe', ['subscriptions', 'cancel', sub.id, '--confirm'], { stdio: 'ignore' });
-const unlocked = await until(async () => (await vm(vp, 'return !vm.isReadOnly')) ? true : null, 45000);
-assert.ok(unlocked, 'visitor page never unlocked after cancel');
-await vp.screenshot({ path: `${OUT}/8-visitor-after-cancel.png` });
-step('cancelled in Stripe: the visitor\'s open page became editable without a reload');
+await op.goto(`${BASE}/${cal}?backend=cf`); await op.waitForTimeout(3500);
+const lapsed = await until(async () => (await (await fetch(`${BASE}/api/pro/status?calendar=${cal}`)).json()).paused ? true : null, 45000);
+assert.ok(lapsed, 'calendar never fell back to paused after cancel');
+await op.goto(`${BASE}/${cal}?backend=cf`); await op.waitForTimeout(3500);
+await vm(op, 'vm.showShare = true'); await op.waitForTimeout(1200);
+await op.locator('[data-testid=pro-lapsed-title]').waitFor({ timeout: 15000 });
+assert.match(await op.locator('[data-testid=pro-lapsed-title]').innerText(), /Pro ended/);
+await op.screenshot({ path: `${OUT}/8-owner-pro-ended.png` });
+assert.equal(await vm(vp, 'return vm.isReadOnly'), true, 'visitor stays read-only (paused)');
+await vp.screenshot({ path: `${OUT}/8-visitor-paused.png` });
+step('cancelled in Stripe: Pro ended -> read-only for the visitor; the owner sees "Pro ended — read-only" with Open / Keep Pro');
+
+// 9. The owner clicks "Open to everyone" -> the visitor's open page becomes editable without a reload
+op.once('dialog', (d) => d.accept());                     // "Open this calendar to everyone?" confirm
+await op.locator('[data-testid=pro-open-btn]').click();
+const opened = await until(async () => (await vm(vp, 'return !vm.isReadOnly')) ? true : null, 45000);
+assert.ok(opened, 'visitor page never became editable after Open');
+await vp.screenshot({ path: `${OUT}/9-visitor-after-open.png` });
+step('owner chose "Open to everyone": the visitor\'s open page became editable without a reload');
 
 await browser.close(); console.log(`\n${n} checks passed`); process.exit(0);
