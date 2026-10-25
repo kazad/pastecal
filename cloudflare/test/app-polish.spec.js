@@ -318,3 +318,15 @@ test('homepage panel: a returning visitor sees Your calendars, and Getting start
   await expect(aside.getByTestId('home-recents')).toContainText('Tab check');
   await ctx.close();
 });
+
+test('homepage panel: a first-time visitor opens on Welcome; Your calendars says it is empty and New calendar starts one', async ({ browser }) => {
+  const { ctx, page } = await open(browser);
+  const aside = page.getByTestId('home-aside');
+  await expect(aside.getByTestId('home-tab-guide')).toHaveAttribute('aria-selected', 'true');
+  await expect(aside).toContainText('Click a day and type an event.');
+  await aside.getByTestId('home-tab-recents').click();
+  await expect(aside.getByTestId('home-recents-empty')).toContainText('No calendars yet.');
+  await aside.getByTestId('home-new').click();
+  await expect(page.locator('textarea[aria-label="Event description"]')).toBeVisible();
+  await ctx.close();
+});

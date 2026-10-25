@@ -51,7 +51,7 @@ test('phone: the header "Add event" button opens quick add, which fits the scree
   await expect(add).toBeVisible();
   const b = await add.boundingBox();
   expect(b.x + b.width).toBeLessThanOrEqual(PHONE.width);
-  expect(b.width).toBeGreaterThanOrEqual(32);
+  expect(b.width).toBeGreaterThanOrEqual(44);   // a full tap target
 
   await add.tap();
   const dialog = page.locator('.pc-qa-dialog');
@@ -116,3 +116,32 @@ test('phone: a view link has no Add event button', async ({ browser, request }) 
   await expect(page.getByTestId('mobile-add-event-button')).toHaveCount(0);
   await ctx.close();
 });
+
+for (const width of [360, 390]) {
+  test(`phone ${width}px: the header gives the title room, 44px targets, and Notes from the ⋮ menu`, async ({ browser, request }) => {
+    const id = await seed(request, 'Fall soccer schedule');
+    const ctx = await browser.newContext({ viewport: { width, height: 760 }, hasTouch: true, isMobile: true });
+    await ctx.addInitScript(() => { window.__TEST__ = true; });
+    const page = await ctx.newPage();
+    await page.goto(`/${id}?backend=cf`);
+    await page.waitForFunction(() => window.scheduleObj && document.querySelector('.e-appointment'), null, { timeout: 20_000 });
+    const header = page.getByTestId('mobile-header');
+    const box = (el) => el.boundingBox();
+    const add = await box(page.getByTestId('mobile-add-event-button'));
+    const share = await box(page.getByTestId('share-button-mobile'));
+    const menu = await box(page.getByTestId('mobile-menu-button'));
+    for (const b of [add, share, menu]) { expect(b.width).toBeGreaterThanOrEqual(44); expect(b.height).toBeGreaterThanOrEqual(44); }
+    const title = await box(header.locator('.pc-m-title'));
+    expect(title.width, 'the name has room').toBeGreaterThan(80);
+    expect(title.x + title.width).toBeLessThanOrEqual(add.x + 1);
+    const logo = await box(header.locator('img[alt="pastecal"]'));
+    expect(logo.x + logo.width).toBeLessThanOrEqual(title.x);
+    // Notes moved from the header into the menu
+    await expect(header.getByRole('button', { name: 'Toggle notes' })).toBeHidden();
+    await page.getByTestId('mobile-menu-button').tap();
+    await page.getByTestId('notes-button-mobile').tap();
+    await expect(page.getByTestId('side-panel')).toHaveAttribute('data-tab', 'notes');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await ctx.close();
+  });
+}
