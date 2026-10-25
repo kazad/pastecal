@@ -677,7 +677,7 @@ const CalendarVueApp = {
         // Headline and lead for the homepage pitch. One version for now; a later test adds more,
         // keyed by experiment variant.
         tourCopy() {
-            return { kicker: 'Shared calendars, refreshingly simple.', title: 'Add events. Paste your link. Done.' };
+            return { kicker: 'Shared calendars. No sign-ups.', title: 'Add events. Paste your link. Done.' };
         }
     },
 
