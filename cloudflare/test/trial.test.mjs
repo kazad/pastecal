@@ -444,6 +444,16 @@ try {
     assert.equal(fake.log.slice(mark).find((l) => l.path === '/stripe/v1/checkout/sessions').body.customer, `cus_${run}_jo_paid`, 'a later checkout reuses the paid customer');
     step('Manage billing opens the named calendar\'s own Stripe customer (paid or trial), and checkout reuses only a paid customer, never a trial\'s');
 
+    // Canceled in the portal: it still runs to the period's end, and /api/me says it ends rather than renews.
+    const meCal = async () => (await (await fetch(BASE + '/api/me', { headers: { Cookie: jo.cookie } })).json()).calendars.find((c) => c.id === calJ2);
+    assert.equal((await meCal()).cancelAtPeriodEnd, false);
+    fake.subs.get(`sub_${run}_jo`).cancel_at_period_end = true;
+    assert.equal((await webhook(event('customer.subscription.updated', { id: `sub_${run}_jo` }))).status, 200);
+    const canceled = await meCal();
+    assert.deepEqual([canceled.status, canceled.cancelAtPeriodEnd], ['active', true]);
+    assert.equal((await status(calJ2, jo.cookie)).locked, true, 'still upgraded until the period ends');
+    step('canceling at period end is stored: /api/me says cancelAtPeriodEnd (the Plus tab shows "Ends <date>"), and the calendar stays upgraded until then');
+
     // Plus is yearly only: a monthly checkout is refused even though this server has a monthly price set.
     const calM = `monthly-${run}`; await createCalendar(calM);
     mark = fake.log.length;

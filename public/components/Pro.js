@@ -459,7 +459,9 @@ const ProPanel = {
             if (!c || !c.currentPeriodEnd || c.status === 'trialing') return '';     // a trial shows its own line
             const ms = c.currentPeriodEnd < 1e12 ? c.currentPeriodEnd * 1000 : c.currentPeriodEnd;
             const d = new Date(ms).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
-            return c.status === 'active' || c.status === 'trialing' ? `Renews ${d}` : `Ends ${d}`;
+            // Canceled in the portal (cancel at period end): it ends then, and says what the calendar becomes.
+            if (c.cancelAtPeriodEnd || !(c.status === 'active' || c.status === 'trialing')) return `Ends ${d}, then ${this.lapsedMode === 'open' ? 'a free calendar anyone can edit' : 'read-only'}`;
+            return `Renews ${d}`;
         },
     },
     watch: {

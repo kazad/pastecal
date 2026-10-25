@@ -234,7 +234,7 @@ const NavigationDropdown = {
                 const name = planName(c.plan);
                 let label;
                 if (c.status === 'past_due') label = 'Payment problem';
-                else if (c.status === 'active' || c.status === 'trialing') label = date ? `${c.status === 'trialing' ? name + ' trial · ends' : name + ' · renews'} ${date}` : name;
+                else if (c.status === 'active' || c.status === 'trialing') label = date ? `${c.status === 'trialing' ? name + ' trial · ends' : c.cancelAtPeriodEnd ? name + ' · ends' : name + ' · renews'} ${date}` : name;
                 else if (end > now) label = `${name} · ends ${date}`;
                 else continue;     // ended: no longer upgraded
                 out.push({ id: c.id, title: titles.get(String(c.id).toLowerCase()) || c.id,

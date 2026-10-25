@@ -14,7 +14,7 @@
  *                                                   but lose the link to the user. Cancels nothing: 409
  *                                                   {error:'active-subscription', calendars} while any subscription
  *                                                   is active, trialing or past_due (cancel it first). 401 signed-out
- *   GET  /api/me                                 -> {email, calendars:[{id, status, plan, interval, currentPeriodEnd}]} | 401;
+ *   GET  /api/me                                 -> {email, calendars:[{id, status, plan, interval, currentPeriodEnd, cancelAtPeriodEnd}]} | 401;
  *                                                   re-sends the cookie (fresh Max-Age) when the session was renewed
  *                                                   in the last day, so browsers keep it
  *   POST /api/pro/checkout    {calendarId, interval?:'year'|'month', editName?} -> {url} (Stripe Checkout).
@@ -189,7 +189,7 @@ export class Accounts extends DurableObject {
         for (const col of ['subscriptions ADD COLUMN created INTEGER', 'checkout_holds ADD COLUMN session_id TEXT',
             'checkout_holds ADD COLUMN restarts INTEGER', 'checkout_holds ADD COLUMN window_start INTEGER',
             'sessions ADD COLUMN renewed_at INTEGER', 'users ADD COLUMN created_via TEXT', 'subscriptions ADD COLUMN trial_end INTEGER',
-            'subscriptions ADD COLUMN has_payment_method INTEGER']) {
+            'subscriptions ADD COLUMN has_payment_method INTEGER', 'subscriptions ADD COLUMN cancel_at_period_end INTEGER']) {
             try { this.sql.exec(`ALTER TABLE ${col}`); } catch (_) { /* already there */ }
         }
     }
@@ -330,21 +330,21 @@ export class Accounts extends DurableObject {
         return {
             email: user.email,
             calendars: [...byCal.values()].map((r) => ({ id: r.calendar_id, status: r.status, plan: r.plan, interval: r.interval, priceId: r.price_id,
-                currentPeriodEnd: r.current_period_end, trialEnd: r.trial_end || null })),
+                currentPeriodEnd: r.current_period_end, trialEnd: r.trial_end || null, cancelAtPeriodEnd: !!r.cancel_at_period_end })),
         };
     }
 
     getSubscription(id) { return this.sql.exec(`SELECT * FROM subscriptions WHERE stripe_subscription_id = ?`, id).toArray()[0] || null; }
     upsertSubscription(s) {
-        this.sql.exec(`INSERT INTO subscriptions (stripe_subscription_id, user_id, stripe_customer_id, calendar_id, plan, interval, price_id, status, current_period_end, updated_at, created, trial_end, has_payment_method)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        this.sql.exec(`INSERT INTO subscriptions (stripe_subscription_id, user_id, stripe_customer_id, calendar_id, plan, interval, price_id, status, current_period_end, updated_at, created, trial_end, has_payment_method, cancel_at_period_end)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(stripe_subscription_id) DO UPDATE SET user_id = excluded.user_id, stripe_customer_id = excluded.stripe_customer_id,
                 calendar_id = excluded.calendar_id, plan = excluded.plan, interval = excluded.interval, price_id = excluded.price_id,
                 status = excluded.status, current_period_end = excluded.current_period_end, updated_at = excluded.updated_at,
                 created = COALESCE(excluded.created, subscriptions.created), trial_end = COALESCE(excluded.trial_end, subscriptions.trial_end),
-                has_payment_method = excluded.has_payment_method`,
+                has_payment_method = excluded.has_payment_method, cancel_at_period_end = excluded.cancel_at_period_end`,
             s.id, s.userId, s.customer || null, s.calendarId, 'pro', s.interval || null, s.priceId || null, s.status, s.currentPeriodEnd || null, Date.now(), s.created || null, s.trialEnd || null,
-            s.hasPaymentMethod ? 1 : 0);
+            s.hasPaymentMethod ? 1 : 0, s.cancelAtPeriodEnd ? 1 : 0);
     }
     setSubscriptionStatus(id, status) { this.sql.exec(`UPDATE subscriptions SET status = ?, updated_at = ? WHERE stripe_subscription_id = ?`, status, Date.now(), id); }
     // The calendar's other active subscriptions, oldest first (a row without `created` predates the column: oldest).
@@ -1546,7 +1546,8 @@ async function handleAdmin(request, env, url, path) {
         const id = 'sub_dev_' + body.calendarId.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 40) + '_' + userId.slice(-8);
         await acc.upsertSubscription({ id, userId, calendarId: body.calendarId, status,
             interval: body.interval === 'month' ? 'month' : 'year',
-            currentPeriodEnd: Number.isFinite(body.currentPeriodEnd) ? body.currentPeriodEnd : Math.floor(Date.now() / 1000) + 365 * 86400 });
+            currentPeriodEnd: Number.isFinite(body.currentPeriodEnd) ? body.currentPeriodEnd : Math.floor(Date.now() / 1000) + 365 * 86400,
+            cancelAtPeriodEnd: !!body.cancelAtPeriodEnd });
         return json({ ok: true, userId, subscriptionId: id });
     }
     return json({ error: 'not-found' }, 404);
