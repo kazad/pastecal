@@ -11,7 +11,8 @@
  *
  * Flag: `?backend=cf` (remembered in localStorage), or one of our Cloudflare hosts: pastecal.com,
  *       www, new.pastecal.com, and the staging copy preview.pastecal.com (which must never fall back to Firebase).
- *       `?backend=firebase` turns it off again. Off = this file does nothing at all.
+ *       A local copy (localhost, *.test) is on by default; `?backend=firebase` (remembered) is the deliberate way
+ *       to reach Firebase from a local copy, and turns it off. Off = this file does nothing at all.
  *
  * How a save works. The app hands us its whole calendar (as it does for Firebase); we diff
  * it against the last server copy with EventStore.changesBetween and send only the
@@ -59,10 +60,16 @@ class CloudCalendarService extends CalendarDataService {
         if (loc && CloudCalendarService.HOSTS.includes(loc.hostname)) return true;
         let q = null;
         try { q = loc && new URLSearchParams(loc.search).get('backend'); } catch (e) { /* no query */ }
-        if (q === 'firebase') { try { store && store.removeItem('pastecal_backend'); } catch (e) { /* ignore */ } return false; }
+        if (q === 'firebase') { try { store && store.setItem('pastecal_backend', 'firebase'); } catch (e) { /* ignore */ } return false; }
         if (q === 'cf') { try { store && store.setItem('pastecal_backend', 'cf'); } catch (e) { /* ignore */ } return true; }
-        try { return !!store && store.getItem('pastecal_backend') === 'cf'; } catch (e) { return false; }
+        let saved = null;
+        try { saved = store ? store.getItem('pastecal_backend') : null; } catch (e) { /* storage blocked */ }
+        // A local copy (localhost, *.test) runs on its own Cloudflare backend unless someone deliberately asked for
+        // Firebase: Firebase there is PRODUCTION data, and a test or a stray click must never write it.
+        if (loc && CloudCalendarService.isLocalHost(loc.hostname)) return saved !== 'firebase';
+        return saved === 'cf';
     }
+    static isLocalHost(h) { return /^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(h || '') || /\.(localhost|test)$/.test(h || ''); }
     // Our Cloudflare deployments. preview.pastecal.com is staging: Firebase there would be PRODUCTION data.
     static HOSTS = ['pastecal.com', 'www.pastecal.com', 'new.pastecal.com', 'preview.pastecal.com'];
     static _store() { try { return typeof localStorage !== 'undefined' ? localStorage : null; } catch (e) { return null; } }
