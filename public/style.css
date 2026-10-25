@@ -2231,3 +2231,5 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 .pc-sample-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; color: var(--pc-text-muted); font-size: 11px; text-align: center }
 .pc-stats-sample .pc-side-btn { margin-top: 12px }
 .pc-stats-sample .pc-sample-tag { align-self: flex-start; width: auto }
+/* Month weekday labels line up with the date numbers under them (both 10px in from the cell edge). */
+.e-schedule .e-month-view .e-date-header-wrap .e-header-cells { padding-left: 10px !important }
