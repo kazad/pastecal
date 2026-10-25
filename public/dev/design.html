@@ -92,6 +92,7 @@
     html += section('Type scale', names.filter(function (n) { return /^--pc-fs-/.test(n); }).map(function (n) { return '<div class="row sz"><span class="name">' + n + '</span><b data-p="font-size" data-v="' + n + '">Shared calendars, refreshingly simple.</b></div>'; }).join(''));
     html += section('Radius', '<div class="row">' + names.filter(function (n) { return /^--pc-radius-/.test(n); }).map(function (n) { return '<span class="sw rad"><i data-p="border-radius" data-v="' + n + '"></i>' + n.slice(5) + '</span>'; }).join('') + '</div>');
     html += section('Elevation (floating things only)', '<div class="row">' + names.filter(function (n) { return /^--pc-shadow-/.test(n); }).map(function (n) { return '<span class="sw shd"><i data-p="box-shadow" data-v="' + n + '"></i>' + n.slice(5) + '</span>'; }).join('') + '</div>');
+    document.getElementById('out').innerHTML = html;
     // Each token sample shows its own token (set here, so the page's CSS stays on the scale).
     document.querySelectorAll('[data-v]').forEach(function (el) { el.style.setProperty(el.dataset.p, 'var(' + el.dataset.v + ')'); });
 })();

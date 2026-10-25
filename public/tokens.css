@@ -137,6 +137,12 @@
     --pc-primary: #4aaaff;       /* as text: 6.7:1; dark text on it: 7.4:1 (white would be 2.5:1) */
     --pc-primary-hover: #6ec2ff;
     --pc-on-primary: #1c1c1e;
+    /* Re-derived here so a dark subtree (/dev/design's dark pane) gets the dark blue, not :root's. */
+    --pc-primary-soft: color-mix(in srgb, var(--pc-primary) 12%, transparent);
+    --pc-link: var(--pc-primary);
+    --pc-link-hover: var(--pc-primary-hover);
+    --pc-focus-ring: 0 0 0 3px color-mix(in srgb, var(--pc-primary) 25%, transparent);
+    --pc-focus-outline: 2px solid var(--pc-primary);
     --pc-brand: #8f9cff;         /* the logo is brightened in dark mode, so its name is too */
 
     --pc-accent: #ff5c8d;        /* dark text on it: 5.8:1 (white would be 2.9:1) */
