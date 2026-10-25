@@ -1897,7 +1897,7 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 .pc-share-url:focus { outline: none; border-color: var(--pc-link); box-shadow: var(--pc-focus-ring) }
 
 /* Draft tag in the address bar, beside Save & share: where the action is, not a line under the grid. */
-.pc-draft-chip { flex: none; margin-right: 6px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .02em;
+.pc-draft-chip { flex: none; margin-left: 8px; margin-right: 6px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .02em;
   color: var(--pc-warning); background: var(--pc-warning-soft); cursor: help }
 .pc-draft-note > span:first-child { display: none }
 
