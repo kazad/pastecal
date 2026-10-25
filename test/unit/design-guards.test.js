@@ -251,7 +251,8 @@ test('one accent: the main app and the pages never use NativeCal\'s pink or the 
 
 test('no decorative gradients outside the illustrations', () => {
   const offenders = [];
-  for (const [label, css] of sources()) for (const d of declarations(css)) if (/gradient\(/.test(d.value)) offenders.push(`${label}: ${d.prop}`);
+  // A mask's gradient draws nothing: it only fades the edge of a sideways-scrolling row (the template chips) to say "more this way".
+  for (const [label, css] of sources()) for (const d of declarations(css)) if (/gradient\(/.test(d.value) && !/^(-webkit-)?mask-image$/.test(d.prop)) offenders.push(`${label}: ${d.prop}`);
   assert.deepEqual(offenders, [], 'flat colors only (restraint). A drawing belongs in style.css /* @illustrations */.');
 });
 
