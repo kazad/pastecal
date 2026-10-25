@@ -36,8 +36,39 @@ module.exports = {
           muted: 'var(--text-color-1)',
           strong: 'var(--text-color-2)',
           hover: 'var(--bg-interactive-hover)',
+          primary: 'var(--pc-primary)',          // the one blue (tokens.css)
+          'on-primary': 'var(--pc-on-primary)',
+          success: 'var(--pc-success)',
+          warning: 'var(--pc-warning)',
+          danger: 'var(--pc-danger)',
         },
       },
+    },
+    // Sizes, radii and shadows come from tokens.css too, so a Tailwind utility can only ever
+    // produce a value on the scale (test/unit/design-guards.test.js checks this mapping).
+    fontSize: {
+      xs: ['var(--pc-fs-xs)', { lineHeight: '1rem' }],
+      sm: ['var(--pc-fs-md)', { lineHeight: '1.25rem' }],
+      base: ['var(--pc-fs-lg)', { lineHeight: '1.5rem' }],
+      lg: ['var(--pc-fs-xl)', { lineHeight: '1.75rem' }],
+      xl: ['var(--pc-fs-2xl)', { lineHeight: '1.75rem' }],
+      '2xl': ['var(--pc-fs-3xl)', { lineHeight: '2rem' }],
+    },
+    borderRadius: {
+      none: '0',
+      sm: 'var(--pc-radius-xs)',
+      DEFAULT: 'var(--pc-radius-xs)',
+      md: 'var(--pc-radius-sm)',
+      lg: 'var(--pc-radius-control)',
+      xl: 'var(--pc-radius-card)',
+      '2xl': 'var(--pc-radius-dialog)',
+      full: 'var(--pc-radius-pill)',
+    },
+    boxShadow: {
+      none: 'none',
+      md: 'var(--pc-shadow-md)',
+      lg: 'var(--pc-shadow-lg)',
+      xl: 'var(--pc-shadow-xl)',
     },
   },
 };

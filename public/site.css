@@ -1,30 +1,33 @@
-/* Shared header and footer for the static pages (pricing, help, about, privacy, terms, report, sign-in).
+[data-theme="dark"] { color-scheme: dark }   /* native form controls and scrollbars follow the theme */
+
+/* Shared header and footer for the static pages (pricing, help, about, privacy, terms, report,
+   sign-in, contact), on tokens.css and components.css.
    The markup lives in scripts/site-chrome/ and is copied into each page by scripts/sync-site-chrome.mjs.
-   A page sets its content column with --site-max (the full width, gutters included). */
+   Header and footer are one width on every page (--pc-page-max), whatever the content column. */
 .site-header, .site-footer { box-sizing: border-box; font-family: var(--pc-font); color: var(--pc-text); }
 .site-header *, .site-footer * { box-sizing: border-box; }
 .site-header__in, .site-footer__in {
-    max-width: var(--site-max, 712px); margin: 0 auto;
+    max-width: var(--pc-page-max); margin: 0 auto;
     padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px));
 }
 .site-header__in { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 14px; }
-.site-brand { display: inline-flex; align-items: center; gap: 8px; color: #3f51b5; font: 800 19px/1 var(--pc-font); text-decoration: none; }
-:root[data-theme="dark"] .site-brand { color: #8f9cff; }
+.site-brand { display: inline-flex; align-items: center; gap: 8px; color: var(--pc-brand); font: 800 var(--pc-fs-xl)/1 var(--pc-font); text-decoration: none; }   /* the logo's indigo, as in the app */
 .site-brand img { width: 26px; height: 26px; }
 .site-nav { display: flex; align-items: center; gap: 18px; }
-.site-link { color: var(--pc-text-muted); font: 600 15px/1 var(--pc-font); text-decoration: none; }
+.site-link { color: var(--pc-text-muted); font: var(--pc-fw-semibold) var(--pc-fs-lg)/1 var(--pc-font); text-decoration: none; }
 .site-link:hover { color: var(--pc-text); }
+/* Get started: the primary button (.pc-btn--primary's colors), as a pill. */
 .site-cta {
-    display: inline-flex; align-items: center; height: 36px; padding: 0 16px; border-radius: var(--pc-radius-pill);
-    background: var(--pc-link); color: #fff; font: 700 14px/1 var(--pc-font); text-decoration: none;
+    display: inline-flex; align-items: center; height: var(--pc-h-md); padding: 0 var(--pc-space-4); border-radius: var(--pc-radius-pill);
+    background: var(--pc-primary); color: var(--pc-on-primary); font: var(--pc-fw-bold) var(--pc-fs-md)/1 var(--pc-font); text-decoration: none;
 }
-.site-cta:hover { background: var(--pc-link); }
-.site-brand:focus-visible, .site-link:focus-visible, .site-cta:focus-visible, .site-footer a:focus-visible { outline: none; box-shadow: var(--pc-focus-ring); border-radius: 6px; }
+.site-cta:hover { background: var(--pc-primary-hover); }
+.site-brand:focus-visible, .site-link:focus-visible, .site-cta:focus-visible, .site-footer a:focus-visible { outline: none; box-shadow: var(--pc-focus-ring); border-radius: var(--pc-radius-sm); }
 @media (max-width: 480px) { .site-link { display: none; } }
 
 .site-footer { border-top: 1px solid var(--pc-line); margin-top: 48px; }
 .site-footer__in { padding-block: 24px 40px; }
-.site-footer__links { display: flex; flex-wrap: wrap; gap: 8px 20px; font: 500 14px/1.4 var(--pc-font); }
+.site-footer__links { display: flex; flex-wrap: wrap; gap: 8px 20px; font: var(--pc-fw-medium) var(--pc-fs-md)/1.4 var(--pc-font); }
 .site-footer__links a { color: var(--pc-text-muted); text-decoration: none; }
 .site-footer__links a:hover { color: var(--pc-text); text-decoration: underline; }
-.site-footer__fine { margin: 12px 0 0; color: var(--pc-text-muted); font: 400 12.5px/1.4 var(--pc-font); }
+.site-footer__fine { margin: 12px 0 0; color: var(--pc-text-muted); font: var(--pc-fw-regular) var(--pc-fs-sm)/1.4 var(--pc-font); }

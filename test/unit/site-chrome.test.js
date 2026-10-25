@@ -20,6 +20,7 @@ for (const rel of PAGES) {
         }
         assert.match(html, /<link rel="stylesheet" href="\/site\.css">/, `${rel} does not link /site.css. ${FIX}`);
         assert.match(html, /<link rel="stylesheet" href="\/tokens\.css">/, `${rel} does not link /tokens.css. ${FIX}`);
+        assert.match(html, /href="\/tokens\.css"><link rel="stylesheet" href="\/components\.css">/, `${rel} must link /components.css right after /tokens.css. ${FIX}`);
     });
 }
 

@@ -59,7 +59,7 @@ const CalendarTitle = {
                 : 'text-lg font-bold text-color-2 leading-tight';
         },
         taglineClass() {
-            return 'text-color-1 text-xs -mt-0.5 text-[10px]';
+            return 'text-color-1 text-xs -mt-0.5';
         },
         titleClasses() {
             const base = this.mode === 'mobile'
@@ -74,7 +74,7 @@ const CalendarTitle = {
         },
         inputClass() {
             return this.mode === 'mobile'
-                ? 'w-full bg-1 border-2 border-blue-500 rounded text-base font-bold focus:outline-none focus:ring-2 focus:ring-blue-300 px-2 py-1 text-color-2 leading-tight text-center'
+                ? 'w-full bg-1 border-2 border-theme-primary rounded text-base font-bold focus:outline-none focus:ring-2 focus:ring-theme-primary px-2 py-1 text-color-2 leading-tight text-center'
                 : 'border border-color-default p-1 max-w-[150px] md:max-w-xs h-8';
         }
     },
