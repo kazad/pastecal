@@ -9,7 +9,12 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/components.css"><link rel="stylesheet" href="/legal.css">
 <script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>
 <link rel="stylesheet" href="/site.css">
-<style>.about-hi { font-size: var(--pc-fs-2xl); font-weight: 700; margin-top: 8px } .about-sig { margin-top: 24px; color: var(--pc-text-muted) }</style>
+<style>.about-hi { font-size: var(--pc-fs-2xl); font-weight: 700; margin-top: 8px }
+/* The photo as on BetterExplained: a slightly tilted print with a warm border, floating right. The frame is a
+   warm tan mixed from the warning tokens, so it follows the theme without raw colors. */
+.about-photo { float: right; width: 200px; height: auto; border-radius: var(--pc-radius-card); border: 4px solid color-mix(in srgb, var(--pc-warning) 22%, var(--pc-warning-soft)); transform: rotate(3deg); margin: 0 0 1rem 1.5rem }
+@media (max-width: 560px) { .about-photo { width: 120px; margin: 0 0 .75rem 1rem } }
+@media (prefers-reduced-motion: reduce) { .about-photo { transform: none } } .about-sig { margin-top: 24px; color: var(--pc-text-muted) }</style>
 </head>
 <body>
 <!-- site-header -->
@@ -27,19 +32,18 @@
 <main>
 <h1>About pastecal</h1>
 
+<img class="about-photo" src="/img/kalid.jpg" alt="Kalid Azad" width="200" height="245">
 <p class="about-hi">Hi, I&rsquo;m Kalid.</p>
 
 <p>I made pastecal because I wanted something simple: a link to a calendar that&rsquo;s easy to edit, without logging in or installing anything. Most calendar tools ask everyone to sign up first. I just wanted a link I could remember, send to a group, and be done.</p>
 
-<p>It started as an answer to a <a href="https://www.viaprize.org/prize/old/1">ViaPrize challenge</a>, and I kept going because I think it&rsquo;s a good idea.</p>
+<p>It started as an answer to a ViaPrize challenge, and I&hellip; just kept going. I think it&rsquo;s a pretty useful idea. The goal is to be clear and simple, something anyone can use.</p>
 
-<p>The goal is to be clear and simple, something anyone can use without being a technologist.</p>
+<p>I like making things that hit the simplicity/power sweet spot. <a href="https://betterexplained.com">BetterExplained</a> is for intuitive math explanations. <a href="https://instacalc.com">Instacalc</a> is a powerful, simple calculator. And pastecal is an easy way to share a schedule.</p>
 
-<p>I like making things that hit a sweet spot between simple and powerful. <a href="https://betterexplained.com">BetterExplained</a> is simple math explanations. <a href="https://instacalc.com">Instacalc</a> is a powerful, simple calculator. pastecal is an easy way to share a schedule.</p>
+<p>It&rsquo;s free to use. If you want more control over a calendar, <a href="/pricing">Plus and Pro</a> give you more options.</p>
 
-<p>It&rsquo;s free to use. If you want more control over a calendar, <a href="/pricing">Plus and Pro</a> keep the lights on.</p>
-
-<p>If something&rsquo;s confusing or broken, <a href="/contact">tell me</a>. I read everything. The code is <a href="https://github.com/kazad/pastecal">on GitHub</a>.</p>
+<p>If something&rsquo;s confusing or broken, or you have an idea, <a href="/contact">contact me</a>. The code is on <a href="https://github.com/kazad/pastecal">GitHub</a>.</p>
 
 <p class="about-sig">&mdash; Kalid</p>
 </main><!-- site-footer -->
