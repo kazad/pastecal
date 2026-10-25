@@ -71,7 +71,7 @@ test('four plans: Plus and Pro are in beta, Teams is in development', () => {
   const block = /<span class="badge dev">In development<\/span>\s*<h3>Teams<\/h3>[\s\S]*?<\/a>/.exec(pricing);
   assert.ok(block, 'Teams card carries the In development badge');
   assert.match(block[0], /href="#waitlist"[^>]*>Join the waitlist<\/a>$/);
-  assert.match(pricing, /<thead><tr><th>Feature<\/th><th>Free<\/th><th class="pro">Plus <span class="beta-tag">Beta<\/span><\/th><th>Pro <span class="beta-tag">Beta<\/span><\/th><th>Teams<\/th><\/tr><\/thead>/);
+  assert.match(pricing, /<thead><tr><th>Feature<\/th><th>Free<\/th><th class="pro">Plus<\/th><th>Pro<\/th><th>Teams<\/th><\/tr><\/thead>/, 'no Beta pills in the table');
   assert.match(pricing, /<span>Upgraded calendars<\/span>/);
   assert.match(pricing, /<tr><td>With a short name<small>[\s\S]*?<td class="n">—<\/td><td class="pro">1<\/td><td>5<\/td><td>25<\/td><\/tr>/);
   assert.match(pricing, /<tr><td>Under your own name<small>[\s\S]*?<td class="n">—<\/td><td class="pro n">—<\/td><td>Unlimited<\/td><td>Unlimited<\/td><\/tr>/);
@@ -123,4 +123,23 @@ test('copy agrees with itself: cancel follows "If your plan ends" (read-only by 
       assert.match(m[1], /'en-US'/, `${f}: ${m[0]}`); assert.match(m[1], /month: 'long'/, `${f}: ${m[0]}`); assert.match(m[1], /timeZone: 'UTC'/, `${f}: ${m[0]}`);
     }
   }
+});
+
+test('pricing reads finished: one badge per card, one Coming line, one beta line, the comparison behind a toggle', () => {
+  const pricing = read('public/pricing.html');
+  for (const name of ['Free', 'Plus', 'Pro', 'Teams']) {
+    const c = card(pricing, name);
+    assert.ok((c.match(/class="badge/g) || []).length <= 1, `${name}: at most one badge`);
+    assert.ok((c.match(/In development/g) || []).length <= 1, `${name}: at most one "In development"`);
+    assert.ok((c.match(/class="coming"/g) || []).length <= 1, `${name}: one Coming line at most`);
+  }
+  assert.doesNotMatch(pricing, /class="soon"/, 'no per-row In development pills');
+  assert.equal((pricing.match(/Plus and Pro are in beta\. Early members keep their price\./g) || []).length, 2, 'the beta line and the FAQ say the same');
+  assert.match(pricing, /<details class="compare" id="compare">\s*<summary[^>]*>Compare every feature<\/summary>/, 'closed by default, opens in place');
+  assert.doesNotMatch(pricing, /<details class="compare" id="compare" open/);
+  assert.match(pricing, /location\.hash === '#compare'/, '#compare opens it');
+  assert.match(pricing, /Rows marked ◦ are coming soon/);
+  const marks = (pricing.match(/<span class="mark" title="Coming soon">◦<\/span>/g) || []).length;
+  assert.ok(marks >= 5, 'not-yet-built rows are marked: ' + marks);
+  assert.doesNotMatch(pricing, /Coming to Plus and Pro/, 'no second list of what is coming');
 });

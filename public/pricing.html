@@ -45,8 +45,6 @@ h2 { font-size: var(--pc-fs-section); letter-spacing: -.01em; margin: 64px 0 14p
 .hero h1 { margin: 0 auto; max-width: 32ch; font-size: var(--pc-fs-hero); line-height: 1.07; letter-spacing: -.02em; text-wrap: balance }
 .hero h1 mark { background: none; color: inherit }
 .lead { margin: 16px auto 0; max-width: 56ch; color: var(--muted); font-size: var(--pc-fs-xl); text-wrap: balance }
-.chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin-top: 16px; color: var(--muted); font-size: var(--pc-fs-md); font-weight: 600 }
-.chips span::before { content: "✓ "; color: var(--ok) }
 
 .plans { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 40px; align-items: stretch }
 .plan { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: var(--pc-radius-card); padding: 24px 20px 20px; display: flex; flex-direction: column }
@@ -72,10 +70,8 @@ h2 { font-size: var(--pc-fs-section); letter-spacing: -.01em; margin: 64px 0 14p
 .plan li { position: relative; padding-left: 22px; text-wrap: pretty }
 .plan .size, .plan .who, .plan .per { text-wrap: pretty }
 .plan li::before { content: "✓"; position: absolute; left: 0; color: var(--ok); font-weight: var(--pc-fw-bold) }
-.plan ul:has(+ .coming-h) { flex: 0 0 auto; margin-bottom: 4px }
-.coming-h { margin: 8px 0 0; font-size: var(--pc-fs-xs); font-weight: var(--pc-fw-bold); letter-spacing: .06em; text-transform: uppercase; color: var(--soon) }
-.plan ul.coming { margin-top: 8px; color: var(--muted) }
-.plan ul.coming li::before { content: "+"; color: var(--muted) }
+.plan ul:has(+ .coming) { flex: 0 0 auto; margin-bottom: 4px }
+.plan .coming { flex: 1 1 auto; margin: 10px 0 0; color: var(--muted); font-size: var(--pc-fs-sm); line-height: 1.45 }
 .plan code, td code { font: var(--pc-fw-semibold) var(--pc-fs-sm) var(--pc-font-mono); background: var(--bg); padding: 1px 5px; border-radius: var(--pc-radius-sm); white-space: nowrap }
 .cta { display: flex; align-items: center; justify-content: center; text-align: center; border-radius: var(--pc-radius-pill); min-height: var(--pc-h-lg); padding: 0 18px; font: var(--pc-fw-bold) var(--pc-fs-lg)/1.2 var(--ui); text-decoration: none; border: 1px solid var(--line); color: var(--ink); background: var(--surface); cursor: pointer }
 .cta.primary { background: var(--blue); border-color: var(--blue); color: var(--blue-ink) }
@@ -127,14 +123,20 @@ td small { display: block; color: var(--muted); font-size: var(--pc-fs-sm); font
 html[data-billing="pending"] .plan.pro .cta, html[data-billing="pending"] #unlCta, html[data-billing="pending"] #get-pro { visibility: hidden }
 html[data-billing="off"] #get-pro { display: none }
 html:not([data-billing="off"]) .if-billing-off, html:not([data-billing="on"]) .if-billing-on { display: none }
-.soon { display: inline-block; font-size: var(--pc-fs-2xs); font-weight: 700; color: var(--soon); background: var(--soon-bg); border-radius: var(--pc-radius-pill); padding: 1px 7px; margin-left: 6px; vertical-align: 1px; white-space: nowrap }
 .swipe { display: none; font-size: var(--pc-fs-md); color: var(--muted); margin: -6px 0 10px }
-.legend { font-size: var(--pc-fs-md); color: var(--muted); margin: 10px 0 0 }
-.legend .soon { margin: 0 4px 0 0 }
+.legend { font-size: var(--pc-fs-sm); color: var(--muted); margin: 10px 0 0 }
+.mark { margin-left: 6px; color: var(--muted); font-weight: var(--pc-fw-bold) }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
+.beta-line { margin: 18px 0 0; text-align: center; color: var(--muted); font-size: var(--pc-fs-md) }
+/* The full comparison: closed by default, opens in place (and on #compare). */
+.compare { margin-top: 48px; scroll-margin-top: 16px }
+.compare > summary { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; font-size: var(--pc-fs-xl); font-weight: var(--pc-fw-bold); color: var(--ink); border-radius: var(--pc-radius-sm) }
+.compare > summary::-webkit-details-marker { display: none }
+.compare > summary::after { content: ""; width: 8px; height: 8px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg) translateY(-3px); transition: transform .15s }
+.compare[open] > summary::after { transform: rotate(-135deg) translateY(-1px) }
+.compare > summary:focus-visible { outline: none; box-shadow: var(--pc-focus-ring) }
+.compare[open] > summary { margin-bottom: 12px }
 
-.indev ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px }
-.indev li { padding: 14px 16px; border-radius: var(--pc-radius-card); background: var(--surface); border: 1px dashed var(--line); color: var(--muted); font-size: var(--pc-fs-lg) }
-.indev li b { display: block; color: var(--ink); font-size: var(--pc-fs-lg); margin-bottom: 2px }
 
 .wait { margin-top: 56px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--pc-radius-card); padding: 28px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 36px; align-items: start; position: relative; scroll-margin-top: 16px }
 .wait h2 { margin: 0 0 6px }
@@ -166,8 +168,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
 
 @media (max-width: 980px) {
   .plans { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 26px }
-  .indev ul { grid-template-columns: minmax(0, 1fr) }
-}
+  }
 @media (max-width: 860px) {
   .faq, .wait { grid-template-columns: minmax(0, 1fr) }
   .wait { gap: 20px; padding: 22px }
@@ -240,7 +241,6 @@ details p { color: var(--muted); margin: 8px 0 0 }
   <section class="hero">
     <h1>Free for everyone who uses&nbsp;it. <mark>Upgrade</mark> when it&rsquo;s yours to&nbsp;run.</h1>
     <p class="lead">Share a calendar with a link. Nobody signs up and nobody pays per person. Upgrades are for the person who keeps the calendar running.</p>
-    <div class="chips"><span>No login required</span><span>Nobody pays per person</span><span>Cancel anytime</span></div>
   </section>
 
   <div class="plans">
@@ -274,13 +274,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
         <li>Full history, and restore any version</li>
         <li>Just a small “Made with pastecal” line</li>
       </ul>
-      <p class="coming-h">In development, included when ready</p>
-      <ul class="coming">
-        <li>Subcalendars</li>
-        <li>Secret events</li>
-        <li>Others suggest events, you approve</li>
-        <li>Your logo and theme</li>
-      </ul>
+      <p class="coming">Coming: subcalendars, secret events, suggested events, your logo and theme.</p>
       <a id="proCta" class="cta primary" href="#get-pro" data-plan="pro">Get Plus</a>
     </div>
 
@@ -297,10 +291,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
         <li>Point each short link at any of your calendars</li>
         <li>One subscription</li>
       </ul>
-      <p class="coming-h">In development, included when ready</p>
-      <ul class="coming">
-        <li>Co-owners</li>
-      </ul>
+      <p class="coming">Coming: co-owners.</p>
       <a id="unlCta" class="cta primary" href="#get-pro" data-plan="unlimited">Get Pro</a>
     </div>
 
@@ -323,6 +314,8 @@ details p { color: var(--muted); margin: 8px 0 0 }
     </div>
   </div>
 
+  <p class="beta-line" data-testid="beta-line">Plus and Pro are in beta. Early members keep their price.</p>
+
   <section class="howto" id="get-pro" aria-labelledby="getProH">
     <h2 id="getProH">Get Plus</h2>
     <p class="howto-sub" id="howtoSub">Plus upgrades one calendar. Pick it and pay with Stripe. There's no account to set up first: yours is made from the email you give Stripe.</p>
@@ -336,7 +329,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
       <label class="interval"><input type="radio" name="interval" value="month"><span><b>$10 a month</b></span></label>
     </div>
     <div class="unl-buy" id="unlBuy" hidden>
-      <p>After paying, claim your @name on your account page, then open any calendar you run, press Share and choose <b>Lock this calendar</b>. One click, no new checkout. Already on Plus? Those calendars move to Pro, and Stripe credits their unused time.</p>
+      <p>After paying, claim your @name on your account page, then open any calendar you run and upgrade it from its <b>Plus</b> tab. One click, no new checkout. Already on Plus? Those calendars move to Pro, and Stripe credits their unused time.</p>
       <button type="button" class="cta primary" id="unlGo">Continue to payment</button>
       <p class="pick-err" id="unlErr" role="alert"></p>
     </div>
@@ -356,12 +349,13 @@ details p { color: var(--muted); margin: 8px 0 0 }
     <p class="pick-new">No calendar yet? <a href="/" data-from="pricing-getpro">Make one</a>, press Save &amp; share, then open its <b>Plus</b> tab.</p>
   </section>
 
-  <h2 id="compare">Compare plans</h2>
+  <details class="compare" id="compare">
+  <summary data-testid="compare-toggle">Compare every feature</summary>
   <p class="explain">Every plan makes unlimited free calendars. <b>An upgraded calendar</b> has all the extras: its name is reserved for you, you choose who edits, and you get full stats and history. <b>Plus</b> gives you one. <b>Pro</b> gives you 5 with short names, like <code>pastecal.com/soccer</code>, and as many as you want under your own name, like <code>pastecal.com/@you/soccer</code>.</p>
   <p class="swipe">Swipe the table to see every plan.</p>
   <div class="gridwrap">
     <table>
-      <thead><tr><th>Feature</th><th>Free</th><th class="pro">Plus <span class="beta-tag">Beta</span></th><th>Pro <span class="beta-tag">Beta</span></th><th>Teams</th></tr></thead>
+      <thead><tr><th>Feature</th><th>Free</th><th class="pro">Plus</th><th>Pro</th><th>Teams</th></tr></thead>
       <tbody>
         <tr class="group"><td colspan="5"><span>Upgraded calendars</span></td></tr>
         <tr><td>With a short name<small>Like <code>pastecal.com/soccer</code>, reserved for you</small></td><td class="n">—</td><td class="pro">1</td><td>5</td><td>25</td></tr>
@@ -376,46 +370,37 @@ details p { color: var(--muted); margin: 8px 0 0 }
 
         <tr class="group"><td colspan="5"><span>Control</span></td></tr>
         <tr><td>Lock editing to people you choose<small>They edit with an editor link you share. Everyone else can view, as today</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
-        <tr><td>Co-owners and admins <span class="soon">In development</span></td><td class="n">—</td><td class="pro n">—</td><td>3 co-owners</td><td>10 admins</td></tr>
-        <tr><td>Suggested events <span class="soon">In development</span><small>Others suggest, you approve or decline</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
-        <tr><td>Secret events <span class="soon">In development</span><small>Seen only by people who can edit</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
-        <tr><td>Subcalendars <span class="soon">In development</span><small>Layers like “Games” and “Practice” people can turn on and off</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Co-owners and admins <span class="mark" title="Coming soon">◦</span><span class="sr">(coming soon)</span></td><td class="n">—</td><td class="pro n">—</td><td>3 co-owners</td><td>10 admins</td></tr>
+        <tr><td>Suggested events <span class="mark" title="Coming soon">◦</span><span class="sr">(coming soon)</span><small>Others suggest, you approve or decline</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Secret events <span class="mark" title="Coming soon">◦</span><span class="sr">(coming soon)</span><small>Seen only by people who can edit</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Subcalendars <span class="mark" title="Coming soon">◦</span><span class="sr">(coming soon)</span><small>Layers like “Games” and “Practice” people can turn on and off</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
 
         <tr class="group"><td colspan="5"><span>Safety</span></td></tr>
         <tr><td>Undo and recent changes</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
         <tr><td>Daily backups</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
         <tr><td>Full history, and restore any earlier version</td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
-        <tr><td>A year of who changed what <span class="soon">In development</span><small>The name of the admin next to each change</small></td><td class="n">—</td><td class="pro n">—</td><td class="n">—</td><td class="y">✓</td></tr>
+        <tr><td>A year of who changed what <span class="mark" title="Coming soon">◦</span><span class="sr">(coming soon)</span><small>The name of the admin next to each change</small></td><td class="n">—</td><td class="pro n">—</td><td class="n">—</td><td class="y">✓</td></tr>
 
         <tr class="group"><td colspan="5"><span>Insight</span></td></tr>
         <tr><td>Views this week and follower count</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
         <tr><td>Calendar stats<small>Views and visitors by day, and how many people follow it in a calendar app</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
         <tr><td>Where people are<small>Countries and cities your visitors come from</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
-        <tr><td>More stats <span class="soon">In development</span><small>Followers by calendar app, busiest hours, and where visits come from</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>More stats <span class="mark" title="Coming soon">◦</span><span class="sr">(coming soon)</span><small>Followers by calendar app, busiest hours, and where visits come from</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
         <tr><td>Private by design<small>Counts only. Never who</small></td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
 
         <tr class="group"><td colspan="5"><span>Look</span></td></tr>
         <tr><td>Event colors and category labels</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
-        <tr><td>Your logo and theme <span class="soon">In development</span><small>Your name, logo and colors on the calendar and in embeds</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
-        <tr><td>No pastecal branding <span class="soon">In development</span><small>On the calendar and in embeds. Plus and Pro show one small “Made with pastecal” line</small></td><td class="n">—</td><td class="pro n">—</td><td class="n">—</td><td class="y">✓</td></tr>
+        <tr><td>Your logo and theme <span class="mark" title="Coming soon">◦</span><span class="sr">(coming soon)</span><small>Your name, logo and colors on the calendar and in embeds</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>No pastecal branding <span class="mark" title="Coming soon">◦</span><span class="sr">(coming soon)</span><small>On the calendar and in embeds. Plus and Pro show one small “Made with pastecal” line</small></td><td class="n">—</td><td class="pro n">—</td><td class="n">—</td><td class="y">✓</td></tr>
 
         <tr class="group"><td colspan="5"><span>Help and billing</span></td></tr>
         <tr><td>Help page and GitHub Discussions</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
-        <tr><td>Invoices in your organization's name <span class="soon">In development</span></td><td class="n">—</td><td class="pro n">—</td><td class="n">—</td><td class="y">✓</td></tr>
+        <tr><td>Invoices in your organization's name <span class="mark" title="Coming soon">◦</span><span class="sr">(coming soon)</span></td><td class="n">—</td><td class="pro n">—</td><td class="n">—</td><td class="y">✓</td></tr>
       </tbody>
     </table>
   </div>
-  <p class="legend"><span class="soon">In development</span> Being built now; included at no extra cost when it ships. Everything else works today.</p>
-
-  <section class="indev" aria-labelledby="devH">
-    <h2 id="devH">Coming to Plus and Pro</h2>
-    <p class="howto-sub">Being built now. Every upgraded calendar gets these at no extra cost when they ship.</p>
-    <ul>
-      <li><b>Suggested events</b>Visitors suggest, you approve or decline.</li>
-      <li><b>Secret events and subcalendars</b>Events only editors see, and layers people can turn on and off.</li>
-      <li><b>Your logo and theme</b>Your name, logo and colors on the calendar and in embeds.</li>
-    </ul>
-  </section>
+  <p class="legend" data-testid="compare-legend">Rows marked ◦ are coming soon, at no extra cost. Everything else works today.</p>
+  </details>
 
   <section class="wait" id="waitlist" aria-labelledby="waitH">
     <div class="wait-copy">
@@ -452,7 +437,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
   <div class="faq">
     <details><summary>What's free?</summary><p>Making, editing and sharing calendars, with no account. Plus and Pro add features for people who run a calendar.</p></details>
     <details><summary>Which plan do I need?</summary><p>Free if anyone with the link can edit. Plus for one upgraded calendar. Pro if you run several. Teams, in development, for an organization.</p></details>
-    <details><summary>Why do Plus and Pro say Beta?</summary><p>Plus and Pro are in beta: features may change. Everything on the Plus card works today, except what's marked in development.</p></details>
+    <details><summary>Why do Plus and Pro say Beta?</summary><p>Plus and Pro are in beta. Early members keep their price. Everything on their cards works today, except what's listed as coming.</p></details>
     <details><summary>Does everyone I share with need to pay?</summary><p>No. You pay for the calendar, yearly or monthly. Everyone you share it with stays free.</p></details>
     <details><summary>Do I need an account to upgrade?</summary><p>Only you do, so we know who owns the calendar, and it's made for you when you pay, from the email you give Stripe. Later you sign in with a link we email you, with no password. Nobody you share with ever needs an account.</p></details>
     <details><summary>Is there a free trial?</summary><p>Yes: 30 days of Plus, free, with no card. <span class="if-billing-off">While Plus is in beta, join the beta and we’ll email you when your trial is ready.</span><span class="if-billing-on">Start it from any saved calendar’s Plus tab.</span> When it ends, nothing is charged and it goes back to a free calendar anyone with the edit link can change, unless you keep Plus ($29 a year) or choose read-only in its Plus tab.</p></details>
@@ -460,7 +445,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
     <details><summary>What happens if I cancel?</summary><p>Your plan lasts until the end of the period you paid for. Then each calendar stays, with everything in it, and does what you chose under “If your plan ends” in its Plus tab: read-only (the default: everyone can still view it, nobody edits until you decide) or open to everyone, a free calendar anyone with the edit link can change.</p></details>
     <details><summary>What if a payment fails?</summary><p>Stripe retries it, and your calendar stays upgraded meanwhile. If the subscription ends unpaid, the calendar keeps all its events and does what you chose under “If your plan ends” (read-only by default).</p></details>
     <details><summary>What happens to backups on the free plan?</summary><p>Every calendar is backed up daily, and you can see the last 7 days of changes. An upgraded calendar keeps the full history and lets you restore any earlier version.</p></details>
-    <details><summary>What is Pro?</summary><p>5 upgraded calendars with short names like pastecal.com/soccer, plus as many as you want under your own name, like pastecal.com/@you/soccer. Short links and @links open the view-only calendar; you and your editors keep the edit link. $96 a year or $10 month to month: one subscription, and each calendar upgrades with one click from its Share panel. Already on Plus? Your calendars move to Pro and Stripe credits the unused time.</p></details>
+    <details><summary>What is Pro?</summary><p>5 upgraded calendars with short names like pastecal.com/soccer, plus as many as you want under your own name, like pastecal.com/@you/soccer. Short links and @links open the view-only calendar; you and your editors keep the edit link. $96 a year or $10 month to month: one subscription, and each calendar upgrades with one click from its Plus tab. Already on Plus? Your calendars move to Pro and Stripe credits the unused time.</p></details>
     <details><summary>What is Teams?</summary><p>Everything in Pro, with 25 short names, up to 10 admins, your logo, no pastecal branding, a year of who changed what and invoices in your organization's name, for $490 a year or $49 a month. It's in development: join the waitlist and we'll email you once, when it opens.</p></details>
     <details><summary>Can I move an upgrade to a different calendar?</summary><p>Email <a href="mailto:support@pastecal.com">support@pastecal.com</a> and we'll help.</p></details>
     <details><summary>Can I see who looked at my calendar?</summary><p>No. Full stats show how many people viewed it, how many follow it in a calendar app, and which countries and cities they're in. Counts only. Never who.</p></details>
@@ -646,6 +631,9 @@ document.querySelectorAll('[data-plan]').forEach(a => a.addEventListener('click'
 <script>
 // Plus (beta): can it be bought yet? GET /api/pro/config. Off, the Plus button is "Join the beta": it
 // goes to the waitlist form with the Pro beta chosen, and the Get Pro picker (checkout) is hidden.
+// #compare (Compare plans links): open the comparison in place.
+function openCompare() { if (location.hash === '#compare') { const d = document.getElementById('compare'); if (d && !d.open) { d.open = true; d.scrollIntoView(); } } }
+openCompare(); window.addEventListener('hashchange', openCompare);
 function joinBeta(plan) {
   document.getElementById('plan').value = plan || 'pro';
   document.getElementById('waitlist').scrollIntoView({ behavior: 'smooth', block: 'start' });

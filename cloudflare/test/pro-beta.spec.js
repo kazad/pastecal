@@ -152,7 +152,8 @@ test('billing off: pricing says "Join the beta", hides Get Plus, and the waitlis
   await expect(page.locator('#unlCta')).toHaveText('Join the beta');      // Pro too: not buyable yet
   await expect(page.locator('#plan option[value=pro]')).toHaveText('Plus beta, early access');
   await expect(page.locator('.plan.pro .badge')).toHaveText('Beta');
-  await expect(page.locator('thead th.pro .beta-tag')).toHaveText('Beta');
+  await expect(page.getByTestId('beta-line')).toHaveText('Plus and Pro are in beta. Early members keep their price.');   // one beta line, no table pills
+  await expect(page.locator('thead .beta-tag')).toHaveCount(0);
   await expect(page.locator('#get-pro')).toBeHidden();
   await expect(page.getByText('Plus and Pro are in beta: features may change.')).toHaveCount(1);
   await cta.click();
@@ -208,7 +209,8 @@ test('billing on: pricing keeps Get Plus and the picker, with the Beta tag', asy
   await expect(page.locator('.plan.pro .cta')).toHaveText('Get Plus');
   await expect(page.locator('.plan.pro .cta')).toBeVisible();
   await expect(page.locator('.plan.pro .badge')).toHaveText('Beta');
-  await expect(page.locator('thead th.pro .beta-tag')).toHaveText('Beta');
+  await expect(page.getByTestId('beta-line')).toHaveText('Plus and Pro are in beta. Early members keep their price.');   // one beta line, no table pills
+  await expect(page.locator('thead .beta-tag')).toHaveCount(0);
   await expect(page.locator('#get-pro')).toBeVisible();
   // Pro Plus: buyable only when its own price is set too (/api/pro/config unlimited).
   const unl = (await (await request.get('/api/pro/config')).json()).unlimited;
