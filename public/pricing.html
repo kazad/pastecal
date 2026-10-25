@@ -3,15 +3,15 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pricing · pastecal</title>
-<meta name="description" content="pastecal is free to use. Pro locks editing to people you choose: $24 a year per calendar, or $48 a year for every calendar you run. Teams ($290 a year) is in development.">
+<meta name="description" content="pastecal is free to use. Pro locks editing to people you choose: $24 a year per calendar, or $60 a year for 10 Pro calendars and unlimited under your own name. Teams ($290 a year) is in development.">
 <link rel="icon" href="/favicon.ico">
 <script>document.documentElement.setAttribute('data-billing', 'pending')</script>
 <script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/tokens.css">
 <style>
 :root { --site-max: 1120px }
-/* Layout: a centered hero, four plan cards (Pro Single and Pro Unlimited are on sale, Pro Single
-   carries the emphasis; Teams is in development), the Get Pro picker, one compare table,
+/* Layout: a centered hero, four plan cards (Pro is the one on sale, so it carries the
+   emphasis; Pro Plus and Teams are in development), the Get Pro picker, one compare table,
    a short in-development list, then the waitlist and questions. */
 :root {
   --bg: #f6f7f9; --surface: #ffffff; --ink: #141a24; --muted: #5c6577; --line: #e4e7ec;
@@ -46,6 +46,9 @@ h2 { font-size: clamp(22px, 2.6vw, 28px); letter-spacing: -.01em; margin: 64px 0
 .unl-buy { margin-top: 20px }
 .unl-buy p { color: var(--muted); margin: 0 0 12px; max-width: 64ch }
 .unl-buy .cta { display: inline-flex }
+.explain { max-width: 760px; color: var(--muted); line-height: 1.6; margin: 4px 0 18px }
+.explain b { color: var(--ink) }
+.plan .size { margin: 2px 0 6px; font-size: 15px; line-height: 1.45 }
 .badge.dev { background: var(--soon-bg); color: var(--soon); border: 1px solid color-mix(in srgb, var(--soon) 25%, transparent) }
 .plan h3 { margin: 0; font-size: 18px }
 .who { color: var(--muted); font-size: 14.5px; margin: 4px 0 0; min-height: 2.9em }
@@ -105,7 +108,7 @@ td small { display: block; color: var(--muted); font-size: 13px; font-weight: 40
 .beta-tag { display: inline-block; font-size: 11px; font-weight: 800; letter-spacing: .02em; color: var(--blue); background: var(--blue-soft); border: 1px solid color-mix(in srgb, var(--blue) 30%, transparent); border-radius: 999px; padding: 0 7px; margin-left: 6px; vertical-align: 2px; white-space: nowrap }
 .plan-name { display: flex; align-items: baseline; gap: 2px; line-height: 1.55 }
 .plan-name .beta-tag { margin-left: 8px; vertical-align: 0; line-height: 1.5 }
-/* Billing: set from GET /api/pro/config. Until it answers, the Pro Single button and Get Pro wait unseen;
+/* Billing: set from GET /api/pro/config. Until it answers, the Pro button and Get Pro wait unseen;
    off (Pro can't be bought yet), the button joins the Pro beta list and Get Pro is gone. */
 html[data-billing="pending"] .plan.pro .cta, html[data-billing="pending"] #unlCta, html[data-billing="pending"] #get-pro { visibility: hidden }
 html[data-billing="off"] #get-pro { display: none }
@@ -239,9 +242,10 @@ details p { color: var(--muted); margin: 8px 0 0 }
 
     <div class="plan pro">
       <span class="badge">Beta</span>
-      <h3>Pro Single</h3>
-      <p class="who">One calendar you run: a team, a class, a shift schedule.</p>
-      <div class="price"><strong>$24</strong><span>per calendar, per year</span></div>
+      <h3>Pro</h3>
+      <p class="size"><b>1 Pro calendar</b></p>
+      <p class="who">For the one calendar you run: a team, a class, a shift schedule.</p>
+      <div class="price"><strong>$24</strong><span>per year</span></div>
       <p class="per">That's $2 a month, billed yearly.</p>
       <ul>
         <li>Everything in Free</li>
@@ -261,22 +265,21 @@ details p { color: var(--muted); margin: 8px 0 0 }
 
     <div class="plan">
       <span class="badge">Beta</span>
-      <h3>Pro Unlimited</h3>
+      <h3>Pro Plus</h3>
+      <p class="size"><b>10 Pro calendars</b>, plus unlimited under your @name</p>
       <p class="who">For everyone who runs more than one calendar.</p>
-      <div class="price"><strong>$48</strong><span>per year</span></div>
-      <p class="per">That's $4 a month, billed yearly. Or $5 month to month.</p>
+      <div class="price"><strong>$60</strong><span>per year</span></div>
+      <p class="per">That's $5 a month, billed yearly. Or $6 month to month.</p>
       <ul>
-        <li>Everything in Pro Single</li>
-        <li>Every calendar you run, one subscription</li>
-        <li>Lock another one in one click, no new checkout</li>
+        <li>Everything in Pro, on every calendar</li>
+        <li>Point each short link at any of your calendars</li>
+        <li>One subscription</li>
       </ul>
       <p class="coming-h">In development, included when ready</p>
       <ul class="coming">
-        <li>Your own pastecal.com/@name, with unlimited links under it</li>
-        <li>Up to 10 locked short links</li>
         <li>Co-owners</li>
       </ul>
-      <a id="unlCta" class="cta primary" href="#get-pro" data-plan="unlimited">Get Pro Unlimited</a>
+      <a id="unlCta" class="cta primary" href="#get-pro" data-plan="unlimited">Get Pro Plus</a>
     </div>
 
     <div class="plan">
@@ -286,7 +289,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
       <div class="price"><strong>$290</strong><span>per year</span></div>
       <p class="per">Or $29 a month, for the whole group.</p>
       <ul>
-        <li>Everything in Pro Unlimited</li>
+        <li>Everything in Pro Plus</li>
         <li>Up to 10 admins</li>
         <li>No pastecal branding</li>
         <li>A year of who changed what</li>
@@ -298,18 +301,18 @@ details p { color: var(--muted); margin: 8px 0 0 }
 
   <section class="howto" id="get-pro" aria-labelledby="getProH">
     <h2 id="getProH">Get Pro</h2>
-    <p class="howto-sub" id="howtoSub">Pro Single is per calendar. Pick one and pay with Stripe. There's no account to set up first: yours is made from the email you give Stripe.</p>
+    <p class="howto-sub" id="howtoSub">Pro is per calendar. Pick one and pay with Stripe. There's no account to set up first: yours is made from the email you give Stripe.</p>
     <div class="plans-pick" role="radiogroup" aria-label="Plan">
-      <label class="interval on"><input type="radio" name="tier" value="single" checked><span><b>Pro Single</b>, one calendar</span></label>
-      <label class="interval"><input type="radio" name="tier" value="unlimited"><span><b>Pro Unlimited</b>, every calendar you run</span></label>
+      <label class="interval on"><input type="radio" name="tier" value="single" checked><span><b>Pro</b>, one calendar</span></label>
+      <label class="interval"><input type="radio" name="tier" value="unlimited"><span><b>Pro Plus</b>, 10 Pro calendars plus unlimited under your @name</span></label>
     </div>
     <div class="intervals" id="singleInterval"><p class="interval-one"><b>$24 a year</b>, per calendar</p></div>
     <div class="intervals" id="unlIntervals" role="radiogroup" aria-label="Billing" hidden>
-      <label class="interval on"><input type="radio" name="interval" value="year" checked><span><b>$48 a year</b> <em>Save 20%</em></span></label>
-      <label class="interval"><input type="radio" name="interval" value="month"><span><b>$5 a month</b></span></label>
+      <label class="interval on"><input type="radio" name="interval" value="year" checked><span><b>$60 a year</b> <em>Save 17%</em></span></label>
+      <label class="interval"><input type="radio" name="interval" value="month"><span><b>$6 a month</b></span></label>
     </div>
     <div class="unl-buy" id="unlBuy" hidden>
-      <p>After paying, open any calendar you run, press Share and choose <b>Lock this calendar</b>. One click, no new checkout. Already on Pro Single? Those calendars move to Unlimited, and Stripe credits their unused time.</p>
+      <p>After paying, open any calendar you run, press Share and choose <b>Lock this calendar</b>. One click, no new checkout. Already on Pro? Those calendars move to Pro Plus, and Stripe credits their unused time.</p>
       <button type="button" class="cta primary" id="unlGo">Continue to payment</button>
       <p class="pick-err" id="unlErr" role="alert"></p>
     </div>
@@ -330,22 +333,25 @@ details p { color: var(--muted); margin: 8px 0 0 }
   </section>
 
   <h2 id="compare">Compare plans</h2>
+  <p class="explain">Every plan makes unlimited free calendars. <b>A Pro calendar</b> has all the extras: its name is reserved for you, you choose who edits, and you get full stats and history. <b>Pro</b> gives you one. <b>Pro Plus</b> gives you 10 with short names, like <code>pastecal.com/soccer</code>, and as many as you want under your own name, like <code>pastecal.com/@you/soccer</code>.</p>
   <p class="swipe">Swipe the table to see every plan.</p>
   <div class="gridwrap">
     <table>
-      <thead><tr><th>Feature</th><th>Free</th><th class="pro">Pro Single <span class="beta-tag">Beta</span></th><th>Pro Unlimited <span class="beta-tag">Beta</span></th><th>Teams</th></tr></thead>
+      <thead><tr><th>Feature</th><th>Free</th><th class="pro">Pro <span class="beta-tag">Beta</span></th><th>Pro Plus <span class="beta-tag">Beta</span></th><th>Teams</th></tr></thead>
       <tbody>
+        <tr class="group"><td colspan="5"><span>Pro calendars</span></td></tr>
+        <tr><td>Pro calendars with a short name<small>Like <code>pastecal.com/soccer</code>, reserved for you</small></td><td class="n">—</td><td class="pro">1</td><td>10</td><td>10</td></tr>
+        <tr><td>Pro calendars under your name <span class="soon">In development</span><small>Like <code>pastecal.com/@you/soccer</code></small></td><td class="n">—</td><td class="pro n">—</td><td>Unlimited</td><td>Unlimited</td></tr>
+
         <tr class="group"><td colspan="5"><span>Sharing</span></td></tr>
-        <tr><td>Calendars</td><td>Unlimited</td><td class="pro">Unlimited</td><td>Unlimited</td><td>Unlimited</td></tr>
+        <tr><td>Free calendars<small>Anyone with the edit link can change them</small></td><td>Unlimited</td><td class="pro">Unlimited</td><td>Unlimited</td><td>Unlimited</td></tr>
         <tr><td>People who can view and edit<small>No login required</small></td><td>Unlimited</td><td class="pro">Unlimited</td><td>Unlimited</td><td>Unlimited</td></tr>
         <tr><td>Edit, view-only and calendar app links</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
         <tr><td>Embed on your website</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
         <tr><td>Choose your view-only link name</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
 
         <tr class="group"><td colspan="5"><span>Control</span></td></tr>
-        <tr><td>Lock editing to people you choose<small>They edit with an editor link you share. Everyone else can view, as today</small></td><td class="n">—</td><td class="pro">1 calendar</td><td>Every calendar you run</td><td>Every calendar <span class="soon">In development</span></td></tr>
-        <tr><td>Your own name: <code>pastecal.com/@name</code> <span class="soon">In development</span><small>As many links as you like under it, like <code>@name/soccer</code></small></td><td class="n">—</td><td class="pro n">—</td><td>Unlimited links</td><td>Unlimited links</td></tr>
-        <tr><td>Locked short links<small>A <code>pastecal.com/name</code> link only you control</small></td><td class="n">—</td><td class="pro">1</td><td>Up to 10</td><td>Up to 10</td></tr>
+        <tr><td>Lock editing to people you choose<small>They edit with an editor link you share. Everyone else can view, as today</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
         <tr><td>Co-owners and admins <span class="soon">In development</span></td><td class="n">—</td><td class="pro n">—</td><td>3 co-owners</td><td>10 admins</td></tr>
         <tr><td>Suggested events <span class="soon">In development</span><small>Others suggest, you approve or decline</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
         <tr><td>Secret events <span class="soon">In development</span><small>Seen only by people who can edit</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
@@ -378,8 +384,8 @@ details p { color: var(--muted); margin: 8px 0 0 }
   <p class="legend"><span class="soon">In development</span> Being built now; included at no extra cost when it ships. Everything else works today.</p>
 
   <section class="indev" aria-labelledby="devH">
-    <h2 id="devH">Coming to Pro Single too</h2>
-    <p class="howto-sub">Being built now. Pro Single subscribers get these at no extra cost when they ship.</p>
+    <h2 id="devH">Coming to Pro too</h2>
+    <p class="howto-sub">Being built now. Pro subscribers get these at no extra cost when they ship.</p>
     <ul>
       <li><b>Suggested events</b>Visitors suggest, you approve or decline.</li>
       <li><b>Secret events and subcalendars</b>Events only editors see, and layers people can turn on and off.</li>
@@ -401,7 +407,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
       <div class="formrow">
         <div class="field">
           <label for="plan">Plan</label>
-          <select id="plan" name="plan"><option value="unlimited">Pro Unlimited, $48 a year</option><option value="teams">Teams, $290 a year or $29 a month</option><option value="pro">In-development Pro features</option><option value="unsure">Not sure</option></select>
+          <select id="plan" name="plan"><option value="unlimited">Pro Plus, $60 a year</option><option value="teams">Teams, $290 a year or $29 a month</option><option value="pro">In-development Pro features</option><option value="unsure">Not sure</option></select>
         </div>
         <div class="field">
           <label for="use">Mostly for</label>
@@ -421,8 +427,8 @@ details p { color: var(--muted); margin: 8px 0 0 }
   <h2>Questions</h2>
   <div class="faq">
     <details><summary>What's free?</summary><p>Making, editing and sharing calendars, with no account. Pro adds features for people who run a calendar.</p></details>
-    <details><summary>Which plan do I need?</summary><p>Free if anyone with the link can edit. Pro Single to lock one calendar. Pro Unlimited to lock every calendar you run. Teams, in development, for an organization.</p></details>
-    <details><summary>Why does Pro say Beta?</summary><p>Pro is in beta: features may change. Everything on the Pro cards works today, except what's marked in development.</p></details>
+    <details><summary>Which plan do I need?</summary><p>Free if anyone with the link can edit. Pro for one Pro calendar. Pro Plus if you run several. Teams, in development, for an organization.</p></details>
+    <details><summary>Why does Pro say Beta?</summary><p>Pro is in beta: features may change. Everything on the Pro card works today, except what's marked in development.</p></details>
     <details><summary>Does everyone I share with need to pay?</summary><p>No. You pay for the calendar, yearly or monthly. Everyone you share it with stays free.</p></details>
     <details><summary>Do I need an account for Pro?</summary><p>Only you do, so we know who owns the calendar, and it's made for you when you pay, from the email you give Stripe. Later you sign in with a link we email you, with no password. Nobody you share with ever needs an account.</p></details>
     <details><summary>Is there a free trial?</summary><p>Yes: 30 days of Pro, free, with no card. <span class="if-billing-off">While Pro is in beta, join the beta and we’ll email you when your trial is ready.</span><span class="if-billing-on">Start it from any saved calendar’s Share panel.</span> When it ends you choose: keep Pro ($24 a year), or go back to a free calendar.</p></details>
@@ -430,8 +436,8 @@ details p { color: var(--muted); margin: 8px 0 0 }
     <details><summary>What happens if I cancel?</summary><p>Pro lasts until the end of the period you paid for. Then your calendar stays, with everything in it, and goes back to the free plan, unlocked.</p></details>
     <details><summary>What if a payment fails?</summary><p>Stripe retries it, and your calendar stays locked meanwhile. If the subscription ends unpaid, the calendar goes back to the free plan, unlocked, with all its events.</p></details>
     <details><summary>What happens to backups on the free plan?</summary><p>Every calendar is backed up daily, and you can see the last 7 days of changes. Pro keeps the full history and lets you restore any earlier version.</p></details>
-    <details><summary>What is Pro Unlimited?</summary><p>Everything in Pro Single on as many calendars as you run, for $48 a year or $5 a month: one subscription, and each calendar locks with one click from its Share panel. Already on Pro Single? Your calendars move to Unlimited and Stripe credits the unused time. Your own pastecal.com/@name, locked short links and co-owners are in development and included when ready.</p></details>
-    <details><summary>What is Teams?</summary><p>Everything in Pro Unlimited, with up to 10 admins, no pastecal branding, a year of who changed what and invoices in your organization's name, for $290 a year or $29 a month. It's in development: join the waitlist and we'll email you once, when it opens.</p></details>
+    <details><summary>What is Pro Plus?</summary><p>10 Pro calendars with short names like pastecal.com/soccer, plus as many as you want under your own name, like pastecal.com/@you/soccer. $60 a year or $6 a month: one subscription, and each calendar locks with one click from its Share panel. Already on Pro? Your calendars move to Pro Plus and Stripe credits the unused time.</p></details>
+    <details><summary>What is Teams?</summary><p>Everything in Pro Plus, with up to 10 admins, no pastecal branding, a year of who changed what and invoices in your organization's name, for $290 a year or $29 a month. It's in development: join the waitlist and we'll email you once, when it opens.</p></details>
     <details><summary>Can I move Pro to a different calendar?</summary><p>Email <a href="mailto:support@pastecal.com">support@pastecal.com</a> and we'll help.</p></details>
     <details><summary>Can I see who looked at my calendar?</summary><p>No. Pro stats show how many people viewed it, how many follow it in a calendar app, and which countries and cities they're in. Counts only. Never who.</p></details>
   </div>
@@ -563,7 +569,7 @@ document.querySelectorAll('[data-plan]').forEach(a => a.addEventListener('click'
     if (await name(p.id) === null) { err.textContent = 'We couldn\'t find a calendar at that link.'; input.focus(); return; }
     go(p.id, 'paste');
   });
-  // Pro Single or Pro Unlimited. Unlimited belongs to the account, not one calendar: no picker, straight to
+  // Pro or Pro Plus (internally 'unlimited'). Pro Plus belongs to the account, not one calendar: no picker, straight to
   // Stripe (signed out works: the account is made from the email given there). Calendars lock from Share.
   const tier = () => (document.querySelector('input[name=tier]:checked') || {}).value || 'single';
   const pickCals = document.getElementById('pickCals'), unlBuy = document.getElementById('unlBuy'), pickNew = document.querySelector('.pick-new');
@@ -572,8 +578,8 @@ document.querySelectorAll('[data-plan]').forEach(a => a.addEventListener('click'
     document.getElementById('singleInterval').hidden = unl;
     document.getElementById('unlIntervals').hidden = !unl;
     document.getElementById('howtoSub').textContent = unl
-      ? 'Pro Unlimited is one subscription for every calendar you run. Pay with Stripe; there\'s no account to set up first.'
-      : 'Pro Single is per calendar. Pick one and pay with Stripe. There\'s no account to set up first: yours is made from the email you give Stripe.';
+      ? 'Pro Plus is one subscription for 10 Pro calendars, plus unlimited under your @name. Pay with Stripe; there\'s no account to set up first.'
+      : 'Pro is per calendar. Pick one and pay with Stripe. There\'s no account to set up first: yours is made from the email you give Stripe.';
     unlBuy.hidden = !unl; form.style.display = unl ? "none" : ""; pickNew.hidden = unl; pickCals.hidden = unl || !cals.length;
   };
   document.querySelectorAll('input[name=tier]').forEach(r => r.addEventListener('change', showTier));
@@ -587,8 +593,8 @@ document.querySelectorAll('[data-plan]').forEach(a => a.addEventListener('click'
         body: JSON.stringify({ plan: 'unlimited', interval: interval() }) });
       const out = await r.json().catch(() => ({}));
       if (r.ok && out.url) { location.href = out.url; return; }
-      unlErr.textContent = out.error === 'already-unlimited' ? 'You already have Pro Unlimited. Open a calendar and press Share to lock it.'
-        : r.status === 503 ? 'Pro Unlimited isn\'t available right now. Nothing was charged.'
+      unlErr.textContent = out.error === 'already-unlimited' ? 'You already have Pro Plus. Open a calendar and press Share to lock it.'
+        : r.status === 503 ? 'Pro Plus isn\'t available right now. Nothing was charged.'
         : out.error === 'buy-on-live' ? (out.message || 'Pro is bought on pastecal.com.')
         : 'Something went wrong. Nothing was charged. Try again in a minute.';
     } catch (x) { unlErr.textContent = 'We couldn\'t reach pastecal. Check your connection and try again.'; }
@@ -614,7 +620,7 @@ document.querySelectorAll('[data-plan]').forEach(a => a.addEventListener('click'
 })();
 </script>
 <script>
-// Pro (beta): can it be bought yet? GET /api/pro/config. Off, the Pro Single button is "Join the Pro beta": it
+// Pro (beta): can it be bought yet? GET /api/pro/config. Off, the Pro button is "Join the Pro beta": it
 // goes to the waitlist form with the Pro beta chosen, and the Get Pro picker (checkout) is hidden.
 function joinBeta(plan) {
   document.getElementById('plan').value = plan || 'pro';
@@ -625,7 +631,7 @@ function joinBeta(plan) {
   const root = document.documentElement;
   const apply = (billing, unlimited) => {
     root.dataset.billing = billing ? 'on' : 'off';
-    // Pro Unlimited is buyable only with its own price set; otherwise its button joins the Pro beta.
+    // Pro Plus is buyable only with its own price set; otherwise its button joins the Pro beta.
     if (!billing || !unlimited) {
       root.dataset.unlimited = 'off';
       document.getElementById('unlCta').textContent = 'Join the Pro beta';
@@ -638,7 +644,7 @@ function joinBeta(plan) {
     document.getElementById('proCta').textContent = 'Join the Pro beta';
     document.getElementById('proCta').href = '#waitlist';
     document.querySelector('#plan option[value=pro]').textContent = 'Pro beta, early access';
-    document.getElementById('waitFor').textContent = "For the Pro beta, Pro Unlimited and Teams. We'll email you once, when yours opens.";
+    document.getElementById('waitFor').textContent = "For the Pro beta, Pro Plus and Teams. We'll email you once, when yours opens.";
     // The account menu's "Join the Pro beta" (and old Get Pro links) land here.
     if (location.hash === '#get-pro' || location.hash === '#pro-beta') joinBeta();
   };

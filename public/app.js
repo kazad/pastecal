@@ -212,7 +212,7 @@ const CalendarVueApp = {
             // Inside someone else's page (an iframe) or asked to look like it (?embed).
             embedded: (() => { try { return window.self !== window.top || new URLSearchParams(location.search).has('embed'); } catch (e) { return true; } })(),
             proTrialUsed: false,
-            proUnlimited: false,        // the signed-in person has Pro Unlimited: the Go Pro card locks with one click
+            proUnlimited: false,        // the signed-in person has Pro Plus: the Go Pro card locks with one click
             proUnlimitedBusy: false,
             proBilling: null,           // /api/pro/config: true = trial and checkout; false = "Join the Pro beta"; null = not known yet (neither shows)
             pausedOwner: false,         // this browser owns the paused (Pro ended) calendar it's looking at: offer the way back
@@ -5275,7 +5275,7 @@ const CalendarVueApp = {
                 }
             } catch (e) { /* offline: offer it; the server decides */ }
         },
-        /** Go Pro card, for a Pro Unlimited owner: lock this calendar now (POST /api/pro/lock), no checkout.
+        /** Go Pro card, for a Pro Plus owner: lock this calendar now (POST /api/pro/lock), no checkout.
          *  The room broadcasts the lock, so the page turns locked by itself; a refusal opens the Pro view to explain. */
         async lockWithUnlimited() {
             const id = this.calendar && this.calendar.id;

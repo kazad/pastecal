@@ -697,7 +697,7 @@ function formatDay(t) {
 
 // Does this subscription's payer have a card Stripe will charge (the subscription's own, or the customer's
 // default)? null when Stripe can't say. Used so trial emails never promise "nothing is charged" falsely.
-// Pro can be bought here: Stripe is configured with the yearly price (Pro Single is yearly only; a monthly
+// Pro can be bought here: Stripe is configured with the yearly price (Pro is yearly only; a monthly
 // price, if set, is still honored for old links). Off, every Pro offer is "Join the Pro beta"
 // (GET /api/pro/config), and checkout and the trial answer 503 billing-not-configured as before.
 function billingOn(env, host) {
@@ -1035,7 +1035,7 @@ async function startTrial(request, env, userId, calendarId) {
     const user = await acc.getUser(userId);
     if (!user) return [401, { error: 'signed-out' }];
     // Pro Unlimited already covers every calendar: lock it instead (no trial needed).
-    if (await acc.activeUnlimited(userId)) return [409, { error: 'has-unlimited', message: 'You have Pro Unlimited: lock this calendar instead.' }];
+    if (await acc.activeUnlimited(userId)) return [409, { error: 'has-unlimited', message: 'You have Pro Plus: lock this calendar instead.' }];
     // Saved calendars only: a draft (only in one browser) has no room yet, so it answers 404.
     const st = await LockClient.lockStatus(env, calendarId);
     if (st.status === 404) return [404, { error: 'no-calendar' }];
@@ -1390,7 +1390,7 @@ async function applySubscription(env, acc, cfg, s) {
 }
 
 // ---- Pro Unlimited ------------------------------------------------------------------------------
-// One subscription per account ($48/year or $5/month) that pays for every calendar its owner locks
+// One subscription per account (Pro Plus: $60/year or $6/month) that pays for every calendar its owner locks
 // under it. The Stripe subscription names no calendar (metadata.plan='unlimited', and lock_calendar
 // when it was bought from a calendar's Share panel); unlimited_locks records which calendars it covers.
 //   - While it is active, POST /api/pro/lock {calendarId} locks any calendar the owner can lock (not
@@ -1449,7 +1449,7 @@ async function checkoutUnlimited(request, env, body, cfg, { userId, claim, claim
         expires_at: Math.floor((Date.now() + CHECKOUT_HOLD_MS) / 1000),
     };
     const paidSingles = singles.filter((x) => x.status !== 'trialing');
-    const forWhat = 'Pro Unlimited: lock every calendar you run.' + (paidSingles.length ? ' Your Pro Single calendars move to it, and their unused time is credited.' : '');
+    const forWhat = 'Pro Plus: 10 Pro calendars, plus unlimited under your @name.' + (paidSingles.length ? ' Your Pro calendars move to it, and their unused time is credited.' : '');
     params.custom_text = { submit: { message: cfg.livemode === false ? `${forWhat} ${TEST_CARD_HINT}` : forWhat } };
     // The upgrade credit lands on the paid Single's customer, so Unlimited is billed to that same customer.
     const customer = (paidSingles.find((x) => x.customer) || {}).customer || (userId ? await acc.customerForUser(userId) : null);

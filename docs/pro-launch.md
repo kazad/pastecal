@@ -118,12 +118,12 @@ stripe prices create --product="$PROD" --currency=usd --unit-amount=299 "--recur
 stripe prices list --lookup-keys=unlimited_yearly --lookup-keys=unlimited_monthly 2>/dev/null | jq -r '.data[] | [.id, .lookup_key, .unit_amount, .recurring.interval, .product] | @tsv'
 ```
 
-Expected (created 2026-10-24 in "pastecal dev"): `price_1UUGsJEPgWTHeJ7WYY9yZ5V4 unlimited_yearly 7900 year` and `price_1UUGsKEPgWTHeJ7WhvUAM7dR unlimited_monthly 800 month`, both on `prod_VVHReOCKcuiMkZ` ("pastecal Pro Unlimited"). Their ids are in `~/worktrees/pastecal-pro/cloudflare/.dev.vars.stripe` as `STRIPE_PRICE_UNLIMITED_YEARLY` / `STRIPE_PRICE_UNLIMITED_MONTHLY`. **Only if they are missing**, create them:
+Expected (created 2026-10-24 in "pastecal dev"): `price_1UUGsJEPgWTHeJ7WYY9yZ5V4 unlimited_yearly 7900 year` and `price_1UUGsKEPgWTHeJ7WhvUAM7dR unlimited_monthly 800 month`, both on `prod_VVHReOCKcuiMkZ` ("pastecal Pro Unlimited"). Their ids are in `~/worktrees/pastecal-pro/cloudflare/.dev.vars.stripe` as `STRIPE_PRICE_UNLIMITED_YEARLY` / `STRIPE_PRICE_UNLIMITED_MONTHLY`. **These predate Pro Plus at $60/$6: make new ones with the amounts below** (and update the ids):
 
 ```zsh
 UPROD=$(stripe products create --name="pastecal Pro Unlimited" --description="Lock every calendar you run: one subscription per account." 2>/dev/null | jq -er .id) && echo $UPROD
-stripe prices create --product="$UPROD" --currency=usd --unit-amount=4800 "--recurring[interval]=year" --lookup-key=unlimited_yearly --nickname="Pro Unlimited yearly" 2>/dev/null | jq -r .id
-stripe prices create --product="$UPROD" --currency=usd --unit-amount=500 "--recurring[interval]=month" --lookup-key=unlimited_monthly --nickname="Pro Unlimited monthly" 2>/dev/null | jq -r .id
+stripe prices create --product="$UPROD" --currency=usd --unit-amount=6000 "--recurring[interval]=year" --lookup-key=unlimited_yearly --nickname="Pro Unlimited yearly" 2>/dev/null | jq -r .id
+stripe prices create --product="$UPROD" --currency=usd --unit-amount=600 "--recurring[interval]=month" --lookup-key=unlimited_monthly --nickname="Pro Unlimited monthly" 2>/dev/null | jq -r .id
 ```
 
 Every Stripe command in this file was checked with `--help` / `--dry-run`. Add `--dry-run` to any of them to preview the request without sending it. Quote bracket flags (`"--recurring[interval]=year"`), because zsh treats `[...]` as a glob.
@@ -297,14 +297,14 @@ stripe prices create --live --product="$PROD" --currency=usd --unit-amount=2400 
 stripe prices create --live --product="$PROD" --currency=usd --unit-amount=299 "--recurring[interval]=month" --lookup-key=pro_monthly --nickname="Pro monthly" 2>/dev/null | jq -r .id
 ```
 
-Pro Unlimited ($48 a year or $5 a month), its own product:
+Pro Plus (internally Pro Unlimited: $60 a year or $6 a month), its own product:
 
 ```zsh
 stripe prices list --live --lookup-keys=unlimited_yearly --lookup-keys=unlimited_monthly 2>/dev/null | jq -r '.data[] | [.id, .lookup_key, .unit_amount, .recurring.interval] | @tsv'
 # only if empty:
 UPROD=$(stripe products create --live --name="pastecal Pro Unlimited" --description="Lock every calendar you run: one subscription per account." 2>/dev/null | jq -er .id) && echo $UPROD
-stripe prices create --live --product="$UPROD" --currency=usd --unit-amount=4800 "--recurring[interval]=year" --lookup-key=unlimited_yearly --nickname="Pro Unlimited yearly" 2>/dev/null | jq -r .id
-stripe prices create --live --product="$UPROD" --currency=usd --unit-amount=500 "--recurring[interval]=month" --lookup-key=unlimited_monthly --nickname="Pro Unlimited monthly" 2>/dev/null | jq -r .id
+stripe prices create --live --product="$UPROD" --currency=usd --unit-amount=6000 "--recurring[interval]=year" --lookup-key=unlimited_yearly --nickname="Pro Unlimited yearly" 2>/dev/null | jq -r .id
+stripe prices create --live --product="$UPROD" --currency=usd --unit-amount=600 "--recurring[interval]=month" --lookup-key=unlimited_monthly --nickname="Pro Unlimited monthly" 2>/dev/null | jq -r .id
 ```
 
 How Pro Unlimited bills (Accounts.js, "Pro Unlimited"):

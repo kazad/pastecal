@@ -217,15 +217,15 @@ const NavigationDropdown = {
         if (typeof ProBilling !== 'undefined') ProBilling.load().then((b) => { this.billing = b; });
     },     // never blocks opening: the section shows its own loading line
     computed: {
-        // The plan, at the top of the section: "Pro Unlimited · renews Oct 24, 2027", "Pro Single", or just the account.
+        // The plan, at the top of the section: "Pro Plus · renews Oct 24, 2027", "Pro", or just the account.
         planLabel() {
             const me = this.acct.me || {};
             if (me.plan === 'unlimited') {
                 const u = me.unlimited || {}, end = u.currentPeriodEnd ? (u.currentPeriodEnd < 1e12 ? u.currentPeriodEnd * 1000 : u.currentPeriodEnd) : 0;
                 const date = end ? new Date(end).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
-                return u.status === 'past_due' ? 'Pro Unlimited · payment problem' : date ? `Pro Unlimited · renews ${date}` : 'Pro Unlimited';
+                return u.status === 'past_due' ? 'Pro Plus · payment problem' : date ? `Pro Plus · renews ${date}` : 'Pro Plus';
             }
-            return me.plan === 'single' ? 'Pro Single' : 'Pro account';
+            return me.plan === 'single' ? 'Pro' : 'Pro account';
         },
         // Calendars this account pays for, lowercased id -> /api/me row.
         proById() {

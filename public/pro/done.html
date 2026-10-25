@@ -85,9 +85,9 @@ button.secondary { margin-top: 10px; background: transparent; color: var(--blue)
     }
     return r;
   });
-  if (proUnlimited) $('title').textContent = 'Pro Unlimited is on';
+  if (proUnlimited) $('title').textContent = 'Pro Plus is on';
   if (!proCalendar) {
-    // Pro Unlimited bought from the pricing page: no calendar yet. Each one locks with one click from its Share panel.
+    // Pro Plus bought from the pricing page: no calendar yet. Each one locks with one click from its Share panel.
     if (!proUnlimited) $('title').textContent = 'Thanks, your payment went through';
     msg.textContent = proUnlimited ? 'Open any calendar you run, press Share, and choose Lock this calendar. No new checkout.'
       : 'Open your calendar and press Share to see its Pro settings.';
