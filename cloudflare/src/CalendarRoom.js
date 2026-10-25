@@ -754,6 +754,8 @@ export class CalendarRoom extends DurableObject {
             return this.lockRoute(suffix, request);
         }
         if (request.headers.get('Upgrade') === 'websocket') {
+            // A view link to a room with no calendar (archived, never created) opens nothing, as GET answers 404.
+            if (isViewOnly && !this.state.id) return new Response('not found', { status: 404 });
             const [client, server] = Object.values(new WebSocketPair());
             this.ctx.acceptWebSocket(server);
             const author = url.searchParams.get('author');
