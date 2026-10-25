@@ -75,8 +75,10 @@ const AuthorSignal = {
         if (this._fbState !== 'unknown') return this._fbState === 'pending';
         this._fbState = 'settled';
         try {
-            if (typeof window !== 'undefined' && window.pcNoProdSideEffects) return false;     // no Firebase app on staging / local CF
-            if (typeof firebase === 'undefined' || !firebase.apps || !firebase.apps.length || !firebase.auth) return false;
+            // No Firebase app here (pastecal.com since Oct 25 2026, staging, a local Cloudflare copy): read its old
+            // user straight from IndexedDB instead, which reaches nothing remote.
+            if ((typeof window !== 'undefined' && window.pcNoProdSideEffects)
+                || typeof firebase === 'undefined' || !firebase.apps || !firebase.apps.length || !firebase.auth) return this._watchFirebaseStore();
             const auth = firebase.auth();
             this._fbState = 'pending';
             const settle = (user) => {
@@ -86,6 +88,42 @@ const AuthorSignal = {
             };
             const off = auth.onAuthStateChanged((user) => { settle(user); try { off && off(); } catch (e) {} });
             setTimeout(() => settle(null), this.WAIT_MS);
+            return true;
+        } catch (e) { this._fbState = 'settled'; return false; }
+    },
+    /**
+     * Firebase is no longer loaded on pastecal.com (Oct 25 2026), but a browser that signed in to it before
+     * keeps its user in IndexedDB (firebaseLocalStorageDb). Read it directly, once, so that browser still
+     * adopts its old uid and the calendars it created stay its own. Only an existing database is opened
+     * (indexedDB.databases()), so a new visitor gets nothing created. Answers within WAIT_MS, like the SDK path.
+     */
+    _watchFirebaseStore() {
+        try {
+            if (typeof indexedDB === 'undefined' || typeof indexedDB.databases !== 'function') return false;
+            this._fbState = 'pending';
+            const settle = (uid) => {
+                if (this._fbState !== 'pending') return;
+                this._fbState = 'settled';
+                if (!this._id) this._keep(uid || this._fresh());
+            };
+            setTimeout(() => settle(null), this.WAIT_MS);
+            indexedDB.databases().then((dbs) => {
+                if (!(dbs || []).some((d) => d && d.name === 'firebaseLocalStorageDb')) return settle(null);
+                const req = indexedDB.open('firebaseLocalStorageDb');
+                req.onerror = () => settle(null);
+                req.onsuccess = () => {
+                    try {
+                        const db = req.result;
+                        const all = db.transaction('firebaseLocalStorage', 'readonly').objectStore('firebaseLocalStorage').getAll();
+                        all.onsuccess = () => {
+                            const row = (all.result || []).find((r) => r && String(r.fbase_key || '').indexOf('firebase:authUser:') === 0);
+                            settle(row && row.value && typeof row.value.uid === 'string' ? row.value.uid : null);
+                            db.close();
+                        };
+                        all.onerror = () => { settle(null); db.close(); };
+                    } catch (e) { settle(null); }
+                };
+            }, () => settle(null));
             return true;
         } catch (e) { this._fbState = 'settled'; return false; }
     },

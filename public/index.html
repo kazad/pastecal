@@ -37,7 +37,6 @@
     <meta name="theme-color" content="#ffffff">
 
     <!-- Preconnects for faster third-party fetches -->
-    <link rel="preconnect" href="https://www.gstatic.com">
     <link rel="preconnect" href="https://cdn.jsdelivr.net">
 
     <!-- Editor link (pastecal.com/<calendar>#k=<key>): move the key out of the URL before ANY
@@ -179,51 +178,44 @@
          production unseen). Same-origin also lets it be cached for a year (public/_headers /vendor/*). -->
     <script src="/vendor/vue-3.5.44/vue.global.prod.js"></script>
     <script src="/vendor/syncfusion-23.2.6/ej2-calendar.min.js?v=1792797113" type="text/javascript"></script>
-    <!-- Only the Firebase services the app uses (92 KB), not firebase-compat.js, which
-         bundles every service (224 KB). Same version, same compat API; app must load first. -->
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js" integrity="sha384-Nc5ARm3RyW8KveEJE95Jpt7ImqwhlOwGfqVpFGgF4Ao//x1qi8KIDcSj+OLG4ekb" crossorigin="anonymous"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js" integrity="sha384-grmC0pfpaPqWq+qECwReRV8PH0JVnrRGo3iRC6FcVXv6Sv2EqgON68UDisDfj5tA" crossorigin="anonymous"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js" integrity="sha384-86kXGYkdFocjUe4AWPRLlnQjzMA29UWeFlyne4xC/mwpqoVrwkFrRC/mbWZdYsO7" crossorigin="anonymous"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-functions-compat.js" integrity="sha384-YX+6hxIHQIMMnbSpbqTfJY5YU9Vtodi1mVLyXsIdszTtaQjp2IVqLHz9q55z0Jmx" crossorigin="anonymous"></script>
+    <!-- Firebase is retired on pastecal.com (Oct 25 2026): the app runs on Cloudflare only, and these four
+         scripts (92 KB, plus an anonymous sign-in chain) no longer load there. A local copy can still choose
+         the old Firebase backend (?backend=firebase, CloudCalendarService.enabled), and only then are they written in. -->
+    <script>
+        window.pcUseFirebase = (function () {
+            try {
+                var h = location.hostname;
+                var local = /^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(h) || /\.(localhost|test)$/.test(h);
+                if (!local) return false;
+                var q = new URLSearchParams(location.search).get('backend');
+                return q === 'firebase' || (q !== 'cf' && localStorage.getItem('pastecal_backend') === 'firebase');
+            } catch (e) { return false; }
+        })();
+        if (window.pcUseFirebase) document.write(''
+            + '<script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js" integrity="sha384-Nc5ARm3RyW8KveEJE95Jpt7ImqwhlOwGfqVpFGgF4Ao//x1qi8KIDcSj+OLG4ekb" crossorigin="anonymous"><\/script>'
+            + '<script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js" integrity="sha384-grmC0pfpaPqWq+qECwReRV8PH0JVnrRGo3iRC6FcVXv6Sv2EqgON68UDisDfj5tA" crossorigin="anonymous"><\/script>'
+            + '<script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js" integrity="sha384-86kXGYkdFocjUe4AWPRLlnQjzMA29UWeFlyne4xC/mwpqoVrwkFrRC/mbWZdYsO7" crossorigin="anonymous"><\/script>'
+            + '<script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-functions-compat.js" integrity="sha384-YX+6hxIHQIMMnbSpbqTfJY5YU9Vtodi1mVLyXsIdszTtaQjp2IVqLHz9q55z0Jmx" crossorigin="anonymous"><\/script>'
+        );
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/chrono-node@1.4.9/dist/chrono.min.js" integrity="sha384-jxA//jFtZ5wjn1SjXb0Sg82gt6EeMtPbRu/MsN+fkNRI1LXjgIZyPDRwKNJ09PKg" crossorigin="anonymous"></script>
 
-    <!-- Firebase config -->
     <script>
-        const firebaseConfig = {
-            apiKey: "AIzaSyCZ9U1FflAFcdDLgxJscs2BwV_PrXqmzKw",
-            authDomain: "pastecal-web.firebaseapp.com",
-            databaseURL: "https://pastecal-web-default-rtdb.firebaseio.com",
-            projectId: "pastecal-web",
-            storageBucket: "pastecal-web.appspot.com",
-            messagingSenderId: "912998627577",
-            appId: "1:912998627577:web:aa652846c2618a986d8a28",
-            measurementId: "G-4J99GY9KE6"
-        };
-        // Not on a copy with no production side effects (staging, local Cloudflare backend): no app means any
-        // stray firebase.* call fails loudly instead of quietly opening production's database.
-        if (!window.pcNoProdSideEffects) firebase.initializeApp(firebaseConfig);
-
-        // Anonymous sign-in. NOT a login and not a permission check -- calendars stay
-        // open read/write to everyone, which is the product. On the Firebase backend it keys
-        // the calendar_authors records (the rules let a browser write only under its own uid).
-        // The Cloudflare backend identifies a browser by its pastecal id instead (a random id in
-        // localStorage, services/AuthorSignal.js); a browser that already had a Firebase uid adopts
-        // it once as that id, so the calendars it created stay recognizably its own.
-        //
-        // Deliberately fire-and-forget: sign-in must never gate rendering a calendar. If it
-        // fails (blocked third-party storage, offline, quota) the app behaves exactly as it
-        // did before -- writes still work, they just carry no author signal.
-        // Not on the staging copy (preview.pastecal.com): it must never write to production Firebase, and
-        // with no uid AuthorSignal records nothing.
-        if (!window.pcNoProdSideEffects) firebase.auth().signInAnonymously().catch(function (err) {
-            console.warn('[auth] anonymous sign-in unavailable:', err && err.code);
-        });
-
-        ej.base.registerLicense('Ngo9BigBOggjHTQxAR8/V1NHaF1cW2hIfEx1RHxQdld5ZFRHallYTnNWUj0eQnxTdEZiW39fcXJXR2JUV0NyWg==');
-
-        if (!window.pcNoProdSideEffects && location.href.includes("localhost") && location.href.includes("?local")) {
-            firebase.functions().useEmulator("localhost", 5001);
+        if (window.pcUseFirebase) {
+            firebase.initializeApp({
+                apiKey: "AIzaSyCZ9U1FflAFcdDLgxJscs2BwV_PrXqmzKw",
+                authDomain: "pastecal-web.firebaseapp.com",
+                databaseURL: "https://pastecal-web-default-rtdb.firebaseio.com",
+                projectId: "pastecal-web",
+                storageBucket: "pastecal-web.appspot.com",
+                messagingSenderId: "912998627577",
+                appId: "1:912998627577:web:aa652846c2618a986d8a28",
+                measurementId: "G-4J99GY9KE6"
+            });
+            firebase.auth().signInAnonymously().catch(function (err) { console.warn('[auth] anonymous sign-in unavailable:', err && err.code); });
+            if (location.search.includes('?local')) firebase.functions().useEmulator('localhost', 5001);
         }
+        ej.base.registerLicense('Ngo9BigBOggjHTQxAR8/V1NHaF1cW2hIfEx1RHxQdld5ZFRHallYTnNWUj0eQnxTdEZiW39fcXJXR2JUV0NyWg==');
     </script>
 
     <!-- Cloudflare Web Analytics (real-user load times; auto-injection wasn't reaching Worker-served HTML) -->
