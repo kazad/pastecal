@@ -161,7 +161,7 @@ const QuickAddDialog = {
         colors: { type: Array, default: () => [] },
         labels: { type: Array, default: () => [] },
         // Per color: true when the calendar gave it a name of its own (app.js hasTypeLabel).
-        // `labels` alone can't tell: an unnamed color is labeled with its color's name.
+        // `labels` alone can't tell: an unnamed color is labeled "Type N".
         named: { type: Array, default: () => [] }
     },
     data() {
