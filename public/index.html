@@ -1277,7 +1277,7 @@
                             {{ unseenChangeCount === 1 ? 'change' : 'changes' }} since you were last here. Undo any of them.
                         </template>
                         <template v-else-if="lock.locked">Every change to this calendar. Undo any of them.</template>
-                        <template v-else>Changes from the last 7 days. Undo any of them.</template>
+                        <template v-else>Changes from the last {{ FREE_CHANGES_DAYS }} days. Undo any of them.</template>
                     </p>
 
                     <!-- Grouped by day rather than as one flat list: every row in a busy
@@ -1318,7 +1318,7 @@
                         </div>
                     </section>
 
-                    <p v-if="!visibleUndoEntries.length" class="pc-side-empty-text mt-2" data-testid="activity-empty">Nothing has changed in the last 7 days.</p>
+                    <p v-if="!visibleUndoEntries.length" class="pc-side-empty-text mt-2" data-testid="activity-empty">Nothing has changed in the last {{ FREE_CHANGES_DAYS }} days.</p>
 
                     <!-- The owner: every saved version. Free, the calendar's creator: one line about what Plus keeps. -->
                     <button v-if="lock.locked && proOwner" type="button" class="pc-link pc-act-more" @click="openInsight('history', 'recent_changes')" data-testid="recent-history-link">
@@ -1431,15 +1431,22 @@
                     </button>
                 </div>
                 <div v-else class="pc-home-pane pc-home-pane--guide" data-testid="home-guide">
-                    <h1>The shared calendar <mark class="pc-hl">nobody</mark> has to sign up for.</h1>
-                    <p class="pc-home-chips"><span>No login</span><span>Nothing to install</span><span>Free</span></p>
+                    <h1>A calendar at a link, for you or your group.</h1>
+                    <p class="pc-home-sub"><mark class="pc-hl">Nobody</mark> signs up or installs anything.</p>
                     <ol class="pc-home-steps">
                         <li><b>1</b><span>Click a day and type an event.</span></li>
                         <li><b>2</b><span>Press <strong>Save &amp; share</strong>.</span></li>
-                        <li><b>3</b><span>Send the link to your group.</span></li>
+                        <li><b>3</b><span>Keep the link, or send it to your group.</span></li>
                     </ol>
                     <p class="pc-home-links"><a v-if="!template" class="pc-home-more" href="/view/demo" data-from="home-panel">See a demo calendar →</a><a class="pc-home-more" href="#how">How pastecal works ↓</a></p>
-                    <p class="pc-home-proof"><span><strong>3,000+</strong> calendars made since 2021</span></p>
+                    <!-- The questions people decide on without asking (Oct 25 2026): one line each. -->
+                    <dl class="pc-home-know" data-testid="home-know">
+                        <div><dt>Free.</dt><dd>No ads. Owners who want more can get Plus.</dd></div>
+                        <div><dt>Private by link.</dt><dd>Nothing is listed. Only people with the link can open it.</dd></div>
+                        <div><dt>Mistakes undo.</dt><dd>Recent changes are listed, and any of them can be put back.</dd></div>
+                        <div><dt>In your phone’s calendar.</dt><dd>Google, Apple or Outlook, and it stays up to date.</dd></div>
+                        <div><dt>Here to stay.</dt><dd>Running since 2021, <strong>3,000+</strong> calendars made.</dd></div>
+                    </dl>
                 </div>
                 </div>
             </aside>
@@ -1453,7 +1460,13 @@
                 <div class="pc-tour-intro" data-tour="intro">
                 <p class="pc-tour-kicker">{{ tourCopy.kicker }}</p>
                 <h2 id="pc-tour-title">{{ tourCopy.title }}</h2>
-                <p class="pc-tour-facts"><span>No login</span><span>Nothing to install</span><span>Free</span></p>
+                <dl class="pc-home-know pc-tour-know" data-testid="tour-know">
+                    <div><dt>Free.</dt><dd>No ads. Owners who want more can get Plus.</dd></div>
+                    <div><dt>Private by link.</dt><dd>Nothing is listed. Only people with the link can open it.</dd></div>
+                    <div><dt>Mistakes undo.</dt><dd>Recent changes are listed, and any of them can be put back.</dd></div>
+                    <div><dt>In your phone’s calendar.</dt><dd>Google, Apple or Outlook, and it stays up to date.</dd></div>
+                    <div><dt>Here to stay.</dt><dd>Running since 2021, <strong>3,000+</strong> calendars made.</dd></div>
+                </dl>
                 </div>
 
                 <ol class="pc-tour-steps" data-tour="steps">

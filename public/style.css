@@ -454,9 +454,6 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-home-new b { display: block; font-size: var(--pc-fs-md); font-weight: var(--pc-fw-semibold) }
 .pc-home-new small { display: block; font-size: var(--pc-fs-xs); color: var(--pc-text-muted) }
 /* Proof under the links: real numbers and who makes it. */
-.pc-home-proof { display: flex; flex-direction: column; gap: 4px; margin: var(--pc-space-5) 0 0; padding-top: var(--pc-space-4); border-top: 1px solid var(--pc-line); font-size: var(--pc-fs-sm); color: var(--pc-text-muted) }
-.pc-home-proof strong { color: var(--pc-text) }
-.pc-home-proof a { color: inherit; text-decoration: underline; text-underline-offset: 2px }
 .pc-demo-code { color: inherit; text-decoration: underline; text-decoration-color: var(--pc-line); text-underline-offset: 3px }
 .pc-demo-code:hover { text-decoration-color: currentColor }
 
@@ -1400,3 +1397,13 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
 .pc-search-result-body { padding: 0 10px 10px; display: flex; flex-direction: column; gap: 8px }
 .pc-search-result-notes { margin: 0; font-size: var(--pc-fs-sm); color: var(--pc-text-2); white-space: pre-line; overflow-wrap: anywhere }
 .pc-search-result-actions { display: flex; gap: 6px }
+
+/* Homepage panel: the line under the headline, and the questions people decide on without asking. */
+.pc-home-aside .pc-home-sub { margin: 0 0 var(--pc-space-4); font-size: var(--pc-fs-md); color: var(--pc-text-2) }
+.pc-home-know { display: flex; flex-direction: column; gap: 8px; margin: var(--pc-space-4) 0 0; padding-top: var(--pc-space-4); border-top: 1px solid var(--pc-line); font-size: var(--pc-fs-sm); line-height: 1.45 }
+.pc-home-know div { display: block }
+.pc-home-know dt { display: inline; font-weight: var(--pc-fw-semibold); color: var(--pc-text) }
+.pc-home-know dd { display: inline; margin: 0 0 0 4px; color: var(--pc-text-2) }
+/* The same lines atop the tour, for screens without the panel (it shows at 1100px+). */
+.pc-tour-know { max-width: 36rem; margin-left: auto; margin-right: auto; text-align: left; border-top: 0; padding-top: 0 }
+@media (min-width: 1100px) { .pc-tour-know { display: none } }

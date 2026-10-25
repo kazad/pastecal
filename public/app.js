@@ -348,6 +348,7 @@ const CalendarVueApp = {
             MAX_COLORS: MAX_COLORS,
             colorFilters: COLORS.map(() => true), // allow all color types by default
             searchOpenId: null,   // the search result shown open, if any
+            FREE_CHANGES_DAYS: 30,   // how far back Recent changes reaches on a free calendar (visibleUndoEntries)
             // Bumped on every scheduler dataBound so hiddenEventCount, which reads the
             // visible date range off scheduleObj, recomputes when the view moves.
             viewTick: 0,
@@ -545,13 +546,14 @@ const CalendarVueApp = {
         },
 
         /**
-         * What Recent changes lists. A free calendar shows the last 7 days; a Pro calendar shows
+         * What Recent changes lists. A free calendar shows the last FREE_CHANGES_DAYS (30: a bad edit is often
+         * noticed only when someone next checks, and "a month" reads calm where "7 days" reads like a timer); a Pro calendar shows
          * everything the room keeps (and its owner has History for the rest). Display only:
          * Cmd+Z still reads undoEntries, so nothing it could undo before goes missing.
          */
         visibleUndoEntries() {
             if (this.lock && this.lock.locked) return this.undoEntries;
-            return ProInsightMath.withinDays(this.undoEntries, 7, this.serverNow());
+            return ProInsightMath.withinDays(this.undoEntries, this.FREE_CHANGES_DAYS, this.serverNow());
         },
 
         /** This browser created the calendar (it's under "Your calendars"). */
@@ -743,7 +745,7 @@ const CalendarVueApp = {
         // Headline and lead for the homepage pitch. One version for now; a later test adds more,
         // keyed by experiment variant.
         tourCopy() {
-            return { kicker: 'Shared calendars. No sign-ups.', title: 'Add events. Paste your link. Done.' };
+            return { kicker: 'How pastecal works', title: 'Add your events, then keep the link or send it to your group.' };
         }
     },
 
