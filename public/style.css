@@ -1046,9 +1046,6 @@ div#Schedule,
 @media (prefers-reduced-motion: reduce) { .pc-grid-tip, .pc-share-pulse { animation: none } }
 @media (max-width: 640px) { .pc-grid-tip { top: 150px; font-size: 13px } .pc-draft-note a { margin-left: 0 } }
 .pc-tour-links h4 span { font-size: 12px; font-weight: 600; color: var(--pc-text-muted); margin-left: 6px }
-.pc-tour-footer { display: flex; gap: 18px; margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--pc-line); font-size: 14px }
-.pc-tour-footer a { color: var(--pc-text-muted) }
-.pc-tour-footer a:hover { color: var(--pc-link) }
 .pc-tour-uses-note { margin: 12px 0 0; font-size: 15px }
 
 /* Tour illustrations: line art in the link color, soft fills from the theme tokens. */
@@ -2413,3 +2410,6 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 /* The owner of a paused calendar: one clear button back to the "Pro ended" choices. */
 .pc-paused-owner { height: 32px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--pc-warning-soft); color: var(--pc-warning); font: 600 13px/1 var(--pc-font); cursor: pointer; white-space: nowrap }
 .pc-paused-owner:hover { filter: brightness(.97) }
+/* The homepage ends with the shared site footer, aligned to the tour's column; the tour's own background already separates it. */
+.pc-home-site-footer { --site-max: 1040px }
+.pc-home-site-footer .site-footer { margin-top: 0; border-top: 0 }
