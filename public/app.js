@@ -587,6 +587,11 @@ const CalendarVueApp = {
                 return this.spansRange(start, ms(e.end), range);
             }).length;
         },
+        // An unset default view is undefined in saved calendars; the select's Auto option is null.
+        calendarDefaultView: {
+            get() { return this.calendar.options.defaultView ?? null; },
+            set(v) { this.calendar.options.defaultView = v; }
+        },
         calendarAutoViewLabel() {
             return 'Month'; // Could be dynamic based on screen size etc.
         },
@@ -2124,9 +2129,6 @@ const CalendarVueApp = {
             const params = new URLSearchParams(window.location.search);
             if (!params.has('view') && !params.has('v')) {
                 let defaultView = this.calendar?.options?.defaultView || this.globalSettings.defaultView || 'Month';
-                // On a phone the month grid cuts every event to its start time, so a new
-                // homepage calendar opens on the week, where events can be read.
-                if (this.isHomepageCalendar && !this.userAddedEvent && window.innerWidth < 640) defaultView = 'Week';
                 const actualViewName = this.getActualViewName(defaultView);
 
                 const viewIndex = scheduleObj.views.findIndex(v => {
@@ -2355,7 +2357,7 @@ const CalendarVueApp = {
             this.calendar.events = [];
             this.calendar.options = {
                 notes: '',
-                defaultView: 'month'    // phones still open on Week (applyDefaultView)
+                defaultView: 'month'
             };
             this.calendar.setEvents(this.calendar.sampleEvents());
             // Reset local settings to defaults
