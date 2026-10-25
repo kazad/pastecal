@@ -999,6 +999,8 @@ const CalendarVueApp = {
                 args.element.firstChild.style.borderLeftColor = categoryColor;
             } else {
                 args.element.style.backgroundColor = categoryColor;
+                // Its text: dark on light colors, white on dark (style.css reads the variable).
+                args.element.style.setProperty('--pc-on-event', ScheduleAdapter.onColor(categoryColor));
             }
             ScheduleAdapter.showTitle(args.element, args.data);
         }
@@ -1018,6 +1020,10 @@ const CalendarVueApp = {
                 return;
             }
             if (args.type === 'QuickInfo' && args.data) ScheduleAdapter.showTitle(args.element, args.data);
+            // The popup header takes the event's color; its title and icons take the matching text color.
+            if (args.type === 'QuickInfo' && args.data && args.data.Id !== undefined) {
+                args.element.style.setProperty('--pc-on-event', ScheduleAdapter.onColor(app.getTypeColor(args.data.Type)));
+            }
             // The date line opens the editor (click handler by appendTo below); say so on hover.
             if (args.type === 'QuickInfo' && args.data && !scheduleObj.readonly) {
                 const when = args.element.querySelector('.e-event-popup .e-date-time');
@@ -3564,6 +3570,19 @@ const CalendarVueApp = {
                 hour12: true
             };
             return new Date(dateString).toLocaleString(undefined, options);
+        },
+
+        // A search result's "when". An all-day event shows its dates only: its stored start is a
+        // midnight, so formatDate printed "12:00 AM", and its end is the day AFTER the last one.
+        formatEventRange(event) {
+            if (!event.isAllDay) return `${this.formatDate(event.start)} - ${this.formatDate(event.end)}`;
+            const day = { weekday: 'short', month: 'short', day: 'numeric' };
+            const start = Event.allDayToLocal(event.start);
+            if (!start) return '';
+            const end = Event.allDayToLocal(event.end);
+            const last = end && end > start ? new Date(end.getFullYear(), end.getMonth(), end.getDate() - 1) : start;
+            const first = start.toLocaleDateString(undefined, day);
+            return last.toDateString() === start.toDateString() ? first : `${first} - ${last.toLocaleDateString(undefined, day)}`;
         },
 
         // Resolves globalSettings.dateFormat to a Syncfusion-compatible date pattern.

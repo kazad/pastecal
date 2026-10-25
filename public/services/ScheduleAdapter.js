@@ -36,6 +36,20 @@
     const opened = new Map();
     const recKey = (r) => `${blank(r.Id) ? '' : String(r.Id)}|${blank(r.RecurrenceID) ? '' : String(r.RecurrenceID)}`;
 
+    // Text on an event chip: one of these two, by contrast with the event's color.
+    const ON_LIGHT = '#ffffff';
+    const ON_DARK = '#14171c';
+    const luminance = (hex) => {
+        let h = String(hex || '').trim().replace(/^#/, '');
+        if (/^[0-9a-f]{3}$/i.test(h)) h = h.replace(/./g, '$&$&');
+        if (!/^[0-9a-f]{6}$/i.test(h)) return NaN;
+        const [r, g, b] = [0, 2, 4].map((i) => {
+            const c = parseInt(h.slice(i, i + 2), 16) / 255;
+            return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+        });
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    };
+
     const ScheduleAdapter = {
         /**
          * Remember an event as the user began to change it. Call from popupOpen (Editor),
@@ -75,6 +89,26 @@
                 const title = unescape(String(data.Subject));
                 if (el.textContent !== title) el.textContent = title;
             });
+        },
+
+        /** WCAG 2 contrast ratio between two #rgb/#rrggbb colors (1..21); NaN if either is unreadable. */
+        contrastRatio(a, b) {
+            const la = luminance(a), lb = luminance(b);
+            if (isNaN(la) || isNaN(lb)) return NaN;
+            return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+        },
+
+        /**
+         * The text color for an event painted in `color`: whichever of white and near-black
+         * reads better on it. White on the light palette colors (orange, sky, gray, lime)
+         * was 2-3:1. Every built-in color reaches 4.5:1 with its pick (test/unit/event-on-color);
+         * a custom color near the middle can't with either, and still gets the better one.
+         */
+        onColor(color) {
+            const light = ScheduleAdapter.contrastRatio(color, ON_LIGHT);
+            const dark = ScheduleAdapter.contrastRatio(color, ON_DARK);
+            if (isNaN(light) || isNaN(dark)) return ON_LIGHT;
+            return dark > light ? ON_DARK : ON_LIGHT;
         },
 
         /** Syncfusion's exception stamp for an occurrence start: UTC, YYYYMMDDTHHMMSSZ. */
