@@ -121,19 +121,21 @@ test('Pro from /pricing (fake Stripe), claim @name, create a calendar under it',
   await page.waitForFunction(() => window.scheduleObj, null, { timeout: 20_000 });
   const st = await (await request.get(`/api/admin/cal/${calendarId}/lock-status`, { headers: { Authorization: `Bearer ${SECRET}` } })).json();
   expect(st.locked).toBe(true);
-  // The owner's panel shows its short link.
-  await expect(page.getByTestId('pro-at-link').first()).toHaveText(new RegExp(`/@${handle}/soccer$`), { timeout: 15_000 });
   // Share leads with the @link, called view-only: the panel's one "Share to view" link, and the header pill.
-  await expect(page.locator('[data-testid=share-group] h4')).toHaveText('Share to view');
+  await expect(page.locator('[data-testid=share-group] h4')).toHaveText('Share to view', { timeout: 15_000 });
   await expect(page.getByTestId('share-readonly-addr')).toContainText(`pastecal.com/@${handle}/soccer`);
-  await expect(page.getByTestId('share-edit-note')).toContainText('view-only');
-  // Locked: "Share to edit" is the editor link (none made in this browser yet: a button to the Pro panel's), then the own address.
+  // Locked: "Share to edit" is the editor link (none made in this browser yet: a button to the Plus tab's), then the
+  // calendar's own address, which is view only for everyone but the owner and editors (stage2's wording).
   const heads = await page.locator('[data-testid=share-links] .pc-link-item h4').allTextContents();
-  expect(heads.slice(0, 3)).toEqual(['Share to view', 'Share to edit', 'Edit link']);
+  expect(heads.slice(0, 3)).toEqual(['Share to view', 'Share to edit', 'Calendar link']);
+  await expect(page.getByTestId('share-editor-links')).toHaveCount(0);    // Share to edit already says where
   await expect(page.getByTestId('share-editor-get')).toBeVisible();
-  await page.getByTestId('share-editor-get').click();
+  await page.getByTestId('share-editor-get').click();                     // the Plus tab, at Who can edit
+  // The owner's Plus tab shows its @link (the Pro links live there).
+  await expect(page.getByTestId('pro-at-link').first()).toHaveText(new RegExp(`/@${handle}/soccer$`), { timeout: 15_000 });
   page.once('dialog', (d) => d.accept());                                     // "Make a new editor link?"
   await page.getByTestId('pro-key-btn').click();
+  await page.getByTestId('side-tab-share').click();
   await expect(page.getByTestId('share-editor-copy')).toContainText('#k=');
   await expect(page.getByTestId('share-view-copy')).toContainText(`pastecal.com/@${handle}/soccer?date=`);   // This view: from the @link too
   await expect(page.getByTestId('share-pill-url')).toContainText(`pastecal.com/@${handle}/soccer`);
@@ -178,8 +180,11 @@ test('"Show on my page" lists it on pastecal.com/@name', async ({ browser }) => 
   await expect(row.getByTestId('cal-status')).toHaveText(`Pro · under @${handle}`);   // doesn't use one of the 5
   // A calendar locked at its own address does: the meter and its row say so.
   const plain = `walk-plain-${run}`;
-  expect((await page.request.post(`/cal/${plain}`, { data: JSON.stringify({ title: 'Book club', options: {}, events: [] }) })).status()).toBe(201);
-  expect((await page.request.post('/api/pro/lock', { data: JSON.stringify({ calendarId: plain }), headers: { 'Content-Type': 'application/json', Origin: BASE } })).status()).toBe(200);
+  // Made by this browser (its pastecal id), so it may lock it under Pro: editors of record, like Plus.
+  const author = `acct-author-${run}`;
+  expect((await page.request.post(`/cal/${plain}`, { data: JSON.stringify({ title: 'Book club', options: {}, events: [], author }) })).status()).toBe(201);
+  expect((await page.request.post('/api/pro/lock', { data: JSON.stringify({ calendarId: plain }), headers: { 'Content-Type': 'application/json', Origin: BASE } })).status()).toBe(403);   // the URL alone is not enough
+  expect((await page.request.post('/api/pro/lock', { data: JSON.stringify({ calendarId: plain, author }), headers: { 'Content-Type': 'application/json', Origin: BASE } })).status()).toBe(200);
   await page.reload();
   await expect(page.locator(`[data-cal="${plain}"]`).getByTestId('cal-status')).toHaveText('Pro · 1 of your 5');
   await expect(page.getByTestId('account-meter')).toHaveText(`Upgraded calendars: 1 of 5 · unlimited under @${handle}`);
@@ -246,8 +251,8 @@ test('a deleted account\'s short link opens "This link has ended", never a calen
     expect((await api.post('/api/stripe/webhook', { data: body, headers: { 'Content-Type': 'application/json', 'Stripe-Signature': signStripe(WHSEC, body) } })).status()).toBe(200); };
   fake.subs.set(sub.id, sub);
   await hook('customer.subscription.created', { id: sub.id });
-  expect((await api.post(`/cal/${cal}`, { data: JSON.stringify({ title: 'Tigers U10', options: {}, events: [] }) })).status()).toBe(201);
-  expect((await post('/api/pro/lock', { calendarId: cal })).status()).toBe(200);
+  expect((await api.post(`/cal/${cal}`, { data: JSON.stringify({ title: 'Tigers U10', options: {}, events: [], author: `gone-author-${run}` }) })).status()).toBe(201);
+  expect((await post('/api/pro/lock', { calendarId: cal, author: `gone-author-${run}` })).status()).toBe(200);   // its creator's browser
   expect((await post('/api/names/short', { name: short, calendarId: cal })).status()).toBe(200);
   const ended = { ...sub, status: 'canceled' }; fake.subs.set(sub.id, ended);
   await hook('customer.subscription.deleted', ended);

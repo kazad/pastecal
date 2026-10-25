@@ -1005,7 +1005,7 @@
                             <!-- Locked: the plain URL edits only for the owner (signed in) and editor-link holders, so it isn't
                                  called an edit link; helpers need an editor link, which lives in the Plus tab. -->
                             <div v-if="lock.locked" class="pc-link-head"><h4 class="pc-share-label">Calendar link</h4><span class="pc-pill">view only for others</span>
-                                <button type="button" class="pc-link pc-link-extra" @click="openPlusTab('share')" data-testid="share-editor-links">Editor links</button></div>
+                                <button v-if="!proOwner" type="button" class="pc-link pc-link-extra" @click="openPlusTab('share')" data-testid="share-editor-links">Editor links</button></div>
                             <div v-else class="pc-link-head"><h4 class="pc-share-label">Edit link</h4><span class="pc-pill pc-pill--danger">can edit</span></div>
                             <div class="pc-link-row">
                                 <button type="button" class="pc-link-field" :data-copy-key="'edit'" :class="{ 'is-copied': copiedKey === 'edit' }" :title="'Copy ' + getEditableURL()" @click="copyLink('edit', getEditableURL(), 'copy')" data-testid="share-edit-copy">

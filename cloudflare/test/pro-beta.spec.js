@@ -155,7 +155,7 @@ test('billing off: pricing says "Join the beta", hides Get Plus, and the waitlis
   await expect(page.getByTestId('beta-line')).toHaveText('Plus and Pro are in beta. Early members keep their price.');   // one beta line, no table pills
   await expect(page.locator('thead .beta-tag')).toHaveCount(0);
   await expect(page.locator('#get-pro')).toBeHidden();
-  await expect(page.getByText('Plus and Pro are in beta: features may change.')).toHaveCount(1);
+  await expect(page.getByText("Everything on their cards works today, except what's listed as coming.")).toHaveCount(1);
   await cta.click();
   await expect(page.locator('#plan')).toHaveValue('pro');
   await expect(page.locator('#email')).toBeFocused();
