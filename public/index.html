@@ -586,7 +586,7 @@
                                     @click="copyShareLink"
                                     role="button" tabindex="0"
                                     @keyup.enter="copyShareLink" @keyup.space="copyShareLink"
-                                    :aria-label="shareCopied ? 'Link copied' : (shareViewURL() ? 'Copy the view-only link' : 'Copy link to this calendar')"
+                                    :aria-label="shareCopied ? 'Link copied' : 'Copy this calendar\'s edit link'"
                                     data-testid="share-pill-existing">
 
                                     <!-- This pill is desktop-only; phones get the separate
@@ -604,13 +604,11 @@
                                     <div v-if="shareCopied"
                                         class="text-theme-success text-xs font-bold whitespace-nowrap"
                                         data-testid="share-pill-copied">Link copied</div>
-                                    <!-- What it copies: the view-only link (the @link or short link when it has one). -->
-                                    <div v-else-if="shareViewURL()" class="text-color-1 text-xs truncate max-w-[150px] md:max-w-xs" data-testid="share-pill-url">
-                                        <span v-text="shortLink(shareViewURL()).replace(/^(pastecal\.com\/)(.*)$/, '$1')"></span><span class="font-bold text-color-2" v-text="shortLink(shareViewURL()).replace(/^pastecal\.com\//, '')"></span>
-                                        <span class="pc-pill-tag" title="The link to share for viewing. This page is the edit page.">view link</span>
-                                    </div>
+                                    <!-- What it copies: this page's own link, the edit link ("don't make me think": it is the
+                                         address you are on). The view-only link is in Share, next to it. -->
                                     <div v-else class="text-color-1 text-xs truncate max-w-[150px] md:max-w-xs" data-testid="share-pill-url">
                                         pastecal.com/<span class="font-bold text-color-2" v-text="calendar.id"></span>
+                                        <span class="pc-pill-tag" title="Anyone with this link can change the calendar. The view-only link is in Share.">edit link</span>
                                     </div>
 
                                     <!-- Everything else (edit link, subscribe, feed URLs) still

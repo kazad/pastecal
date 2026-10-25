@@ -3844,16 +3844,14 @@ const CalendarVueApp = {
          * panel's own copy buttons -- the whole point is to learn whether this path
          * gets used, and lumping them together would hide the answer.
          */
+        // The header pill copies the page's own link, the edit link (it is the address you are on); the
+        // view-only link is one click away in Share. The toast says what was copied, since it grants editing.
         copyShareLink() {
-            const readOnly = this.shareViewURL();
-            const url = readOnly || this.getEditableURL();
+            const url = this.getEditableURL();
             if (!url) return;
 
             const settle = () => {
-                // The view-only link is minted asynchronously and can be missing or still
-                // pending; the fallback grants full edit access, so say so rather than
-                // giving the same "copied" as the safe link.
-                if (!readOnly) this.showToast('Copied the edit link: anyone with it can change this calendar', 'info');
+                this.showToast('Copied the edit link: anyone with it can change this calendar. For a view-only link, open Share.', 'info');
                 this.shareCopied = true;
                 clearTimeout(this.shareCopiedTimer);
                 this.shareCopiedTimer = setTimeout(() => { this.shareCopied = false; }, 1600);

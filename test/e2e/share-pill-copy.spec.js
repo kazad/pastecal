@@ -52,8 +52,9 @@ test.describe('Header share pill', () => {
   });
 
   test('copies the read-only link, never the editable one', async ({ page, context }) => {
-    // The one mistake here that cannot be undone is handing out edit rights by
-    // accident, so the safe URL has to be the default.
+    // Was: the view-only link by default, so edit rights are never handed out by accident.
+    // Since Oct 25 2026 (owner's call): the pill is the page's own address, the edit link,
+    // with a toast saying it grants editing; the view-only link is in Share.
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     await open(page);
 
@@ -61,8 +62,9 @@ test.describe('Header share pill', () => {
     await expect(page.locator(COPIED)).toBeVisible();
 
     const copied = await page.evaluate(() => navigator.clipboard.readText());
-    expect(copied).toContain('/view/');
-    expect(copied).not.toMatch(/pastecal\.com\/rldispatch$/);
+    // The pill is the page's own link, the edit link (Oct 25 2026); the view-only link is in Share.
+    expect(copied).toMatch(/pastecal\.com\/rldispatch$/);
+    expect(copied).not.toContain('/view/');
   });
 
   test('the copied state reverts on its own', async ({ page, context }) => {

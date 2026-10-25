@@ -208,5 +208,28 @@ function tab(id) {
     step("a case variant can't take over a free calendar's case-insensitive lookups");
 }
 
+// Security review, Oct 25 2026: a view link only reads. A POST through /cal/view/<id> once reached the room's
+// create path, so a viewer could recreate an EMPTY room (an archived calendar, a view row backfilled from
+// Firebase) and get back its edit name, as its creator of record.
+{
+    const name = uniq('viewpost');
+    // Its own address: the steps above use up this IP's create allowance (CREATE_LIMITER, 10 a minute).
+    assert.equal((await fetch(url(name), { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '10.71.0.9' }, body: JSON.stringify({ title: 'Owner', events: [ev('o1', 'Owner event')] }) })).status, 201);
+    const view = await (await fetch(`${BASE}/api/create-view`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': '10.71.0.9' }, body: JSON.stringify({ sourceCalendarId: name }) })).json();
+    assert.ok(view.publicViewId, JSON.stringify(view));
+    const viewPost = () => fetch(`${BASE}/cal/view/${encodeURIComponent(view.publicViewId)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'HIJACKED', author: 'attacker', events: [ev('x', 'x')] }) });
+    let r = await viewPost();
+    assert.equal(r.status, 405, 'a live calendar: refused');
+    assert.ok(!(await r.text()).includes(name), 'and the edit name never comes back');
+    // The case that leaked: the room behind the view id is empty.
+    assert.equal((await fetch(url(name, '/archive'), { method: 'POST', headers: { Authorization: `Bearer ${SECRET}` } })).status, 200);
+    r = await viewPost();
+    const body = await r.text();
+    assert.equal(r.status, 405, `an empty room behind a view id: refused (got ${r.status})`);
+    assert.ok(!body.includes(name), 'and the edit name never comes back');
+    for (const method of ['PUT', 'PATCH', 'DELETE']) assert.equal((await fetch(`${BASE}/cal/view/${encodeURIComponent(view.publicViewId)}`, { method })).status, 405, `${method} refused`);
+    step('a view link cannot create, change or reveal the calendar behind it (POST/PUT/PATCH/DELETE refused, even on an empty room)');
+}
+
 console.log('hardening tests passed');
 process.exit(0);

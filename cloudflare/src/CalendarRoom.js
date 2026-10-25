@@ -887,6 +887,8 @@ export class CalendarRoom extends DurableObject {
             const cal = isViewOnly ? this.viewCalendar(viewId) : this.calendar();
             return Response.json({ v: this.state.v, calendar: cal, locked: !!this.lock, pro: !!this.lock, paused: this.paused(), proSettings: this.proSettings() });
         }
+        // Nothing that writes ever comes through a view link (the Worker refuses it too: index.js, /cal/view).
+        if (isViewOnly && request.method !== 'GET' && request.method !== 'HEAD') return Response.json({ error: 'read only' }, { status: 405 });
         if (request.method === 'POST' && suffix === '') {
             const text = await request.text();
             if (text.length > LIMITS.maxCreate) return Response.json({ ok: false, error: 'too big' }, { status: 413 });

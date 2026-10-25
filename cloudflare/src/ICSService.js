@@ -243,9 +243,9 @@ export const ICSService = {
             `DTEND${dateParam}:${end}`,
             `SUMMARY:${this.escapeText(event.title)}`,
             // The calendar's VIEW link (never the edit link: a calendar app shows notes to anyone who sees
-            // the event), after the event's own notes. Everyone following in Google/Apple/Outlook sees where
-            // the calendar lives, and where to make their own.
-            `DESCRIPTION:${this.escapeText([event.description || '', viewUrl ? `Calendar: ${viewUrl}` : ''].filter(Boolean).join('\n\n'))}`
+            // the event): the bare link on the notes' last line (Google shows only notes), and URL: (Apple's
+            // own link field). Quiet, but every follower can find the calendar, and make their own.
+            `DESCRIPTION:${this.escapeText([event.description || '', viewUrl].filter(Boolean).join('\n\n'))}`
         ];
         if (viewUrl) eventLines.push(`URL:${viewUrl}`);
 
