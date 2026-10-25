@@ -1252,7 +1252,7 @@ div#Schedule,
 .e-schedule .e-schedule-toolbar .e-active-view .e-tbar-btn { background: color-mix(in srgb, var(--pc-link) 12%, transparent) !important }
 .e-schedule .e-month-view .e-appointment { border-radius: 6px !important }
 .e-schedule .e-month-view .e-appointment .e-recurrence-icon { display: none !important }
-.e-schedule .e-month-view .e-appointment .e-time { font-weight: 500; opacity: .9 }
+.e-schedule .e-month-view .e-appointment .e-time { font-weight: 500 }
 @media (max-width: 640px) {
   .e-schedule .e-month-view .e-appointment .e-time { display: none !important }
   .e-schedule .e-month-view .e-appointment .e-subject { font-size: 10.5px !important; padding-inline: 1px }
@@ -1641,10 +1641,11 @@ button:hover > .pc-add-event {
   min-width: 22px; height: 22px; line-height: 22px !important; text-align: center; border-radius: 999px; padding-inline: 4px }
 .e-schedule .e-month-view .e-date-header.e-navigate:hover { background: var(--pc-hover); text-decoration: none !important }
 .e-schedule .e-month-view .e-current-date .e-date-header { font-weight: 700 }
-/* Chips: no border or shadow, a little more air, time lighter than the title. */
+/* Chips: no border or shadow, a little more air, time lighter-weight than the title (full
+   ink: faded text on a light event color fell under 4.5:1). */
 .e-schedule .e-month-view .e-appointment { border: 0 !important; box-shadow: none !important; padding-inline: 2px }
 .e-schedule .e-month-view .e-appointment .e-subject { font-size: 12px !important }
-.e-schedule .e-month-view .e-appointment .e-time { font-weight: 500 !important; opacity: .85 }
+.e-schedule .e-month-view .e-appointment .e-time { font-weight: 500 !important }
 .e-schedule .e-month-view .e-more-indicator { color: var(--pc-text-muted) !important; font-weight: 600; font-size: 11.5px !important }
 /* Week and Day: working hours plain, the rest a faint tint (not a gray block), quiet hour lines. */
 .e-schedule .e-vertical-view .e-work-cells { background: var(--pc-weekend) !important; border-color: var(--pc-line) !important }
@@ -2233,3 +2234,61 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 .pc-stats-sample .pc-sample-tag { align-self: flex-start; width: auto }
 /* Month weekday labels line up with the date numbers under them (both 10px in from the cell edge). */
 .e-schedule .e-month-view .e-date-header-wrap .e-header-cells { padding-left: 10px !important }
+
+/* Event text: dark on light event colors, white on dark ones. eventRendered and popupOpen set
+   --pc-on-event per event (ScheduleAdapter.onColor, by WCAG contrast). Not the agenda: there
+   the color is only a left bar and the text sits on the page. */
+.e-schedule .e-month-view .e-appointment,
+.e-schedule .e-month-view .e-appointment *,
+.e-schedule .e-vertical-view .e-appointment,
+.e-schedule .e-vertical-view .e-appointment *,
+.e-more-popup-wrapper .e-appointment,
+.e-more-popup-wrapper .e-appointment *,
+.e-quick-popup-wrapper .e-event-popup .e-popup-header,
+.e-quick-popup-wrapper .e-event-popup .e-popup-header *:not(.e-edit):not(.e-delete):not(.e-close) { color: var(--pc-on-event) !important }
+
+/* Dark Syncfusion popups on the app's own surfaces. The material-dark theme paints them
+   #424242 with a light border; JS resolves "auto" into data-theme, so this one path also
+   covers prefers-color-scheme. */
+:root[data-theme="dark"] .e-quick-popup-wrapper,
+:root[data-theme="dark"] .e-quick-popup-wrapper .e-popup-content,
+:root[data-theme="dark"] .e-quick-popup-wrapper .e-popup-footer,
+:root[data-theme="dark"] .e-more-popup-wrapper,
+:root[data-theme="dark"] .e-schedule-dialog.e-dialog,
+:root[data-theme="dark"] .e-quick-dialog.e-dialog,
+:root[data-theme="dark"] .e-schedule-dialog .e-dlg-header-content,
+:root[data-theme="dark"] .e-schedule-dialog .e-dlg-content,
+:root[data-theme="dark"] .e-schedule-dialog .e-footer-content,
+:root[data-theme="dark"] .e-quick-dialog .e-dlg-header-content,
+:root[data-theme="dark"] .e-quick-dialog .e-dlg-content,
+:root[data-theme="dark"] .e-quick-dialog .e-footer-content,
+:root[data-theme="dark"] .e-dropdown-popup,
+:root[data-theme="dark"] .e-ddl.e-popup,
+:root[data-theme="dark"] .e-ddl.e-popup .e-list-item:not(.e-active):not(.e-hover):not(.e-item-focus),
+:root[data-theme="dark"] .e-datepicker.e-popup-wrapper,
+:root[data-theme="dark"] .e-datetimepicker.e-popup-wrapper,
+:root[data-theme="dark"] .e-datetimepicker.e-popup,
+:root[data-theme="dark"] .e-timepicker.e-popup,
+:root[data-theme="dark"] .e-popup .e-calendar,
+:root[data-theme="dark"] .e-popup .e-calendar .e-header,
+:root[data-theme="dark"] .e-popup .e-calendar .e-footer-container,
+:root[data-theme="dark"] .e-popup .e-list-parent.e-ul {
+    background-color: var(--pc-surface) !important;
+    color: var(--pc-text);
+}
+:root[data-theme="dark"] .e-quick-popup-wrapper,
+:root[data-theme="dark"] .e-more-popup-wrapper,
+:root[data-theme="dark"] .e-schedule-dialog.e-dialog,
+:root[data-theme="dark"] .e-quick-dialog.e-dialog,
+:root[data-theme="dark"] .e-dropdown-popup,
+:root[data-theme="dark"] .e-ddl.e-popup,
+:root[data-theme="dark"] .e-datetimepicker.e-popup,
+:root[data-theme="dark"] .e-timepicker.e-popup,
+:root[data-theme="dark"] .e-popup .e-calendar {
+    border: 1px solid var(--pc-line) !important;
+}
+:root[data-theme="dark"] .e-schedule-dialog .e-dlg-header-content,
+:root[data-theme="dark"] .e-schedule-dialog .e-dlg-header,
+:root[data-theme="dark"] .e-schedule-dialog .e-dlg-content,
+:root[data-theme="dark"] .e-quick-dialog .e-dlg-header-content,
+:root[data-theme="dark"] .e-quick-dialog .e-dlg-content { color: var(--pc-text) }

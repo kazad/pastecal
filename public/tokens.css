@@ -29,6 +29,7 @@
     --pc-accent: #d6124f;        /* white text on it: 5.2:1 */
     --pc-accent-hover: #b80f44;
     --pc-on-accent: #ffffff;
+    --pc-on-event: #ffffff;      /* text on an event chip; set per event from its color (ScheduleAdapter.onColor) */
     --pc-accent-soft: color-mix(in srgb, var(--pc-accent) 14%, var(--pc-bg));
     --pc-focus-ring: 0 0 0 3px color-mix(in srgb, var(--pc-accent) 22%, transparent);
 

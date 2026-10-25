@@ -771,8 +771,7 @@
                                     :style="{ borderLeft: '3px solid ' + getTypeColor(event.type) }"
                                     class="cursor-pointer p-1 pl-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors mb-1">
                                     <div class="font-semibold text-color-2">{{ event.title }}</div>
-                                    <div class="text-xs text-color-1">{{ formatDate(event.start) }} - {{
-                                        formatDate(event.end)}}</div>
+                                    <div class="text-xs text-color-1">{{ formatEventRange(event) }}</div>
                                 </div>
                             </div>
                         </section>
