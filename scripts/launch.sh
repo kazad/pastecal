@@ -87,9 +87,12 @@ stripe_auth() {   # once per run: a live `stripe login` session, or a live key a
         say "It must show the live account $LIVE_ACCOUNT ('New business' / pastecal) in LIVE mode."
         yes_no "Is that the live pastecal account?" || die "switch first: stripe switch $LIVE_ACCOUNT --live"
     fi
-    local probe; probe="$(st balance retrieve)" || { st_err; die "stripe live call failed"; }
-    [ "$(jq -r '.livemode' <<<"$probe")" = true ] || die "stripe answered in TEST mode; this script only works live"
-    ok "stripe answers in live mode"
+    local probe lm; probe="$(st prices list --limit=1)" || probe=""
+    lm="$(jq -r '.data[0].livemode | tostring' <<<"$probe" 2>/dev/null)"   # "true" | "false" | "null" (no prices)
+    [ "$lm" = false ] && die "stripe answered in TEST mode; this script only works live"
+    if [ -z "$probe" ]; then st_err; yes_no "The live probe call failed. Continue anyway (each later call still checks)?" || die "no live Stripe access"
+    elif [ "$lm" = true ]; then ok "stripe answers in live mode"
+    else ok "stripe reachable (no prices yet, so live mode is not provable from them; you confirmed the account)"; fi
     STRIPE_AUTH_DONE=1
 }
 
@@ -127,16 +130,20 @@ if step 1 "Pre-checks" "Tools, git state, the live version (must be $EXPECTED_LI
         trig="$(wr versions view "$live" --name "$WORKER" --json 2>/dev/null | jq -r '.annotations["workers/triggered_by"] // empty' 2>/dev/null)"
         warn "live version is $live (triggered by: ${trig:-unknown}), not $EXPECTED_LIVE"
         wr versions list --name "$WORKER" 2>/dev/null | tail -24
-        if [ "$trig" = secret ]; then
-            yes_no "It is a secret change. Is it on top of $EXPECTED_LIVE's code (the list above)?" || die "live code moved: rebase launch-prep onto what is live, re-test"
+        if [ "$trig" = secret ] || [ -z "$trig" ]; then
+            # Empty: the annotation could not be read. A secret-only version (e.g. owner-setup.sh) is the likely case.
+            yes_no "Is $live a 'Secret Change' on top of $EXPECTED_LIVE's code (see the Source column above)?" || die "live code moved: rebase launch-prep onto what is live, re-test"
         else
-            die "a newer CODE upload is live: rebase launch-prep onto it and re-test before launching"
+            die "a newer CODE upload is live (triggered by $trig): rebase launch-prep onto it and re-test before launching"
         fi
     fi
     note "live version before launch: ${live:-confirmed by hand}"
 
     secrets="$(wr secret list --name "$WORKER" 2>/dev/null | jq -r '.[].name' 2>/dev/null | sort | tr '\n' ' ')"
     say "  secret names on $WORKER: ${secrets:-<could not read>}"
+    # Fail closed: production already holds these two, so a list without them was not read properly.
+    case " $secrets " in *" IMPORT_SECRET "*) ;; *) wr secret list --name "$WORKER" --format pretty 2>&1 | tail -15
+        yes_no "Could not confirm the secret list (no IMPORT_SECRET in it). Checked by eye: no ACCOUNTS_DEV_MODE, STRIPE_API_BASE, LOCK_API_BASE, UNSAFE_DEV_SESSION_HEADER?" || die "secret list unreadable";; esac
     for s in ACCOUNTS_DEV_MODE STRIPE_API_BASE LOCK_API_BASE UNSAFE_DEV_SESSION_HEADER BETA_REAL_DATA BILLING_TEST_MODE SITE_URL; do
         case " $secrets " in *" $s "*) die "$s is set on production: delete it first (wr secret delete $s --name $WORKER)";; esac
     done
@@ -296,15 +303,19 @@ if step 6 "Post-checks (read-only)" "GETs against pastecal.com (curl's user agen
         c="$(code "$SITE$p")"; t="$(title "$SITE$p")"
         [ "$c" = 200 ] && ok "$p $c  '$t'" || bad "$p $c"
     done
-    c="$(code "$SITE/cal/view/demo")"; [ "$c" = 200 ] && ok "/cal/view/demo $c" || bad "/cal/view/demo $c"
+    # demo is a view-only NAME: /cal/view/<name> resolves it through the directory (index.js, route 5).
+    c="$(code "$SITE/cal/view/demo")"; [ "$c" = 200 ] && ok "/cal/view/demo $c" || warn "/cal/view/demo $c (was it 200 before the deploy? if so, investigate)"
     ics="$(curl -s -D - -o /dev/null --max-time 20 "$SITE/demo.ics" | tr -d '\r')"
     grep -q '^HTTP/[0-9.]* 200' <<<"$ics" && grep -qi '^content-type: text/calendar' <<<"$ics" && ok "/demo.ics 200 text/calendar" || bad "/demo.ics: $(head -1 <<<"$ics")"
     st_json="$(curl -s --max-time 20 "$SITE/api/pro/status?calendar=demo")"
-    jq -e 'has("locked") and has("pro")' <<<"$st_json" >/dev/null 2>&1 && ok "/api/pro/status?calendar=demo $(jq -c . <<<"$st_json")" || bad "/api/pro/status: ${st_json:0:120}"
+    if jq -e 'has("locked") and has("pro")' <<<"$st_json" >/dev/null 2>&1; then ok "/api/pro/status?calendar=demo $(jq -c . <<<"$st_json")"
+    elif jq -e . <<<"$st_json" >/dev/null 2>&1; then warn "/api/pro/status?calendar=demo answered JSON without locked/pro (a view name may not resolve): ${st_json:0:120}; pro-smoke's calendar=test check is the authoritative one"
+    else bad "/api/pro/status did not answer JSON: ${st_json:0:120}"; fi
     c="$(code "$SITE/api/admin/cal/x/stats-dump")"; [ "$c" = 403 ] && ok "stats-dump $c (dev hooks off)" || bad "stats-dump answered $c, expected 403"
     c="$(code -X POST -H 'Content-Type: application/json' --data '{}' "$WEBHOOK_URL")"; ok "webhook with no signature: $c (400 = billing on, 503 = off)"
     secrets="$(wr secret list --name "$WORKER" 2>/dev/null | jq -r '.[].name' 2>/dev/null | sort | tr '\n' ' ')"
-    say "  secrets: $secrets"
+    say "  secrets: ${secrets:-<could not read>}"
+    case " $secrets " in *" IMPORT_SECRET "*) ;; *) bad "secret list unreadable: check by eye with: wr secret list --name $WORKER --format pretty";; esac
     for s in STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET STRIPE_PRICE_PRO_YEARLY STRIPE_PRICE_PRO_MONTHLY CONTACT_NOTIFY_TO; do
         case " $secrets " in *" $s "*) ;; *) warn "$s is not set";; esac
     done
