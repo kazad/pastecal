@@ -8,6 +8,9 @@
 const base = require('./tailwind.config.js');
 module.exports = {
   ...base,
+  // Only the theme colors: the main app's token-mapped sizes, radii and shadows (tailwind.config.js)
+  // are not applied to NativeCal, which keeps Tailwind's own scale (shadow-sm, text-2xl).
+  theme: { extend: base.theme.extend },
   content: [
     './public/nativecal/**/*.{html,js}',
     './public/components/**/*.js',

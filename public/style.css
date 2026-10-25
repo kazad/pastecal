@@ -801,18 +801,12 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-title-fit { width: auto !important }   /* a locked title sizes to its text, so the lock sits beside it (beats Tailwind w-full) */
 
 .pc-pro { margin-top: 16px; padding: 16px; scroll-margin-top: 12px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); background: var(--pc-bg); color: var(--pc-text); font-family: var(--pc-font) }
-.pc-pro--flash { box-shadow: 0 0 0 2px var(--pc-link); transition: box-shadow var(--pc-dur) var(--pc-ease) }
 .pc-pro-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px }
 .pc-pro-head h4 { margin: 0; font-size: var(--pc-fs-lg); font-weight: var(--pc-fw-semibold) }
 .pc-pro-icon { display: inline-flex; color: var(--pc-text-muted) }
 .pc-pro-icon svg { width: 18px; height: 18px }
 .pc-pro-lead { margin: 0 0 12px; color: var(--pc-text-muted); font-size: var(--pc-fs-sm); line-height: 1.5 }
-.pc-pro-plans { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px }
-.pc-pro-plan { display: inline-flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--pc-field); border-radius: var(--pc-radius-control); background: var(--pc-bg); font-size: var(--pc-fs-md); cursor: pointer }
-.pc-pro-plan.on { border-color: var(--pc-link); box-shadow: inset 0 0 0 1px var(--pc-link) }
-.pc-pro-plan input, .pc-pro-choice input { margin: 0; accent-color: var(--pc-link) }
-.pc-pro-plan b { font-weight: var(--pc-fw-semibold) }
-.pc-pro-save { margin-left: 2px; padding: 1px 7px; border-radius: var(--pc-radius-pill); background: var(--pc-success-soft); color: var(--pc-success); font-style: normal; font-size: var(--pc-fs-xs); font-weight: var(--pc-fw-semibold) }
+.pc-pro-choice input { margin: 0; accent-color: var(--pc-link) }
 .pc-pro-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px }
 .pc-pro-email label { display: block; margin-bottom: 2px; font-size: var(--pc-fs-sm); color: var(--pc-text) }
 .pc-pro-row .pc-field { flex: 1 1 220px; width: auto; max-width: 420px }

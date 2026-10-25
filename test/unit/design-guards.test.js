@@ -31,11 +31,16 @@ const root = path.join(__dirname, '../..');
 const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
 
 // Every page a visitor can reach, and what each must link.
-const PAGES = ['index', 'pricing', 'help', 'about', 'contact', 'privacy', 'terms', 'report', 'signin', 'pro/done', 'dev/design', 'dev/pro']
-  .map((n) => `public/${n}.html`);
-// Not scanned, with why:
-//   public/nativecal/**     the NativeCal beta (/beta) is a separate renderer with its own native.css
-//   public/pricing-next.html, public/design-ideas.html, public/poll.html   drafts and prototypes, not linked from anywhere
+// Every .html under public/ (top level, pro/, dev/) is a page, so a new page is checked by default.
+// Not checked, with why:
+const EXCLUDED = {
+  'public/pricing-next.html': 'a draft of the pricing page, not linked from anywhere',
+  'public/design-ideas.html': 'a prototype scratch page, not linked from anywhere',
+  'public/poll.html': 'an old standalone prototype with its own Tailwind accent, not linked from anywhere',
+  // public/nativecal/** is not listed: the NativeCal beta (/beta) is a separate renderer with its own native.css.
+};
+const PAGES = ['', 'pro', 'dev'].flatMap((d) => fs.readdirSync(path.join(root, 'public', d)).filter((f) => f.endsWith('.html')).map((f) => path.posix.join('public', d, f)))
+  .filter((p) => !(p in EXCLUDED));
 // Scanned for values: every page but dev/pro.html, the old standalone /pro email-capture landing
 // (a dev-only page kept for reference; nothing links it).
 const SCANNED_PAGES = PAGES.filter((p) => p !== 'public/dev/pro.html');
@@ -71,8 +76,10 @@ const outsideVars = (v) => v.replace(/var\(--pc-[\w-]+\)/g, 'TOKEN');
 // --- the four checks, as functions (so the self-test below can plant violations) ------------
 
 const RAW_COLOR = /#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?)\(/;
+// Custom properties count too: a page's own `--blue: #2563eb` is a second palette (pricing and
+// /pro/done had one each). Name the token instead: `--blue: var(--pc-primary)`.
 function rawColors(css) {
-  return declarations(css).filter((d) => !d.prop.startsWith('--') && RAW_COLOR.test(outsideVars(d.value))).map((d) => `${d.prop}: ${d.value}`);
+  return declarations(css).filter((d) => RAW_COLOR.test(outsideVars(d.value))).map((d) => `${d.prop}: ${d.value}`);
 }
 // Font sizes: a token, inherit, or a relative size (em, %) that follows its parent's token.
 function badFontSizes(css) {
@@ -94,7 +101,7 @@ function badRadii(css) {
 // Shadows: a token, none, or a flat ring/hairline (no blur) in token colors. A blurred shadow is
 // elevation, and elevation is only for floating things: use --pc-shadow-md/-lg/-xl.
 function badShadows(css) {
-  return declarations(css).filter((d) => d.prop === 'box-shadow' && !d.prop.startsWith('--')).filter((d) => {
+  return declarations(css).filter((d) => d.prop === 'box-shadow').filter((d) => {
     const v = d.value.replace(/color-mix\([^()]*(\([^()]*\)[^()]*)*\)/g, 'TOKEN');
     if (/^(none|TOKEN|var\(--pc-(shadow-[\w-]+|focus-ring)\))$/.test(v)) return false;
     return v.split(/,(?![^(]*\))/).some((one) => {
@@ -201,6 +208,11 @@ test('every <button> is a .pc-btn or a listed component', () => {
     'If it truly is a new component, add it to components.css and to BUTTON_COMPONENTS here with its reason.');
 });
 
+test('every EXCLUDED page still exists (no stale exceptions)', () => {
+  const gone = Object.keys(EXCLUDED).filter((p) => !fs.existsSync(path.join(root, p)));
+  assert.deepEqual(gone, [], 'remove these from EXCLUDED');
+});
+
 test('every BUTTON_COMPONENTS entry is still used (no stale exceptions)', () => {
   const all = MARKUP.map(read).join('\n');
   const stale = Object.keys(BUTTON_COMPONENTS).filter((c) => !new RegExp(`<button\\b[^>]*(?<![:\\w-])class="[^"]*\\b${c}\\b`).test(all));
@@ -278,6 +290,7 @@ test('/dev/design has a sample for every component components.css documents', ()
 
 test('self-test: each guard flags a planted violation and passes the right way to write it', () => {
   assert.deepEqual(rawColors('.x { color: #ff0000; background: rgba(0,0,0,.1) }'), ['color: #ff0000', 'background: rgba(0,0,0,.1)']);
+  assert.deepEqual(rawColors(':root { --blue: #2563eb } .x { color: var(--blue) }'), ['--blue: #2563eb'], 'a page palette in custom properties is caught');
   assert.deepEqual(rawColors('.x { color: var(--pc-text) } /* #fff */ .y { background: url("data:image/svg+xml,%23fff") } /* @illustrations */ .z { color: #123456 } /* @end-illustrations */'), []);
   assert.deepEqual(badFontSizes('.x { font-size: 12.5px } .y { font: 600 13px/1 var(--pc-font) }'), ['font-size: 12.5px', 'font: 600 13px/1 var(--pc-font)']);
   assert.deepEqual(badFontSizes('.x { font-size: var(--pc-fs-sm); font: var(--pc-fw-bold) var(--pc-fs-md)/18px var(--pc-font) } .y { font-size: .9em }'), []);
