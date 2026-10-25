@@ -140,6 +140,7 @@ test('billing off: pricing says "Join the Pro beta", hides Get Pro, and the wait
   const { ctx, page } = await open(browser, '/pricing');
   const cta = page.locator('.plan.pro .cta');
   await expect(cta).toHaveText('Join the Pro beta');
+  await expect(page.locator('#unlCta')).toHaveText('Join the Pro beta');      // Pro Plus too: not buyable yet
   await expect(page.locator('.plan.pro .badge')).toHaveText('Beta');
   await expect(page.locator('thead th.pro .beta-tag')).toHaveText('Beta');
   await expect(page.locator('#get-pro')).toBeHidden();
@@ -199,6 +200,9 @@ test('billing on: pricing keeps Get Pro and the picker, with the Beta tag', asyn
   await expect(page.locator('.plan.pro .badge')).toHaveText('Beta');
   await expect(page.locator('thead th.pro .beta-tag')).toHaveText('Beta');
   await expect(page.locator('#get-pro')).toBeVisible();
+  // Pro Plus: buyable only when its own price is set too (/api/pro/config unlimited).
+  const unl = (await (await request.get('/api/pro/config')).json()).unlimited;
+  await expect(page.locator('#unlCta')).toHaveText(unl ? 'Get Pro Plus' : 'Join the Pro beta');
   await page.locator('.plan.pro .cta').click();
   await expect(page.locator('#calLink')).toBeFocused();
   await ctx.close();

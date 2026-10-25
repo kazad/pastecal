@@ -330,7 +330,7 @@ export async function serveAt(request, env, url, { serveFeed }) {
     let handle, name;
     try { handle = decodeURIComponent(m[1]).toLowerCase(); name = m[2] ? decodeURIComponent(m[2]).toLowerCase() : null; } catch { return notFound(env, url); }
     const ics = !!m[3];
-    if (ics && !name) return new Response('not found', { status: 404 });
+    if (ics && !name) return null;                                         // /@x.ics: an old calendar named "@x" keeps its feed
     if (!/^[a-z0-9-]{1,40}$/.test(handle) || (name !== null && !/^[a-z0-9-]{1,40}$/.test(name))) return notFound(env, url);
     const acc = accounts(env);
     if (!name) {

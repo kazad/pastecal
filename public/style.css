@@ -2449,3 +2449,5 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 .pc-pro-linkline { margin: 4px 0 0; font-size: 14px; overflow-wrap: anywhere }
 .pc-pro-linkline a { color: var(--pc-link); text-decoration: none; font-weight: 600 }
 a.pc-acct-btn { text-decoration: none }
+.pc-pro-release { margin-left: 10px; padding: 0; border: 0; background: none; cursor: pointer; font-family: var(--pc-font) }
+.pc-pro-select { flex: 1 1 0; min-width: 0; max-width: 420px; height: 36px; padding: 0 8px; border: 1px solid var(--pc-field); border-radius: var(--pc-radius-md, 8px); background: var(--pc-bg); color: var(--pc-text); font: 14px var(--pc-font) }

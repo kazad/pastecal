@@ -380,13 +380,21 @@ const ProPanel = {
                 <div v-if="status.plan === 'unlimited' || status.atName || (status.shortNames || []).length" class="pc-pro-sub" data-testid="pro-short-links">
                     <h5>Short links</h5>
                     <p v-if="status.atName" class="pc-pro-linkline"><a :href="'/@' + status.handle + '/' + status.atName" target="_blank" rel="noopener" data-testid="pro-at-link">{{ host }}/@{{ status.handle }}/{{ status.atName }}</a></p>
-                    <p v-for="n in (status.shortNames || [])" :key="n" class="pc-pro-linkline"><a :href="'/' + n" target="_blank" rel="noopener" data-testid="pro-short-link">{{ host }}/{{ n }}</a></p>
+                    <p v-for="n in (status.shortNames || [])" :key="n" class="pc-pro-linkline"><a :href="'/' + n" target="_blank" rel="noopener" data-testid="pro-short-link">{{ host }}/{{ n }}</a>
+                        <button type="button" class="pc-pro-link pc-pro-release" @click="nameChange('/api/names/short/release', { name: n })" :disabled="busy" data-testid="pro-short-release">Release</button></p>
                     <template v-if="status.plan === 'unlimited'">
                         <form v-if="status.handle" class="pc-pro-row" @submit.prevent="saveAtName" data-testid="pro-at-form">
                             <span class="pc-pro-name"><span class="pc-pro-muted">@{{ status.handle }}/</span><input v-model.trim="atNameInput" maxlength="40" aria-label="Name under your @name" :placeholder="status.atName ? 'new name' : 'name'" autocapitalize="none" spellcheck="false" data-testid="pro-at-input"></span>
                             <button type="submit" class="pc-pro-btn pc-pro-btn--quiet" :disabled="busy || !atNameInput">{{ status.atName ? 'Rename' : 'Save' }}</button>
                         </form>
-                        <form class="pc-pro-row" @submit.prevent="addShortName" data-testid="pro-short-form">
+                        <div v-if="(status.otherShortNames || []).length" class="pc-pro-row" data-testid="pro-short-remap">
+                            <select class="pc-pro-select" v-model="remapName" aria-label="Point one of your short links here">
+                                <option value="">Move a link here…</option>
+                                <option v-for="n in status.otherShortNames" :key="n" :value="n">{{ host }}/{{ n }}</option>
+                            </select>
+                            <button type="button" class="pc-pro-btn pc-pro-btn--quiet" :disabled="busy || !remapName" @click="nameChange('/api/names/short/remap', { name: remapName, calendarId })">Move here</button>
+                        </div>
+                        <form v-if="(status.shortNames || []).length + (status.otherShortNames || []).length < 10" class="pc-pro-row" @submit.prevent="addShortName" data-testid="pro-short-form">
                             <span class="pc-pro-name"><span class="pc-pro-muted">{{ host }}/</span><input v-model.trim="shortInput" maxlength="30" aria-label="Short name" placeholder="name" autocapitalize="none" spellcheck="false" data-testid="pro-short-input"></span>
                             <button type="submit" class="pc-pro-btn pc-pro-btn--quiet" :disabled="busy || !shortInput">Add</button>
                         </form>
@@ -469,6 +477,7 @@ const ProPanel = {
             lapsedMode: 'readonly',
             atNameInput: '',      // Pro Plus: this calendar's name under the owner's @handle
             shortInput: '',       // Pro Plus: a top-level pastecal.com/<name> for it
+            remapName: '',        // Pro Plus: one of the owner's short names, to point here instead
             host: /(^|\.)pastecal\.com$/.test(location.hostname) ? location.hostname.replace(/^www\./, '') : 'pastecal.com',
             unlimitedOn: true,    // /api/pro/config unlimited: Pro Plus can be bought here
             billing: null,        // /api/pro/config: false = Pro can't be bought yet, so the offer is the Pro beta list
@@ -636,7 +645,7 @@ const ProPanel = {
             this.error = ''; this.busy = true;
             try {
                 const r = await proApi('POST', path, body);
-                if (r.status === 200 && r.data.ok) { this.atNameInput = ''; this.shortInput = ''; if (typeof AccountMenu !== 'undefined') AccountMenu.reset(); await this.refresh(); return; }
+                if (r.status === 200 && r.data.ok) { this.atNameInput = ''; this.shortInput = ''; this.remapName = ''; if (typeof AccountMenu !== 'undefined') AccountMenu.reset(); await this.refresh(); return; }
                 this.error = r.data.message || (r.status === 0 ? 'We couldn’t reach pastecal. Check your connection and try again.' : r.status === 401 ? 'Sign in again to change it.' : 'Something went wrong. Try again in a minute.');
             } finally { this.busy = false; }
         },

@@ -35,7 +35,8 @@ h1 { margin: 8px 0 2px; font-size: 28px; line-height: 1.2; letter-spacing: -.01e
 .btn[disabled] { opacity: .55; cursor: default; }
 .link { border: 0; background: none; padding: 0; color: var(--pc-link); font: inherit; cursor: pointer; text-decoration: none; }
 .link:hover { text-decoration: underline; }
-.btn:focus-visible, .link:focus-visible, input:focus-visible, select:focus-visible, a:focus-visible { outline: none; box-shadow: var(--pc-focus-ring); }
+.btn:focus-visible, .link:focus-visible, select:focus-visible, a:focus-visible, .check input:focus-visible { outline: none; box-shadow: var(--pc-focus-ring); }
+.field input:focus, .field input:focus-visible { outline: none; box-shadow: none; }
 form.inline { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 12px; }
 .field { display: inline-flex; align-items: center; min-width: 0; flex: 1 1 260px; height: 38px; border: 1px solid var(--pc-field); border-radius: var(--pc-radius-md); background: var(--pc-bg); overflow: hidden; }
 .field:focus-within { box-shadow: var(--pc-focus-ring); border-color: var(--pc-link); }
@@ -43,8 +44,9 @@ form.inline { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; mar
 .field input { flex: 1; min-width: 40px; height: 100%; border: 0; outline: none; background: transparent; color: var(--pc-text); font: inherit; padding: 0 10px 0 0; }
 .field input.solo { padding-left: 10px; }
 select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); border-radius: var(--pc-radius-md); background: var(--pc-bg); color: var(--pc-text); font: inherit; padding: 0 8px; }
-.err { color: var(--pc-danger); margin: 8px 0 0; }
-.ok { color: var(--pc-success); margin: 8px 0 0; }
+.err, .card .err { color: var(--pc-danger); margin: 8px 0 0; }
+.ok, .card .ok { color: var(--pc-success); margin: 8px 0 0; }
+.err:empty { display: none; }
 .big-link { display: inline-block; margin-top: 6px; font-weight: 600; color: var(--pc-link); text-decoration: none; overflow-wrap: anywhere; }
 .list { list-style: none; margin: 12px 0 0; padding: 0; }
 .list > li { padding: 12px 0; border-top: 1px solid var(--pc-line); }
@@ -267,7 +269,8 @@ select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); borde
     var shorts = A.shortNames || [];
     $('shortCard').hidden = !(unl || shorts.length);
     $('shortH').textContent = 'Short links · ' + shorts.length + ' of ' + A.shortLimit;
-    $('shortForm').hidden = !unl || shorts.length >= A.shortLimit;
+    var lockable = A.calendars.filter(function (c) { return c.state !== 'open' && c.state !== 'unknown'; });
+    $('shortForm').hidden = !unl || shorts.length >= A.shortLimit || !lockable.length;
     var held = shorts.map(function (x) { return x.endedAt; }).filter(Boolean).sort()[0];
     $('shortNote').textContent = held
       ? 'Your Pro Plus has ended, so these can\u2019t be changed. They keep working, and stay yours until ' + day(held + A.holdDays * 86400000) + '. Renew to keep them.'

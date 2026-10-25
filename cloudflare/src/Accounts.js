@@ -978,7 +978,9 @@ async function route(request, env, url, path) {
                 const acc = accounts(env), h = await acc.handleOf(userId), l = await acc.linkFor(id);
                 if (h) out.handle = h.handle;
                 out.atName = l && h && l.handle === h.handle ? l.name : null;
-                out.shortNames = (await acc.shortNamesOf(userId)).filter((x) => x.calendarId === id).map((x) => x.name);
+                const shorts = await acc.shortNamesOf(userId);
+                out.shortNames = shorts.filter((x) => x.calendarId === id).map((x) => x.name);
+                out.otherShortNames = shorts.filter((x) => x.calendarId && x.calendarId !== id).map((x) => x.name);   // remap one here
             }
             const sub = await accounts(env).subscriptionFor(id, userId);
             if (sub && sub.status === 'trialing') {

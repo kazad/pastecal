@@ -221,6 +221,8 @@ try {
     assert.equal(r.status, 409); assert.equal(r.d.error, 'short-limit');
     assert.equal((await pj('/api/names/short/remap', { name: s1, calendarId: soccer }, ann.cookie)).status, 200);
     assert.equal(JSON.parse(await (await get(`/cal/view/${s1}`)).text()).calendar.title, 'U10 Soccer', 'remapped');
+    const ownerSt = await (await get(`/api/pro/status?calendar=${enc(soccer)}`, ann.cookie)).json();
+    assert.deepEqual([ownerSt.atName, ownerSt.shortNames, ownerSt.otherShortNames.length], ['soccer', [s1], 9], 'the owner panel lists its own short links and the ones it could take');
     assert.equal((await pj('/api/names/short/remap', { name: s1, calendarId: `bobcal-${run}` }, ann.cookie)).d.error, 'not-owner');
     assert.equal((await pj('/api/names/short/remap', { name: s1, calendarId: club }, bob.cookie)).status, 404, 'not his name');
     a = await account(ann.cookie);
