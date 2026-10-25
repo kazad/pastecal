@@ -571,7 +571,9 @@ function joinBeta() {
     // The account menu's "Join the Pro beta" (and old Get Pro links) land here.
     if (location.hash === '#get-pro' || location.hash === '#pro-beta') joinBeta();
   };
-  fetch('/api/pro/config', { credentials: 'same-origin' }).then(r => r.ok ? r.json() : null)
+  // Stalled for 4 seconds: show Get Pro as before (checkout still answers 503 if billing is off).
+  const ctl = new AbortController(); setTimeout(() => ctl.abort(), 4000);
+  fetch('/api/pro/config', { credentials: 'same-origin', signal: ctl.signal }).then(r => r.ok ? r.json() : null)
     .then(d => apply(!(d && d.billing === false))).catch(() => apply(true));
 })();
 </script>

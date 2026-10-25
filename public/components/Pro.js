@@ -124,13 +124,16 @@ async function proApi(method, path, body) {
     return { status: res.status, data };
 }
 
-// Can Pro be bought on this site? GET /api/pro/config, asked once per page. true | false; a failed
-// request counts as true, so the offer works as before (checkout and the trial still answer 503 when off).
+// Can Pro be bought on this site? GET /api/pro/config, asked once per page. true | false; a failed or
+// stalled (4s) request counts as true, so the offer works as before (checkout and the trial still answer 503 when off).
 const ProBilling = {
     _p: null,
     load() {
         if (!this._p) {
-            this._p = fetch('/api/pro/config', { credentials: 'same-origin' })
+            // A stalled request must not hold the offer back: after 4 seconds, behave as billing on.
+            const ctl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+            if (ctl) setTimeout(() => ctl.abort(), 4000);
+            this._p = fetch('/api/pro/config', { credentials: 'same-origin', signal: ctl ? ctl.signal : undefined })
                 .then((r) => (r.ok ? r.json() : null))
                 .then((d) => (d && typeof d.billing === 'boolean' ? d.billing : true))
                 .catch(() => true);
