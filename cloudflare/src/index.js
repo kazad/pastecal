@@ -114,7 +114,7 @@ function hitFor(request, env, kind) {
 }
 
 // Pages search engines may list (public/_headers clears noindex for the same ones).
-const INDEXABLE_PAGES = new Set(['/', '/privacy', '/terms', '/pricing']);
+const INDEXABLE_PAGES = new Set(['/', '/privacy', '/terms', '/pricing', '/about', '/help', '/templates', '/sitemap.xml']);
 
 const ADMIN_LOCK_OPS = new Set(['lock', 'unlock', 'rotate-editor-key', 'lock-status']);
 
@@ -518,7 +518,7 @@ async function route(request, env, ctx) {
         // pastecal.com itself (Oct 2026: organic visitors fell from ~110/week to ~5).
         // Every page passes through here now (link previews). Indexed: the same pages as public/_headers --
         // the homepage, view-only links and the public site pages; never an edit link (/<name>).
-        const indexable = url.hostname !== 'new.pastecal.com' && (INDEXABLE_PAGES.has(path) || path.startsWith('/view/'));
+        const indexable = url.hostname !== 'new.pastecal.com' && (INDEXABLE_PAGES.has(path) || path.startsWith('/view/') || /^\/templates\/[a-z-]+$/.test(path));   // + the template pages (scripts/build-templates.mjs)
         if (indexable) out.headers.delete('X-Robots-Tag'); else out.headers.set('X-Robots-Tag', 'noindex');
         if (/\.(js|css|json)$/.test(path) || beta) out.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
         applySecurityHeaders(out.headers, path);
