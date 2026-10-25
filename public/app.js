@@ -743,6 +743,8 @@ const CalendarVueApp = {
         // DOM render and doesn't reactively update them when set later — so settings must be
         // available for the pre-appendTo configuration block below, not just applied after.
         this.loadGlobalSettings();
+        this.$nextTick(() => this.fitSlugBox());   // after the title font is in: see fitSlugBox
+        if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => this.fitSlugBox());
         // Can Pro be bought yet? Decides between the trial/checkout and "Join the beta" everywhere Pro is offered.
         if (typeof ProBilling !== 'undefined') ProBilling.load().then((b) => { this.proBilling = b; });
         else this.proBilling = true;
@@ -1931,6 +1933,7 @@ const CalendarVueApp = {
     },
 
     watch: {
+        'calendar.id'() { this.$nextTick(() => this.fitSlugBox()); },
         // The footer line appears once loading ends (or changes with Pro): give the month grid its room.
         pageFooter() { this.$nextTick(() => { if (this._refitMonthRows) this._refitMonthRows(); }); },
         // The homepage pitch is an experiment: pick (or recall) this browser's variant
@@ -2920,6 +2923,23 @@ const CalendarVueApp = {
             });
         },
 
+        // Clicking the name selects all of it, so typing replaces the random name instead of appending.
+        // The desktop name box is as wide as the name, so its dashed underline ends where the name does
+        // and the pencil sits right after it. Measured, because letters differ in width.
+        fitSlugBox() {
+            try {
+                const el = document.getElementById('slug');
+                if (!el) return;
+                const ctx = this._slugCtx || (this._slugCtx = document.createElement('canvas').getContext('2d'));
+                ctx.font = getComputedStyle(el).font;
+                const w = ctx.measureText(el.value || el.placeholder || '').width;
+                el.style.width = Math.ceil(Math.max(w, 60) + 4) + 'px';
+            } catch (err) { /* layout nicety only */ }
+        },
+        selectSlug(e) {
+            const el = e && e.target;
+            if (el && el.select) setTimeout(() => { try { el.select(); } catch (err) { /* */ } }, 0);
+        },
         handleSlugInput() {
             this.userHasEditedSlug = true;
             this.slugTaken = null;

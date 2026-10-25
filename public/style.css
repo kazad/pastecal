@@ -569,9 +569,9 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-plan-price b { font-size: var(--pc-fs-3xl); font-weight: 800; letter-spacing: -.02em; color: var(--pc-text); font-variant-numeric: tabular-nums }
 .pc-plan-price small { display: block; font-size: var(--pc-fs-sm) }
 .pc-tour-plans code { padding: 1px 5px; border-radius: var(--pc-radius-sm); background: var(--pc-soft); color: var(--pc-text); font-size: var(--pc-fs-sm); white-space: nowrap }
-.pc-plan-tag { position: absolute; top: -10px; left: 14px; padding: 2px 9px; border: 1px solid color-mix(in srgb, var(--pc-warning) 25%, transparent); border-radius: var(--pc-radius-pill);
+.pc-plan-tag.pc-plan-tag { position: absolute; top: -10px; left: 14px; padding: 2px 9px; border: 1px solid color-mix(in srgb, var(--pc-warning) 25%, transparent); border-radius: var(--pc-radius-pill);
   background: var(--pc-warning-soft); color: var(--pc-warning); font-size: var(--pc-fs-xs); font-weight: var(--pc-fw-bold) }
-.pc-plan-tag--on { border-color: var(--pc-primary); background: var(--pc-primary); color: var(--pc-on-primary) }
+.pc-plan-tag.pc-plan-tag--on { border-color: var(--pc-primary); background: var(--pc-primary); color: var(--pc-on-primary) }
 .pc-tour .pc-tour-plans-more { margin: 14px 0 0 }
 .pc-tour-plans-more a { font-weight: var(--pc-fw-semibold); color: var(--pc-link) }
 /* Quotes: two cards, each said once on this page. */
@@ -1030,7 +1030,7 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-side-notes-read { font-size: var(--pc-fs-md); line-height: 1.6; color: var(--pc-text); overflow-wrap: anywhere }
 .pc-side-notes-read a { color: var(--pc-link) }
 .pc-side-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px }
-.pc-notes-edit { float: right; margin: -4px -4px 6px 12px }
+.pc-notes-edit { align-self: flex-end; display: flex; margin: -2px 0 0 }   /* top right, above the text; Done sits in the same spot */
 
 /* ---- Share: every link visible, and the link itself is the copy button (.pc-link-field) ----- */
 .pc-links { display: flex; flex-direction: column; gap: 12px }
@@ -1321,7 +1321,7 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
 .pc-pro-price { margin: 10px 0 4px; font-size: var(--pc-fs-md) }
 /* Homepage plan cards: each opens /pricing; the whole card is the link, so it reads as text.
    "Learn more" shows on hover or focus where there is a pointer, always on touch screens. */
-.pc-tour-plan, .pc-tour-plan:hover, .pc-tour-plan * { color: inherit; text-decoration: none }
+.pc-tour-plan, .pc-tour-plan:hover, .pc-tour-plan * { color: inherit; text-decoration: none }   /* the plan tag doubles its class to keep its own color */
 .pc-tour-plan { transition: border-color var(--pc-dur-fast) var(--pc-ease) }
 .pc-tour-plan:hover { border-color: var(--pc-field) }
 .pc-tour-plan:focus-visible { outline: none; box-shadow: var(--pc-focus-ring) }
@@ -1366,3 +1366,10 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
 @media (max-width: 767px) { .pc-m-claim input { padding-left: 0 } .pc-m-claim .pc-draft-chip { flex: none; margin: 0 6px 0 8px } }
 /* The header pill's tag after a view-only link ("view only"). */
 .pc-pill-tag { margin-left: 6px; padding: 1px 6px; border-radius: var(--pc-radius-pill); background: var(--pc-soft); color: var(--pc-text-muted); font-size: var(--pc-fs-2xs); font-weight: var(--pc-fw-semibold) }
+
+/* The calendar's name in the address pill can be typed over: a dashed underline and a pencil say so
+   (it read as plain text). Doubled class to win over Tailwind's border-none, which loads later. */
+.pc-slug-edit.pc-slug-edit { max-width: 16rem; border-bottom: 1.5px dashed color-mix(in srgb, var(--pc-text-muted) 70%, transparent); border-radius: 0; cursor: text }
+.pc-slug-edit.pc-slug-edit:hover, .pc-slug-edit.pc-slug-edit:focus { border-bottom-style: solid; border-bottom-color: var(--pc-primary) }
+.pc-slug-pencil { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 24px; height: 24px; margin-left: 2px; border-radius: 50%; color: var(--pc-text-muted); cursor: pointer }
+.pc-slug-pencil:hover { color: var(--pc-primary); background: var(--pc-primary-soft) }

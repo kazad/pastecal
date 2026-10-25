@@ -330,3 +330,23 @@ test('homepage panel: a first-time visitor opens on Welcome; Your calendars says
   await expect(page.locator('textarea[aria-label="Event description"]')).toBeVisible();
   await ctx.close();
 });
+
+// ---- The random name reads as editable: the pencil selects it, and typing replaces it ----
+for (const viewport of [DESKTOP, PHONE]) {
+  test(`the pencil beside the name selects it, so typing replaces it (${viewport.width}px)`, async ({ browser }) => {
+    const { ctx, page } = await open(browser, { viewport });
+    const phone = viewport.width < 600;
+    const input = page.locator(phone ? '#slug-m' : '#slug');
+    const random = await input.inputValue();
+    expect(random).toMatch(/^[a-z0-9]{6,}$/);
+    await page.getByTestId(phone ? 'slug-pencil-mobile' : 'slug-pencil').click();
+    await expect(input).toBeFocused();
+    await page.keyboard.type('soccer-fall');
+    await expect(input).toHaveValue('soccer-fall');
+    if (!phone) {   // the box ends where the name does, so the pencil sits right after it
+      const box = await input.boundingBox(), pen = await page.getByTestId('slug-pencil').boundingBox();
+      expect(pen.x - (box.x + box.width)).toBeLessThan(8);
+    }
+    await ctx.close();
+  });
+}
