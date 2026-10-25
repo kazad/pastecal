@@ -54,8 +54,8 @@ test('four plans: Pro Single and Pro Unlimited are in beta, Teams is in developm
   assert.match(pricing, /<label class="interval"><input type="radio" name="interval" value="month"><span><b>\$5 a month<\/b>/);
   assert.match(pricing, /body: JSON\.stringify\(\{ plan: 'unlimited', interval: interval\(\) \}\)/, 'Continue to payment checks out Pro Unlimited');
   const lockRow = /<tr><td>Lock editing to people you choose[\s\S]*?<\/tr>/.exec(pricing)[0];
-  assert.match(lockRow, /<td class="pro">1 calendar<\/td><td>Unlimited<\/td><td>Unlimited <span class="soon">In development<\/span><\/td><\/tr>$/,
-    'locking any number of calendars is on Pro Unlimited, still in development for Teams');
+  assert.match(lockRow, /<td class="pro">1 calendar<\/td><td>Every calendar you run<\/td><td>Every calendar <span class="soon">In development<\/span><\/td><\/tr>$/,
+    'locking many calendars is on Pro Unlimited, still in development for Teams');
   for (const name of ['Teams']) {
     const block = new RegExp(`<span class="badge dev">In development</span>\\s*<h3>${name}</h3>[\\s\\S]*?</a>`).exec(pricing);
     assert.ok(block, `${name} card carries the In development badge`);

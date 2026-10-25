@@ -28,7 +28,8 @@ for (const path of ['/', '/pricing']) {
   });
 
   test(`trackers still load outside Europe on ${path}`, async ({ browser }) => {
-    const { seen, inEurope } = await trackerRequests(browser, 'America/New_York', path);
+    // ?backend=firebase: a local copy acts like the live site only when asked (it defaults to no production side effects).
+    const { seen, inEurope } = await trackerRequests(browser, 'America/New_York', path + '?backend=firebase');
     expect(inEurope).toBe(false);
     expect(seen.some((u) => /googletagmanager\.com/.test(u))).toBe(true);
   });

@@ -23,7 +23,7 @@ test('preview.pastecal.com is a Cloudflare host: always the Worker, never Fireba
   assert.equal(Cloud.enabled(at('preview.pastecal.com', '?backend=firebase'), mem()), true);
   for (const h of ['pastecal.com', 'www.pastecal.com', 'new.pastecal.com']) assert.equal(Cloud.enabled(at(h), mem()), true, h);
   assert.equal(Cloud.enabled(at('preview.pastecal.com.evil.example'), mem()), false, 'exact host only');
-  assert.equal(Cloud.enabled(at('localhost'), mem()), false);
+  assert.equal(Cloud.enabled(at('localhost'), mem()), true, 'a local copy defaults to its own backend, never production Firebase');
 });
 
 test('PreviewSite.is: the preview host only', () => {
