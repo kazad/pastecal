@@ -306,6 +306,22 @@ try {
     openTab.close();
     step('a trial that ends with no choice made goes back to open: a normal free calendar anyone with the link can edit; the owner gets one email saying so');
 
+    // --- A trial that became paid (a card was added) ends like a paid plan: read-only, "Plus ended", never "nothing was charged".
+    const calC = `converted-${run}`; await createCalendar(calC);
+    const kim = await signIn(`kim-trial-${run}@example.com`);
+    assert.equal((await post('/api/pro/trial', { calendarId: calC }, kim.cookie)).status, 200);
+    const kimSub = [...fake.subs.values()].find((x) => x.metadata.calendar_id === calC);
+    Object.assign(fake.subs.get(kimSub.id), { status: 'active', default_payment_method: 'pm_kim' });
+    assert.equal((await webhook(event('customer.subscription.updated', { id: kimSub.id, object: 'subscription' }))).status, 200);
+    fake.subs.get(kimSub.id).status = 'canceled';
+    assert.equal((await webhook(event('customer.subscription.deleted', { id: kimSub.id, object: 'subscription' }))).status, 200);
+    st = await status(calC, kim.cookie);
+    assert.deepEqual([st.locked, st.paused, st.lapsedOwner], [false, true, true], 'a paid plan ends read-only');
+    const kimEnd = (await outbox(`kim-trial-${run}@example.com`)).filter((m) => / ended$/.test(m.subject));
+    assert.deepEqual(kimEnd.map((m) => m.subject), [`Plus for Team ${calC} ended`]);
+    assert.doesNotMatch(kimEnd[0].text, /Nothing was charged/);
+    step('a trial that became paid ends like a paid plan: read-only by default, and the email says "Plus … ended", not "trial … nothing was charged"');
+
     // --- Support: reset a calendar's trial (someone else trialed it): canceled in Stripe, unlocked (not paused), trial freed.
     const calR = `reset-${run}`; await createCalendar(calR);
     const fay = await signIn(`fay-trial-${run}@example.com`);

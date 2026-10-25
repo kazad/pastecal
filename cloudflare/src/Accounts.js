@@ -1461,7 +1461,9 @@ async function applySubscription(env, acc, cfg, s) {
     if (st.locked && st.ownerId === userId) {
         // Nobody else pays: Pro ended, so the calendar pauses (read-only) unless the owner chose 'open'.
         // A trial that ends unpaid goes back to open unless its owner chose read-only (a squatter's trial can't freeze it).
-        const wasTrial = !!(s.trial || await acc.isTrialSubscription(s.id));
+        // "Was a trial" is the state just before it ended: a trial that became paid (a card was added) keeps its trial
+        // metadata, but it ends like any paid plan (read-only, "Plus ended", never "nothing was charged").
+        const wasTrial = !!(prev && prev.status === 'trialing');
         const r = await LockClient.unlock(env, calendarId, userId, { lapse: !heir, trial: wasTrial });
         if (r.status >= 500) return { retry: true };
         if (!heir && r.ok) await sendPlanNotice(env, acc, wasTrial ? 'trial-ended' : 'ended', s, calendarId, userId, { paused: !!r.paused });
