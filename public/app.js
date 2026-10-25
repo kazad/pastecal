@@ -348,6 +348,7 @@ const CalendarVueApp = {
             MAX_COLORS: MAX_COLORS,
             colorFilters: COLORS.map(() => true), // allow all color types by default
             searchOpenId: null,   // the search result shown open, if any
+            printRange: '', printLink: '', printQr: '', printDate: '',   // the printed page's header and footer (preparePrint)
             FREE_CHANGES_DAYS: 30,   // how far back Recent changes reaches on a free calendar (visibleUndoEntries)
             // Bumped on every scheduler dataBound so hiddenEventCount, which reads the
             // visible date range off scheduleObj, recomputes when the view moves.
@@ -782,6 +783,12 @@ const CalendarVueApp = {
         // DOM render and doesn't reactively update them when set later — so settings must be
         // available for the pre-appendTo configuration block below, not just applied after.
         this.loadGlobalSettings();
+        // Printing: fill the print header/footer first; the QR library loads once the page is idle, not before.
+        // The grid sizes events in pixels for the screen; lay it out at the paper's width (landscape, 10mm margins,
+        // about 980px) while printing, then back. (style.css .pc-printing)
+        window.addEventListener('beforeprint', () => { this.preparePrint(); document.documentElement.classList.add('pc-printing'); try { window.scheduleObj && scheduleObj.refreshLayout && scheduleObj.refreshLayout(); } catch (e) { /* prints at screen layout */ } });
+        window.addEventListener('afterprint', () => { document.documentElement.classList.remove('pc-printing'); try { window.scheduleObj && scheduleObj.refreshLayout && scheduleObj.refreshLayout(); } catch (e) { /* */ } });
+        setTimeout(() => { try { if (typeof qrcode !== 'function') { const sc = document.createElement('script'); sc.src = '/vendor/qrcode-generator-1.4.4/qrcode.js'; sc.async = true; document.head.appendChild(sc); } } catch (e) { /* no QR, still prints */ } }, 4000);
         this.$nextTick(() => this.fitSlugBox());   // after the title font is in: see fitSlugBox
         if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => this.fitSlugBox());
         // Can Pro be bought yet? Decides between the trial/checkout and "Join the beta" everywhere Pro is offered.
@@ -1178,6 +1185,7 @@ const CalendarVueApp = {
         };
         // An editor that closes without a save is the "this was confusing or fiddly" signal.
         scheduleObj.popupClose = (args) => {
+            this.hideDraftBlock();
             if (args.type !== 'Editor') return;
             if (!this.editorSaved) track(a => a.editorAbandoned());
             this.editorSaved = false;
@@ -1235,6 +1243,9 @@ const CalendarVueApp = {
                 return;
             }
             if (args.type === 'QuickInfo' && args.data) ScheduleAdapter.showTitle(args.element, args.data);
+            // A new event: the chosen slot shows as a "New event" block while the quick box is open, and its
+            // label follows the title being typed (as Google Calendar does), so you see where it will land.
+            if (args.type === 'QuickInfo' && args.data && args.data.Id === undefined && !scheduleObj.readonly) app.showDraftBlock(args.element);
             // The popup header takes the event's color; its title and icons take the matching text color.
             if (args.type === 'QuickInfo' && args.data && args.data.Id !== undefined) {
                 args.element.style.setProperty('--pc-on-event', ScheduleAdapter.onColor(app.getTypeColor(args.data.Type)));
@@ -2991,6 +3002,38 @@ const CalendarVueApp = {
                 el.style.width = Math.ceil(Math.max(w, 60) + 4) + 'px';
             } catch (err) { /* layout nicety only */ }
         },
+        // Before printing: the dates on screen, the view link (never the edit link: a printout gets passed around)
+        // and its QR code, if the small QR library has loaded (it loads once the page is idle; see mounted).
+        preparePrint() {
+            try {
+                const range = document.querySelector('#Schedule .e-date-range .e-tbar-btn-text');
+                this.printRange = range ? range.textContent.trim() : '';
+                const view = this.isReadOnly ? (location.origin + location.pathname) : (this.shareViewURL() || this.getReadOnlyURL() || '');
+                this.printLink = view ? view.replace(/^https?:\/\//, '').replace(/\?.*$/, '') : '';
+                this.printDate = new Date().toLocaleDateString();
+                this.printQr = '';
+                if (view && typeof qrcode === 'function') { const q = qrcode(0, 'M'); q.addData(view.replace(/\?.*$/, '')); q.make(); this.printQr = q.createSvgTag({ cellSize: 3, margin: 0, scalable: true }); }
+            } catch (e) { /* print without the footer extras */ }
+        },
+
+        showDraftBlock(popup) {
+            try {
+                this.hideDraftBlock();
+                const cells = [...document.querySelectorAll('#Schedule .e-work-cells.e-selected-cell, #Schedule .e-all-day-cells.e-selected-cell')];
+                if (!cells.length) return;
+                cells.forEach((c, i) => c.classList.add('pc-draft-cell', i === 0 ? 'pc-draft-head' : 'pc-draft-more', ...(i === cells.length - 1 ? ['pc-draft-tail'] : [])));
+                const root = document.getElementById('Schedule');
+                const input = popup && popup.querySelector('input.e-subject, .e-subject');
+                const label = () => root.style.setProperty('--pc-draft', JSON.stringify((input && input.value.trim()) || 'New event'));
+                label();
+                if (input) { input.addEventListener('input', label); this._draftOff = () => input.removeEventListener('input', label); }
+            } catch (e) { /* a nicety: never in the way of adding the event */ }
+        },
+        hideDraftBlock() {
+            document.querySelectorAll('#Schedule .pc-draft-cell').forEach((c) => c.classList.remove('pc-draft-cell', 'pc-draft-head', 'pc-draft-more', 'pc-draft-tail'));
+            if (this._draftOff) { this._draftOff(); this._draftOff = null; }
+        },
+
         // Clicking the name selects all of it, so typing replaces the random name instead of appending.
         // At once, not on a timer: a fast typist beat the timer and appended. A click focuses on mouse
         // down, and the mouse up would collapse the selection, so that one mouse up is cancelled.

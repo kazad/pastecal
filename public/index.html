@@ -600,7 +600,7 @@
                                          address you are on). The view-only link is in Share, next to it. -->
                                     <div v-else class="text-color-1 text-xs truncate max-w-[150px] md:max-w-xs" data-testid="share-pill-url">
                                         pastecal.com/<span class="font-bold text-color-2" v-text="calendar.id"></span>
-                                        <span class="pc-pill-tag" title="Anyone with this link can change the calendar. The view-only link is in Share.">edit link</span>
+                                        <span class="pc-pill-tag" title="Anyone with this link can change the calendar. The view-only link is in Share.">can edit</span>
                                     </div>
 
                                     <!-- Everything else (edit link, subscribe, feed URLs) still
@@ -709,11 +709,18 @@
              (your own calendar, embeds) the aside is absent and the calendar is full width. -->
         <div class="pc-home" :class="{ 'pc-home-split': (isHomepageCalendar && !homeAsideHidden) || sideDocked, 'pc-home--side': sideDocked }">
             <div class="pc-home-cal">
+            <!-- Printing (Ctrl+P, or Print in Share): the calendar's name and dates on top, a QR code to its view link below. -->
+            <div class="pc-print-only pc-print-head" aria-hidden="true" v-cloak><div class="pc-print-title">{{ displayCalendarTitle }}</div><div class="pc-print-range">{{ printRange }}</div></div>
             <div id="cal2_wrap" style="width: 100%; height: 100%; position: relative;">
                 <div id="Schedule" data-testid="schedule-container"></div>
                 <!-- Whenever a color filter is on, say so on the calendar itself, not only in the search panel:
                      in #41 an event "went missing" after the panel was closed. A floating bar at the bottom of
                      the screen, so turning a filter on never pushes the calendar down. -->
+                <div class="pc-print-only pc-print-foot" aria-hidden="true" v-cloak>
+                    <span v-if="printQr" class="pc-print-qr" v-html="printQr"></span>
+                    <div class="pc-print-note"><b v-if="printLink">Scan to add it to your phone calendar.</b><br v-if="printLink"><span v-if="printLink">{{ printLink }}</span><br v-if="printLink"><span class="pc-print-fine">Changes show up on their own. Printed {{ printDate }}</span></div>
+                    <span class="pc-print-brand">pastecal</span>
+                </div>
                 <div v-if="isColorFilterActive" data-testid="hidden-events-banner" class="pc-hidden-pill" role="status" v-cloak>
                     <span>{{ hiddenEventsMessage }}</span>
                     <button @click="resetColorFilters" type="button" class="pc-link">Show all events</button>
