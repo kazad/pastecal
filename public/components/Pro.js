@@ -123,6 +123,15 @@ function trialFeature(id, feature) {
 function proAuthor() {
     try { return typeof AuthorSignal !== 'undefined' && AuthorSignal.uid ? AuthorSignal.uid() || '' : ''; } catch (e) { return ''; }
 }
+// The same, waiting up to 3 seconds for it: on a fresh page load (back from a sign-in link) the anonymous
+// sign-in is still being restored, and asking without the uid would refuse the calendar's own creator.
+async function proAuthorReady(ms = 3000) {
+    for (const t0 = Date.now(); Date.now() - t0 < ms; await new Promise((r) => setTimeout(r, 100))) {
+        const uid = proAuthor();
+        if (uid) return uid;
+    }
+    return proAuthor();
+}
 
 function proTrack(fn) {
     try { if (typeof Analytics !== 'undefined' && Analytics) fn(Analytics); } catch (e) { /* observational only */ }
@@ -563,7 +572,7 @@ const ProPanel = {
         },
         async checkout() {
             proTrack((a) => a.proCheckoutStarted(this.interval));
-            const r = await proApi('POST', '/api/pro/checkout', { calendarId: this.calendarId, interval: this.interval, title: this.calendarTitle || '', author: proAuthor() });
+            const r = await proApi('POST', '/api/pro/checkout', { calendarId: this.calendarId, interval: this.interval, title: this.calendarTitle || '', author: await proAuthorReady() });
             if (r.status === 200 && r.data.url) { ProIntent.clear(); location.href = r.data.url; return; }
             const reason = r.status === 0 ? 'network' : (r.data.error || String(r.status));
             proTrack((a) => a.proCheckoutFailed(reason));
@@ -581,7 +590,7 @@ const ProPanel = {
             if (!this.me) { this.trialStep = 'email'; this.$nextTick(() => { this.$refs.trialEmail && this.$refs.trialEmail.focus(); }); return; }
             this.busy = true;
             try {
-                const r = await proApi('POST', '/api/pro/trial', { calendarId: this.calendarId, author: proAuthor() });
+                const r = await proApi('POST', '/api/pro/trial', { calendarId: this.calendarId, author: await proAuthorReady() });
                 if (r.status === 200 && r.data.ok) {
                     ProIntent.clear();
                     if (!r.data.already) { proTrack((a) => a.trialStarted(this.trialSurface || this.surface)); TrialUsage.flag(this.calendarId, 'trialing', true); }

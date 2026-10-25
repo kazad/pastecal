@@ -52,14 +52,16 @@ async function signIn(request, email) {
   return { cookie, value: cookie.split('=')[1] };
 }
 // A browser with a fixed author uid and, optionally, a signed-in session.
-async function open(browser, path, { author, session, viewport = { width: 1440, height: 900 } } = {}) {
+// authorDelay: the uid appears only after that many ms, as a real anonymous sign-in does on a fresh page load.
+async function open(browser, path, { author, session, authorDelay = 0, viewport = { width: 1440, height: 900 } } = {}) {
   const ctx = await browser.newContext({ viewport, hasTouch: viewport.width < 600 });
   if (session) await ctx.addCookies([{ name: 'pc_session', value: session, url: base() }]);
-  await ctx.addInitScript((uid) => {
+  await ctx.addInitScript(([uid, delay]) => {
     window.__TEST__ = true;
     if (!uid) return;
-    const t = setInterval(() => { try { if (typeof AuthorSignal !== 'undefined') { AuthorSignal.uid = () => uid; clearInterval(t); } } catch (e) { /* not yet */ } }, 5);
-  }, author || null);
+    const ready = Date.now() + delay;
+    const t = setInterval(() => { try { if (typeof AuthorSignal !== 'undefined') { AuthorSignal.uid = () => (Date.now() >= ready ? uid : null); clearInterval(t); } } catch (e) { /* not yet */ } }, 5);
+  }, [author || null, authorDelay]);
   await ctx.route('**/*', (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
   const page = await ctx.newPage();
   page.on('dialog', (d) => d.accept());
@@ -107,6 +109,29 @@ test('free editor, billing on: Plus adds a short list, one primary trial button,
   expect(row[0], 'six tabs fit at 390px').toBeLessThanOrEqual(row[1]);
   await expect(phone.page.getByTestId('side-tab-plus')).toBeVisible();
   await phone.ctx.close();
+});
+
+test('signed out, the creator starts the trial by email: the link signs in, and the calendar page starts it once its uid is ready', async ({ browser, request }) => {
+  test.skip(await billingOf(request) !== true, 'needs a server with (fake) Stripe vars');
+  const author = `auth-link-${run}`, email = `linktrial-${run}@example.com`;
+  const id = await newCalendar(request, author);
+  const { ctx, page } = await open(browser, `/${id}`, { author, authorDelay: 1500 });
+  await vm(page, "vm.openPlusTab('share')");
+  await plusPanel(page).getByTestId('pro-trial-btn').click();
+  await plusPanel(page).locator('#pc-pro-trial-email').fill(email);
+  await plusPanel(page).getByRole('button', { name: 'Send link' }).click();
+  await expect(plusPanel(page).getByTestId('pro-trial-sent')).toBeVisible();
+  const mails = (await (await admin(request, `/api/admin/accounts/outbox?email=${encodeURIComponent(email)}`)).json()).emails;
+  const link = mails.at(-1).text.match(/https?:\/\/\S+\/signin#t=[A-Za-z0-9_-]+/)[0].replace(/^https?:\/\/[^/]+/, '');
+  await page.goto(link);
+  await expect(page.locator('#confirm')).toHaveText('Start my trial');
+  await expect(page.locator('#msg')).toContainText('and start your free 30-day Plus trial?');
+  await page.locator('#confirm').click();
+  await page.waitForURL(new RegExp(`/${id}`));
+  // The page loads with no uid for 1.5s (the anonymous sign-in restoring); the trial still starts, as its creator.
+  await expect(page.getByTestId('pro-trial-line').filter({ visible: true })).toHaveText(/^Plus trial · (30|29) days left$/, { timeout: 20_000 });
+  expect((await (await request.get(`/api/pro/status?calendar=${id}`)).json()).locked).toBe(true);
+  await ctx.close();
 });
 
 test('a browser that never edited it can\'t start the trial: the server says how to upgrade', async ({ browser, request }) => {

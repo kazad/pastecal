@@ -5344,7 +5344,7 @@ const CalendarVueApp = {
             let r = null;
             try {
                 r = await fetch('/api/pro/undo-upgrade', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ calendarId: this.calendar.id, author: proAuthor() }) });
+                    body: JSON.stringify({ calendarId: this.calendar.id, author: await proAuthorReady() }) });
             } catch (e) { /* offline */ }
             const d = r ? await r.json().catch(() => ({})) : {};
             if (r && r.ok) { this.upgradeNotice = null; this.showToast('Upgrade undone. Anyone with the link can edit again.', 'success'); return; }
