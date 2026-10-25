@@ -989,7 +989,7 @@
                         <div v-if="getReadOnlyURL()" class="pc-link-item" data-testid="share-feed">
                             <div class="pc-link-head"><h4 class="pc-share-label">Calendar feed</h4><span class="pc-share-tag">.ics</span>
                                 <!-- The full-access feed carries the edit link inside it: kept, small, and labeled. -->
-                                <button v-if="canEdit" type="button" class="pc-link-extra pc-link-extra--quiet" title="A feed that also gives edit access" @click="copyLink('editfeed', getEditableICSURL(), 'ics')" data-testid="share-editfeed-copy">{{ copiedKey === 'editfeed' ? 'Copied' : 'Copy with edit access' }}</button></div>
+                                <button v-if="canEdit" type="button" class="pc-link-extra pc-link-extra--quiet" title="The same feed, from your edit link. Anyone with it can also edit, so share it only with editors." @click="copyLink('editfeed', getEditableICSURL(), 'ics')" data-testid="share-editfeed-copy">{{ copiedKey === 'editfeed' ? 'Copied' : 'Edit link .ics' }}</button></div>
                             <div class="pc-link-row">
                                 <button type="button" class="pc-link" :data-copy-key="'feed'" :class="{ 'is-copied': copiedKey === 'feed' }" :title="'Copy ' + getReadOnlyICSURL()" @click="copyLink('feed', getReadOnlyICSURL(), 'ics')" data-testid="share-feed-copy">
                                     <span class="pc-link-url">{{ copiedKey === 'feed' ? 'Copied to clipboard' : shortLink(getReadOnlyICSURL()) }}</span>
