@@ -4,36 +4,36 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Help · pastecal</title>
 <meta name="description" content="How to use pastecal: quick start, link types, features, privacy, phone use and keyboard shortcuts.">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/legal.css">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/components.css"><link rel="stylesheet" href="/legal.css">
 <style>
 :root { --site-max: 1052px }
 html { scroll-behavior: smooth; scroll-padding-top: 76px }
-kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px solid var(--pc-line); border-bottom-width: 2px; border-radius: 6px; background: var(--pc-soft); font: 600 13px/1.4 var(--pc-font); text-align: center }
-code { font: 500 .88em/1.4 var(--pc-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); background: var(--pc-soft); border: 1px solid var(--pc-line); border-radius: 5px; padding: 1px 5px; overflow-wrap: anywhere }
+kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px solid var(--pc-line); border-bottom-width: 2px; border-radius: var(--pc-radius-sm); background: var(--pc-soft); font: var(--pc-fw-semibold) var(--pc-fs-sm)/1.4 var(--pc-font); text-align: center }
+code { font: 500 .88em/1.4 var(--pc-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); background: var(--pc-soft); border: 1px solid var(--pc-line); border-radius: var(--pc-radius-sm); padding: 1px 5px; overflow-wrap: anywhere }
 main.help { max-width: 1020px }
 .layout { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 48px; align-items: start }
-.toc { position: sticky; top: 24px; font-size: 15px }
-.toc b { display: block; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--pc-text-muted); margin-bottom: 8px }
-.toc a { display: block; padding: 5px 10px; margin-left: -10px; border-radius: 8px; color: var(--pc-text); text-decoration: none }
+.toc { position: sticky; top: 24px; font-size: var(--pc-fs-md) }
+.toc b { display: block; font-size: var(--pc-fs-xs); letter-spacing: .06em; text-transform: uppercase; color: var(--pc-text-muted); margin-bottom: 8px }
+.toc a { display: block; padding: 5px 10px; margin-left: -10px; border-radius: var(--pc-radius-control); color: var(--pc-text); text-decoration: none }
 .toc a:hover, .toc a.on { background: var(--pc-soft); color: var(--pc-link) }
 .doc { min-width: 0; max-width: 700px }
 .doc section { padding-top: 6px }
 .doc h2 { margin: 36px 0 8px; padding-top: 4px }
 .doc section:first-child h2 { margin-top: 0 }
-.doc h3 { font-size: 16px; margin: 20px 0 2px }
+.doc h3 { font-size: var(--pc-fs-lg); margin: 20px 0 2px }
 .doc p { margin: 6px 0 }
 .steps { list-style: none; counter-reset: s; padding: 0; margin: 10px 0 0; display: grid; gap: 10px }
-.steps li { counter-increment: s; position: relative; padding: 12px 14px 12px 54px; border: 1px solid var(--pc-line); border-radius: 12px; background: var(--pc-surface, var(--pc-bg)) }
-.steps li::before { content: counter(s); position: absolute; left: 14px; top: 12px; width: 28px; height: 28px; border-radius: 50%; background: var(--pc-accent); color: var(--pc-on-accent, #fff); font-weight: 700; display: grid; place-items: center }
+.steps li { counter-increment: s; position: relative; padding: 12px 14px 12px 54px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); background: var(--pc-surface) }
+.steps li::before { content: counter(s); position: absolute; left: 14px; top: 12px; width: 28px; height: 28px; border-radius: 50%; background: var(--pc-primary); color: var(--pc-on-primary); font-weight: 700; display: grid; place-items: center }
 .steps li > b:first-child { display: block }
-.tw { overflow-x: auto; margin: 12px 0; border: 1px solid var(--pc-line); border-radius: 12px }
-table { border-collapse: collapse; width: 100%; font-size: 15px; line-height: 1.5 }
+.tw { overflow-x: auto; margin: 12px 0; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card) }
+table { border-collapse: collapse; width: 100%; font-size: var(--pc-fs-md); line-height: 1.5 }
 th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--pc-line) }
 tr:last-child td { border-bottom: 0 }
-th { background: var(--pc-soft); font-size: 13px; color: var(--pc-text-muted); font-weight: 600 }
+th { background: var(--pc-soft); font-size: var(--pc-fs-sm); color: var(--pc-text-muted); font-weight: 600 }
 td:first-child { font-weight: 600; white-space: nowrap }
 td:nth-child(2) { min-width: 210px }
-.warn { margin: 10px 0; padding: 10px 14px; border-radius: 10px; background: var(--pc-warning-soft); border: 1px solid var(--pc-line); font-size: 15px }
+.warn { margin: 10px 0; padding: 10px 14px; border-radius: var(--pc-radius-card); background: var(--pc-warning-soft); border: 1px solid var(--pc-line); font-size: var(--pc-fs-md) }
 .feat { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 0 }
 .feat li { padding: 9px 0; border-bottom: 1px solid var(--pc-line) }
 .feat li:last-child { border-bottom: 0 }
@@ -45,16 +45,16 @@ td:nth-child(2) { min-width: 210px }
   .layout { display: block }
   .toc { position: sticky; top: 0; z-index: 5; margin: 0 -16px 12px; padding: 8px 16px; background: var(--pc-bg); border-bottom: 1px solid var(--pc-line); display: flex; gap: 6px; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch }
   .toc b { display: none }
-  .toc a { margin: 0; padding: 6px 12px; border: 1px solid var(--pc-line); border-radius: 999px; font-size: 14px; flex: none }
+  .toc a { margin: 0; padding: 6px 12px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-pill); font-size: var(--pc-fs-md); flex: none }
   html { scroll-padding-top: 64px }
   .tw { border: 0; overflow: visible }
   table, tbody, tr, td { display: block }
   thead { display: none }
-  tr { border: 1px solid var(--pc-line); border-radius: 12px; padding: 4px 0; margin-bottom: 10px }
+  tr { border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); padding: 4px 0; margin-bottom: 10px }
   td, td:nth-child(2) { border: 0; padding: 4px 14px; min-width: 0; white-space: normal }
-  td:first-child { font-size: 16px; padding-top: 10px }
-  td[data-l]:not([data-l=""])::before { content: attr(data-l); display: block; font-size: 12px; color: var(--pc-text-muted); font-weight: 600 }
-  h1 { font-size: 30px }
+  td:first-child { font-size: var(--pc-fs-lg); padding-top: 10px }
+  td[data-l]:not([data-l=""])::before { content: attr(data-l); display: block; font-size: var(--pc-fs-xs); color: var(--pc-text-muted); font-weight: 600 }
+  h1 { font-size: var(--pc-fs-3xl) }
 }
 </style>
 <script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>

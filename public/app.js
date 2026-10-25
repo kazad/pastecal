@@ -103,7 +103,7 @@ const AddToCalendar = {
     },
     template: `
         <div class="pc-addcal" v-click-outside="() => { open = false }" @keydown.esc="open = false">
-            <button type="button" class="pc-addcal-btn" data-testid="view-add-to-cal" aria-haspopup="menu" :aria-expanded="open ? 'true' : 'false'" @click.stop="open = !open">
+            <button type="button" class="pc-btn pc-btn--sm pc-btn--pill pc-addcal-btn" data-testid="view-add-to-cal" aria-haspopup="menu" :aria-expanded="open ? 'true' : 'false'" @click.stop="open = !open">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M12 14v5M9.5 16.5h5"/></svg>
                 <span class="pc-addcal-label">Add to my calendar</span>
                 <svg class="pc-addcal-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
@@ -5165,14 +5165,12 @@ const CalendarVueApp = {
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>`;
                 buttonElement.innerHTML = `${checkIcon} Copied`;
-                buttonElement.classList.remove('bg-blue-500', 'hover:bg-blue-600');
                 buttonElement.classList.add('bg-green-500');
 
                 setTimeout(() => {
                     buttonElement.innerHTML = originalContent;
                     buttonElement.classList.remove('bg-green-500');
-                    buttonElement.classList.add('bg-blue-500', 'hover:bg-blue-600');
-                }, 1500); // Revert after 1.5 seconds
+                                    }, 1500); // Revert after 1.5 seconds
 
             }).catch(err => {
                 console.error('Failed to copy: ', err);

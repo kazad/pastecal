@@ -6,8 +6,8 @@ const QuickAddButton = {
         <span class="inline-flex items-start">
                 <button slot="trigger" @click="$emit('open')"
                     data-testid="desktop-add-event-button" :title="'Add event (' + shortcut + ')'"
-                    class="text-color-1 hover:text-blue-500 p-1.5 rounded-full transition-colors">
-                    <span class="pc-add-event"><span aria-hidden="true" class="pc-add-event-plus">+</span>Add event</span>
+                    class="text-color-1 hover:text-theme-primary p-1.5 rounded-full transition-colors">
+                    <span class="pc-add-event"><span aria-hidden="true" class="pc-add-event-plus">+</span><span class="pc-add-event-label">Add event</span></span>
                 </button>
         </span>
     `,

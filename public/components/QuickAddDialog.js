@@ -9,7 +9,7 @@ const QuickAddDialog = {
                     <h3 class="text-lg font-semibold mb-4">Add event by typing</h3>
                     <form @submit.prevent="createEvent">
                         <div class="flex items-baseline gap-2 mb-1.5">
-                            <span class="flex items-center justify-center shrink-0 h-5 w-5 rounded-full bg-blue-600 text-white text-xs font-bold">1</span>
+                            <span class="pc-qa-step">1</span>
                             <label for="qa-description" class="text-sm font-medium">Describe the event</label>
                         </div>
                         <textarea id="qa-description"
@@ -18,7 +18,7 @@ const QuickAddDialog = {
                                  placeholder="Meet John tomorrow 2pm for 1 hour"
                                  rows="2"
                                  @keydown.enter.prevent="handleEnter"
-                                 class="w-full p-2 bg-1 border border-color-default rounded-lg text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                 class="pc-field mb-2">
                         </textarea>
                         <!-- Examples belong to step 1: they show what you can type. -->
                         <div class="pc-qa-examples">
@@ -28,11 +28,11 @@ const QuickAddDialog = {
                                     :key="ex"
                                     @click="useExample(ex)"
                                     :title="'Use: ' + ex"
-                                    class="pc-qa-chip">{{ ex }}</button>
+                                    class="pc-chip pc-chip--soft">{{ ex }}</button>
                         </div>
 
                         <div class="flex items-baseline gap-2 mb-1.5">
-                            <span class="flex items-center justify-center shrink-0 h-5 w-5 rounded-full bg-blue-600 text-white text-xs font-bold">2</span>
+                            <span class="pc-qa-step">2</span>
                             <label class="text-sm font-medium">Check the details</label>
                         </div>
 
@@ -44,7 +44,7 @@ const QuickAddDialog = {
                                        v-model="fields.subject"
                                        @input="pin('subject')"
                                        placeholder="Untitled event"
-                                       class="flex-1 min-w-0 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                       class="flex-1 min-w-0 pc-field">
                             </div>
 
                             <div class="flex items-center gap-2">
@@ -54,13 +54,13 @@ const QuickAddDialog = {
                                        v-model="fields.startDate"
                                        @input="pin('start')"
                                        aria-label="Start date"
-                                       class="pc-qa-date w-44 shrink-0 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                       class="pc-qa-date w-44 shrink-0 pc-field">
                                 <input type="time"
                                        v-model="fields.startTime"
                                        @input="pin('start'); timesCleared()"
                                        :disabled="isAllDay"
                                        aria-label="Start time"
-                                       class="pc-qa-time w-32 shrink-0 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                       class="pc-qa-time w-32 shrink-0 pc-field">
                             </div>
 
                             <div class="flex items-center gap-2">
@@ -70,13 +70,13 @@ const QuickAddDialog = {
                                        v-model="fields.endDate"
                                        @input="pin('end')"
                                        aria-label="End date"
-                                       class="pc-qa-date w-44 shrink-0 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                       class="pc-qa-date w-44 shrink-0 pc-field">
                                 <input type="time"
                                        v-model="fields.endTime"
                                        @input="pin('end'); timesCleared()"
                                        :disabled="isAllDay"
                                        aria-label="End time"
-                                       class="pc-qa-time w-32 shrink-0 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                       class="pc-qa-time w-32 shrink-0 pc-field">
                             </div>
 
                             <!-- All day: a switch under the dates, aligned with the inputs. The time
@@ -84,11 +84,11 @@ const QuickAddDialog = {
                                  on or off never changes the dialog's height. -->
                             <div class="flex items-center gap-2">
                                 <span class="w-14 shrink-0" aria-hidden="true"></span>
-                                <label class="pc-qa-switch">
+                                <label class="pc-switch pc-qa-switch">
                                     <input type="checkbox" role="switch" data-testid="qa-all-day"
                                            :checked="isAllDay" :aria-checked="isAllDay ? 'true' : 'false'"
                                            @change="setAllDay($event.target.checked)">
-                                    <span class="pc-qa-switch-track" aria-hidden="true"></span>
+                                    <span class="pc-switch-track" aria-hidden="true"></span>
                                     <span>All day</span>
                                 </label>
                             </div>
@@ -109,7 +109,7 @@ const QuickAddDialog = {
                                                 :title="labels[i] || ('Type ' + (i + 1))"
                                                 :data-testid="'qa-color-' + (i + 1)"
                                                 @click="type = i + 1"
-                                                class="pc-qa-type" :class="{ 'is-selected': type === i + 1 }"
+                                                class="pc-chip pc-chip--dot pc-qa-type" :class="{ 'is-selected': type === i + 1 }"
                                                 :style="{ '--dot': c }">{{ labels[i] }}</button>
                                         <button v-else type="button"
                                                 role="radio" :aria-checked="type === i + 1"
@@ -118,7 +118,7 @@ const QuickAddDialog = {
                                                 :data-testid="'qa-color-' + (i + 1)"
                                                 @click="type = i + 1"
                                                 class="w-6 h-6 rounded-full transition-transform"
-                                                :class="type === i + 1 ? 'ring-2 ring-offset-2 ring-blue-500 scale-110' : 'hover:scale-110'"
+                                                :class="type === i + 1 ? 'ring-2 ring-offset-2 ring-theme-primary scale-110' : 'hover:scale-110'"
                                                 :style="{ backgroundColor: c }"></button>
                                     </template>
                                 </div>
@@ -138,12 +138,12 @@ const QuickAddDialog = {
                         <div class="flex justify-end gap-2">
                             <button type="button"
                                     @click="hideDialog"
-                                    class="py-2.5 px-4 border border-color-default text-color-2 font-bold rounded-lg text-sm hover:bg-[var(--bg-interactive-hover)] transition-colors">
+                                    class="pc-btn">
                                 Cancel
                             </button>
                             <button type="submit"
                                     :disabled="!isValidEvent"
-                                    class="py-2.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg text-sm shadow-md transition-colors disabled:opacity-50 disabled:hover:bg-blue-600">
+                                    class="pc-btn pc-btn--primary">
                                 Create
                             </button>
                         </div>

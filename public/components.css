@@ -1,0 +1,195 @@
+/* =========================================================================================
+   pastecal components -- the building blocks every screen is made of.
+
+   Built only from tokens.css (loaded first). The app loads this before style.css, whose
+   screen sections arrange these blocks; the static pages load it before site.css. Change a
+   block here and every screen follows. /dev/design shows them live.
+
+     .pc-btn          button: --primary, --ghost, --danger, --link; --xs/--sm/--lg; --pill; --icon
+     .pc-field        text input, select (with our chevron), textarea: --sm, --lg
+     .pc-field-group  a field with a fixed prefix ("pastecal.com/" + name)
+     .pc-chip         a pill you press (examples, templates, color types): --soft, --lg, --dot
+     .pc-tag          a small label you read ("can edit", "Draft", "Pro"): --primary/--success/--warn/--danger
+     .pc-card         a bordered surface: --flat (page background), --pad
+     .pc-tabs         a row of tabs with an underline on the selected one (.pc-tab)
+     .pc-seg          a segmented control (.pc-seg-btn, .on or aria-pressed)
+     .pc-switch       an on/off switch around a checkbox (.pc-switch-track after the input)
+     .pc-kbd          a key cap
+     .pc-link-field   a link shown as a field that copies itself (.pc-link-url, .pc-link-act)
+     .pc-modal        overlay, with .pc-modal-panel as its card
+
+   Rules: no raw hex and no px font sizes here (test/unit/design-system.test.js); a variant
+   changes as little as it can; state is a class (.on, .is-on, .is-copied) or an aria attribute.
+   ========================================================================================= */
+
+/* ---- Button ------------------------------------------------------------------------------- */
+.pc-btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: none;
+    height: var(--pc-h-md); padding: 0 var(--pc-space-4);
+    border: 1px solid var(--pc-field); border-radius: var(--pc-radius-control);
+    background: var(--pc-bg); color: var(--pc-text);
+    font: var(--pc-fw-semibold) var(--pc-fs-md)/1 var(--pc-font);
+    white-space: nowrap; text-decoration: none; cursor: pointer;
+    transition: background-color var(--pc-dur-fast) var(--pc-ease), border-color var(--pc-dur-fast) var(--pc-ease), color var(--pc-dur-fast) var(--pc-ease);
+}
+.pc-btn:hover:not(:disabled) { background: var(--pc-hover); text-decoration: none }
+.pc-btn:focus-visible { outline: var(--pc-focus-outline); outline-offset: 2px }
+.pc-btn:disabled { opacity: .55; cursor: not-allowed }
+.pc-btn svg { flex: none; width: 16px; height: 16px }
+
+.pc-btn--primary { border-color: var(--pc-primary); background: var(--pc-primary); color: var(--pc-on-primary) }
+.pc-btn--primary:hover:not(:disabled) { border-color: var(--pc-primary-hover); background: var(--pc-primary-hover); color: var(--pc-on-primary) }
+.pc-btn--ghost { border-color: transparent; background: transparent; color: var(--pc-text-muted) }
+.pc-btn--ghost:hover:not(:disabled) { color: var(--pc-text) }
+.pc-btn--danger { border-color: var(--pc-danger); background: var(--pc-danger); color: var(--pc-bg) }
+.pc-btn--danger:hover:not(:disabled) { background: color-mix(in srgb, var(--pc-danger) 85%, var(--pc-text)) }
+/* A button that reads as a link: no box, primary text, underline on hover. */
+.pc-btn--link { height: auto; padding: 0; border: 0; border-radius: var(--pc-radius-xs); background: none; color: var(--pc-link); font-weight: var(--pc-fw-semibold) }
+.pc-btn--link:hover:not(:disabled) { background: none; color: var(--pc-link-hover); text-decoration: underline }
+
+.pc-btn--xs { height: var(--pc-h-xs); padding: 0 10px; font-size: var(--pc-fs-sm) }
+.pc-btn--sm { height: var(--pc-h-sm); padding: 0 var(--pc-space-3); font-size: var(--pc-fs-sm) }
+.pc-btn--lg { height: var(--pc-h-lg); padding: 0 var(--pc-space-5); font-size: var(--pc-fs-lg) }
+.pc-btn--pill { border-radius: var(--pc-radius-pill) }
+.pc-btn--icon { width: var(--pc-h-md); padding: 0; color: var(--pc-text-muted) }
+.pc-btn--icon:hover:not(:disabled) { color: var(--pc-primary); border-color: var(--pc-primary); background: var(--pc-bg) }
+.pc-btn--sm.pc-btn--icon { width: var(--pc-h-sm) }
+.pc-btn--xs.pc-btn--icon { width: var(--pc-h-xs) }
+
+/* ---- Field: input, select, textarea ------------------------------------------------------- */
+.pc-field {
+    display: block; width: 100%; min-width: 0; height: var(--pc-h-md); padding: 0 10px;
+    border: 1px solid var(--pc-field); border-radius: var(--pc-radius-control);
+    background-color: var(--pc-bg); color: var(--pc-text);
+    font: var(--pc-fw-regular) var(--pc-fs-md) var(--pc-font);
+}
+.pc-field::placeholder { color: var(--pc-text-muted) }
+.pc-field:focus { outline: none; border-color: var(--pc-primary); box-shadow: var(--pc-focus-ring) }
+.pc-field:disabled { opacity: .45; cursor: not-allowed }
+textarea.pc-field { height: auto; padding: 10px 12px; line-height: var(--pc-lh-body); resize: vertical }
+/* Selects: our own chevron with room for it, not the browser's arrow jammed at the edge. */
+select.pc-field {
+    -webkit-appearance: none; appearance: none; padding-right: 34px; text-overflow: ellipsis; cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 11px center; background-size: 16px 16px;
+}
+[data-theme="dark"] select.pc-field { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239aa3b2' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") }
+.pc-field--sm { height: var(--pc-h-sm); font-size: var(--pc-fs-sm) }
+.pc-field--lg { height: var(--pc-h-lg); padding: 0 14px; font-size: var(--pc-fs-lg) }
+textarea.pc-field--lg { padding: 11px 14px }
+
+/* A field with a fixed prefix ("pastecal.com/" + the name you pick). */
+.pc-field-group { display: flex; align-items: center; overflow: hidden; border: 2px solid var(--pc-primary); border-radius: var(--pc-radius-control); background: var(--pc-bg) }
+.pc-field-group:focus-within { box-shadow: var(--pc-focus-ring) }
+.pc-field-group > .pc-field-prefix { display: flex; align-items: center; height: 40px; padding: 0 var(--pc-space-1) 0 var(--pc-space-3); border-right: 1px solid var(--pc-line); background: var(--pc-surface); color: var(--pc-text-muted); font-size: var(--pc-fs-md); font-weight: var(--pc-fw-medium) }
+.pc-field-group > .pc-field { flex: 1; height: 40px; border: 0; border-radius: 0; font-weight: var(--pc-fw-medium); box-shadow: none }
+
+/* ---- Chip: a pill you press ---------------------------------------------------------------- */
+.pc-chip {
+    display: inline-flex; align-items: center; gap: 6px; flex: none; max-width: 100%;
+    height: var(--pc-h-xs); padding: 0 11px;
+    border: 1px solid var(--pc-line); border-radius: var(--pc-radius-pill);
+    background: var(--pc-bg); color: var(--pc-text);
+    font: var(--pc-fw-medium) var(--pc-fs-sm)/1 var(--pc-font);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer;
+    transition: background-color var(--pc-dur-fast) var(--pc-ease), border-color var(--pc-dur-fast) var(--pc-ease);
+}
+.pc-chip:hover { border-color: var(--pc-primary) }
+.pc-chip:focus-visible { outline: none; box-shadow: var(--pc-focus-ring) }
+.pc-chip--soft { background: var(--pc-soft); color: var(--pc-text-2) }
+.pc-chip--soft:hover { color: var(--pc-primary) }
+/* A larger chip with a field border: the template row. Pressed, it inverts. */
+.pc-chip--lg { height: var(--pc-h-sm); padding: 0 var(--pc-space-3); border-color: var(--pc-field); font-weight: var(--pc-fw-semibold) }
+@media (hover: hover) { .pc-chip--lg:hover { background: var(--pc-hover); border-color: var(--pc-text-muted) } }   /* no sticky gray after a tap */
+@media (hover: none) { .pc-chip--lg:hover { border-color: var(--pc-field) } }
+.pc-chip--lg.is-on { background: var(--pc-text); border-color: var(--pc-text); color: var(--pc-bg) }
+/* A color type: its dot, then its name. --dot is set inline. */
+.pc-chip--dot { padding: 0 10px 0 8px }
+.pc-chip--dot::before { content: ""; flex: none; width: 10px; height: 10px; box-sizing: border-box; border-radius: 50%; background: var(--dot); border: 2px solid var(--dot) }
+.pc-chip--dot:hover { border-color: var(--dot) }
+.pc-chip.is-selected { border-color: var(--pc-primary); box-shadow: 0 0 0 1px var(--pc-primary); background: color-mix(in srgb, var(--pc-primary) 10%, var(--pc-bg)) }
+
+/* ---- Tag: a small label you read ----------------------------------------------------------- */
+.pc-tag {
+    display: inline-flex; align-items: center; gap: var(--pc-space-1); flex: none;
+    padding: 1px 7px; border-radius: var(--pc-radius-pill);
+    background: var(--pc-soft); color: var(--pc-text-muted);
+    font: var(--pc-fw-semibold) var(--pc-fs-xs)/1.5 var(--pc-font); letter-spacing: 0; text-transform: none; white-space: nowrap;
+}
+.pc-tag--primary { background: var(--pc-primary-soft); color: var(--pc-primary) }
+.pc-tag--success { background: var(--pc-success-soft); color: var(--pc-success) }
+.pc-tag--warn { background: var(--pc-warning-soft); color: var(--pc-warning) }
+.pc-tag--danger { background: var(--pc-danger-soft); color: var(--pc-danger) }
+.pc-tag--caps { padding: 2px 9px; font-weight: var(--pc-fw-bold); letter-spacing: .04em; text-transform: uppercase }
+.pc-tag--strong { font-weight: var(--pc-fw-bold) }
+
+/* ---- Card: a bordered surface -------------------------------------------------------------- */
+.pc-card { min-width: 0; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); background: var(--pc-surface); color: var(--pc-text) }
+.pc-card--flat { background: var(--pc-bg) }
+.pc-card--pad { padding: var(--pc-space-3) }
+/* Selectable cards: a ring in the primary blue when chosen. */
+button.pc-card { font-family: var(--pc-font); text-align: left; cursor: pointer }
+button.pc-card:hover { border-color: var(--pc-field) }
+button.pc-card:focus-visible { outline: var(--pc-focus-outline); outline-offset: 2px }
+.pc-card.on { border-color: var(--pc-primary); box-shadow: inset 0 0 0 1px var(--pc-primary) }
+
+/* ---- Tabs: underline on the selected one ---------------------------------------------------- */
+.pc-tabs { display: flex; align-items: stretch; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none }
+.pc-tabs::-webkit-scrollbar { display: none }
+.pc-tab { flex: none; padding: 0 var(--pc-space-2); border: 0; background: none; color: var(--pc-text-muted); font: var(--pc-fw-medium) var(--pc-fs-md)/1 var(--pc-font); white-space: nowrap; cursor: pointer }
+.pc-tab:hover { color: var(--pc-text) }
+.pc-tab[aria-selected="true"] { font-weight: var(--pc-fw-bold); color: var(--pc-text); box-shadow: inset 0 -2px 0 var(--pc-primary) }
+.pc-tab:focus-visible { outline: var(--pc-focus-outline); outline-offset: -2px; border-radius: var(--pc-radius-sm) }
+
+/* ---- Segmented control ---------------------------------------------------------------------- */
+.pc-seg { display: inline-flex; padding: 2px; border-radius: var(--pc-radius-control); background: var(--pc-soft) }
+.pc-seg-btn { min-height: 30px; padding: 0 var(--pc-space-3); border: 0; border-radius: var(--pc-radius-sm); background: transparent; color: var(--pc-text-muted); font: var(--pc-fw-medium) var(--pc-fs-sm) var(--pc-font); white-space: nowrap; cursor: pointer }
+.pc-seg-btn.on, .pc-seg-btn[aria-pressed="true"] { background: var(--pc-bg); color: var(--pc-text); box-shadow: var(--pc-shadow-sm) }
+.pc-seg-btn:focus-visible { outline: var(--pc-focus-outline); outline-offset: 1px }
+
+/* ---- Switch: <label class="pc-switch"><input type="checkbox"><span class="pc-switch-track"></span> Text</label> */
+.pc-switch { position: relative; display: inline-flex; align-items: center; gap: var(--pc-space-2); font-size: var(--pc-fs-md); color: var(--pc-text); cursor: pointer; user-select: none }
+.pc-switch input { position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none }
+.pc-switch-track { position: relative; flex: none; width: 34px; height: 20px; box-sizing: border-box; border: 1px solid transparent; border-radius: var(--pc-radius-pill);
+    background: color-mix(in srgb, var(--pc-text-muted) 40%, transparent); transition: background var(--pc-dur-fast) var(--pc-ease) }
+.pc-switch-track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%;
+    background: var(--pc-knob); box-shadow: 0 1px 2px rgba(0, 0, 0, .25); transition: transform var(--pc-dur-fast) var(--pc-ease) }
+.pc-switch input:checked + .pc-switch-track { background: var(--pc-primary); border-color: var(--pc-primary) }
+.pc-switch input:checked + .pc-switch-track::after { transform: translateX(14px) }
+.pc-switch input:focus-visible + .pc-switch-track { outline: var(--pc-focus-outline); outline-offset: 2px }
+
+/* ---- Key cap --------------------------------------------------------------------------------- */
+.pc-kbd { display: inline-block; min-width: 1.6em; padding: 1px 5px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-sm);
+    background: var(--pc-bg); color: var(--pc-text-muted); font: var(--pc-fw-medium) var(--pc-fs-2xs)/1.35 var(--pc-font); letter-spacing: .02em; text-align: center; white-space: nowrap }
+
+/* ---- Link field: the link itself is the copy button ---------------------------------------- */
+.pc-link-field {
+    flex: 1; min-width: 0; height: var(--pc-h-md); display: flex; align-items: center; gap: var(--pc-space-2); padding: 0 6px 0 var(--pc-space-3);
+    border: 1px solid var(--pc-field); border-radius: var(--pc-radius-control); background: var(--pc-soft); color: var(--pc-text);
+    font: var(--pc-fw-medium) var(--pc-fs-md)/1 var(--pc-font); text-align: left; cursor: copy;
+    transition: border-color var(--pc-dur-fast), background var(--pc-dur-fast);
+}
+.pc-link-field:hover { border-color: var(--pc-primary); background: var(--pc-bg) }
+.pc-link-field:focus-visible { outline: var(--pc-focus-outline); outline-offset: 1px }
+.pc-link-url { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+.pc-link-act { flex: none; width: var(--pc-h-xs); height: var(--pc-h-xs); display: grid; place-items: center; border-radius: var(--pc-radius-sm); color: var(--pc-text-muted) }
+.pc-link-field:hover .pc-link-act { color: var(--pc-primary); background: var(--pc-soft) }
+.pc-link-ico { width: 16px; height: 16px }
+.pc-link-field--code .pc-link-url { font: var(--pc-fw-medium) var(--pc-fs-xs)/1 var(--pc-font-mono); color: var(--pc-text-muted) }
+/* Copied: the field itself says so, in green, so the click is never ambiguous. */
+.pc-link-field.is-copied { border-color: var(--pc-success); background: var(--pc-success-soft); color: var(--pc-success) }
+.pc-link-field.is-copied .pc-link-url { font-weight: var(--pc-fw-bold); font-family: var(--pc-font); color: inherit }
+.pc-link-field.is-copied .pc-link-act { color: inherit; background: transparent }
+
+/* ---- Modal: one overlay treatment and one panel treatment for every dialog ------------------ */
+.pc-modal { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; padding: var(--pc-space-4); background: var(--pc-scrim) }
+.pc-modal-panel {
+    position: relative; width: 100%; max-width: 28rem; padding: var(--pc-space-6);
+    border: 1px solid var(--pc-line); border-radius: var(--pc-radius-dialog); background: var(--pc-bg); color: var(--pc-text); box-shadow: var(--pc-shadow-xl);
+    /* Never taller than the screen: with enough content (a busy day in Activity) the top and bottom
+       were unreachable, since .pc-modal is fixed and the page behind does not scroll. */
+    max-height: calc(100vh - 2rem); overflow-y: auto; overscroll-behavior: contain;
+}
+.pc-modal-panel--wide { max-width: 44rem }
+/* The close button stays reachable once the panel scrolls: sticky at the top, in a zero-height row. */
+.pc-modal-panel > button[aria-label="Close"] { position: sticky; top: 0; float: right; margin: -0.5rem -0.5rem 0 0; z-index: 2 }

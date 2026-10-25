@@ -18,21 +18,19 @@
 </script>
 <style>
 :root { --site-max: 720px }
-:root { --bg: #f5f6f8; --surface: #ffffff; --ink: #141a24; --muted: #5c6577; --line: #e2e6ed; --blue: #2563eb; --bad: #b42318;
-  --ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
-@media (prefers-color-scheme: dark) { :root { --bg: #0f131a; --surface: #171c25; --ink: #e8ecf3; --muted: #9aa4b5; --line: #2a3140; --blue: #6b9bff; --bad: #ff8a80; } }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 var(--ui); }
-main { max-width: 420px; margin: 8vh auto 0; padding: 32px 24px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
-h1 { font-size: 22px; margin: 0 0 8px; }
+:root { --bg: var(--pc-soft); --surface: var(--pc-bg); --ink: var(--pc-text); --muted: var(--pc-text-muted); --line: var(--pc-line); --blue: var(--pc-primary); --bad: var(--pc-danger); --ui: var(--pc-font); }   /* tokens.css */
+body { margin: 0; background: var(--bg); color: var(--ink); font: var(--pc-fs-lg)/1.5 var(--ui); }
+main { max-width: 420px; margin: 8vh auto 0; padding: 32px 24px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--pc-radius-card); }
+h1 { font-size: var(--pc-fs-2xl); margin: 0 0 8px; }
 p { margin: 8px 0; color: var(--muted); }
 p.bad { color: var(--bad); }
-a.btn, button.btn { display: inline-block; margin-top: 16px; padding: 10px 16px; border-radius: 8px; border: 0; background: var(--blue); color: #fff; text-decoration: none; font: 600 16px var(--ui); cursor: pointer; }
+a.btn, button.btn { display: inline-block; margin-top: 16px; padding: 10px 16px; border-radius: var(--pc-radius-control); border: 0; background: var(--blue); color: var(--pc-on-primary); text-decoration: none; font: var(--pc-fw-semibold) var(--pc-fs-lg) var(--ui); cursor: pointer; }
 button.btn[disabled] { opacity: .6; cursor: default; }
 .who { color: var(--ink); font-weight: 600; word-break: break-all; }
 [hidden] { display: none !important; }
 @media (max-width: 480px) { main { margin: 24px 16px; } }
 </style>
-<link rel="stylesheet" href="/tokens.css">
+<link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/components.css">
 <link rel="stylesheet" href="/site.css">
 </head>
 <body>

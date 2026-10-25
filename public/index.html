@@ -164,6 +164,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap">
     <link rel="stylesheet" href="/tokens.css?v=1792797113">
+    <link rel="stylesheet" href="/components.css?v=1792797113">
     <link rel="stylesheet" href="/site.css">
     <link rel="stylesheet" href="/style.css?v=1792797113">
     <!-- Tailwind, prebuilt by scripts/build-css.sh (was a 124 KB in-browser compiler). After style.css, as the compiler's output was. -->
@@ -313,7 +314,7 @@
                         <div class="flex items-center gap-1.5">
                             <img class="h-8 w-8 dark:brightness-150" src="/img/pastecal.logo.svg" alt="pastecal">
                             <span
-                                class="pc-m-wordmark text-sm font-medium text-blue-500 hover:text-blue-600 transition-colors">pastecal</span>
+                                class="pc-m-wordmark text-sm font-medium">pastecal</span>
                         </div>
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-color-1" fill="currentColor"
                             viewBox="0 0 16 16" aria-label="Recent calendars">
@@ -335,7 +336,7 @@
                     </calendar-title>
                     <lock-badge v-if="(lock.locked || lock.paused) && !editTitle" :can-edit="lock.canEdit" :paused="lock.paused" @copy="makeOwnCopy"></lock-badge>
                     <button v-if="!editTitle" v-on:click="toggleNotes" aria-label="Toggle notes" :aria-expanded="showNotes ? 'true' : 'false'" :class="{ 'pc-hdr-on': showNotes }"
-                        class="text-color-1 hover:text-blue-500 p-1 transition-colors flex items-center justify-center flex-shrink-0">
+                        class="text-color-1 hover:text-theme-primary p-1 transition-colors flex items-center justify-center flex-shrink-0">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                             stroke="currentColor" class="w-5 h-5">
                             <path stroke-linecap="round" stroke-linejoin="round"
@@ -355,13 +356,13 @@
                     <!-- Share button -->
                     <button v-if="isExisting" @click="toggleShare()" aria-label="Share calendar" :class="{ 'pc-hdr-on': showShare }"
                         data-testid="share-button-mobile"
-                        class="p-1 hover:text-blue-500">
+                        class="p-1 hover:text-theme-primary">
                         <icon name="share" class="w-5 h-5"></icon>
                     </button>
                     <!-- Kebab Menu (...) -->
                     <div class="relative z-40">
                         <button @click.stop="showMobileMenu = !showMobileMenu" aria-label="Open menu"
-                            class="p-1 hover:text-blue-500">
+                            class="p-1 hover:text-theme-primary">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24"
                                 stroke="currentColor" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round"
@@ -379,7 +380,7 @@
                             <button v-if="canEdit"
                                 @click="showMobileMenu = false; openQuickAdd()"
                                 class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
-                                <span class="text-lg leading-none font-bold text-blue-500">+</span> Quick add event
+                                <span class="text-lg leading-none font-bold text-theme-primary">+</span> Quick add event
                             </button>
                                                             <button @click="showMobileMenu = false; toggleSettings()"
                                                                     data-testid="settings-button-mobile"
@@ -419,10 +420,10 @@
                 <input type="text" v-model="calendar.id" @input="handleSlugInput" @keyup.enter="create"
                     class="flex-1 bg-transparent border-none focus:ring-0 p-1 text-sm font-bold text-color-2 min-w-0"
                     placeholder="your-link" aria-label="Custom URL slug" aria-describedby="url-prefix-mobile">
-                <span v-if="isHomepageCalendar" class="pc-draft-chip" title="Saved only in this browser until you press Save &amp; share">Draft</span>
+                <span v-if="isHomepageCalendar" class="pc-tag pc-tag--warn pc-tag--strong pc-draft-chip" title="Saved only in this browser until you press Save &amp; share">Draft</span>
                 <button @click="share"
                     :class="{ 'pc-share-pulse': sharePulse }"
-                    class="bg-blue-600 text-white text-sm font-bold px-4 py-1.5 rounded-md shadow-sm whitespace-nowrap"
+                    class="pc-btn pc-btn--sm pc-btn--primary"
                     data-testid="share-new-mobile" aria-label="Save and share this calendar">
                     Save &amp; share
                 </button>
@@ -456,7 +457,7 @@
 
                             <!-- Dropdown arrow indicator -->
                             <button @click.stop="toggleRecents"
-                                class="text-color-1 hover:text-blue-500 p-1 transition-colors" title="Recent calendars">
+                                class="text-color-1 hover:text-theme-primary p-1 transition-colors" title="Recent calendars">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="currentColor"
                                     viewBox="0 0 16 16">
                                     <path fill-rule="evenodd"
@@ -569,7 +570,7 @@
                                      clicks deep, behind a panel that opens with an Edit-vs-View
                                      permissions question. The pill now copies on click; the
                                      chevron still opens that panel for everything else. -->
-                                <div class="relative flex items-center bg-1 border border-color-default rounded-full p-1 pl-3 pr-3 shadow-sm hover:border-blue-500 hover:bg-[var(--bg-interactive-hover)] cursor-pointer transition-all group select-none"
+                                <div class="relative flex items-center bg-1 border border-color-default rounded-full p-1 pl-3 pr-3 shadow-sm hover:border-theme-primary hover:bg-[var(--bg-interactive-hover)] cursor-pointer transition-all group select-none"
                                     @click="copyShareLink"
                                     role="button" tabindex="0"
                                     @keyup.enter="copyShareLink" @keyup.space="copyShareLink"
@@ -582,7 +583,7 @@
                                          unambiguous here -- the URL is right beside it. -->
                                     <div
                                         class="transition-colors flex-shrink-0 p-1 rounded-full mr-1"
-                                        :class="shareCopied ? 'text-green-600' : 'text-color-1 group-hover:text-blue-500'">
+                                        :class="shareCopied ? 'text-green-600' : 'text-color-1 group-hover:text-theme-primary'">
                                         <icon v-if="shareCopied" name="check" class="w-5 h-5"></icon>
                                         <icon v-else name="copy" class="w-5 h-5"></icon>
                                     </div>
@@ -598,7 +599,7 @@
                                     <!-- Everything else (edit link, subscribe, feed URLs) still
                                          lives in the full sharing panel, one click away. -->
                                     <button type="button"
-                                        class="pc-pill-share-btn flex items-center flex-shrink-0 ml-2"
+                                        class="pc-btn pc-btn--xs pc-btn--pill pc-btn--primary pc-pill-share-btn ml-2"
                                         @click.stop="toggleShare"
                                         :class="{ 'pc-hdr-on': showShare }"
                                         aria-label="Share this calendar"
@@ -619,7 +620,7 @@
                             <template #trigger>
                                 <!-- Unified Pill Container -->
                                 <div
-                                    class="flex items-center bg-1 border border-color-default rounded-full p-0 sm:p-1 pl-1.5 sm:pl-3 pr-0 sm:pr-1 shadow-sm focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all max-w-full relative">
+                                    class="flex items-center bg-1 border border-color-default rounded-full p-0 sm:p-1 pl-1.5 sm:pl-3 pr-0 sm:pr-1 shadow-sm focus-within:border-theme-primary focus-within:ring-2 focus-within:ring-theme-primary transition-all max-w-full relative">
 
                                     <!-- Domain -->
                                     <span
@@ -632,10 +633,10 @@
                                         type="text" :disabled="isExisting" v-model="calendar.id" @keyup.enter="create"
                                         @input="handleSlugInput" placeholder="your-name">
 
-                                    <span v-if="isHomepageCalendar" class="pc-draft-chip" title="Saved only in this browser until you press Save &amp; share">Draft</span>
+                                    <span v-if="isHomepageCalendar" class="pc-tag pc-tag--warn pc-tag--strong pc-draft-chip" title="Saved only in this browser until you press Save &amp; share">Draft</span>
                                     <!-- Save & share: turns the draft into a real calendar and shows its links -->
                                     <button @click="share" :class="{ 'pc-share-pulse': sharePulse }" data-testid="share-new"
-                                        class="ml-0.5 sm:ml-1 px-2 sm:px-3 py-1 sm:py-1.5 text-white bg-blue-600 font-bold rounded-full text-xs hover:bg-blue-700 transition-colors flex-shrink-0 shadow-sm whitespace-nowrap">
+                                        class="pc-btn pc-btn--xs pc-btn--pill pc-btn--primary ml-0.5 sm:ml-1">
                                         Save &amp; share
                                     </button>
                                 </div>
@@ -680,8 +681,8 @@
         <div v-if="isHomepageCalendar && !isReadOnly" class="pc-tpl" data-testid="templates" v-cloak>
             <div class="pc-tpl-row" role="group" aria-label="Start from a template">
                 <span class="pc-tpl-label">Start from:</span>
-                <button type="button" class="pc-tpl-chip" :class="{ 'is-on': !template }" :aria-pressed="!template ? 'true' : 'false'" data-testid="tpl-blank" @click="template && startBlank()">Blank</button>
-                <button v-for="t in templateChips" :key="t.id" type="button" class="pc-tpl-chip" :class="{ 'is-on': template && template.id === t.id }"
+                <button type="button" class="pc-chip pc-chip--lg pc-tpl-chip" :class="{ 'is-on': !template }" :aria-pressed="!template ? 'true' : 'false'" data-testid="tpl-blank" @click="template && startBlank()">Blank</button>
+                <button v-for="t in templateChips" :key="t.id" type="button" class="pc-chip pc-chip--lg pc-tpl-chip" :class="{ 'is-on': template && template.id === t.id }"
                     :aria-pressed="template && template.id === t.id ? 'true' : 'false'" :data-testid="'tpl-' + t.id" @click="pickTemplate(t.id)">{{ t.label }}</button>
                 <button v-if="templateUndo" type="button" class="pc-tpl-link" data-testid="tpl-undo" @click="templateUndo = false; undoLastLocal()">Undo</button>
             </div>
@@ -733,8 +734,8 @@
                 <div class="pc-side-inner">
                 <div class="pc-side-handle" aria-hidden="true"></div>
                 <div class="pc-side-bar">
-                    <div v-if="sideShowsTabs" class="pc-side-tabs" role="tablist" aria-label="Calendar panel">
-                        <button v-for="t in sideTabs" :key="t.id" type="button" role="tab" class="pc-side-tab"
+                    <div v-if="sideShowsTabs" class="pc-tabs pc-side-tabs" role="tablist" aria-label="Calendar panel">
+                        <button v-for="t in sideTabs" :key="t.id" type="button" role="tab" class="pc-tab pc-side-tab"
                             :class="{ 'pc-side-tab--icon': t.icon }" :aria-label="t.icon ? t.label : null" :title="t.icon ? t.label : null"
                             :aria-selected="sideSelectedTab === t.id ? 'true' : 'false'" :data-testid="'side-tab-' + t.id"
                             @click="openSideTab(t.id)"><icon v-if="t.icon" :name="t.icon"></icon><template v-else>{{ t.label }}</template></button>
@@ -752,14 +753,14 @@
                         <template v-if="canEdit">
                             <template v-if="notesEditing">
                                 <div class="pc-side-row">
-                                    <button type="button" class="pc-side-btn pc-side-btn--primary" @click="notesEditing = false" data-testid="notes-done">Done</button>
+                                    <button type="button" class="pc-btn pc-btn--sm pc-btn--primary" @click="notesEditing = false" data-testid="notes-done">Done</button>
                                 </div>
-                                <textarea ref="notesInput" aria-label="Calendar notes" class="pc-side-notes-input"
+                                <textarea ref="notesInput" aria-label="Calendar notes" class="pc-field pc-side-notes-input"
                                     placeholder="Where to meet, who to call, what to bring..." v-model="calendar.options.notes"></textarea>
                             </template>
                             <template v-else-if="(calendar.options.notes || '').trim()">
                                 <div class="pc-notes-edit">
-                                    <button type="button" class="pc-side-btn" @click="editNotes" data-testid="notes-edit" title="Edit notes">
+                                    <button type="button" class="pc-btn pc-btn--sm" @click="editNotes" data-testid="notes-edit" title="Edit notes">
                                         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
                                         Edit
                                     </button>
@@ -768,7 +769,7 @@
                             </template>
                             <div v-else class="pc-side-empty" data-testid="notes-empty">
                                 <p class="pc-side-empty-text">No notes yet. Add where to meet, who to call, what to bring.</p>
-                                <button type="button" class="pc-side-btn pc-side-btn--primary" @click="editNotes" data-testid="notes-add">Add notes</button>
+                                <button type="button" class="pc-btn pc-btn--sm pc-btn--primary" @click="editNotes" data-testid="notes-add">Add notes</button>
                             </div>
                         </template>
                         <div v-if="isReadOnly" class="pc-side-notes-read" v-html="getReadOnlyNotes()"></div>
@@ -779,7 +780,7 @@
                             <!-- Search Input -->
                             <div class="flex flex-col gap-2">
                                 <input type="search" v-model="searchQuery" @input="searchEvents" aria-label="Search events"
-                                    class="w-full p-2 border border-color-default rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                                    class="w-full p-2 border border-color-default rounded-lg focus:outline-none focus:ring-2 focus:ring-theme-primary text-sm"
                                     placeholder="Search events...">
                             </div>
 
@@ -814,7 +815,7 @@
                                             :aria-label="typeLabelFor(idx)"
                                             :title="colorFilters[idx] ? typeLabelFor(idx) + ' (shown)' : typeLabelFor(idx) + ' (hidden)'"
                                             class="pc-filter-dot cursor-pointer transition-all"
-                                            :class="[colorFilters[idx] ? 'is-on' : 'is-off', hasTypeLabel(idx) ? 'pc-filter-chip' : 'w-5 h-5 rounded-full border-2']"
+                                            :class="[colorFilters[idx] ? 'is-on' : 'is-off', hasTypeLabel(idx) ? 'pc-chip pc-chip--dot pc-filter-chip' : 'w-5 h-5 rounded-full border-2']"
                                             :style="hasTypeLabel(idx) ? { '--dot': color } : (colorFilters[idx]
                                                 ? { backgroundColor: color, borderColor: color }
                                                 : { backgroundColor: 'transparent', borderColor: color, opacity: .4, borderStyle: 'dashed' })">
@@ -920,7 +921,7 @@
                     <div v-if="showShare && !isExisting" class="pc-side-empty" data-testid="share-draft" v-cloak>
                         <p class="pc-side-empty-title">Links show up here once you save it.</p>
                         <p class="pc-side-empty-text">Save &amp; share gives this calendar its own link: one to edit, one for the group chat, and one for calendar apps. Nobody you share with needs an account.</p>
-                        <button type="button" class="pc-side-btn pc-side-btn--primary" @click="share">Save &amp; share</button>
+                        <button type="button" class="pc-btn pc-btn--sm pc-btn--primary" @click="share">Save &amp; share</button>
                     </div>
                     <!-- Share, ordered by what people do most, one compact row per link so the tab fits
                          without scrolling: send the read-only link, add it to a calendar app, hand helpers
@@ -934,47 +935,47 @@
                              label and its "can view / can edit" tag say what the link does. -->
                         <section class="pc-links" data-testid="share-links">
                         <div class="pc-link-item" data-testid="share-group">
-                            <div class="pc-link-head"><h4 class="pc-share-label">View-only link</h4><span class="pc-share-tag">can view</span>
+                            <div class="pc-link-head"><h4 class="pc-share-label">View-only link</h4><span class="pc-tag">can view</span>
                                 <button v-if="getReadOnlyURL() && canEdit" type="button" class="pc-link-extra" @click="showReadOnlySlug = !showReadOnlySlug">{{ showReadOnlySlug ? 'Cancel' : 'Rename' }}</button></div>
                             <!-- Older calendars may not have a read-only link yet: make one on request rather than show nothing. -->
-                            <button v-if="!getReadOnlyURL()" type="button" class="pc-share-copy pc-share-copy--primary" :disabled="creatingReadOnly || !canEdit"
+                            <button v-if="!getReadOnlyURL()" type="button" class="pc-btn pc-btn--sm pc-btn--primary" :disabled="creatingReadOnly || !canEdit"
                                 @click="makeReadOnlyLink" data-testid="create-readonly">{{ creatingReadOnly ? 'Creating…' : 'Create link' }}</button>
                             <template v-else>
                             <div class="pc-link-row">
-                                <button type="button" class="pc-link" :data-copy-key="'view'" :class="{ 'is-copied': copiedKey === 'view' }" :title="'Copy ' + getReadOnlyURL()" @click="copyLink('view', getReadOnlyURL(), 'copy')" data-testid="share-readonly-addr">
+                                <button type="button" class="pc-link-field" :data-copy-key="'view'" :class="{ 'is-copied': copiedKey === 'view' }" :title="'Copy ' + getReadOnlyURL()" @click="copyLink('view', getReadOnlyURL(), 'copy')" data-testid="share-readonly-addr">
                                     <span class="pc-link-url">{{ copiedKey === 'view' ? 'Copied to clipboard' : shortLink(getReadOnlyURL()) }}</span>
                                     <span class="pc-link-act" :aria-label="copiedKey === 'view' ? 'Copied' : 'Copy'"><template v-if="copiedKey === 'view'"><svg class="pc-link-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></template><template v-else><svg class="pc-link-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg></template></span>
                                 </button>
-                                <button v-if="canShare()" type="button" class="pc-link-share" @click="shareUrl(getReadOnlyURL(), 'Calendar')" aria-label="Share…" title="Share…"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v13"/></svg></button>
+                                <button v-if="canShare()" type="button" class="pc-btn pc-btn--icon pc-link-share" @click="shareUrl(getReadOnlyURL(), 'Calendar')" aria-label="Share…" title="Share…"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v13"/></svg></button>
                             </div>
                             <div v-if="showReadOnlySlug" class="pc-share-link">
                                 <span class="pc-link-prefix">pastecal.com/view/</span>
-                                <input type="text" v-model="readOnlySlugInput" placeholder="new-name" aria-label="New name for the view-only link" class="pc-share-url" @keydown.enter="readOnlySlugInput.trim() && customizeExistingLink()">
-                                <button type="button" @click="customizeExistingLink" :disabled="!readOnlySlugInput.trim()" class="pc-share-copy pc-share-copy--primary">Save</button>
+                                <input type="text" v-model="readOnlySlugInput" placeholder="new-name" aria-label="New name for the view-only link" class="pc-field pc-field--sm" @keydown.enter="readOnlySlugInput.trim() && customizeExistingLink()">
+                                <button type="button" @click="customizeExistingLink" :disabled="!readOnlySlugInput.trim()" class="pc-btn pc-btn--sm pc-btn--primary">Save</button>
                             </div>
                             </template>
                         </div>
 
                         <div v-if="canEdit" class="pc-link-item" data-testid="share-helpers">
-                            <div class="pc-link-head"><h4 class="pc-share-label">Edit link</h4><span class="pc-share-tag pc-share-tag--warn">can edit</span><span v-if="lock.locked" class="pc-share-tag">Locked</span></div>
+                            <div class="pc-link-head"><h4 class="pc-share-label">Edit link</h4><span class="pc-tag pc-tag--danger">can edit</span><span v-if="lock.locked" class="pc-tag">Locked</span></div>
                             <div class="pc-link-row">
-                                <button type="button" class="pc-link" :data-copy-key="'edit'" :class="{ 'is-copied': copiedKey === 'edit' }" :title="'Copy ' + getEditableURL()" @click="copyLink('edit', getEditableURL(), 'copy')" data-testid="share-edit-copy">
+                                <button type="button" class="pc-link-field" :data-copy-key="'edit'" :class="{ 'is-copied': copiedKey === 'edit' }" :title="'Copy ' + getEditableURL()" @click="copyLink('edit', getEditableURL(), 'copy')" data-testid="share-edit-copy">
                                     <span class="pc-link-url">{{ copiedKey === 'edit' ? 'Copied to clipboard' : shortLink(getEditableURL()) }}</span>
                                     <span class="pc-link-act" :aria-label="copiedKey === 'edit' ? 'Copied' : 'Copy'"><template v-if="copiedKey === 'edit'"><svg class="pc-link-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></template><template v-else><svg class="pc-link-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg></template></span>
                                 </button>
-                                <button v-if="canShare()" type="button" class="pc-link-share" @click="shareUrl(getEditableURL(), 'Calendar')" aria-label="Share…" title="Share…"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v13"/></svg></button>
+                                <button v-if="canShare()" type="button" class="pc-btn pc-btn--icon pc-link-share" @click="shareUrl(getEditableURL(), 'Calendar')" aria-label="Share…" title="Share…"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v13"/></svg></button>
                             </div>
                         </div>
 
                         <div class="pc-link-item" data-testid="share-view">
-                            <div class="pc-link-head"><h4 class="pc-share-label">This view</h4><span class="pc-share-tag">{{ viewLinkTag }}</span>
+                            <div class="pc-link-head"><h4 class="pc-share-label">This view</h4><span class="pc-tag">{{ viewLinkTag }}</span>
                                 <button type="button" class="pc-link-extra" :aria-expanded="showViewHelp ? 'true' : 'false'" @click="showViewHelp = !showViewHelp" data-testid="share-view-help">How it works</button></div>
                             <div class="pc-link-row">
-                                <button type="button" class="pc-link" :data-copy-key="'here'" :class="{ 'is-copied': copiedKey === 'here' }" :title="'Copy ' + currentViewURL" @click="copyLink('here', currentViewURL, 'copy')" data-testid="share-view-copy">
+                                <button type="button" class="pc-link-field" :data-copy-key="'here'" :class="{ 'is-copied': copiedKey === 'here' }" :title="'Copy ' + currentViewURL" @click="copyLink('here', currentViewURL, 'copy')" data-testid="share-view-copy">
                                     <span class="pc-link-url">{{ copiedKey === 'here' ? 'Copied to clipboard' : shortLink(currentViewURL) }}</span>
                                     <span class="pc-link-act" :aria-label="copiedKey === 'here' ? 'Copied' : 'Copy'"><template v-if="copiedKey === 'here'"><svg class="pc-link-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></template><template v-else><svg class="pc-link-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg></template></span>
                                 </button>
-                                <button v-if="canShare()" type="button" class="pc-link-share" @click="shareUrl(currentViewURL, 'Calendar View')" aria-label="Share…" title="Share…"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v13"/></svg></button>
+                                <button v-if="canShare()" type="button" class="pc-btn pc-btn--icon pc-link-share" @click="shareUrl(currentViewURL, 'Calendar View')" aria-label="Share…" title="Share…"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v13"/></svg></button>
                             </div>
                             <div v-if="showViewHelp" class="pc-link-help" data-testid="share-view-help-body">
                                 Opens at the date and view you're looking at. Edit the end of any link:
@@ -987,15 +988,15 @@
                         </div>
 
                         <div v-if="getReadOnlyURL()" class="pc-link-item" data-testid="share-feed">
-                            <div class="pc-link-head"><h4 class="pc-share-label">Calendar feed</h4><span class="pc-share-tag">.ics</span>
+                            <div class="pc-link-head"><h4 class="pc-share-label">Calendar feed</h4><span class="pc-tag">.ics</span>
                                 <!-- The full-access feed carries the edit link inside it: kept, small, and labeled. -->
                                 <button v-if="canEdit" type="button" class="pc-link-extra pc-link-extra--quiet" title="A feed that also gives edit access" @click="copyLink('editfeed', getEditableICSURL(), 'ics')" data-testid="share-editfeed-copy">{{ copiedKey === 'editfeed' ? 'Copied' : 'Copy with edit access' }}</button></div>
                             <div class="pc-link-row">
-                                <button type="button" class="pc-link" :data-copy-key="'feed'" :class="{ 'is-copied': copiedKey === 'feed' }" :title="'Copy ' + getReadOnlyICSURL()" @click="copyLink('feed', getReadOnlyICSURL(), 'ics')" data-testid="share-feed-copy">
+                                <button type="button" class="pc-link-field" :data-copy-key="'feed'" :class="{ 'is-copied': copiedKey === 'feed' }" :title="'Copy ' + getReadOnlyICSURL()" @click="copyLink('feed', getReadOnlyICSURL(), 'ics')" data-testid="share-feed-copy">
                                     <span class="pc-link-url">{{ copiedKey === 'feed' ? 'Copied to clipboard' : shortLink(getReadOnlyICSURL()) }}</span>
                                     <span class="pc-link-act" :aria-label="copiedKey === 'feed' ? 'Copied' : 'Copy'"><template v-if="copiedKey === 'feed'"><svg class="pc-link-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></template><template v-else><svg class="pc-link-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg></template></span>
                                 </button>
-                                <button v-if="canShare()" type="button" class="pc-link-share" @click="shareUrl(getReadOnlyICSURL(), 'Calendar feed')" aria-label="Share…" title="Share…"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v13"/></svg></button>
+                                <button v-if="canShare()" type="button" class="pc-btn pc-btn--icon pc-link-share" @click="shareUrl(getReadOnlyICSURL(), 'Calendar feed')" aria-label="Share…" title="Share…"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7"/><path d="M16 6l-4-4-4 4"/><path d="M12 2v13"/></svg></button>
                             </div>
                         </div>
                         </section>
@@ -1005,17 +1006,17 @@
                         <section v-if="getWebcalURL()" class="pc-links-sec" data-testid="share-apps">
                             <h4 class="pc-share-more-title">Add to calendar app</h4>
                             <div class="pc-share-apps pc-share-apps--grid">
-                                <a :href="getGoogleSubscribeURL()" target="_blank" rel="noopener" @click="trackSubscribe('subscribe_google')" data-testid="subscribe-google" class="pc-share-app" title="Opens Google Calendar">Google <svg class="pc-app-ext" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg></a>
-                                <a :href="getWebcalURL()" @click="trackSubscribe('subscribe_apple')" data-testid="subscribe-apple" class="pc-share-app" title="Opens Apple Calendar">Apple <svg class="pc-app-ext" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg></a>
-                                <a :href="getOutlookSubscribeURL()" target="_blank" rel="noopener" @click="trackSubscribe('subscribe_outlook')" data-testid="subscribe-outlook" class="pc-share-app" title="Opens Outlook">Outlook <svg class="pc-app-ext" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg></a>
-                                <a :href="getWebcalURL()" @click="trackSubscribe('subscribe')" data-testid="subscribe-webcal" class="pc-share-app" title="Opens your calendar app">Other <svg class="pc-app-ext" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg></a>
+                                <a :href="getGoogleSubscribeURL()" target="_blank" rel="noopener" @click="trackSubscribe('subscribe_google')" data-testid="subscribe-google" class="pc-btn pc-btn--sm pc-share-app" title="Opens Google Calendar">Google <svg class="pc-app-ext" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg></a>
+                                <a :href="getWebcalURL()" @click="trackSubscribe('subscribe_apple')" data-testid="subscribe-apple" class="pc-btn pc-btn--sm pc-share-app" title="Opens Apple Calendar">Apple <svg class="pc-app-ext" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg></a>
+                                <a :href="getOutlookSubscribeURL()" target="_blank" rel="noopener" @click="trackSubscribe('subscribe_outlook')" data-testid="subscribe-outlook" class="pc-btn pc-btn--sm pc-share-app" title="Opens Outlook">Outlook <svg class="pc-app-ext" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg></a>
+                                <a :href="getWebcalURL()" @click="trackSubscribe('subscribe')" data-testid="subscribe-webcal" class="pc-btn pc-btn--sm pc-share-app" title="Opens your calendar app">Other <svg class="pc-app-ext" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7M8 7h9v9"/></svg></a>
                             </div>
                         </section>
 
                         <section v-if="getReadOnlyURL()" class="pc-links-sec" data-testid="share-more-options">
                             <h4 class="pc-share-more-title">Embed on a website</h4>
                             <div class="pc-link-row">
-                                <button type="button" class="pc-link pc-link--code" :data-copy-key="'embed'" :class="{ 'is-copied': copiedKey === 'embed' }" title="Copy embed code" @click="copyLink('embed', embedCode(), 'embed')" data-testid="share-embed-copy">
+                                <button type="button" class="pc-link-field pc-link-field--code" :data-copy-key="'embed'" :class="{ 'is-copied': copiedKey === 'embed' }" title="Copy embed code" @click="copyLink('embed', embedCode(), 'embed')" data-testid="share-embed-copy">
                                     <code class="pc-link-url">{{ copiedKey === 'embed' ? 'Copied to clipboard' : embedCode() }}</code>
                                     <span class="pc-link-act"><template v-if="copiedKey === 'embed'"><svg class="pc-link-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg></template><template v-else><svg class="pc-link-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg></template></span>
                                 </button>
@@ -1024,9 +1025,9 @@
                         </section>
 
                         <!-- Pro, unlocked: one line and a link. The full offer (plans, checkout) is the Get Pro view. -->
-                        <div v-if="!lock.locked && canEdit" class="pc-share-pro pc-gopro" data-testid="share-pro-card">
+                        <div v-if="!lock.locked && canEdit" class="pc-gopro" data-testid="share-pro-card">
                             <div class="pc-gopro-head"><b>Go Pro</b><span class="pc-gopro-price">$24 a year</span>
-                                <button type="button" class="pc-gopro-btn" @click="shareProFocus = true" data-testid="share-get-pro">Get Pro</button></div>
+                                <button type="button" class="pc-btn pc-btn--sm pc-btn--pill pc-btn--primary pc-gopro-btn" @click="shareProFocus = true" data-testid="share-get-pro">Get Pro</button></div>
                             <ul class="pc-gopro-list">
                                 <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg><span><b>Lock editing</b> to you and people you choose</span></li>
                                 <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg><span><b>Stats</b>: views per day, followers, places</span></li>
@@ -1072,7 +1073,7 @@
                                         <input :value="/^Type \d+$/.test(label) ? '' : label" @input="updateTypeLabel(index+1, $event.target.value)"
                                             :aria-label="'Label for type ' + (index + 1)"
                                             :data-category-label="index"
-                                            class="pc-set-input"
+                                            class="pc-field pc-field--sm"
                                             :placeholder="displayTypeLabels[index]">
                                     </div>
                                 </div>
@@ -1088,7 +1089,7 @@
                             <div class="pc-set-grid">
                                 <div class="pc-set-field">
                                     <label class="pc-set-label" for="set-cal-view">Default view</label>
-                                    <select id="set-cal-view" v-model="calendar.options.defaultView" class="pc-set-input">
+                                    <select id="set-cal-view" v-model="calendar.options.defaultView" class="pc-field pc-field--sm">
                                         <option :value="null">Auto ({{ calendarAutoViewLabel }})</option>
                                         <option value="Day">Day</option>
                                         <option value="Week">Week</option>
@@ -1107,8 +1108,8 @@
                                     <span class="pc-set-label">Custom view shows</span>
                                     <div class="pc-set-pair">
                                         <input type="number" v-model.number="calendar.options.customViewDuration" aria-label="Custom view length"
-                                            :min="1" :max="calendar.options.customViewUnit === 'Weeks' ? 52 : 24" class="pc-set-input pc-set-num">
-                                        <select v-model="calendar.options.customViewUnit" aria-label="Custom view unit" class="pc-set-input">
+                                            :min="1" :max="calendar.options.customViewUnit === 'Weeks' ? 52 : 24" class="pc-field pc-field--sm pc-set-num">
+                                        <select v-model="calendar.options.customViewUnit" aria-label="Custom view unit" class="pc-field pc-field--sm">
                                             <option value="Weeks">Weeks</option>
                                             <option value="Months">Months</option>
                                         </select>
@@ -1144,21 +1145,21 @@
                             <div class="pc-set-grid">
                                 <div class="pc-set-field">
                                     <label class="pc-set-label" for="set-first-day">First day of week</label>
-                                    <select id="set-first-day" v-model="globalSettings.firstDayOfWeek" @change="saveGlobalSettings" class="pc-set-input">
+                                    <select id="set-first-day" v-model="globalSettings.firstDayOfWeek" @change="saveGlobalSettings" class="pc-field pc-field--sm">
                                         <option value="0">Sunday</option>
                                         <option value="1">Monday</option>
                                     </select>
                                 </div>
                                 <div class="pc-set-field">
                                     <label class="pc-set-label" for="set-time-format">Time format</label>
-                                    <select id="set-time-format" v-model="globalSettings.timeFormat" @change="saveGlobalSettings" class="pc-set-input">
+                                    <select id="set-time-format" v-model="globalSettings.timeFormat" @change="saveGlobalSettings" class="pc-field pc-field--sm">
                                         <option value="12">12-hour (1:00 PM)</option>
                                         <option value="24">24-hour (13:00)</option>
                                     </select>
                                 </div>
                                 <div class="pc-set-field">
                                     <label class="pc-set-label" for="set-date-format">Date format</label>
-                                    <select id="set-date-format" v-model="globalSettings.dateFormat" @change="saveGlobalSettings" class="pc-set-input">
+                                    <select id="set-date-format" v-model="globalSettings.dateFormat" @change="saveGlobalSettings" class="pc-field pc-field--sm">
                                         <option value="auto">Auto (browser)</option>
                                         <option value="us">US: 1/7/26</option>
                                         <option value="iso">ISO: 2026-01-07</option>
@@ -1167,7 +1168,7 @@
                                 </div>
                                 <div class="pc-set-field">
                                     <label class="pc-set-label" for="set-start-hour">Start hour</label>
-                                    <select id="set-start-hour" v-model="globalSettings.startHour" @change="saveGlobalSettings" class="pc-set-input">
+                                    <select id="set-start-hour" v-model="globalSettings.startHour" @change="saveGlobalSettings" class="pc-field pc-field--sm">
                                         <option value="00:00">12:00 AM</option>
                                         <option value="05:00">5:00 AM</option>
                                         <option value="06:00">6:00 AM</option>
@@ -1178,7 +1179,7 @@
                                 </div>
                                 <div class="pc-set-field">
                                     <label class="pc-set-label" for="set-my-view">My default view</label>
-                                    <select id="set-my-view" v-model="globalSettings.defaultView" @change="saveGlobalSettings" class="pc-set-input">
+                                    <select id="set-my-view" v-model="globalSettings.defaultView" @change="saveGlobalSettings" class="pc-field pc-field--sm">
                                         <option value="Day">Day</option>
                                         <option value="Week">Week</option>
                                         <option value="Month">Month</option>
@@ -1189,7 +1190,7 @@
                                 </div>
                                 <div class="pc-set-field">
                                     <label class="pc-set-label" for="set-theme">Theme</label>
-                                    <select id="set-theme" v-model="globalSettings.darkMode" @change="saveGlobalSettings" class="pc-set-input">
+                                    <select id="set-theme" v-model="globalSettings.darkMode" @change="saveGlobalSettings" class="pc-field pc-field--sm">
                                         <option value="auto">Auto (system)</option>
                                         <option value="light">Light</option>
                                         <option value="dark">Dark</option>
@@ -1201,8 +1202,8 @@
                                     <div class="pc-set-pair">
                                         <input type="number" v-model.number="globalSettings.customViewDuration" aria-label="Custom view length"
                                             @change="saveGlobalSettings" :min="1"
-                                            :max="globalSettings.customViewUnit === 'Weeks' ? 52 : 24" class="pc-set-input pc-set-num">
-                                        <select v-model="globalSettings.customViewUnit" @change="saveGlobalSettings" aria-label="Custom view unit" class="pc-set-input">
+                                            :max="globalSettings.customViewUnit === 'Weeks' ? 52 : 24" class="pc-field pc-field--sm pc-set-num">
+                                        <select v-model="globalSettings.customViewUnit" @change="saveGlobalSettings" aria-label="Custom view unit" class="pc-field pc-field--sm">
                                             <option value="Weeks">Weeks</option>
                                             <option value="Months">Months</option>
                                         </select>
@@ -1220,7 +1221,7 @@
                     <div v-if="!isExisting" class="pc-side-empty" data-testid="activity-draft">
                         <p class="pc-side-empty-title">Changes show up here once you share it.</p>
                         <p class="pc-side-empty-text">Every add, edit and delete, by anyone with the link, with a one-click undo.</p>
-                        <button type="button" class="pc-side-btn pc-side-btn--primary" @click="share">Save &amp; share</button>
+                        <button type="button" class="pc-btn pc-btn--sm pc-btn--primary" @click="share">Save &amp; share</button>
                     </div>
                     <template v-else>
                     <p class="pc-side-hint pc-act-lead">
@@ -1242,7 +1243,7 @@
                     <section v-for="group in changesByDay" :key="group.key" class="pc-act-day">
                         <h5 class="pc-act-day-head">
                             {{ group.label }}
-                            <span v-if="group.unseen" class="pc-act-new">{{ group.unseen }} new</span>
+                            <span v-if="group.unseen" class="pc-tag pc-tag--primary pc-act-new">{{ group.unseen }} new</span>
                         </h5>
                         <div v-for="entry in group.entries" :key="entry.key" class="pc-act-row">
                             <span class="pc-act-dot" aria-hidden="true" :style="{ background: entry.type ? getTypeColor(entry.type) : 'var(--pc-field)' }"></span>
@@ -1265,7 +1266,7 @@
                                     <li v-for="(ev, i) in entry.added" :key="i">{{ ev.title }} · {{ ev.when }}</li>
                                 </ul>
                             </div>
-                            <button v-if="entry.canRestore" type="button" @click="undoChange(entry)" class="pc-act-undo"
+                            <button v-if="entry.canRestore" type="button" @click="undoChange(entry)" class="pc-btn pc-btn--xs pc-act-undo"
                                 :aria-label="entry.restoreLabel" :title="entry.restoreLabel + '. Restoring is itself a change, so it can be undone too.'">Undo</button>
                         </div>
                     </section>
@@ -1274,7 +1275,7 @@
 
                     <!-- Pro owner: every saved version. Free, the calendar's creator: one line about what Pro keeps. -->
                     <button v-if="lock.locked && proOwner" type="button" class="pc-act-more" @click="openInsight('history', 'recent_changes')" data-testid="recent-history-link">
-                        Restore an earlier version <span class="pc-act-pro">Pro</span> <span aria-hidden="true">→</span>
+                        Restore an earlier version <span class="pc-tag pc-tag--primary pc-tag--strong">Pro</span> <span aria-hidden="true">→</span>
                     </button>
                     <p v-else-if="!lock.locked && isMineCalendar" class="pc-changes-foot" data-testid="recent-pro-pitch">
                         Pro keeps every version and can restore any date.
@@ -1297,15 +1298,15 @@
                     <div v-if="showStatsInfo" data-testid="stats-info" v-cloak>
                         <!-- A draft has no visitors yet: show what Stats will look like, clearly marked as an example. -->
                         <div v-if="!isExisting" class="pc-free-stats pc-stats-sample" data-testid="stats-draft">
-                            <span class="pc-sample-tag">Example</span>
+                            <span class="pc-tag pc-tag--caps pc-sample-tag">Example</span>
                             <div class="pc-free-tiles">
-                                <div class="pc-free-tile"><span class="pc-free-num">480</span><span class="pc-free-label">Views, last 7 days</span><span class="pc-stat-delta is-up">↑ 18% vs the week before</span></div>
-                                <div class="pc-free-tile"><span class="pc-free-num">23</span><span class="pc-free-label">Calendar-app followers</span></div>
+                                <div class="pc-card pc-card--flat pc-card--pad pc-free-tile"><span class="pc-free-num">480</span><span class="pc-free-label">Views, last 7 days</span><span class="pc-stat-delta pc-stat-delta--up">↑ 18% vs the week before</span></div>
+                                <div class="pc-card pc-card--flat pc-card--pad pc-free-tile"><span class="pc-free-num">23</span><span class="pc-free-label">Calendar-app followers</span></div>
                             </div>
                             <div class="pc-sample-bars" aria-hidden="true"><span style="height:32%"></span><span style="height:43%"></span><span style="height:39%"></span><span style="height:51%"></span><span style="height:73%"></span><span style="height:100%"></span><span style="height:62%"></span></div>
                             <div class="pc-sample-days" aria-hidden="true"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
                             <p class="pc-free-fine">Counts only. Never who. Your real numbers start once you share it.</p>
-                            <button type="button" class="pc-side-btn pc-side-btn--primary" @click="share">Save &amp; share</button>
+                            <button type="button" class="pc-btn pc-btn--sm pc-btn--primary" @click="share">Save &amp; share</button>
                         </div>
                         <p v-else-if="lock.locked && !proOwnerChecked" class="pc-side-hint" aria-live="polite">Loading…</p>
                         <div v-else-if="lock.locked" class="pc-side-empty" data-testid="stats-not-owner">
@@ -1318,12 +1319,12 @@
                                 <p v-else-if="freeStats && freeStats.unavailable" class="pc-side-hint" data-testid="stats-free-unavailable">Stats start counting soon.</p>
                                 <p v-else-if="freeStats && !freeStats.loading && !freeStats.views && !freeStats.followers" class="pc-side-hint" data-testid="stats-free-empty">No views counted yet. They show up here once people open the view-only link.</p>
                                 <div v-else class="pc-free-tiles">
-                                    <div class="pc-free-tile" data-testid="stats-free-views">
+                                    <div class="pc-card pc-card--flat pc-card--pad pc-free-tile" data-testid="stats-free-views">
                                         <span class="pc-free-num">{{ freeStats && !freeStats.loading ? freeStats.views.toLocaleString() : '–' }}</span>
                                         <span class="pc-free-label">Views, last 7 days</span>
                                         <span v-if="freeStatsDelta" class="pc-stat-delta" :class="'pc-stat-delta--' + freeStatsDelta.dir" data-testid="stats-free-delta">{{ freeStatsDelta.text }} <span class="pc-stat-vs">vs the week before</span></span>
                                     </div>
-                                    <div class="pc-free-tile" data-testid="stats-free-followers">
+                                    <div class="pc-card pc-card--flat pc-card--pad pc-free-tile" data-testid="stats-free-followers">
                                         <span class="pc-free-num">{{ freeStats && !freeStats.loading ? freeStats.followers.toLocaleString() : '–' }}</span>
                                         <span class="pc-free-label">Calendar-app followers</span>
                                     </div>
@@ -1340,7 +1341,7 @@
                                     <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
                                         <span><b>Places</b>: top countries and cities</span></li>
                                 </ul>
-                                <button type="button" class="pc-side-btn pc-side-btn--primary" @click="getProFromStats" data-testid="stats-get-pro">Get Pro</button>
+                                <button type="button" class="pc-btn pc-btn--sm pc-btn--primary" @click="getProFromStats" data-testid="stats-get-pro">Get Pro</button>
                             </div>
                         </template>
                     </div>
@@ -1446,7 +1447,7 @@
                         <p>Change an event. Everyone sees it.</p>
                     </li>
                 </ol>
-                <p class="pc-tour-cta"><a class="pc-tour-start" href="#" @click.prevent="startFromTour">Start your calendar ↑</a><a href="/view/demo" data-from="home-steps">See a demo calendar →</a></p>
+                <p class="pc-tour-cta"><a class="pc-btn pc-btn--lg pc-btn--pill pc-btn--primary pc-tour-start" href="#" @click.prevent="startFromTour">Start your calendar ↑</a><a href="/view/demo" data-from="home-steps">See a demo calendar →</a></p>
 
                 <!-- Before / with pastecal: the setup other shared calendars ask for, next to this one's. -->
                 <div class="pc-vs-wrap" data-tour="why">
@@ -1583,17 +1584,17 @@
                 </div>
 
                 <div class="mb-6">
-                    <div class="pc-input-group">
-                        <span class="pc-input-prefix">pastecal.com/</span>
+                    <div class="pc-field-group">
+                        <span class="pc-field-prefix">pastecal.com/</span>
                         <input ref="claimInput" type="text" v-model="calendar.id" aria-label="Claim custom URL"
-                            class="pc-input" placeholder="my-calendar"
+                            class="pc-field" placeholder="my-calendar"
                             @keyup.enter="confirmClaim">
                     </div>
                     <p class="text-xs text-color-1 mt-2 text-center">
                         For a private calendar, keep the random name: it can't be guessed.
                     </p>
                 </div>
-                <button @click="confirmClaim" class="pc-btn pc-btn-primary w-full shadow-md">
+                <button @click="confirmClaim" class="pc-btn pc-btn--primary w-full">
                     <span>Get my link</span>
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
                         stroke="currentColor">

@@ -6,111 +6,107 @@
 <meta name="description" content="pastecal is free to use. Pro Single locks editing to people you choose: $24 a year or $2.99 a month per calendar. Pro Unlimited ($79 a year or $8 a month) and Teams ($290 a year or $29 a month) are in development.">
 <link rel="icon" href="/favicon.ico">
 <script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/tokens.css">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/components.css">
 <style>
 :root { --site-max: 1120px }
 /* Layout: a centered hero, four plan cards (Pro Single is the one on sale, so it carries the
    emphasis; Pro Unlimited and Teams are in development), the Get Pro picker, one compare table,
    a short in-development list, then the waitlist and questions. */
 :root {
-  --bg: #f6f7f9; --surface: #ffffff; --ink: #141a24; --muted: #5c6577; --line: #e4e7ec;
-  --blue: #2563eb; --blue-ink: #ffffff; --blue-soft: #eef3ff; --ok: #1f7a4d; --soon: #8a5a00; --soon-bg: #fdf3dc; --hl: #fff1a8;
-  --ui: "Figtree", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* This page's names, on the design tokens (tokens.css): the app's colors in both themes. */
+  --bg: var(--pc-soft); --surface: var(--pc-bg); --ink: var(--pc-text); --muted: var(--pc-text-muted); --line: var(--pc-line);
+  --blue: var(--pc-primary); --blue-ink: var(--pc-on-primary); --blue-soft: color-mix(in srgb, var(--pc-primary) 8%, var(--pc-bg));
+  --ok: var(--pc-success); --soon: var(--pc-warning); --soon-bg: var(--pc-warning-soft); --hl: color-mix(in srgb, var(--pc-highlight) 35%, var(--pc-bg));
+  --ui: var(--pc-font);
 }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
-  --bg: #0f1218; --surface: #171b23; --ink: #e6e9ef; --muted: #9aa3b2; --line: #2a303b;
-  --blue: #6b9bff; --blue-ink: #0b1220; --blue-soft: #1b2436; --ok: #34d399; --soon: #f5c451; --soon-bg: #3a300f; --hl: #5c4d10; color-scheme: dark } }
-:root[data-theme="dark"] {
-  --bg: #0f1218; --surface: #171b23; --ink: #e6e9ef; --muted: #9aa3b2; --line: #2a303b;
-  --blue: #6b9bff; --blue-ink: #0b1220; --blue-soft: #1b2436; --ok: #34d399; --soon: #f5c451; --soon-bg: #3a300f; --hl: #5c4d10; color-scheme: dark }
 * { box-sizing: border-box }
-body { background: var(--bg); color: var(--ink); font: 16px/1.55 var(--ui); margin: 0 }
+body { background: var(--bg); color: var(--ink); font: var(--pc-fs-lg)/1.55 var(--ui); margin: 0 }
 .col { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 8px 64px }
 h2 { font-size: clamp(22px, 2.6vw, 28px); letter-spacing: -.01em; margin: 64px 0 14px; text-wrap: balance }
 
 .hero { text-align: center; padding: 40px 0 0 }
 .hero h1 { margin: 0 auto; max-width: 32ch; font-size: clamp(32px, 5vw, 52px); line-height: 1.07; letter-spacing: -.02em; text-wrap: balance }
 .hero h1 mark { background: linear-gradient(transparent 58%, var(--hl) 58%, var(--hl) 92%, transparent 92%); color: inherit; padding: 0 .08em }
-.lead { margin: 16px auto 0; max-width: 56ch; color: var(--muted); font-size: 18px; text-wrap: balance }
-.chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin-top: 16px; color: var(--muted); font-size: 14.5px; font-weight: 600 }
+.lead { margin: 16px auto 0; max-width: 56ch; color: var(--muted); font-size: var(--pc-fs-xl); text-wrap: balance }
+.chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin-top: 16px; color: var(--muted); font-size: var(--pc-fs-md); font-weight: 600 }
 .chips span::before { content: "✓ "; color: var(--ok) }
 
 .plans { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 40px; align-items: stretch }
-.plan { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 24px 20px 20px; display: flex; flex-direction: column }
+.plan { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: var(--pc-radius-card); padding: 24px 20px 20px; display: flex; flex-direction: column }
 .plan.pro { border: 2px solid var(--blue); box-shadow: 0 10px 30px -18px color-mix(in srgb, var(--blue) 60%, transparent) }
-.badge { position: absolute; top: -12px; left: 20px; background: var(--blue); color: var(--blue-ink); font-size: 12px; font-weight: 800; border-radius: 999px; padding: 3px 10px }
+.badge { position: absolute; top: -12px; left: 20px; background: var(--blue); color: var(--blue-ink); font-size: var(--pc-fs-xs); font-weight: 800; border-radius: var(--pc-radius-pill); padding: 3px 10px }
 .badge.dev { background: var(--soon-bg); color: var(--soon); border: 1px solid color-mix(in srgb, var(--soon) 25%, transparent) }
-.plan h3 { margin: 0; font-size: 18px }
-.who { color: var(--muted); font-size: 14.5px; margin: 4px 0 0; min-height: 2.9em }
+.plan h3 { margin: 0; font-size: var(--pc-fs-xl) }
+.who { color: var(--muted); font-size: var(--pc-fs-md); margin: 4px 0 0; min-height: 2.9em }
 .price { margin: 14px 0 0; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap }
-.price strong { font-size: 40px; line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums }
-.price span { color: var(--muted); font-size: 14.5px }
-.per { color: var(--muted); font-size: 13.5px; margin: 4px 0 0; min-height: 2.8em }
-.plan ul { list-style: none; padding: 0; margin: 16px 0 20px; display: grid; gap: 8px; font-size: 14.5px; flex: 1; align-content: start }
+.price strong { font-size: var(--pc-fs-5xl); line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums }
+.price span { color: var(--muted); font-size: var(--pc-fs-md) }
+.per { color: var(--muted); font-size: var(--pc-fs-sm); margin: 4px 0 0; min-height: 2.8em }
+.plan ul { list-style: none; padding: 0; margin: 16px 0 20px; display: grid; gap: 8px; font-size: var(--pc-fs-md); flex: 1; align-content: start }
 .plan li { position: relative; padding-left: 22px }
 .plan li::before { content: "✓"; position: absolute; left: 0; color: var(--ok); font-weight: 800 }
 .plan ul:has(+ .coming-h) { flex: 0 0 auto; margin-bottom: 4px }
-.coming-h { margin: 8px 0 0; font-size: 11.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--soon) }
+.coming-h { margin: 8px 0 0; font-size: var(--pc-fs-xs); font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--soon) }
 .plan ul.coming { margin-top: 8px; color: var(--muted) }
 .plan ul.coming li::before { content: "+"; color: var(--muted) }
-.plan code, td code { font: 600 .9em ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--bg); padding: 1px 5px; border-radius: 5px; white-space: nowrap }
-.cta { display: flex; align-items: center; justify-content: center; text-align: center; border-radius: 999px; min-height: 44px; padding: 0 18px; font: 700 15px/1.2 var(--ui); text-decoration: none; border: 1px solid var(--line); color: var(--ink); background: var(--surface); cursor: pointer }
+.plan code, td code { font: 600 .9em ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--bg); padding: 1px 5px; border-radius: var(--pc-radius-sm); white-space: nowrap }
+.cta { display: flex; align-items: center; justify-content: center; text-align: center; border-radius: var(--pc-radius-pill); min-height: var(--pc-h-lg); padding: 0 18px; font: var(--pc-fw-bold) var(--pc-fs-lg)/1.2 var(--ui); text-decoration: none; border: 1px solid var(--line); color: var(--ink); background: var(--surface); cursor: pointer }
 .cta.primary { background: var(--blue); border-color: var(--blue); color: var(--blue-ink) }
 .cta:hover { filter: brightness(1.06) }
 
-.howto { margin-top: 32px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 4px 24px 22px; scroll-margin-top: 16px }
+.howto { margin-top: 32px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--pc-radius-card); padding: 4px 24px 22px; scroll-margin-top: 16px }
 .howto h2 { margin: 20px 0 8px }
 .howto-sub { color: var(--muted); margin: 0 0 14px; max-width: 64ch }
 .intervals { display: flex; flex-wrap: wrap; gap: 10px }
-.interval { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 10px; padding: 9px 14px; cursor: pointer; font-weight: 400 }
+.interval { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: var(--pc-radius-control); padding: 9px 14px; cursor: pointer; font-weight: 400 }
 .interval.on { border-color: var(--blue); background: var(--blue-soft) }
 .interval input { accent-color: var(--blue); margin: 0 }
-.interval em { font-style: normal; font-size: 12px; font-weight: 700; color: var(--ok) }
-.pick-h { font-size: 14px; color: var(--muted); margin: 20px 0 8px; font-weight: 600 }
+.interval em { font-style: normal; font-size: var(--pc-fs-xs); font-weight: 700; color: var(--ok) }
+.pick-h { font-size: var(--pc-fs-md); color: var(--muted); margin: 20px 0 8px; font-weight: 600 }
 .pick-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px }
-.pick-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 8px 8px 14px; min-width: 0 }
+.pick-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--line); border-radius: var(--pc-radius-control); padding: 8px 8px 8px 14px; min-width: 0 }
 .pick-list .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; min-width: 0 }
-.pick-list .t small { display: block; color: var(--muted); font-weight: 400; font-size: 13px; overflow: hidden; text-overflow: ellipsis }
+.pick-list .t small { display: block; color: var(--muted); font-weight: 400; font-size: var(--pc-fs-sm); overflow: hidden; text-overflow: ellipsis }
 .pick-list .cta { flex: none; min-height: 38px; padding: 0 14px }
-.pick-tag { display: inline-block; margin-left: 8px; font-size: 12px; font-weight: 700; color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); border-radius: 999px; padding: 1px 8px; vertical-align: 1px }
+.pick-tag { display: inline-block; margin-left: 8px; font-size: var(--pc-fs-xs); font-weight: 700; color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); border-radius: var(--pc-radius-pill); padding: 1px 8px; vertical-align: 1px }
 .pick-paste { display: flex; flex-direction: column; margin-top: 20px; gap: 6px }
 .pick-row { display: flex; gap: 8px }
-.pick-row input { flex: 1 1 auto; min-width: 0; height: 44px; border: 1px solid var(--line); border-radius: 10px; padding: 0 14px; background: var(--bg); color: var(--ink); font: inherit; font-size: 16px }
+.pick-row input { flex: 1 1 auto; min-width: 0; height: var(--pc-h-lg); border: 1px solid var(--line); border-radius: var(--pc-radius-control); padding: 0 14px; background: var(--bg); color: var(--ink); font: inherit; font-size: var(--pc-fs-lg) }
 .pick-row .cta { flex: none }
-.pick-err { color: var(--soon); font-size: 14px; margin: 0; min-height: 0 }
+.pick-err { color: var(--soon); font-size: var(--pc-fs-md); margin: 0; min-height: 0 }
 .pick-err:empty, .pick-found:empty { display: none }
-.pick-found { color: var(--ok); font-size: 14px; font-weight: 600; margin: 0 }
-.pick-new { color: var(--muted); font-size: 15px; margin: 16px 0 0 }
+.pick-found { color: var(--ok); font-size: var(--pc-fs-md); font-weight: 600; margin: 0 }
+.pick-new { color: var(--muted); font-size: var(--pc-fs-lg); margin: 16px 0 0 }
 .pick-new a { color: var(--blue); font-weight: 600 }
 
-.gridwrap { overflow-x: auto; -webkit-overflow-scrolling: touch; background: var(--surface); border: 1px solid var(--line); border-radius: 16px }
-table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 14.5px }
+.gridwrap { overflow-x: auto; -webkit-overflow-scrolling: touch; background: var(--surface); border: 1px solid var(--line); border-radius: var(--pc-radius-card) }
+table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: var(--pc-fs-md) }
 th, td { padding: 11px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top }
-thead th { font-size: 14px; background: var(--surface) }
+thead th { font-size: var(--pc-fs-md); background: var(--surface) }
 thead th:not(:first-child), td:not(:first-child) { text-align: center; width: 15% }
 thead th.pro, td.pro { background: var(--blue-soft) }
-tr.group td { background: var(--bg); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 800 }
+tr.group td { background: var(--bg); font-size: var(--pc-fs-xs); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 800 }
 tbody tr:last-child td { border-bottom: 0 }
 .y { color: var(--ok); font-weight: 800 }
 .n { color: var(--muted) }
-td small { display: block; color: var(--muted); font-size: 13px; font-weight: 400 }
-.soon { display: inline-block; font-size: 11px; font-weight: 700; color: var(--soon); background: var(--soon-bg); border-radius: 999px; padding: 1px 7px; margin-left: 6px; vertical-align: 1px; white-space: nowrap }
-.swipe { display: none; font-size: 14px; color: var(--muted); margin: -6px 0 10px }
-.legend { font-size: 14px; color: var(--muted); margin: 10px 0 0 }
+td small { display: block; color: var(--muted); font-size: var(--pc-fs-sm); font-weight: 400 }
+.soon { display: inline-block; font-size: var(--pc-fs-2xs); font-weight: 700; color: var(--soon); background: var(--soon-bg); border-radius: var(--pc-radius-pill); padding: 1px 7px; margin-left: 6px; vertical-align: 1px; white-space: nowrap }
+.swipe { display: none; font-size: var(--pc-fs-md); color: var(--muted); margin: -6px 0 10px }
+.legend { font-size: var(--pc-fs-md); color: var(--muted); margin: 10px 0 0 }
 .legend .soon { margin: 0 4px 0 0 }
 
 .indev ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px }
-.indev li { padding: 14px 16px; border-radius: 12px; background: var(--surface); border: 1px dashed var(--line); color: var(--muted); font-size: 15px }
-.indev li b { display: block; color: var(--ink); font-size: 16px; margin-bottom: 2px }
+.indev li { padding: 14px 16px; border-radius: var(--pc-radius-card); background: var(--surface); border: 1px dashed var(--line); color: var(--muted); font-size: var(--pc-fs-lg) }
+.indev li b { display: block; color: var(--ink); font-size: var(--pc-fs-lg); margin-bottom: 2px }
 
-.wait { margin-top: 56px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 28px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 36px; align-items: start; position: relative; scroll-margin-top: 16px }
+.wait { margin-top: 56px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--pc-radius-card); padding: 28px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 36px; align-items: start; position: relative; scroll-margin-top: 16px }
 .wait h2 { margin: 0 0 6px }
 .wait p { margin: 0; color: var(--muted) }
 form { display: flex; flex-direction: column; gap: 14px }
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0 }
-label { font-size: 14px; font-weight: 600 }
+label { font-size: var(--pc-fs-md); font-weight: 600 }
 .opt { font-weight: 400; color: var(--muted) }
-input[type=email], select, textarea { width: 100%; height: 46px; border: 1px solid var(--line); border-radius: 10px; padding: 0 14px; background: var(--bg); color: var(--ink); font: inherit; font-size: 16px }
+input[type=email], select, textarea { width: 100%; height: var(--pc-h-lg); border: 1px solid var(--line); border-radius: var(--pc-radius-control); padding: 0 14px; background: var(--bg); color: var(--ink); font: inherit; font-size: var(--pc-fs-lg) }
 textarea { height: auto; min-height: 84px; padding: 11px 14px; resize: vertical; line-height: 1.45 }
 select { appearance: none; -webkit-appearance: none; cursor: pointer; padding-right: 38px;
   background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
@@ -118,8 +114,8 @@ select { appearance: none; -webkit-appearance: none; cursor: pointer; padding-ri
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--blue); outline-offset: 1px; border-color: var(--blue) }
 .formrow { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px }
 .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden }
-#waitBtn { min-height: 48px; font-size: 16px }
-.wait-ideas { margin-top: 12px !important; font-size: 15px }
+#waitBtn { min-height: 48px; font-size: var(--pc-fs-lg) }
+.wait-ideas { margin-top: 12px !important; font-size: var(--pc-fs-lg) }
 .done { color: var(--ok); font-weight: 600; min-height: 1.4em; margin: 0 }
 
 .faq { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 32px }
@@ -143,7 +139,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
   .hero { padding-top: 24px }
   .howto { padding: 4px 16px 18px }
   /* The compare table scrolls inside its own box; the feature column stays put so each row keeps its name. */
-  table { min-width: 620px; font-size: 14px }
+  table { min-width: 620px; font-size: var(--pc-fs-md) }
   th, td { padding: 10px 10px }
   thead th:first-child, tbody td:first-child:not([colspan]) { position: sticky; left: 0; z-index: 1; background: var(--surface); width: 168px; min-width: 168px; box-shadow: 1px 0 0 var(--line) }
   tr.group td span { position: sticky; left: 10px; display: inline-block }

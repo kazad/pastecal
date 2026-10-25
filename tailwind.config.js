@@ -36,6 +36,8 @@ module.exports = {
           muted: 'var(--text-color-1)',
           strong: 'var(--text-color-2)',
           hover: 'var(--bg-interactive-hover)',
+          primary: 'var(--pc-primary)',          // the one blue (tokens.css)
+          'on-primary': 'var(--pc-on-primary)',
         },
       },
     },

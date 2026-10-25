@@ -26,7 +26,7 @@ const WelcomeDock = {
                     <div class="flex items-center gap-1 mt-3">
                         <button type="button" @click="dismiss"
                             data-testid="welcome-dock-dismiss"
-                            class="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors">
+                            class="pc-btn pc-btn--xs pc-btn--primary">
                             Got it
                         </button>
                         <button type="button" @click="showHelp"

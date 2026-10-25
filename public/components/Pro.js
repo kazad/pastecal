@@ -166,13 +166,13 @@ const ProPanel = {
                 <form v-if="trialStep === 'email'" class="pc-pro-email" @submit.prevent="sendTrialLink" data-testid="pro-trial-email-form">
                     <label for="pc-pro-trial-email">Your email. The link we send starts your trial. No password.</label>
                     <div class="pc-pro-row">
-                        <input id="pc-pro-trial-email" ref="trialEmail" type="email" v-model.trim="email" required autocomplete="email" placeholder="you@example.com">
-                        <button type="submit" class="pc-pro-btn" :disabled="busy">{{ busy ? 'Sending…' : 'Send link' }}</button>
+                        <input id="pc-pro-trial-email" class="pc-field" ref="trialEmail" type="email" v-model.trim="email" required autocomplete="email" placeholder="you@example.com">
+                        <button type="submit" class="pc-btn pc-btn--primary" :disabled="busy">{{ busy ? 'Sending…' : 'Send link' }}</button>
                     </div>
                 </form>
                 <p v-else-if="trialStep === 'sent'" class="pc-pro-ok" data-testid="pro-trial-sent">Check your email. The link starts your trial and brings you back here.</p>
                 <div v-else class="pc-pro-row">
-                    <button type="button" class="pc-pro-btn" @click="startTrial" :disabled="busy" data-testid="pro-trial-btn">{{ busy ? 'One moment…' : 'Start free trial' }}</button>
+                    <button type="button" class="pc-btn pc-btn--primary" @click="startTrial" :disabled="busy" data-testid="pro-trial-btn">{{ busy ? 'One moment…' : 'Start free trial' }}</button>
                     <span v-if="me" class="pc-pro-muted">as <span data-hj-suppress data-clarity-mask="true">{{ me.email }}</span></span>
                 </div>
                 <p class="pc-pro-muted pc-pro-or">Or pay now:</p>
@@ -196,16 +196,16 @@ const ProPanel = {
                 <form v-if="step === 'email'" class="pc-pro-email" @submit.prevent="sendLink" data-testid="pro-email-form">
                     <label for="pc-pro-email-input">Your email, so you can manage the lock later. No password.</label>
                     <div class="pc-pro-row">
-                        <input id="pc-pro-email-input" ref="email" type="email" v-model.trim="email" required
+                        <input id="pc-pro-email-input" class="pc-field" ref="email" type="email" v-model.trim="email" required
                             autocomplete="email" placeholder="you@example.com">
-                        <button type="submit" class="pc-pro-btn" :disabled="busy">{{ busy ? 'Sending…' : 'Send sign-in link' }}</button>
+                        <button type="submit" class="pc-btn pc-btn--primary" :disabled="busy">{{ busy ? 'Sending…' : 'Send sign-in link' }}</button>
                     </div>
                 </form>
                 <p v-else-if="step === 'sent'" class="pc-pro-ok" data-testid="pro-sent">
                     Check your email for a sign-in link. It brings you back here to finish.
                 </p>
                 <div v-else class="pc-pro-row">
-                    <button type="button" class="pc-pro-btn" @click="lockNow" :disabled="busy" data-testid="pro-lock-btn">
+                    <button type="button" class="pc-btn pc-btn--primary" @click="lockNow" :disabled="busy" data-testid="pro-lock-btn">
                         {{ going ? 'Taking you to payment…' : busy ? 'One moment…' : 'Lock this calendar' }}
                     </button>
                     <span v-if="me" class="pc-pro-muted">Signed in as <span data-hj-suppress data-clarity-mask="true">{{ me.email }}</span> · <a href="#" @click.prevent="signOut">Sign out</a></span>
@@ -220,8 +220,8 @@ const ProPanel = {
                 <form v-if="step === 'email'" class="pc-pro-email" @submit.prevent="sendLink">
                     <label for="pc-pro-email-input2">Are you the owner? Sign in with the email you paid with.</label>
                     <div class="pc-pro-row">
-                        <input id="pc-pro-email-input2" ref="email" type="email" v-model.trim="email" required autocomplete="email" placeholder="you@example.com">
-                        <button type="submit" class="pc-pro-btn" :disabled="busy">{{ busy ? 'Sending…' : 'Send sign-in link' }}</button>
+                        <input id="pc-pro-email-input2" class="pc-field" ref="email" type="email" v-model.trim="email" required autocomplete="email" placeholder="you@example.com">
+                        <button type="submit" class="pc-btn pc-btn--primary" :disabled="busy">{{ busy ? 'Sending…' : 'Send sign-in link' }}</button>
                     </div>
                 </form>
                 <p v-else-if="step === 'sent'" class="pc-pro-ok">Check your email for a sign-in link.</p>
@@ -233,15 +233,15 @@ const ProPanel = {
             <template v-if="mode === 'lapsed'">
                 <p class="pc-pro-lead">Everyone can still view it and follow it in their calendar app. Nobody can edit it, you included.</p>
                 <div class="pc-pro-row">
-                    <button type="button" class="pc-pro-btn pc-pro-btn--quiet" @click="openToEveryone" :disabled="busy" data-testid="pro-open-btn">Open to everyone</button>
-                    <button v-if="!keepOpen" type="button" class="pc-pro-btn" @click="keepProAfter" :disabled="busy" data-testid="pro-keep-btn">Keep Pro</button>
+                    <button type="button" class="pc-btn" @click="openToEveryone" :disabled="busy" data-testid="pro-open-btn">Open to everyone</button>
+                    <button v-if="!keepOpen" type="button" class="pc-btn pc-btn--primary" @click="keepProAfter" :disabled="busy" data-testid="pro-keep-btn">Keep Pro</button>
                 </div>
                 <div v-if="keepOpen" class="pc-pro-keep" data-testid="pro-keep-plans">
                     <div class="pc-pro-plans" role="radiogroup" aria-label="Billing">
                         <label class="pc-pro-plan" :class="{ on: interval === 'year' }"><input type="radio" value="year" v-model="interval" name="pc-pro-keep-interval2"><span><b>$24/year</b> <em class="pc-pro-save">Save 33%</em></span></label>
                         <label class="pc-pro-plan" :class="{ on: interval === 'month' }"><input type="radio" value="month" v-model="interval" name="pc-pro-keep-interval2"><span><b>$2.99/month</b></span></label>
                     </div>
-                    <div class="pc-pro-row"><button type="button" class="pc-pro-btn" @click="keepCheckout" :disabled="busy" data-testid="pro-keep-checkout">{{ going ? 'Taking you to payment…' : 'Keep Pro' }}</button></div>
+                    <div class="pc-pro-row"><button type="button" class="pc-btn pc-btn--primary" @click="keepCheckout" :disabled="busy" data-testid="pro-keep-checkout">{{ going ? 'Taking you to payment…' : 'Keep Pro' }}</button></div>
                 </div>
                 <p class="pc-pro-muted pc-pro-note">Open to everyone: a free calendar anyone with the edit link can change. Keep Pro: locked again for you, $24 a year or $2.99 a month.</p>
                 <p v-if="testCardHint" class="pc-pro-muted pc-pro-note">{{ testCardHint }}</p>
@@ -257,15 +257,15 @@ const ProPanel = {
                         <label class="pc-pro-plan" :class="{ on: interval === 'year' }"><input type="radio" value="year" v-model="interval" name="pc-pro-keep-interval"><span><b>$24/year</b> <em class="pc-pro-save">Save 33%</em></span></label>
                         <label class="pc-pro-plan" :class="{ on: interval === 'month' }"><input type="radio" value="month" v-model="interval" name="pc-pro-keep-interval"><span><b>$2.99/month</b></span></label>
                     </div>
-                    <div class="pc-pro-row"><button type="button" class="pc-pro-btn" @click="keepCheckout" :disabled="busy" data-testid="pro-keep-checkout">{{ going ? 'Taking you to payment…' : 'Keep Pro' }}</button>
+                    <div class="pc-pro-row"><button type="button" class="pc-btn pc-btn--primary" @click="keepCheckout" :disabled="busy" data-testid="pro-keep-checkout">{{ going ? 'Taking you to payment…' : 'Keep Pro' }}</button>
                         <span class="pc-pro-muted">{{ keepNote }}</span></div>
                 </div>
                 <p class="pc-pro-lead">Only you and people with your editor link can change it. Everyone else can view.
                     <span v-if="renewal" data-testid="pro-renewal">{{ renewal }}</span></p>
 
                 <div class="pc-pro-row pc-pro-insight" data-testid="pro-insight-row">
-                    <button type="button" class="pc-pro-btn pc-pro-btn--quiet" @click="$emit('open-insight', 'stats')" data-testid="pro-stats-btn">Stats</button>
-                    <button type="button" class="pc-pro-btn pc-pro-btn--quiet" @click="$emit('open-insight', 'history')" data-testid="pro-history-btn">History</button>
+                    <button type="button" class="pc-btn" @click="$emit('open-insight', 'stats')" data-testid="pro-stats-btn">Stats</button>
+                    <button type="button" class="pc-btn" @click="$emit('open-insight', 'history')" data-testid="pro-history-btn">History</button>
                     <span class="pc-pro-muted">Who’s following, where they’re from, and every saved version.</span>
                 </div>
 
@@ -273,12 +273,12 @@ const ProPanel = {
                     <h5>Editor link</h5>
                     <p class="pc-pro-muted">Share it with people who should be able to edit.</p>
                     <div v-if="editorLink" class="pc-pro-row">
-                        <input ref="link" class="pc-pro-field" type="text" readonly :value="editorLink" @focus="$event.target.select()"
+                        <input ref="link" class="pc-field pc-pro-field" type="text" readonly :value="editorLink" @focus="$event.target.select()"
                             aria-label="Editor link" data-testid="pro-editor-link" data-hj-suppress data-clarity-mask="true">
-                        <button type="button" class="pc-pro-btn" @click="copyLink">{{ copied ? 'Copied' : 'Copy' }}</button>
+                        <button type="button" class="pc-btn pc-btn--primary" @click="copyLink">{{ copied ? 'Copied' : 'Copy' }}</button>
                     </div>
                     <div class="pc-pro-row">
-                        <button type="button" class="pc-pro-btn" :class="{ 'pc-pro-btn--quiet': editorLink }" @click="makeKey" :disabled="busy" data-testid="pro-key-btn">
+                        <button type="button" class="pc-btn" :class="{ 'pc-btn--primary': !editorLink }" @click="makeKey" :disabled="busy" data-testid="pro-key-btn">
                             {{ editorLink ? 'Reset editor link' : 'Get a new editor link' }}
                         </button>
                     </div>
@@ -295,7 +295,7 @@ const ProPanel = {
                 </div>
 
                 <div class="pc-pro-row pc-pro-foot">
-                    <button type="button" class="pc-pro-btn pc-pro-btn--quiet" @click="portal" :disabled="busy">Manage billing</button>
+                    <button type="button" class="pc-btn" @click="portal" :disabled="busy">Manage billing</button>
                     <a href="#" class="pc-pro-link" @click.prevent="signOut">Sign out</a>
                     <span v-if="me" class="pc-pro-muted" data-hj-suppress data-clarity-mask="true">{{ me.email }}</span>
                 </div>

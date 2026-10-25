@@ -94,7 +94,7 @@ test('pick a template, switch, keep your own event, then Save & share saves it a
   expect(await input.inputValue()).not.toMatch(/tigers|practice/i);
   const slug = `test-tpl-${Date.now()}-${Math.floor(Math.random() * 1e5)}`;
   await input.fill(slug);
-  await page.locator('.pc-modal .pc-btn-primary').click();
+  await page.locator('.pc-modal .pc-btn--primary').click();
   await expect(page).toHaveURL(new RegExp(`/${slug}`, 'i'), { timeout: 20_000 });
   const saved = (await (await page.request.get(`/cal/${slug}`)).json()).calendar;
   const savedTitles = saved.events.map((e) => e.title);

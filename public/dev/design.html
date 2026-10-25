@@ -15,6 +15,7 @@
     <title>pastecal design system</title>
     <link rel="icon" type="image/svg+xml" href="/img/icons/favicon.svg" />
     <link rel="stylesheet" href="/tokens.css">
+    <link rel="stylesheet" href="/components.css">
     <link rel="stylesheet" href="/style.css">
     <link rel="stylesheet" href="/nativecal/native.css">
     <script>
@@ -278,13 +279,27 @@
             <p class="intro">One filled button per surface: the thing to do. Everything else is quiet. Labels are verbs in
                 sentence case ("Save", "More options"), never all caps.</p>
             <div class="card">
-                <div class="card-t"><b>App buttons</b><code>.pc-btn .pc-btn-primary | -secondary | -danger | -sm</code></div>
+                <div class="card-t"><b>App buttons</b><code>components.css: .pc-btn --primary | --ghost | --danger | --link · --xs | --sm | --lg · --pill · --icon</code></div>
                 <div class="gal">
-                    <button class="pc-btn pc-btn-primary">Claim URL</button>
-                    <button class="pc-btn pc-btn-secondary">Cancel</button>
-                    <button class="pc-btn pc-btn-danger">Delete calendar</button>
-                    <button class="pc-btn pc-btn-primary pc-btn-sm">Copy link</button>
-                    <button class="pc-btn pc-btn-primary" disabled>Disabled</button>
+                    <button class="pc-btn pc-btn--primary">Get my link</button>
+                    <button class="pc-btn">Cancel</button>
+                    <button class="pc-btn pc-btn--ghost">Skip</button>
+                    <button class="pc-btn pc-btn--danger">Delete calendar</button>
+                    <button class="pc-btn pc-btn--sm pc-btn--primary">Copy</button>
+                    <button class="pc-btn pc-btn--xs pc-btn--pill pc-btn--primary">Save &amp; share</button>
+                    <button class="pc-btn pc-btn--link">About Pro</button>
+                    <button class="pc-btn pc-btn--primary" disabled>Disabled</button>
+                </div>
+                <div class="card-t"><b>Chips, tags, switch, key cap, segmented</b><code>.pc-chip --soft | --lg | --dot · .pc-tag --primary | --success | --warn | --danger · .pc-switch · .pc-kbd · .pc-seg</code></div>
+                <div class="gal">
+                    <button class="pc-chip pc-chip--soft">lunch tomorrow 2pm</button>
+                    <button class="pc-chip pc-chip--lg is-on">Blank</button>
+                    <button class="pc-chip pc-chip--lg">Sports team</button>
+                    <button class="pc-chip pc-chip--dot" style="--dot: var(--pc-event-4)">Practice</button>
+                    <span class="pc-tag">can view</span><span class="pc-tag pc-tag--danger">can edit</span><span class="pc-tag pc-tag--warn pc-tag--strong">Draft</span><span class="pc-tag pc-tag--primary">2 new</span>
+                    <label class="pc-switch"><input type="checkbox" checked><span class="pc-switch-track"></span>All day</label>
+                    <kbd class="pc-kbd">⌘E</kbd>
+                    <div class="pc-seg"><button class="pc-seg-btn on">7 days</button><button class="pc-seg-btn">30 days</button></div>
                 </div>
             </div>
             <div class="card nc-tokens">
@@ -308,10 +323,12 @@
                 ring. Dropdowns use the Lucide chevron, not the browser's arrow.</p>
             <div class="grid2">
                 <div class="card">
-                    <div class="card-t"><b>App</b><code>.pc-input · .pc-input-group</code></div>
+                    <div class="card-t"><b>App</b><code>.pc-field --sm | --lg · .pc-field-group · .pc-link-field</code></div>
                     <div class="field-demo">
-                        <input class="pc-input" placeholder="Calendar name">
-                        <div class="pc-input-group"><span class="pc-input-prefix">pastecal.com/</span><input class="pc-input" value="summer-trip" aria-label="Calendar address"></div>
+                        <input class="pc-field" placeholder="Calendar name">
+                        <select class="pc-field pc-field--sm" aria-label="Default view"><option>Auto (Month)</option></select>
+                        <div class="pc-field-group"><span class="pc-field-prefix">pastecal.com/</span><input class="pc-field" value="summer-trip" aria-label="Calendar address"></div>
+                        <button type="button" class="pc-link-field"><span class="pc-link-url">pastecal.com/view/summer-trip</span><span class="pc-link-act"><svg class="pc-link-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg></span></button>
                     </div>
                 </div>
                 <div class="card nc-tokens">
@@ -496,9 +513,9 @@
                 ],
                 adoption: [
                     ['NativeCal beta (pastecal.com/beta/<name>)', 'on', 'Colors, type, radii and shadows all come from tokens.'],
-                    ['App theme variables and .pc-* components', 'on', '--bg, --text-color-1/2, --link and friends now read tokens; .pc-btn, .pc-input, .pc-modal use them.'],
+                    ['App theme variables and .pc-* components', 'on', '--bg, --text-color-1/2, --link and friends read tokens; components.css holds .pc-btn, .pc-field, .pc-chip, .pc-tag, .pc-card, .pc-tabs, .pc-seg, .pc-switch, .pc-kbd, .pc-link-field, .pc-modal.'],
                     ['Links', 'on', 'Darker blue for contrast (4.8:1, was 2.6:1).'],
-                    ['Main app buttons written as Tailwind utilities', 'part', '64 hard-coded blue utilities (21 in index.html, the rest in QuickAddDialog, QuickAddButton, WelcomeDock) still to move to .pc-btn.'],
+                    ['Main app buttons written as Tailwind utilities', 'on', 'Moved to .pc-btn; the remaining Tailwind blues read the theme (text-theme-primary, border-theme-primary).'],
                     ['Main app header, settings panel, dialogs', 'part', 'Use the theme variables; spacing and type still set per element with Tailwind.'],
                     ['NativeCal v1 (/nativecal/<name>, or /beta/<name>?ux=1)', 'off', 'Deliberately Syncfusion\'s look, kept for comparison; the beta replaces it.'],
                     ['Syncfusion calendar (pastecal.com/<name>)', 'off', 'Its own Material theme; replaced by NativeCal.'],

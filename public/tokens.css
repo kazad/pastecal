@@ -5,7 +5,11 @@
    every token and component live. Change a value here and every surface follows.
 
    Rules:
-   - Components use tokens, never raw hex or px sizes (test/unit/design-system.test.js).
+   - Components use tokens, never raw hex or px font sizes (test/unit/design-system.test.js
+     fails the build on a new one). The shared building blocks -- button, field, chip, tag,
+     card, tabs, segmented control, switch, key cap, link field -- live in components.css.
+   - One blue: --pc-primary fills the main action, --pc-link colors text links. They are the
+     same hue; dark mode lightens both and puts dark text on the fill.
    - Text meets WCAG AA: 4.5:1 for body text, 3:1 for large/bold. The numbers in the
      comments are measured, and /dev/design recomputes them live.
    - Dark mode redefines colors only, under [data-theme="dark"] -- which also works on
@@ -25,23 +29,32 @@
     --pc-text-2: #374151;        /* secondary but strong               10.3:1 */
     --pc-text-muted: #6b7280;    /* labels, meta, times                 4.8:1 */
 
-    /* ---- accent: one brand color for "do this" and "today" ----------------------------- */
+    /* ---- primary: the one blue, for the main action, links, focus and "today" --------- */
+    --pc-primary: #2563eb;       /* white text on it: 5.2:1; as text on --pc-bg: 5.2:1 */
+    --pc-primary-hover: #1d4ed8;
+    --pc-on-primary: #ffffff;
+    --pc-primary-soft: color-mix(in srgb, var(--pc-primary) 12%, transparent);   /* tinted buttons, selected */
+    --pc-link: var(--pc-primary);
+    --pc-link-hover: var(--pc-primary-hover);
+    --pc-focus-ring: 0 0 0 3px color-mix(in srgb, var(--pc-primary) 25%, transparent);
+    --pc-focus-outline: 2px solid var(--pc-primary);
+
+    /* ---- accent: the brand pink (Material's), kept for NativeCal and /dev/design -------- */
     --pc-accent: #d6124f;        /* white text on it: 5.2:1 */
     --pc-accent-hover: #b80f44;
     --pc-on-accent: #ffffff;
     --pc-on-event: #ffffff;      /* text on an event chip; set per event from its color (ScheduleAdapter.onColor) */
     --pc-accent-soft: color-mix(in srgb, var(--pc-accent) 14%, var(--pc-bg));
-    --pc-focus-ring: 0 0 0 3px color-mix(in srgb, var(--pc-accent) 22%, transparent);
-
-    /* ---- links: blue, distinct from the accent ------------------------------------------ */
-    --pc-link: #0277bd;          /* 4.8:1 (was rgb(3,169,244): 2.6:1) */
-    --pc-link-hover: #01579b;
+    --pc-brand: #3f51b5;         /* the logo's indigo (pastecal.logo.svg), for the wordmark */
 
     /* ---- semantic ----------------------------------------------------------------------- */
     --pc-success: #1f7a4d;  --pc-success-soft: #e3f3ea;
     --pc-warning: #8a5a00;  --pc-warning-soft: #fbefd4;
     --pc-danger: #c62828;   --pc-danger-soft: #fdecea;
     --pc-snackbar: #26272b; --pc-on-snackbar: #f4f4f6; --pc-snackbar-action: #ff8fb1;
+    --pc-toast: #1f2328;    --pc-on-toast: #f3f4f6;    --pc-toast-action: #8ab4ff; --pc-toast-error: #f87171;
+    --pc-highlight: #ffd60a;     /* the marker stroke on the homepage headline */
+    --pc-knob: #ffffff;          /* a switch's thumb, in both themes */
 
     /* ---- event palette: the defaults for categories 1-8, then 9-16 (app.js) ------------- */
     --pc-event-1: #3f51b5;  --pc-event-2: #e3165b;  --pc-event-3: #d0442f;  --pc-event-4: #2e7d32;
@@ -54,28 +67,51 @@
     /* ---- type --------------------------------------------------------------------------- */
     --pc-font: "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     --pc-font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-    --pc-fs-caption: 11px;       /* UPPERCASE labels: weekdays, section eyebrows (600, +.06em) */
-    --pc-fs-small: 12.5px;       /* events, field labels, meta */
-    --pc-fs-body: 14px;          /* body, buttons, inputs */
-    --pc-fs-lead: 16px;          /* phone title, emphasized body */
-    --pc-fs-title: 18px;         /* toolbar title, dialog titles on phones */
-    --pc-fs-heading: 20px;       /* dialog and popup titles */
-    --pc-fs-display: 22px;       /* day numbers in Week/Day */
+    /* The scale. Every font-size outside the Syncfusion grid and the homepage miniatures is
+       one of these (clamp() for fluid marketing headings). */
+    --pc-fs-2xs: 11px;           /* UPPERCASE labels: weekdays, section eyebrows (600, +.06em) */
+    --pc-fs-xs: 12px;            /* tags, fine print, event chips */
+    --pc-fs-sm: 13px;            /* meta, hints, small buttons, dense fields */
+    --pc-fs-md: 14px;            /* body, buttons, inputs */
+    --pc-fs-lg: 16px;            /* emphasized body, panel titles, phone inputs (no iOS zoom) */
+    --pc-fs-xl: 18px;            /* toolbar title, lead paragraphs */
+    --pc-fs-2xl: 20px;           /* dialog and popup titles, section headings */
+    --pc-fs-3xl: 28px;           /* big numbers, page headings */
+    --pc-fs-4xl: 36px;           /* hero headings */
+    --pc-fs-5xl: 40px;           /* prices */
+    /* By role (the names components use) */
+    --pc-fs-caption: var(--pc-fs-2xs);
+    --pc-fs-small: var(--pc-fs-sm);
+    --pc-fs-body: var(--pc-fs-md);
+    --pc-fs-lead: var(--pc-fs-lg);
+    --pc-fs-title: var(--pc-fs-xl);
+    --pc-fs-heading: var(--pc-fs-2xl);
+    --pc-fs-display: var(--pc-fs-3xl);
     --pc-fw-regular: 400; --pc-fw-medium: 500; --pc-fw-semibold: 600; --pc-fw-bold: 700;
     --pc-lh-tight: 1.25; --pc-lh-body: 1.5;
     --pc-tracking-caps: .06em; --pc-tracking-tight: -.01em;
 
     /* ---- space: a 4px grid -------------------------------------------------------------- */
     --pc-space-1: 4px;  --pc-space-2: 8px;  --pc-space-3: 12px; --pc-space-4: 16px;
-    --pc-space-5: 20px; --pc-space-6: 24px; --pc-space-8: 32px;
+    --pc-space-5: 20px; --pc-space-6: 24px; --pc-space-8: 32px; --pc-space-10: 40px; --pc-space-12: 48px;
+
+    /* ---- control heights: every button, field and chip is one of these ------------------- */
+    --pc-h-xs: 28px;             /* chips, tiny actions */
+    --pc-h-sm: 32px;             /* panel buttons and fields, toolbar buttons */
+    --pc-h-md: 36px;             /* default button and field */
+    --pc-h-lg: 44px;             /* page forms, phone tap targets */
 
     /* ---- shape -------------------------------------------------------------------------- */
-    --pc-radius-xs: 4px;         /* event bars, chips */
-    --pc-radius-sm: 6px;         /* event blocks, menu rows */
+    --pc-radius-xs: 4px;         /* event bars, small marks */
+    --pc-radius-sm: 6px;         /* event blocks, menu rows, icons inside a field */
     --pc-radius-md: 8px;         /* buttons, inputs */
     --pc-radius-lg: 12px;        /* cards, menus, popovers */
     --pc-radius-xl: 16px;        /* dialogs, bottom sheets */
     --pc-radius-pill: 999px;
+    /* By role */
+    --pc-radius-control: var(--pc-radius-md);
+    --pc-radius-card: var(--pc-radius-lg);
+    --pc-radius-dialog: var(--pc-radius-xl);
 
     /* ---- elevation ---------------------------------------------------------------------- */
     --pc-shadow-sm: 0 1px 2px rgba(0,0,0,.10);
@@ -104,17 +140,20 @@
     --pc-text-2: #c4c6cc;        /* 10.0:1 */
     --pc-text-muted: #999999;    /*  5.9:1 */
 
+    --pc-primary: #4aaaff;       /* as text: 6.7:1; dark text on it: 7.4:1 (white would be 2.5:1) */
+    --pc-primary-hover: #6ec2ff;
+    --pc-on-primary: #1c1c1e;
+
     --pc-accent: #ff5c8d;        /* dark text on it: 5.8:1 (white would be 2.9:1) */
     --pc-accent-hover: #ff7aa3;
     --pc-on-accent: #1c1c1e;
-
-    --pc-link: #4aaaff;          /* 6.7:1 */
-    --pc-link-hover: #6ec2ff;
+    --pc-brand: #8f9cff;         /* the logo is brightened in dark mode, so its name is too */
 
     --pc-success: #6fd49c;  --pc-success-soft: #17372a;
     --pc-warning: #f0c46a;  --pc-warning-soft: #3a2e14;
     --pc-danger: #ff8a80;   --pc-danger-soft: #3a1c1a;
     --pc-snackbar: #3a3b41;
+    --pc-toast: #e9ecf1;    --pc-on-toast: #14171c;    --pc-toast-action: #0b5cad; --pc-toast-error: #f87171;
 
     --pc-shadow-md: 0 12px 32px rgba(0,0,0,.5);
     --pc-shadow-lg: 0 12px 36px rgba(0,0,0,.55), 0 2px 6px rgba(0,0,0,.3);
