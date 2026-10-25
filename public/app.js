@@ -3024,7 +3024,7 @@ const CalendarVueApp = {
                 cells.forEach((c, i) => c.classList.add('pc-draft-cell', i === 0 ? 'pc-draft-head' : 'pc-draft-more', ...(i === cells.length - 1 ? ['pc-draft-tail'] : [])));
                 const root = document.getElementById('Schedule');
                 const input = popup && popup.querySelector('input.e-subject, .e-subject');
-                const label = () => root.style.setProperty('--pc-draft', JSON.stringify((input && input.value.trim()) || 'New event'));
+                const label = () => root.style.setProperty('--draft-label', JSON.stringify((input && input.value.trim()) || 'New event'));
                 label();
                 if (input) { input.addEventListener('input', label); this._draftOff = () => input.removeEventListener('input', label); }
             } catch (e) { /* a nicety: never in the way of adding the event */ }

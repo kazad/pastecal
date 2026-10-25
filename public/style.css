@@ -1427,8 +1427,8 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
    labelled with the title as it's typed. Several selected slots read as one block. */
 #Schedule .pc-draft-cell { position: relative }
 #Schedule .pc-draft-cell::after { content: ""; position: absolute; left: 3px; right: 3px; top: 0; bottom: 0; z-index: 2; pointer-events: none;
-  background: var(--pc-primary); color: var(--pc-on-primary); font: var(--pc-fw-semibold) 12px/1.3 var(--pc-font); text-align: left; padding: 3px 7px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; box-shadow: var(--pc-shadow-md) }
-#Schedule .pc-draft-head::after { content: var(--pc-draft, "New event"); top: 2px; border-top-left-radius: var(--pc-radius-sm); border-top-right-radius: var(--pc-radius-sm) }
+  background: var(--pc-primary); color: var(--pc-on-primary); font: var(--pc-fw-semibold) var(--pc-fs-xs)/1.3 var(--pc-font); text-align: left; padding: 3px 7px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; box-shadow: var(--pc-shadow-md) }
+#Schedule .pc-draft-head::after { content: var(--draft-label, "New event"); top: 2px; border-top-left-radius: var(--pc-radius-sm); border-top-right-radius: var(--pc-radius-sm) }
 #Schedule .pc-draft-tail::after { bottom: 2px; border-bottom-left-radius: var(--pc-radius-sm); border-bottom-right-radius: var(--pc-radius-sm) }
 /* A month-view day is tall: the block is one event row under the date, not the whole cell. */
 #Schedule .e-month-view .pc-draft-cell::after { top: 30px; bottom: auto; height: 22px; border-radius: var(--pc-radius-sm) }
@@ -1438,7 +1438,7 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
 .pc-print-only { display: none }
 @media print {
   @page { size: landscape; margin: 10mm }
-  html, body, #app { background: #fff !important; color: #111 !important }
+  html, body, #app { background: var(--pc-paper) !important; color: var(--pc-ink) !important }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact }
   topbar, .pc-m-header, .pc-viewer-row, .pc-tpl, .pc-home-line, .pc-draft-note, .pc-home-aside, aside, .pc-side, .pc-side-scrim,
   .pc-view-footer, .pc-edit-footer, .pc-hosted-note, .pc-embed-credit, .site-footer, .pc-tour, .pc-hidden-pill, .pc-grid-tip,
@@ -1447,24 +1447,24 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
   .pc-print-only { display: flex !important }
   .pc-print-head { flex-direction: column; margin: 0 0 8px }
   .pc-print-title { font: 800 22pt/1.1 var(--pc-font) }
-  .pc-print-range { font: 500 12pt var(--pc-font); color: #555; margin-top: 2px }
+  .pc-print-range { font: 500 12pt var(--pc-font); color: var(--pc-ink-2); margin-top: 2px }
   .pc-home, .pc-home-cal { display: block !important; width: 100% !important }
   #cal2_wrap { height: auto !important }
-  #Schedule, .e-schedule { width: 100% !important; height: auto !important; border: 1px solid #ccc !important; box-shadow: none !important; overflow: hidden !important }
+  #Schedule, .e-schedule { width: 100% !important; height: auto !important; border: 1px solid var(--pc-paper-line) !important; box-shadow: none !important; overflow: hidden !important }
   .e-schedule table { width: 100% !important; table-layout: fixed !important }
   .e-schedule .e-month-view .e-date-header-wrap, .e-schedule .e-month-view .e-content-wrap { width: 100% !important; padding: 0 !important }
   /* One landscape Letter/A4 page: 6 rows of 24mm fit under a 16mm header and above a 26mm footer. */
   .e-schedule .e-month-view .e-work-cells { height: 25mm !important }
   .e-schedule .e-month-view .e-header-cells { height: 7mm !important; padding: 2px 6px !important }
   .e-schedule .e-content-wrap, .e-schedule .e-content-table { height: auto !important; overflow: visible !important }
-  .e-schedule .e-month-view .e-appointment { font-size: 8.5pt !important }
+  .e-schedule .e-month-view .e-appointment { font-size: var(--pc-fs-2xs) !important }
   .pc-home-cal, #cal2_wrap { break-inside: avoid }
   .e-appointment { box-shadow: none !important }
-  .pc-print-foot { align-items: center; gap: 12px; margin-top: 8px; padding-top: 6px; border-top: 1px solid #ddd; break-inside: avoid }
+  .pc-print-foot { align-items: center; gap: 12px; margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--pc-paper-rule); break-inside: avoid }
   .pc-print-qr svg { width: 22mm; height: 22mm; display: block }
-  .pc-print-note { flex: 1; font: 500 10pt/1.4 var(--pc-font); color: #222 }
-  .pc-print-fine { color: #777 }
-  .pc-print-brand { font: 600 9pt var(--pc-font); color: #999 }
+  .pc-print-note { flex: 1; font: 500 10pt/1.4 var(--pc-font); color: var(--pc-ink) }
+  .pc-print-fine { color: var(--pc-ink-muted) }
+  .pc-print-brand { font: 600 9pt var(--pc-font); color: var(--pc-ink-faint) }
 }
 /* While printing (beforeprint/afterprint in app.js): the calendar takes the paper's width, so events fit their days. */
 .pc-printing #cal2_wrap { width: 980px !important; max-width: 980px !important }
