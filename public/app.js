@@ -34,6 +34,22 @@ function track(fn) {
 (function installErrorReporting() {
     if (typeof window === 'undefined') return;
 
+    const seen = new Set();   // one report per distinct failure, not one per repaint
+    // Firebase errors embed database paths, and a path names the calendar: strip the key
+    // after any of our roots so a slug never rides along to analytics.
+    const scrub = (m) => String(m).replace(
+        /\b(calendars(?:_readonly)?|history(?:_meta)?|slug_mappings|calendar_authors)([./])[^\s.\/'"]+/g, '$1$2<id>');
+    const report = (kind, message, where) => {
+        try {
+            message = scrub(message);
+            const key = kind + '|' + message + '|' + where;
+            if (seen.has(key)) return;
+            if (seen.size > 20) return;   // a storm is one signal, not a thousand hits
+            seen.add(key);
+            track(a => a.jsError(kind, message, where));
+        } catch (err) { /* reporting must never become the failure */ }
+    };
+
     // A browser can bring back an old saved copy of the page (a restored tab) and fetch today's
     // scripts for it, because the server ignores ?v=. The old page then lacks a script this code
     // needs ("LockBadge is not defined", "slugFromPath is not a function") and the calendar never
@@ -49,22 +65,6 @@ function track(fn) {
             track(a => a.track('stale_page_reload', { where: String(where).slice(0, 120) }));
             setTimeout(() => location.reload(), 50);   // let the report leave first
         } catch (err) { /* no storage: never risk a reload loop */ }
-    };
-
-    const seen = new Set();   // one report per distinct failure, not one per repaint
-    // Firebase errors embed database paths, and a path names the calendar: strip the key
-    // after any of our roots so a slug never rides along to analytics.
-    const scrub = (m) => String(m).replace(
-        /\b(calendars(?:_readonly)?|history(?:_meta)?|slug_mappings|calendar_authors)([./])[^\s.\/'"]+/g, '$1$2<id>');
-    const report = (kind, message, where) => {
-        try {
-            message = scrub(message);
-            const key = kind + '|' + message + '|' + where;
-            if (seen.has(key)) return;
-            if (seen.size > 20) return;   // a storm is one signal, not a thousand hits
-            seen.add(key);
-            track(a => a.jsError(kind, message, where));
-        } catch (err) { /* reporting must never become the failure */ }
     };
 
     window.addEventListener('error', (e) => {
