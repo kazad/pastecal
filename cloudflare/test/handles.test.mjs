@@ -363,6 +363,28 @@ try {
         step('@link page: its own <title>, description, og:/twitter: title and url (the @ address), every value escaped; no edit id');
     }
 
+    // --- red team: a calendar under someone else's @name can't be re-linked, renamed, or used to dodge the 10
+    {
+        const fay = await signIn(`fay-names-${run}@example.com`), gus = await signIn(`gus-names-${run}@example.com`);
+        const subF = await giveUnlimited(fay, 'fay'); await giveUnlimited(gus, 'gus');
+        const fh = `fay-${run}`.slice(0, 30), gh = `gus-${run}`.slice(0, 30);
+        assert.equal((await pj('/api/names/handle', { handle: fh }, fay.cookie)).status, 200);
+        assert.equal((await pj('/api/names/handle', { handle: gh }, gus.cookie)).status, 200);
+        const club = (await pj('/api/names/calendar', { name: 'club' }, fay.cookie)).d.calendarId;
+        assert.equal((await pj('/api/pro/lapsed-mode', { calendarId: club, mode: 'open' }, fay.cookie)).status, 200);
+        await endUnlimited(subF, fay, 'fay');
+        st = await lockStatus(club);
+        assert.equal(st.locked, false, 'open after her plan ended: anyone with the edit link may edit or lock it');
+        r = await pj('/api/names/link', { calendarId: club, name: 'mine' }, gus.cookie);
+        assert.equal(r.status, 409); assert.equal(r.d.error, 'linked-elsewhere');
+        assert.equal((await get(`/@${fh}/club`)).status, 200, 'her @link is untouched');
+        assert.equal((await get(`/@${gh}/mine`)).status, 404);
+        // Locking it is still allowed (it's open), but her old @link doesn't exempt it from his 10.
+        assert.equal((await pj('/api/pro/lock', { calendarId: club }, gus.cookie)).status, 200);
+        assert.equal((await account(gus.cookie)).proCount, 1, 'it counts toward his 10');
+        step('red team: a calendar with another account\'s @link can\'t be linked under yours (409 linked-elsewhere, theirs untouched), and their link never exempts it from your 10');
+    }
+
     // --- rate limit on name changes
     const dan = await signIn(`dan-names-${run}@example.com`);
     await giveUnlimited(dan, 'dan');
