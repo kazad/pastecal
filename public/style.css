@@ -1247,13 +1247,7 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
   .pc-tpl-x { position: absolute; top: 4px; right: 4px }
 }
 
-/* =========================================================================================
-   Toast (components/ToastNotification.js): one compact dark row, message + action + close
-   ========================================================================================= */
-.pc-toast { pointer-events: auto; display: flex; align-items: center; gap: 4px; max-width: 100%; min-height: var(--pc-h-lg); padding: 6px 6px 6px 16px;
-  border-radius: var(--pc-radius-card); background: var(--pc-toast); color: var(--pc-on-toast); box-shadow: var(--pc-shadow-md); font: var(--pc-fw-medium) var(--pc-fs-md)/1.35 var(--pc-font) }
-.pc-toast-ico { width: 18px; height: 18px; flex: none; margin-right: 6px; color: var(--pc-toast-error) }
-.pc-toast-msg { margin: 0; padding: 4px 6px 4px 0; flex: 1 1 auto; min-width: 0 }
+/* ==================================================================================.pc-toast-msg { margin: 0; padding: 4px 6px 4px 0; flex: 1 1 auto; min-width: 0 }
 .pc-toast-act { flex: none; height: var(--pc-h-sm); padding: 0 12px; border: 0; border-radius: var(--pc-radius-control); background: none; color: var(--pc-toast-action); font: var(--pc-fw-bold) var(--pc-fs-md)/1 var(--pc-font); cursor: pointer }
 .pc-toast-act:hover, .pc-toast-x:hover { background: color-mix(in srgb, currentColor 10%, transparent) }
 .pc-toast-x { flex: none; display: grid; place-items: center; width: var(--pc-h-sm); height: var(--pc-h-sm); border: 0; border-radius: var(--pc-radius-control); background: none; color: inherit; opacity: .65; cursor: pointer }
@@ -1308,3 +1302,22 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
 .pc-home-tabs .pc-home-tab.on { color: var(--pc-text) }
 .pc-home-tabs .pc-home-tab:hover { color: var(--pc-text) }
 .pc-home-tabs .pc-home-tab:focus-visible { outline: none; box-shadow: var(--pc-focus-ring); border-radius: var(--pc-radius-xs) }
+
+/* ---- Pro names (unlimited-handles) on the design system ---- */
+/* Share's other view-only addresses: one compact line under "Share to view" (buttons are .pc-link). */
+.pc-other-links { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-top: -6px; font-size: var(--pc-fs-sm) }
+.pc-other-h { color: var(--pc-text-muted); font-weight: var(--pc-fw-semibold) }
+.pc-other-link { font-size: var(--pc-fs-sm); color: var(--pc-text-2); cursor: copy; overflow-wrap: anywhere; text-align: left }
+.pc-other-link.is-copied { color: var(--pc-success) }
+.pc-link-note { margin: -2px 0 0; color: var(--pc-text-muted); font-size: var(--pc-fs-sm); line-height: 1.4 }
+/* Toasts never cover the side panel: beside it on a wide screen, above the bottom sheet on a phone. */
+@media (min-width: 768px) { body:has(.pc-side) .pc-toast-wrap { left: calc(50% - 220px) } }
+@media (max-width: 767px) { body:has(.pc-side) .pc-toast-wrap { bottom: auto; top: 12px } }
+/* Pro links in the Plus tab: a fixed prefix (@handle/ or pastecal.com/) and the name, as one field. */
+.pc-pro-name { display: inline-flex; align-items: center; flex: 1 1 0; max-width: 420px; min-width: 0; height: var(--pc-h-md, 36px); padding-left: 10px; border: 1px solid var(--pc-field); border-radius: var(--pc-radius-control); background: var(--pc-bg); font-size: var(--pc-fs-md) }
+.pc-pro-name:focus-within { border-color: var(--pc-link); box-shadow: var(--pc-focus-ring) }
+.pc-pro-name input { flex: 1; min-width: 40px; height: 100%; border: 0; outline: none; background: transparent; color: var(--pc-text); font: var(--pc-fs-md) var(--pc-font); padding: 0 10px 0 1px }
+.pc-pro-linkline { margin: 4px 0 0; font-size: var(--pc-fs-md); overflow-wrap: anywhere }
+.pc-pro-linkline a { color: var(--pc-link); text-decoration: none; font-weight: var(--pc-fw-semibold) }
+.pc-pro-release { margin-left: 10px; font-size: var(--pc-fs-sm) }
+.pc-pro-select { flex: 1 1 0; min-width: 0; max-width: 420px }

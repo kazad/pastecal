@@ -177,6 +177,12 @@ class CloudCalendarService extends CalendarDataService {
         (async () => {
             try {
                 const lookup = await this.lookupCalendar(slug);
+                // A Pro short name whose account was deleted: a neutral "This link has ended" page (the Worker's).
+                if (lookup.data?.ended && typeof window !== 'undefined' && window.location) {
+                    this.close(slug);
+                    window.location.replace('/link-ended/' + encodeURIComponent(slug));
+                    return;
+                }
                 if (lookup.data?.found) {
                     if (lookup.data.isReadOnly) {
                         if (typeof window !== 'undefined' && window.location) {
@@ -522,7 +528,7 @@ class CloudCalendarService extends CalendarDataService {
 
     /** Is this name taken? First check directory, then HEAD /cal/<id>: 404 = free. */
     static async checkExists(id, callback_yes, callback_no) {
-        if (['beta', 'nativecal', 'view', 'dev', 'api', 'cal', 'report', 'signin', 'pro', 'pricing', 'explore', 'privacy', 'terms', 'contact'].includes(String(id || '').toLowerCase())) { callback_yes(); return; }
+        if (['beta', 'nativecal', 'view', 'dev', 'api', 'cal', 'report', 'signin', 'pro', 'pricing', 'explore', 'privacy', 'terms', 'contact', 'account'].includes(String(id || '').toLowerCase()) || String(id || '').startsWith('@')) { callback_yes(); return; }
         try {
             const lookup = await this.lookupCalendar(id);
             if (lookup.data?.found) { callback_yes(); return; }

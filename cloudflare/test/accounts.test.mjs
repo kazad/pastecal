@@ -53,7 +53,7 @@ const setCookie = r.headers.get('set-cookie');
 assert.match(setCookie, /^pc_session=[A-Za-z0-9_-]{22}; HttpOnly; Secure; SameSite=Lax; Path=\/; Max-Age=34560000$/);
 const cookie = setCookie.split(';')[0];
 r = await me(cookie);
-assert.equal(r.status, 200); assert.deepEqual(await r.json(), { email: ann, calendars: [] });
+assert.equal(r.status, 200); assert.deepEqual(await r.json(), { email: ann, plan: null, unlimited: null, calendars: [] });
 step('verify sets a 400-day (Max-Age=34560000) HttpOnly Secure SameSite=Lax cookie; /api/me knows the user');
 
 r = await post('/api/auth/verify', { token });

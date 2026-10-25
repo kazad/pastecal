@@ -44,8 +44,8 @@ const AccountMenu = {
         if (!force && st.status !== 'idle' && !(st.retry && st.status === 'out' && st.step === 'idle')) return;
         st.status = 'loading'; st.error = ''; st.retry = false;
         const r = await this.api('GET', '/api/me');
-        if (r.status === 200) { st.me = r.data; st.status = 'in'; }
-        else if (r.status === 401) { st.me = null; st.status = 'out'; }
+        if (r.status === 200) { st.me = r.data; st.status = 'in'; this.hint(true); }
+        else if (r.status === 401) { st.me = null; st.status = 'out'; this.hint(false); }
         // Anything else (offline, a server error): most people opening this menu have no account,
         // so don't tell them one failed to load. Show the quiet line and try again next open.
         else { st.me = null; st.status = 'out'; st.retry = true; }
@@ -54,6 +54,10 @@ const AccountMenu = {
             const state = st.status === 'in' ? 'signed_in' : 'signed_out';
             this.track(a => a.accountMenuShown(state));
         }
+    },
+    // The site pages' header shows "Account" while this hint cookie is set (the session itself is HttpOnly).
+    hint(on) {
+        try { document.cookie = on ? 'pc_in=1; Path=/; Max-Age=34560000; SameSite=Lax' : 'pc_in=; Path=/; Max-Age=0; SameSite=Lax'; } catch (e) { /* no hint */ }
     },
     // Someone signed in or out elsewhere on the page (the share dialog): fetch again next open.
     reset() {
@@ -161,7 +165,7 @@ const NavigationDropdown = {
 
                 <template v-else-if="acct.status === 'in'">
                     <div class="pc-acct-head">
-                        <span class="pc-acct-label">Pro account</span>
+                        <span class="pc-acct-label" data-testid="account-plan">{{ planLabel }}</span>
                         <span class="pc-acct-muted pc-acct-email" data-testid="account-email" data-hj-suppress data-clarity-mask="true">{{ acct.me.email }}</span>
                     </div>
                     <div v-for="c in proCalendars" :key="c.id" class="pc-acct-cal-row">
@@ -174,14 +178,16 @@ const NavigationDropdown = {
                             :aria-label="'Stats for ' + c.title" data-testid="account-stats">Stats</button>
                     </div>
                     <p v-if="proCalendars.length === 0" class="pc-acct-muted pc-acct-line">No upgraded calendars right now.</p>
-                    <a href="/pricing#get-pro" data-from="account-menu" class="pc-link pc-acct-link pc-acct-line" data-testid="account-get-pro">{{ billing === false ? 'Join the beta' : proCalendars.length ? 'Upgrade another calendar' : 'Upgrade a calendar' }}</a>
+                    <p v-if="acct.me.plan === 'unlimited'" class="pc-acct-muted pc-acct-line" data-testid="account-unlimited-hint">To upgrade another calendar, open it and choose its Plus tab.</p>
+                    <a v-else href="/pricing#get-pro" data-from="account-menu" class="pc-link pc-acct-link pc-acct-line" data-testid="account-get-pro">{{ billing === false ? 'Join the beta' : proCalendars.length ? 'Upgrade another calendar' : 'Upgrade a calendar' }}</a>
                     <div class="pc-acct-actions">
+                        <a href="/account" class="pc-btn pc-btn--sm" data-from="account-menu" data-testid="account-page-link">Account</a>
                         <button type="button" class="pc-btn pc-btn--sm" @click="portal" :disabled="acct.busy" data-testid="account-billing">Manage billing</button>
                         <button type="button" class="pc-link pc-acct-link" @click="signOut" :disabled="acct.busy" data-testid="account-signout">Sign out</button>
                     </div>
                     <!-- Asked in place, not with confirm(): a browser dialog would also close the menu -->
                     <div v-if="acct.confirmDelete" class="pc-acct-delete" data-testid="account-delete-confirm">
-                        <p class="pc-acct-line">Delete your Pro account? This signs you out on every device and erases your email. Your calendars and their links stay as they are.</p>
+                        <p class="pc-acct-line">Delete your account? This signs you out on every device and erases your email. Your calendars stay at their links, but paused ones stay read-only for good, and @links and short links end after 90 days. <a href="/account" class="pc-acct-link">See what happens to each</a>.</p>
                         <div class="pc-acct-actions">
                             <button type="button" class="pc-btn pc-btn--sm pc-btn--danger" @click="deleteAccount" :disabled="acct.busy" data-testid="account-delete-yes">{{ acct.busy ? 'Deleting…' : 'Delete account' }}</button>
                             <button type="button" class="pc-link pc-acct-link" @click="acct.confirmDelete = false" :disabled="acct.busy" data-testid="account-delete-no">Cancel</button>
@@ -201,7 +207,7 @@ const NavigationDropdown = {
                             <button type="submit" class="pc-btn pc-btn--sm pc-btn--primary" :disabled="acct.busy">{{ acct.busy ? 'Sending…' : 'Send link' }}</button>
                         </div>
                     </form>
-                    <button v-else type="button" class="pc-link pc-acct-link pc-acct-line" @click="startSignIn" data-testid="account-signin">Upgraded a calendar? Sign in</button>
+                    <button v-else type="button" class="pc-link pc-acct-link pc-acct-line" @click="startSignIn" data-testid="account-signin">Have Plus or Pro? Sign in</button>
                 </template>
 
                 <p v-if="acct.error" class="pc-acct-err" role="alert" data-testid="account-error">{{ acct.error }}</p>
@@ -216,6 +222,17 @@ const NavigationDropdown = {
         if (typeof ProBilling !== 'undefined') ProBilling.load().then((b) => { this.billing = b; });
     },     // never blocks opening: the section shows its own loading line
     computed: {
+        // The plan, at the top of the section: "Pro · renews October 24, 2027", "Plus", or just the account.
+        planLabel() {
+            const me = this.acct.me || {};
+            if (me.plan === 'unlimited') {
+                const u = me.unlimited || {}, end = u.currentPeriodEnd ? (u.currentPeriodEnd < 1e12 ? u.currentPeriodEnd * 1000 : u.currentPeriodEnd) : 0;
+                const date = end ? new Date(end).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }) : '';
+                const P = planName('unlimited');
+                return u.status === 'past_due' ? `${P} · payment problem` : date ? `${P} · renews ${date}` : P;
+            }
+            return me.plan ? planName(me.plan) : 'Your account';
+        },
         // Calendars this account pays for, lowercased id -> /api/me row.
         proById() {
             const map = new Map();
@@ -230,7 +247,7 @@ const NavigationDropdown = {
             const out = [];
             for (const c of this.proById.values()) {
                 const end = c.currentPeriodEnd ? (c.currentPeriodEnd < 1e12 ? c.currentPeriodEnd * 1000 : c.currentPeriodEnd) : 0;
-                const date = end ? new Date(end).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+                const date = end ? new Date(end).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }) : '';
                 const name = planName(c.plan);
                 let label;
                 if (c.status === 'past_due') label = 'Payment problem';
@@ -317,7 +334,7 @@ const NavigationDropdown = {
                     return;
                 }
                 st.confirmDelete = false;
-                if (r.status === 409) st.error = 'You still have a paid plan on a calendar. Cancel it in Manage billing; you can delete your account once it has ended.';
+                if (r.status === 409) st.error = 'You still have an active plan. Cancel it in Manage billing; you can delete your account once it has ended.';
                 else if (r.status === 401) await AccountMenu.load(true);
                 else st.error = r.status === 0 ? NAV_NETWORK_ERROR : 'Something went wrong. Try again in a minute.';
             } finally { st.busy = false; }

@@ -9,12 +9,13 @@
      one ('Editors') only when the calendar has none, through the named-links API. -->
 <meta name="referrer" content="no-referrer">
 <meta name="robots" content="noindex">
-<title>Plus is on · pastecal</title>
+<title>You're upgraded · pastecal</title>
 <link rel="icon" href="/favicon.ico">
 <script>
-  var proCalendar = null, proSession = null;
+  var proCalendar = null, proSession = null, proUnlimited = false;
   try { proCalendar = decodeURIComponent(location.hash.slice(1)) || null; } catch (e) { proCalendar = null; }
   try { proSession = new URLSearchParams(location.search).get('session_id'); } catch (e) { proSession = null; }
+  try { proUnlimited = new URLSearchParams(location.search).get('plan') === 'unlimited'; } catch (e) { proUnlimited = false; }
   // First thing, before anything else on the page can read or record the address.
   history.replaceState(null, '', location.pathname);
 </script>
@@ -58,16 +59,53 @@ p.bad { color: var(--pc-danger) }
     <p class="small">You can make more links, or turn one off, from the Plus tab on your calendar.</p>
   </section>
 
+  <!-- Pro (plan=unlimited): the @name is what Pro adds, and nothing else teaches it -->
+  <section id="nextName" hidden data-testid="done-next-name">
+    <h2>Next: claim your name</h2>
+    <p class="small">One name for all your calendars, like <b>pastecal.com/@yourname/soccer</b>. Then make calendars under it, as many as you like. Links under your name open the view-only calendar.</p>
+    <a class="pc-btn pc-btn--primary pc-btn--lg" href="/account" data-testid="done-claim-name">Claim your @name</a>
+  </section>
+
   <a class="pc-btn pc-btn--primary pc-btn--lg" id="go" href="/">Back to your calendar</a>
 </main>
 <script>
 (function () {
   var $ = function (id) { return document.getElementById(id); };
   var go = $('go'), msg = $('msg');
+  function api(method, path, body) {
+    var init = { method: method, credentials: 'same-origin', headers: {} };
+    if (body) { init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(body); }
+    return fetch(path, init).then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { status: r.status, data: d }; }); },
+      function () { return { status: 0, data: {} }; });
+  }
+  // Paid while signed out (pay first): this browser started the checkout, so it may be signed in now.
+  // An email that already has an account gets a sign-in link instead (the server decides).
+  var existingAccount = false;
+  var claimed = !proSession ? Promise.resolve(null) : api('POST', '/api/pro/claim', { sessionId: proSession }).then(function (r) {
+    if (r.status === 200 && r.data.ok && !r.data.signedIn) {
+      existingAccount = true;
+      var who = document.createElement('b'); who.textContent = r.data.email;
+      $('signin-note').textContent = ''; $('signin-note').append('This email already has a pastecal account, so we sent a sign-in link to ', who, '. Open it to get your editor link and manage your plan.');
+      $('signin-note').hidden = false;
+    }
+    return r;
+  });
+  // The site header shows "Account" while this browser is signed in (a hint cookie; the session is HttpOnly).
+  claimed.then(function () { return api('GET', '/api/me'); }).then(function (r) {
+    try {
+      if (r.status === 200) document.cookie = 'pc_in=1; Path=/; Max-Age=34560000; SameSite=Lax';
+      else if (r.status === 401) document.cookie = 'pc_in=; Path=/; Max-Age=0; SameSite=Lax';
+    } catch (e) { /* no hint */ }
+  });
+  if (proUnlimited) { $('title').textContent = 'Pro is on'; $('nextName').hidden = false; }
   if (!proCalendar) {
-    $('title').textContent = 'Thanks, your payment went through';
-    msg.textContent = 'Open your calendar and open its Plus tab to see your plan.';
+    // Pro bought from the pricing page: no calendar yet. Next is the @name (account page); each calendar
+    // also upgrades with one click from its Plus tab.
+    if (!proUnlimited) $('title').textContent = 'Thanks, your payment went through';
+    msg.textContent = proUnlimited ? 'Your payment went through. To upgrade a calendar you run, open it and choose its Plus tab. No new checkout.'
+      : 'Open your calendar and open its Plus tab to see your plan.';
     go.textContent = 'Back to pastecal';
+    if (proUnlimited) go.hidden = true;
     return;
   }
   var calPath = '/' + encodeURIComponent(proCalendar);
@@ -82,13 +120,6 @@ p.bad { color: var(--pc-danger) }
     });
   } catch (e) { /* storage blocked: the address it is */ }
   $('calname').textContent = calName;
-
-  function api(method, path, body) {
-    var init = { method: method, credentials: 'same-origin', headers: {} };
-    if (body) { init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(body); }
-    return fetch(path, init).then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { status: r.status, data: d }; }); },
-      function () { return { status: 0, data: {} }; });
-  }
 
   function locked() {
     var span = document.createElement('span'); span.className = 'cal'; span.textContent = calName;
@@ -141,19 +172,6 @@ p.bad { color: var(--pc-danger) }
       });
     });
   }
-
-  // Paid while signed out (pay first): this browser started the checkout, so it may be signed in now.
-  // An email that already has an account gets a sign-in link instead (the server decides).
-  var existingAccount = false;
-  var claimed = !proSession ? Promise.resolve(null) : api('POST', '/api/pro/claim', { sessionId: proSession }).then(function (r) {
-    if (r.status === 200 && r.data.ok && !r.data.signedIn) {
-      existingAccount = true;
-      var who = document.createElement('b'); who.textContent = r.data.email;
-      $('signin-note').textContent = ''; $('signin-note').append('This email already has a pastecal account, so we sent a sign-in link to ', who, '. Open it to get your editor link and manage Plus.');
-      $('signin-note').hidden = false;
-    }
-    return r;
-  });
 
   // The webhook may land a few seconds after Stripe sends people here: ask every 1.5s for up to ~20s.
   var tries = 0;

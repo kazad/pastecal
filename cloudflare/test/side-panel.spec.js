@@ -77,7 +77,7 @@ test('editor: every header button and every tab opens the panel beside the calen
     await page.getByTestId(`side-tab-${tab}`).click();
     await expect(panel(page)).toHaveAttribute('data-tab', tab);
   }
-  await expect(panel(page).getByRole('heading', { name: 'View-only link' })).toBeVisible();
+  await expect(panel(page).getByRole('heading', { name: 'Share to view' })).toBeVisible();
   await page.getByTestId('side-tab-notes').click();
   await expect(page.getByTestId('notes-read')).toContainText('Rainouts decided by 7am');   // read first
   await expect(panel(page).getByLabel('Calendar notes')).toHaveCount(0);
@@ -134,7 +134,7 @@ test('Share in the panel still copies its links', async ({ browser, request }) =
   await page.getByTestId('share-pill-more').click();
   // Ordered by what people do most: the read-only link first, then calendar apps, then helpers.
   const order = await panel(page).locator('.pc-link-item h4').allTextContents();
-  expect(order).toEqual(['View-only link', 'Edit link', 'This view', 'Calendar feed']);
+  expect(order).toEqual(['Share to view', 'Edit link', 'This view', 'Calendar feed']);
   await expect(page.getByTestId('share-plus-line')).toContainText('Upgrade');   // Share is for sharing: one line to the Plus tab
   expect(await page.$eval('.pc-side-body', (b) => b.scrollHeight <= b.clientHeight + 1), 'Share fits without scrolling').toBe(true);
   await expect(page.getByTestId('share-readonly-addr')).toContainText(`pastecal.com/view/${viewId}`);

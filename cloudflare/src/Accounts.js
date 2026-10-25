@@ -14,10 +14,20 @@
  *                                                   but lose the link to the user. Cancels nothing: 409
  *                                                   {error:'active-subscription', calendars} while any subscription
  *                                                   is active, trialing or past_due (cancel it first). 401 signed-out
- *   GET  /api/me                                 -> {email, calendars:[{id, status, plan, interval, currentPeriodEnd, cancelAtPeriodEnd}]} | 401;
+ *                                                   Names (decided Oct 2026): calendars already follow their "If your plan
+ *                                                   ends" choice (a paused one stays read-only for good: nobody owns it);
+ *                                                   @links keep serving the view-only calendar in place for 90 days (no
+ *                                                   redirect: that would need a view link, and the alias already is one),
+ *                                                   then end; the @ page goes at once; the handle is retired forever.
+ *                                                   Short names are tombstones ("This link has ended") for 90 days, then free.
+ *   GET  /api/me                                 -> {email, plan:'unlimited'|'pro'|null, unlimited:{status, interval, currentPeriodEnd}|null,
+ *                                                   calendars:[{id, status, plan:'pro'|'unlimited', interval, currentPeriodEnd, cancelAtPeriodEnd}]} | 401;
+ *                                                   (plan ids: 'pro' is Plus, 'unlimited' is Pro; Plans.js names them)
  *                                                   re-sends the cookie (fresh Max-Age) when the session was renewed
  *                                                   in the last day, so browsers keep it
- *   POST /api/pro/checkout    {calendarId, interval?:'year'|'month', editName?} -> {url} (Stripe Checkout).
+ *   POST /api/pro/checkout    {calendarId, interval?:'year'|'month', plan?:'pro'|'single'|'unlimited', editName?} -> {url} (Stripe Checkout).
+ *                             plan 'unlimited' (Pro Unlimited, see "Pro Unlimited" below): calendarId optional, 409
+ *                             already-unlimited; a Single checkout or a trial by an Unlimited owner is 409 has-unlimited.
  *                             Signed out works too (pay first): it sets an HttpOnly pc_claim cookie whose hash rides
  *                             on the checkout; Stripe asks for the email and the webhook finds or makes that account.
  *   POST /api/pro/trial       {calendarId}       -> {ok, trialEnd} (signed in): a 30-day Pro trial, no card. A direct
@@ -43,6 +53,11 @@
  *                             owner chose 'open'. The owner sets it while locked, or after: 'open' on a paused calendar
  *                             makes it a normal free calendar. Only that owner can lock a paused calendar again
  *                             (resubscribe). Errors: 401, 400 bad-calendar / bad-mode, 409 not-locked, 403 not-owner.
+ *   POST /api/pro/lock        {calendarId} -> {ok, already?}: a Pro Unlimited owner locks one of their calendars, no
+ *                             checkout. 401, 400 bad-calendar, 403 no-unlimited, 404 no-calendar, 409 locked-by-other
+ *                             (also a calendar paused for someone else), 403 buy-on-live (beta).
+ *   POST /api/pro/unlock      {calendarId} -> {ok}: release a calendar from the owner's Unlimited (a plain unlock: a free
+ *                             calendar again). 409 not-unlimited for a calendar not under their Unlimited.
  *   POST /api/pro/claim       {sessionId} -> {ok, signedIn, email}: /pro/done after a signed-out checkout. Needs the
  *                             pc_claim cookie, a paid recent checkout carrying its hash, and is single-use. Signs in
  *                             only an account that checkout made; an existing account gets a sign-in link instead.
@@ -57,12 +72,14 @@
  *                                                   mergeProSettings in CalendarRoom.js; 400 {error:'bad-settings', message})
  *     Owner routes answer 401 signed-out, 400 bad-calendar, 404 no-calendar, 409 not-locked, 403 not-owner;
  *     editor-links also 400 bad-label, 409 too-many-links (20 live), 404 no-link.
- *   GET  /api/pro/config                         -> {billing}: true only when Stripe is configured (keys and both prices).
+ *   GET  /api/pro/config                         -> {billing, unlimited}: billing is true only when Stripe is configured (keys
+ *                                                   and the Pro yearly price); unlimited also needs STRIPE_PRICE_UNLIMITED_YEARLY.
  *                                                   False: the site offers "Join the beta" (the waitlist) instead of
  *                                                   the trial and checkout. Public, cached 60 seconds.
  *   GET  /api/pro/status?calendar=<id>           -> {locked, pro, plan, isOwner, paused, lapsedOwner, trialUsed}; plan is the
- *                                                   lock's plan id (null unlocked; Plans.js names it); the owner also
- *                                                   gets lapsedMode, and trial:{endsAt, hasCard} while trialing; the
+ *                                                   plan id (null unlocked; 'unlimited' when the owner's Pro covers it;
+ *                                                   Plans.js names it), plus unlimited:true when the signed-in person has
+ *                                                   an active Pro; the owner also gets lapsedMode, and trial:{endsAt, hasCard} while trialing; the
  *                                                   paused calendar's owner gets lapsedTrial (its Pro was a trial)
  *   POST /api/stripe/webhook                     Stripe events (signed), see handleWebhook
  *   POST /api/admin/accounts/reassign {calendarId, email}   (Bearer IMPORT_SECRET; lost access, disputes)
@@ -94,10 +111,11 @@
  */
 import { DurableObject } from 'cloudflare:workers';
 import { LockClient } from './LockClient.js';
-import { INTERVALS, stripeConfig, stripeRequest, verifyStripeSignature, summarizeSubscription, subscriptionIdOf, timingSafeEqual,
+import { INTERVALS, PLANS, isUnlimited, stripeConfig, stripeRequest, verifyStripeSignature, summarizeSubscription, subscriptionIdOf, timingSafeEqual,
     eventModeMismatch, subscriptionOfInvoice, paymentOfInvoice, paymentOfInvoicePayments } from './Stripe.js';
 import { siteUrl, siteHost, allowedOrigins, isStaging } from './Site.js';
 import { planName } from './Plans.js';
+import { removeDirectoryName, endDirectoryName, purgeNames } from './Names.js';
 
 const LOGIN_TTL = 15 * 60 * 1000;
 const SESSION_TTL = 365 * 24 * 3600 * 1000;   // from the last renewal (see sessionUser)
@@ -122,6 +140,7 @@ const TRIAL_ERRORS = {
 // A full refund or a dispute ends the subscription that charge paid for (which unlocks as usual).
 const CHARGE_EVENTS = new Set(['charge.refunded', 'charge.dispute.created']);
 const CHECKOUT_RESTARTS_PER_HOUR = 3;
+const SHORT_HOLD_MS = 90 * 24 * 3600 * 1000;   // a lapsed owner's short names stay theirs this long, then are released
 const TEST_INBOX_RETAIN_MS = 7 * 24 * 3600 * 1000, TEST_INBOX_MAX = 500;   // see TestInbox.js
 
 // Same rule as index.js: any name Firebase allowed.
@@ -184,13 +203,26 @@ export class Accounts extends DurableObject {
             CREATE UNIQUE INDEX IF NOT EXISTS trials_user ON trials(user_id);
             CREATE UNIQUE INDEX IF NOT EXISTS trials_email ON trials(email_hash);
             CREATE TABLE IF NOT EXISTS trial_reminders (subscription_id TEXT PRIMARY KEY, at INTEGER);
-            CREATE TABLE IF NOT EXISTS notice_emails (k TEXT PRIMARY KEY, at INTEGER);`);
+            CREATE TABLE IF NOT EXISTS notice_emails (k TEXT PRIMARY KEY, at INTEGER);
+            CREATE TABLE IF NOT EXISTS unlimited_locks (calendar_id TEXT PRIMARY KEY, user_id TEXT NOT NULL, subscription_id TEXT NOT NULL, locked_at INTEGER);
+            CREATE INDEX IF NOT EXISTS unlimited_locks_sub ON unlimited_locks(subscription_id);
+            CREATE INDEX IF NOT EXISTS unlimited_locks_user ON unlimited_locks(user_id);
+            CREATE TABLE IF NOT EXISTS unlimited_first_lock (subscription_id TEXT PRIMARY KEY, at INTEGER);
+            CREATE TABLE IF NOT EXISTS handles (handle TEXT PRIMARY KEY, user_id TEXT UNIQUE, created_at INTEGER);
+            CREATE TABLE IF NOT EXISTS handle_links (handle TEXT NOT NULL, name TEXT NOT NULL, calendar_id TEXT NOT NULL UNIQUE, alias TEXT NOT NULL,
+                show INTEGER DEFAULT 0, created_at INTEGER, PRIMARY KEY (handle, name));
+            CREATE TABLE IF NOT EXISTS short_links (name TEXT PRIMARY KEY, user_id TEXT, calendar_id TEXT, created_at INTEGER, updated_at INTEGER, ended_at INTEGER);
+            CREATE INDEX IF NOT EXISTS short_links_user ON short_links(user_id);
+            CREATE TABLE IF NOT EXISTS account_calendars (user_id TEXT NOT NULL, calendar_id TEXT NOT NULL, added_at INTEGER, PRIMARY KEY (user_id, calendar_id));
+            CREATE TABLE IF NOT EXISTS name_events (user_id TEXT, kind TEXT, detail TEXT, at INTEGER);
+            CREATE INDEX IF NOT EXISTS name_events_user ON name_events(user_id, at);`);
         // Added later (an existing table keeps its columns): which subscription came first, and the
         // Checkout Session a hold guards plus how often its buyer restarted it.
         for (const col of ['subscriptions ADD COLUMN created INTEGER', 'checkout_holds ADD COLUMN session_id TEXT',
             'checkout_holds ADD COLUMN restarts INTEGER', 'checkout_holds ADD COLUMN window_start INTEGER',
             'sessions ADD COLUMN renewed_at INTEGER', 'users ADD COLUMN created_via TEXT', 'subscriptions ADD COLUMN trial_end INTEGER',
-            'subscriptions ADD COLUMN has_payment_method INTEGER', 'subscriptions ADD COLUMN cancel_at_period_end INTEGER']) {
+            'subscriptions ADD COLUMN has_payment_method INTEGER', 'subscriptions ADD COLUMN cancel_at_period_end INTEGER',
+            'handles ADD COLUMN deleted_at INTEGER']) {
             try { this.sql.exec(`ALTER TABLE ${col}`); } catch (_) { /* already there */ }
         }
     }
@@ -302,17 +334,182 @@ export class Accounts extends DurableObject {
         const user = this.getUser(userId);
         if (!user) return { deleted: false };
         const active = this.sql.exec(`SELECT calendar_id, status FROM subscriptions WHERE user_id = ?`, userId).toArray().filter((r) => ACTIVE.has(r.status));
-        if (active.length) return { active: [...new Set(active.map((r) => r.calendar_id))] };
+        if (active.length) return { active: [...new Set(active.map((r) => r.calendar_id || 'pro-unlimited'))] };
+        // Pro names: the @links keep opening their view-only calendars for 90 days (handles.deleted_at),
+        // then the sweep removes them and their hidden names; the @handle page itself is gone at once.
+        // The handle stays taken, by nobody, forever, so an old shared @link can never be someone else's.
+        // Short names are held 90 days like after a lapse, then released (alarm), never re-pointed: their
+        // directory rows become tombstones ("This link has ended"), so nobody can make a calendar there first.
+        const now = Date.now();
+        const h = this.handleOf(userId);
+        const links = h ? this.sql.exec(`SELECT name, alias FROM handle_links WHERE handle = ?`, h.handle).toArray() : [];
+        const shorts = this.sql.exec(`SELECT name FROM short_links WHERE user_id = ?`, userId).toArray().map((r) => r.name);
         this.ctx.storage.transactionSync(() => {
             this.sql.exec(`DELETE FROM login_tokens WHERE email = ?`, user.email);
             this.sql.exec(`DELETE FROM sessions WHERE user_id = ?`, userId);
             this.sql.exec(`DELETE FROM checkout_holds WHERE user_id = ?`, userId);
             this.sql.exec(`DELETE FROM welcome_emails WHERE user_id = ?`, userId);
+            this.sql.exec(`DELETE FROM unlimited_locks WHERE user_id = ?`, userId);   // only ever ended ones here
             this.sql.exec(`DELETE FROM outbox WHERE to_email = ?`, user.email);          // dev mode only ever writes here
-            this.sql.exec(`UPDATE subscriptions SET user_id = NULL, updated_at = ? WHERE user_id = ?`, Date.now(), userId);
+            this.sql.exec(`UPDATE subscriptions SET user_id = NULL, updated_at = ? WHERE user_id = ?`, now, userId);
+            if (h) this.sql.exec(`UPDATE handles SET user_id = NULL, deleted_at = ? WHERE handle = ?`, now, h.handle);
+            this.sql.exec(`UPDATE short_links SET user_id = NULL, calendar_id = NULL, ended_at = COALESCE(ended_at, ?) WHERE user_id = ?`, now, userId);
+            this.sql.exec(`DELETE FROM account_calendars WHERE user_id = ?`, userId);
+            this.sql.exec(`DELETE FROM name_events WHERE user_id = ?`, userId);
             this.sql.exec(`DELETE FROM users WHERE id = ?`, userId);
         });
-        return { deleted: true };
+        if (shorts.length || links.length) this.scheduleSweep();
+        return { deleted: true, handle: h ? h.handle : null, links: links.map((l) => l.name), removeSlugs: [], endSlugs: shorts, shortNames: shorts };
+    }
+
+    // ---- Pro Unlimited names: @handle, links under it, top-level short names ----
+    // handles: one per account, claimed once (user_id NULL: the account was deleted, the name stays taken).
+    // handle_links: pastecal.com/@handle/<name> -> a calendar, through `alias`, a hidden read-only name in the
+    //   directory (so the view page and feed never see the calendar's edit id). A calendar has at most one.
+    // short_links: pastecal.com/<name> -> a calendar; the name itself is the read-only directory row.
+    //   ended_at: the owner's Unlimited ended (or the account was deleted); 90 days later it is released.
+    // account_calendars: calendars this owner locked under Unlimited, kept after it lapses ("Your calendars").
+    handleOf(userId) { return userId ? this.sql.exec(`SELECT * FROM handles WHERE user_id = ?`, userId).toArray()[0] || null : null; }
+    handleRow(handle) { return this.sql.exec(`SELECT * FROM handles WHERE handle = ?`, handle).toArray()[0] || null; }
+    claimHandle(userId, handle) {
+        if (this.handleOf(userId)) return { error: 'has-handle' };
+        if (this.handleRow(handle)) return { error: 'taken' };
+        this.sql.exec(`INSERT INTO handles (handle, user_id, created_at) VALUES (?, ?, ?)`, handle, userId, Date.now());
+        return { ok: true };
+    }
+    linkFor(calendarId) { return this.sql.exec(`SELECT * FROM handle_links WHERE calendar_id = ?`, calendarId).toArray()[0] || null; }
+    linkByName(handle, name) { return this.sql.exec(`SELECT * FROM handle_links WHERE handle = ? AND name = ?`, handle, name).toArray()[0] || null; }
+    // For the public pages: a live handle resolves, and a deleted account's for 90 days (then the sweep removes them).
+    resolveLink(handle, name) {
+        const r = this.sql.exec(`SELECT l.alias FROM handle_links l JOIN handles h ON h.handle = l.handle WHERE l.handle = ? AND l.name = ?
+            AND (h.user_id IS NOT NULL OR h.deleted_at > ?)`, handle, name, Date.now() - SHORT_HOLD_MS).toArray()[0];
+        return r ? { alias: r.alias } : null;
+    }
+    handlePage(handle) {
+        const h = this.handleRow(handle);
+        if (!h || !h.user_id) return null;
+        return { handle, links: this.sql.exec(`SELECT name, calendar_id AS calendarId FROM handle_links WHERE handle = ? AND show = 1 ORDER BY name`, handle).toArray() };
+    }
+    // -> {ok, previous:{name, alias}|null} | {error:'name-taken'}
+    setLink(handle, name, calendarId, alias) {
+        const other = this.linkByName(handle, name);
+        if (other && other.calendar_id !== calendarId) return { error: 'name-taken' };
+        const prev = this.linkFor(calendarId);
+        if (prev && prev.name === name) return { ok: true, previous: null, alias: prev.alias };
+        if (prev) this.sql.exec(`UPDATE handle_links SET name = ? WHERE calendar_id = ?`, name, calendarId);
+        else this.sql.exec(`INSERT INTO handle_links (handle, name, calendar_id, alias, show, created_at) VALUES (?, ?, ?, ?, 0, ?)`, handle, name, calendarId, alias, Date.now());
+        return { ok: true, previous: prev ? { name: prev.name } : null, alias: prev ? prev.alias : alias };
+    }
+    removeLink(calendarId) {
+        const prev = this.linkFor(calendarId);
+        if (prev) this.sql.exec(`DELETE FROM handle_links WHERE calendar_id = ?`, calendarId);
+        return prev;
+    }
+    setShow(calendarId, show) { this.sql.exec(`UPDATE handle_links SET show = ? WHERE calendar_id = ?`, show ? 1 : 0, calendarId); return this.linkFor(calendarId); }
+    shortRow(name) { return this.sql.exec(`SELECT * FROM short_links WHERE name = ?`, name).toArray()[0] || null; }
+    shortNamesOf(userId) { return this.sql.exec(`SELECT name, calendar_id AS calendarId, ended_at AS endedAt FROM short_links WHERE user_id = ? ORDER BY created_at`, userId).toArray(); }
+    addShort(userId, name, calendarId, limit) {
+        if (this.shortRow(name)) return { error: 'taken' };
+        if (this.shortNamesOf(userId).length >= limit) return { error: 'short-limit' };
+        const now = Date.now();
+        this.sql.exec(`INSERT INTO short_links (name, user_id, calendar_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`, name, userId, calendarId, now, now);
+        return { ok: true };
+    }
+    remapShort(name, calendarId) { this.sql.exec(`UPDATE short_links SET calendar_id = ?, updated_at = ? WHERE name = ?`, calendarId, Date.now(), name); }
+    removeShort(name) { this.sql.exec(`DELETE FROM short_links WHERE name = ?`, name); }
+    // Rate limit and log for name changes: claims, links, remaps (no emails, only the account id).
+    nameEventsLastHour(userId) { return this.sql.exec(`SELECT COUNT(*) AS n FROM name_events WHERE user_id = ? AND at > ?`, userId, Date.now() - 3600 * 1000).one().n; }
+    noteNameEvent(userId, kind, detail) {
+        const now = Date.now();
+        this.sql.exec(`INSERT INTO name_events (user_id, kind, detail, at) VALUES (?, ?, ?, ?)`, userId, kind, String(detail || '').slice(0, 120), now);
+        this.sql.exec(`DELETE FROM name_events WHERE at < ?`, now - 30 * 24 * 3600 * 1000);
+    }
+    addOwned(userId, calendarId) { this.sql.exec(`INSERT OR IGNORE INTO account_calendars (user_id, calendar_id, added_at) VALUES (?, ?, ?)`, userId, calendarId, Date.now()); }
+    ownedUnderAccount(userId, calendarId) { return this.sql.exec(`SELECT 1 FROM account_calendars WHERE user_id = ? AND calendar_id = ?`, userId, calendarId).toArray().length > 0; }
+    removeOwned(userId, calendarId) { this.sql.exec(`DELETE FROM account_calendars WHERE user_id = ? AND calendar_id = ?`, userId, calendarId); }
+    // Calendars under this owner's Unlimited that count toward its 10: those not living under the owner's @handle.
+    proCount(userId) {
+        return this.sql.exec(`SELECT COUNT(*) AS n FROM unlimited_locks u WHERE u.user_id = ? AND NOT EXISTS
+            (SELECT 1 FROM handle_links l JOIN handles h ON h.handle = l.handle WHERE l.calendar_id = u.calendar_id AND h.user_id = u.user_id)`, userId).one().n;
+    }
+    // The owner's Unlimited ended: their short names keep working, frozen, and are released 90 days later.
+    markShortEnded(userId) {
+        this.sql.exec(`UPDATE short_links SET ended_at = ? WHERE user_id = ? AND ended_at IS NULL`, Date.now(), userId);
+        this.scheduleSweep();
+    }
+    clearShortEnded(userId) { this.sql.exec(`UPDATE short_links SET ended_at = NULL WHERE user_id = ?`, userId); }
+    scheduleSweep() {
+        const a = this.sql.exec(`SELECT MIN(ended_at) AS t FROM short_links WHERE ended_at IS NOT NULL`).one().t;
+        const b = this.sql.exec(`SELECT MIN(deleted_at) AS t FROM handles WHERE deleted_at IS NOT NULL`).one().t;
+        const t = [a, b].filter(Boolean).sort((x, y) => x - y)[0];
+        if (t) this.ctx.storage.setAlarm(t + SHORT_HOLD_MS);
+    }
+    // Release every short name held past 90 days: the row goes, and its directory name with it.
+    async sweepShortHolds(now = Date.now()) {
+        const due = this.sql.exec(`SELECT name FROM short_links WHERE ended_at IS NOT NULL AND ended_at <= ?`, now - SHORT_HOLD_MS).toArray().map((r) => r.name);
+        for (const name of due) {
+            this.sql.exec(`DELETE FROM short_links WHERE name = ?`, name);
+            if (this.env.DIRECTORY) await this.env.DIRECTORY.get(this.env.DIRECTORY.idFromName('global')).fetch('http://internal/remove', { method: 'POST', body: JSON.stringify({ slug: name }) });
+            console.log('[names] short name released after the hold');
+        }
+        // A deleted account's @links: gone 90 days after the delete, with their hidden names. The handle stays retired.
+        for (const h of this.sql.exec(`SELECT handle FROM handles WHERE user_id IS NULL AND deleted_at IS NOT NULL AND deleted_at <= ?`, now - SHORT_HOLD_MS).toArray()) {
+            const links = this.sql.exec(`SELECT name, alias FROM handle_links WHERE handle = ?`, h.handle).toArray();
+            for (const l of links) {
+                if (this.env.DIRECTORY) await this.env.DIRECTORY.get(this.env.DIRECTORY.idFromName('global')).fetch('http://internal/remove', { method: 'POST', body: JSON.stringify({ slug: l.alias }) });
+            }
+            this.sql.exec(`DELETE FROM handle_links WHERE handle = ?`, h.handle);
+            this.sql.exec(`UPDATE handles SET deleted_at = NULL WHERE handle = ?`, h.handle);
+            due.push('@' + h.handle, ...links.map((l) => `@${h.handle}/${l.name}`));
+            console.log('[names] a deleted account\'s @links ended after the hold');
+        }
+        this.scheduleSweep();
+        return due;
+    }
+    async alarm() { await this.sweepShortHolds(); }
+    // Dev mode only: as if this account's Unlimited ended `ageMs` ago (the hold clock). `names`: those short
+    // names instead (a deleted account has no email left to find them by).
+    ageShortHolds(email, ageMs, names = null) {
+        if (Array.isArray(names)) {
+            for (const n of names) {
+                if (String(n).startsWith('@')) this.sql.exec(`UPDATE handles SET deleted_at = deleted_at - ? WHERE handle = ? AND deleted_at IS NOT NULL`, ageMs, String(n).slice(1));
+                else this.sql.exec(`UPDATE short_links SET ended_at = COALESCE(ended_at, ?) - ? WHERE name = ?`, Date.now(), ageMs, String(n));
+            }
+            return;
+        }
+        const u = this.findUser(email);
+        if (u) this.sql.exec(`UPDATE short_links SET ended_at = COALESCE(ended_at, ?) - ? WHERE user_id = ?`, Date.now(), ageMs, u.id);
+    }
+    // Everything /account shows, in one read (calendar titles and lock states come from the rooms).
+    accountView(userId) {
+        const user = this.getUser(userId);
+        if (!user) return null;
+        const subs = this.sql.exec(`SELECT * FROM subscriptions WHERE user_id = ? ORDER BY updated_at DESC`, userId).toArray().filter((r) => !CONFLICT.has(r.status));
+        const sub = (r) => ({ status: r.status, interval: r.interval, currentPeriodEnd: r.current_period_end, trialEnd: r.trial_end || null,
+            cancelAtPeriodEnd: !!r.cancel_at_period_end, endedAt: ENDED.has(r.status) ? r.updated_at : null });
+        const unl = subs.filter((r) => r.plan === 'unlimited');
+        const activeUnl = unl.find((r) => ACTIVE.has(r.status)) || null;
+        const singles = subs.filter((r) => r.plan !== 'unlimited' && r.calendar_id);
+        const h = this.handleOf(userId);
+        const links = h ? this.sql.exec(`SELECT name, calendar_id AS calendarId, show FROM handle_links WHERE handle = ?`, h.handle).toArray() : [];
+        const shortNames = this.shortNamesOf(userId);
+        const owned = new Set([
+            ...this.sql.exec(`SELECT calendar_id FROM account_calendars WHERE user_id = ? ORDER BY added_at`, userId).toArray().map((r) => r.calendar_id),
+            ...singles.map((r) => r.calendar_id), ...links.map((l) => l.calendarId), ...shortNames.map((x) => x.calendarId).filter(Boolean)]);
+        const covered = this.sql.exec(`SELECT u.calendar_id, s.status FROM unlimited_locks u JOIN subscriptions s ON s.stripe_subscription_id = u.subscription_id WHERE u.user_id = ?`, userId)
+            .toArray().filter((r) => ACTIVE.has(r.status)).map((r) => r.calendar_id);
+        const singleByCal = {};
+        for (const r of singles) { const have = singleByCal[r.calendar_id]; if (!have || (!ACTIVE.has(have.status) && ACTIVE.has(r.status))) singleByCal[r.calendar_id] = r; }
+        return {
+            email: user.email,
+            plan: activeUnl ? 'unlimited' : singles.some((r) => ACTIVE.has(r.status)) ? 'pro' : null,
+            unlimited: (activeUnl || unl[0]) ? sub(activeUnl || unl[0]) : null,
+            singles: Object.values(singleByCal).map((r) => ({ calendarId: r.calendar_id, ...sub(r) })),
+            hasBilling: subs.some((r) => r.stripe_customer_id),
+            handle: h ? h.handle : null,
+            links, shortNames, owned: [...owned], covered,
+            proCount: this.proCount(userId),
+        };
     }
 
     getUser(userId) { return this.sql.exec(`SELECT * FROM users WHERE id = ?`, userId).toArray()[0] || null; }
@@ -324,13 +521,24 @@ export class Accounts extends DurableObject {
         const rows = this.sql.exec(`SELECT * FROM subscriptions WHERE user_id = ? ORDER BY updated_at DESC`, userId).toArray();
         const byCal = new Map();     // one entry per calendar: an active subscription wins over old ones
         for (const r of rows) {
-            if (CONFLICT.has(r.status)) continue;          // refunded: never theirs
+            if (CONFLICT.has(r.status) || r.plan === 'unlimited' || !r.calendar_id) continue;   // refunded: never theirs
             const have = byCal.get(r.calendar_id);
-            if (!have || (!ACTIVE.has(have.status) && ACTIVE.has(r.status))) byCal.set(r.calendar_id, r);
+            if (!have || (!ACTIVE.has(have.status) && ACTIVE.has(r.status))) byCal.set(r.calendar_id, { ...r, plan: 'pro' });
         }
+        // Pro Unlimited: the account's own subscription, and every calendar locked under it (which wins
+        // over that calendar's old Single row).
+        const unl = rows.filter((r) => r.plan === 'unlimited' && !CONFLICT.has(r.status));
+        const activeUnl = unl.find((r) => ACTIVE.has(r.status)) || null;
+        const shown = activeUnl || unl[0] || null;
+        for (const c of this.unlimitedCalendarsOf(userId)) {
+            if (ACTIVE.has(c.status)) byCal.set(c.calendar_id, { ...c, plan: 'unlimited' });
+        }
+        const calendars = [...byCal.values()];
         return {
             email: user.email,
-            calendars: [...byCal.values()].map((r) => ({ id: r.calendar_id, status: r.status, plan: r.plan, interval: r.interval, priceId: r.price_id,
+            plan: activeUnl ? 'unlimited' : calendars.some((r) => ACTIVE.has(r.status)) ? 'pro' : null,
+            unlimited: shown ? { status: shown.status, interval: shown.interval, currentPeriodEnd: shown.current_period_end } : null,
+            calendars: calendars.map((r) => ({ id: r.calendar_id, status: r.status, plan: r.plan, interval: r.interval, priceId: r.price_id,
                 currentPeriodEnd: r.current_period_end, trialEnd: r.trial_end || null, cancelAtPeriodEnd: !!r.cancel_at_period_end })),
         };
     }
@@ -344,7 +552,7 @@ export class Accounts extends DurableObject {
                 status = excluded.status, current_period_end = excluded.current_period_end, updated_at = excluded.updated_at,
                 created = COALESCE(excluded.created, subscriptions.created), trial_end = COALESCE(excluded.trial_end, subscriptions.trial_end),
                 has_payment_method = excluded.has_payment_method, cancel_at_period_end = excluded.cancel_at_period_end`,
-            s.id, s.userId, s.customer || null, s.calendarId, 'pro', s.interval || null, s.priceId || null, s.status, s.currentPeriodEnd || null, Date.now(), s.created || null, s.trialEnd || null,
+            s.id, s.userId, s.customer || null, s.calendarId, s.plan === 'unlimited' ? 'unlimited' : 'pro', s.interval || null, s.priceId || null, s.status, s.currentPeriodEnd || null, Date.now(), s.created || null, s.trialEnd || null,
             s.hasPaymentMethod ? 1 : 0, s.cancelAtPeriodEnd ? 1 : 0);
     }
     setSubscriptionStatus(id, status) { this.sql.exec(`UPDATE subscriptions SET status = ?, updated_at = ? WHERE stripe_subscription_id = ?`, status, Date.now(), id); }
@@ -361,6 +569,11 @@ export class Accounts extends DurableObject {
     // there is one, else the most recent. Each trial has its own customer, so "most recent" alone could open
     // a trial's customer where the paid plan isn't listed.
     customerForUser(userId) {
+        // The Billing Portal opens on one customer: an active Pro's first (it is what they pay for), then a
+        // paid (never-trial) one, then the most recent.
+        const unl = this.sql.exec(`SELECT stripe_customer_id, status FROM subscriptions WHERE user_id = ? AND plan = 'unlimited' AND stripe_customer_id IS NOT NULL
+            ORDER BY updated_at DESC`, userId).toArray().find((r) => ACTIVE.has(r.status));
+        if (unl) return unl.stripe_customer_id;
         return this.paidCustomerForUser(userId) || (this.sql.exec(`SELECT stripe_customer_id FROM subscriptions WHERE user_id = ? AND stripe_customer_id IS NOT NULL
             ORDER BY updated_at DESC LIMIT 1`, userId).toArray()[0] || {}).stripe_customer_id || null;
     }
@@ -372,6 +585,56 @@ export class Accounts extends DurableObject {
             ORDER BY updated_at DESC LIMIT 1`, userId).toArray()[0];
         return row ? row.stripe_customer_id : null;
     }
+
+    // ---- Pro Unlimited: one subscription per account; any number of its calendars locked under it ----
+    // unlimited_locks: calendar -> the owner and the Unlimited subscription it is locked under. A row
+    // means "this owner pays for this calendar through Unlimited"; the room holds the lock itself.
+    // The owner's Unlimited subscriptions that are active, oldest first.
+    activeUnlimitedAll(userId) {
+        return this.sql.exec(`SELECT stripe_subscription_id AS id, user_id AS userId, status, created, stripe_customer_id AS customer FROM subscriptions
+            WHERE user_id = ? AND plan = 'unlimited' ORDER BY COALESCE(created, 0), stripe_subscription_id`, userId).toArray().filter((r) => ACTIVE.has(r.status));
+    }
+    activeUnlimited(userId) { return userId ? this.activeUnlimitedAll(userId)[0] || null : null; }
+    // The owner's active Single subscriptions (one calendar each), trials included.
+    activeSingles(userId) {
+        return this.sql.exec(`SELECT stripe_subscription_id AS id, calendar_id AS calendarId, status, stripe_customer_id AS customer, created FROM subscriptions
+            WHERE user_id = ? AND COALESCE(plan, 'pro') != 'unlimited' AND calendar_id IS NOT NULL ORDER BY COALESCE(created, 0)`, userId).toArray().filter((r) => ACTIVE.has(r.status));
+    }
+    unlimitedRow(calendarId) { return this.sql.exec(`SELECT * FROM unlimited_locks WHERE calendar_id = ?`, calendarId).toArray()[0] || null; }
+    unlimitedRowsOf(subscriptionId) { return this.sql.exec(`SELECT * FROM unlimited_locks WHERE subscription_id = ? ORDER BY locked_at`, subscriptionId).toArray(); }
+    // Is this calendar paid for by this owner's active Unlimited?
+    coveredByUnlimited(calendarId, userId) {
+        const r = this.sql.exec(`SELECT s.status FROM unlimited_locks u JOIN subscriptions s ON s.stripe_subscription_id = u.subscription_id
+            WHERE u.calendar_id = ? AND u.user_id = ?`, calendarId, userId).toArray()[0];
+        return !!(r && ACTIVE.has(r.status));
+    }
+    // Record the calendar under this owner's Unlimited. Never takes a row another owner's ACTIVE
+    // Unlimited holds (two owners racing for one calendar: the first row wins, the room decides the rest).
+    coverUnlimited(calendarId, userId, subscriptionId) {
+        const row = this.unlimitedRow(calendarId);
+        if (row && row.user_id !== userId) {
+            const st = this.getSubscription(row.subscription_id);
+            if (st && ACTIVE.has(st.status)) return false;
+        }
+        this.sql.exec(`INSERT OR REPLACE INTO unlimited_locks (calendar_id, user_id, subscription_id, locked_at) VALUES (?, ?, ?, ?)`,
+            calendarId, userId, subscriptionId, row && row.user_id === userId ? row.locked_at : Date.now());
+        this.addOwned(userId, calendarId);
+        return true;
+    }
+    uncoverUnlimited(calendarId, userId) { this.sql.exec(`DELETE FROM unlimited_locks WHERE calendar_id = ? AND user_id = ?`, calendarId, userId); }
+    // The calendars under this owner's Unlimited, with that subscription's state.
+    unlimitedCalendarsOf(userId) {
+        return this.sql.exec(`SELECT u.calendar_id, s.status, s.interval, s.price_id, s.current_period_end, s.trial_end FROM unlimited_locks u
+            JOIN subscriptions s ON s.stripe_subscription_id = u.subscription_id WHERE u.user_id = ? ORDER BY u.locked_at`, userId).toArray();
+    }
+    // The calendar an Unlimited checkout was started from is locked once, on its first activation (a
+    // renewal must never re-lock a calendar its owner has since unlocked).
+    claimFirstLock(subscriptionId) {
+        if (this.sql.exec(`SELECT 1 FROM unlimited_first_lock WHERE subscription_id = ?`, subscriptionId).toArray().length) return false;
+        this.sql.exec(`INSERT INTO unlimited_first_lock (subscription_id, at) VALUES (?, ?)`, subscriptionId, Date.now());
+        return true;
+    }
+    releaseFirstLock(subscriptionId) { this.sql.exec(`DELETE FROM unlimited_first_lock WHERE subscription_id = ?`, subscriptionId); }
     // One buyer at a time per calendar: a hold lasts as long as the Stripe Checkout page it guards
     // (both CHECKOUT_HOLD_MS), so a second person can't pay for a calendar someone is already buying
     // and end up charged without the lock. The same user may restart their own checkout, at most
@@ -476,7 +739,7 @@ export class Accounts extends DurableObject {
     }
     // The calendar's current subscription for this owner (an active one wins), for /api/pro/status.
     subscriptionFor(calendarId, userId) {
-        const rows = this.sql.exec(`SELECT status, trial_end, current_period_end, has_payment_method, stripe_customer_id FROM subscriptions WHERE calendar_id = ? AND user_id = ? ORDER BY updated_at DESC`, calendarId, userId).toArray();
+        const rows = this.sql.exec(`SELECT status, plan, trial_end, current_period_end, has_payment_method, stripe_customer_id FROM subscriptions WHERE calendar_id = ? AND user_id = ? ORDER BY updated_at DESC`, calendarId, userId).toArray();
         return rows.find((r) => ACTIVE.has(r.status)) || rows[0] || null;
     }
 
@@ -495,9 +758,12 @@ export class Accounts extends DurableObject {
         const now = Date.now();
         const byStatus = {};
         for (const r of this.sql.exec(`SELECT status, COUNT(*) AS n FROM subscriptions GROUP BY status`).toArray()) byStatus[r.status || 'unknown'] = r.n;
-        const rows = this.sql.exec(`SELECT calendar_id, user_id, status, stripe_subscription_id FROM subscriptions ORDER BY updated_at DESC`).toArray();
+        const rows = this.sql.exec(`SELECT calendar_id, user_id, status, stripe_subscription_id FROM subscriptions WHERE calendar_id IS NOT NULL ORDER BY updated_at DESC`).toArray();
+        // Calendars under a Pro Unlimited count as paid by its owner (their old Single row may have ended).
+        const covered = this.sql.exec(`SELECT u.calendar_id, u.user_id, s.status, s.stripe_subscription_id FROM unlimited_locks u
+            JOIN subscriptions s ON s.stripe_subscription_id = u.subscription_id`).toArray();
         const byCal = new Map();
-        for (const r of rows) {
+        for (const r of [...covered, ...rows]) {
             const have = byCal.get(r.calendar_id);
             if (!have || (!ACTIVE.has(have.status) && ACTIVE.has(r.status))) byCal.set(r.calendar_id, r);
         }
@@ -697,6 +963,26 @@ async function sendPlanNotice(env, acc, kind, s, calendarId, userId, { paused = 
     }
 }
 
+// Once per Pro subscription (id 'unlimited'), when it first turns active: the one thing Pro adds that
+// nothing else teaches is the @name, so this says to claim it on /account. Plain text, no link but the site's.
+async function sendProWelcome(env, acc, userId, subscriptionId) {
+    try {
+        if (!(await acc.claimWelcome('pro:' + subscriptionId, userId))) return;
+        const user = await acc.getUser(userId);
+        if (!user || !user.email) return;
+        const host = siteHost(env);
+        const text = `Thanks for getting Pro.\n\n`
+            + `Next: claim your name. It's one name for all your calendars, like ${host}/@yourname/soccer, and you choose it once. Sign in with this email at:\n${siteUrl(env)}/account\n\n`
+            + `Then make calendars under your name, as many as you like. Or open any calendar you run and upgrade it from its Plus tab: up to ${UNLIMITED_TOP_LEVEL} can have a short link like ${host}/soccer.\n\n`
+            + `Short links and @links open the view-only calendar. You and your editors keep the edit link.\n\n`
+            + `To manage billing: open your account page, or any upgraded calendar's Plus tab, and choose Manage billing.\n\n`
+            + `Questions? Write to support@pastecal.com.\n`;
+        await sendEmail(env, user.email, 'Pro is on: claim your @name', text, null, 'welcome');
+    } catch (err) {
+        console.error('[accounts] pro welcome email failed:', err && err.message);
+    }
+}
+
 // "October 24, 2026" for a Stripe timestamp (seconds) or ms. UTC, so the date doesn't depend on the server.
 function formatDay(t) {
     const ms = t < 1e12 ? t * 1000 : t;
@@ -799,7 +1085,9 @@ async function route(request, env, url, path) {
     }
     if (path === '/api/pro/config') {
         if (m !== 'GET') return json({ error: 'method' }, 405);
-        return json({ billing: billingOn(env, url.hostname) }, 200, { 'Cache-Control': 'public, max-age=60' });
+        const cfg = stripeConfig(env, url.hostname);
+        return json({ billing: billingOn(env, url.hostname), unlimited: !!(cfg && cfg.prices.year && cfg.unlimitedPrices.year) },
+            200, { 'Cache-Control': 'public, max-age=60' });
     }
     if (path === '/api/pro/status') {
         if (m !== 'GET') return json({ error: 'method' }, 405);
@@ -811,15 +1099,36 @@ async function route(request, env, url, path) {
         const locked = !!st.locked, isOwner = !!(locked && userId && st.ownerId === userId);
         const lapsed = !locked && st.lapsed ? st.lapsed : null;
         // plan: the lock's plan id, for its display name (Plans.js): 'pro' is Plus, 'unlimited' is Pro.
-        const out = { locked, pro: locked && st.plan === 'pro', plan: locked ? (st.plan || 'pro') : null, isOwner, paused: !!(lapsed && lapsed.mode === 'readonly'),
+        // A calendar under its owner's Pro says Pro even when the room's lock predates it (a Plus moved under Pro).
+        const plan = !locked ? null : (await accounts(env).coveredByUnlimited(id, st.ownerId)) ? 'unlimited' : (st.plan || 'pro');
+        const out = { locked, pro: locked && (plan === 'pro' || plan === 'unlimited'), plan, isOwner, paused: !!(lapsed && lapsed.mode === 'readonly'),
             lapsedOwner: !!(lapsed && userId && lapsed.ownerId === userId), trialUsed: await accounts(env).trialUsedForCalendar(id) };
+        // The signed-in person has Pro Unlimited: they lock this calendar with one click (POST /api/pro/lock).
+        if (userId && await accounts(env).activeUnlimited(userId)) {
+            out.unlimited = true;
+            // Its 10 are used: this calendar can still go under the owner's @handle, without limit.
+            const acc = accounts(env);
+            if (!locked && !(await acc.linkFor(id)) && (await acc.proCount(userId)) >= UNLIMITED_TOP_LEVEL) out.unlimitedFull = true;
+            const h = await acc.handleOf(userId);
+            if (h) out.handle = h.handle;
+        }
         if (out.lapsedOwner) {
             // Which words the owner sees: "Trial ended" or "Pro ended".
             const sub = await accounts(env).subscriptionFor(id, userId);
             out.lapsedTrial = !!(sub && sub.trial_end && !sub.has_payment_method);
-            out.plan = (sub && sub.plan) || 'pro';           // which plan ended, for "Plus ended" / "Pro ended"
+            // which plan ended, for "Plus ended" / "Pro ended": a calendar kept under the account ended with Pro
+            out.plan = sub ? (sub.plan || 'pro') : (await accounts(env).ownedUnderAccount(userId, id)) ? 'unlimited' : 'pro';
         }
         if (isOwner) {
+            if (out.plan === 'unlimited' || out.unlimited) {
+                // Its short links, for the owner's Plus tab: pastecal.com/@handle/<name> and any pastecal.com/<name> here.
+                const acc = accounts(env), h = await acc.handleOf(userId), l = await acc.linkFor(id);
+                if (h) out.handle = h.handle;
+                out.atName = l && h && l.handle === h.handle ? l.name : null;
+                const shorts = await acc.shortNamesOf(userId);
+                out.shortNames = shorts.filter((x) => x.calendarId === id).map((x) => x.name);
+                out.otherShortNames = shorts.filter((x) => x.calendarId && x.calendarId !== id).map((x) => x.name);   // remap one here
+            }
             const sub = await accounts(env).subscriptionFor(id, userId);
             // Not chosen yet: a trial ends open, a paid plan read-only (CalendarRoom unlock).
             out.lapsedMode = st.lapsedModeChosen === false ? (sub && sub.status === 'trialing' ? 'open' : 'readonly') : (st.lapsedMode || 'readonly');
@@ -905,6 +1214,8 @@ async function route(request, env, url, path) {
     if (path === '/api/pro/lapsed-mode') return setLapsedMode(request, env, body);
     if (path === '/api/pro/upgrade-notice') return upgradeNotice(request, env, body);
     if (path === '/api/pro/undo-upgrade') return undoUpgrade(request, env, body);
+    if (path === '/api/pro/lock') return unlimitedLock(request, env, body);
+    if (path === '/api/pro/unlock') return unlimitedUnlock(request, env, body);
     if (path === '/api/pro/claim') return claimCheckout(request, env, body);
     if (path === '/api/pro/portal') {
         const cfg = stripeConfig(env, new URL(request.url).hostname);
@@ -974,8 +1285,17 @@ async function deleteAccount(request, env) {
     if (!userId) return json({ error: 'signed-out' }, 401);
     const r = await accounts(env).deleteAccount(userId);
     if (r.active) return json({ error: 'active-subscription', calendars: r.active,
-        message: 'Cancel your plan first (Manage billing), then delete your account.' }, 409);
+        message: 'Cancel your subscription first (Manage billing), then delete your account.' }, 409);
+    if (r.deleted) await forgetNames(env, r);
     return json({ ok: true, deleted: true }, 200, { 'Set-Cookie': sessionCookie('', 0) });
+}
+
+// After an account delete: its @links stop resolving at once; its short names become tombstones (a
+// neutral "This link has ended" page, never creatable) until the sweep releases them.
+async function forgetNames(env, r) {
+    for (const slug of r.removeSlugs || []) await removeDirectoryName(env, slug);
+    for (const slug of r.endSlugs || []) await endDirectoryName(env, slug);
+    await purgeNames(r.handle, r.links || []);
 }
 
 async function requireOwner(request, env, calendarId) {
@@ -1061,6 +1381,8 @@ async function startTrial(request, env, userId, calendarId, author) {
     const acc = accounts(env);
     const user = await acc.getUser(userId);
     if (!user) return [401, { error: 'signed-out' }];
+    // Pro Unlimited already covers every calendar: lock it instead (no trial needed).
+    if (await acc.activeUnlimited(userId)) return [409, { error: 'has-unlimited', message: 'You have Pro: lock this calendar instead.' }];
     // Saved calendars only: a draft (only in one browser) has no room yet, so it answers 404.
     const st = await LockClient.lockStatus(env, calendarId);
     if (st.status === 404) return [404, { error: 'no-calendar' }];
@@ -1174,7 +1496,7 @@ async function setLapsedMode(request, env, body) {
 async function checkout(request, env, body) {
     // The beta (preview.pastecal.com) runs on live calendars with Stripe in test mode: a test card must
     // never lock a real calendar, so Pro is bought on pastecal.com.
-    if (env.BETA_REAL_DATA) return json({ error: 'buy-on-live', message: 'Plus is bought on pastecal.com. The beta shows the new design on your real calendars.' }, 403);
+    if (env.BETA_REAL_DATA) return json({ error: 'buy-on-live', message: 'Plans are bought on pastecal.com. The beta shows the new design on your real calendars.' }, 403);
     const cfg = stripeConfig(env, new URL(request.url).hostname);
     if (!cfg) return json({ error: 'billing-not-configured' }, 503);
     const userId = await sessionUserId(request, env);
@@ -1188,13 +1510,21 @@ async function checkout(request, env, body) {
         const { success } = await env.CREATE_LIMITER.limit({ key: 'checkout:' + (request.headers.get('CF-Connecting-IP') || 'unknown') });
         if (!success) return json({ error: 'too-many-checkouts' }, 429);
     }
+    // 'single' and 'pro' both mean Plus (one calendar); 'unlimited' is Pro.
+    const plan = body.plan === undefined || body.plan === 'pro' ? 'single' : body.plan;
+    if (typeof plan !== 'string' || !PLANS.has(plan)) return json({ error: 'bad-plan' }, 400);
+    const interval = body.interval === undefined ? 'year' : body.interval;
+    if (!Object.hasOwn(INTERVALS, interval)) return json({ error: 'bad-interval' }, 400);
+    // Pro (plan id 'unlimited') is sold yearly or monthly, for the account; a calendar is optional.
+    if (plan === 'unlimited') return checkoutUnlimited(request, env, body, cfg, { userId, claim, claimHash, buyer, interval });
+    // Plus (plan id 'pro') is yearly only. A monthly price, if still configured, is never sold.
+    if (interval !== 'year') return json({ error: 'bad-interval', message: 'Plus is yearly: $29 a year.' }, 400);
     const calendarId = body.calendarId;
     if (!validId(calendarId)) return json({ error: 'bad-calendar' }, 400);
-    const interval = body.interval === undefined ? 'year' : body.interval;
-    // Plus (plan id 'pro') is yearly only. A monthly price, if still configured, is never sold.
-    if (interval !== 'year' || !Object.hasOwn(INTERVALS, interval)) return json({ error: 'bad-interval', message: 'Plus is yearly: $29 a year.' }, 400);
     const price = cfg.prices[interval];
     if (!price) return json({ error: 'billing-not-configured' }, 503);
+    // Pro Unlimited already pays for every calendar of theirs: no Single on top (POST /api/pro/lock).
+    if (userId && await accounts(env).activeUnlimited(userId)) return json({ error: 'has-unlimited' }, 409);
 
     // v1: they have the calendar open; it must exist and not be someone else's.
     const st = await LockClient.lockStatus(env, calendarId);
@@ -1387,6 +1717,7 @@ async function refundConflict(acc, cfg, s, why, undo = false) {
 
 // Make the calendar match the subscription. {retry:true} when the calendar (or Stripe) couldn't be reached.
 async function applySubscription(env, acc, cfg, s) {
+    if (isUnlimited(cfg, s)) return applyUnlimited(env, acc, cfg, s);
     const prev = await acc.getSubscription(s.id);
     if (prev && CONFLICT.has(prev.status)) return {};                   // refunded and canceled by us: final
     // Our row wins over Stripe's metadata: support may have reassigned the owner.
@@ -1418,6 +1749,9 @@ async function applySubscription(env, acc, cfg, s) {
     if (ACTIVE.has(s.status)) {
         if (prev && prev.status === 'trialing' && s.status === 'active' && s.trial) console.log(`[trial] converted interval=${s.interval === 'month' ? 'month' : 'year'} via=card`);
         if (st.locked && st.ownerId === userId) {
+            // Already paid for by this owner's Pro Unlimited (an upgrade, or a Single bought after it):
+            // the Single is canceled with its unused time credited, never refunded twice (same key as the upgrade).
+            if (await acc.coveredByUnlimited(calendarId, userId)) return absorbSingle(env, acc, cfg, s);
             // Keep Pro during a trial is an ordinary checkout: the paid subscription replaces the trial,
             // which is canceled now (never refunded: it charged nothing).
             let mine = others.filter((o) => o.userId === userId);
@@ -1457,6 +1791,7 @@ async function applySubscription(env, acc, cfg, s) {
         return {};
     }
     if (others.some((o) => o.userId === userId)) return {};            // still paid for by this owner
+    if (await acc.coveredByUnlimited(calendarId, userId)) return {};    // ... through their Pro Unlimited
     const heir = others[0];                                             // another person's active subscription, oldest first
     if (st.locked && st.ownerId === userId) {
         // Nobody else pays: Pro ended, so the calendar pauses (read-only) unless the owner chose 'open'.
@@ -1474,6 +1809,236 @@ async function applySubscription(env, acc, cfg, s) {
     console.warn('[accounts] lock handed to the remaining subscription:', heir.id);
     const l = await LockClient.lock(env, calendarId, heir.userId);
     return l.status >= 500 ? { retry: true } : {};
+}
+
+// ---- Pro Unlimited ------------------------------------------------------------------------------
+// One subscription per account (Pro, id 'unlimited': $96/year or $10/month) that pays for every calendar its owner locks
+// under it. The Stripe subscription names no calendar (metadata.plan='unlimited', and lock_calendar
+// when it was bought from a calendar's Share panel); unlimited_locks records which calendars it covers.
+//   - While it is active, POST /api/pro/lock {calendarId} locks any calendar the owner can lock (not
+//     locked by, or paused for, someone else), and POST /api/pro/unlock releases one (a plain unlock).
+//   - Upgrade: when it becomes active, each of the owner's active Single subscriptions whose calendar
+//     they hold moves under it, and the Single is canceled with proration (prorate + invoice_now):
+//     Stripe credits the unused time to that Single's customer balance, which pays toward later
+//     invoices on the same customer. Checkout reuses a signed-in owner's paid Single customer so the
+//     credit lands where the Unlimited invoices are. A trial is simply canceled (it charged nothing).
+//   - When it ends (canceled, unpaid, refunded, disputed), every calendar under it falls back exactly
+//     like a Single that ended: unlock with lapse, so it is paused (read-only) unless the owner chose
+//     'open'. A calendar the owner still pays for another way (a newer Unlimited) moves to that one.
+const unlimitedHoldKey = (buyer) => 'unlimited:' + buyer;
+export const UNLIMITED_TOP_LEVEL = 5;    // (owner decision Oct 2026: was 10; Teams will get 25) Pro calendars outside the owner's @handle (and top-level short names)
+
+// POST /api/pro/checkout {plan:'unlimited', interval, calendarId?}: Stripe Checkout for Pro Unlimited.
+// calendarId (optional): the calendar it was bought from, locked under it as soon as it is active.
+async function checkoutUnlimited(request, env, body, cfg, { userId, claim, claimHash, buyer, interval }) {
+    const price = cfg.unlimitedPrices[interval];
+    if (!price) return json({ error: 'billing-not-configured' }, 503);
+    const acc = accounts(env);
+    const [user, active, singles] = userId ? await Promise.all([acc.getUser(userId), acc.activeUnlimited(userId), acc.activeSingles(userId)]) : [null, null, []];
+    if (userId && !user) return json({ error: 'signed-out' }, 401);
+    if (active) return json({ error: 'already-unlimited' }, 409);
+    let calendarId = null;
+    if (body.calendarId !== undefined && body.calendarId !== null && body.calendarId !== '') {
+        if (!validId(body.calendarId)) return json({ error: 'bad-calendar' }, 400);
+        calendarId = body.calendarId;
+        const st = await LockClient.lockStatus(env, calendarId);
+        if (st.status === 404) return json({ error: 'no-calendar' }, 404);
+        if (!st.ok) return json({ error: 'unavailable' }, 502);
+        if (st.locked && st.ownerId !== userId) return json({ error: 'locked-by-other' }, 409);
+        if (st.lapsed && st.lapsed.mode === 'readonly' && st.lapsed.ownerId !== userId) return json({ error: userId ? 'locked-by-other' : 'signed-out' }, userId ? 409 : 401);
+    }
+    const holdKey = unlimitedHoldKey(buyer);
+    const hold = await acc.holdCheckout(holdKey, buyer, CHECKOUT_HOLD_MS);
+    if (!hold.ok) return json({ error: hold.error }, hold.error === 'too-many-checkouts' ? 429 : 409);
+    if (hold.previousSession) {
+        const path = `/v1/checkout/sessions/${encodeURIComponent(hold.previousSession)}`;
+        const x = await stripeRequest(cfg, 'POST', path + '/expire');
+        if (!x.ok) {
+            const g = await stripeRequest(cfg, 'GET', path);
+            if (!(g.ok && g.data.status === 'expired')) return json({ error: 'checkout-in-progress' }, 409);
+        }
+    }
+    const meta = { plan: 'unlimited', ...(userId ? { user_id: userId } : { claim: claimHash }), ...(calendarId ? { lock_calendar: calendarId } : {}) };
+    const site = siteUrl(env);
+    const params = {
+        mode: 'subscription',
+        line_items: [{ price, quantity: 1 }],
+        payment_method_types: ['card'],
+        wallet_options: { link: { display: 'never' } },
+        metadata: { ...meta, interval },
+        subscription_data: { metadata: meta },
+        success_url: `${site}/pro/done?session_id={CHECKOUT_SESSION_ID}&plan=unlimited${calendarId ? '#' + encodeURIComponent(calendarId) : ''}`,
+        cancel_url: calendarId ? `${site}/${encodeURIComponent(calendarId)}` : `${site}/pricing`,
+        expires_at: Math.floor((Date.now() + CHECKOUT_HOLD_MS) / 1000),
+    };
+    const paidSingles = singles.filter((x) => x.status !== 'trialing');
+    const forWhat = `Pro: ${UNLIMITED_TOP_LEVEL} upgraded calendars, plus unlimited under your @name.` + (paidSingles.length ? ' Your Plus calendars move to it, and their unused time is credited.' : '');
+    params.custom_text = { submit: { message: cfg.livemode === false ? `${forWhat} ${TEST_CARD_HINT}` : forWhat } };
+    // The upgrade credit lands on the paid Single's customer, so Unlimited is billed to that same customer.
+    const customer = (paidSingles.find((x) => x.customer) || {}).customer || (userId ? await acc.customerForUser(userId) : null);
+    if (customer) params.customer = customer; else if (user) params.customer_email = user.email;
+    const r = await stripeRequest(cfg, 'POST', '/v1/checkout/sessions', params);
+    if (!r.ok || !r.data.url) { console.error('[accounts] unlimited checkout failed:', r.status, r.data && r.data.error && r.data.error.code); return json({ error: 'stripe-error' }, 502); }
+    if (r.data.id) await acc.setCheckoutSession(holdKey, buyer, r.data.id);
+    return json({ url: r.data.url }, 200, claim ? { 'Set-Cookie': claimCookie(claim, CLAIM_MAX_AGE) } : {});
+}
+
+// A Single subscription whose calendar is now under the owner's Pro Unlimited: cancel it. Paid: with
+// proration, so Stripe credits the unused time. A trial: plainly (nothing was charged). The same
+// idempotency key wherever it is called from, so an upgrade and a racing webhook cancel it once.
+async function absorbSingle(env, acc, cfg, single) {
+    const trialing = single.status === 'trialing';
+    const d = await stripeRequest(cfg, 'DELETE', `/v1/subscriptions/${encodeURIComponent(single.id)}`,
+        trialing ? null : { prorate: true, invoice_now: true }, { idempotencyKey: `upgrade-cancel-${single.id}` });
+    if (retryable(d)) return { retry: true };
+    if (!d.ok) { console.warn('[accounts] upgrade: single cancel answered', d.status); return {}; }
+    console.log(`[unlimited] single moved under unlimited trial=${trialing ? 1 : 0}`);
+    return applySubscription(env, acc, cfg, summarizeSubscription(d.data));   // ended, still covered: no unlock
+}
+
+// Lock one calendar under an owner's active Unlimited. -> {ok, already?} | {status, error} | {retry}
+async function lockUnderUnlimited(env, acc, cfg, calendarId, userId, subscriptionId, title = null) {
+    const st = await LockClient.lockStatus(env, calendarId);
+    if (st.status === 404) return { status: 404, error: 'no-calendar' };
+    if (!st.ok) return { retry: true };
+    if (st.locked && st.ownerId !== userId) return { status: 409, error: 'locked-by-other' };
+    if (!st.locked && st.lapsed && st.lapsed.mode === 'readonly' && st.lapsed.ownerId !== userId) return { status: 409, error: 'locked-by-other' };
+    // Pro Unlimited covers 10 calendars, plus any number living under the owner's @handle.
+    // Only a link under THIS owner's @handle exempts it (another account's old link doesn't).
+    const link = await acc.linkFor(calendarId), own = await acc.handleOf(userId);
+    const underOwnHandle = !!(link && own && link.handle === own.handle);
+    if (!(await acc.coveredByUnlimited(calendarId, userId)) && !underOwnHandle
+        && (await acc.proCount(userId)) >= UNLIMITED_TOP_LEVEL) return { status: 409, error: 'unlimited-full', message: `You've used your ${UNLIMITED_TOP_LEVEL}. Put more under your @name, without limit.` };
+    if (!(await acc.coverUnlimited(calendarId, userId, subscriptionId))) return { status: 409, error: 'locked-by-other' };
+    if (st.locked) {
+        // Already theirs (a Single): it moves under Unlimited, and that Single is canceled with credit.
+        for (const one of (await acc.activeSingles(userId)).filter((x) => x.calendarId === calendarId)) {
+            if ((await absorbSingle(env, acc, cfg, one)).retry) return { retry: true };
+        }
+        return { ok: true, already: true };
+    }
+    const r = await LockClient.lock(env, calendarId, userId);
+    if (r.status >= 500 || r.status === 0) { await acc.uncoverUnlimited(calendarId, userId); return { retry: true }; }
+    if (!r.ok) { await acc.uncoverUnlimited(calendarId, userId); return { status: r.status === 409 ? 409 : 502, error: r.error || 'unavailable' }; }
+    await sendWelcomeEmail(env, acc, calendarId, userId, title || st.title, null, null, 'unlimited');
+    return { ok: true };
+}
+
+// Make the account match its Pro Unlimited subscription. {retry:true} when a room or Stripe couldn't be reached.
+async function applyUnlimited(env, acc, cfg, s) {
+    const prev = await acc.getSubscription(s.id);
+    if (prev && CONFLICT.has(prev.status)) return {};
+    let userId = (prev && prev.user_id) || s.userId;
+    if (!userId && s.claim && s.customer) {
+        const c = await stripeRequest(cfg, 'GET', `/v1/customers/${encodeURIComponent(s.customer)}`);
+        if (retryable(c)) return { retry: true };
+        const email = String(c.ok && c.data.email || '').trim().toLowerCase();
+        if (validEmail(email)) userId = (await acc.userForCheckout(email, s.claim)).userId;
+    }
+    if (!userId) { console.warn('[accounts] unlimited subscription without user metadata:', s.id); return {}; }
+    await acc.upsertSubscription({ ...s, calendarId: null, userId, plan: 'unlimited' });
+    if (!ACTIVE.has(s.status) && !ENDED.has(s.status)) return {};       // incomplete, paused: leave as is
+
+    if (ACTIVE.has(s.status)) {
+        await acc.clearShortEnded(userId);                               // resubscribed: no release pending
+        await acc.releaseCheckout(unlimitedHoldKey(userId));
+        if (s.claim) await acc.releaseCheckout(unlimitedHoldKey('anon:' + s.claim));
+        // The same person paying for Unlimited twice: the oldest stays, later ones are refunded.
+        const others = (await acc.activeUnlimitedAll(userId)).filter((o) => o.id !== s.id);
+        const isOlder = (o) => !o.created || !s.created || o.created < s.created || (o.created === s.created && o.id < s.id);
+        if (others.some(isOlder)) return refundConflict(acc, cfg, s, 'duplicate-unlimited');
+        for (const dup of others) {
+            const g = await stripeRequest(cfg, 'GET', `/v1/subscriptions/${encodeURIComponent(dup.id)}`);
+            if (retryable(g)) return { retry: true };
+            if (g.ok && ACTIVE.has(g.data.status) && (await refundConflict(acc, cfg, summarizeSubscription(g.data), 'duplicate-unlimited')).retry) return { retry: true };
+        }
+        // Upgrade: every Single calendar this owner holds moves under Unlimited (covered first, so the
+        // Single's cancellation keeps the lock), then the Single is canceled with credit.
+        for (const one of await acc.activeSingles(userId)) {
+            const st = await LockClient.lockStatus(env, one.calendarId);
+            if (st.status >= 500 || st.status === 0) return { retry: true };
+            if (!(st.locked && st.ownerId === userId)) continue;             // not holding it: left to the Single's own path
+            if (!(await acc.coverUnlimited(one.calendarId, userId, s.id))) continue;
+            if ((await absorbSingle(env, acc, cfg, one)).retry) return { retry: true };
+        }
+        // Bought from a calendar: lock that one too, once.
+        if (s.lockCalendar && validId(s.lockCalendar) && await acc.claimFirstLock(s.id)) {
+            const r = await lockUnderUnlimited(env, acc, cfg, s.lockCalendar, userId, s.id);
+            if (r.retry) { await acc.releaseFirstLock(s.id); return { retry: true }; }
+            if (r.error) console.warn('[accounts] unlimited: could not lock the calendar it was bought from:', r.error);
+        }
+        await sendProWelcome(env, acc, userId, s.id);                    // once per subscription: claim your @name
+        return {};
+    }
+
+    // Ended: each calendar under it falls back the way a Single does (paused unless the owner chose 'open').
+    const heir = await acc.activeUnlimited(userId);                      // a newer Unlimited of theirs
+    for (const row of await acc.unlimitedRowsOf(s.id)) {
+        const cal = row.calendar_id;
+        if (heir) { await acc.coverUnlimited(cal, userId, heir.id); continue; }
+        if ((await acc.otherActiveSubscriptions(cal, s.id)).some((o) => o.userId === userId)) { await acc.uncoverUnlimited(cal, userId); continue; }
+        const st = await LockClient.lockStatus(env, cal);
+        if (st.status >= 500 || st.status === 0) return { retry: true };
+        if (st.ok && st.locked && st.ownerId === userId) {
+            const r = await LockClient.unlock(env, cal, userId, { lapse: true });
+            if (r.status >= 500 || r.status === 0) return { retry: true };
+        }
+        await acc.uncoverUnlimited(cal, userId);
+    }
+    if (!heir) await acc.markShortEnded(userId);                         // short names: frozen, released after 90 days
+    if (prev && ACTIVE.has(prev.status)) console.log('[unlimited] lapsed');
+    return {};
+}
+
+// POST /api/pro/lock {calendarId}: an Unlimited owner locks one of their calendars. No checkout.
+async function unlimitedLock(request, env, body) {
+    if (env.BETA_REAL_DATA) return json({ error: 'buy-on-live', message: 'Plans are used on pastecal.com. The beta shows the new design on your real calendars.' }, 403);
+    const cfg = stripeConfig(env, new URL(request.url).hostname);
+    if (!cfg) return json({ error: 'billing-not-configured' }, 503);
+    const userId = await sessionUserId(request, env);
+    if (!userId) return json({ error: 'signed-out' }, 401);
+    if (!validId(body.calendarId)) return json({ error: 'bad-calendar' }, 400);
+    const acc = accounts(env);
+    const sub = await acc.activeUnlimited(userId);
+    if (!sub) return json({ error: 'no-unlimited' }, 403);
+    const title = typeof body.title === 'string' ? body.title : null;
+    const r = await lockUnderUnlimited(env, acc, cfg, body.calendarId, userId, sub.id, title);
+    if (r.retry) return json({ error: 'unavailable' }, 502);
+    if (r.error) return json({ error: r.error, ...(r.message ? { message: r.message } : {}) }, r.status);
+    return json({ ok: true, ...(r.already ? { already: true } : {}) });
+}
+
+// Lock a calendar under the owner's active Unlimited, for Names.js (a new calendar under @handle).
+// -> {ok, already?} | {status, error, message?}
+export async function lockForOwner(env, host, calendarId, userId, title = null) {
+    if (env.BETA_REAL_DATA) return { status: 403, error: 'buy-on-live', message: 'Plans are used on pastecal.com.' };
+    const cfg = stripeConfig(env, host);
+    if (!cfg) return { status: 503, error: 'billing-not-configured' };
+    const acc = accounts(env);
+    const sub = await acc.activeUnlimited(userId);
+    if (!sub) return { status: 403, error: 'no-unlimited' };
+    const r = await lockUnderUnlimited(env, acc, cfg, calendarId, userId, sub.id, title);
+    if (r.retry) return { status: 502, error: 'unavailable' };
+    return r;
+}
+
+// POST /api/pro/unlock {calendarId}: release a calendar from the owner's Unlimited. A plain unlock: it
+// becomes a free calendar again (editable with its link), and its editor links pause for a re-lock.
+async function unlimitedUnlock(request, env, body) {
+    const userId = await sessionUserId(request, env);
+    if (!userId) return json({ error: 'signed-out' }, 401);
+    if (!validId(body.calendarId)) return json({ error: 'bad-calendar' }, 400);
+    const acc = accounts(env);
+    if (!(await acc.coveredByUnlimited(body.calendarId, userId))) return json({ error: 'not-unlimited' }, 409);
+    const st = await LockClient.lockStatus(env, body.calendarId);
+    if (st.status >= 500 || st.status === 0) return json({ error: 'unavailable' }, 502);
+    if (st.ok && st.locked && st.ownerId === userId) {
+        const r = await LockClient.unlock(env, body.calendarId, userId);
+        if (!r.ok) return r.status >= 500 ? json({ error: 'unavailable' }, 502) : roomError(r);
+    }
+    await acc.uncoverUnlimited(body.calendarId, userId);
+    await acc.removeOwned(userId, body.calendarId);
+    return json({ ok: true });
 }
 
 // The daily health check (scripts/pro-health.sh). Every calendar with a subscription row is
@@ -1588,6 +2153,16 @@ async function handleAdmin(request, env, url, path) {
         if (!Number.isFinite(body.ageMs) || body.ageMs <= 0) return json({ error: 'need ageMs' }, 400);
         await acc.ageSessions(String(body.email || '').toLowerCase(), body.ageMs);
         return json({ ok: true });
+    }
+    // As if this account's Pro Unlimited ended ageMs ago, then release whatever short names are past the hold.
+    if (devMode(env) && path === '/api/admin/accounts/age-short-holds' && request.method === 'POST') {
+        const body = (await readJson(request)) || {};
+        if (!Number.isFinite(body.ageMs) || body.ageMs <= 0) return json({ error: 'need ageMs' }, 400);
+        await acc.ageShortHolds(String(body.email || '').toLowerCase(), body.ageMs, Array.isArray(body.names) ? body.names.slice(0, 50) : null);
+        const released = await acc.sweepShortHolds();
+        // The sweep runs in the Accounts object; drop this data center's cached @ lookups for what it ended.
+        for (const r of released.filter((x) => x.includes('/'))) { const [hh, nn] = r.slice(1).split('/'); await purgeNames(hh, [nn]); }
+        return json({ ok: true, released });
     }
     if (devMode(env) && path === '/api/admin/accounts/dev-subscription' && request.method === 'POST') {
         const body = (await readJson(request)) || {};

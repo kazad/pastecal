@@ -149,7 +149,7 @@ const COMPONENT_REGISTRY = {
     'lock-badge': LockBadge,                   // Pro lock icon + popover beside the title
     'add-to-calendar': AddToCalendar,          // View link: subscribe menu in the header
     'pro-panel': ProPanel,                     // Share dialog: Lock this calendar / owner panel
-    'pro-beta-join': ProBetaJoin,              // "Join the Pro beta" while billing is off (Go Pro card, Stats)
+    'pro-beta-join': ProBetaJoin,              // "Join the beta" while billing is off (Go Pro card, Stats)
     'pro-stats': ProStats,                     // Pro owner: views, visitors, followers, places
     'pro-history': ProHistory                  // Pro owner: saved versions, preview, restore
 };
@@ -164,6 +164,15 @@ const stripBase = (path) => {
     return path;
 };
 
+// The read-only name an @link page opens (pastecal.com/@handle/<name>; Worker: cloudflare/src/Names.js), or null.
+// Only on an /@ address: anywhere else the meta would be a stray copy.
+function atViewSlug() {
+    if (!/^\/@/.test(stripBase(window.location.pathname))) return null;
+    const m = document.querySelector('meta[name="pc-view"]');
+    const v = m && m.getAttribute('content');
+    return v && /^[A-Za-z0-9_-]{1,100}$/.test(v) ? v : null;
+}
+
 const CalendarVueApp = {
     components: COMPONENT_REGISTRY,
     directives: {
@@ -171,6 +180,7 @@ const CalendarVueApp = {
     },
     data() {
         // Normalized for the case-insensitive lookup; null for the homepage or a bad path.
+        // (On /view/<x> this is "view", on /@handle/<name> "@handle": never a calendar to open, and never the homepage.)
         let urlslug = SlugManager.slugFromPath(stripBase(window.location.pathname));
         if (urlslug) urlslug = SlugManager.normalizeSlug(urlslug);
 
@@ -212,9 +222,15 @@ const CalendarVueApp = {
             // Inside someone else's page (an iframe) or asked to look like it (?embed).
             embedded: (() => { try { return window.self !== window.top || new URLSearchParams(location.search).has('embed'); } catch (e) { return true; } })(),
             proTrialUsed: false,
-            proBilling: null,           // /api/pro/config: true = trial and checkout; false = "Join the Pro beta"; null = not known yet (neither shows)
-            pausedOwner: false,
-            homeTab: null,              // the homepage panel's tab when the visitor picked one ('recents' | 'guide')         // this browser owns the paused (Pro ended) calendar it's looking at: offer the way back
+            proUnlimited: false,        // the signed-in person has Pro (id unlimited): the Upgrade card locks with one click
+            proUnlimitedBusy: false,
+            proUnlimitedFull: false,    // Pro with its 5 used: the card offers the owner's @name instead
+            proHandle: '',
+            editorLinkStored: '',       // the owner's last editor link made in this browser (Pro panel, localStorage): "Share to edit"
+            shareNames: null,           // the owner's own links for this calendar ({handle, atName, shortNames}, /api/pro/status): Share leads with them
+            proBilling: null,           // /api/pro/config: true = trial and checkout; false = "Join the beta"; null = not known yet (neither shows)
+            homeTab: null,              // the homepage panel's tab when the visitor picked one ('recents' | 'guide')
+            pausedOwner: false,         // this browser owns the paused (Pro ended) calendar it's looking at: offer the way back
             proTrialActive: false,      // this browser owns the calendar and it is on its free trial (trial_feature_used)
             proSurface: 'share',        // where the Pro offer was opened from: 'share' | 'stats' | 'lock' (trial_started)        // this calendar already had its one free trial (/api/pro/status), so the Go Pro card doesn't offer it
             lockedOut: false,
@@ -695,7 +711,7 @@ const CalendarVueApp = {
         // DOM render and doesn't reactively update them when set later — so settings must be
         // available for the pre-appendTo configuration block below, not just applied after.
         this.loadGlobalSettings();
-        // Can Pro be bought yet? Decides between the trial/checkout and "Join the Pro beta" everywhere Pro is offered.
+        // Can Pro be bought yet? Decides between the trial/checkout and "Join the beta" everywhere Pro is offered.
         if (typeof ProBilling !== 'undefined') ProBilling.load().then((b) => { this.proBilling = b; });
         else this.proBilling = true;
 
@@ -724,9 +740,12 @@ const CalendarVueApp = {
                 // readonly: pastecal.com/view/ID (supports alternative base paths via CAL_BASE)
                 let path = stripBase(location.pathname);
 
-                if (path?.startsWith('/view/')) {
+                // pastecal.com/@handle/<name>: the Worker serves this page with the read-only name to open
+                // (<meta name="pc-view">), so it opens exactly like /view/<that name> and the address stays.
+                const atView = atViewSlug();
+                if (path?.startsWith('/view/') || atView) {
                     // Read-only view mode
-                    const requestedSlug = path.split('/')[2];
+                    const requestedSlug = atView || path.split('/')[2];
             // Ensure explicit boolean normalization when setting read-only mode
             this.setIsReadOnly(true);
             this.viewRoute = true;
@@ -737,6 +756,8 @@ const CalendarVueApp = {
                     console.log('Looking up calendar for /view/ route:', requestedSlug);
                     const result = await CalendarDataService.lookupCalendar(requestedSlug);
 
+                    // A Pro short name whose account was deleted: a neutral "This link has ended" page (the Worker's).
+                    if (result.data.ended) { location.replace('/link-ended/' + encodeURIComponent(requestedSlug)); return; }
                     if (result.data.found && result.data.isReadOnly) {
                         // Found as read-only - subscribe with the actual slug
                         const actualSlug = result.data.actualSlug;
@@ -751,6 +772,8 @@ const CalendarVueApp = {
                             // Re-initialize local settings to load custom colors and labels
                             this.initializeLocalSettings();
                             // Add to recents when calendar loads, but mark as read-only
+                            // The tab says which calendar this is (a short link's page is static: the server can't).
+                            if (c.title) document.title = `${String(c.title).slice(0, 120)} · pastecal`;
                             if (c.title) {
                                 // A read-only calendar you were linked to is a visit,
                                 // not something you created.
@@ -1930,7 +1953,7 @@ const CalendarVueApp = {
         'lock.locked': {
             handler(locked) {
                 this.proOwnerChecked = false;
-                if (!locked) { this.proOwner = false; this.upgradeNotice = null; if (this.showPlus) this.refreshProTrial(); return; }
+                if (!locked) { this.proOwner = false; this.upgradeNotice = null; this.shareNames = null; if (this.showPlus) this.refreshProTrial(); return; }
                 this.refreshProOwner();
                 this.checkUpgradeNotice();
             },
@@ -3093,7 +3116,9 @@ const CalendarVueApp = {
                 viewParam = viewLower;
             }
 
-            const baseURL = SlugManager.getViewerBaseURL(this.calendar, this.isReadOnly);
+            // The owner of a calendar with an @link or short link: "This view" starts from that view-only link too.
+            const named = !this.isReadOnly && this.shareNames ? this.shareViewURL() : null;
+            const baseURL = named || SlugManager.getViewerBaseURL(this.calendar, this.isReadOnly);
             // baseURL is null only if read-only mode somehow lacks a slug (server race + no
             // /view/<slug> in the URL). Fall back to the current href so we never leak the edit id.
             this.currentViewURL = baseURL
@@ -3135,6 +3160,7 @@ const CalendarVueApp = {
             // feed is the address being viewed, plus .ics.
             if (!this.viewRoute) return null;
             const parts = stripBase(window.location.pathname).split('/').filter(Boolean);
+            if (atViewSlug() && parts.length === 2) return `${window.location.origin}/${parts.map(encodeURIComponent).join('/').replace(/^%40/, '@')}.ics`;
             return parts[0] === 'view' && parts[1] ? `${window.location.origin}/view/${encodeURIComponent(parts[1])}.ics` : null;
         },
 
@@ -3230,6 +3256,42 @@ const CalendarVueApp = {
         getReadOnlyURL() {
             // Use SlugManager for centralized read-only link operations
             return SlugManager.getReadOnlyURL(this.calendar);
+        },
+
+        /** /api/pro/status (here, or from the Pro panel after a change): the owner's @link and short links for
+         *  this calendar. Only its owner gets them, and only they are shown them. */
+        onProNames(st) {
+            if (!st || !st.isOwner || !this.calendar) { this.shareNames = null; return; }
+            const shortNames = Array.isArray(st.shortNames) ? st.shortNames.filter((n) => typeof n === 'string') : [];
+            this.shareNames = (st.handle && st.atName) || shortNames.length ? { handle: st.handle || '', atName: st.atName || '', shortNames } : null;
+        },
+        /** The editor link the Pro panel last made in this browser (same key as Pro.js storedLink and /pro/done). */
+        storedEditorLink() {
+            try { return (this.calendar && localStorage.getItem('pastecal_editor_link:' + String(this.calendar.id).toLowerCase())) || ''; } catch (e) { return ''; }
+        },
+        /** "Share to edit" with no editor link here yet: the Pro panel's Editor link section makes one (never resets one). */
+        /** Share to edit, no editor link made in this browser yet: they're made in the Plus tab, under Who can edit. */
+        goEditorLink() {
+            this.openPlusTab('share');
+            setTimeout(() => { const el = document.getElementById('pc-pro-editor'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 300);
+        },
+        /** "Share to view": one link, the best this calendar has: its @link, else a short link, else its view link.
+         *  All three open the view-only calendar. */
+        shareViewURL() {
+            const n = this.shareNames, origin = window.location.origin;
+            if (n && n.handle && n.atName) return `${origin}/@${n.handle}/${encodeURIComponent(n.atName)}`;
+            if (n && n.shortNames.length) return `${origin}/${encodeURIComponent(n.shortNames[0])}`;
+            return this.getReadOnlyURL();
+        },
+        /** Share's "Other links": the calendar's other view-only addresses, listed compactly under the main one. */
+        otherViewLinks() {
+            const n = this.shareNames, origin = window.location.origin, main = this.shareViewURL();
+            const all = [];
+            if (n && n.handle && n.atName) all.push(`${origin}/@${n.handle}/${encodeURIComponent(n.atName)}`);
+            if (n) for (const s of n.shortNames) all.push(`${origin}/${encodeURIComponent(s)}`);
+            const view = this.getReadOnlyURL();
+            if (view) all.push(view);
+            return all.filter((u) => u !== main);
         },
 
         getReadOnlyNotes() {
@@ -3685,7 +3747,7 @@ const CalendarVueApp = {
          * gets used, and lumping them together would hide the answer.
          */
         copyShareLink() {
-            const readOnly = this.getReadOnlyURL();
+            const readOnly = this.shareViewURL();
             const url = readOnly || this.getEditableURL();
             if (!url) return;
 
@@ -5276,7 +5338,12 @@ const CalendarVueApp = {
             try {
                 const res = await fetch('/api/pro/status?calendar=' + encodeURIComponent(id), { credentials: 'same-origin' });
                 const data = res.ok ? await res.json() : null;
-                if (this.calendar && this.calendar.id === id) this.proTrialUsed = !!(data && data.trialUsed);
+                if (this.calendar && this.calendar.id === id) {
+                    this.proTrialUsed = !!(data && data.trialUsed);
+                    this.proUnlimited = !!(data && data.unlimited);
+                    this.proUnlimitedFull = !!(data && data.unlimitedFull);    // its 5 are used: this one goes under @name
+                    this.proHandle = (data && data.handle) || '';
+                }
             } catch (e) { /* offline: offer it; the server decides */ }
         },
         /** During a trial: the first use of a Pro feature per calendar per day (Pro.js trialFeature). */
@@ -5292,6 +5359,8 @@ const CalendarVueApp = {
                 if (this.calendar && this.calendar.id === id) {
                     this.proOwner = !!(data && data.isOwner);
                     this.proPlan = (data && data.plan) || null;
+                    this.onProNames(data);
+                    this.editorLinkStored = data && data.isOwner ? this.storedEditorLink() : '';
                     this.proTrialActive = !!(data && data.isOwner && data.trial);
                     this.trialFeatureUsed('lock');          // the owner on their locked calendar: the lock in use
                 }

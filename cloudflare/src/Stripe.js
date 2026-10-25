@@ -1,9 +1,11 @@
 /**
  * Stripe over plain fetch (no SDK): form-encoded requests and webhook signature checks.
  *
- * Config comes only from env: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, and one price id per
- * interval (STRIPE_PRICE_PRO_YEARLY, STRIPE_PRICE_PRO_MONTHLY). With any of the first two missing,
- * billing is off and the routes answer 503 billing-not-configured.
+ * Config comes only from env: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, and one price id per plan and
+ * interval: Pro Single (one calendar) STRIPE_PRICE_PRO_YEARLY / STRIPE_PRICE_PRO_MONTHLY, Pro Unlimited
+ * (every calendar of one account) STRIPE_PRICE_UNLIMITED_YEARLY / STRIPE_PRICE_UNLIMITED_MONTHLY. With any
+ * of the first two missing, billing is off and the routes answer 503 billing-not-configured; a plan whose
+ * price is missing answers 503 for that plan only.
  * Requests go to https://api.stripe.com; local tests may point STRIPE_API_BASE at a fake on this
  * machine, honored only with ACCOUNTS_DEV_MODE=1 (see localBase), so the key never goes elsewhere.
  * A test-mode key (sk_test_/rk_test_) is refused outside dev mode: production never bills in test mode.
@@ -14,6 +16,8 @@ import { localBase } from './LockClient.js';
 import { testKeyAllowed } from './Site.js';
 
 export const INTERVALS = { year: 'STRIPE_PRICE_PRO_YEARLY', month: 'STRIPE_PRICE_PRO_MONTHLY' };
+export const UNLIMITED_INTERVALS = { year: 'STRIPE_PRICE_UNLIMITED_YEARLY', month: 'STRIPE_PRICE_UNLIMITED_MONTHLY' };
+export const PLANS = new Set(['single', 'unlimited']);
 
 // host: the request's hostname (url.hostname). It matters only for a test key on staging.
 export function stripeConfig(env, host = null) {
@@ -34,6 +38,7 @@ export function stripeConfig(env, host = null) {
         livemode: /^(sk|rk)_live_/.test(env.STRIPE_SECRET_KEY) ? true : testKey ? false : null,
         webhookSecret: env.STRIPE_WEBHOOK_SECRET,
         prices: { year: env.STRIPE_PRICE_PRO_YEARLY || null, month: env.STRIPE_PRICE_PRO_MONTHLY || null },
+        unlimitedPrices: { year: env.STRIPE_PRICE_UNLIMITED_YEARLY || null, month: env.STRIPE_PRICE_UNLIMITED_MONTHLY || null },
         base: devBase || 'https://api.stripe.com',
     };
 }
@@ -107,6 +112,8 @@ export function summarizeSubscription(sub) {
         calendarId: sub.metadata && sub.metadata.calendar_id || null,
         userId: sub.metadata && sub.metadata.user_id || null,
         claim: sub.metadata && sub.metadata.claim || null,     // pay first: the hash a signed-out checkout carries
+        planMeta: sub.metadata && sub.metadata.plan || null,   // 'unlimited' on a Pro Unlimited checkout (see isUnlimited)
+        lockCalendar: sub.metadata && sub.metadata.lock_calendar || null,   // Unlimited bought from a calendar: lock it too
         trial: !!(sub.metadata && sub.metadata.trial === '1'),  // started by POST /api/pro/trial (no card)
         trialEnd: Number.isFinite(sub.trial_end) ? sub.trial_end : null,
         hasPaymentMethod: !!sub.default_payment_method,
@@ -117,6 +124,16 @@ export function summarizeSubscription(sub) {
         created: Number.isFinite(sub.created) ? sub.created : null,
         latestInvoice: (typeof sub.latest_invoice === 'string' ? sub.latest_invoice : sub.latest_invoice && sub.latest_invoice.id) || null,
     };
+}
+
+// Is this a Pro Unlimited subscription? Its price says so first (a subscription made or changed in the
+// Dashboard keeps no metadata of ours), then the plan our checkout wrote into its metadata.
+export function isUnlimited(cfg, s) {
+    const u = cfg && cfg.unlimitedPrices || {};
+    if (s.priceId && (s.priceId === u.year || s.priceId === u.month)) return true;
+    const p = cfg && cfg.prices || {};
+    if (s.priceId && (s.priceId === p.year || s.priceId === p.month)) return false;
+    return s.planMeta === 'unlimited';
 }
 
 const ref = (v) => (typeof v === 'string' ? v : v && v.id) || null;

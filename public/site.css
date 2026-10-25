@@ -23,7 +23,8 @@
 }
 .site-cta:hover { background: var(--pc-primary-hover); }
 .site-brand:focus-visible, .site-link:focus-visible, .site-cta:focus-visible, .site-footer a:focus-visible { outline: none; box-shadow: var(--pc-focus-ring); border-radius: var(--pc-radius-sm); }
-@media (max-width: 480px) { .site-link { display: none; } }
+.site-acct[hidden] { display: none; }
+@media (max-width: 480px) { .site-link { display: none; } .site-acct:not([hidden]) { display: inline; } }
 
 .site-footer { border-top: 1px solid var(--pc-line); margin-top: 48px; }
 .site-footer__in { padding-block: 24px 40px; }

@@ -112,6 +112,20 @@ stripe prices create --product="$PROD" --currency=usd --unit-amount=2400 "--recu
 stripe prices create --product="$PROD" --currency=usd --unit-amount=299 "--recurring[interval]=month" --lookup-key=pro_monthly --nickname="Pro monthly" 2>/dev/null | jq -r .id
 ```
 
+**Pro Unlimited prices** (one subscription per account, any number of locked calendars; its own product):
+
+```zsh
+stripe prices list --lookup-keys=unlimited_yearly --lookup-keys=unlimited_monthly 2>/dev/null | jq -r '.data[] | [.id, .lookup_key, .unit_amount, .recurring.interval, .product] | @tsv'
+```
+
+Expected (created 2026-10-24 in "pastecal dev"): `price_1UUGsJEPgWTHeJ7WYY9yZ5V4 unlimited_yearly 7900 year` and `price_1UUGsKEPgWTHeJ7WhvUAM7dR unlimited_monthly 800 month`, both on `prod_VVHReOCKcuiMkZ` ("pastecal Pro Unlimited"). Their ids are in `~/worktrees/pastecal-pro/cloudflare/.dev.vars.stripe` as `STRIPE_PRICE_UNLIMITED_YEARLY` / `STRIPE_PRICE_UNLIMITED_MONTHLY`. **These predate Pro Plus at $60/$6: make new ones with the amounts below** (and update the ids):
+
+```zsh
+UPROD=$(stripe products create --name="pastecal Pro Unlimited" --description="Lock every calendar you run: one subscription per account." 2>/dev/null | jq -er .id) && echo $UPROD
+stripe prices create --product="$UPROD" --currency=usd --unit-amount=6000 "--recurring[interval]=year" --lookup-key=unlimited_yearly --nickname="Pro Unlimited yearly" 2>/dev/null | jq -r .id
+stripe prices create --product="$UPROD" --currency=usd --unit-amount=600 "--recurring[interval]=month" --lookup-key=unlimited_monthly --nickname="Pro Unlimited monthly" 2>/dev/null | jq -r .id
+```
+
 Every Stripe command in this file was checked with `--help` / `--dry-run`. Add `--dry-run` to any of them to preview the request without sending it. Quote bracket flags (`"--recurring[interval]=year"`), because zsh treats `[...]` as a glob.
 
 ### a2. Customer portal (sandbox)
@@ -121,7 +135,7 @@ The Worker creates portal sessions without a `configuration`, so it uses the mod
 - Payment methods: customers can update them.
 - Cancellations: allowed, at the **end of the billing period**, with no prorations.
 - Invoice history: on.
-- Subscriptions (switch plans): **off at launch.** Recommended: it keeps the yearly/monthly logic to "buy" and "cancel". To offer it later, turn it on here and add both Pro prices. The webhook already handles `customer.subscription.updated`.
+- Subscriptions (switch plans): **off, and keep it off.** It keeps the yearly/monthly logic to "buy" and "cancel". Above all, never let the portal switch a Pro Single subscription to a Pro Unlimited price (or back): the Single → Unlimited upgrade must go through Checkout, which moves the calendars under Unlimited and cancels the Single with credit. A portal switch would skip that (the webhook would classify the subscription by its new price, but no calendar would move).
 - Default redirect: `https://pastecal.com/`.
 
 Then check:
@@ -143,12 +157,15 @@ A full refund or a dispute cancels the subscription it paid for, which unlocks t
    - `IMPORT_SECRET=<any local string>`, which reads that outbox.
    - `STRIPE_SECRET_KEY=<sandbox sk_test_… or rk_test_… from Dashboard → Developers → API keys>`. Testing a **restricted** test key here, with the same permissions planned for live (c4), proves those permissions.
    - `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_PRO_YEARLY` and `STRIPE_PRICE_PRO_MONTHLY`, from the commands below.
+   - `STRIPE_PRICE_UNLIMITED_YEARLY` and `STRIPE_PRICE_UNLIMITED_MONTHLY` (Pro Unlimited; without them only the Unlimited checkout answers `503 billing-not-configured`).
 2. Print the values to paste into `.dev.vars`:
 
 ```zsh
 stripe listen --print-secret 2>/dev/null
 stripe prices list --lookup-keys=pro_yearly 2>/dev/null | jq -er '.data[0].id'
 stripe prices list --lookup-keys=pro_monthly 2>/dev/null | jq -er '.data[0].id'
+stripe prices list --lookup-keys=unlimited_yearly 2>/dev/null | jq -er '.data[0].id'
+stripe prices list --lookup-keys=unlimited_monthly 2>/dev/null | jq -er '.data[0].id'
 ```
 
 3. In terminal 1, start the Worker locally: `wr dev --port 8787`.
@@ -280,6 +297,20 @@ stripe prices create --live --product="$PROD" --currency=usd --unit-amount=2900 
 stripe prices create --live --product="$PROD" --currency=usd --unit-amount=299 "--recurring[interval]=month" --lookup-key=pro_monthly --nickname="Pro monthly" 2>/dev/null | jq -r .id
 ```
 
+Pro Plus (internally Pro Unlimited: $60 a year or $6 a month), its own product:
+
+```zsh
+stripe prices list --live --lookup-keys=unlimited_yearly --lookup-keys=unlimited_monthly 2>/dev/null | jq -r '.data[] | [.id, .lookup_key, .unit_amount, .recurring.interval] | @tsv'
+# only if empty:
+UPROD=$(stripe products create --live --name="pastecal Pro Unlimited" --description="Lock every calendar you run: one subscription per account." 2>/dev/null | jq -er .id) && echo $UPROD
+stripe prices create --live --product="$UPROD" --currency=usd --unit-amount=6000 "--recurring[interval]=year" --lookup-key=unlimited_yearly --nickname="Pro Unlimited yearly" 2>/dev/null | jq -r .id
+stripe prices create --live --product="$UPROD" --currency=usd --unit-amount=600 "--recurring[interval]=month" --lookup-key=unlimited_monthly --nickname="Pro Unlimited monthly" 2>/dev/null | jq -r .id
+```
+
+How Pro Unlimited bills (Accounts.js, "Pro Unlimited"):
+- Its subscription names no calendar (`metadata.plan=unlimited`, `metadata.lock_calendar` when bought from a calendar). Calendars are locked under it with `POST /api/pro/lock` (no new checkout) and released with `POST /api/pro/unlock`. When it ends, every calendar under it falls back exactly like an ended Single (paused read-only unless the owner chose "open").
+- **Upgrade from Single:** when Unlimited becomes active, each of the owner's Single calendars moves under it, then the Single is canceled now with `prorate=true&invoice_now=true`: Stripe credits the unused time to **that Single's customer** balance, which pays toward later invoices on the same customer. Checkout bills Unlimited to the signed-in owner's paid Single customer, so the credit is used. **Known limit:** a Single bought while signed out (pay first) may sit on its own customer; its credit then stays on that customer's balance and is not applied to Unlimited. Support can refund it from the Dashboard (Customers → that customer → Balance) if asked. A trial is canceled plainly (it charged nothing).
+
 ### c3. Live customer portal
 
 Use the same settings as a2, in live mode: Dashboard → Settings → Billing → Customer portal → Save. Check:
@@ -296,7 +327,7 @@ Dashboard → Developers → API keys → **Create restricted key** named "paste
 
 - `POST /v1/checkout/sessions`, `POST /v1/checkout/sessions/<id>/expire`, `GET /v1/checkout/sessions/<id>` (a buyer restarting checkout: the old page is expired first)
 - `POST /v1/billing_portal/sessions`
-- `GET /v1/subscriptions/<id>`, `DELETE /v1/subscriptions/<id>` (cancel now: a second payer for a locked calendar, a duplicate, a full refund or a dispute)
+- `GET /v1/subscriptions/<id>`, `DELETE /v1/subscriptions/<id>` (cancel now: a second payer for a locked calendar, a duplicate, a full refund or a dispute; and a Single moved under Pro Unlimited, with `prorate`/`invoice_now`)
 - `GET /v1/invoices/<id>`, `GET /v1/invoice_payments`, `GET /v1/charges/<id>`, `POST /v1/refunds` (refund a payment that could not get the lock)
 
 Grant **Checkout Sessions: Write**, **Customer portal: Write**, **Subscriptions: Write**, **Customers: Write** (the trial does `POST /v1/customers` and `POST /v1/subscriptions`), **Invoices: Read**, **Charges: Read**, **Refunds: Write**, and nothing else. The exact permission labels are unverified, so prove the set in the sandbox first (a3). If live checkout answers `502 stripe-error` and `wr tail` shows a 403 permission error, add the one Stripe names. Copy the key and go straight to d1. Do not paste it anywhere else.
@@ -324,6 +355,8 @@ d2 and d3. The price ids, looked up by lookup key. Price ids are not secret:
 ```zsh
 Y=$(stripe prices list --live --lookup-keys=plus_yearly 2>/dev/null | jq -er '.data[0].id') && echo $Y && print -r -- "$Y" | wr secret put STRIPE_PRICE_PRO_YEARLY
 M=$(stripe prices list --live --lookup-keys=pro_monthly 2>/dev/null | jq -er '.data[0].id') && echo $M && print -r -- "$M" | wr secret put STRIPE_PRICE_PRO_MONTHLY
+UY=$(stripe prices list --live --lookup-keys=unlimited_yearly 2>/dev/null | jq -er '.data[0].id') && echo $UY && print -r -- "$UY" | wr secret put STRIPE_PRICE_UNLIMITED_YEARLY
+UM=$(stripe prices list --live --lookup-keys=unlimited_monthly 2>/dev/null | jq -er '.data[0].id') && echo $UM && print -r -- "$UM" | wr secret put STRIPE_PRICE_UNLIMITED_MONTHLY
 ```
 
 d4. Create the live webhook endpoint and store its signing secret. **Run this after (e).** Billing turns on when this finishes:
@@ -342,7 +375,7 @@ Check what is set. This shows names only, never values:
 wr secret list
 ```
 
-Want exactly `CONTACT_NOTIFY_TO`, `FIREBASE_SA`, `IMPORT_SECRET`, `STRIPE_PRICE_PRO_MONTHLY`, `STRIPE_PRICE_PRO_YEARLY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and **none** of the four dev-only names.
+Want exactly `CONTACT_NOTIFY_TO`, `FIREBASE_SA`, `IMPORT_SECRET`, `STRIPE_PRICE_PRO_MONTHLY`, `STRIPE_PRICE_PRO_YEARLY`, `STRIPE_PRICE_UNLIMITED_MONTHLY`, `STRIPE_PRICE_UNLIMITED_YEARLY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and **none** of the four dev-only names.
 
 ---
 
@@ -486,16 +519,18 @@ Steps g1–g3 run from `~/worktrees/pc-launch/cloudflare`. Each change takes eff
 ```zsh
 wr secret delete STRIPE_PRICE_PRO_YEARLY
 wr secret delete STRIPE_PRICE_PRO_MONTHLY
+wr secret delete STRIPE_PRICE_UNLIMITED_YEARLY
+wr secret delete STRIPE_PRICE_UNLIMITED_MONTHLY
 ```
 
-Each delete asks for confirmation; there is no `--yes`.
+Each delete asks for confirmation; there is no `--yes`. To stop only Pro Unlimited sales, delete just the two `UNLIMITED` names. Existing Unlimited owners can still lock and unlock calendars (that needs no price).
 
 After this:
 
 - Checkout answers `503 billing-not-configured`.
 - Webhooks and the portal keep working, so existing owners can still cancel, and cancellations still unlock.
 
-To restore sales, re-run d2 and d3.
+To restore sales, re-run d2 and d3 (all four lines).
 
 ### g2. Turn all billing off
 
@@ -599,9 +634,10 @@ Run from `~/worktrees/pastecal-pro-staging/cloudflare` (alias `wr` from section 
 5. `sed -n 's/^STRIPE_SECRET_KEY=//p' ~/worktrees/pastecal-pro/cloudflare/.dev.vars.stripe | tr -d '\r"' | wr secret put STRIPE_SECRET_KEY --env staging`
 6. `print -r -- price_1UTr8UEPgWTHeJ7W3PQwUvXH | wr secret put STRIPE_PRICE_PRO_YEARLY --env staging`
 7. `print -r -- price_1UTr8bEPgWTHeJ7WOtXnUtB1 | wr secret put STRIPE_PRICE_PRO_MONTHLY --env staging`
+7b. `print -r -- price_1UUGsJEPgWTHeJ7WYY9yZ5V4 | wr secret put STRIPE_PRICE_UNLIMITED_YEARLY --env staging && print -r -- price_1UUGsKEPgWTHeJ7WhvUAM7dR | wr secret put STRIPE_PRICE_UNLIMITED_MONTHLY --env staging` (Pro Unlimited, sandbox)
 8. `umask 077 && openssl rand -hex 32 > ~/.pastecal-staging-import-secret && wr secret put IMPORT_SECRET --env staging < ~/.pastecal-staging-import-secret`
 9. `WH=$(stripe webhook_endpoints create --url=https://preview.pastecal.com/api/stripe/webhook --description="pastecal staging (pastecal-staging)" --enabled-events=checkout.session.completed --enabled-events=customer.subscription.created --enabled-events=customer.subscription.updated --enabled-events=customer.subscription.deleted --enabled-events=customer.subscription.trial_will_end --enabled-events=invoice.payment_failed --enabled-events=charge.refunded --enabled-events=charge.dispute.created 2>/dev/null | jq -er .secret) && print -r -- "$WH" | wr secret put STRIPE_WEBHOOK_SECRET --env staging; unset WH`
-10. `wr secret list --env staging` — want exactly IMPORT_SECRET, the four STRIPE_* names; never FIREBASE_SA.
+10. `wr secret list --env staging` — want exactly IMPORT_SECRET, the six STRIPE_* names; never FIREBASE_SA.
 11. Smoke: create a calendar and a view link on staging first, then `scripts/pro-smoke.sh --base https://preview.pastecal.com --calendar <cal> --view-slug <view> --expect-billing`.
 
 Reset staging data: Durable Object data persists across deploys. Realistic options: change `env.staging.name` (e.g. `pastecal-staging-2`) and redeploy (fresh, empty DOs; delete the old Worker afterwards with `wr delete --name pastecal-staging` — unverified whether that removes its DO storage immediately), or add an admin reset route later.
