@@ -1288,7 +1288,13 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
   .pc-tpl { margin: 0 }
 }
 
-/* ==================================================================================.pc-toast-msg { margin: 0; padding: 4px 6px 4px 0; flex: 1 1 auto; min-width: 0 }
+/* =========================================================================================
+   Toast (components/ToastNotification.js): one compact dark row, message + action + close
+   ========================================================================================= */
+.pc-toast { pointer-events: auto; display: flex; align-items: center; gap: 4px; max-width: 100%; min-height: var(--pc-h-lg); padding: 6px 6px 6px 16px;
+  border-radius: var(--pc-radius-card); background: var(--pc-toast); color: var(--pc-on-toast); box-shadow: var(--pc-shadow-md); font: var(--pc-fw-medium) var(--pc-fs-md)/1.35 var(--pc-font) }
+.pc-toast-ico { width: 18px; height: 18px; flex: none; margin-right: 6px; color: var(--pc-toast-error) }
+.pc-toast-msg { margin: 0; padding: 4px 6px 4px 0; flex: 1 1 auto; min-width: 0 }
 .pc-toast-act { flex: none; height: var(--pc-h-sm); padding: 0 12px; border: 0; border-radius: var(--pc-radius-control); background: none; color: var(--pc-toast-action); font: var(--pc-fw-bold) var(--pc-fs-md)/1 var(--pc-font); cursor: pointer }
 .pc-toast-act:hover, .pc-toast-x:hover { background: color-mix(in srgb, currentColor 10%, transparent) }
 .pc-toast-x { flex: none; display: grid; place-items: center; width: var(--pc-h-sm); height: var(--pc-h-sm); border: 0; border-radius: var(--pc-radius-control); background: none; color: inherit; opacity: .65; cursor: pointer }
