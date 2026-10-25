@@ -617,7 +617,7 @@ function formatDay(t) {
 
 // Does this subscription's payer have a card Stripe will charge (the subscription's own, or the customer's
 // default)? null when Stripe can't say. Used so trial emails never promise "nothing is charged" falsely.
-// Pro can be bought here: Stripe is configured with the yearly price (Pro Single is yearly only; a monthly
+// Pro can be bought here: Stripe is configured with the yearly price (Pro is yearly only; a monthly
 // price, if set, is still honored for old links). Off, every Pro offer is "Join the Pro beta"
 // (GET /api/pro/config), and checkout and the trial answer 503 billing-not-configured as before.
 function billingOn(env, host) {
