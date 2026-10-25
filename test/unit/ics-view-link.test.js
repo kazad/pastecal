@@ -24,8 +24,8 @@ const unfold = (ics) => ics.replace(/\r\n[ \t]/g, '');
 test('each event names the view link after its own notes, and as URL', async () => {
     const ICS = await load();
     const ics = unfold(ICS.generateICS(cal, 'Ab3xY', { viewUrl: 'https://pastecal.com/view/Ab3xY' }));
-    assert.match(ics, /DESCRIPTION:Field 3\\n\\nCalendar: https:\/\/pastecal\.com\/view\/Ab3xY/);
-    assert.match(ics, /DESCRIPTION:Calendar: https:\/\/pastecal\.com\/view\/Ab3xY/, 'an event with no notes gets just the link');
+    assert.match(ics, /DESCRIPTION:Field 3\\n\\nhttps:\/\/pastecal\.com\/view\/Ab3xY\r\n/);
+    assert.match(ics, /DESCRIPTION:https:\/\/pastecal\.com\/view\/Ab3xY\r\n/, 'an event with no notes gets just the link');
     assert.equal((ics.match(/^URL:https:\/\/pastecal\.com\/view\/Ab3xY$/gm) || []).length, 2);
     assert.ok(!ics.includes('secret-edit-name'), 'the edit name never appears in a feed');
 });

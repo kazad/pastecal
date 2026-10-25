@@ -429,6 +429,10 @@ async function route(request, env, ctx) {
             let viewId = '';
             try { viewId = decodeURIComponent(viewMatch[1]); } catch { viewId = viewMatch[1]; }
             if (!validId(viewId)) return new Response('not found', { status: 404 });
+            // A view link only reads: GET/HEAD and the read-only socket. A POST here once reached the room's
+            // create path, so an empty room behind a view id could be created by its viewer, who got back
+            // the edit name and became its creator of record (security review, Oct 25 2026).
+            if (request.method !== 'GET' && request.method !== 'HEAD') return new Response('read only', { status: 405, headers: { Allow: 'GET, HEAD' } });
             const dir = getDirectory(env);
             let targetId = null;
             if (dir) {
