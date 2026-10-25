@@ -44,7 +44,7 @@ const PAGES = ['', 'pro', 'dev'].flatMap((d) => fs.readdirSync(path.join(root, '
 // (a dev-only page kept for reference; nothing links it).
 const SCANNED_PAGES = PAGES.filter((p) => p !== 'public/dev/pro.html');
 const TEMPLATE_JS = ['public/app.js', ...fs.readdirSync(path.join(root, 'public/components')).filter((f) => f.endsWith('.js')).map((f) => `public/components/${f}`)];
-const CSS_FILES = ['public/components.css', 'public/style.css', 'public/site.css', 'public/legal.css'];
+const CSS_FILES = ['public/components.css', 'public/style.css', 'public/site.css', 'public/legal.css', 'public/features.css'];
 
 const styleBlocks = (html) => [...html.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/g)].map((m) => m[1]).join('\n');
 // Inline style="" (and Vue's :style="{...}" is JS, so only literal style= is read). Each becomes a rule.

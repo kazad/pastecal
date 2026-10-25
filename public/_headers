@@ -29,6 +29,8 @@
   ! X-Robots-Tag
 /templates/*
   ! X-Robots-Tag
+/features
+  ! X-Robots-Tag
 # The test site stays out of search entirely.
 https://new.pastecal.com/*
   X-Robots-Tag: noindex

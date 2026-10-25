@@ -756,20 +756,14 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-make-own { font-size: var(--pc-fs-sm); font-weight: var(--pc-fw-medium); color: var(--pc-link); white-space: nowrap }
 .pc-make-own:hover { color: var(--pc-link-hover); text-decoration: underline }
 .pc-addcal { position: relative }
-.pc-addcal-btn { padding: 0 10px 0 12px; font-size: var(--pc-fs-sm) }
-.pc-addcal-btn:hover:not(:disabled), .pc-addcal-btn[aria-expanded="true"] { border-color: var(--pc-link); background: var(--pc-hover) }
-.pc-addcal-btn .pc-addcal-caret { width: 14px; height: 14px; color: var(--pc-text-muted) }
-.pc-addcal-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: var(--pc-z-menu); width: 240px; padding: 6px;
-  border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); background: var(--pc-bg); box-shadow: var(--pc-shadow-md) }
-.pc-addcal-hint { margin: 4px 8px 6px; font-size: var(--pc-fs-sm); line-height: var(--pc-lh-tight); color: var(--pc-text-muted) }
-.pc-addcal-menu a { display: block; padding: 8px 10px; border-radius: var(--pc-radius-sm); font-size: var(--pc-fs-md); color: var(--pc-text) }
-.pc-addcal-menu a:hover, .pc-addcal-menu a:focus-visible { background: var(--pc-hover); color: var(--pc-link); outline: none }
+.pc-share-hint { margin: 6px 0 0; font-size: var(--pc-fs-sm); color: var(--pc-text-muted) }
+.pc-addcal-btn { padding: 0 12px; font-size: var(--pc-fs-sm); text-decoration: none }
+.pc-addcal-btn:hover { border-color: var(--pc-link); background: var(--pc-hover) }
 /* Phone: the second header row */
 .pc-viewer-row { display: flex; align-items: center; justify-content: space-between; gap: 8px }
 .pc-viewer-row .pc-view-badge { margin-left: 0 }
-.pc-viewer-row .pc-addcal-menu { right: auto; left: 50%; transform: translateX(-50%) }
 .pc-viewer-row .pc-viewer-actions { gap: 10px; min-width: 0 }
-.pc-viewer-row .pc-addcal-btn { padding: 0 8px 0 10px }
+.pc-viewer-row .pc-addcal-btn { padding: 0 10px }
 @media (max-width: 380px) { .pc-viewer-row .pc-view-badge { display: none } .pc-viewer-row { justify-content: flex-end } }
 
 /* Under the calendar: a view link's pitch, Pro's credit, an embed's corner, an edit link's links.
@@ -1299,6 +1293,7 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
 .pc-toast-x svg { width: 16px; height: 16px }
 /* Returning viewers: one small hint under "Add to my calendar", pointing up at it. */
 .pc-addcal { position: relative }
+.pc-share-hint { margin: 6px 0 0; font-size: var(--pc-fs-sm); color: var(--pc-text-muted) }
 .pc-addcal-nudge { position: absolute; top: calc(100% + 10px); right: 0; z-index: 30; display: flex; align-items: center; gap: 4px; width: max-content; max-width: min(280px, calc(100vw - 32px));
   padding: 8px 6px 8px 12px; border-radius: var(--pc-radius-control); background: var(--pc-text); color: var(--pc-bg); box-shadow: var(--pc-shadow-md); font: var(--pc-fw-medium) var(--pc-fs-sm)/1.35 var(--pc-font) }
 .pc-addcal-nudge::before { content: ""; position: absolute; top: -5px; right: 22px; width: 10px; height: 10px; background: inherit; transform: rotate(45deg) }
@@ -1422,3 +1417,54 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
 .pc-set-copy-hint { font-size: var(--pc-fs-sm); color: var(--pc-text-2); min-width: 0 }
 .pc-set-copy .pc-btn { flex: none }
 .pc-view-footer .pc-link { margin-left: 8px; font-weight: var(--pc-fw-semibold); white-space: nowrap }
+
+/* While the quick box is open on an empty slot: that slot shows as a "New event" block (app.showDraftBlock),
+   labelled with the title as it's typed. Several selected slots read as one block. */
+#Schedule .pc-draft-cell { position: relative }
+#Schedule .pc-draft-cell::after { content: ""; position: absolute; left: 3px; right: 3px; top: 0; bottom: 0; z-index: 2; pointer-events: none;
+  background: var(--pc-primary); color: var(--pc-on-primary); font: var(--pc-fw-semibold) var(--pc-fs-xs)/1.3 var(--pc-font); text-align: left; padding: 3px 7px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; box-shadow: var(--pc-shadow-md) }
+#Schedule .pc-draft-head::after { content: var(--draft-label, "New event"); top: 2px; border-top-left-radius: var(--pc-radius-sm); border-top-right-radius: var(--pc-radius-sm) }
+#Schedule .pc-draft-tail::after { bottom: 2px; border-bottom-left-radius: var(--pc-radius-sm); border-bottom-right-radius: var(--pc-radius-sm) }
+/* A month-view day is tall: the block is one event row under the date, not the whole cell. */
+#Schedule .e-month-view .pc-draft-cell::after { top: 30px; bottom: auto; height: 22px; border-radius: var(--pc-radius-sm) }
+
+/* ---- Print: one landscape page. The calendar's name and month, the month drawn for paper (index.html .pc-print-cal,
+   app.buildPrintMonth: titles wrap, the weeks fill the page, event colors kept), and a QR code to the add page.
+   Everything you click is left off. */
+.pc-print-only { display: none }
+@media print {
+  @page { size: landscape; margin: 9mm }
+  html, body, #app { background: var(--pc-paper) !important; color: var(--pc-ink) !important }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact }
+  topbar, .pc-m-header, .pc-viewer-row, .pc-tpl, .pc-home-line, .pc-draft-note, .pc-home-aside, aside, .pc-side, .pc-side-scrim,
+  .pc-view-footer, .pc-edit-footer, .pc-hosted-note, .pc-embed-credit, .site-footer, .pc-tour, .pc-hidden-pill, .pc-grid-tip,
+  .pc-toast-wrap, .pc-upsell, #pc-beta-banner, .pc-beta-banner, [data-testid=homepage-tour], footer, #Schedule { display: none !important }
+  #app topbar, #app .pc-m-header, #app .pc-viewer-row { display: none !important }   /* outranks Tailwind's md:flex */
+  .pc-print-only { display: flex !important }
+  .pc-home, .pc-home-cal { display: block !important; width: 100% !important }
+  #cal2_wrap { height: auto !important }
+  .pc-print-head { flex-direction: row; align-items: baseline; justify-content: space-between; gap: 12mm; margin: 0 0 4mm }
+  .pc-print-title { font: 800 20pt/1.1 var(--pc-font); letter-spacing: -.01em }
+  .pc-print-range { font: 600 14pt/1.1 var(--pc-font); color: var(--pc-ink-2); white-space: nowrap }
+  .pc-print-cal { flex-direction: column; border: 1px solid var(--pc-paper-line); border-radius: var(--pc-radius-sm); overflow: hidden; font-family: var(--pc-font) }
+  .pc-pm-dows, .pc-pm-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)) }
+  .pc-pm-dows div { padding: 1.5mm 2mm; font: 700 8pt var(--pc-font); letter-spacing: .06em; text-transform: uppercase; color: var(--pc-ink-2); border-bottom: 1px solid var(--pc-paper-line) }
+  /* Header 12mm, weekdays 7mm, footer 24mm: the weeks share the rest of a landscape A4 page (Letter is a little taller).
+     app.buildPrintMonth sizes "+N more" to the same 146mm. */
+  .pc-pm-weeks { display: grid; grid-template-rows: repeat(var(--print-rows, 5), minmax(0, 1fr)); height: 146mm }
+  .pc-pm-week + .pc-pm-week { border-top: 1px solid var(--pc-paper-rule) }
+  .pc-pm-day { min-width: 0; overflow: hidden; padding: 1.2mm 1.2mm 1mm; display: flex; flex-direction: column; gap: .8mm }
+  .pc-pm-day + .pc-pm-day { border-left: 1px solid var(--pc-paper-rule) }
+  .pc-pm-day.is-out { background: var(--pc-paper-tint) }
+  .pc-pm-day.is-out .pc-pm-num { color: var(--pc-ink-faint) }
+  .pc-pm-num { font: 700 9pt/1 var(--pc-font); color: var(--pc-ink); padding: .5mm .8mm 1mm }
+  .pc-pm-ev { font: 500 7.5pt/1.25 var(--pc-font); padding: .7mm 1.4mm; border-radius: var(--pc-radius-xs); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere }
+  .pc-pm-ev b { font-weight: 700 }
+  .pc-pm-more { font: 600 7.5pt var(--pc-font); color: var(--pc-ink-2); padding: 0 1.4mm }
+  .pc-print-foot { align-items: center; gap: 4mm; margin-top: 4mm; break-inside: avoid }
+  .pc-print-qr svg { width: 20mm; height: 20mm; display: block }
+  .pc-print-note { flex: 1; font: 500 9.5pt/1.4 var(--pc-font); color: var(--pc-ink) }
+  .pc-print-fine { color: var(--pc-ink-muted) }
+  .pc-print-brand img { filter: grayscale(1); opacity: .6 }
+  .pc-print-brand { display: inline-flex; align-items: center; gap: 1.5mm; font: 700 10pt var(--pc-font); color: var(--pc-ink-faint) }
+}

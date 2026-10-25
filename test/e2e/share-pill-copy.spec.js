@@ -85,7 +85,7 @@ test.describe('Header share pill', () => {
     await open(page);
 
     await page.locator(MORE).click();
-    await expect(page.locator('[data-testid="subscribe-webcal"]')).toBeVisible();
+    await expect(page.locator('[data-testid="share-subscribe-copy"]')).toBeVisible();
   });
 
   test('the chevron does not also copy', async ({ page, context }) => {
@@ -130,6 +130,6 @@ test.describe('Header share pill', () => {
     await expect(page.locator(PILL)).toBeHidden();
 
     await page.locator('[data-testid="share-button-mobile"]').click();
-    await expect(page.locator('[data-testid="subscribe-webcal"]')).toBeVisible();
+    await expect(page.locator('[data-testid="share-subscribe-copy"]')).toBeVisible();
   });
 });

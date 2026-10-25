@@ -140,7 +140,7 @@ test('Pro from /pricing (fake Stripe), claim @name, create a calendar under it',
   await expect(page.getByTestId('share-view-copy')).toContainText(`pastecal.com/@${handle}/soccer?date=`);   // This view: from the @link too
   // The header pill is the page's own link, the edit link; the @link is in Share (above).
   await expect(page.getByTestId('share-pill-url')).toContainText(calendarId);
-  await expect(page.getByTestId('share-pill-url')).toContainText('edit link');
+  await expect(page.getByTestId('share-pill-url')).toContainText('can edit');
   await ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.getByTestId('share-pill-existing').click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain(calendarId);

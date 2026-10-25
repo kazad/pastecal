@@ -114,7 +114,7 @@ function hitFor(request, env, kind) {
 }
 
 // Pages search engines may list (public/_headers clears noindex for the same ones).
-const INDEXABLE_PAGES = new Set(['/', '/privacy', '/terms', '/pricing', '/about', '/help', '/templates', '/sitemap.xml']);
+const INDEXABLE_PAGES = new Set(['/', '/privacy', '/terms', '/pricing', '/about', '/help', '/templates', '/features', '/sitemap.xml']);
 
 const ADMIN_LOCK_OPS = new Set(['lock', 'unlock', 'rotate-editor-key', 'lock-status']);
 
@@ -210,6 +210,19 @@ async function route(request, env, ctx) {
         }
         const url = new URL(request.url);
         const path = url.pathname;
+
+        // "Add to my calendar" for a view link: /view/<id>/add, /@handle/<name>/add (/subscribe answers too)
+        // (public/subscribe/page.html picks this device's calendar app). Link previews show the calendar's card.
+        const subMatch = (request.method === 'GET' || request.method === 'HEAD') && path.match(/^(\/view\/[^/]+|\/@[^/]+\/[^/]+)\/(?:add|subscribe)\/?$/);
+        if (subMatch) {
+            let res = await env.ASSETS.fetch(new Request(new URL('/subscribe/page', url), request));
+            const target = request.method === 'GET' ? calendarTarget(subMatch[1], '') : null;
+            if (target) res = await previewPage(request, env, res, target, Date.now(), { url: url.origin + path });
+            const out = new Response(res.body, res);
+            out.headers.set('X-Robots-Tag', 'noindex');
+            applySecurityHeaders(out.headers, path);
+            return out;
+        }
 
         // Pro Unlimited names: pastecal.com/@handle[/<name>[.ics]] (before slug routing; a new calendar
         // can't start with "@"). null: an old calendar whose id starts with "@" keeps its address.

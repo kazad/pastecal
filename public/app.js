@@ -89,21 +89,19 @@ function track(fn) {
 })();
 
 // ============================================================
-// "Add to my calendar" on a view link: the subscribe URLs Share hands out (Google, Apple,
-// Outlook, Other), as a small menu beside the title. Mounted in both headers; the menu itself
-// only exists while open, so its links are never in the page twice.
+// "Add to my calendar" on a view link: opens its add page (/view/<id>/add), which picks this
+// device's calendar app and says what happens next. Mounted in both headers.
 // ============================================================
 // A returning viewer (2nd visit to this view link, in this browser) gets one gentle hint to subscribe.
-// It shows once: subscribing, opening the menu from it, or dismissing it ends it for good.
+// It shows once: subscribing, opening the page from it, or dismissing it ends it for good.
 const SUB_NUDGE = { visits: 'pc_view_visits', done: 'pc_sub_nudge_done' };
 const readJSON = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) || d; } catch (e) { return d; } };
 const writeJSON = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage blocked: no hint */ } };
 
 const AddToCalendar = {
-    props: { google: String, apple: String, outlook: String, other: String, nudgeKey: String },
+    props: { href: String, nudgeKey: String },
     emits: ['pick'],
-    directives: { 'click-outside': clickOutside },
-    data() { return { open: false, nudge: false }; },
+    data() { return { nudge: false }; },
     mounted() {
         const key = this.nudgeKey;
         if (!key) return;
@@ -116,8 +114,8 @@ const AddToCalendar = {
         }
     },
     methods: {
-        pick(method) { this.$emit('pick', method); this.open = false; this.endNudge('subscribed'); },
-        fromNudge() { this.open = true; this.endNudge('opened'); },
+        pick() { this.$emit('pick', 'subscribe_page'); this.endNudge('subscribed'); },
+        fromNudge() { this.endNudge('opened'); this.$emit('pick', 'subscribe_page'); window.location.href = this.href; },
         endNudge(action) {
             if (!this.nudge) return;
             this.nudge = false;
@@ -127,22 +125,14 @@ const AddToCalendar = {
         },
     },
     template: `
-        <div class="pc-addcal" v-click-outside="() => { open = false }" @keydown.esc="open = false">
-            <button type="button" class="pc-btn pc-btn--sm pc-btn--pill pc-addcal-btn" data-testid="view-add-to-cal" aria-haspopup="menu" :aria-expanded="open ? 'true' : 'false'" @click.stop="open = !open">
+        <div class="pc-addcal">
+            <a class="pc-btn pc-btn--sm pc-btn--pill pc-addcal-btn" data-testid="view-add-to-cal" :href="href" target="_top" @click="pick">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M12 14v5M9.5 16.5h5"/></svg>
                 <span class="pc-addcal-label">Add to my calendar</span>
-                <svg class="pc-addcal-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-            </button>
-            <div v-if="nudge && !open" class="pc-addcal-nudge" role="status" data-testid="subscribe-nudge">
+            </a>
+            <div v-if="nudge" class="pc-addcal-nudge" role="status" data-testid="subscribe-nudge">
                 <button type="button" class="pc-addcal-nudge-text" @click.stop="fromNudge">Add it to your phone calendar. Updates show up on their own.</button>
                 <button type="button" class="pc-addcal-nudge-x" aria-label="Dismiss" @click.stop="endNudge('dismissed')">&times;</button>
-            </div>
-            <div v-if="open" class="pc-addcal-menu" role="menu" data-testid="view-add-to-cal-menu">
-                <p class="pc-addcal-hint">Subscribe once. Every change shows up in your own calendar.</p>
-                <a role="menuitem" :href="google" target="_blank" rel="noopener" data-testid="view-subscribe-google" @click="pick('subscribe_google')">Google Calendar</a>
-                <a role="menuitem" :href="apple" data-testid="view-subscribe-apple" @click="pick('subscribe_apple')">Apple Calendar</a>
-                <a role="menuitem" :href="outlook" target="_blank" rel="noopener" data-testid="view-subscribe-outlook" @click="pick('subscribe_outlook')">Outlook</a>
-                <a role="menuitem" :href="other" data-testid="view-subscribe-webcal" @click="pick('subscribe')">Other calendar app</a>
             </div>
         </div>`,
 };
@@ -348,6 +338,8 @@ const CalendarVueApp = {
             MAX_COLORS: MAX_COLORS,
             colorFilters: COLORS.map(() => true), // allow all color types by default
             searchOpenId: null,   // the search result shown open, if any
+            printFrom: null,      // 'share' while Share's Print button opens the dialog (counted in beforeprint)
+            printMonth: null, printLink: '', printQr: '', printDate: '',   // the printed page's header and footer (preparePrint)
             FREE_CHANGES_DAYS: 30,   // how far back Recent changes reaches on a free calendar (visibleUndoEntries)
             // Bumped on every scheduler dataBound so hiddenEventCount, which reads the
             // visible date range off scheduleObj, recomputes when the view moves.
@@ -782,6 +774,13 @@ const CalendarVueApp = {
         // DOM render and doesn't reactively update them when set later — so settings must be
         // available for the pre-appendTo configuration block below, not just applied after.
         this.loadGlobalSettings();
+        // Printing: fill the print header/footer first; the QR library loads once the page is idle, not before.
+        window.addEventListener('beforeprint', () => {
+            this.preparePrint();
+            track(a => a.printed((this.printFrom || 'browser') + (this.isReadOnly ? '_view' : '_edit')));
+            this.printFrom = null;
+        });
+        setTimeout(() => { try { if (typeof qrcode !== 'function') { const sc = document.createElement('script'); sc.src = '/vendor/qrcode-generator-1.4.4/qrcode.js'; sc.async = true; document.head.appendChild(sc); } } catch (e) { /* no QR, still prints */ } }, 4000);
         this.$nextTick(() => this.fitSlugBox());   // after the title font is in: see fitSlugBox
         if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => this.fitSlugBox());
         // Can Pro be bought yet? Decides between the trial/checkout and "Join the beta" everywhere Pro is offered.
@@ -1178,6 +1177,7 @@ const CalendarVueApp = {
         };
         // An editor that closes without a save is the "this was confusing or fiddly" signal.
         scheduleObj.popupClose = (args) => {
+            this.hideDraftBlock();
             if (args.type !== 'Editor') return;
             if (!this.editorSaved) track(a => a.editorAbandoned());
             this.editorSaved = false;
@@ -1235,6 +1235,9 @@ const CalendarVueApp = {
                 return;
             }
             if (args.type === 'QuickInfo' && args.data) ScheduleAdapter.showTitle(args.element, args.data);
+            // A new event: the chosen slot shows as a "New event" block while the quick box is open, and its
+            // label follows the title being typed (as Google Calendar does), so you see where it will land.
+            if (args.type === 'QuickInfo' && args.data && args.data.Id === undefined && !scheduleObj.readonly) app.showDraftBlock(args.element);
             // The popup header takes the event's color; its title and icons take the matching text color.
             if (args.type === 'QuickInfo' && args.data && args.data.Id !== undefined) {
                 args.element.style.setProperty('--pc-on-event', ScheduleAdapter.onColor(app.getTypeColor(args.data.Type)));
@@ -2991,6 +2994,87 @@ const CalendarVueApp = {
                 el.style.width = Math.ceil(Math.max(w, 60) + 4) + 'px';
             } catch (err) { /* layout nicety only */ }
         },
+        /** Share's Print button: the browser's print dialog (which also saves a PDF), counted as 'share'. */
+        printCalendar() {
+            this.printFrom = 'share';
+            try { window.print(); } catch (e) { this.printFrom = null; }
+        },
+
+        // Before printing: the dates on screen, the view link (never the edit link: a printout gets passed around)
+        // and its QR code, if the small QR library has loaded (it loads once the page is idle; see mounted).
+        preparePrint() {
+            try {
+                this.printMonth = this.buildPrintMonth();
+                const view = this.isReadOnly ? (location.origin + location.pathname) : (this.shareViewURL() || this.getReadOnlyURL() || '');
+                this.printLink = view ? view.replace(/^https?:\/\//, '').replace(/\?.*$/, '') : '';
+                this.printDate = new Date().toLocaleDateString();
+                this.printQr = '';
+                // The QR opens the subscribe page (this phone's calendar app, one tap); the printed text is the view link.
+                const scan = this.subscribePageURL() || view;
+                if (scan && typeof qrcode === 'function') { const q = qrcode(0, 'M'); q.addData(scan.replace(/\?.*$/, '')); q.make(); this.printQr = q.createSvgTag({ cellSize: 3, margin: 0, scalable: true }); }
+            } catch (e) { /* print without the footer extras */ }
+        },
+
+        // The month being looked at, as weeks of days with their events (repeats expanded), for the printed page.
+        // As many events as fit in a day on paper; the rest are "+N more".
+        buildPrintMonth() {
+            const sch = window.scheduleObj;
+            if (!sch || !sch.getEvents) return null;
+            const sel = new Date(sch.selectedDate || Date.now());
+            const first = new Date(sel.getFullYear(), sel.getMonth(), 1);
+            const fdow = Number(sch.firstDayOfWeek) || 0;
+            const start = new Date(first); start.setDate(1 - ((first.getDay() - fdow + 7) % 7));
+            const last = new Date(sel.getFullYear(), sel.getMonth() + 1, 0);
+            const weeks = Math.ceil(((last - start) / 864e5 + 1) / 7);
+            const end = new Date(start); end.setDate(start.getDate() + weeks * 7);
+            const loc = navigator.language || 'en-US';
+            const en = /^en/i.test(loc);
+            const time = (d) => { const t = d.toLocaleTimeString(loc, { hour: 'numeric', minute: '2-digit' }); return en ? t.replace(':00', '').replace(/\s?([AP])M/i, (m, x) => x.toLowerCase() + 'm') : t; };
+            const evs = (sch.getEvents(start, end, true) || []).map((e) => ({ s: new Date(e.StartTime), e: new Date(e.EndTime), all: !!e.IsAllDay, title: e.Subject || '(No title)', type: e.Type }))
+                .sort((a, b) => (b.all - a.all) || (a.s - b.s));
+            const day0 = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+            const out = [];
+            for (let w = 0; w < weeks; w++) {
+                const row = [];
+                for (let i = 0; i < 7; i++) {
+                    const d = new Date(start); d.setDate(start.getDate() + w * 7 + i);
+                    const t = d.getTime(), next = new Date(d); next.setDate(d.getDate() + 1);
+                    const on = evs.filter((e) => e.all ? (day0(e.s) <= t && t < Math.max(day0(e.e), day0(e.s) + 1)) : (e.s < next && e.e > d && (day0(e.s) === t || e.e - e.s > 864e5 || day0(e.s) < t)));
+                    // What fits in a day (mm): a one-line event is ~5.3, a wrapped one ~8.6 (about 24 characters a line);
+                    // past that, the last ones become "+N more".
+                    const room = (146 / weeks) - 5.5;
+                    const tall = (e) => ((e.all ? 0 : 7) + e.title.length > 24 ? 8.6 : 5.3);
+                    let used = 0, fit = 0;
+                    for (const e of on) { const h = tall(e); const moreLine = fit + 1 < on.length ? 4 : 0; if (used + h + moreLine > room) break; used += h; fit++; }
+                    const shown = on.slice(0, fit);
+                    row.push({ key: t, num: d.getDate() === 1 ? d.toLocaleDateString(loc, { month: 'short', day: 'numeric' }) : d.getDate(), inMonth: d.getMonth() === sel.getMonth(),
+                        events: shown.map((e) => { const color = this.getTypeColor(e.type); return { title: e.title, time: e.all || day0(e.s) !== t ? '' : time(e.s), color, on: ScheduleAdapter.onColor(color) }; }),
+                        more: on.length - shown.length });
+                }
+                out.push(row);
+            }
+            const dows = Array.from({ length: 7 }, (_, i) => { const d = new Date(start); d.setDate(start.getDate() + i); return d.toLocaleDateString(loc, { weekday: 'short' }); });
+            return { label: sel.toLocaleDateString(loc, { month: 'long', year: 'numeric' }), dows, weeks: out };
+        },
+
+        showDraftBlock(popup) {
+            try {
+                this.hideDraftBlock();
+                const cells = [...document.querySelectorAll('#Schedule .e-work-cells.e-selected-cell, #Schedule .e-all-day-cells.e-selected-cell')];
+                if (!cells.length) return;
+                cells.forEach((c, i) => c.classList.add('pc-draft-cell', i === 0 ? 'pc-draft-head' : 'pc-draft-more', ...(i === cells.length - 1 ? ['pc-draft-tail'] : [])));
+                const root = document.getElementById('Schedule');
+                const input = popup && popup.querySelector('input.e-subject, .e-subject');
+                const label = () => root.style.setProperty('--draft-label', JSON.stringify((input && input.value.trim()) || 'New event'));
+                label();
+                if (input) { input.addEventListener('input', label); this._draftOff = () => input.removeEventListener('input', label); }
+            } catch (e) { /* a nicety: never in the way of adding the event */ }
+        },
+        hideDraftBlock() {
+            document.querySelectorAll('#Schedule .pc-draft-cell').forEach((c) => c.classList.remove('pc-draft-cell', 'pc-draft-head', 'pc-draft-more', 'pc-draft-tail'));
+            if (this._draftOff) { this._draftOff(); this._draftOff = null; }
+        },
+
         // Clicking the name selects all of it, so typing replaces the random name instead of appending.
         // At once, not on a timer: a fast typist beat the timer and appended. A click focuses on mouse
         // down, and the mouse up would collapse the selection, so that one mouse up is cancelled.
@@ -3265,6 +3349,12 @@ const CalendarVueApp = {
          * click does nothing at all -- which is why the named app buttons and the
          * plain feed URL stay visible next to it.
          */
+        /** The add-to-calendar page for the read-only feed (/view/<id>/add): Add to my calendar, Share, the printed QR. */
+        subscribePageURL() {
+            const feed = this.getSubscribeICSURL();
+            return feed ? feed.replace(/\.ics$/i, '/add') : null;
+        },
+
         getWebcalURL() {
             const url = this.getSubscribeICSURL();
             if (!url) return null;
@@ -4023,11 +4113,8 @@ const CalendarVueApp = {
         shareUrl(url, title) {
             if (navigator.share) {
                 track(a => a.calendarShared('native'));
-                navigator.share({
-                    title: 'pastecal calendar',
-                    text: title,
-                    url: url
-                }).catch(err => {
+                // The message is the calendar's name and its link, nothing else: it reads like a person sent it.
+                navigator.share({ title: title || 'Calendar', text: title || '', url: url }).catch(err => {
                     console.log('Error sharing:', err);
                 });
             }
