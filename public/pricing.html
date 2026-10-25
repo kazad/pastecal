@@ -40,6 +40,7 @@ h2 { font-size: clamp(22px, 2.6vw, 28px); letter-spacing: -.01em; margin: 64px 0
 .plan { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 24px 20px 20px; display: flex; flex-direction: column }
 .plan.pro { border: 2px solid var(--blue); box-shadow: 0 10px 30px -18px color-mix(in srgb, var(--blue) 60%, transparent) }
 .badge { position: absolute; top: -12px; left: 20px; background: var(--blue); color: var(--blue-ink); font-size: 12px; font-weight: 800; border-radius: 999px; padding: 3px 10px }
+.plan .size { margin: 2px 0 6px; font-size: 15px; line-height: 1.45 }
 .badge.dev { background: var(--soon-bg); color: var(--soon); border: 1px solid color-mix(in srgb, var(--soon) 25%, transparent) }
 .plan h3 { margin: 0; font-size: 18px }
 .who { color: var(--muted); font-size: 14.5px; margin: 4px 0 0; min-height: 2.9em }
@@ -233,8 +234,9 @@ details p { color: var(--muted); margin: 8px 0 0 }
     <div class="plan pro">
       <span class="badge">Beta</span>
       <h3>Pro Single</h3>
-      <p class="who">One calendar you run: a team, a class, a shift schedule.</p>
-      <div class="price"><strong>$24</strong><span>per calendar, per year</span></div>
+      <p class="size"><b>1 Pro calendar</b></p>
+      <p class="who">For the one calendar you run: a team, a class, a shift schedule.</p>
+      <div class="price"><strong>$24</strong><span>per year</span></div>
       <p class="per">That's $2 a month, billed yearly.</p>
       <ul>
         <li>Everything in Free</li>
@@ -255,17 +257,17 @@ details p { color: var(--muted); margin: 8px 0 0 }
     <div class="plan">
       <span class="badge">Beta</span>
       <h3>Pro Unlimited</h3>
+      <p class="size"><b>10 Pro calendars</b>, plus unlimited under your @name</p>
       <p class="who">For everyone who runs more than one calendar.</p>
       <div class="price"><strong>$48</strong><span>per year</span></div>
       <p class="per">That's $4 a month, billed yearly. Or $5 month to month.</p>
       <ul>
-        <li>Everything in Pro Single</li>
-        <li>Every calendar you run, one subscription</li>
+        <li>Everything in Pro Single, on every calendar</li>
+        <li>Point each short link at any of your calendars</li>
+        <li>One subscription</li>
       </ul>
       <p class="coming-h">In development, included when ready</p>
       <ul class="coming">
-        <li>Your own pastecal.com/@name, with unlimited links under it</li>
-        <li>Up to 10 locked short links</li>
         <li>Co-owners</li>
       </ul>
       <a class="cta" href="#waitlist" data-plan="unlimited" data-wait="unlimited">Join the Pro beta</a>
@@ -322,7 +324,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
         <tr><td>Choose your view-only link name</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
 
         <tr class="group"><td colspan="5"><span>Control</span></td></tr>
-        <tr><td>Lock editing to people you choose<small>They edit with an editor link you share. Everyone else can view, as today</small></td><td class="n">—</td><td class="pro">1 calendar</td><td>Every calendar you run</td><td>Every calendar <span class="soon">In development</span></td></tr>
+        <tr><td>Lock editing to people you choose<small>They edit with an editor link you share. Everyone else can view, as today</small></td><td class="n">—</td><td class="pro">1 calendar</td><td>10, plus unlimited under @name</td><td>Every calendar <span class="soon">In development</span></td></tr>
         <tr><td>Your own name: <code>pastecal.com/@name</code> <span class="soon">In development</span><small>As many links as you like under it, like <code>@name/soccer</code></small></td><td class="n">—</td><td class="pro n">—</td><td>Unlimited links</td><td>Unlimited links</td></tr>
         <tr><td>Locked short links<small>A <code>pastecal.com/name</code> link only you control</small></td><td class="n">—</td><td class="pro">1</td><td>Up to 10</td><td>Up to 10</td></tr>
         <tr><td>Co-owners and admins <span class="soon">In development</span></td><td class="n">—</td><td class="pro n">—</td><td>3 co-owners</td><td>10 admins</td></tr>
