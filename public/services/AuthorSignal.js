@@ -109,7 +109,14 @@ const AuthorSignal = {
         if (id) return Promise.resolve(id);
         return new Promise((resolve) => {
             (this._waiters = this._waiters || []).push(resolve);
-            setTimeout(() => resolve(this.uidNow()), this.WAIT_MS + 50);
+            const t0 = Date.now();
+            const tick = () => {
+                const v = this.uid();
+                if (v) return resolve(v);
+                if (Date.now() - t0 >= this.WAIT_MS) return resolve(this.uidNow());
+                setTimeout(tick, 100);
+            };
+            setTimeout(tick, 100);
         });
     },
 

@@ -488,6 +488,40 @@ try {
     assert.equal(last.status, 429); assert.equal(last.d.error, 'slow-down');
     step('name changes are rate limited per account (20 an hour: 429 slow-down)');
 
+    // --- red team: every new POST refuses another site (Origin) and non-JSON (a form post), signed in or not
+    {
+        const vic = await signIn(`vic-names-${run}@example.com`);
+        const evil = { 'Content-Type': 'application/json', Origin: 'https://evil.example', Cookie: vic.cookie };
+        const form = { 'Content-Type': 'text/plain', Origin: BASE, Cookie: vic.cookie };
+        for (const path of ['/api/account/delete', '/api/pro/undo-upgrade', '/api/pro/upgrade-notice', '/api/pro/lock', '/api/pro/unlock', '/api/pro/checkout',
+            '/api/names/handle', '/api/names/calendar', '/api/names/link', '/api/names/unlink', '/api/names/show', '/api/names/short', '/api/names/short/remap', '/api/names/short/release']) {
+            for (const headers of [evil, form]) {
+                const r = await fetch(BASE + path, { method: 'POST', headers, body: JSON.stringify({ calendarId: club, name: 'x', handle: 'x', author: AUTHOR }) });
+                assert.equal(r.status, 403, `${path} ${headers.Origin} ${headers['Content-Type']}`);
+                assert.equal((await r.json()).error, 'forbidden-origin', path);
+            }
+        }
+        assert.equal((await account(vic.cookie)).email, vic.email, 'the account is still there');
+        step('red team: every new POST (/api/account/delete, undo, upgrade-notice, Pro lock/unlock/checkout, /api/names/*) refuses another Origin and a non-JSON body (403 forbidden-origin)');
+    }
+
+    // --- red team: run_worker_first routing (og-cards): site pages are never calendar targets, unknown paths make no room
+    {
+        for (const p of ['/account', '/handle', '/pricing', '/help', '/signin', '/about']) {
+            const r = await get(p);
+            assert.equal(r.status, 200, p);
+            const head = (await r.text()).split('</head>')[0];
+            assert.ok(!/\/og\/[^"]*\.png/.test(head), `${p}: no calendar card tags`);
+        }
+        const junk = `wp-admin-${run}`;
+        const r = await get(`/${junk}`);
+        assert.equal(r.status, 200);
+        assert.ok(!(await r.text()).includes(`/og/${junk}`), 'an unknown name gets the generic tags');
+        assert.equal((await admin(`/api/admin/cal/${enc(junk)}/lock-status`)).status, 404, 'and no room');
+        assert.equal((await get(`/og/${junk}.png`)).headers.get('x-preview'), 'static');
+        step('red team: /account, /handle and the site pages reach their pages with no calendar tags; an unknown path gets the generic tags, the site card, and no room');
+    }
+
     void subB;
     console.log(`\n${n} checks passed`);
 } finally {

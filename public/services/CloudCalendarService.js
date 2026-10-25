@@ -441,7 +441,7 @@ class CloudCalendarService extends CalendarDataService {
         if (replay && this._overWriteBudget()) return;
         const id = `s${++room.seq}`;
         const author = this._authorUid();
-        const writer = this.writerId || author;
+        const writer = this.writerId || null;   // never the author id: history is public, the id proves who made it
         room.inflight = { id, kind: 'save', v: room.v, commands, journalT, replay, localEvents };
         if (!this._send(room, { t: 'save', id, v: room.v, commands, author, writer })) { room.inflight = null; room.unsent = true; }
     }
@@ -449,7 +449,7 @@ class CloudCalendarService extends CalendarDataService {
     static _sendMeta(room, meta, opts = {}) {
         const id = `m${++room.seq}`;
         const author = this._authorUid();
-        const writer = this.writerId || author;
+        const writer = this.writerId || null;   // never the author id: history is public, the id proves who made it
         room.inflight = { id, kind: 'meta', v: room.v, meta, journalT: opts.journalT };
         if (!this._send(room, { t: 'meta', id, ...meta, author, writer })) { room.inflight = null; room.unsent = true; }
     }
