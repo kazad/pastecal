@@ -183,7 +183,8 @@ export class Accounts extends DurableObject {
                 subscription_id TEXT, started_at INTEGER);
             CREATE UNIQUE INDEX IF NOT EXISTS trials_user ON trials(user_id);
             CREATE UNIQUE INDEX IF NOT EXISTS trials_email ON trials(email_hash);
-            CREATE TABLE IF NOT EXISTS trial_reminders (subscription_id TEXT PRIMARY KEY, at INTEGER);`);
+            CREATE TABLE IF NOT EXISTS trial_reminders (subscription_id TEXT PRIMARY KEY, at INTEGER);
+            CREATE TABLE IF NOT EXISTS notice_emails (k TEXT PRIMARY KEY, at INTEGER);`);
         // Added later (an existing table keeps its columns): which subscription came first, and the
         // Checkout Session a hold guards plus how often its buyer restarted it.
         for (const col of ['subscriptions ADD COLUMN created INTEGER', 'checkout_holds ADD COLUMN session_id TEXT',
@@ -462,6 +463,12 @@ export class Accounts extends DurableObject {
     }
     trialUsedForCalendar(calendarId) { return this.sql.exec(`SELECT 1 FROM trials WHERE calendar_id = ?`, calendarId).toArray().length > 0; }
     // Once per subscription, like claimWelcome: Stripe may send trial_will_end twice.
+    // Once per key ('ended:<sub>', 'canceled:<sub>'): claimed before sending, so retried webhooks send nothing twice.
+    claimNotice(k) {
+        if (this.sql.exec(`SELECT 1 FROM notice_emails WHERE k = ?`, k).toArray().length) return false;
+        this.sql.exec(`INSERT INTO notice_emails (k, at) VALUES (?, ?)`, k, Date.now());
+        return true;
+    }
     claimTrialReminder(subscriptionId) {
         if (this.sql.exec(`SELECT 1 FROM trial_reminders WHERE subscription_id = ?`, subscriptionId).toArray().length) return false;
         this.sql.exec(`INSERT INTO trial_reminders (subscription_id, at) VALUES (?, ?)`, subscriptionId, Date.now());
@@ -652,6 +659,41 @@ async function sendWelcomeEmail(env, acc, calendarId, userId, title, trialEnd = 
         await sendEmail(env, user.email, trialEnd ? `Your ${P} trial is on for ${name}` : `${P} is on for ${name}`, text, null, 'welcome');
     } catch (err) {
         console.error('[accounts] welcome email failed:', err && err.message);
+    }
+}
+
+// The owner hears when their plan changes on its own: a trial or plan ended (and what the calendar is now),
+// or they canceled in the portal (when it ends, and what happens then). Plain, short, once per subscription.
+async function sendPlanNotice(env, acc, kind, s, calendarId, userId, { paused = false } = {}) {
+    try {
+        if (!(await acc.claimNotice(`${kind}:${s.id}`))) return;
+        const user = await acc.getUser(userId);
+        if (!user || !user.email) return;
+        const st = await LockClient.lockStatus(env, calendarId);
+        const name = cleanTitle(st.title, cleanTitle(calendarId, 'your calendar'));
+        const row = await acc.getSubscription(s.id);
+        const P = planName(row && row.plan);
+        const link = `${siteUrl(env)}/${encodeURIComponent(calendarId)}`;
+        const now = paused
+            ? `${name} is now read-only: everyone can still view it and follow it in their calendar app, but nobody can edit it until you choose. `
+            : `${name} is a free calendar again: anyone with the edit link can change it. `;
+        let subject, text;
+        if (kind === 'canceled') {
+            const day = s.currentPeriodEnd ? formatDay(s.currentPeriodEnd) : 'the end of the period you paid for';
+            const then = st.lapsedMode === 'open' && st.lapsedModeChosen ? 'a free calendar anyone with the edit link can change' : 'read-only (everyone can view, nobody edits until you choose)';
+            subject = `${P} for ${name} ends ${day}`;
+            text = `You canceled ${P} for ${name}. Nothing else will be charged.\n\n`
+                + `It stays upgraded until ${day}. Then it becomes ${then}. You can change that, or keep ${P}, from the calendar's Plus tab:\n${link}\n\n`
+                + `Questions? Write to support@pastecal.com.\n`;
+        } else {
+            subject = kind === 'trial-ended' ? `Your ${P} trial for ${name} ended` : `${P} for ${name} ended`;
+            text = (kind === 'trial-ended' ? `Your ${P} trial for ${name} ended. Nothing was charged.\n\n` : `${P} for ${name} ended.\n\n`)
+                + now + `\n\nTo keep ${P}${paused ? ' or open it to everyone' : ''}, open the calendar's Plus tab:\n${link}\n\n`
+                + `Questions? Write to support@pastecal.com.\n`;
+        }
+        await sendEmail(env, user.email, subject, text, null, 'plan-notice');
+    } catch (err) {
+        console.error('[accounts] plan notice failed:', err && err.message);
     }
 }
 
@@ -1356,6 +1398,10 @@ async function applySubscription(env, acc, cfg, s) {
     }
     if (!validId(calendarId) || !userId) { console.warn('[accounts] subscription without calendar/user metadata:', s.id); return {}; }
     await acc.upsertSubscription({ ...s, calendarId, userId });
+    // Canceled in the portal just now (still running to the period's end): say what happens and when.
+    if (s.cancelAtPeriodEnd && !(prev && prev.cancel_at_period_end) && ACTIVE.has(s.status) && s.status !== 'trialing') {
+        await sendPlanNotice(env, acc, 'canceled', s, calendarId, userId);
+    }
     if (s.trial) {
         const u = await acc.getUser(userId);
         await acc.noteTrial(calendarId, userId, u && u.email ? await sha256(u.email) : null, s.id);
@@ -1415,6 +1461,7 @@ async function applySubscription(env, acc, cfg, s) {
         const wasTrial = !!(s.trial || await acc.isTrialSubscription(s.id));
         const r = await LockClient.unlock(env, calendarId, userId, { lapse: !heir, trial: wasTrial });
         if (r.status >= 500) return { retry: true };
+        if (!heir && r.ok) await sendPlanNotice(env, acc, wasTrial ? 'trial-ended' : 'ended', s, calendarId, userId, { paused: !!r.paused });
         if (!heir && r.ok && wasTrial) console.log(`[trial] lapsed mode=${r.paused ? 'readonly' : 'open'}`);
     } else if (st.locked || !heir) return {};
     if (!heir) return {};

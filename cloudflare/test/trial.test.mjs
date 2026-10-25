@@ -232,6 +232,9 @@ try {
     fresh.close();
     let got = await getCal(cal);
     assert.equal(got.paused, true); assert.equal(got.calendar.events.length, 2, 'reads as before');
+    const endedMail = (await outbox(annEmail)).at(-1);
+    assert.equal(endedMail.subject, `Your Plus trial for Team ${cal} ended`);
+    assert.match(endedMail.text, /Nothing was charged/); assert.match(endedMail.text, /is now read-only/); assert.match(endedMail.text, /Plus tab/);
     const feed = await fetch(`${BASE}/${enc(cal)}.ics`);
     assert.equal(feed.status, 200); const ics = await feed.text();
     assert.match(ics, /BEGIN:VCALENDAR/); assert.match(ics, /owner edit/);
@@ -290,11 +293,16 @@ try {
     assert.equal((await webhook(event('customer.subscription.deleted', { id: daveSub.id, object: 'subscription' }))).status, 200);
     st = await status(calO, dave.cookie);
     assert.deepEqual([st.locked, st.paused, st.lapsedOwner], [false, false, false]);
+    const daveMail = (await outbox(`dave-trial-${run}@example.com`)).filter((m) => / ended$/.test(m.subject));
+    assert.equal(daveMail.length, 1, 'one email when the trial ends');
+    assert.match(daveMail[0].text, /is a free calendar again: anyone with the edit link can change it/);
+    await webhook(event('customer.subscription.deleted', { id: daveSub.id, object: 'subscription' }));
+    assert.equal((await outbox(`dave-trial-${run}@example.com`)).filter((m) => / ended$/.test(m.subject)).length, 1, 'a repeat event sends nothing');
     const openTab = tab(calO); snap = await openTab.ready;
     assert.deepEqual([snap.locked, snap.paused, snap.canEdit], [false, false, true]);
     assert.equal((await openTab.save([{ type: 'add', event: ev('o1', 'anyone edits', 5) }])).t, 'ack');
     openTab.close();
-    step('a trial that ends with no choice made goes back to open: a normal free calendar anyone with the link can edit');
+    step('a trial that ends with no choice made goes back to open: a normal free calendar anyone with the link can edit; the owner gets one email saying so');
 
     // --- Support: reset a calendar's trial (someone else trialed it): canceled in Stripe, unlocked (not paused), trial freed.
     const calR = `reset-${run}`; await createCalendar(calR);
@@ -452,7 +460,12 @@ try {
     const canceled = await meCal();
     assert.deepEqual([canceled.status, canceled.cancelAtPeriodEnd], ['active', true]);
     assert.equal((await status(calJ2, jo.cookie)).locked, true, 'still upgraded until the period ends');
-    step('canceling at period end is stored: /api/me says cancelAtPeriodEnd (the Plus tab shows "Ends <date>"), and the calendar stays upgraded until then');
+    const cancelMail = (await outbox(`jo-trial-${run}@example.com`)).filter((m) => m.subject.startsWith(`Plus for Team ${calJ2} ends `));
+    assert.equal(cancelMail.length, 1, 'one email on cancel');
+    assert.match(cancelMail[0].text, /You canceled Plus/); assert.match(cancelMail[0].text, /Then it becomes read-only/);
+    await webhook(event('customer.subscription.updated', { id: `sub_${run}_jo` }));
+    assert.equal((await outbox(`jo-trial-${run}@example.com`)).filter((m) => m.subject.startsWith(`Plus for Team ${calJ2} ends `)).length, 1, 'once');
+    step('canceling at period end is stored and emailed once (when it ends, what happens then): /api/me says cancelAtPeriodEnd (the Plus tab shows "Ends <date>"), and the calendar stays upgraded until then');
 
     // Plus is yearly only: a monthly checkout is refused even though this server has a monthly price set.
     const calM = `monthly-${run}`; await createCalendar(calM);
