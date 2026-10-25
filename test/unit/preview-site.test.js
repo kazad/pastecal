@@ -59,7 +59,8 @@ test('editor links use the page origin, so a staging key never points at pasteca
 
 test('the preview host skips production Firebase sign-in and analytics', () => {
   const html = fs.readFileSync(path.join(__dirname, '../../public/index.html'), 'utf8');
-  assert.match(html, /if \(location\.hostname !== 'preview\.pastecal\.com'\) firebase\.auth\(\)\.signInAnonymously\(\)/);
+  assert.match(html, /if \(!window\.pcNoProdSideEffects\) firebase\.auth\(\)\.signInAnonymously\(\)/);
+  assert.match(html, /if \(h === 'preview\.pastecal\.com'\) return true;/, 'the flag covers the preview host');
   assert.equal((html.match(/hostname === 'preview\.pastecal\.com'/g) || []).length, 2, 'GTM and gtag are both off');
   assert.match(html, /<script src="\/utils\/preview\.js/);
 });
