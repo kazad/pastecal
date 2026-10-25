@@ -3,67 +3,107 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pricing · pastecal</title>
-<meta name="description" content="pastecal is free to use. Pro locks editing to people you choose: $24 a year or $2.99 a month per calendar. Teams, for up to 10 calendars with no pastecal branding, is $290 a year or $29 a month.">
+<meta name="description" content="pastecal is free to use. Pro Single locks editing to people you choose: $24 a year or $2.99 a month per calendar. Pro Unlimited ($79 a year or $8 a month) and Teams ($290 a year or $29 a month) are in development.">
 <link rel="icon" href="/favicon.ico">
 <script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/tokens.css">
 <style>
-:root { --site-max: 1080px }
-/* Layout: the app's own look (system type, pastecal blue). Three plan cards, then one feature
-   grid, then the waitlist. Pro is the recommended plan, so it carries the only emphasis. */
+:root { --site-max: 1120px }
+/* Layout: a centered hero, four plan cards (Pro Single is the one on sale, so it carries the
+   emphasis; Pro Unlimited and Teams are in development), the Get Pro picker, one compare table,
+   a short in-development list, then the waitlist and questions. */
 :root {
-  --bg: #f5f6f8; --surface: #ffffff; --ink: #141a24; --muted: #5c6577; --line: #e2e6ed;
-  --blue: #2563eb; --blue-ink: #ffffff; --blue-soft: #eef3ff; --ok: #1f7a4d; --soon: #8a5a00; --soon-bg: #fdf3dc;
+  --bg: #f6f7f9; --surface: #ffffff; --ink: #141a24; --muted: #5c6577; --line: #e4e7ec;
+  --blue: #2563eb; --blue-ink: #ffffff; --blue-soft: #eef3ff; --ok: #1f7a4d; --soon: #8a5a00; --soon-bg: #fdf3dc; --hl: #fff1a8;
   --ui: "Figtree", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg: #0f1218; --surface: #171b23; --ink: #e6e9ef; --muted: #9aa3b2; --line: #2a303b;
-  --blue: #6b9bff; --blue-ink: #0b1220; --blue-soft: #1b2436; --ok: #34d399; --soon: #f5c451; --soon-bg: #3a300f; color-scheme: dark } }
+  --blue: #6b9bff; --blue-ink: #0b1220; --blue-soft: #1b2436; --ok: #34d399; --soon: #f5c451; --soon-bg: #3a300f; --hl: #5c4d10; color-scheme: dark } }
 :root[data-theme="dark"] {
   --bg: #0f1218; --surface: #171b23; --ink: #e6e9ef; --muted: #9aa3b2; --line: #2a303b;
-  --blue: #6b9bff; --blue-ink: #0b1220; --blue-soft: #1b2436; --ok: #34d399; --soon: #f5c451; --soon-bg: #3a300f; color-scheme: dark }
+  --blue: #6b9bff; --blue-ink: #0b1220; --blue-soft: #1b2436; --ok: #34d399; --soon: #f5c451; --soon-bg: #3a300f; --hl: #5c4d10; color-scheme: dark }
 * { box-sizing: border-box }
 body { background: var(--bg); color: var(--ink); font: 16px/1.55 var(--ui); margin: 0 }
-.col { max-width: 1080px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 16px 64px }
-.mock { background: var(--blue-soft); color: var(--muted); font-size: 13px; text-align: center; padding-block: 6px }
-h1 { margin: 0; font-size: clamp(30px, 4.4vw, 44px); line-height: 1.1; text-wrap: balance }
-.lead { color: var(--muted); font-size: 18px; max-width: 60ch; margin: 12px 0 0 }
-h2 { font-size: 22px; margin: 56px 0 14px; text-wrap: balance }
+.col { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 8px 64px }
+h2 { font-size: clamp(22px, 2.6vw, 28px); letter-spacing: -.01em; margin: 64px 0 14px; text-wrap: balance }
 
-.plans { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 32px; align-items: stretch }
-.plan { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 22px; display: flex; flex-direction: column; gap: 6px }
-.plan.pro { border: 2px solid var(--blue); position: relative }
-.badge { position: absolute; top: -12px; left: 22px; background: var(--blue); color: var(--blue-ink); font-size: 12px; font-weight: 700; border-radius: 999px; padding: 3px 10px }
-.plan h3 { margin: 0; font-size: 19px }
-.who { color: var(--muted); font-size: 15px; margin: 0 }
-.price { margin: 12px 0 0; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap }
-.price strong { font-size: 38px; line-height: 1; font-variant-numeric: tabular-nums }
-.price span { color: var(--muted); font-size: 15px }
-.per { color: var(--muted); font-size: 14px; margin: 2px 0 0; min-height: 1.4em }
-.plan ul { list-style: none; padding: 0; margin: 14px 0 18px; display: flex; flex-direction: column; gap: 7px; font-size: 15px; flex: 1 }
-.plan li::before { content: "✓"; color: var(--ok); font-weight: 700; margin-right: 8px }
-.cta { display: block; text-align: center; border-radius: 9px; padding: 10px 14px; font-weight: 700; text-decoration: none; border: 1px solid var(--line); color: var(--ink); background: var(--surface); cursor: pointer; font-size: 15px }
+.hero { text-align: center; padding: 40px 0 0 }
+.hero h1 { margin: 0 auto; max-width: 32ch; font-size: clamp(32px, 5vw, 52px); line-height: 1.07; letter-spacing: -.02em; text-wrap: balance }
+.hero h1 mark { background: linear-gradient(transparent 58%, var(--hl) 58%, var(--hl) 92%, transparent 92%); color: inherit; padding: 0 .08em }
+.lead { margin: 16px auto 0; max-width: 56ch; color: var(--muted); font-size: 18px; text-wrap: balance }
+.chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px 18px; margin-top: 16px; color: var(--muted); font-size: 14.5px; font-weight: 600 }
+.chips span::before { content: "✓ "; color: var(--ok) }
+
+.plans { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 40px; align-items: stretch }
+.plan { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 24px 20px 20px; display: flex; flex-direction: column }
+.plan.pro { border: 2px solid var(--blue); box-shadow: 0 10px 30px -18px color-mix(in srgb, var(--blue) 60%, transparent) }
+.badge { position: absolute; top: -12px; left: 20px; background: var(--blue); color: var(--blue-ink); font-size: 12px; font-weight: 800; border-radius: 999px; padding: 3px 10px }
+.badge.dev { background: var(--soon-bg); color: var(--soon); border: 1px solid color-mix(in srgb, var(--soon) 25%, transparent) }
+.plan h3 { margin: 0; font-size: 18px }
+.who { color: var(--muted); font-size: 14.5px; margin: 4px 0 0; min-height: 2.9em }
+.price { margin: 14px 0 0; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap }
+.price strong { font-size: 40px; line-height: 1; letter-spacing: -.02em; font-variant-numeric: tabular-nums }
+.price span { color: var(--muted); font-size: 14.5px }
+.per { color: var(--muted); font-size: 13.5px; margin: 4px 0 0; min-height: 2.8em }
+.plan ul { list-style: none; padding: 0; margin: 16px 0 20px; display: grid; gap: 8px; font-size: 14.5px; flex: 1; align-content: start }
+.plan li { position: relative; padding-left: 22px }
+.plan li::before { content: "✓"; position: absolute; left: 0; color: var(--ok); font-weight: 800 }
+.plan ul:has(+ .coming-h) { flex: 0 0 auto; margin-bottom: 4px }
+.coming-h { margin: 8px 0 0; font-size: 11.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--soon) }
+.plan ul.coming { margin-top: 8px; color: var(--muted) }
+.plan ul.coming li::before { content: "+"; color: var(--muted) }
+.plan code, td code { font: 600 .9em ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--bg); padding: 1px 5px; border-radius: 5px; white-space: nowrap }
+.cta { display: flex; align-items: center; justify-content: center; text-align: center; border-radius: 999px; min-height: 44px; padding: 0 18px; font: 700 15px/1.2 var(--ui); text-decoration: none; border: 1px solid var(--line); color: var(--ink); background: var(--surface); cursor: pointer }
 .cta.primary { background: var(--blue); border-color: var(--blue); color: var(--blue-ink) }
+.cta:hover { filter: brightness(1.06) }
 
-.promises { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: 18px }
-.promises div { padding: 14px 16px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); font-size: 15px; color: var(--muted) }
-.promises b { display: block; color: var(--ink); font-size: 16px; margin-bottom: 2px }
+.howto { margin-top: 32px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 4px 24px 22px; scroll-margin-top: 16px }
+.howto h2 { margin: 20px 0 8px }
+.howto-sub { color: var(--muted); margin: 0 0 14px; max-width: 64ch }
+.intervals { display: flex; flex-wrap: wrap; gap: 10px }
+.interval { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 10px; padding: 9px 14px; cursor: pointer; font-weight: 400 }
+.interval.on { border-color: var(--blue); background: var(--blue-soft) }
+.interval input { accent-color: var(--blue); margin: 0 }
+.interval em { font-style: normal; font-size: 12px; font-weight: 700; color: var(--ok) }
+.pick-h { font-size: 14px; color: var(--muted); margin: 20px 0 8px; font-weight: 600 }
+.pick-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px }
+.pick-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 8px 8px 14px; min-width: 0 }
+.pick-list .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; min-width: 0 }
+.pick-list .t small { display: block; color: var(--muted); font-weight: 400; font-size: 13px; overflow: hidden; text-overflow: ellipsis }
+.pick-list .cta { flex: none; min-height: 38px; padding: 0 14px }
+.pick-tag { display: inline-block; margin-left: 8px; font-size: 12px; font-weight: 700; color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); border-radius: 999px; padding: 1px 8px; vertical-align: 1px }
+.pick-paste { display: flex; flex-direction: column; margin-top: 20px; gap: 6px }
+.pick-row { display: flex; gap: 8px }
+.pick-row input { flex: 1 1 auto; min-width: 0; height: 44px; border: 1px solid var(--line); border-radius: 10px; padding: 0 14px; background: var(--bg); color: var(--ink); font: inherit; font-size: 16px }
+.pick-row .cta { flex: none }
+.pick-err { color: var(--soon); font-size: 14px; margin: 0; min-height: 0 }
+.pick-err:empty, .pick-found:empty { display: none }
+.pick-found { color: var(--ok); font-size: 14px; font-weight: 600; margin: 0 }
+.pick-new { color: var(--muted); font-size: 15px; margin: 16px 0 0 }
+.pick-new a { color: var(--blue); font-weight: 600 }
 
-.gridwrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 14px }
-table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 15px }
+.gridwrap { overflow-x: auto; -webkit-overflow-scrolling: touch; background: var(--surface); border: 1px solid var(--line); border-radius: 16px }
+table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 14.5px }
 th, td { padding: 11px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top }
-thead th { font-size: 14px; position: sticky; top: 0; background: var(--surface) }
-thead th:not(:first-child), td:not(:first-child) { text-align: center; width: 17% }
+thead th { font-size: 14px; background: var(--surface) }
+thead th:not(:first-child), td:not(:first-child) { text-align: center; width: 15% }
 thead th.pro, td.pro { background: var(--blue-soft) }
-tr.group td { background: var(--bg); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700 }
+tr.group td { background: var(--bg); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 800 }
 tbody tr:last-child td { border-bottom: 0 }
-.y { color: var(--ok); font-weight: 700 }
+.y { color: var(--ok); font-weight: 800 }
 .n { color: var(--muted) }
 td small { display: block; color: var(--muted); font-size: 13px; font-weight: 400 }
-.soon { display: inline-block; font-size: 11px; font-weight: 700; color: var(--soon); background: var(--soon-bg); border-radius: 999px; padding: 1px 7px; margin-left: 6px; vertical-align: 1px }
+.soon { display: inline-block; font-size: 11px; font-weight: 700; color: var(--soon); background: var(--soon-bg); border-radius: 999px; padding: 1px 7px; margin-left: 6px; vertical-align: 1px; white-space: nowrap }
+.swipe { display: none; font-size: 14px; color: var(--muted); margin: -6px 0 10px }
 .legend { font-size: 14px; color: var(--muted); margin: 10px 0 0 }
+.legend .soon { margin: 0 4px 0 0 }
 
-.wait { margin-top: 56px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 28px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 36px; align-items: start; position: relative }
+.indev ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px }
+.indev li { padding: 14px 16px; border-radius: 12px; background: var(--surface); border: 1px dashed var(--line); color: var(--muted); font-size: 15px }
+.indev li b { display: block; color: var(--ink); font-size: 16px; margin-bottom: 2px }
+
+.wait { margin-top: 56px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 28px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 36px; align-items: start; position: relative; scroll-margin-top: 16px }
 .wait h2 { margin: 0 0 6px }
 .wait p { margin: 0; color: var(--muted) }
 form { display: flex; flex-direction: column; gap: 14px }
@@ -76,57 +116,38 @@ select { appearance: none; -webkit-appearance: none; cursor: pointer; padding-ri
   background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
   background-position: calc(100% - 20px) 50%, calc(100% - 14px) 50%; background-size: 6px 6px; background-repeat: no-repeat }
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--blue); outline-offset: 1px; border-color: var(--blue) }
-.formrow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px }
+.formrow { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px }
 .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden }
-#waitBtn { height: 48px; font-size: 16px }
+#waitBtn { min-height: 48px; font-size: 16px }
 .wait-ideas { margin-top: 12px !important; font-size: 15px }
 .done { color: var(--ok); font-weight: 600; min-height: 1.4em; margin: 0 }
-.howto { margin-top: 32px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 4px 24px 20px }
-.howto h2 { margin: 18px 0 8px }
-.howto-sub { color: var(--muted); margin: 0 0 14px; max-width: 64ch }
-.intervals { display: flex; flex-wrap: wrap; gap: 10px }
-.interval { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 10px; padding: 9px 14px; cursor: pointer; font-weight: 400 }
-.interval.on { border-color: var(--blue); background: var(--blue-soft) }
-.interval input { accent-color: var(--blue); margin: 0 }
-.interval em { font-style: normal; font-size: 12px; font-weight: 700; color: var(--ok) }
-.pick-h { font-size: 14px; color: var(--muted); margin: 20px 0 8px; font-weight: 600 }
-.pick-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px }
-.pick-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 8px 8px 14px; min-width: 0 }
-.pick-list .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; min-width: 0 }
-.pick-list .t small { display: block; color: var(--muted); font-weight: 400; font-size: 13px; overflow: hidden; text-overflow: ellipsis }
-.pick-list .cta { flex: none; padding: 7px 14px }
-.pick-tag { display: inline-block; margin-left: 8px; font-size: 12px; font-weight: 700; color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); border-radius: 999px; padding: 1px 8px; vertical-align: 1px }
-.pick-paste { margin-top: 20px; gap: 6px }
-.pick-row { display: flex; gap: 8px }
-.pick-row input { flex: 1 1 auto; min-width: 0; height: 44px; border: 1px solid var(--line); border-radius: 10px; padding: 0 14px; background: var(--bg); color: var(--ink); font: inherit; font-size: 16px }
-.pick-row .cta { flex: none }
-.pick-err { color: var(--soon); font-size: 14px; margin: 0; min-height: 0 }
-.pick-err:empty, .pick-found:empty { display: none }
-.pick-found { color: var(--ok); font-size: 14px; font-weight: 600; margin: 0 }
-.pick-new { color: var(--muted); font-size: 15px; margin: 16px 0 0 }
-.pick-new a { color: var(--blue); font-weight: 600 }
-.plan li .soon { margin-left: 8px }
-.plan ul.coming { margin-top: 4px; color: var(--muted) }
-.plan ul:has(+ .coming-h) { flex: 0 0 auto; margin-bottom: 4px }
-.plan ul.coming li::before { content: "+"; color: var(--muted) }
-.coming-h { margin: 6px 0 0; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--soon) }
 
-.indev { margin-top: 48px }
-.indev ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px }
-.indev li { padding: 14px 16px; border-radius: 12px; background: var(--surface); border: 1px dashed var(--line); color: var(--muted); font-size: 15px }
-.indev li b { display: block; color: var(--ink); font-size: 16px; margin-bottom: 2px }
-@media (max-width: 640px) { .indev ul { grid-template-columns: minmax(0, 1fr) } }
 .faq { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 32px }
 details { border-bottom: 1px solid var(--line); padding-block: 12px }
 summary { cursor: pointer; font-weight: 600 }
 details p { color: var(--muted); margin: 8px 0 0 }
 :focus-visible { outline: 2px solid var(--blue); outline-offset: 2px }
 
+@media (max-width: 980px) {
+  .plans { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 26px }
+  .indev ul { grid-template-columns: minmax(0, 1fr) }
+}
 @media (max-width: 860px) {
-  .plans, .promises, .faq { grid-template-columns: minmax(0, 1fr) }
-  .formrow { grid-template-columns: minmax(0, 1fr) }
-  .wait { grid-template-columns: minmax(0, 1fr) }
+  .faq, .wait { grid-template-columns: minmax(0, 1fr) }
+  .wait { gap: 20px; padding: 22px }
+}
+@media (max-width: 640px) {
+  .plans { grid-template-columns: minmax(0, 1fr) }
   .plan.pro { order: -1 }
+  .who, .per { min-height: 0 }
+  .hero { padding-top: 24px }
+  .howto { padding: 4px 16px 18px }
+  /* The compare table scrolls inside its own box; the feature column stays put so each row keeps its name. */
+  table { min-width: 620px; font-size: 14px }
+  th, td { padding: 10px 10px }
+  thead th:first-child, tbody td:first-child:not([colspan]) { position: sticky; left: 0; z-index: 1; background: var(--surface); width: 168px; min-width: 168px; box-shadow: 1px 0 0 var(--line) }
+  tr.group td span { position: sticky; left: 10px; display: inline-block }
+  .swipe { display: block }
 }
 </style>
 <!-- Analytics, as on the calendar pages (index.html): GA4 and Clarity through GTM. Off in tests,
@@ -178,19 +199,22 @@ details p { color: var(--muted); margin: 8px 0 0 }
 <!-- /site-header -->
 
 <div class="col">
-  <h1>Free for everyone you share with. Pro when it matters.</h1>
-  <p class="lead">pastecal stays free and account-free for making and sharing calendars. Pro is for the calendars you're responsible for: lock who can edit, with just a small “Made with pastecal” line. More is on the way.</p>
+  <section class="hero">
+    <h1>Free for everyone who uses&nbsp;it. <mark>Pro</mark> when it&rsquo;s yours to&nbsp;run.</h1>
+    <p class="lead">Share a calendar with a link. Nobody signs up and nobody pays per person. Pro is for the person who keeps the calendar running.</p>
+    <div class="chips"><span>No login required</span><span>Nobody pays per person</span><span>Cancel Pro anytime</span></div>
+  </section>
 
   <div class="plans">
     <div class="plan">
       <h3>Free</h3>
-      <p class="who">For trips, families and small groups.</p>
+      <p class="who">Trips, families and small groups.</p>
       <div class="price"><strong>$0</strong></div>
       <p class="per">No account, no card.</p>
       <ul>
         <li>Unlimited calendars</li>
         <li>Unlimited people, no login required</li>
-        <li>Edit, view-only and calendar app links</li>
+        <li>Edit, view-only, calendar app and embed links</li>
         <li>Undo and daily backups</li>
         <li>Basic stats: views this week, followers</li>
       </ul>
@@ -199,49 +223,62 @@ details p { color: var(--muted); margin: 8px 0 0 }
 
     <div class="plan pro">
       <span class="badge">Recommended</span>
-      <h3>Pro</h3>
-      <p class="who">For a calendar you run: a team, a class, a shift schedule.</p>
+      <h3>Pro Single</h3>
+      <p class="who">One calendar you run: a team, a class, a shift schedule.</p>
       <div class="price"><strong>$24</strong><span>per calendar, per year</span></div>
       <p class="per">That's $2 a month, billed yearly. Or $2.99 month to month.</p>
       <ul>
         <li>Everything in Free</li>
-        <li>Lock editing to people you choose</li>
-        <li>A full history of changes, and restore any version</li>
-        <li>Full stats: views by day, followers, places</li>
+        <li>Lock editing with editor links you share</li>
+        <li>Full stats: views and visitors by day, followers, places</li>
+        <li>Full history, and restore any version</li>
         <li>Just a small “Made with pastecal” line</li>
       </ul>
       <p class="coming-h">In development, included when ready</p>
       <ul class="coming">
         <li>Others suggest events, you approve</li>
         <li>Secret events and subcalendars</li>
-        <li>Your logo, name and theme</li>
+        <li>Your logo and theme</li>
       </ul>
       <a class="cta primary" href="#get-pro" data-plan="pro">Get Pro</a>
     </div>
 
     <div class="plan">
-      <h3>Teams</h3>
-      <p class="who">For clubs, schools and offices with several calendars. <span class="soon" style="margin-left:0">In development</span></p>
-      <div class="price"><strong>$290</strong><span>per year</span></div>
-      <p class="per">Or $29 a month. Up to 10 Pro calendars.</p>
+      <span class="badge dev">In development</span>
+      <h3>Pro Unlimited</h3>
+      <p class="who">For everyone who runs more than one calendar.</p>
+      <div class="price"><strong>$79</strong><span>per year</span></div>
+      <p class="per">Or $8 a month.</p>
       <ul>
-        <li>Everything in Pro, on 10 calendars</li>
-        <li>No pastecal branding</li>
-        <li>One bill for the whole group</li>
-        <li>Move Pro between calendars anytime</li>
-        <li>Shared admins across calendars</li>
+        <li>Everything in Pro Single</li>
+        <li>Unlimited locked calendars</li>
+        <li>Your own name: <code>pastecal.com/@name</code></li>
+        <li>Up to 10 locked short links</li>
+        <li>Up to 3 co-owners</li>
       </ul>
-      <a class="cta" href="#waitlist" data-plan="teams">Join the waitlist</a>
+      <a class="cta" href="#waitlist" data-plan="unlimited" data-wait="unlimited">Join the waitlist</a>
     </div>
-  </div>
 
-  <div class="promises">
-    <div><b>Nobody pays per person</b>Everyone you share with stays free, with no account. You pay per calendar, not per seat.</div>
+    <div class="plan">
+      <span class="badge dev">In development</span>
+      <h3>Teams</h3>
+      <p class="who">Clubs, schools, buildings and offices.</p>
+      <div class="price"><strong>$290</strong><span>per year</span></div>
+      <p class="per">Or $29 a month, for the whole group.</p>
+      <ul>
+        <li>Everything in Pro Unlimited</li>
+        <li>Up to 10 admins</li>
+        <li>No pastecal branding</li>
+        <li>A year of who changed what</li>
+        <li>Invoices in your organization's name</li>
+      </ul>
+      <a class="cta" href="#waitlist" data-plan="teams" data-wait="teams">Join the waitlist</a>
+    </div>
   </div>
 
   <section class="howto" id="get-pro" aria-labelledby="getProH">
     <h2 id="getProH">Get Pro</h2>
-    <p class="howto-sub">Pro is per calendar. Pick one and pay with Stripe. There's no account to set up first: yours is made from the email you give Stripe.</p>
+    <p class="howto-sub">Pro Single is per calendar. Pick one and pay with Stripe. There's no account to set up first: yours is made from the email you give Stripe.</p>
     <div class="intervals" role="radiogroup" aria-label="Billing">
       <label class="interval on"><input type="radio" name="interval" value="year" checked><span><b>$24 a year</b> <em>Save 33%</em></span></label>
       <label class="interval"><input type="radio" name="interval" value="month"><span><b>$2.99 a month</b></span></label>
@@ -263,58 +300,67 @@ details p { color: var(--muted); margin: 8px 0 0 }
   </section>
 
   <h2>Compare plans</h2>
+  <p class="swipe">Swipe the table to see every plan.</p>
   <div class="gridwrap">
     <table>
-      <thead><tr><th>Feature</th><th>Free</th><th class="pro">Pro</th><th>Teams</th></tr></thead>
+      <thead><tr><th>Feature</th><th>Free</th><th class="pro">Pro Single</th><th>Pro Unlimited</th><th>Teams</th></tr></thead>
       <tbody>
-        <tr class="group"><td colspan="4">Sharing</td></tr>
-        <tr><td>Calendars</td><td>Unlimited</td><td class="pro">1 Pro calendar</td><td>Up to 10</td></tr>
-        <tr><td>People who can view and edit<small>No login required</small></td><td>Unlimited</td><td class="pro">Unlimited</td><td>Unlimited</td></tr>
-        <tr><td>Edit, view-only and calendar app links</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td></tr>
-        <tr><td>Embed on your website</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td></tr>
-        <tr><td>Choose your view-only link name</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td></tr>
+        <tr class="group"><td colspan="5"><span>Sharing</span></td></tr>
+        <tr><td>Calendars</td><td>Unlimited</td><td class="pro">Unlimited</td><td>Unlimited</td><td>Unlimited</td></tr>
+        <tr><td>People who can view and edit<small>No login required</small></td><td>Unlimited</td><td class="pro">Unlimited</td><td>Unlimited</td><td>Unlimited</td></tr>
+        <tr><td>Edit, view-only and calendar app links</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Embed on your website</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Choose your view-only link name</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
 
-        <tr class="group"><td colspan="4">Control</td></tr>
-        <tr><td>Lock editing to people you choose<small>They edit with an editor link you share. Everyone else can view, as today</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td></tr>
+        <tr class="group"><td colspan="5"><span>Control</span></td></tr>
+        <tr><td>Lock editing to people you choose<small>They edit with an editor link you share. Everyone else can view, as today</small></td><td class="n">—</td><td class="pro">1 calendar</td><td>Unlimited <span class="soon">In development</span></td><td>Unlimited <span class="soon">In development</span></td></tr>
+        <tr><td>Your own name: <code>pastecal.com/@name</code> <span class="soon">In development</span></td><td class="n">—</td><td class="pro n">—</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Locked short links <span class="soon">In development</span><small>Short <code>pastecal.com/name</code> links nobody else can take</small></td><td class="n">—</td><td class="pro n">—</td><td>Up to 10</td><td>Up to 10</td></tr>
+        <tr><td>Co-owners and admins <span class="soon">In development</span></td><td class="n">—</td><td class="pro n">—</td><td>3 co-owners</td><td>10 admins</td></tr>
+        <tr><td>Suggested events <span class="soon">In development</span><small>Others suggest, you approve or decline</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Secret events <span class="soon">In development</span><small>Seen only by people who can edit</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Subcalendars <span class="soon">In development</span><small>Layers like “Games” and “Practice” people can turn on and off</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
 
-        <tr class="group"><td colspan="4">Safety</td></tr>
-        <tr><td>Undo and recent changes</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td></tr>
-        <tr><td>Daily backups</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td></tr>
-        <tr><td>Restore any earlier version</td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td></tr>
+        <tr class="group"><td colspan="5"><span>Safety</span></td></tr>
+        <tr><td>Undo and recent changes</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Daily backups</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Full history, and restore any earlier version</td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>A year of who changed what <span class="soon">In development</span><small>The name of the admin next to each change</small></td><td class="n">—</td><td class="pro n">—</td><td class="n">—</td><td class="y">✓</td></tr>
 
-        <tr class="group"><td colspan="4">Insight</td></tr>
-        <tr><td>Views this week and follower count</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td></tr>
-        <tr><td>Calendar stats<small>Views and visitors by day, and how many people follow it in a calendar app</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td></tr>
-        <tr><td>Where people are<small>Countries and cities your visitors come from</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td></tr>
-        <tr><td>Private by design<small>Counts only. Never names, addresses or who viewed what</small></td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td></tr>
+        <tr class="group"><td colspan="5"><span>Insight</span></td></tr>
+        <tr><td>Views this week and follower count</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Calendar stats<small>Views and visitors by day, and how many people follow it in a calendar app</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Where people are<small>Countries and cities your visitors come from</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>More stats <span class="soon">In development</span><small>Followers by calendar app, busiest hours, and where visits come from</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Private by design<small>Counts only. Never who</small></td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
 
-        <tr class="group"><td colspan="4">Look</td></tr>
-        <tr><td>Event colors and category labels</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td></tr>
-        <tr><td>No pastecal branding<small>On the calendar and in embeds. Pro shows one small “Made with pastecal” line</small></td><td class="n">—</td><td class="pro n">—</td><td class="y">✓</td></tr>
+        <tr class="group"><td colspan="5"><span>Look</span></td></tr>
+        <tr><td>Event colors and category labels</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Your logo and theme <span class="soon">In development</span><small>Your name, logo and colors on the calendar and in embeds</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>No pastecal branding <span class="soon">In development</span><small>On the calendar and in embeds. Pro plans show one small “Made with pastecal” line</small></td><td class="n">—</td><td class="pro n">—</td><td class="n">—</td><td class="y">✓</td></tr>
 
-        <tr class="group"><td colspan="4">Help</td></tr>
-        <tr><td>Help<small>The Help page and GitHub Discussions</small></td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td></tr>
+        <tr class="group"><td colspan="5"><span>Help and billing</span></td></tr>
+        <tr><td>Help page and GitHub Discussions</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
+        <tr><td>Invoices in your organization's name <span class="soon">In development</span></td><td class="n">—</td><td class="pro n">—</td><td class="n">—</td><td class="y">✓</td></tr>
       </tbody>
     </table>
   </div>
-  <p class="legend">Everything above works today.</p>
+  <p class="legend"><span class="soon">In development</span> Being built now; included at no extra cost when it ships. Everything else works today.</p>
 
   <section class="indev" aria-labelledby="devH">
-    <h2 id="devH">In development</h2>
-    <p class="howto-sub">Being built now. Pro subscribers get these at no extra cost when they ship.</p>
+    <h2 id="devH">Coming to Pro Single too</h2>
+    <p class="howto-sub">Being built now. Pro Single subscribers get these at no extra cost when they ship.</p>
     <ul>
       <li><b>Suggested events</b>Visitors suggest, you approve or decline.</li>
-      <li><b>Secret events</b>Seen only by people who can edit.</li>
-      <li><b>Subcalendars</b>Layers like "Games" and "Practice" people can turn on and off.</li>
+      <li><b>Secret events and subcalendars</b>Events only editors see, and layers people can turn on and off.</li>
       <li><b>Your logo and theme</b>Your name, logo and colors on the calendar and in embeds.</li>
-      <li><b>Teams</b>Several calendars and shared admins on one bill, with no pastecal branding. <a href="#waitlist">Join the waitlist</a></li>
     </ul>
   </section>
 
   <section class="wait" id="waitlist" aria-labelledby="waitH">
     <div class="wait-copy">
       <h2 id="waitH">Join the waitlist</h2>
-      <p>For Teams, and for the Pro features in development. We'll email you once, when they open.</p>
+      <p>For Pro Unlimited, Teams and the Pro features in development. We'll email you once, when they open.</p>
       <p class="wait-ideas">Have an idea for Pro, or something pastecal should do better? Add it to the form. We read every one.</p>
     </div>
     <form id="waitForm" novalidate>
@@ -325,7 +371,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
       <div class="formrow">
         <div class="field">
           <label for="plan">Plan</label>
-          <select id="plan" name="plan"><option value="teams">Teams, $290 a year or $29 a month</option><option value="pro">Pro features in development</option><option value="unsure">Not sure yet</option></select>
+          <select id="plan" name="plan"><option value="unlimited">Pro Unlimited, $79 a year</option><option value="teams">Teams, $290 a year or $29 a month</option><option value="pro">In-development Pro features</option><option value="unsure">Not sure</option></select>
         </div>
         <div class="field">
           <label for="use">Mostly for</label>
@@ -345,16 +391,18 @@ details p { color: var(--muted); margin: 8px 0 0 }
   <h2>Questions</h2>
   <div class="faq">
     <details><summary>What's free?</summary><p>Making, editing and sharing calendars, with no account. Pro adds features for people who run a calendar.</p></details>
+    <details><summary>Which plan do I need?</summary><p>Free if anyone with the link can edit. Pro Single to lock one calendar, available now. Pro Unlimited, in development, for people who run several calendars or share the work with co-owners. Teams, in development, for an organization.</p></details>
     <details><summary>Does everyone I share with need to pay?</summary><p>No. You pay for the calendar, yearly or monthly. Everyone you share it with stays free.</p></details>
     <details><summary>Do I need an account for Pro?</summary><p>Only you do, so we know who owns the calendar, and it's made for you when you pay, from the email you give Stripe. Later you sign in with a link we email you, with no password. Nobody you share with ever needs an account.</p></details>
-    <details><summary>Is there a free trial?</summary><p>No. Pro is $24 a year or $2.99 a month, paid through Stripe, and renews automatically until you cancel.</p></details>
+    <details><summary>Is there a free trial?</summary><p>No. Pro Single is $24 a year or $2.99 a month, paid through Stripe, and renews automatically until you cancel.</p></details>
     <details><summary>How do I cancel?</summary><p>Sign in and open Manage billing. You can cancel there any time.</p></details>
     <details><summary>What happens if I cancel?</summary><p>Pro lasts until the end of the period you paid for. Then your calendar stays, with everything in it, and goes back to the free plan, unlocked.</p></details>
     <details><summary>What if a payment fails?</summary><p>Stripe retries it, and your calendar stays locked meanwhile. If the subscription ends unpaid, the calendar goes back to the free plan, unlocked, with all its events.</p></details>
     <details><summary>What happens to backups on the free plan?</summary><p>Every calendar is backed up daily, and you can see the last 7 days of changes. Pro keeps the full history and lets you restore any earlier version.</p></details>
-    <details><summary>What is Teams?</summary><p>Up to 10 Pro calendars on one bill, with no pastecal branding and shared admins, for $290 a year or $29 a month. It opens later: join the waitlist and we'll email you once, when it does.</p></details>
+    <details><summary>What is Pro Unlimited?</summary><p>Everything in Pro Single on as many calendars as you run, your own pastecal.com/@name, up to 10 locked short links and up to 3 co-owners, for $79 a year or $8 a month. It's in development: join the waitlist and we'll email you once, when it opens.</p></details>
+    <details><summary>What is Teams?</summary><p>Everything in Pro Unlimited, with up to 10 admins, no pastecal branding, a year of who changed what and invoices in your organization's name, for $290 a year or $29 a month. It's in development: join the waitlist and we'll email you once, when it opens.</p></details>
     <details><summary>Can I move Pro to a different calendar?</summary><p>Email <a href="mailto:support@pastecal.com">support@pastecal.com</a> and we'll help.</p></details>
-    <details><summary>Can I see who looked at my calendar?</summary><p>No. Pro stats show how many people viewed it, how many follow it in a calendar app, and which countries and cities they're in. Never who they are.</p></details>
+    <details><summary>Can I see who looked at my calendar?</summary><p>No. Pro stats show how many people viewed it, how many follow it in a calendar app, and which countries and cities they're in. Counts only. Never who.</p></details>
   </div>
 </div>
 
@@ -373,6 +421,11 @@ document.querySelectorAll('[data-plan]').forEach(a => a.addEventListener('click'
 <script>
 (() => {
   const form = document.getElementById('waitForm'), done = document.getElementById('done'), btn = document.getElementById('waitBtn');
+  // The plan cards' Join the waitlist: preselect that plan, then the email field is next.
+  document.querySelectorAll('[data-wait]').forEach(a => a.addEventListener('click', () => {
+    document.getElementById('plan').value = a.dataset.wait;
+    setTimeout(() => document.getElementById('email').focus({ preventScroll: true }), 350);
+  }));
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const email = document.getElementById('email');
@@ -383,7 +436,7 @@ document.querySelectorAll('[data-plan]').forEach(a => a.addEventListener('click'
       const r = await fetch('/api/waitlist', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const out = await r.json().catch(() => ({}));
       if (!r.ok || !out.ok) throw new Error(out.error || "That didn't save. Please try again in a moment.");
-      done.textContent = out.returning ? "Updated. You're still on the list." : "You're on the list. We'll email you when Pro opens.";
+      done.textContent = out.returning ? "Updated. You're still on the list." : "You're on the list. We'll email you when it opens.";
       pcTrack('waitlist_joined', { kind: body.plan, returning: !!out.returning });
       form.reset();
     } catch (err) { done.style.color = 'var(--soon)'; done.textContent = err.message; }

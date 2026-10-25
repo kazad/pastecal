@@ -1344,7 +1344,7 @@
                 </template>
                 <template v-else>
                 <h1>The shared calendar <mark class="pc-hl">nobody</mark> has to sign up for.</h1>
-                <p class="pc-home-lead">Add events on the left, press <strong>Save &amp; share</strong>, and send the link. Everyone sees every change.</p>
+                <p class="pc-home-lead">Add events, press <strong>Save &amp; share</strong>, and send the link. Everyone sees every change.</p>
                 <ol class="pc-home-steps">
                     <li><b>1</b><span>Click a day and type an event.</span></li>
                     <li><b>2</b><span>Press <strong>Save &amp; share</strong>.</span></li>
@@ -1352,7 +1352,7 @@
                 </ol>
                 </template>
                 <p v-if="!homeRecents.length" class="pc-home-links"><a v-if="!template" class="pc-home-more" href="/view/demo" data-from="home-panel">See a demo calendar →</a><a class="pc-home-more" href="#how">How pastecal works ↓</a></p>
-                <p v-if="!homeRecents.length" class="pc-home-proof"><span class="pc-quote">“I’ve introduced my apartment complex to it, as it has a shared space on the rooftop that we wanted people to be able to book, in an easy no-login way.” <i>A pastecal user</i></span><span><strong>3,000+</strong> calendars made since 2021</span></p>
+                <p v-if="!homeRecents.length" class="pc-home-proof"><span class="pc-quote">“I’ve introduced my apartment complex to it, as it has a shared space on the rooftop that we wanted people to be able to book, in an easy no-login way.”</span><span><strong>3,000+</strong> calendars made since 2021</span></p>
                 </div>
             </aside>
             <!-- Below the docking width the panel floats over the calendar; this dims what is behind it. -->
@@ -1441,8 +1441,8 @@
                     <li><h4>Pro when you need more</h4><p>Lock who can edit, see every change, and restore any version.</p></li>
                 </ul>
                 <div class="pc-tour-quotes">
-                    <blockquote>“I’ve introduced my apartment complex to it, as it has a shared space on the rooftop that we wanted people to be able to book, in an easy no-login way.”<cite>A pastecal user</cite></blockquote>
-                    <blockquote>“I find it an amazing tool … simplicity is the great feature of pastecal.”<cite>A pastecal user</cite></blockquote>
+                    <blockquote>“I’ve introduced my apartment complex to it, as it has a shared space on the rooftop that we wanted people to be able to book, in an easy no-login way.”</blockquote>
+                    <blockquote>“I find it an amazing tool … simplicity is the great feature of pastecal.”</blockquote>
                 </div>
                 <p class="pc-tour-proof"><strong>3,000+</strong> calendars made since 2021</p>
                 </div>
@@ -1478,8 +1478,9 @@
                 <div data-tour="pricing">
                 <h3 class="pc-tour-label">Pricing</h3>
                 <div class="pc-tour-plans">
-                    <div><h4>Free <span>no account, no card</span></h4><p>Everything on this page: unlimited calendars, all three links, undo and daily backups. Nobody you share with pays or signs up.</p></div>
-                    <div class="pc-tour-plan-pro"><h4>Pro <span>$24 a year or $2.99 a month, per calendar</span></h4><p>For calendars you run: lock who can edit, keep a full history and restore any version, and see how many people view and follow it.</p><a href="/pricing" data-from="home-plans">See Pro →</a></div>
+                    <div><h4>Free</h4><p>Unlimited calendars and people, no login required. Edit and view-only links, calendar-app feeds, undo and daily backups.</p></div>
+                    <div class="pc-tour-plan-pro"><h4>Pro <span>from $24 a year</span></h4><p>For calendars you run: lock who can edit, restore any version, and see who's viewing and following, as counts.</p><a href="/pricing" class="pc-pro-link" data-from="home-pricing">Compare plans →</a></div>
+                </div>
                 </div>
                 </div>
 
@@ -1489,7 +1490,7 @@
                     <details><summary>Is it private?</summary><p>Anyone with a link can open it, so give a private calendar a hard-to-guess name. Edit links are kept out of search engines.</p></details>
                     <details><summary>Can I undo a change?</summary><p>Yes. Click "Edited … ago" at the top to see recent changes and put any of them back.</p></details>
                     <details><summary>Does it work on phones?</summary><p>Yes, in any phone browser. There is nothing to install.</p></details>
-                    <details><summary>Is it free?</summary><p>Yes. Making, editing and sharing calendars is free, with no trial and no card. Pro adds locking, full history and stats for $24 a year per calendar: <a href="/pricing" data-from="home-faq">see Pro</a>.</p></details>
+                    <details><summary>Is it free?</summary><p>Yes. Making, editing and sharing calendars is free, with no card needed. Pro adds locking, full history and stats for $24 a year per calendar: <a href="/pricing" data-from="home-faq">see Pro</a>.</p></details>
                     <details><summary>Can I put it on my website?</summary><p>Yes. Put the view-only link in an iframe and visitors see your calendar as it changes:</p><code class="pc-tour-snippet">&lt;iframe src="https://pastecal.com/view/ni191jkhnx" width="100%" height="600" style="border:0"&gt;&lt;/iframe&gt;</code></details>
                 </div>
 

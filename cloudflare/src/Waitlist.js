@@ -5,7 +5,7 @@
  */
 import { DurableObject } from 'cloudflare:workers';
 
-export const PLANS = ['pro', 'teams', 'unsure'];
+export const PLANS = ['pro', 'unlimited', 'teams', 'unsure'];
 
 export class Waitlist extends DurableObject {
     constructor(ctx, env) {
