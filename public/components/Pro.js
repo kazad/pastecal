@@ -242,8 +242,17 @@ const ProPanel = {
 
             <!-- A Pro Plus owner: every calendar of theirs is included, so locking is one click. -->
             <template v-if="mode === 'unlimited'">
-                <p class="pc-pro-lead">Included in your <b>Pro Plus</b>. Only you and people you invite can edit. Everyone else can still view.</p>
-                <div class="pc-pro-row">
+                <!-- Its 10 are used: more go under the owner's @name, without limit. -->
+                <template v-if="status && status.unlimitedFull">
+                    <p class="pc-pro-lead" data-testid="pro-unlimited-full">You've used your 10 Pro calendars.<template v-if="status.handle"> Put more under <b>@{{ status.handle }}</b>, without limit.</template></p>
+                    <form v-if="status.handle" class="pc-pro-row" @submit.prevent="saveAtName" data-testid="pro-put-under">
+                        <span class="pc-pro-name"><span class="pc-pro-muted">@{{ status.handle }}/</span><input v-model.trim="atNameInput" maxlength="40" aria-label="Name" placeholder="name" autocapitalize="none" spellcheck="false"></span>
+                        <button type="submit" class="pc-pro-btn" :disabled="busy || !atNameInput">{{ busy ? 'One moment…' : 'Put it there' }}</button>
+                    </form>
+                    <p v-else class="pc-pro-muted"><a href="/account" class="pc-pro-link">Claim your @name</a> to add as many as you like.</p>
+                </template>
+                <p v-else class="pc-pro-lead">Included in your <b>Pro Plus</b>. Only you and people you invite can edit. Everyone else can still view.</p>
+                <div v-if="!(status && status.unlimitedFull)" class="pc-pro-row">
                     <button type="button" class="pc-pro-btn" @click="lockUnlimited" :disabled="busy" data-testid="pro-unlimited-lock">{{ busy ? 'Locking…' : 'Lock this calendar' }}</button>
                     <span v-if="me" class="pc-pro-muted">as <span data-hj-suppress data-clarity-mask="true">{{ me.email }}</span></span>
                 </div>
@@ -367,6 +376,24 @@ const ProPanel = {
                 <p class="pc-pro-lead">Only you and people with your editor link can change it. Everyone else can view.
                     <span v-if="renewal" data-testid="pro-renewal">{{ renewal }}</span></p>
 
+                <!-- Pro Plus: this calendar's short links (pastecal.com/@handle/<name>, pastecal.com/<name>) -->
+                <div v-if="status.plan === 'unlimited' || status.atName || (status.shortNames || []).length" class="pc-pro-sub" data-testid="pro-short-links">
+                    <h5>Short links</h5>
+                    <p v-if="status.atName" class="pc-pro-linkline"><a :href="'/@' + status.handle + '/' + status.atName" target="_blank" rel="noopener" data-testid="pro-at-link">{{ host }}/@{{ status.handle }}/{{ status.atName }}</a></p>
+                    <p v-for="n in (status.shortNames || [])" :key="n" class="pc-pro-linkline"><a :href="'/' + n" target="_blank" rel="noopener" data-testid="pro-short-link">{{ host }}/{{ n }}</a></p>
+                    <template v-if="status.plan === 'unlimited'">
+                        <form v-if="status.handle" class="pc-pro-row" @submit.prevent="saveAtName" data-testid="pro-at-form">
+                            <span class="pc-pro-name"><span class="pc-pro-muted">@{{ status.handle }}/</span><input v-model.trim="atNameInput" maxlength="40" aria-label="Name under your @name" :placeholder="status.atName || 'name'" autocapitalize="none" spellcheck="false" data-testid="pro-at-input"></span>
+                            <button type="submit" class="pc-pro-btn pc-pro-btn--quiet" :disabled="busy || !atNameInput">{{ status.atName ? 'Rename' : 'Save' }}</button>
+                        </form>
+                        <form class="pc-pro-row" @submit.prevent="addShortName" data-testid="pro-short-form">
+                            <span class="pc-pro-name"><span class="pc-pro-muted">{{ host }}/</span><input v-model.trim="shortInput" maxlength="30" aria-label="Short name" placeholder="name" autocapitalize="none" spellcheck="false" data-testid="pro-short-input"></span>
+                            <button type="submit" class="pc-pro-btn pc-pro-btn--quiet" :disabled="busy || !shortInput">Add</button>
+                        </form>
+                    </template>
+                    <p class="pc-pro-muted pc-pro-note"><a href="/account" class="pc-pro-link" data-testid="pro-account-link">Your account</a>: every calendar and short link, in one place.</p>
+                </div>
+
                 <div class="pc-pro-row pc-pro-insight" data-testid="pro-insight-row">
                     <button type="button" class="pc-pro-btn pc-pro-btn--quiet" @click="$emit('open-insight', 'stats')" data-testid="pro-stats-btn">Stats</button>
                     <button type="button" class="pc-pro-btn pc-pro-btn--quiet" @click="$emit('open-insight', 'history')" data-testid="pro-history-btn">History</button>
@@ -440,6 +467,9 @@ const ProPanel = {
             trialSurface: '',
             wantTrial: false,     // opened from "Try Pro free" (ProIntent 'trial')
             lapsedMode: 'readonly',
+            atNameInput: '',      // Pro Plus: this calendar's name under the owner's @handle
+            shortInput: '',       // Pro Plus: a top-level pastecal.com/<name> for it
+            host: location.host.replace(/^www\./, ''),
             unlimitedOn: true,    // /api/pro/config unlimited: Pro Plus can be bought here
             billing: null,        // /api/pro/config: false = Pro can't be bought yet, so the offer is the Pro beta list
             // The staging copy only (utils/preview.js): which test card to pay with.
@@ -597,6 +627,17 @@ const ProPanel = {
                 if (r.status === 403 && r.data.message) { this.error = r.data.message; return; }
                 if (r.status === 404) { this.error = 'Save this calendar first. Then you can lock it.'; return; }
                 this.error = r.status === 0 ? 'We couldn’t reach pastecal. Check your connection and try again.' : 'Something went wrong. Try again in a minute.';
+            } finally { this.busy = false; }
+        },
+        // ---- Pro Plus short links (Names.js) ----
+        async saveAtName() { await this.nameChange('/api/names/link', { calendarId: this.calendarId, name: this.atNameInput }); },
+        async addShortName() { await this.nameChange('/api/names/short', { calendarId: this.calendarId, name: this.shortInput }); },
+        async nameChange(path, body) {
+            this.error = ''; this.busy = true;
+            try {
+                const r = await proApi('POST', path, body);
+                if (r.status === 200 && r.data.ok) { this.atNameInput = ''; this.shortInput = ''; if (typeof AccountMenu !== 'undefined') AccountMenu.reset(); await this.refresh(); return; }
+                this.error = r.data.message || (r.status === 0 ? 'We couldn’t reach pastecal. Check your connection and try again.' : r.status === 401 ? 'Sign in again to change it.' : 'Something went wrong. Try again in a minute.');
             } finally { this.busy = false; }
         },
         async unlockUnlimited() {

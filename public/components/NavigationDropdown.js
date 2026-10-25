@@ -177,6 +177,7 @@ const NavigationDropdown = {
                     <p v-if="acct.me.plan === 'unlimited'" class="pc-acct-muted pc-acct-line" data-testid="account-unlimited-hint">To lock another calendar, open it and choose Share.</p>
                     <a v-else href="/pricing#get-pro" data-from="account-menu" class="pc-acct-link pc-acct-line" data-testid="account-get-pro">{{ billing === false ? 'Join the Pro beta' : proCalendars.length ? 'Get Pro for another calendar' : 'Get Pro for a calendar' }}</a>
                     <div class="pc-acct-actions">
+                        <a href="/account" class="pc-acct-btn" data-from="account-menu" data-testid="account-page-link">Account</a>
                         <button type="button" class="pc-acct-btn" @click="portal" :disabled="acct.busy" data-testid="account-billing">Manage billing</button>
                         <button type="button" class="pc-acct-link" @click="signOut" :disabled="acct.busy" data-testid="account-signout">Sign out</button>
                     </div>

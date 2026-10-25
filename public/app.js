@@ -164,6 +164,15 @@ const stripBase = (path) => {
     return path;
 };
 
+// The read-only name an @link page opens (pastecal.com/@handle/<name>; Worker: cloudflare/src/Names.js), or null.
+// Only on an /@ address: anywhere else the meta would be a stray copy.
+function atViewSlug() {
+    if (!/^\/@/.test(stripBase(window.location.pathname))) return null;
+    const m = document.querySelector('meta[name="pc-view"]');
+    const v = m && m.getAttribute('content');
+    return v && /^[A-Za-z0-9_-]{1,100}$/.test(v) ? v : null;
+}
+
 const CalendarVueApp = {
     components: COMPONENT_REGISTRY,
     directives: {
@@ -171,6 +180,7 @@ const CalendarVueApp = {
     },
     data() {
         // Normalized for the case-insensitive lookup; null for the homepage or a bad path.
+        // (On /view/<x> this is "view", on /@handle/<name> "@handle": never a calendar to open, and never the homepage.)
         let urlslug = SlugManager.slugFromPath(stripBase(window.location.pathname));
         if (urlslug) urlslug = SlugManager.normalizeSlug(urlslug);
 
@@ -214,6 +224,8 @@ const CalendarVueApp = {
             proTrialUsed: false,
             proUnlimited: false,        // the signed-in person has Pro Plus: the Go Pro card locks with one click
             proUnlimitedBusy: false,
+            proUnlimitedFull: false,    // Pro Plus with its 10 used: the card offers the owner's @name instead
+            proHandle: '',
             proBilling: null,           // /api/pro/config: true = trial and checkout; false = "Join the Pro beta"; null = not known yet (neither shows)
             pausedOwner: false,         // this browser owns the paused (Pro ended) calendar it's looking at: offer the way back
             proTrialActive: false,      // this browser owns the calendar and it is on its free trial (trial_feature_used)
@@ -715,9 +727,12 @@ const CalendarVueApp = {
                 // readonly: pastecal.com/view/ID (supports alternative base paths via CAL_BASE)
                 let path = stripBase(location.pathname);
 
-                if (path?.startsWith('/view/')) {
+                // pastecal.com/@handle/<name>: the Worker serves this page with the read-only name to open
+                // (<meta name="pc-view">), so it opens exactly like /view/<that name> and the address stays.
+                const atView = atViewSlug();
+                if (path?.startsWith('/view/') || atView) {
                     // Read-only view mode
-                    const requestedSlug = path.split('/')[2];
+                    const requestedSlug = atView || path.split('/')[2];
             // Ensure explicit boolean normalization when setting read-only mode
             this.setIsReadOnly(true);
             this.viewRoute = true;
@@ -3121,6 +3136,7 @@ const CalendarVueApp = {
             // feed is the address being viewed, plus .ics.
             if (!this.viewRoute) return null;
             const parts = stripBase(window.location.pathname).split('/').filter(Boolean);
+            if (atViewSlug() && parts.length === 2) return `${window.location.origin}/${parts.map(encodeURIComponent).join('/').replace(/^%40/, '@')}.ics`;
             return parts[0] === 'view' && parts[1] ? `${window.location.origin}/view/${encodeURIComponent(parts[1])}.ics` : null;
         },
 
@@ -5272,6 +5288,8 @@ const CalendarVueApp = {
                 if (this.calendar && this.calendar.id === id) {
                     this.proTrialUsed = !!(data && data.trialUsed);
                     this.proUnlimited = !!(data && data.unlimited);
+                    this.proUnlimitedFull = !!(data && data.unlimitedFull);    // its 10 are used: this one goes under @name
+                    this.proHandle = (data && data.handle) || '';
                 }
             } catch (e) { /* offline: offer it; the server decides */ }
         },
