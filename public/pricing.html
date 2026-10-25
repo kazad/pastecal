@@ -35,6 +35,9 @@ h2 { font-size: var(--pc-fs-section); letter-spacing: -.01em; margin: 64px 0 14p
 .plan { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: var(--pc-radius-card); padding: 24px 20px 20px; display: flex; flex-direction: column }
 .plan.pro { border: 2px solid var(--blue) }
 .badge { position: absolute; top: -12px; left: 20px; background: var(--blue); color: var(--blue-ink); font-size: var(--pc-fs-xs); font-weight: var(--pc-fw-bold); border-radius: var(--pc-radius-pill); padding: 3px 10px }
+.explain { max-width: 760px; color: var(--muted); line-height: 1.6; margin: 4px 0 18px }
+.explain b { color: var(--ink) }
+.plan .size { margin: 2px 0 6px; font-size: var(--pc-fs-md); line-height: 1.45 }
 .badge.dev { background: var(--soon-bg); color: var(--soon) }
 .plan h3 { margin: 0; font-size: var(--pc-fs-xl) }
 .who { color: var(--muted); font-size: var(--pc-fs-md); margin: 4px 0 0; min-height: 2.9em }
@@ -232,8 +235,9 @@ details p { color: var(--muted); margin: 8px 0 0 }
     <div class="plan pro">
       <span class="badge">Beta</span>
       <h3>Pro Single</h3>
-      <p class="who">One calendar you run: a team, a class, a shift schedule.</p>
-      <div class="price"><strong>$24</strong><span>per calendar, per year</span></div>
+      <p class="size"><b>1 Pro calendar</b></p>
+      <p class="who">For the one calendar you run: a team, a class, a shift schedule.</p>
+      <div class="price"><strong>$24</strong><span>per year</span></div>
       <p class="per">That's $2 a month, billed yearly.</p>
       <ul>
         <li>Everything in Free</li>
@@ -254,17 +258,17 @@ details p { color: var(--muted); margin: 8px 0 0 }
     <div class="plan">
       <span class="badge">Beta</span>
       <h3>Pro Unlimited</h3>
+      <p class="size"><b>10 Pro calendars</b>, plus unlimited under your @name</p>
       <p class="who">For everyone who runs more than one calendar.</p>
       <div class="price"><strong>$48</strong><span>per year</span></div>
       <p class="per">That's $4 a month, billed yearly. Or $5 month to month.</p>
       <ul>
-        <li>Everything in Pro Single</li>
-        <li>Every calendar you run, one subscription</li>
+        <li>Everything in Pro Single, on every calendar</li>
+        <li>Point each short link at any of your calendars</li>
+        <li>One subscription</li>
       </ul>
       <p class="coming-h">In development, included when ready</p>
       <ul class="coming">
-        <li>Your own pastecal.com/@name</li>
-        <li>Locked short links</li>
         <li>Co-owners</li>
       </ul>
       <a class="cta" href="#waitlist" data-plan="unlimited" data-wait="unlimited">Join the Pro beta</a>
@@ -308,22 +312,25 @@ details p { color: var(--muted); margin: 8px 0 0 }
   </section>
 
   <h2 id="compare">Compare plans</h2>
+  <p class="explain">Every plan makes unlimited free calendars. <b>A Pro calendar</b> has all the extras: its name is reserved for you, you choose who edits, and you get full stats and history. <b>Pro Single</b> gives you one. <b>Pro Unlimited</b> gives you 10 with short names, like <code>pastecal.com/soccer</code>, and as many as you want under your own name, like <code>pastecal.com/@you/soccer</code>.</p>
   <p class="swipe">Swipe the table to see every plan.</p>
   <div class="gridwrap">
     <table>
       <thead><tr><th>Feature</th><th>Free</th><th class="pro">Pro Single <span class="beta-tag">Beta</span></th><th>Pro Unlimited <span class="beta-tag">Beta</span></th><th>Teams</th></tr></thead>
       <tbody>
+        <tr class="group"><td colspan="5"><span>Pro calendars</span></td></tr>
+        <tr><td>Pro calendars with a short name<small>Like <code>pastecal.com/soccer</code>, reserved for you</small></td><td class="n">—</td><td class="pro">1</td><td>10</td><td>10</td></tr>
+        <tr><td>Pro calendars under your name <span class="soon">In development</span><small>Like <code>pastecal.com/@you/soccer</code></small></td><td class="n">—</td><td class="pro n">—</td><td>Unlimited</td><td>Unlimited</td></tr>
+
         <tr class="group"><td colspan="5"><span>Sharing</span></td></tr>
-        <tr><td>Calendars</td><td>Unlimited</td><td class="pro">Unlimited</td><td>Unlimited</td><td>Unlimited</td></tr>
+        <tr><td>Free calendars<small>Anyone with the edit link can change them</small></td><td>Unlimited</td><td class="pro">Unlimited</td><td>Unlimited</td><td>Unlimited</td></tr>
         <tr><td>People who can view and edit<small>No login required</small></td><td>Unlimited</td><td class="pro">Unlimited</td><td>Unlimited</td><td>Unlimited</td></tr>
         <tr><td>Edit, view-only and calendar app links</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
         <tr><td>Embed on your website</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
         <tr><td>Choose your view-only link name</td><td class="y">✓</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
 
         <tr class="group"><td colspan="5"><span>Control</span></td></tr>
-        <tr><td>Lock editing to people you choose<small>They edit with an editor link you share. Everyone else can view, as today</small></td><td class="n">—</td><td class="pro">1 calendar</td><td>Unlimited <span class="soon">In development</span></td><td>Unlimited <span class="soon">In development</span></td></tr>
-        <tr><td>Your own name: <code>pastecal.com/@name</code> <span class="soon">In development</span></td><td class="n">—</td><td class="pro n">—</td><td class="y">✓</td><td class="y">✓</td></tr>
-        <tr><td>Locked short links <span class="soon">In development</span><small>Short <code>pastecal.com/name</code> links nobody else can take</small></td><td class="n">—</td><td class="pro n">—</td><td>Up to 10</td><td>Up to 10</td></tr>
+        <tr><td>Lock editing to people you choose<small>They edit with an editor link you share. Everyone else can view, as today</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
         <tr><td>Co-owners and admins <span class="soon">In development</span></td><td class="n">—</td><td class="pro n">—</td><td>3 co-owners</td><td>10 admins</td></tr>
         <tr><td>Suggested events <span class="soon">In development</span><small>Others suggest, you approve or decline</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>
         <tr><td>Secret events <span class="soon">In development</span><small>Seen only by people who can edit</small></td><td class="n">—</td><td class="pro y">✓</td><td class="y">✓</td><td class="y">✓</td></tr>

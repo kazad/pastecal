@@ -140,7 +140,7 @@ test('billing off: pricing says "Join the Pro beta", hides Get Pro, and the wait
   const { ctx, page } = await open(browser, '/pricing');
   const cta = page.locator('.plan.pro .cta');
   await expect(cta).toHaveText('Join the Pro beta');
-  await expect(page.locator('.plan.pro .beta-tag')).toHaveText('Beta');
+  await expect(page.locator('.plan.pro .badge')).toHaveText('Beta');
   await expect(page.locator('thead th.pro .beta-tag')).toHaveText('Beta');
   await expect(page.locator('#get-pro')).toBeHidden();
   await expect(page.getByText('Pro is in beta: features may change.')).toHaveCount(1);
@@ -196,7 +196,7 @@ test('billing on: pricing keeps Get Pro and the picker, with the Beta tag', asyn
   const { ctx, page } = await open(browser, '/pricing');
   await expect(page.locator('.plan.pro .cta')).toHaveText('Get Pro');
   await expect(page.locator('.plan.pro .cta')).toBeVisible();
-  await expect(page.locator('.plan.pro .beta-tag')).toHaveText('Beta');
+  await expect(page.locator('.plan.pro .badge')).toHaveText('Beta');
   await expect(page.locator('thead th.pro .beta-tag')).toHaveText('Beta');
   await expect(page.locator('#get-pro')).toBeVisible();
   await page.locator('.plan.pro .cta').click();
