@@ -383,7 +383,7 @@ const ProPanel = {
                     <p v-for="n in (status.shortNames || [])" :key="n" class="pc-pro-linkline"><a :href="'/' + n" target="_blank" rel="noopener" data-testid="pro-short-link">{{ host }}/{{ n }}</a></p>
                     <template v-if="status.plan === 'unlimited'">
                         <form v-if="status.handle" class="pc-pro-row" @submit.prevent="saveAtName" data-testid="pro-at-form">
-                            <span class="pc-pro-name"><span class="pc-pro-muted">@{{ status.handle }}/</span><input v-model.trim="atNameInput" maxlength="40" aria-label="Name under your @name" :placeholder="status.atName || 'name'" autocapitalize="none" spellcheck="false" data-testid="pro-at-input"></span>
+                            <span class="pc-pro-name"><span class="pc-pro-muted">@{{ status.handle }}/</span><input v-model.trim="atNameInput" maxlength="40" aria-label="Name under your @name" :placeholder="status.atName ? 'new name' : 'name'" autocapitalize="none" spellcheck="false" data-testid="pro-at-input"></span>
                             <button type="submit" class="pc-pro-btn pc-pro-btn--quiet" :disabled="busy || !atNameInput">{{ status.atName ? 'Rename' : 'Save' }}</button>
                         </form>
                         <form class="pc-pro-row" @submit.prevent="addShortName" data-testid="pro-short-form">
@@ -469,7 +469,7 @@ const ProPanel = {
             lapsedMode: 'readonly',
             atNameInput: '',      // Pro Plus: this calendar's name under the owner's @handle
             shortInput: '',       // Pro Plus: a top-level pastecal.com/<name> for it
-            host: location.host.replace(/^www\./, ''),
+            host: /(^|\.)pastecal\.com$/.test(location.hostname) ? location.hostname.replace(/^www\./, '') : 'pastecal.com',
             unlimitedOn: true,    // /api/pro/config unlimited: Pro Plus can be bought here
             billing: null,        // /api/pro/config: false = Pro can't be bought yet, so the offer is the Pro beta list
             // The staging copy only (utils/preview.js): which test card to pay with.

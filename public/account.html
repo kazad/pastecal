@@ -22,8 +22,8 @@ h1 { margin: 8px 0 2px; font-size: 28px; line-height: 1.2; letter-spacing: -.01e
 .card { background: var(--pc-bg); border: 1px solid var(--pc-line); border-radius: var(--pc-radius-lg); padding: 20px; margin: 0 0 16px; }
 .card h2 { margin: 0 0 4px; font-size: 17px; line-height: 1.3; }
 .card > p, .muted { color: var(--pc-text-muted); margin: 4px 0 0; }
-.plan { font-size: 18px; font-weight: 600; margin: 2px 0 0; color: var(--pc-text); }
-.meter { margin: 6px 0 0; color: var(--pc-text-2); }
+.card .plan { font-size: 18px; font-weight: 600; margin: 2px 0 0; color: var(--pc-text); }
+.card .meter { margin: 6px 0 0; color: var(--pc-text-2); }
 .row-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 16px; }
 .btn { display: inline-flex; align-items: center; justify-content: center; height: 38px; padding: 0 16px; border-radius: var(--pc-radius-md); border: 1px solid transparent;
   background: var(--pc-link); color: var(--btn-ink); font: 600 14px/1 var(--pc-font); text-decoration: none; cursor: pointer; white-space: nowrap; }
@@ -62,7 +62,8 @@ select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); borde
 .check { display: inline-flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 14px; cursor: pointer; }
 .check input { accent-color: var(--pc-link); width: 16px; height: 16px; margin: 0; }
 .short-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
-.short-name { font-weight: 600; overflow-wrap: anywhere; }
+.short-name { font-weight: 600; overflow-wrap: anywhere; color: var(--pc-link); text-decoration: none; }
+.short-name:hover { text-decoration: underline; }
 .short-row .grow { flex: 1 1 200px; color: var(--pc-text-muted); min-width: 0; overflow-wrap: anywhere; }
 .danger-zone { background: transparent; border-style: dashed; }
 .danger-zone h2 { color: var(--pc-text); }
@@ -196,7 +197,7 @@ select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); borde
       .catch(function () { return { status: 0, d: {} }; });
   };
   var OFFLINE = 'We couldn’t reach pastecal. Check your connection and try again.';
-  var day = function (t) { if (!t) return ''; var ms = t < 1e12 ? t * 1000 : t; return new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); };
+  var day = function (t) { if (!t) return ''; var ms = t < 1e12 ? t * 1000 : t; return new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }); };
   var daysLeft = function (t) { var ms = (t < 1e12 ? t * 1000 : t) - Date.now(); return Math.max(0, Math.ceil(ms / 86400000)); };
   var ACTIVE = { active: 1, trialing: 1, past_due: 1 };
   var el = function (tag, attrs, kids) {
@@ -205,7 +206,8 @@ select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); borde
     (kids || []).forEach(function (c) { if (c) n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
     return n;
   };
-  var host = location.host.replace(/^www\./, '');
+  // How links read: pastecal.com (or the preview site's own name); a local copy still says pastecal.com.
+  var host = /(^|\.)pastecal\.com$/.test(location.hostname) ? location.hostname.replace(/^www\./, '') : 'pastecal.com';
   var A = null;
 
   function show(which) { ['loading', 'out', 'in', 'deleted'].forEach(function (id) { $(id).hidden = id !== which; }); }
@@ -241,8 +243,8 @@ select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); borde
     $('email').textContent = A.email;
     $('plan').textContent = planLine();
     var unl = A.plan === 'unlimited', lapsed = !unl && A.unlimited;
-    $('meter').hidden = !(unl || A.handle);
-    if (unl || A.handle) $('meter').textContent = 'Pro calendars: ' + A.proCount + ' of ' + A.proLimit + (A.handle ? ' · unlimited under @' + A.handle : ' · unlimited under your @name');
+    $('meter').hidden = !unl;
+    if (unl) $('meter').textContent = 'Pro calendars: ' + A.proCount + ' of ' + A.proLimit + (A.handle ? ' · unlimited under @' + A.handle : ' · unlimited under your @name');
     $('planNote').hidden = !lapsed;
     if (lapsed) $('planNote').textContent = 'Your links keep working. Renew Pro Plus to add or change names.';
     $('billing').hidden = !A.hasBilling;
@@ -266,6 +268,10 @@ select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); borde
     $('shortCard').hidden = !(unl || shorts.length);
     $('shortH').textContent = 'Short links · ' + shorts.length + ' of ' + A.shortLimit;
     $('shortForm').hidden = !unl || shorts.length >= A.shortLimit;
+    var held = shorts.map(function (x) { return x.endedAt; }).filter(Boolean).sort()[0];
+    $('shortNote').textContent = held
+      ? 'Your Pro Plus has ended, so these can\u2019t be changed. They keep working, and stay yours until ' + day(held + A.holdDays * 86400000) + '. Renew to keep them.'
+      : 'If Pro Plus ends, your short links keep working but can\u2019t be changed. We hold them for you for ' + A.holdDays + ' days after it ends, then release them for anyone to use.';
     var mine = A.calendars.filter(function (c) { return c.state !== 'open' && c.state !== 'unknown'; });
     var sel = $('shortCal'); sel.textContent = '';
     mine.forEach(function (c) { sel.appendChild(el('option', { value: c.id, text: c.title })); });
