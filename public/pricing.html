@@ -227,6 +227,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
   <div class="site-header__in">
     <a class="site-brand" href="/" data-from="site-header"><img src="/img/pastecal.logo.svg" alt="" width="26" height="26">pastecal</a>
     <nav class="site-nav" aria-label="Site">
+      <a class="site-link" href="/features" data-from="site-header">Features</a>
       <a class="site-link" href="/templates" data-from="site-header">Templates</a>
       <a class="site-link" href="/help" data-from="site-header">Help</a>
       <a class="site-link" href="/pricing" data-from="site-header">Pricing</a>
@@ -505,7 +506,7 @@ document.querySelectorAll('[data-plan]').forEach(a => a.addEventListener('click'
   document.querySelectorAll('.interval input').forEach(r => r.addEventListener('change', () =>
     document.querySelectorAll('.interval').forEach(l => l.classList.toggle('on', l.querySelector('input').checked))));
   const ID = /^[A-Za-z0-9_-]{1,100}$/;
-  const RESERVED = new Set(['view', 'pricing', 'privacy', 'terms', 'pro', 'signin', 'report', 'explore', 'api', 'dev', 'demo', 'beta', 'nativecal', 'cal', 'account', 'templates', 'index.html']);
+  const RESERVED = new Set(['view', 'pricing', 'privacy', 'terms', 'pro', 'signin', 'report', 'explore', 'api', 'dev', 'demo', 'beta', 'nativecal', 'cal', 'account', 'templates', 'features', 'index.html']);
   const go = (id, via) => {
     try { localStorage.setItem('pastecal_pro_intent', JSON.stringify({ id, interval: 'year', t: Date.now() })); } catch (e) { /* storage blocked: Share still opens by hand */ }
     pcTrack('pricing_getpro_picked', { via, interval: 'year' });
@@ -673,6 +674,7 @@ function joinBeta(plan) {
   <div class="site-footer__in">
     <nav class="site-footer__links" aria-label="Footer">
       <a href="/" data-from="site-footer">Make a calendar</a>
+      <a href="/features" data-from="site-footer">Features</a>
       <a href="/templates" data-from="site-footer">Templates</a>
       <a href="/pricing" data-from="site-footer">Pricing</a>
       <a href="/help" data-from="site-footer">Help</a>

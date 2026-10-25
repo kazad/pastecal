@@ -22,7 +22,7 @@ export const RESERVED_WORDS = new Set([
 // them. Only creation: an existing calendar keeps working. The apps' checkExists lists match.
 export const RESERVED_CALENDAR_NAMES = new Set([
     'beta', 'nativecal', 'view', 'dev', 'api', 'cal',
-    'report', 'signin', 'pro', 'pricing', 'explore', 'privacy', 'terms', 'contact', 'account', 'templates',
+    'report', 'signin', 'pro', 'pricing', 'explore', 'privacy', 'terms', 'contact', 'account', 'templates', 'features',
 ]);
 
 // Every top-level entry of public/ (a page, a folder, a file), without its extension. A short name
@@ -30,7 +30,7 @@ export const RESERVED_CALENDAR_NAMES = new Set([
 export const STATIC_PAGE_NAMES = new Set([
     '_headers', 'about', 'app', 'components', 'contact', 'demo', 'design-ideas', 'dev', 'directives', 'help', 'img', 'index',
     'js-old-components', 'legal', 'models', 'nativecal', 'poll', 'pricing', 'pricing-next', 'privacy', 'pro', 'report', 'robots',
-    'selftest', 'services', 'signin', 'site', 'style', 'tailwind', 'terms', 'tokens', 'utils', 'vendor', 'account', 'handle', 'templates', 'sitemap', 'subscribe',
+    'selftest', 'services', 'signin', 'site', 'style', 'tailwind', 'terms', 'tokens', 'utils', 'vendor', 'account', 'handle', 'templates', 'features', 'sitemap', 'subscribe',
 ]);
 
 // Names that would read as pastecal itself, staff, or a site function on a public @ page or a short

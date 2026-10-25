@@ -1,0 +1,185 @@
+/* pastecal.com/features: six rows, words beside a picture, alternating sides on a wide screen and stacked on a phone.
+   Each picture is a real screenshot (scripts/shoot-features.mjs) on the homepage tour's stage, with a few drawn
+   pieces on top that replay one moment. The resting styles are the finished scene; the animations run only under
+   .is-playing (features.html turns it on while the picture is on screen, never with reduced motion). */
+main.ft-main > * { max-width: none }
+.ft-lede { margin: 6px 0 0; font-size: var(--pc-fs-xl); color: var(--pc-text-2); max-width: 46ch }
+.ft-main { counter-reset: ft-step }
+.ft-main > h1 { font-size: var(--pc-fs-hero); letter-spacing: -.02em; line-height: 1.05 }
+
+.ft-row { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); align-items: center; gap: var(--pc-space-12); margin-top: 72px; counter-increment: ft-step }
+.ft-main > .ft-row:first-of-type { margin-top: var(--pc-space-12) }
+.ft-row:nth-of-type(even) { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr) }
+.ft-row:nth-of-type(even) > .ft-text { order: 2 }
+.ft-text h2 { margin: 0 0 var(--pc-space-2); font-size: var(--pc-fs-section); line-height: 1.15; letter-spacing: var(--pc-tracking-tight); text-wrap: balance }
+.ft-text h2::before { content: counter(ft-step); display: block; margin-bottom: var(--pc-space-2); font-size: var(--pc-fs-xl); color: var(--pc-link) }
+.ft-text p { margin: 0 0 var(--pc-space-3); color: var(--pc-text-2); max-width: 40ch }
+.ft-text a { font-weight: var(--pc-fw-semibold) }
+
+.ft-end { display: flex; flex-wrap: wrap; align-items: center; gap: var(--pc-space-3) var(--pc-space-6); margin: 80px 0 var(--pc-space-4); padding-top: var(--pc-space-10); border-top: 1px solid var(--pc-line) }
+.ft-end a:not(.pc-btn) { font-weight: var(--pc-fw-semibold) }
+.ft-end .pc-btn { text-decoration: none }
+
+@media (max-width: 860px) {
+  .ft-row, .ft-row:nth-of-type(even) { grid-template-columns: minmax(0, 1fr); gap: var(--pc-space-5); margin-top: 56px }
+  .ft-row:nth-of-type(even) > .ft-text { order: 0 }
+  .ft-text p { max-width: 60ch }
+}
+
+/* @illustrations */
+/* The stage: the homepage tour's (style.css .pc-tour-art), sized by its width so every piece scales with it. */
+.ft-art { --u: 1cqw; --art-dur: 9s; --art-shadow: 0 1px 2px rgba(0,0,0,.06), 0 10px 26px -8px rgba(30,40,80,.18);
+  position: relative; aspect-ratio: 16 / 11; container-type: inline-size; overflow: hidden; contain: layout paint;
+  border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card);
+  background: radial-gradient(110% 80% at 50% 0%, color-mix(in srgb, var(--pc-link) 10%, transparent), transparent 70%), var(--pc-surface);
+  font-family: var(--pc-font); color: var(--pc-text); line-height: 1.2; user-select: none }
+[data-theme="dark"] .ft-art { --art-shadow: 0 1px 0 rgba(255,255,255,.04) inset, 0 14px 30px -10px rgba(0,0,0,.7) }
+.ft-art img { display: block; width: 100%; height: auto }
+.ft-art :is(i, b, s, em) { font-style: normal; text-decoration: none }
+.ft-art .c1 { background: var(--pc-event-1); color: var(--pc-on-event) }
+.ft-art .c2 { background: var(--pc-event-2); color: var(--pc-on-event) }
+/* Screenshots sit in a window with a hairline, so a light picture on a dark page still looks placed. */
+.ft-win, .ft-panel, .ft-paper { position: absolute; container-type: inline-size; overflow: hidden; border: 1px solid var(--pc-line); border-radius: calc(1.6 * var(--u)); background: var(--pc-bg); box-shadow: var(--art-shadow) }
+.ft-cursor { position: absolute; width: calc(3.6 * var(--u)); height: calc(3.6 * var(--u)); fill: var(--pc-text); stroke: var(--pc-bg); stroke-width: 1.6; stroke-linejoin: round; filter: drop-shadow(0 2px 3px rgba(0,0,0,.25)); opacity: 0; pointer-events: none }
+.ft-caret { display: inline-block; width: 1.5px; height: 1.1em; margin-left: 1px; vertical-align: -.2em; background: var(--pc-link) }
+.is-playing .ft-caret { animation: ft-blink .8s steps(1) infinite }
+@keyframes ft-blink { 50% { opacity: 0 } }
+
+/* 1. Make: click Wednesday the 14th, type, and Picture day lands on the grid; then the link at the top lights up.
+   Positions are shares of calendar.jpg (1180x700): the cell is x 507 y 375 w 166 h 111, the link 823 19 345 38. */
+.ft-make .ft-win { left: 5%; top: 9%; width: 102% }
+.ft-cell { position: absolute; left: 42.97%; top: 53.57%; width: 14.07%; height: 15.86% }
+.ft-chip { position: absolute; left: 43.14%; top: 57.86%; width: 13.47%; height: 2.86%; display: flex; align-items: center; padding: 0 .3cqw; box-sizing: border-box; border-radius: .35cqw;
+  background: var(--pc-event-4); color: var(--pc-on-event); font-size: calc(1.02 * var(--u)); font-weight: 600; white-space: nowrap; overflow: hidden; transform-origin: left center }
+.ft-pop { position: absolute; left: 44%; top: 63.5%; display: flex; align-items: center; height: calc(4.2 * var(--u)); padding: 0 calc(1.2 * var(--u)); border: 1px solid color-mix(in srgb, var(--pc-link) 55%, var(--pc-line)); border-radius: var(--u);
+  background: var(--pc-bg); box-shadow: var(--pc-shadow-md); font-size: calc(1.9 * var(--u)); font-weight: 600; white-space: nowrap; opacity: 0 }
+.ft-pill { position: absolute; left: 69.75%; top: 2.71%; width: 29.24%; height: 5.43%; border-radius: 999px; box-sizing: border-box }
+.ft-make .ft-cursor { left: 50%; top: 62% }
+.is-playing.ft-make .ft-cursor { animation: ft-make-cursor var(--art-dur) var(--pc-ease) infinite }
+.is-playing.ft-make .ft-cell { animation: ft-make-cell var(--art-dur) var(--pc-ease) infinite }
+.is-playing.ft-make .ft-pop { animation: ft-make-pop var(--art-dur) var(--pc-ease) infinite }
+.is-playing.ft-make .ft-typed { animation: ft-make-type var(--art-dur) steps(15, end) infinite }
+.is-playing.ft-make .ft-chip { animation: ft-make-chip var(--art-dur) var(--pc-ease) infinite }
+.is-playing.ft-make .ft-pill { animation: ft-make-pill var(--art-dur) var(--pc-ease) infinite }
+@keyframes ft-make-cursor { 0% { transform: translate(18cqw, 14cqw); opacity: 0 } 5% { opacity: 1 } 13% { transform: translate(0, 0) } 15% { transform: scale(.82) } 17% { transform: scale(1) } 58% { transform: translate(0, 0); opacity: 1 } 70%, 100% { transform: translate(6cqw, 8cqw); opacity: 0 } }
+@keyframes ft-make-cell { 0%, 14% { background: transparent } 16%, 58% { background: color-mix(in srgb, var(--pc-link) 16%, transparent) } 66%, 100% { background: transparent } }
+@keyframes ft-make-pop { 0%, 16% { opacity: 0; transform: translateY(4px) } 19%, 55% { opacity: 1; transform: none } 59%, 100% { opacity: 0; transform: translateY(-3px) } }
+@keyframes ft-make-type { 0%, 20% { clip-path: inset(0 100% 0 0) } 45%, 100% { clip-path: inset(0 0 0 0) } }
+@keyframes ft-make-chip { 0%, 57% { opacity: 0; transform: scale(.6) } 62% { opacity: 1; transform: scale(1.08); box-shadow: 0 0 0 3px color-mix(in srgb, var(--pc-event-4) 35%, transparent) } 67% { transform: none } 78%, 95% { opacity: 1; box-shadow: 0 0 0 0 transparent } 100% { opacity: 0 } }
+@keyframes ft-make-pill { 0%, 68% { box-shadow: 0 0 0 0 transparent } 72% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--pc-primary) 45%, transparent) } 84% { box-shadow: 0 0 0 2px color-mix(in srgb, var(--pc-primary) 35%, transparent) } 94%, 100% { box-shadow: 0 0 0 0 transparent } }
+
+/* 2. Share: copy the view link (share.jpg, 330x560: its field is x 21 y 96 w 288 h 34), and it lands in the team chat. */
+.ft-share .ft-panel { right: 6%; top: 7%; width: 40% }
+.ft-copyring { position: absolute; left: 6.4%; top: 17.1%; width: 87.3%; height: 6.1%; border-radius: calc(2.4 * var(--u)); box-sizing: border-box }
+.ft-toast { position: absolute; right: 5%; top: 25%; padding: calc(1.4 * var(--u)) calc(3 * var(--u)); border-radius: 999px; background: var(--pc-toast); color: var(--pc-on-toast); font-size: calc(3.6 * var(--u)); font-weight: 600; opacity: 0 }
+.ft-share .ft-cursor { left: 85%; top: 21%; width: calc(9 * var(--u)); height: calc(9 * var(--u)) }
+.ft-chat { position: absolute; left: 5%; top: 24%; width: 46%; display: flex; flex-direction: column; gap: calc(1.2 * var(--u)); padding: calc(1.6 * var(--u)) calc(2 * var(--u)) calc(2 * var(--u)); box-sizing: border-box;
+  border: 1px solid var(--pc-line); border-radius: calc(2 * var(--u)); background: var(--pc-bg); box-shadow: var(--art-shadow); font-size: calc(1.9 * var(--u)) }
+.ft-room { font-size: calc(1.5 * var(--u)); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--pc-text-muted) }
+.ft-out { align-self: flex-end; max-width: 92%; padding: calc(1.1 * var(--u)) calc(1.4 * var(--u)) calc(1.3 * var(--u)); border-radius: calc(2 * var(--u)) calc(2 * var(--u)) calc(.5 * var(--u)) calc(2 * var(--u)); background: var(--pc-primary); color: var(--pc-on-primary); font-weight: 600; transform-origin: right bottom }
+.ft-card { display: flex; align-items: center; gap: calc(.8 * var(--u)); margin-top: calc(.9 * var(--u)); padding: calc(.7 * var(--u)) calc(1.1 * var(--u)); border-radius: calc(1.1 * var(--u)); background: color-mix(in srgb, var(--pc-on-primary) 18%, transparent); font-size: calc(1.75 * var(--u)); font-weight: 700; white-space: nowrap }
+.ft-card svg { flex: none; width: calc(2.2 * var(--u)); height: calc(2.2 * var(--u)); fill: none; stroke: currentColor; stroke-width: 2.2 }
+.ft-in { align-self: flex-start; display: grid; height: calc(3.8 * var(--u)) }
+.ft-in > span { grid-area: 1 / 1; display: flex; align-items: center; padding: 0 calc(1.5 * var(--u)); border-radius: calc(2 * var(--u)) calc(2 * var(--u)) calc(2 * var(--u)) calc(.5 * var(--u)); background: var(--pc-hover); font-weight: 600; color: var(--pc-text) }
+.ft-dots { gap: calc(.5 * var(--u)); opacity: 0 }
+.ft-dots i { width: calc(.7 * var(--u)); height: calc(.7 * var(--u)); border-radius: 50%; background: var(--pc-text-muted) }
+.ft-reply { transform-origin: left bottom }
+.is-playing.ft-share .ft-cursor { animation: ft-share-cursor var(--art-dur) var(--pc-ease) infinite }
+.is-playing.ft-share .ft-copyring { animation: ft-share-ring var(--art-dur) var(--pc-ease) infinite }
+.is-playing.ft-share .ft-toast { animation: ft-share-toast var(--art-dur) var(--pc-ease) infinite }
+.is-playing.ft-share .ft-out { animation: ft-share-out var(--art-dur) var(--pc-ease) infinite }
+.is-playing.ft-share .ft-dots { animation: ft-share-dots var(--art-dur) linear infinite }
+.is-playing.ft-share .ft-reply { animation: ft-share-reply var(--art-dur) var(--pc-ease) infinite }
+@keyframes ft-share-cursor { 0% { transform: translate(-30cqw, 40cqw); opacity: 0 } 5% { opacity: 1 } 14% { transform: none } 16% { transform: scale(.82) } 18% { transform: scale(1) } 30% { transform: none; opacity: 1 } 40%, 100% { transform: translate(-12cqw, 22cqw); opacity: 0 } }
+@keyframes ft-share-ring { 0%, 15% { box-shadow: 0 0 0 0 transparent } 18% { box-shadow: 0 0 0 1.4cqw color-mix(in srgb, var(--pc-primary) 35%, transparent) } 30%, 100% { box-shadow: 0 0 0 0 transparent } }
+@keyframes ft-share-toast { 0%, 17% { opacity: 0; transform: translateY(-3px) } 20%, 34% { opacity: 1; transform: none } 38%, 100% { opacity: 0 } }
+@keyframes ft-share-out { 0%, 34% { opacity: 0; transform: translateY(8px) scale(.94) } 40%, 95% { opacity: 1; transform: none } 100% { opacity: 0 } }
+@keyframes ft-share-dots { 0%, 50% { opacity: 0 } 52%, 62% { opacity: 1 } 64%, 100% { opacity: 0 } }
+@keyframes ft-share-reply { 0%, 63% { opacity: 0; transform: scale(.9) } 67%, 95% { opacity: 1; transform: none } 100% { opacity: 0 } }
+
+/* 3. Phone: tap Add to my calendar on the view link, and the add page comes up on the phone
+   (add.jpg, 390x760: the big button is x 35 y 222 w 320 h 44). */
+.ft-viewbar { position: absolute; left: 5%; top: 30%; width: 50%; display: flex; flex-wrap: wrap; align-items: center; gap: calc(1.2 * var(--u)); padding: calc(2 * var(--u)); box-sizing: border-box;
+  border: 1px solid var(--pc-line); border-radius: calc(2 * var(--u)); background: var(--pc-bg); box-shadow: var(--art-shadow); font-size: calc(2.2 * var(--u)) }
+.ft-viewbar b { font-weight: 800 }
+.ft-badge { display: inline-flex; align-items: center; gap: calc(.6 * var(--u)); padding: calc(.5 * var(--u)) calc(1.2 * var(--u)); border: 1px solid var(--pc-line); border-radius: 999px; background: var(--pc-surface); color: var(--pc-text-muted); font-size: calc(1.5 * var(--u)); font-weight: 600 }
+.ft-badge svg { width: calc(1.8 * var(--u)); height: calc(1.8 * var(--u)); fill: none; stroke: currentColor; stroke-width: 2.4 }
+.ft-addbtn { margin-top: var(--u); padding: calc(1.2 * var(--u)) calc(2.2 * var(--u)); border: 1px solid var(--pc-field); border-radius: calc(1.2 * var(--u)); background: var(--pc-bg); font-size: calc(1.9 * var(--u)); font-weight: 600 }
+.ft-phone .ft-cursor { left: 30%; top: 72% ; width: calc(7 * var(--u)); height: calc(7 * var(--u)) }
+.ft-device { position: absolute; right: 8%; top: 10%; width: 33%; padding: calc(1.6 * var(--u)) calc(1.2 * var(--u)) 0; box-sizing: border-box; border: 1.5px solid var(--pc-field); border-bottom: 0; border-radius: calc(4.4 * var(--u)) calc(4.4 * var(--u)) 0 0;
+  background: var(--pc-bg); box-shadow: var(--art-shadow); container-type: inline-size }
+.ft-device img { border-radius: calc(2.8 * var(--u)) calc(2.8 * var(--u)) 0 0 }
+.ft-tapring { position: absolute; left: 13%; top: 31%; width: 74%; height: 5.4%; border-radius: calc(3 * var(--u)) }
+.is-playing.ft-phone .ft-cursor { animation: ft-phone-cursor var(--art-dur) var(--pc-ease) infinite }
+.is-playing.ft-phone .ft-addbtn { animation: ft-phone-press var(--art-dur) var(--pc-ease) infinite }
+.is-playing.ft-phone .ft-device { animation: ft-phone-up var(--art-dur) var(--pc-ease) infinite }
+.is-playing.ft-phone .ft-tapring { animation: ft-phone-ring var(--art-dur) var(--pc-ease) infinite }
+@keyframes ft-phone-cursor { 0% { transform: translate(20cqw, 18cqw); opacity: 0 } 5% { opacity: 1 } 14% { transform: none } 16% { transform: scale(.82) } 18% { transform: scale(1) } 26% { transform: none; opacity: 1 } 36%, 100% { transform: translate(8cqw, 10cqw); opacity: 0 } }
+@keyframes ft-phone-press { 0%, 15% { border-color: var(--pc-field); background: var(--pc-bg) } 16% { transform: scale(.94) } 18%, 24% { transform: none; border-color: var(--pc-link); background: var(--pc-hover) } 30%, 100% { border-color: var(--pc-field); background: var(--pc-bg) } }
+@keyframes ft-phone-up { 0%, 18% { transform: translateY(105%) } 32%, 94% { transform: none } 100% { transform: translateY(105%) } }
+@keyframes ft-phone-ring { 0%, 40% { box-shadow: 0 0 0 0 transparent } 44% { box-shadow: 0 0 0 2.4cqw color-mix(in srgb, var(--pc-primary) 35%, transparent) } 52% { box-shadow: 0 0 0 0 transparent } 56% { box-shadow: 0 0 0 2.4cqw color-mix(in srgb, var(--pc-primary) 35%, transparent) } 64%, 100% { box-shadow: 0 0 0 0 transparent } }
+
+/* 4. Organize: search for "game", and the games come up. */
+.ft-organize .ft-win { left: 4%; top: 8%; width: 92% }
+.ft-search { position: absolute; left: 4%; bottom: 6%; width: 46%; display: flex; flex-direction: column; gap: calc(.6 * var(--u)); padding: calc(1.6 * var(--u)); box-sizing: border-box;
+  border: 1px solid var(--pc-line); border-radius: calc(2 * var(--u)); background: var(--pc-bg); box-shadow: var(--pc-shadow-md); font-size: calc(1.9 * var(--u)) }
+.ft-field { display: flex; align-items: center; gap: var(--u); height: calc(4.6 * var(--u)); padding: 0 calc(1.4 * var(--u)); margin-bottom: calc(.6 * var(--u)); border: 1px solid var(--pc-link); border-radius: calc(1.2 * var(--u)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--pc-link) 18%, transparent); font-weight: 600 }
+.ft-field svg { width: calc(2.2 * var(--u)); height: calc(2.2 * var(--u)); fill: none; stroke: var(--pc-text-muted); stroke-width: 2.4; stroke-linecap: round }
+.ft-q { display: inline-block; overflow: hidden; white-space: nowrap }
+.ft-hit { display: flex; align-items: center; gap: var(--u); padding: calc(.9 * var(--u)) var(--u); border-radius: var(--u) }
+.ft-hit:nth-child(2) { background: var(--pc-soft) }
+.ft-hit b { font-weight: 600 }
+.ft-hit small { margin-left: auto; font-size: calc(1.6 * var(--u)); color: var(--pc-text-muted) }
+.ft-dot { flex: none; width: calc(1.4 * var(--u)); height: calc(1.4 * var(--u)); border-radius: 50%; background: var(--pc-event-2) }
+.is-playing.ft-organize .ft-q { animation: ft-org-type var(--art-dur) steps(4, end) infinite }
+.is-playing.ft-organize .ft-hit { animation: ft-org-hit var(--art-dur) var(--pc-ease) infinite }
+.is-playing.ft-organize .ft-hit:nth-child(3) { animation-name: ft-org-hit2 }
+.is-playing.ft-organize .ft-hit:nth-child(4) { animation-name: ft-org-hit3 }
+@keyframes ft-org-type { 0%, 8% { max-width: 0 } 22%, 100% { max-width: 4em } }
+@keyframes ft-org-hit { 0%, 24% { opacity: 0; transform: translateY(4px) } 28%, 95% { opacity: 1; transform: none } 100% { opacity: 0 } }
+@keyframes ft-org-hit2 { 0%, 28% { opacity: 0; transform: translateY(4px) } 32%, 95% { opacity: 1; transform: none } 100% { opacity: 0 } }
+@keyframes ft-org-hit3 { 0%, 32% { opacity: 0; transform: translateY(4px) } 36%, 95% { opacity: 1; transform: none } 100% { opacity: 0 } }
+
+/* 5. Print: the month comes out of the printer, and the QR code lights up (print.jpg, 1056x730: x 8 y 646 w 76 h 76). */
+.ft-slot { position: absolute; left: 8%; right: 8%; top: 7%; height: calc(2.4 * var(--u)); border: 1px solid var(--pc-field); border-radius: 999px; background: var(--pc-soft); box-shadow: inset 0 3px 6px -2px rgba(0,0,0,.25); z-index: 1 }
+.ft-feed { position: absolute; left: 12%; right: 12%; top: calc(7% + calc(1.2 * var(--u))); bottom: 0; overflow: hidden }
+.ft-print .ft-paper { left: 0; top: 0; width: 100%; padding: calc(3 * var(--u)) calc(3 * var(--u)) calc(1.5 * var(--u)); box-sizing: border-box; border-radius: 0 0 calc(.8 * var(--u)) calc(.8 * var(--u)); border-top: 0; background: var(--pc-paper) }
+.ft-sheet { position: relative; display: block }
+.ft-qrring { position: absolute; left: .4%; top: 88%; width: 7.6%; height: 11%; border-radius: calc(.6 * var(--u)) }
+.is-playing.ft-print .ft-paper { animation: ft-print-feed var(--art-dur) cubic-bezier(.4,0,.6,1) infinite }
+.is-playing.ft-print .ft-qrring { animation: ft-print-qr var(--art-dur) var(--pc-ease) infinite }
+@keyframes ft-print-feed { 0%, 4% { transform: translateY(-101%) } 40%, 95% { transform: none } 100% { transform: translateY(-101%) } }
+@keyframes ft-print-qr { 0%, 46% { box-shadow: 0 0 0 0 transparent } 50% { box-shadow: 0 0 0 1cqw color-mix(in srgb, var(--pc-primary) 40%, transparent) } 58% { box-shadow: 0 0 0 0 transparent } 62% { box-shadow: 0 0 0 1cqw color-mix(in srgb, var(--pc-primary) 40%, transparent) } 70%, 100% { box-shadow: 0 0 0 0 transparent } }
+
+/* 6. Lock: on a locked calendar, a visitor's tap on an event gets the app's own message (Pro.js lockedVisitor). */
+.ft-lock .ft-panel { right: 6%; top: 20%; width: 42% }
+.ft-locked { position: absolute; left: 5%; top: 26%; width: 44%; display: flex; flex-direction: column; gap: calc(1.2 * var(--u)); padding: calc(2 * var(--u)); box-sizing: border-box;
+  border: 1px solid var(--pc-line); border-radius: calc(2 * var(--u)); background: var(--pc-bg); box-shadow: var(--art-shadow); font-size: calc(2 * var(--u)) }
+.ft-lockhead { display: flex; align-items: center; justify-content: space-between; gap: var(--u); margin-bottom: calc(.6 * var(--u)) }
+.ft-lockhead b { font-weight: 800 }
+.ft-ev { padding: calc(.9 * var(--u)) calc(1.2 * var(--u)); border-radius: calc(.8 * var(--u)); font-size: calc(1.8 * var(--u)); font-weight: 600; white-space: nowrap }
+.ft-tip { padding: calc(1.4 * var(--u)) calc(1.8 * var(--u)); border-radius: calc(1.2 * var(--u)); background: var(--pc-toast); color: var(--pc-on-toast); font-size: calc(1.75 * var(--u)); font-weight: 600; line-height: 1.35 }
+.ft-lock .ft-cursor { left: 34%; top: 57%; width: calc(7 * var(--u)); height: calc(7 * var(--u)) }
+.is-playing.ft-lock .ft-cursor { animation: ft-lock-cursor var(--art-dur) var(--pc-ease) infinite }
+.is-playing.ft-lock .ft-tap { animation: ft-lock-tap var(--art-dur) var(--pc-ease) infinite }
+.is-playing.ft-lock .ft-tip { animation: ft-lock-tip var(--art-dur) var(--pc-ease) infinite }
+@keyframes ft-lock-cursor { 0% { transform: translate(24cqw, 20cqw); opacity: 0 } 5% { opacity: 1 } 15% { transform: none } 17% { transform: scale(.82) } 19% { transform: scale(1) } 23% { transform: none; opacity: 1 } 32%, 100% { transform: translate(14cqw, -6cqw); opacity: 0 } }
+@keyframes ft-lock-tap { 0%, 17% { transform: none } 19% { transform: translateX(-1.2cqw) } 21% { transform: translateX(1.2cqw) } 23% { transform: translateX(-.6cqw) } 25%, 100% { transform: none } }
+@keyframes ft-lock-tip { 0%, 22% { opacity: 0; transform: translateY(4px) } 26%, 92% { opacity: 1; transform: none } 98%, 100% { opacity: 0 } }
+
+/* A phone: the stages are taller, and the pictures fill more of them. */
+@media (max-width: 860px) {
+  .ft-art { aspect-ratio: 4 / 3; --u: 1.3cqw }
+  .ft-make { --u: 1cqw }
+  .ft-chat { top: 44%; z-index: 1 }
+  .ft-locked { top: 22% }
+  .ft-make .ft-win { left: -18%; width: 150% }
+  .ft-organize .ft-win { left: -6%; width: 112% }
+  .ft-share .ft-panel { width: 46% }
+  .ft-chat, .ft-viewbar, .ft-locked { width: 50% }
+  .ft-search { width: 58% }
+  .ft-device { width: 38% }
+  .ft-feed { left: 6%; right: 6% }
+}
+@media (prefers-reduced-motion: reduce) { .ft-art *, .ft-art *::before { animation: none !important } }
+/* @end-illustrations */

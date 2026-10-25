@@ -10,7 +10,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-export const PAGES = ['pricing', 'help', 'about', 'privacy', 'terms', 'report', 'contact', 'signin', 'account', 'handle', 'templates'].map(n => `public/${n}.html`)
+export const PAGES = ['pricing', 'help', 'about', 'privacy', 'terms', 'report', 'contact', 'signin', 'account', 'handle', 'templates', 'features'].map(n => `public/${n}.html`)
   // the template pages (scripts/build-templates.mjs)
   .concat(fs.existsSync(path.join(root, 'public/templates')) ? fs.readdirSync(path.join(root, 'public/templates')).filter((f) => f.endsWith('.html')).sort().map((f) => `public/templates/${f}`) : []);
 // The homepage has the app's own header, and ends with the same site footer (inside its markers).

@@ -114,7 +114,7 @@ function hitFor(request, env, kind) {
 }
 
 // Pages search engines may list (public/_headers clears noindex for the same ones).
-const INDEXABLE_PAGES = new Set(['/', '/privacy', '/terms', '/pricing', '/about', '/help', '/templates', '/sitemap.xml']);
+const INDEXABLE_PAGES = new Set(['/', '/privacy', '/terms', '/pricing', '/about', '/help', '/templates', '/features', '/sitemap.xml']);
 
 const ADMIN_LOCK_OPS = new Set(['lock', 'unlock', 'rotate-editor-key', 'lock-status']);
 

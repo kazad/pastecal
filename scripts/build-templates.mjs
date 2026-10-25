@@ -147,7 +147,7 @@ fs.mkdirSync(path.join(root, 'public/templates'), { recursive: true });
 fs.writeFileSync(path.join(root, 'public/templates.html'), indexPage(list));
 for (const { id, c } of list) fs.writeFileSync(path.join(root, `public/templates/${c.slug}.html`), detailPage(id, c, list));
 // The sitemap: the pages worth finding in search (never a calendar's edit link).
-const urls = ['/', '/templates', ...list.map(({ c }) => `/templates/${c.slug}`), '/pricing', '/help', '/about'];
+const urls = ['/', '/features', '/templates', ...list.map(({ c }) => `/templates/${c.slug}`), '/pricing', '/help', '/about'];
 fs.writeFileSync(path.join(root, 'public/sitemap.xml'), `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((u) => `  <url><loc>https://pastecal.com${u}</loc></url>`).join('\n')}\n</urlset>\n`);
 console.log(`wrote public/templates.html, ${list.length} template pages and public/sitemap.xml`);
 // The shared header and footer (scripts/site-chrome), so a rebuilt page is never left without them.
