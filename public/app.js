@@ -2349,7 +2349,7 @@ const CalendarVueApp = {
             this.calendar.events = [];
             this.calendar.options = {
                 notes: '',
-                defaultView: 'week'
+                defaultView: 'month'    // phones still open on Week (applyDefaultView)
             };
             this.calendar.setEvents(this.calendar.sampleEvents());
             // Reset local settings to defaults
@@ -3433,7 +3433,7 @@ const CalendarVueApp = {
             (this._templateUndo = this._templateUndo || []).push({ entry: stack[stack.length - 1], restore: () => this.restoreDraftMeta(before) });
             this.restoreDraftMeta({
                 title: Calendar.DEFAULT_TITLE,
-                options: { notes: '', defaultView: before.options.defaultView || 'week' },
+                options: { notes: '', defaultView: before.options.defaultView || 'month' },
                 colors: [...this.DEFAULT_COLORS],
                 localColors: [...this.DEFAULT_COLORS],
                 labels: this.DEFAULT_COLORS.map((_, i) => `Type ${i + 1}`),
