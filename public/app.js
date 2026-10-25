@@ -64,6 +64,36 @@ function track(fn) {
 })();
 
 // ============================================================
+// "Add to my calendar" on a view link: the subscribe URLs Share hands out (Google, Apple,
+// Outlook, Other), as a small menu beside the title. Mounted in both headers; the menu itself
+// only exists while open, so its links are never in the page twice.
+// ============================================================
+const AddToCalendar = {
+    props: { google: String, apple: String, outlook: String, other: String },
+    emits: ['pick'],
+    directives: { 'click-outside': clickOutside },
+    data() { return { open: false }; },
+    methods: {
+        pick(method) { this.$emit('pick', method); this.open = false; },
+    },
+    template: `
+        <div class="pc-addcal" v-click-outside="() => { open = false }" @keydown.esc="open = false">
+            <button type="button" class="pc-addcal-btn" data-testid="view-add-to-cal" aria-haspopup="menu" :aria-expanded="open ? 'true' : 'false'" @click.stop="open = !open">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M12 14v5M9.5 16.5h5"/></svg>
+                <span class="pc-addcal-label">Add to my calendar</span>
+                <svg class="pc-addcal-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div v-if="open" class="pc-addcal-menu" role="menu" data-testid="view-add-to-cal-menu">
+                <p class="pc-addcal-hint">Subscribe once. Every change shows up in your own calendar.</p>
+                <a role="menuitem" :href="google" target="_blank" rel="noopener" data-testid="view-subscribe-google" @click="pick('subscribe_google')">Google Calendar</a>
+                <a role="menuitem" :href="apple" data-testid="view-subscribe-apple" @click="pick('subscribe_apple')">Apple Calendar</a>
+                <a role="menuitem" :href="outlook" target="_blank" rel="noopener" data-testid="view-subscribe-outlook" @click="pick('subscribe_outlook')">Outlook</a>
+                <a role="menuitem" :href="other" data-testid="view-subscribe-webcal" @click="pick('subscribe')">Other calendar app</a>
+            </div>
+        </div>`,
+};
+
+// ============================================================
 // COMPONENT REGISTRY
 // ============================================================
 // IMPORTANT: All components used in templates must be registered here!
@@ -88,6 +118,7 @@ const COMPONENT_REGISTRY = {
     'chevron-down-icon': ChevronDownIcon,      // Chevron down icon SVG
     'close-icon': CloseIcon,                   // Close icon SVG
     'lock-badge': LockBadge,                   // Pro lock icon + popover beside the title
+    'add-to-calendar': AddToCalendar,          // View link: subscribe menu in the header
     'pro-panel': ProPanel,                     // Share dialog: Lock this calendar / owner panel
     'pro-stats': ProStats,                     // Pro owner: views, visitors, followers, places
     'pro-history': ProHistory                  // Pro owner: saved versions, preview, restore
@@ -147,7 +178,9 @@ const CalendarVueApp = {
             isReadOnly: false,
             // Pro lock, from the live snapshot (CloudCalendarService.onLockState). lockedOut =
             // locked and this tab has no rights: the calendar is shown read-only.
-            lock: { locked: false, pro: false, canEdit: true },
+            lock: { locked: false, pro: false, canEdit: true, proSettings: null },
+            // Inside someone else's page (an iframe) or asked to look like it (?embed).
+            embedded: (() => { try { return window.self !== window.top || new URLSearchParams(location.search).has('embed'); } catch (e) { return true; } })(),
             lockedOut: false,
             lockKnown: false,   // a lock state has arrived for this calendar (the default above is a guess)
             viewRoute: false,   // /view/<slug>: read-only for its own reason, whatever the lock says
@@ -558,9 +591,21 @@ const CalendarVueApp = {
             return this.isHomepageCalendar ? 'new' : 'editor';
         },
         // Pro trims pastecal's branding from what visitors see (view links, embeds, a locked
-        // calendar's read-only face) to the "Made with pastecal" footer. The owner's own editing UI keeps it.
+        // calendar's read-only face) while the owner leaves proSettings.hideBranding on (the
+        // default). It shrinks to the "Made with pastecal · Report" line, never to nothing:
+        // removing that is a Teams feature. The owner's own editing UI keeps the branding.
         hideBranding() {
-            return !!(this.isReadOnly && this.lock.pro);
+            if (!(this.isReadOnly && this.lock.pro)) return false;
+            const p = this.lock.proSettings;
+            return !p || p.hideBranding !== false;
+        },
+        // Which line sits under the calendar: 'viewer' (the free view link's one-line invitation),
+        // 'pro' (trimmed to "Made with pastecal"), 'embed' (a tiny corner credit inside someone's
+        // page), 'editor' (quiet links on an edit link), or '' (homepage draft, still loading).
+        pageFooter() {
+            if (this.isLoading) return '';
+            if (this.isReadOnly) return this.hideBranding ? 'pro' : (this.embedded ? 'embed' : 'viewer');
+            return this.isExisting ? 'editor' : '';
         },
         // The footer's Report link (shown when branding is trimmed). The page's own path, so a view link
         // reports its view code and never reveals the edit name behind it.
@@ -639,7 +684,7 @@ const CalendarVueApp = {
                         console.log('Found read-only calendar with slug:', actualSlug);
 
                         CalendarDataService.subscribe_readonly(actualSlug, (c, access) => {
-                            if (access) this.lock = { locked: !!access.locked, pro: !!access.pro, canEdit: false };
+                            if (access) this.lock = { locked: !!access.locked, pro: !!access.pro, canEdit: false, proSettings: access.proSettings || null };
                             this.applyRemoteCalendar(c);
                             this.ensureCalendarOptionsDefaults();
                             // Update custom view in schedule with calendar's settings
@@ -1406,7 +1451,11 @@ const CalendarVueApp = {
             if (window.innerWidth >= 1100) {
                 const rect = sched.getBoundingClientRect();
                 const chrome = rect.height - rows[0].getBoundingClientRect().height * rows.length;
-                h = Math.max(100, Math.floor((window.innerHeight - (rect.top + window.scrollY) - 12 - chrome) / rows.length));
+                // The one line under the calendar (pageFooter) fits in the window too, or every page scrolls.
+                const foot = document.querySelector('.pc-home-cal > .pc-view-footer, .pc-home-cal > .pc-edit-footer, .pc-home-cal > .pc-hosted-note');
+                const cs = foot && getComputedStyle(foot);
+                const footH = foot ? foot.offsetHeight + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom) : 0;
+                h = Math.max(100, Math.floor((window.innerHeight - (rect.top + window.scrollY) - 12 - chrome - footH) / rows.length));
             }
             const now = parseFloat(sched.style.getPropertyValue('--month-cell-h')) || 100;
             if (Math.abs(now - h) < 2) return false;
@@ -1416,6 +1465,7 @@ const CalendarVueApp = {
         scheduleObj.addEventListener('dataBound', () => {
             requestAnimationFrame(() => { if (fitMonthRows()) relayout(); });
         });
+        this._refitMonthRows = () => { if (fitMonthRows()) relayout(); };
         let fitTimer = null;
         window.addEventListener('resize', () => {
             clearTimeout(fitTimer);
@@ -1756,6 +1806,8 @@ const CalendarVueApp = {
     },
 
     watch: {
+        // The footer line appears once loading ends (or changes with Pro): give the month grid its room.
+        pageFooter() { this.$nextTick(() => { if (this._refitMonthRows) this._refitMonthRows(); }); },
         // The homepage pitch is an experiment: pick (or recall) this browser's variant
         // once the page is known to be the homepage, then report which parts of it are read.
         isHomepageCalendar: {
@@ -2999,7 +3051,13 @@ const CalendarVueApp = {
         getSubscribeICSURL() {
             // No fallback to the editable feed: these URLs go to Google, Microsoft and the OS,
             // so without a read-only link the subscribe buttons hide (their v-if) instead.
-            return this.getReadOnlyICSURL();
+            const own = this.getReadOnlyICSURL();
+            if (own) return own;
+            // A view link's calendar never carries its publicViewId (the server strips it): the
+            // feed is the address being viewed, plus .ics.
+            if (!this.viewRoute) return null;
+            const parts = stripBase(window.location.pathname).split('/').filter(Boolean);
+            return parts[0] === 'view' && parts[1] ? `${window.location.origin}/view/${encodeURIComponent(parts[1])}.ics` : null;
         },
 
         /**
@@ -4998,7 +5056,7 @@ const CalendarVueApp = {
          */
         applyLockState(s) {
             if (!s || (this.calendar && s.id && s.id !== this.calendar.id)) return;
-            this.lock = { locked: !!s.locked, pro: !!s.pro, canEdit: s.canEdit !== false };
+            this.lock = { locked: !!s.locked, pro: !!s.pro, canEdit: s.canEdit !== false, proSettings: s.proSettings || null };
             this.lockKnown = true;
             if (this.lock.locked) this.proUpsell = false;
             else this.$nextTick(() => this.maybeShowProUpsell());

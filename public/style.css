@@ -1002,9 +1002,47 @@ div#Schedule,
 .pc-tour-maker { margin: 18px 0 0; font-size: 14px }
 .pc-tour-maker a { color: var(--pc-link) }
 
-/* ---- View-only pages: "Make your own calendar" next to the View Only badge ---- */
-.pc-make-own { margin-left: 10px; font-size: 13px; color: var(--pc-link); white-space: nowrap }
-.pc-make-own:hover { text-decoration: underline }
+/* ---- View-only pages: badge beside the title; Add to my calendar + Make your own on the right ---- */
+.pc-view-badge { display: inline-flex; align-items: center; gap: 4px; flex: none; margin-left: 8px; height: 22px; padding: 0 8px;
+  border: 1px solid var(--pc-line); border-radius: var(--pc-radius-pill); background: var(--pc-surface);
+  font-size: var(--pc-fs-caption); font-weight: var(--pc-fw-semibold); color: var(--pc-text-muted); white-space: nowrap; cursor: default; height: 22px !important; align-self: center; line-height: 1 }
+.pc-view-badge svg { width: 12px; height: 12px }
+.pc-viewer-actions { display: flex; align-items: center; gap: 12px; flex: none }
+.pc-make-own { font-size: 13px; font-weight: var(--pc-fw-medium); color: var(--pc-link); white-space: nowrap }
+.pc-make-own:hover { color: var(--pc-link-hover); text-decoration: underline }
+.pc-addcal { position: relative }
+.pc-addcal-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 10px 0 12px; border: 1px solid var(--pc-field);
+  border-radius: var(--pc-radius-pill); background: var(--pc-bg); color: var(--pc-text); font: inherit; font-size: 13px;
+  font-weight: var(--pc-fw-semibold); white-space: nowrap; cursor: pointer; transition: border-color var(--pc-dur-fast), background var(--pc-dur-fast) }
+.pc-addcal-btn:hover, .pc-addcal-btn[aria-expanded="true"] { border-color: var(--pc-link); background: var(--pc-hover) }
+.pc-addcal-btn:focus-visible { outline: none; box-shadow: var(--pc-focus-ring) }
+.pc-addcal-btn svg { width: 16px; height: 16px; flex: none }
+.pc-addcal-btn .pc-addcal-caret { width: 14px; height: 14px; color: var(--pc-text-muted) }
+.pc-addcal-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: var(--pc-z-menu); width: 240px; padding: 6px;
+  background: var(--pc-bg); border: 1px solid var(--pc-line); border-radius: var(--pc-radius-lg); box-shadow: var(--pc-shadow-md) }
+.pc-addcal-hint { margin: 4px 8px 6px; font-size: var(--pc-fs-small); line-height: var(--pc-lh-tight); color: var(--pc-text-muted) }
+.pc-addcal-menu a { display: block; padding: 8px 10px; border-radius: var(--pc-radius-sm); font-size: var(--pc-fs-body); color: var(--pc-text) }
+.pc-addcal-menu a:hover, .pc-addcal-menu a:focus-visible { background: var(--pc-hover); color: var(--pc-link); outline: none }
+/* Phone: the second header row */
+.pc-viewer-row { display: flex; align-items: center; justify-content: space-between; gap: 8px }
+.pc-viewer-row .pc-view-badge { margin-left: 0 }
+.pc-viewer-row .pc-addcal-menu { right: auto; left: 50%; transform: translateX(-50%) }
+.pc-viewer-row .pc-viewer-actions { gap: 10px; min-width: 0 }
+.pc-viewer-row .pc-addcal-btn { padding: 0 8px 0 10px }
+@media (max-width: 380px) { .pc-viewer-row .pc-view-badge { display: none } .pc-viewer-row { justify-content: flex-end } }
+
+/* ---- The line under the calendar: view link pitch, Pro credit, embed corner, edit-link links ---- */
+.pc-view-footer { margin: 12px 4px 4px; font-size: 13px; line-height: 1.6; color: var(--pc-text-muted); text-align: center; text-wrap: balance }
+.pc-view-footer img { display: inline-block; width: 16px; height: 16px; margin-right: 6px; vertical-align: -3px }
+.pc-view-footer a { margin-left: 8px; color: var(--pc-link); font-weight: var(--pc-fw-medium); white-space: nowrap }
+.pc-view-footer a:hover { color: var(--pc-link-hover); text-decoration: underline }
+.pc-embed-credit { position: fixed; right: 6px; bottom: 4px; z-index: 5; padding: 1px 6px; border-radius: var(--pc-radius-xs);
+  background: color-mix(in srgb, var(--pc-bg) 85%, transparent); font-size: 11px; color: var(--pc-text-muted) }
+.pc-embed-credit:hover { color: var(--pc-link) }
+.pc-edit-footer { display: flex; justify-content: center; flex-wrap: wrap; gap: 4px 0; margin: 12px 4px 4px; font-size: 12px }
+.pc-edit-footer a { color: var(--pc-text-muted) }
+.pc-edit-footer a + a::before { content: "·"; margin: 0 8px; color: var(--pc-text-muted) }
+.pc-edit-footer a:hover { color: var(--pc-link) }
 
 /* ---- Homepage flow: grid tip, draft note, Share pulse ---- */
 .pc-grid-tip { position: absolute; z-index: 5; left: 50%; top: 96px; transform: translateX(-50%); pointer-events: none;
@@ -1015,7 +1053,7 @@ div#Schedule,
 .pc-draft-note > span { color: var(--pc-text-muted) }
 .pc-draft-note b { color: var(--pc-text) }
 .pc-draft-note a { margin-left: auto; color: var(--pc-link) }
-.pc-hosted-note { margin: 6px 4px 0; font-size: 12px; color: var(--pc-text-muted); text-align: right }
+.pc-hosted-note { margin: 12px 4px 4px; font-size: 12px; color: var(--pc-text-muted); text-align: center }
 .pc-hosted-note a { color: var(--pc-text-muted); text-decoration: underline }
 .pc-hosted-note a:hover { color: var(--pc-link) }
 .pc-share-pulse { animation: pc-share-pulse 1.5s ease-out 2 }
@@ -1120,6 +1158,8 @@ div#Schedule,
 .pc-home-split #Schedule.e-schedule { overflow: visible }
 /* The month grid is 5-6 fixed-height rows; 80vh left a dead block under it on tall screens */
 .pc-home-split div#Schedule { min-height: 0 }
+/* The wrapper's height:100% would take the whole stretched row and push the footer line below the window */
+.pc-home-split #cal2_wrap { height: auto !important }
 .pc-home-split .e-quick-popup-wrapper { z-index: 20 }
 .pc-home-bar { display: flex; align-items: center; justify-content: space-between; padding: 6px 6px 6px 16px; border-bottom: 1px solid var(--pc-line); background: var(--pc-surface); font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--pc-text-muted) }
 .pc-home-body { padding: 20px 22px 24px; overflow: auto; display: flex; flex-direction: column; flex: 1 }

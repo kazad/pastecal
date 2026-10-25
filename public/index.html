@@ -313,7 +313,7 @@
                 <!-- Center: Title (absolutely centered) -->
                 <div class="absolute left-1/2 transform -translate-x-1/2 z-30 flex items-center gap-1">
                     <calendar-title :title="calendar.title" :is-editing="editTitle" :is-read-only="isReadOnly" :heading="isHomepageCalendar ? 'div' : 'h1'"
-                        mode="mobile" input-ref="mobileTitleInput" class="pc-m-title overflow-hidden max-w-[120px]" :class="{ 'pc-title-fit': lock.locked }"
+                        mode="mobile" input-ref="mobileTitleInput" class="pc-m-title overflow-hidden" :class="{ 'pc-title-fit': lock.locked, 'max-w-[120px]': !isReadOnly, 'max-w-[170px]': isReadOnly }"
                         @update:title="calendar.title = $event" @click="editTitle = true" @blur="editTitle = false"
                         @enter="editTitle = false">
                     </calendar-title>
@@ -360,7 +360,7 @@
                                 class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
                                                                         <icon name="search" class="w-5 h-5"></icon>                                Search
                             </button>
-                            <button
+                            <button v-if="canEdit"
                                 @click="showMobileMenu = false; openQuickAdd()"
                                 class="w-full text-left px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2">
                                 <span class="text-lg leading-none font-bold text-blue-500">+</span> Quick add event
@@ -381,6 +381,15 @@
                             </button>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- Row 2 on a view link: what this is, and what you can do with it -->
+            <div v-if="!isLoading && isReadOnly" class="pc-viewer-row" data-testid="viewer-row-mobile">
+                <span v-if="!lock.locked" class="pc-view-badge" data-testid="view-only-badge-mobile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>View only</span>
+                <div class="pc-viewer-actions">
+                    <add-to-calendar v-if="getWebcalURL()" :google="getGoogleSubscribeURL()" :apple="getWebcalURL()" :outlook="getOutlookSubscribeURL()" :other="getWebcalURL()" @pick="trackSubscribe"></add-to-calendar>
+                    <a v-if="!hideBranding" href="/" target="_top" class="pc-make-own" data-testid="make-own-mobile" data-from="view-header">Make your own</a>
                 </div>
             </div>
 
@@ -476,6 +485,7 @@
                     :is-read-only="isReadOnly" mode="desktop" @update:title="calendar.title = $event"
                     @click="editTitle = true" @blur="editTitle = false" @enter="setTitle($event)">
                 </calendar-title>
+                <span v-if="isReadOnly && !lock.locked" class="pc-view-badge" data-testid="view-only-badge" title="This is a view-only link. You see every change but can't edit."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>View only</span>
                 <calendar-title v-if="editTitle" :title="calendar.title" :is-editing="editTitle"
                     :is-read-only="isReadOnly" mode="desktop" input-ref="desktopTitleInput"
                     @update:title="calendar.title = $event" @click="editTitle = true" @blur="editTitle = false"
@@ -501,7 +511,7 @@
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6M16 13H8M16 17H8"/></svg>
                         <span>Notes</span>
                     </button>
-                    <button v-if="lastEditLabel" @click="showRecentChanges ? closeSidePanel() : openRecentChanges()" data-testid="last-edit-link" :class="{ 'pc-hdr-on': showRecentChanges }" class="pc-hdr-btn" :title="'Calendar edited ' + lastEditExact">
+                    <button v-if="lastEditLabel && canEdit" @click="showRecentChanges ? closeSidePanel() : openRecentChanges()" data-testid="last-edit-link" :class="{ 'pc-hdr-on': showRecentChanges }" class="pc-hdr-btn" :title="'Calendar edited ' + lastEditExact">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l4 2"/></svg>
                         <span>{{ lastEditLabel }}</span>
                     </button>
@@ -525,35 +535,11 @@
                     </div>
                 </div>
 
-                <div v-if="!isLoading && isReadOnly" class="flex items-center">
-                    <custom-tooltip align="right">
-                        <template #trigger>
-                            <div class="flex items-center bg-1 border border-color-default rounded-full p-1 pl-3 pr-3 shadow-sm cursor-pointer select-none hover:border-blue-500 hover:bg-[var(--bg-interactive-hover)] transition-all"
-                                @click="toggleShare"
-                                data-testid="share-pill-readonly">
-                                <!-- Share Icon (a lock on a locked calendar) -->
-                                <div class="text-color-1 flex-shrink-0 mr-1.5">
-                                    <svg v-if="lock.locked" class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                                    <icon v-else name="share" class="w-5 h-5"></icon>
-                                </div>
-                                <!-- Text -->
-                                <div class="text-color-2 text-xs font-bold" data-testid="readonly-pill-label">
-                                    {{ lock.locked ? 'Locked' : 'View only' }}
-                                </div>
-                            </div>
-                        </template>
-                        <template #content>
-                            <p class="leading-relaxed" v-if="lock.locked">
-                                Only the owner and invited editors can change this calendar.
-                            </p>
-                            <p class="leading-relaxed" v-else>
-                                This is a view-only link. You can see every change but can't edit.
-                            </p>
-                        </template>
-                    </custom-tooltip>
-                    <!-- People sent a view-only link are the best future users: one quiet invitation.
-                         Also shown inside embeds, as the free plan's small credit (Pro removes it). -->
-                    <a v-if="!hideBranding" href="/" target="_top" class="pc-make-own" data-testid="make-own">Make your own calendar</a>
+                <!-- A view link's own actions: take it with you, or make one. "Make your own" is the free
+                     plan's credit (Pro's trimmed branding drops it); the badge sits beside the title. -->
+                <div v-if="!isLoading && isReadOnly" class="pc-viewer-actions" data-testid="viewer-actions">
+                    <add-to-calendar v-if="getWebcalURL()" :google="getGoogleSubscribeURL()" :apple="getWebcalURL()" :outlook="getOutlookSubscribeURL()" :other="getWebcalURL()" @pick="trackSubscribe"></add-to-calendar>
+                    <a v-if="!hideBranding" href="/" target="_top" class="pc-make-own" data-testid="make-own" data-from="view-header">Make your own</a>
                 </div>
 
                 <div v-if="!isLoading && !isReadOnly">
@@ -704,9 +690,14 @@
                     Click any day to add your first event
                 </div>
             </div>
-            <!-- Pro trims pastecal's branding for visitors to this one line (removing it is a Teams feature),
-                 and a page with no sign of who hosts it is a phishing kit's dream: it says where it lives and how to report it. -->
-            <p v-if="hideBranding" class="pc-hosted-note" data-testid="hosted-note" v-cloak>Made with <a href="/" target="_blank" rel="noopener" data-testid="made-with">pastecal</a> · <a :href="reportUrl" target="_blank" rel="noopener" data-testid="report-link">Report</a></p>
+            <!-- The one line under the calendar (pageFooter). A view link: who made this and how to make your
+                 own. Pro trims it to "Made with pastecal · Report" (removing it is a Teams feature, and a page
+                 with no sign of who hosts it is a phishing kit's dream: it says where it lives and how to report
+                 it). Inside someone's page: a tiny corner credit. An edit link: quiet links, no pitch. -->
+            <p v-if="pageFooter === 'viewer'" class="pc-view-footer" data-testid="view-footer" v-cloak><img src="/img/pastecal.logo.svg" alt="" width="16" height="16" class="dark:brightness-150"><span>Made with pastecal: free shared calendars, no login required.</span><a href="/?from=view-footer" data-from="view-footer" target="_top" data-testid="view-footer-cta">Make your own →</a></p>
+            <p v-else-if="pageFooter === 'pro'" class="pc-hosted-note" data-testid="hosted-note" v-cloak>Made with <a href="/" target="_blank" rel="noopener" data-testid="made-with">pastecal</a> · <a :href="reportUrl" target="_blank" rel="noopener" data-testid="report-link">Report</a></p>
+            <a v-else-if="pageFooter === 'embed'" class="pc-embed-credit" href="/?from=view-embed" data-from="view-embed" target="_blank" rel="noopener" data-testid="embed-credit" v-cloak>pastecal</a>
+            <nav v-else-if="pageFooter === 'editor'" class="pc-edit-footer" aria-label="pastecal" data-testid="edit-footer" v-cloak><a href="/">pastecal</a><a href="/help">Help</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></nav>
             <p v-if="isHomepageCalendar" class="pc-draft-note" v-cloak>
                 <span>This calendar is a draft, saved only in this browser. Press <b>Save &amp; share</b> to get a link anyone can open.</span>
                 <span class="pc-draft-links"><button v-if="homeAsideHidden" type="button" class="pc-show-guide" @click="toggleHomeAside"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m10 15-3-3 3-3"/></svg>Show guide</button><a href="#how">How pastecal works ↓</a></span>
