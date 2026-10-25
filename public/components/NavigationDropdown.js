@@ -113,7 +113,7 @@ const NavigationDropdown = {
                         <a :href="item.path" class="flex-1 min-w-0 mr-3">
                             <div class="pc-nav-title text-color-2 font-medium transition-colors">
                                 <span class="truncate">{{ item.title }}</span>
-                                <span v-if="item.pro" class="pc-pill pc-pill--pro pc-nav-pro" data-testid="nav-pro-pill">Pro</span>
+                                <span v-if="item.pro" class="pc-pill pc-pill--pro pc-nav-pro" data-testid="nav-pro-pill">{{ item.planName }}</span>
                             </div>
                             <div class="text-xs text-color-1 truncate">
                                 {{ item.address }}<template v-if="item.view"> · view only</template>
@@ -231,11 +231,12 @@ const NavigationDropdown = {
             for (const c of this.proById.values()) {
                 const end = c.currentPeriodEnd ? (c.currentPeriodEnd < 1e12 ? c.currentPeriodEnd * 1000 : c.currentPeriodEnd) : 0;
                 const date = end ? new Date(end).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+                const name = planName(c.plan);
                 let label;
                 if (c.status === 'past_due') label = 'Payment problem';
-                else if (c.status === 'active' || c.status === 'trialing') label = date ? `Pro · renews ${date}` : 'Pro';
-                else if (end > now) label = `Pro · ends ${date}`;
-                else continue;     // ended: no longer Pro
+                else if (c.status === 'active' || c.status === 'trialing') label = date ? `${c.status === 'trialing' ? name + ' trial · ends' : name + ' · renews'} ${date}` : name;
+                else if (end > now) label = `${name} · ends ${date}`;
+                else continue;     // ended: no longer upgraded
                 out.push({ id: c.id, title: titles.get(String(c.id).toLowerCase()) || c.id,
                     path: '/' + encodeURIComponent(c.id), label, problem: c.status === 'past_due' });
             }
@@ -247,7 +248,7 @@ const NavigationDropdown = {
             const all = (this.recentCalendars || []).map(item => {
                 const shown = { ...item, ...RecentCalendars.display(item) };
                 const sub = !shown.view && this.proById.get(String(item.id).toLowerCase());
-                return { ...shown, pro: !!(sub && ACCOUNT_ACTIVE.includes(sub.status)) };
+                return { ...shown, pro: !!(sub && ACCOUNT_ACTIVE.includes(sub.status)), planName: planName(sub && sub.plan) };
             });
             return [
                 { label: 'Your calendars', items: all.filter(item => item.mine) },

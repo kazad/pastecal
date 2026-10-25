@@ -13,7 +13,7 @@ const PreviewSite = {
     HOST: 'preview.pastecal.com',
     DISMISS_KEY: 'pastecal_preview_banner_dismissed',
     TEST_CARD: '4242 4242 4242 4242',
-    BANNER_TEXT: 'Beta · The new pastecal design, on your real calendars. Changes you make here are real. Pro is bought on pastecal.com.',
+    BANNER_TEXT: 'Beta · The new pastecal design, on your real calendars. Changes you make here are real. Plus is bought on pastecal.com.',
     CHECKOUT_HINT: 'Test mode: pay with card 4242 4242 4242 4242, any future date, any CVC. No real money moves.',
 
     is(loc = (typeof location !== 'undefined' ? location : null)) {

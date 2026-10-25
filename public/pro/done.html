@@ -9,7 +9,7 @@
      one ('Editors') only when the calendar has none, through the named-links API. -->
 <meta name="referrer" content="no-referrer">
 <meta name="robots" content="noindex">
-<title>Pro is on · pastecal</title>
+<title>Plus is on · pastecal</title>
 <link rel="icon" href="/favicon.ico">
 <script>
   var proCalendar = null, proSession = null;
@@ -43,7 +43,7 @@ p.bad { color: var(--pc-danger) }
 </head>
 <body>
 <main>
-  <h1><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span id="title">Pro is on</span></h1>
+  <h1><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span id="title">Plus is on</span></h1>
   <p id="msg">Your payment went through. Locking <span class="cal" id="calname">your calendar</span>…</p>
 
   <p id="signin-note" class="small" hidden></p>
@@ -55,7 +55,7 @@ p.bad { color: var(--pc-danger) }
       <button id="copy" type="button" class="pc-btn pc-btn--primary pc-btn--lg">Copy</button>
     </div>
     <button id="share" type="button" class="pc-btn pc-btn--secondary" hidden>Send it to your editors</button>
-    <p class="small">You can make more links, or turn one off, from Share on your calendar.</p>
+    <p class="small">You can make more links, or turn one off, from the Plus tab on your calendar.</p>
   </section>
 
   <a class="pc-btn pc-btn--primary pc-btn--lg" id="go" href="/">Back to your calendar</a>
@@ -66,7 +66,7 @@ p.bad { color: var(--pc-danger) }
   var go = $('go'), msg = $('msg');
   if (!proCalendar) {
     $('title').textContent = 'Thanks, your payment went through';
-    msg.textContent = 'Open your calendar and press Share to see its Pro settings.';
+    msg.textContent = 'Open your calendar and open its Plus tab to see your plan.';
     go.textContent = 'Back to pastecal';
     return;
   }
@@ -116,8 +116,8 @@ p.bad { color: var(--pc-danger) }
     }
     function signInHint(r) {
       if (existingAccount) return;             // the sign-in note above already says what to do
-      if (r.status === 401) msg.append(' Sign in from your calendar’s Share panel to make an editor link.');
-      else msg.append(' Make an editor link from your calendar’s Share panel.');
+      if (r.status === 401) msg.append(' Sign in from your calendar’s Plus tab to make an editor link.');
+      else msg.append(' Make an editor link from your calendar’s Plus tab.');
     }
     api('GET', '/api/pro/editor-links?calendar=' + encodeURIComponent(proCalendar)).then(function (r) {
       if (r.status !== 200 || !Array.isArray(r.data)) return signInHint(r);
@@ -127,7 +127,7 @@ p.bad { color: var(--pc-danger) }
         try { saved = JSON.parse(localStorage.getItem(storeName) || 'null'); } catch (e) { saved = null; }
         var live = saved && saved.id && r.data.some(function (l) { return l.id === saved.id; });
         if (live && typeof saved.link === 'string') return show(saved.link);
-        msg.append(' Your editor links are in Share on your calendar.');
+        msg.append(' Your editor links are in the Plus tab on your calendar.');
         return;
       }
       api('POST', '/api/pro/editor-links', { calendarId: proCalendar, label: 'Editors' }).then(function (c) {
@@ -149,7 +149,7 @@ p.bad { color: var(--pc-danger) }
     if (r.status === 200 && r.data.ok && !r.data.signedIn) {
       existingAccount = true;
       var who = document.createElement('b'); who.textContent = r.data.email;
-      $('signin-note').textContent = ''; $('signin-note').append('This email already has a pastecal account, so we sent a sign-in link to ', who, '. Open it to get your editor link and manage Pro.');
+      $('signin-note').textContent = ''; $('signin-note').append('This email already has a pastecal account, so we sent a sign-in link to ', who, '. Open it to get your editor link and manage Plus.');
       $('signin-note').hidden = false;
     }
     return r;
@@ -162,7 +162,7 @@ p.bad { color: var(--pc-danger) }
       if (r.status === 200 && r.data.locked) return claimed.then(locked);
       if (++tries < 14) return setTimeout(poll, 1500);
       $('title').textContent = 'Still setting up';
-      msg.textContent = 'Your payment went through, and the lock is still on its way. Refresh this page in a minute, or open your calendar and press Share.';
+      msg.textContent = 'Your payment went through, and the lock is still on its way. Refresh this page in a minute, or open your calendar’s Plus tab.';
     });
   })();
 

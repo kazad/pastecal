@@ -4431,7 +4431,8 @@ const CalendarVueApp = {
                 title: (e.title && e.title.trim()) ? e.title : 'Untitled event',
             }));
             if (entry.kind === 'restored') return ProInsightMath.restoredLabel(entry.label);   // "Restored the version from Oct 21"
-            if (entry.label) return entry.label;                 // server-written rows: "Locked with Pro", "Unlocked"
+            // Server-written rows: "Upgraded with Plus", "Unlocked". Rows written before the rename said Pro for the Plus plan.
+            if (entry.label) return { 'Locked with Pro': 'Upgraded with Plus', 'Pro ended. Editing paused by the owner': 'Plus ended. Editing paused by the owner' }[entry.label] || entry.label;
             if (entry.kind === 'wiped' || entry.kind === 'deleted') {
                 return gone.length ? `All events deleted (${gone.length})` : 'All events deleted';
             }

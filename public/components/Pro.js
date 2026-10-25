@@ -546,8 +546,8 @@ const ProPanel = {
             const reason = r.status === 0 ? 'network' : (r.data.error || String(r.status));
             proTrack((a) => a.proCheckoutFailed(reason));
             if (r.status === 401) { this.me = null; this.step = 'email'; this.focusEmail(); return; }
-            if (r.status === 503) { this.error = 'Pro isn’t available yet. Nothing was charged.'; return; }
-            if (r.status === 409 && r.data.error === 'already-pro') { this.error = 'This calendar already has Pro.'; this.refresh(); return; }
+            if (r.status === 503) { this.error = 'Upgrades aren’t available yet. Nothing was charged.'; return; }
+            if (r.status === 409 && r.data.error === 'already-pro') { this.error = 'This calendar is already upgraded.'; this.refresh(); return; }
             if (r.status === 409) { this.error = 'Someone else has already locked this calendar.'; this.refresh(); return; }
             if (r.status === 0) { this.error = 'We couldn’t reach pastecal. Check your connection and try again.'; return; }
             this.error = 'Something went wrong. Nothing was charged. Try again in a minute.';
@@ -570,8 +570,8 @@ const ProPanel = {
                 if (e === 'locked-by-other') { this.error = 'Someone else has already locked this calendar.'; this.refresh(); return; }
                 if (e === 'already-pro') { this.refresh(); return; }
                 if (e === 'buy-on-live') { this.error = r.data.message; return; }
-                if (r.status === 404) { this.error = 'Save this calendar first. Then you can try Pro on it.'; return; }
-                if (r.status === 503) { this.error = 'Pro isn’t available yet.'; return; }
+                if (r.status === 404) { this.error = 'Save this calendar first. Then you can try Plus on it.'; return; }
+                if (r.status === 503) { this.error = 'Upgrades aren’t available yet.'; return; }
                 this.error = r.status === 0 ? 'We couldn’t reach pastecal. Check your connection and try again.' : 'Something went wrong. Try again in a minute.';
             } finally { this.busy = false; }
         },

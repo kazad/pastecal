@@ -876,7 +876,7 @@ async function deleteAccount(request, env) {
     if (!userId) return json({ error: 'signed-out' }, 401);
     const r = await accounts(env).deleteAccount(userId);
     if (r.active) return json({ error: 'active-subscription', calendars: r.active,
-        message: 'Cancel your Pro subscription first (Manage billing), then delete your account.' }, 409);
+        message: 'Cancel your plan first (Manage billing), then delete your account.' }, 409);
     return json({ ok: true, deleted: true }, 200, { 'Set-Cookie': sessionCookie('', 0) });
 }
 
@@ -942,7 +942,7 @@ async function claimCheckout(request, env, body) {
 // was added: trial_settings.end_behavior.missing_payment_method=cancel). It is applied at once, so the
 // calendar is locked before this answers; the webhook's copy of the same events changes nothing.
 async function startTrial(request, env, userId, calendarId) {
-    if (env.BETA_REAL_DATA) return [403, { error: 'buy-on-live', message: 'Pro is started on pastecal.com. The beta shows the new design on your real calendars.' }];
+    if (env.BETA_REAL_DATA) return [403, { error: 'buy-on-live', message: 'Plus is started on pastecal.com. The beta shows the new design on your real calendars.' }];
     const cfg = stripeConfig(env, new URL(request.url).hostname);
     if (!cfg) return [503, { error: 'billing-not-configured' }];
     if (!validId(calendarId)) return [400, { error: 'bad-calendar' }];
@@ -1012,7 +1012,7 @@ async function setLapsedMode(request, env, body) {
 async function checkout(request, env, body) {
     // The beta (preview.pastecal.com) runs on live calendars with Stripe in test mode: a test card must
     // never lock a real calendar, so Pro is bought on pastecal.com.
-    if (env.BETA_REAL_DATA) return json({ error: 'buy-on-live', message: 'Pro is bought on pastecal.com. The beta shows the new design on your real calendars.' }, 403);
+    if (env.BETA_REAL_DATA) return json({ error: 'buy-on-live', message: 'Plus is bought on pastecal.com. The beta shows the new design on your real calendars.' }, 403);
     const cfg = stripeConfig(env, new URL(request.url).hostname);
     if (!cfg) return json({ error: 'billing-not-configured' }, 503);
     const userId = await sessionUserId(request, env);
