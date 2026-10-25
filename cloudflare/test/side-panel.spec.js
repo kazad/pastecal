@@ -135,7 +135,7 @@ test('Share in the panel still copies its links', async ({ browser, request }) =
   // Ordered by what people do most: the read-only link first, then calendar apps, then helpers.
   const order = await panel(page).locator('.pc-link-item h4').allTextContents();
   expect(order).toEqual(['View-only link', 'Edit link', 'This view', 'Calendar feed']);
-  await expect(page.getByTestId('share-pro-card')).toContainText('Go Pro');
+  await expect(page.getByTestId('share-pro-card')).toContainText('Upgrade');
   expect(await page.$eval('.pc-side-body', (b) => b.scrollHeight <= b.clientHeight + 1), 'Share fits without scrolling').toBe(true);
   await expect(page.getByTestId('share-readonly-addr')).toContainText(`pastecal.com/view/${viewId}`);
   await page.getByTestId('share-readonly-addr').click();                    // the field itself copies
@@ -217,15 +217,15 @@ test('the same five tabs in the same order, and the row never scrolls', async ({
     const [v, f] = [await views.boundingBox(), await followers.boundingBox()];
     expect(Math.abs(v.y - f.y), 'tiles side by side').toBeLessThan(2);
     expect(f.x).toBeGreaterThan(v.x + v.width - 1);
-    await expect(page.getByTestId('stats-teaser')).toContainText('More with Pro');
+    await expect(page.getByTestId('stats-teaser')).toContainText('More with Plus');
     await expect(page.getByTestId('stats-teaser')).toContainText('Beta');
-    // Billing on (Stripe configured): Get Pro. Off (a plain local server): Join the Pro beta, and no Get Pro.
+    // Billing on (Stripe configured): Upgrade. Off (a plain local server): Join the beta, and no Upgrade button.
     const { billing } = await (await page.request.get('/api/pro/config')).json();
     if (billing) {
-      await expect(page.getByTestId('stats-teaser')).toContainText('Get Pro');
+      await expect(page.getByTestId('stats-get-pro')).toHaveText('Upgrade');
       await expect(page.getByTestId('stats-get-pro')).toBeVisible();
     } else {
-      await expect(page.getByTestId('stats-teaser').getByTestId('pro-beta-btn')).toHaveText('Join the Pro beta');
+      await expect(page.getByTestId('stats-teaser').getByTestId('pro-beta-btn')).toHaveText('Join the beta');
       await expect(page.getByTestId('stats-get-pro')).toHaveCount(0);
     }
     await ctx.close();
@@ -246,7 +246,7 @@ test('Stats when the calendar is not counted yet: no number tiles, no "0", one m
   await expect(page.getByTestId('stats-free-views')).toHaveCount(0);
   await expect(page.getByTestId('stats-free-followers')).toHaveCount(0);
   await expect(page.getByTestId('stats-free')).not.toContainText(/\b0\b/);
-  await expect(page.getByTestId('stats-teaser')).toContainText('More with Pro');
+  await expect(page.getByTestId('stats-teaser')).toContainText('More with Plus');
   await ctx.close();
 });
 
