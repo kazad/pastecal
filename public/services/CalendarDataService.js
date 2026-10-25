@@ -1,8 +1,12 @@
 // CalendarDataService - Firebase database operations for calendars
 class CalendarDataService {
     static connected = false;
-    static db = firebase.database().ref('/calendars');
-    static db_readonly = firebase.database().ref('/calendars_readonly');
+    // Made on first use, not when this file loads: the first ref opens a WebSocket to the PRODUCTION
+    // database, and a page on the Cloudflare backend (local copies, staging, the live site) never needs it.
+    static get db() { return this._db || (CalendarDataService._db = firebase.database().ref('/calendars')); }
+    static get db_readonly() { return this._dbReadonly || (CalendarDataService._dbReadonly = firebase.database().ref('/calendars_readonly')); }
+    static set db(ref) { CalendarDataService._db = ref; }                 // tests hand in a fake
+    static set db_readonly(ref) { CalendarDataService._dbReadonly = ref; }
 
     // Firebase Realtime Database rejects any payload containing `undefined` — the *entire*
     // write fails. Historically this caused silent save failures (notably the IsAllDay field
@@ -460,7 +464,7 @@ class CalendarDataService {
     // Server time, estimated from Firebase's measured clock offset, so a laptop with a wrong
     // clock cannot stamp an edit hours into the future.
     static _serverNow() {
-        if (this._timeOffset === undefined && typeof firebase !== 'undefined' && firebase.database) {
+        if (this._timeOffset === undefined && typeof firebase !== 'undefined' && firebase.database && !(typeof window !== 'undefined' && window.pcNoProdSideEffects)) {
             this._timeOffset = 0;
             try { firebase.database().ref('.info/serverTimeOffset').on('value', (s) => { this._timeOffset = s.val() || 0; }); } catch (e) { /* keep 0 */ }
         }

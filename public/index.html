@@ -195,7 +195,9 @@
             appId: "1:912998627577:web:aa652846c2618a986d8a28",
             measurementId: "G-4J99GY9KE6"
         };
-        firebase.initializeApp(firebaseConfig);
+        // Not on a copy with no production side effects (staging, local Cloudflare backend): no app means any
+        // stray firebase.* call fails loudly instead of quietly opening production's database.
+        if (!window.pcNoProdSideEffects) firebase.initializeApp(firebaseConfig);
 
         // Anonymous sign-in. NOT a login and not a permission check -- calendars stay
         // open read/write to everyone, which is the product. This only gives each browser
@@ -216,7 +218,7 @@
 
         ej.base.registerLicense('Ngo9BigBOggjHTQxAR8/V1NHaF1cW2hIfEx1RHxQdld5ZFRHallYTnNWUj0eQnxTdEZiW39fcXJXR2JUV0NyWg==');
 
-        if (location.href.includes("localhost") && location.href.includes("?local")) {
+        if (!window.pcNoProdSideEffects && location.href.includes("localhost") && location.href.includes("?local")) {
             firebase.functions().useEmulator("localhost", 5001);
         }
     </script>
