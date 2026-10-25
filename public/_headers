@@ -21,6 +21,14 @@
   ! X-Robots-Tag
 /pricing
   ! X-Robots-Tag
+/about
+  ! X-Robots-Tag
+/help
+  ! X-Robots-Tag
+/templates
+  ! X-Robots-Tag
+/templates/*
+  ! X-Robots-Tag
 # The test site stays out of search entirely.
 https://new.pastecal.com/*
   X-Robots-Tag: noindex

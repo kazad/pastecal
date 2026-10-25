@@ -1,0 +1,22 @@
+/* pastecal.com/templates: a gallery of template cards, and one page per template (scripts/build-templates.mjs). */
+/* The gallery and the picture use the full page width; text keeps legal.css's 680px reading column. */
+main.tpl-main > .tpl-grid { max-width: none }
+main.tpl-main > .tpl-pic, main.tpl-main > .tpl-cols { max-width: 820px }
+.tpl-lede { font-size: var(--pc-fs-lg); color: var(--pc-text-2); max-width: 62ch; margin: 4px 0 20px }
+.tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px }
+.tpl-card { display: flex; flex-direction: column; gap: 6px; padding: 10px 10px 14px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); background: var(--pc-bg); color: var(--pc-text); text-decoration: none; transition: border-color var(--pc-dur-fast) var(--pc-ease), box-shadow var(--pc-dur-fast) var(--pc-ease) }
+.tpl-card:hover, .tpl-card:focus-visible { border-color: var(--pc-primary); box-shadow: var(--pc-shadow-md); outline: none }
+.tpl-pic { display: block; width: 100%; height: auto; aspect-ratio: 818 / 640; object-fit: cover; object-position: top left; border-radius: var(--pc-radius-sm); border: 1px solid var(--pc-line); background: var(--pc-soft) }
+.tpl-card .tpl-pic { aspect-ratio: 16 / 10 }
+.tpl-card-name { margin-top: 6px; font-weight: var(--pc-fw-bold); font-size: var(--pc-fs-md) }
+.tpl-card-short { color: var(--pc-text-2); font-size: var(--pc-fs-sm) }
+.tpl-blank { margin-top: 24px; color: var(--pc-text-2) }
+.tpl-crumb { margin: 0 0 4px; font-size: var(--pc-fs-sm) }
+.tpl-use { margin: 4px 0 20px }
+.tpl-detail .tpl-pic { margin-bottom: 24px }
+.tpl-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px 40px; max-width: 820px }
+.tpl-cols h2, .tpl-detail > h2 { font-size: var(--pc-fs-md); margin: 16px 0 6px }
+.tpl-labels { display: flex; flex-wrap: wrap; gap: 6px }
+.tpl-sample { color: var(--pc-text-2) }
+.tpl-fine { font-size: var(--pc-fs-sm); color: var(--pc-text-muted) }
+.tpl-others { display: flex; flex-wrap: wrap; gap: 8px 16px }

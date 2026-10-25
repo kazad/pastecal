@@ -691,6 +691,7 @@
                 <button v-for="t in templateChips" :key="t.id" type="button" class="pc-chip pc-chip--lg pc-tpl-chip" :class="{ 'is-on': template && template.id === t.id }"
                     :aria-pressed="template && template.id === t.id ? 'true' : 'false'" :data-testid="'tpl-' + t.id" @click="pickTemplate(t.id)">{{ t.label }}</button>
                 <button v-if="templateUndo" type="button" class="pc-link pc-tpl-link" data-testid="tpl-undo" @click="templateUndo = false; undoLastLocal()">Undo</button>
+                <a class="pc-link pc-tpl-link" href="/templates" data-from="tpl-row" data-testid="tpl-more">More templates →</a>
             </div>
 
             <p v-if="template && templateNudge" class="pc-tpl-note" data-testid="tpl-nudge">
@@ -1625,6 +1626,7 @@
   <div class="site-footer__in">
     <nav class="site-footer__links" aria-label="Footer">
       <a href="/" data-from="site-footer">Make a calendar</a>
+      <a href="/templates" data-from="site-footer">Templates</a>
       <a href="/pricing" data-from="site-footer">Pricing</a>
       <a href="/help" data-from="site-footer">Help</a>
       <a href="/about" data-from="site-footer">About</a>
