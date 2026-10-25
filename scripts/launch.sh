@@ -31,7 +31,7 @@ SITE="https://pastecal.com"
 WEBHOOK_URL="$SITE/api/stripe/webhook"
 EXPECTED_LIVE="71aaca32"          # prod-counting-live 30001ea, live before the launch
 # The commit whose code (cloudflare/src, wrangler.jsonc, public/) passed the full test run.
-TESTED_CODE="e630115"
+TESTED_CODE="7802d9f"
 LIVE_ACCOUNT="acct_1CN6CpEBwAK7H2Dz"
 EVENTS="checkout.session.completed customer.subscription.created customer.subscription.updated customer.subscription.deleted customer.subscription.trial_will_end invoice.payment_failed charge.refunded charge.dispute.created"
 NODE="${NODE:-$HOME/.nvm/versions/node/v22.18.0/bin/node}"
