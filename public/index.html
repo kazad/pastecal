@@ -1514,10 +1514,10 @@
                 <div data-tour="pricing">
                 <h3 class="pc-tour-label">Pricing</h3>
                 <div class="pc-tour-plans">
-                    <div><h4>Free</h4><p class="pc-plan-price"><b>$0</b></p><p>No login required.</p></div>
-                    <div class="pc-tour-plan-pro"><span class="pc-plan-tag pc-plan-tag--on">Beta</span><h4>Pro Single</h4><p class="pc-plan-price"><b>$24</b> a year</p><p>{{ proBilling === true ? 'Lock one calendar. Try it free for 30 days, no card.' : proBilling === false ? 'Lock one calendar. Join the Pro beta for early access.' : 'Lock one calendar.' }}</p></div>
-                    <div><span class="pc-plan-tag">In development</span><h4>Pro Unlimited</h4><p class="pc-plan-price"><b>$79</b> a year <small>or $8 a month</small></p><p>Unlimited calendars under your own <code>pastecal.com/@name</code></p></div>
-                    <div><span class="pc-plan-tag">In development</span><h4>Teams</h4><p class="pc-plan-price"><b>$290</b> a year <small>or $29 a month</small></p><p>Several admins, your logo.</p></div>
+                    <a class="pc-tour-plan" href="/pricing" data-from="home-plan-free"><h4>Free</h4><p class="pc-plan-price"><b>$0</b></p><p>No login required.</p><span class="pc-tour-plan-more">Learn more →</span></a>
+                    <a class="pc-tour-plan pc-tour-plan-pro" href="/pricing" data-from="home-plan-pro"><span class="pc-plan-tag pc-plan-tag--on">Beta</span><h4>Pro Single</h4><p class="pc-plan-price"><b>$24</b> a year</p><p>{{ proBilling === true ? 'Lock one calendar. Try it free for 30 days, no card.' : proBilling === false ? 'Lock one calendar. Join the Pro beta for early access.' : 'Lock one calendar.' }}</p><span class="pc-tour-plan-more">Learn more →</span></a>
+                    <a class="pc-tour-plan" href="/pricing" data-from="home-plan-pro-unlimited"><span class="pc-plan-tag pc-plan-tag--on">Beta</span><h4>Pro Unlimited</h4><p class="pc-plan-price"><b>$48</b> a year <small>or $5 a month</small></p><p>Every calendar you run, one subscription.</p><span class="pc-tour-plan-more">Learn more →</span></a>
+                    <a class="pc-tour-plan" href="/pricing" data-from="home-plan-teams"><span class="pc-plan-tag">In development</span><h4>Teams</h4><p class="pc-plan-price"><b>$290</b> a year <small>or $29 a month</small></p><p>Several admins, your logo.</p><span class="pc-tour-plan-more">Learn more →</span></a>
                 </div>
                 <p class="pc-tour-plans-more"><a href="/pricing" class="pc-pro-link" data-from="home-pricing">Compare plans →</a></p>
                 </div>
@@ -1547,7 +1547,6 @@
       <a href="/privacy" data-from="site-footer">Privacy</a>
       <a href="/terms" data-from="site-footer">Terms</a>
       <a href="/contact" data-from="site-footer">Contact</a>
-      <a href="/report" data-from="site-footer">Report a calendar</a>
     </nav>
     <p class="site-footer__fine">pastecal · Simple shared calendars</p>
   </div>

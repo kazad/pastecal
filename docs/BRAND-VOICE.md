@@ -59,7 +59,7 @@ for a calendar anyone with the link can open: tell people to pick a hard-to-gues
 
 ## Money
 
-- **Plain prices:** "$24 a year or $2.99 a month, per calendar." State the unit (per calendar).
+- **Plain prices:** "$24 a year, per calendar." State the unit (per calendar).
 - **No fake urgency:** no countdowns, "limited time", "only today", "prices going up".
 - **No price-change promises** ("locked in forever", "early-bird pricing for life").
 - **Free is real:** "Free, with no trial and no card." Never call the free plan a trial or "Lite".

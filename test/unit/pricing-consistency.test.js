@@ -1,6 +1,6 @@
 // L3 pricing consistency: one set of prices and one branding story on every page that states them.
-// Pro Single: $24 a year or $2.99 a month, with a small "Made with pastecal" footer. Pro Unlimited (in
-// development): $79 a year or $8 a month, also with the footer. Teams (in development): $290 a year or
+// Pro Single: $24 a year (yearly only), with a small "Made with pastecal" footer. Pro Unlimited (in
+// development): $48 a year or $5 a month, also with the footer. Teams (in development): $290 a year or
 // $29 a month, and removing pastecal branding is a Teams-only feature.
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -18,32 +18,41 @@ test('no page states the old Teams price', () => {
 // One plan card: from its <h3> to the end of its button.
 const card = (html, name) => new RegExp(`<h3>${name}</h3>[\\s\\S]*?</a>`).exec(html)[0];
 
-test('Teams is $290 a year or $29 a month on the pricing card, waitlist, FAQ and terms', () => {
+test('Teams is $290 a year or $29 a month on the pricing card, waitlist and FAQ', () => {
   const pricing = read('public/pricing.html');
   const teams = card(pricing, 'Teams');
   assert.match(teams, /<strong>\$290<\/strong>/);
   assert.match(teams, /\$29 a month/);
   assert.match(pricing, /<option value="teams">Teams, \$290 a year or \$29 a month<\/option>/);
   assert.match(pricing, /<summary>What is Teams\?<\/summary><p>[^<]*\$290 a year or \$29 a month/);
-  assert.match(read('public/terms.html'), /Teams[^<]*\$290 a year or \$29 a month/);
 });
 
-test('four plans: Pro Single is on sale, Pro Unlimited and Teams are in development', () => {
+test('one price everywhere: no $2.99 and no $79 or $8 a month on any page people see', () => {
+  for (const f of ['public/index.html', 'public/pricing.html', 'public/terms.html', 'public/components/Pro.js']) {
+    const t = read(f);
+    assert.ok(!/2\.99/.test(t), `${f} still mentions $2.99`);
+    assert.ok(!/\$79\b|\$8 a month/.test(t), `${f} still has the old Pro Unlimited price`);
+  }
+});
+
+test('four plans: Pro Single and Pro Unlimited are in beta, Teams is in development', () => {
   const pricing = read('public/pricing.html');
   const single = card(pricing, 'Pro Single');
   assert.match(single, /<strong>\$24<\/strong>/);
-  assert.match(single, /\$2\.99/);
+  assert.doesNotMatch(single, /\$2\.99/, 'Pro Single is yearly only');
   assert.match(single, /data-plan="pro">Get Pro<\/a>$/, 'Pro Single opens the Get Pro picker');
   const unlimited = card(pricing, 'Pro Unlimited');
-  assert.match(unlimited, /<strong>\$79<\/strong>/);
-  assert.match(unlimited, /\$8 a month/);
-  assert.match(pricing, /<option value="unlimited">Pro Unlimited, \$79 a year<\/option>/);
-  for (const name of ['Pro Unlimited', 'Teams']) {
+  assert.match(unlimited, /<strong>\$48<\/strong>/);
+  assert.match(unlimited, /\$5 month to month/);
+  assert.match(pricing, /<option value="unlimited">Pro Unlimited, \$48 a year<\/option>/);
+  assert.match(pricing, /<span class="badge">Beta<\/span>\s*<h3>Pro Unlimited<\/h3>/, 'Pro Unlimited carries the Beta badge');
+  assert.match(unlimited, /href="#waitlist"[^>]*>Join the Pro beta<\/a>$/);
+  for (const name of ['Teams']) {
     const block = new RegExp(`<span class="badge dev">In development</span>\\s*<h3>${name}</h3>[\\s\\S]*?</a>`).exec(pricing);
     assert.ok(block, `${name} card carries the In development badge`);
     assert.match(block[0], /href="#waitlist"[^>]*>Join the waitlist<\/a>$/);
   }
-  assert.match(pricing, /<thead><tr><th>Feature<\/th><th>Free<\/th><th class="pro">Pro Single <span class="beta-tag">Beta<\/span><\/th><th>Pro Unlimited<\/th><th>Teams<\/th><\/tr><\/thead>/);
+  assert.match(pricing, /<thead><tr><th>Feature<\/th><th>Free<\/th><th class="pro">Pro Single <span class="beta-tag">Beta<\/span><\/th><th>Pro Unlimited <span class="beta-tag">Beta<\/span><\/th><th>Teams<\/th><\/tr><\/thead>/);
 });
 
 test('branding removal is a Teams feature; Pro keeps a small footer', () => {

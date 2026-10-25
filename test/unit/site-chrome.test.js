@@ -34,7 +34,7 @@ test('the homepage ends with the same site footer and has no footer of its own',
 
 test('the footer links to every page the header and footer promise', () => {
     const footer = partial('footer.html');
-    for (const href of ['/', '/pricing', '/help', '/about', '/privacy', '/terms', '/report', '/contact']) {
+    for (const href of ['/', '/pricing', '/help', '/about', '/privacy', '/terms', '/contact']) {
         assert.ok(footer.includes(`href="${href}"`), `footer is missing ${href}`);
     }
 });
