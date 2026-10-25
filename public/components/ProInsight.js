@@ -340,7 +340,7 @@ const ProStats = {
                 </template>
             </template>
 
-            <p class="pc-insight-privacy">Counts only. We never record who viewed your calendar.</p>
+            <p class="pc-insight-privacy">pastecal never records who viewed your calendar.</p>
         </div>
     `,
     props: { calendarId: String, where: { type: String, default: 'share_panel' } },

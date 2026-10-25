@@ -181,6 +181,7 @@ const BUTTON_COMPONENTS = {
   'pc-nav-row': 'a row in the logo menu: icon + two lines (style.css "Logo menu")',
   'pc-swatch': 'an event color to pick: its fill is the event color (components.css)',
   'pc-filter-dot': 'a legend dot that filters events by color: its fill is the event color',
+  'pc-search-result-head': 'a search result row that opens in place to show its notes (style.css "Search panel")',
   'pc-toast-act': 'the action on a toast, on the toast\'s inverted surface (style.css "Toast")',
   'pc-toast-x': 'the close on a toast, on the toast\'s inverted surface',
   'pc-addcal-nudge-text': 'the hint under "Add to my calendar", on an inverted tooltip surface',
