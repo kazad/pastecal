@@ -36,6 +36,7 @@ import { sessionUserId, sameSite, UNLIMITED_TOP_LEVEL, lockForOwner } from './Ac
 import { LockClient } from './LockClient.js';
 import { SlugService, nameProblem } from './SlugService.js';
 import { applySecurityHeaders } from './SecurityHeaders.js';
+import { siteUrl } from './Site.js';
 
 export const NAME_CHANGES_PER_HOUR = 20;
 export const SHORT_HOLD_DAYS = 90;
@@ -350,7 +351,14 @@ export async function serveAt(request, env, url, { serveFeed }) {
         }
         return handlePageResponse(env, url, page);
     }
-    const hit = await cached(cacheKey('at', handle, name), async () => (await acc.resolveLink(handle, name)) || { none: true });
+    const hit = await cached(cacheKey('at', handle, name), async () => {
+        const r = await acc.resolveLink(handle, name);
+        if (!r) return { none: true };
+        // Its title, for the page's <title> and link preview (never the target id: the cache is internal, the page isn't).
+        const look = await directoryLookup(env, r.alias).catch(() => null);
+        const st = look && look.found && look.targetId ? await LockClient.lockStatus(env, look.targetId).catch(() => null) : null;
+        return { alias: r.alias, title: (st && typeof st.title === 'string' && st.title.trim()) ? st.title.trim().slice(0, 120) : '' };
+    });
     if (!hit || hit.none) return notFound(env, url);
     if (ics) {
         const look = await directoryLookup(env, hit.alias);
@@ -360,7 +368,24 @@ export async function serveAt(request, env, url, { serveFeed }) {
     // The app's view page, told which read-only name to open; the address stays /@handle/<name>.
     const page = await env.ASSETS.fetch(new Request(new URL('/', url), { headers: { Accept: 'text/html' } }));
     const meta = `<meta name="pc-view" content="${esc(hit.alias)}"><meta name="pc-at" content="${esc('@' + handle + '/' + name)}">`;
-    const out = new HTMLRewriter().on('head', { element(e) { e.prepend(meta, { html: true }); } }).transform(page);
+    // A texted or posted link previews as this calendar, at this address. setInnerContent escapes text;
+    // setAttribute escapes only '"', so attribute values go through esc() first (no double escaping).
+    const title = hit.title || `@${handle}/${name}`;
+    const pageTitle = `${title} · pastecal`;
+    const desc = `${title}: a shared calendar on pastecal, view only. Open it to see the schedule, or add it to your calendar app.`;
+    const at = `${siteUrl(env)}/@${handle}/${name}`;
+    const set = (v) => ({ element(e) { e.setAttribute('content', esc(v)); } });
+    const out = new HTMLRewriter()
+        .on('head', { element(e) { e.prepend(meta, { html: true }); } })
+        .on('title', { element(e) { e.setInnerContent(pageTitle); } })
+        .on('meta[name="description"]', set(desc))
+        .on('meta[property="og:title"]', set(title))
+        .on('meta[property="og:description"]', set(desc))
+        .on('meta[property="og:url"]', set(at))
+        .on('meta[name="twitter:title"]', set(title))
+        .on('meta[name="twitter:description"]', set(desc))
+        .on('meta[property="twitter:url"]', set(at))
+        .transform(page);
     const res = new Response(out.body, out);
     res.headers.set('Cache-Control', 'no-cache');
     res.headers.delete('X-Robots-Tag');

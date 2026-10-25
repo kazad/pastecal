@@ -148,6 +148,7 @@ test('a visitor opens pastecal.com/@name/soccer: view-only, and the edit id is n
   expect(new URL(page.url()).pathname).toBe(`/@${handle}/soccer`);
   const vm = await page.evaluate(() => { const p = app; return { ro: p.isReadOnly, can: p.canEdit, title: p.calendar.title }; });
   expect(vm).toEqual({ ro: true, can: false, title: 'Soccer' });
+  await expect(page).toHaveTitle('Soccer · pastecal');
   await expect(page.getByTestId('homepage-tour')).toHaveCount(0);
   const storage = await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }) + document.documentElement.outerHTML + document.title + location.href);
   for (const s of [...seen, storage]) expect(s.includes(calendarId), `edit id leaked in: ${s.slice(0, 200)}`).toBe(false);
@@ -206,6 +207,9 @@ test('a short link moves to another calendar only on Save (Change, pick, Save; C
   await expect(page.getByTestId('short-ok')).toHaveText(`pastecal.com/${short} now opens Hockey.`);
   await expect(page.getByTestId('short-row').filter({ hasText: short })).toContainText('→ Hockey');
   expect(await target()).toBe(hockey);
+  // Its page: static, so the app names the tab after the calendar once it loads.
+  await page.goto(`/${short}`);
+  await expect(page).toHaveTitle('Hockey · pastecal', { timeout: 20_000 });
   await ctx.close();
 });
 

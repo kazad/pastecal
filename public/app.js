@@ -760,6 +760,8 @@ const CalendarVueApp = {
                             // Re-initialize local settings to load custom colors and labels
                             this.initializeLocalSettings();
                             // Add to recents when calendar loads, but mark as read-only
+                            // The tab says which calendar this is (a short link's page is static: the server can't).
+                            if (c.title) document.title = `${String(c.title).slice(0, 120)} · pastecal`;
                             if (c.title) {
                                 // A read-only calendar you were linked to is a visit,
                                 // not something you created.

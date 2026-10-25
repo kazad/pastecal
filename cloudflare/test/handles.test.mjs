@@ -322,6 +322,34 @@ try {
         step('deleted account: each short name is a tombstone (lookup ended, POST /cal 409 in any case, no claim or view link, feeds and view JSON 410, /link-ended/<name> says so (404 for any other name), the calendar stays); released after 90 days, then creatable');
     }
 
+    // --- an @link's page previews as its calendar: <title>, description, og/twitter title and url (escaped)
+    {
+        const xena = await signIn(`xena-names-${run}@example.com`);
+        await giveUnlimited(xena, 'xena');
+        const xh = `xena-${run}`.slice(0, 30);
+        assert.equal((await pj('/api/names/handle', { handle: xh }, xena.cookie)).status, 200);
+        const evil = `Tigers "U10" <script>alert(1)</script></title><img src=x onerror=alert(2)> & co`;
+        const made = await pj('/api/names/calendar', { name: 'tigers', title: evil }, xena.cookie);
+        assert.equal(made.status, 200, JSON.stringify(made.d));
+        const res = await get(`/@${xh}/tigers`);
+        assert.equal(res.status, 200);
+        const html = await noEditId(res, made.d.calendarId, '@ page');
+        const head = html.slice(0, html.indexOf('</head>'));
+        { const bad = /<script>alert|<img src=x|onerror=alert\(2\)>/.exec(head); assert.ok(!bad, 'nothing from the title runs or opens a tag: ' + (bad && head.slice(Math.max(0, bad.index - 300), bad.index + 100))); }
+        assert.equal((head.match(/<title>/g) || []).length, 1);
+        const title = /<title>([^<]*)<\/title>/.exec(head)[1];
+        assert.match(title, /^Tigers (&quot;|")U10(&quot;|") &lt;script&gt;alert\(1\)&lt;\/script&gt;&lt;\/title&gt;&lt;img src=x onerror=alert\(2\)&gt; &amp; co · pastecal$/, title);
+        const meta = (sel) => { const m = new RegExp(`<meta ${sel} content="([^"]*)"`).exec(head); return m && m[1]; };
+        assert.match(meta('property="og:title"'), /^Tigers &quot;U10&quot; &lt;script&gt;/, 'og:title is the calendar, escaped');
+        assert.equal(meta('property="og:url"'), `https://pastecal.com/@${xh}/tigers`);
+        assert.equal(meta('property="twitter:url"'), `https://pastecal.com/@${xh}/tigers`);
+        assert.match(meta('property="og:description"'), /a shared calendar on pastecal, view only/);
+        assert.equal(meta('name="description"').split(':')[0], 'Tigers &quot;U10&quot; &lt;script&gt;alert(1)&lt;/script&gt;&lt;/title&gt;&lt;img src=x onerror=alert(2)&gt; &amp; co', 'escaped once, not twice');
+        assert.match(meta('name="twitter:title"'), /^Tigers &quot;U10&quot;/);
+        assert.ok(!head.includes('The shared calendar nobody has to sign up for'), 'not the homepage card');
+        step('@link page: its own <title>, description, og:/twitter: title and url (the @ address), every value escaped; no edit id');
+    }
+
     // --- rate limit on name changes
     const dan = await signIn(`dan-names-${run}@example.com`);
     await giveUnlimited(dan, 'dan');
