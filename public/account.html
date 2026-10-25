@@ -141,7 +141,7 @@ select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); borde
         <p id="handleNote">Your public page lists the calendars you choose to show. Links under your name open the view-only calendar.</p>
         <div id="newCal">
           <h2 style="margin-top:18px" id="newCalH">New calendar</h2>
-          <p>Upgraded and locked to you, at its own pastecal.com/@you/… link. As many as you like.</p>
+          <p id="newCalNote">Upgraded and locked to you, at its own pastecal.com/@you/… link. As many as you like; they don't count toward your 10.</p>
           <form class="inline" id="newCalForm" novalidate>
             <span class="field"><span class="pre" id="newCalPre"></span><input id="newCalInput" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="40" aria-label="Short name" placeholder="soccer" data-testid="newcal-input"></span>
             <button class="btn" type="submit" data-testid="newcal-create">Create</button>
@@ -285,6 +285,7 @@ select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); borde
       $('handleLink').href = '/@' + A.handle;
       $('newCalH').textContent = 'New calendar under @' + A.handle;
       $('newCalPre').textContent = '@' + A.handle + '/';
+      $('newCalNote').textContent = 'Upgraded and locked to you, at its own ' + host + '/@' + A.handle + '/… link. As many as you like; they don\u2019t count toward your 10.';
       $('newCal').hidden = !unl;
     }
 
@@ -348,7 +349,9 @@ select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); borde
     var list = $('calList'); list.textContent = '';
     $('calsEmpty').hidden = A.calendars.length > 0;
     A.calendars.forEach(function (c) {
-      var label = c.state === 'trial' && c.trialEnd ? 'Trial · ' + daysLeft(c.trialEnd) + ' days left' : LABEL[c.state];
+      // Pro: which ones use one of the 10, and which live under the @name (unlimited).
+      var label = c.state === 'trial' && c.trialEnd ? 'Trial · ' + daysLeft(c.trialEnd) + ' days left'
+        : c.state === 'unlimited' ? (c.atName && A.handle ? 'Pro · under @' + A.handle : 'Pro · 1 of your 10') : LABEL[c.state];
       var chip = el('span', { class: 'chip' + (c.state === 'paused' ? ' warn' : c.state === 'open' ? '' : ' on'), 'data-testid': 'cal-status', text: label });
       var top = el('div', { class: 'cal-top' }, [el('span', { class: 'cal-title', text: c.title }), chip]);
       var links = el('div', { class: 'cal-links' }, [el('a', { href: '/' + encodeURIComponent(c.id), 'data-testid': 'cal-open', text: 'Open' })]);

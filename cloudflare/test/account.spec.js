@@ -164,7 +164,15 @@ test('"Show on my page" lists it on pastecal.com/@name', async ({ browser }) => 
   await expect(page.getByTestId('handle-empty')).toBeVisible();
   await page.goto('/account');
   const row = page.locator(`[data-cal="${calendarId}"]`);
-  await expect(row.getByTestId('cal-status')).toHaveText('Included in Pro');
+  await expect(row.getByTestId('cal-status')).toHaveText(`Pro · under @${handle}`);   // doesn't use one of the 10
+  // A calendar locked at its own address does: the meter and its row say so.
+  const plain = `walk-plain-${run}`;
+  expect((await page.request.post(`/cal/${plain}`, { data: JSON.stringify({ title: 'Book club', options: {}, events: [] }) })).status()).toBe(201);
+  expect((await page.request.post('/api/pro/lock', { data: JSON.stringify({ calendarId: plain }), headers: { 'Content-Type': 'application/json', Origin: BASE } })).status()).toBe(200);
+  await page.reload();
+  await expect(page.locator(`[data-cal="${plain}"]`).getByTestId('cal-status')).toHaveText('Pro · 1 of your 10');
+  await expect(page.getByTestId('account-meter')).toHaveText(`Upgraded calendars: 1 of 10 · unlimited under @${handle}`);
+  await expect(page.locator('#newCalNote')).toContainText(`pastecal.com/@${handle}/… link`);
   await row.getByTestId('cal-at-edit').click();
   await row.getByTestId('cal-show').check();
   await expect(page.locator(`[data-cal="${calendarId}"]`).getByTestId('cal-show')).toBeChecked();
