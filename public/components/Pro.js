@@ -257,6 +257,7 @@ const ProPanel = {
                 <h4 v-if="mode === 'owner'" data-testid="pro-owner-title">Upgraded with {{ plan }} <span class="pc-pill pc-pill--beta" data-testid="pro-beta-tag">Beta</span></h4>
                 <h4 v-else-if="mode === 'lapsed'" data-testid="pro-lapsed-title">{{ status.lapsedTrial ? 'Trial ended' : plan + ' ended' }} — read-only</h4>
                 <h4 v-else-if="mode === 'paused'">Editing is paused</h4>
+                <h4 v-else-if="mode === 'locked' && canEdit" data-testid="pro-editor-title">You can edit this calendar</h4>
                 <h4 v-else-if="mode === 'locked'">This calendar is locked</h4>
                 <h4 v-else>Upgrade this calendar <span class="pc-pill pc-pill--beta" data-testid="pro-beta-tag">Beta</span></h4>
             </div>
@@ -349,6 +350,7 @@ const ProPanel = {
             <!-- Locked, and this browser is not signed in as the owner -->
             <template v-if="mode === 'locked' || mode === 'paused'">
                 <p v-if="mode === 'paused'" class="pc-pro-lead" data-testid="pro-paused">Editing is paused by the owner. You can still view it and follow it in your calendar app.</p>
+                <p v-else-if="canEdit" class="pc-pro-lead" data-testid="pro-editor-lead">You’re using an editor link. Only the owner and people with an editor link can change it. Everyone else can view.</p>
                 <p v-else class="pc-pro-lead">Only the owner and people with an editor link can change it. Everyone else can view.</p>
                 <form v-if="step === 'email'" class="pc-pro-email" @submit.prevent="sendLink">
                     <label for="pc-pro-email-input2">Are you the owner? Sign in with the email you paid with.</label>

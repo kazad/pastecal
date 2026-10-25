@@ -95,6 +95,8 @@ try {
     const welcome = (await outbox(annEmail)).at(-1);
     assert.match(welcome.subject, /^Your Plus trial is on for /);
     assert.match(welcome.text, /No card is on file, so nothing will be charged/);
+    assert.doesNotMatch(welcome.text, /Manage billing/, 'a no-card trial has no billing to manage');
+    assert.match(welcome.text, /To keep Plus after the trial: open the calendar's Plus tab and choose Keep Plus/);
     step('a sign-in link from "Try Pro free" starts a 30-day trial on verify: direct subscription, no card, cancel at the end; the calendar is locked for that user');
 
     // --- Only an editor of record can upgrade: the browser that made it, or one that edited it on 2+ days.

@@ -107,7 +107,7 @@ test('privacy covers visit counting, the welcome email and deleting an account',
   const p = read('public/privacy.html');
   assert.match(p, /Each calendar also counts its own visits/);
   assert.match(p, /never store IP addresses/i);
-  assert.match(p, /one welcome email when you first lock a calendar/);
+  assert.match(p, /a welcome email when you upgrade/);
   assert.match(p, /Deleting it removes your email, your sign-in links and your sessions/);
 });
 

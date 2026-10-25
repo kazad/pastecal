@@ -190,7 +190,8 @@ test('an editor-link holder and a visitor never see the owner\'s controls, and c
   await helper.page.getByTestId('share-pill-more').click();
   await helper.page.getByTestId('side-tab-plus').click();
   const t = plusPanel(helper.page);
-  await expect(t.getByRole('heading', { name: 'This calendar is locked' })).toBeVisible();
+  await expect(t.getByRole('heading', { name: 'You can edit this calendar' })).toBeVisible();   // an editor link edits: not "locked" for them
+  await expect(t.getByTestId('pro-editor-lead')).toContainText('editor link');
   await expect(t.getByTestId('pro-owner-signin')).toBeVisible();
   for (const tid of ownerOnly) await expect(t.getByTestId(tid)).toHaveCount(0);
   await helper.ctx.close();

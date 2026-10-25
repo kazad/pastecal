@@ -936,7 +936,10 @@ async function sendWelcomeEmail(env, acc, calendarId, userId, title, trialEnd = 
             + `${link}\n\n`
             + `Who can edit now: only you (signed in with this email) and people with an editor link. Everyone else can still view it.\n\n`
             + `To give someone editor access: open the calendar, choose the Plus tab, and copy the Editor link. You can reset or revoke editor links there at any time.\n\n`
-            + `To manage billing: open the calendar's Plus tab, or the logo menu, and choose Manage billing. You can also sign in at ${siteHost(env)} with this email.\n\n`
+            // A trial with no card has no billing to manage: it says how to keep the plan instead.
+            + (trialEnd && hasCard === false
+                ? `To keep ${P} after the trial: open the calendar's Plus tab and choose Keep ${P}. You can also sign in at ${siteHost(env)} with this email.\n\n`
+                : `To manage billing: open the calendar's Plus tab, or the logo menu, and choose Manage billing. You can also sign in at ${siteHost(env)} with this email.\n\n`)
             + `Questions? Write to support@pastecal.com.\n`;
         await sendEmail(env, user.email, trialEnd ? `Your ${P} trial is on for ${name}` : `${P} is on for ${name}`, text, null, 'welcome');
     } catch (err) {
