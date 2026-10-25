@@ -836,6 +836,18 @@ const CalendarVueApp = {
         scheduleObj.startHour = this.calendar?.options?.extended ? "00:00" : (this.globalSettings.startHour || "05:00");
         scheduleObj.timeFormat = this.globalSettings.timeFormat === '24' ? 'HH:mm' : 'h:mm a';
         scheduleObj.firstDayOfWeek = parseInt(this.globalSettings.firstDayOfWeek) || 0;
+        // Phones: Week/Day hour labels like "5:00 AM" clip to "5:00…" in the narrow time column,
+        // so label hours compactly ("5a", "12p", or "17" in 24-hour time). window.pcHourLabel reads
+        // the format live, so a settings change applies on the next render.
+        if (typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 639px)').matches) {
+            const vm = this;
+            window.pcHourLabel = (date) => {
+                const h = date.getHours();
+                if (vm.globalSettings.timeFormat === '24') return String(h);
+                return (h % 12 || 12) + (h < 12 ? 'a' : 'p');
+            };
+            scheduleObj.timeScale.majorSlotTemplate = '<span class="pc-hour">${pcHourLabel(data.date)}</span>';
+        }
 
         // Build custom view configuration dynamically
         const customViewDuration = this.calendar?.options?.customViewDuration || this.globalSettings.customViewDuration;

@@ -1058,6 +1058,11 @@ div#Schedule,
   .e-schedule .e-vertical-view .e-appointment .e-subject { white-space: normal !important; max-height: none !important; overflow-wrap: normal !important; word-break: normal !important; hyphens: manual; line-height: 1.2 !important; font-size: 10px !important; letter-spacing: -.02em }
   .e-schedule .e-vertical-view .e-appointment .e-time { display: none !important }
   .e-schedule .e-vertical-view .e-appointment .e-appointment-details { padding: 2px !important }
+  /* Beat the 12.5px subject rule further down, or "Standup" clips to "Standu". */
+  .e-schedule.e-schedule .e-vertical-view .e-appointment .e-subject { font-size: 10.5px !important; letter-spacing: -.02em }
+  /* The now-line's "4:45 PM" label clipped in the narrow time column; the line itself says now. */
+  .e-schedule .e-vertical-view .e-current-time { visibility: hidden }
+  .e-schedule .e-vertical-view .e-time-cells-wrap .e-time-slots .pc-hour { font-size: 11px; font-weight: 500; white-space: nowrap }
 }
 
 /* Homepage split: calendar 2/3, pitch 1/3, only on wide screens. Narrower, a one-line pitch sits
@@ -1918,6 +1923,34 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 .pc-qa-chip { height: 28px; padding: 0 11px; border: 1px solid var(--pc-line); border-radius: 999px; background: var(--pc-soft);
   font: 500 12.5px/1 var(--pc-font); color: var(--pc-text-2); cursor: pointer; white-space: nowrap }
 .pc-qa-chip:hover { border-color: var(--pc-link); color: var(--pc-link) }
+/* Phone header "+": the desktop "+ Add event" pill's tint as a 34px circle (44px tap area via the halo). */
+.pc-m-add { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px;
+  margin-right: 4px; border-radius: 999px; background: color-mix(in srgb, var(--pc-link) 14%, transparent); color: var(--pc-link) }
+.pc-m-add::after { content: ""; position: absolute; inset: -6px; border-radius: 999px }
+.pc-m-add svg { width: 20px; height: 20px }
+.pc-m-add:active { transform: scale(.94) }
+.pc-m-add:focus-visible { outline: 2px solid var(--pc-link); outline-offset: 2px }
+/* Narrow phones (iPhone SE/mini): the centered title met the "+" and the wordmark. Keep the logo, drop the
+   wordmark, and give the title a little less room so logo, title, notes, +, share and menu all fit. */
+@media (max-width: 379px) {
+  .pc-m-add { width: 32px; height: 32px; margin-right: 0 }
+  [data-testid="mobile-header"] .pc-m-title { max-width: 96px }
+}
+@media (max-width: 349px) { [data-testid="mobile-header"] .pc-m-wordmark { display: none } }
+/* Phones: the dialog fits the screen (w-full + mx-4 made it 32px too wide, and a 176px date plus a 128px
+   time field didn't fit beside the labels), so no sideways scroll. Date stretches, time keeps a fixed width. */
+@media (max-width: 639px) {
+  div.pc-qa-dialog { width: auto; flex: 1 1 auto; min-width: 0; margin: 0 12px; padding: 16px;
+    max-height: calc(100dvh - 24px); overflow-y: auto; overflow-x: hidden }
+  .pc-qa-dialog .pc-qa-fields { padding-left: 0 }
+  .pc-qa-dialog .pc-qa-date { width: auto; flex: 1 1 0; min-width: 0 }
+  .pc-qa-dialog .pc-qa-time { width: 6.75rem; min-width: 0 }
+  .pc-qa-chip { max-width: 100%; overflow: hidden; text-overflow: ellipsis }
+  /* Event editor: Start and End side by side clipped "10/24/26 10:00 …"; stack them, full width. */
+  .e-schedule-dialog .e-start-end-row { display: flex !important; flex-direction: column !important; gap: 12px }
+  .e-schedule-dialog .e-start-end-row .e-start-container,
+  .e-schedule-dialog .e-start-end-row .e-end-container { width: 100% !important; float: none !important; padding: 0 !important; margin: 0 !important }
+}
 
 /* No hairline under the header: the calendar card's own edge separates them (one line, not three). */
 @media (min-width: 768px) { topbar.md\:flex { border-bottom: 0 !important; margin-bottom: 4px } }
