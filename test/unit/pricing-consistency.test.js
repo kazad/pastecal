@@ -1,6 +1,6 @@
 // L3 pricing consistency: one set of prices and one branding story on every page that states them.
 // Plus (plan id 'pro', in beta): $29 a year (yearly only), with a small "Made with pastecal" footer.
-// Pro (plan id 'unlimited', in beta): $96 a year ($8 a month, billed yearly) or $10 month to month,
+// Pro (plan id 'unlimited', in beta; buyable when billing and its price are on, "Join the beta" otherwise): $96 a year ($8 a month, billed yearly) or $10 month to month,
 // also with the footer. Teams (in development): $490 a year or $49 a month, and removing pastecal
 // branding is a Teams-only feature.
 const test = require('node:test');
@@ -30,7 +30,7 @@ test('Teams is $490 a year or $49 a month on the pricing card, waitlist, FAQ and
 });
 
 test('one price everywhere: none of the old prices on any page people see', () => {
-  for (const f of ['public/index.html', 'public/pricing.html', 'public/terms.html', 'public/components/Pro.js', 'public/components/NavigationDropdown.js', 'cloudflare/src/Accounts.js']) {
+  for (const f of ['public/index.html', 'public/pricing.html', 'public/terms.html', 'public/account.html', 'public/pro/done.html', 'public/components/Pro.js', 'public/components/NavigationDropdown.js', 'cloudflare/src/Accounts.js', 'cloudflare/src/Names.js']) {
     const t = read(f);
     assert.ok(!/2\.99/.test(t), `${f} still mentions $2.99`);
     assert.ok(!/\$24\b|\$2 a month/.test(t), `${f} still has the old $24 price`);
@@ -38,6 +38,9 @@ test('one price everywhere: none of the old prices on any page people see', () =
     assert.ok(!/\$79\b/.test(t), `${f} still has $79`);
     assert.ok(!/\$290\b|\$29 a month/.test(t), `${f} still has the old Teams price`);
     assert.ok(!/Pro Plus|Join the Pro beta|Pro beta trial/.test(t), `${f} still uses the old plan names`);
+    // The one-calendar plan is Plus now: "Pro" means the 10-calendar plan (id 'unlimited').
+    const shown = t.replace(/<!--[\s\S]*?-->/g, '').replace(/^\s*(\/\/|\*|\/\*).*$/gm, '').replace(/\s\/\/ .*$/gm, '');
+    assert.ok(!/Keep Pro|Pro trial|Try Pro free|Locked with Pro<|Pro calendars?\b|Pro is on for|manage your new Pro/.test(shown), `${f} calls the one-calendar plan Pro (it is Plus)`);
   }
 });
 
@@ -58,14 +61,20 @@ test('four plans: Plus and Pro are in beta, Teams is in development', () => {
   assert.match(pro, /5 upgraded calendars/);
   assert.match(pricing, /<option value="unlimited">Pro, \$96 a year or \$10 a month<\/option>/);
   assert.match(pricing, /<span class="badge">Beta<\/span>\s*<h3>Pro<\/h3>/, 'Pro carries the Beta badge');
-  assert.match(pro, /href="#waitlist"[^>]*data-wait="unlimited">Join the beta<\/a>$/);
+  // Billing on: Get Pro opens the Get Plus section on Pro. Billing off: the page renames it Join the beta.
+  assert.match(pro, /id="unlCta" class="cta primary" href="#get-pro" data-plan="unlimited">Get Pro<\/a>$/);
+  assert.match(pricing, /getElementById\('unlCta'\)\.textContent = 'Join the beta'/);
+  assert.match(pricing, /joinBeta\('unlimited'\)/);
+  assert.match(pricing, /<label class="interval on"><input type="radio" name="interval" value="year" checked><span><b>\$96 a year<\/b>/);
+  assert.match(pricing, /<label class="interval"><input type="radio" name="interval" value="month"><span><b>\$10 a month<\/b>/);
+  assert.match(pricing, /body: JSON\.stringify\(\{ plan: 'unlimited', interval: interval\(\) \}\)/, 'Continue to payment checks out Pro');
   const block = /<span class="badge dev">In development<\/span>\s*<h3>Teams<\/h3>[\s\S]*?<\/a>/.exec(pricing);
   assert.ok(block, 'Teams card carries the In development badge');
   assert.match(block[0], /href="#waitlist"[^>]*>Join the waitlist<\/a>$/);
-  assert.match(pricing, /<thead><tr><th>Feature<\/th><th>Free<\/th><th class="pro">Plus <span class="beta-tag">Beta<\/span><\/th><th>Pro <span class="beta-tag">Beta<\/span><\/th><th>Teams<\/th><\/tr><\/thead>/);
+  assert.match(pricing, /<thead><tr><th>Feature<\/th><th>Free<\/th><th class="pro">Plus<\/th><th>Pro<\/th><th>Teams<\/th><\/tr><\/thead>/, 'no Beta pills in the table');
   assert.match(pricing, /<span>Upgraded calendars<\/span>/);
   assert.match(pricing, /<tr><td>With a short name<small>[\s\S]*?<td class="n">—<\/td><td class="pro">1<\/td><td>5<\/td><td>25<\/td><\/tr>/);
-  assert.match(pricing, /<tr><td>Under your own name <span class="soon">In development<\/span>[\s\S]*?<td class="n">—<\/td><td class="pro n">—<\/td><td>Unlimited<\/td><td>Unlimited<\/td><\/tr>/);
+  assert.match(pricing, /<tr><td>Under your own name<small>[\s\S]*?<td class="n">—<\/td><td class="pro n">—<\/td><td>Unlimited<\/td><td>Unlimited<\/td><\/tr>/);
   assert.ok(!/Pro calendar/.test(pricing), 'the concept word is "upgraded calendar"');
 });
 
@@ -73,7 +82,13 @@ test('homepage plan cards match the pricing page', () => {
   const home = read('public/index.html');
   assert.match(home, /<h4>Plus<\/h4><p class="pc-plan-price"><b>\$29<\/b> a year<\/p>/);
   assert.match(home, /<h4>Pro<\/h4><p class="pc-plan-price"><b>\$96<\/b> a year <small>or \$10 a month<\/small><\/p>/);
-  assert.match(home, /<span class="pc-gopro-price">Plus · \$29 a year<\/span>/);
+});
+
+test('the Plus tab names the Plus price', () => {
+  const pro = read('public/components/Pro.js');
+  assert.match(pro, />\{\{ going \? 'taking you to payment…' : 'upgrade now: \$29\/year' \}\}</);
+  assert.match(pro, /<b>\$29 a year<\/b> <span class="pc-pro-muted">That's about \$2\.42 a month\.<\/span>/);
+  assert.ok(!/\$24 a year|\$2 a month/.test(pro), 'no old Plus price');
 });
 
 test('branding removal is a Teams feature; Plus and Pro keep a small footer', () => {
@@ -92,6 +107,39 @@ test('privacy covers visit counting, the welcome email and deleting an account',
   const p = read('public/privacy.html');
   assert.match(p, /Each calendar also counts its own visits/);
   assert.match(p, /never store IP addresses/i);
-  assert.match(p, /one welcome email when you first lock a calendar/);
+  assert.match(p, /a welcome email when you upgrade/);
   assert.match(p, /Deleting it removes your email, your sign-in links and your sessions/);
+});
+
+test('copy agrees with itself: cancel follows "If your plan ends" (read-only by default), the waitlist starts on Teams, one date format', () => {
+  const pricing = read('public/pricing.html');
+  assert.match(pricing, /<summary>What happens if I cancel\?<\/summary><p>[^<]*“If your plan ends”[^<]*read-only \(the default/);
+  assert.doesNotMatch(pricing, /goes back to the free plan, unlocked/);
+  assert.match(pricing, /<select id="plan" name="plan"><option value="teams">/, 'the waitlist does not default to a plan you can buy now');
+  // Renewal and end dates: "October 24, 2027" in UTC everywhere (the emails' formatDay, /account, the Share panel, the logo menu).
+  for (const f of ['public/account.html', 'public/components/Pro.js', 'public/components/NavigationDropdown.js']) {
+    const t = read(f);
+    for (const m of t.matchAll(/toLocaleDateString\(([^)]*)\)/g)) {
+      assert.match(m[1], /'en-US'/, `${f}: ${m[0]}`); assert.match(m[1], /month: 'long'/, `${f}: ${m[0]}`); assert.match(m[1], /timeZone: 'UTC'/, `${f}: ${m[0]}`);
+    }
+  }
+});
+
+test('pricing reads finished: one badge per card, one Coming line, one beta line, the comparison behind a toggle', () => {
+  const pricing = read('public/pricing.html');
+  for (const name of ['Free', 'Plus', 'Pro', 'Teams']) {
+    const c = card(pricing, name);
+    assert.ok((c.match(/class="badge/g) || []).length <= 1, `${name}: at most one badge`);
+    assert.ok((c.match(/In development/g) || []).length <= 1, `${name}: at most one "In development"`);
+    assert.ok((c.match(/class="coming"/g) || []).length <= 1, `${name}: one Coming line at most`);
+  }
+  assert.doesNotMatch(pricing, /class="soon"/, 'no per-row In development pills');
+  assert.equal((pricing.match(/Plus and Pro are in beta\. Early members keep their price\./g) || []).length, 2, 'the beta line and the FAQ say the same');
+  assert.match(pricing, /<details class="compare" id="compare">\s*<summary[^>]*>Compare every feature<\/summary>/, 'closed by default, opens in place');
+  assert.doesNotMatch(pricing, /<details class="compare" id="compare" open/);
+  assert.match(pricing, /location\.hash === '#compare'/, '#compare opens it');
+  assert.match(pricing, /Rows marked ◦ are coming soon/);
+  const marks = (pricing.match(/<span class="mark" title="Coming soon">◦<\/span>/g) || []).length;
+  assert.ok(marks >= 5, 'not-yet-built rows are marked: ' + marks);
+  assert.doesNotMatch(pricing, /Coming to Plus and Pro/, 'no second list of what is coming');
 });

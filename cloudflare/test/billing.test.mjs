@@ -53,7 +53,7 @@ const sub = (id, calendarId, userId, status, interval = 'year') => ({
     id, object: 'subscription', status, customer: `cus_${run}`, metadata: { calendar_id: calendarId, user_id: userId },
     items: { data: [{ current_period_end: 1830000000, price: { id: interval === 'year' ? 'price_fake_yearly' : 'price_fake_monthly', recurring: { interval } } }] },
 });
-const lockCalls = (id) => fake.log.filter((l) => l.path.startsWith(`/lockfake/cal/${id}/`) && !l.path.endsWith('lock-status'));
+const lockCalls = (id) => fake.log.filter((l) => l.path.startsWith(`/lockfake/cal/${id}/`) && !l.path.endsWith('lock-status') && !l.path.endsWith('editor-of-record'));   // reads, not lock changes
 const me = async (cookie) => (await fetch(BASE + '/api/me', { headers: { Cookie: cookie } })).json();
 const status = async (id, cookie) => (await fetch(`${BASE}/api/pro/status?calendar=${encodeURIComponent(id)}`, { headers: cookie ? { Cookie: cookie } : {} })).json();
 
@@ -67,8 +67,8 @@ try {
     assert.equal(r.status, 503);
     step('without Stripe keys, checkout, portal and the webhook answer 503 billing-not-configured');
     // /api/pro/config tells the site which Pro offer to show: the trial and checkout, or "Join the Pro beta".
-    assert.deepEqual(await (await fetch(NOKEYS + '/api/pro/config')).json(), { billing: false });
-    assert.deepEqual(await (await fetch(BASE + '/api/pro/config')).json(), { billing: true });
+    assert.deepEqual(await (await fetch(NOKEYS + '/api/pro/config')).json(), { billing: false, unlimited: false });
+    assert.deepEqual(await (await fetch(BASE + '/api/pro/config')).json(), { billing: true, unlimited: false });
     assert.equal((await post(BASE, '/api/pro/config', {}, nk.cookie)).status, 405);
     step('/api/pro/config: billing true with Stripe keys and the yearly price, false without');
 
@@ -184,10 +184,13 @@ try {
     const plainCal = `plain-${run}`; fake.addCalendar(plainCal);
     const b2 = fake.log.length;
     r = await post(BASE, '/api/pro/checkout', { calendarId: plainCal, interval: 'month' }, ann.cookie);
+    assert.equal(r.status, 400); assert.equal((await r.json()).error, 'bad-interval');
+    assert.equal(fake.log.slice(b2).filter((l) => l.path === '/stripe/v1/checkout/sessions').length, 0, 'no monthly page, even with a monthly price set');
+    r = await post(BASE, '/api/pro/checkout', { calendarId: plainCal, interval: 'year' }, ann.cookie);
     assert.equal(r.status, 200);
     const cs2 = fake.log.slice(b2).find((l) => l.path === '/stripe/v1/checkout/sessions');
-    assert.equal(cs2.body['line_items[0][price]'], 'price_fake_monthly'); assert.equal(cs2.body.client_reference_id, plainCal);
-    step('checkout interval "month" uses the monthly price');
+    assert.equal(cs2.body['line_items[0][price]'], 'price_fake_yearly'); assert.equal(cs2.body.client_reference_id, plainCal);
+    step('Plus is yearly only: interval "month" is refused (400 bad-interval) even with a monthly price configured');
 
     // One buyer at a time: while ann's checkout for plainCal is open, nobody else can start one.
     const holder2 = await signIn(BASE, `bob-hold-${run}@example.com`);
@@ -231,7 +234,7 @@ try {
     assert.equal(r.status, 200);
     assert.equal(fake.cals.get(cal).locked, true); assert.equal(fake.cals.get(cal).ownerId, ann.userId);
     let mine = await me(ann.cookie);
-    assert.deepEqual(mine.calendars, [{ id: cal, status: 'active', plan: 'pro', interval: 'year', priceId: 'price_fake_yearly', currentPeriodEnd: 1830000000, trialEnd: null }]);
+    assert.deepEqual(mine.calendars, [{ id: cal, status: 'active', plan: 'pro', interval: 'year', priceId: 'price_fake_yearly', currentPeriodEnd: 1830000000, trialEnd: null, cancelAtPeriodEnd: false }]);
     step('a signed subscription.created locks the calendar for its owner; /api/me lists it with status and interval');
 
     const calls = lockCalls(cal).length;
@@ -245,12 +248,12 @@ try {
     // --- Status, editor key, portal
     const s1 = await status(cal, ann.cookie);
     // Trial fields: the owner also learns what happens when Pro ends (lapsedMode, default read-only).
-    assert.deepEqual(s1, { locked: true, pro: true, isOwner: true, paused: false, lapsedOwner: false, trialUsed: false, lapsedMode: 'readonly' });
+    assert.deepEqual(s1, { locked: true, pro: true, plan: 'pro', isOwner: true, paused: false, lapsedOwner: false, trialUsed: false, lapsedMode: 'readonly' });
     const s2 = await status(cal);
-    assert.deepEqual(s2, { locked: true, pro: true, isOwner: false, paused: false, lapsedOwner: false, trialUsed: false });
-    assert.deepEqual(Object.keys(s2).sort(), ['isOwner', 'lapsedOwner', 'locked', 'paused', 'pro', 'trialUsed']);
-    assert.deepEqual(await status(`missing-${run}`), { locked: false, pro: false, isOwner: false, paused: false, lapsedOwner: false, trialUsed: false });
-    step('status says {locked, pro, isOwner, paused, lapsedOwner, trialUsed} and nothing else (no owner id, no key)');
+    assert.deepEqual(s2, { locked: true, pro: true, plan: 'pro', isOwner: false, paused: false, lapsedOwner: false, trialUsed: false });
+    assert.deepEqual(Object.keys(s2).sort(), ['isOwner', 'lapsedOwner', 'locked', 'paused', 'plan', 'pro', 'trialUsed']);
+    assert.deepEqual(await status(`missing-${run}`), { locked: false, pro: false, plan: null, isOwner: false, paused: false, lapsedOwner: false, trialUsed: false });
+    step('status says {locked, pro, plan, isOwner, paused, lapsedOwner, trialUsed} and nothing else (no owner id, no key)');
 
     const bob = await signIn(BASE, `bob-${run}@example.com`);
     assert.equal((await post(BASE, '/api/pro/editor-key', { calendarId: cal })).status, 401);
@@ -311,7 +314,7 @@ try {
     // A paid cancel falls back like a lapsed trial: the room is told lapse:true (paused unless the owner chose open).
     const unlockCall = fake.log.slice(b4).find((l) => l.path === `/lockfake/cal/${cal}/unlock`);
     assert.deepEqual(unlockCall.body, { ownerId: ann.userId, lapse: true });
-    assert.deepEqual(await status(cal, ann.cookie), { locked: false, pro: false, isOwner: false, paused: false, lapsedOwner: false, trialUsed: false });
+    assert.deepEqual(await status(cal, ann.cookie), { locked: false, pro: false, plan: null, isOwner: false, paused: false, lapsedOwner: false, trialUsed: false });
     step('a failed payment keeps the lock (past_due); cancellation unlocks with lapse:true (the read-only fallback)');
 
     // --- Support: reassign a paid calendar to another email.
@@ -408,7 +411,7 @@ try {
     // only the TESTKEY instance below shows the refusal). And a test key outside dev mode turns billing off.
     r = await fetch(TESTKEY + '/api/stripe/webhook', { method: 'POST', body: '{}', headers: { 'Stripe-Signature': signStripe(WHSEC, '{}') } });
     assert.equal(r.status, 503); assert.deepEqual(await r.json(), { error: 'billing-not-configured' });
-    assert.deepEqual(await (await fetch(TESTKEY + '/api/pro/config')).json(), { billing: false });
+    assert.deepEqual(await (await fetch(TESTKEY + '/api/pro/config')).json(), { billing: false, unlimited: false });
     step('a test-mode Stripe key without dev mode: billing answers 503 billing-not-configured');
 } finally {
     fake.close();

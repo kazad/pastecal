@@ -100,7 +100,10 @@ const ProInsightMath = {
         for (const r of list) if ((Number(r[key]) || 0) > (Number(best[key]) || 0)) best = r;
         const avg = total / Math.max(1, list.length);
         const per = avg >= 10 ? Math.round(avg) : Math.round(avg * 10) / 10;
-        return `${total.toLocaleString()} ${noun} in ${list.length} days, about ${per.toLocaleString()} a day. Busiest day: ${this.dayLabel(best.day, { weekday: 'short', month: 'short', day: 'numeric' })}, ${Number(best[key]).toLocaleString()}.`;
+        // "1 view", and "less than one a day" rather than "about 0 a day".
+        const what = total === 1 ? noun.replace(/s$/, '') : noun;
+        const rate = per < 1 ? 'less than one a day' : `about ${per.toLocaleString()} a day`;
+        return `${total.toLocaleString()} ${what} in ${list.length} days, ${rate}. Busiest day: ${this.dayLabel(best.day, { weekday: 'short', month: 'short', day: 'numeric' })}, ${Number(best[key]).toLocaleString()}.`;
     },
 
     // 🇺🇸 from "US". Anything that isn't two letters gets no flag.
@@ -229,7 +232,7 @@ async function proInsightApi(method, path, body) {
 function proInsightError(r) {
     if (r.status === 0) return PRO_INSIGHT_NET;
     if (r.status === 401) return 'Sign in as the owner to see this. Use the email you paid with.';
-    if (r.status === 403 && r.data && r.data.error === 'pro-only') return 'This is part of Pro. Lock the calendar to turn it on.';
+    if (r.status === 403 && r.data && r.data.error === 'pro-only') return 'This is part of Plus. Upgrade the calendar to turn it on.';
     if (r.status === 403) return 'Only the calendar’s owner can see this.';
     if (r.status === 503 && r.data && r.data.error === 'stats-unavailable') return 'Stats start counting soon.';
     if (r.status === 503) return 'Saved versions aren’t available right now. Try again later.';
@@ -280,7 +283,7 @@ const ProStats = {
 
                 <template v-else>
                     <div class="pc-stat-cards">
-                        <button v-for="m in metrics" :key="m.key" type="button" class="pc-stat-card" :class="{ on: metric === m.key }"
+                        <button v-for="m in metrics" :key="m.key" type="button" class="pc-card pc-card--flat pc-card--pad pc-stat-card" :class="{ on: metric === m.key }"
                             :aria-pressed="metric === m.key ? 'true' : 'false'" @click="metric = m.key" :data-testid="'pro-stat-' + m.key">
                             <span class="pc-stat-label">{{ m.label }}</span>
                             <span class="pc-stat-num">{{ fmt(headline.now[m.key]) }}</span>
@@ -423,15 +426,15 @@ const ProHistory = {
                                 <span class="pc-insight-muted">{{ eventCount(v) }}<template v-if="v.savedAt"> · {{ timeOf(v) }}</template></span>
                             </div>
                             <div class="pc-ver-actions">
-                                <button type="button" class="pc-btn pc-btn-sm pc-btn-secondary" @click="openPreview(v)" :disabled="busy">Preview</button>
-                                <button type="button" class="pc-btn pc-btn-sm pc-btn-secondary" @click="askRestore(v)" :disabled="busy">Restore</button>
+                                <button type="button" class="pc-btn pc-btn--sm" @click="openPreview(v)" :disabled="busy">Preview</button>
+                                <button type="button" class="pc-btn pc-btn--sm" @click="askRestore(v)" :disabled="busy">Restore</button>
                             </div>
                             <div v-if="confirming && confirming.date === v.date" class="pc-confirm" role="alertdialog" :aria-label="'Restore the version from ' + label(v)">
                                 <p class="pc-confirm-title">Restore the version from {{ label(v) }}?</p>
                                 <p class="pc-insight-muted">Everyone with the link sees this version right away. You can undo by restoring the version saved just before.</p>
                                 <div class="pc-confirm-row">
-                                    <button type="button" class="pc-pro-btn" @click="restore(v)" :disabled="busy" data-testid="pro-restore-confirm">{{ busy ? 'Restoring…' : 'Restore this version' }}</button>
-                                    <button type="button" class="pc-pro-btn pc-pro-btn--quiet" @click="confirming = null" :disabled="busy">Cancel</button>
+                                    <button type="button" class="pc-btn pc-btn--primary" @click="restore(v)" :disabled="busy" data-testid="pro-restore-confirm">{{ busy ? 'Restoring…' : 'Restore this version' }}</button>
+                                    <button type="button" class="pc-btn" @click="confirming = null" :disabled="busy">Cancel</button>
                                 </div>
                             </div>
                         </li>
@@ -444,16 +447,16 @@ const ProHistory = {
                 <div class="pc-preview-bar" data-testid="pro-preview">
                     <span class="pc-preview-label">Previewing {{ label(preview) }}</span>
                     <span class="pc-preview-actions">
-                        <button v-if="!confirming" type="button" class="pc-pro-btn" @click="askRestore(preview)" :disabled="busy || !preview.calendar">Restore this version</button>
-                        <button type="button" class="pc-pro-btn pc-pro-btn--quiet" @click="closePreview" :disabled="busy">Exit preview</button>
+                        <button v-if="!confirming" type="button" class="pc-btn pc-btn--primary" @click="askRestore(preview)" :disabled="busy || !preview.calendar">Restore this version</button>
+                        <button type="button" class="pc-btn" @click="closePreview" :disabled="busy">Exit preview</button>
                     </span>
                 </div>
                 <div v-if="confirming" class="pc-confirm" role="alertdialog" :aria-label="'Restore the version from ' + label(confirming)">
                     <p class="pc-confirm-title">Restore the version from {{ label(confirming) }}?</p>
                     <p class="pc-insight-muted">Everyone with the link sees this version right away. You can undo by restoring the version saved just before.</p>
                     <div class="pc-confirm-row">
-                        <button type="button" class="pc-pro-btn" @click="restore(confirming)" :disabled="busy" data-testid="pro-restore-confirm">{{ busy ? 'Restoring…' : 'Restore this version' }}</button>
-                        <button type="button" class="pc-pro-btn pc-pro-btn--quiet" @click="confirming = null" :disabled="busy">Cancel</button>
+                        <button type="button" class="pc-btn pc-btn--primary" @click="restore(confirming)" :disabled="busy" data-testid="pro-restore-confirm">{{ busy ? 'Restoring…' : 'Restore this version' }}</button>
+                        <button type="button" class="pc-btn" @click="confirming = null" :disabled="busy">Cancel</button>
                     </div>
                 </div>
 
@@ -471,7 +474,7 @@ const ProHistory = {
                             </li>
                         </ul>
                     </div>
-                    <button v-if="shownGroups.length < previewGroups.length" type="button" class="pc-pro-link pc-prev-more" @click="showAll = true">
+                    <button v-if="shownGroups.length < previewGroups.length" type="button" class="pc-link pc-prev-more" @click="showAll = true">
                         Show all {{ previewGroups.length }} dates</button>
                 </template>
             </template>

@@ -4,17 +4,31 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>About · pastecal</title>
 <meta name="description" content="pastecal is the shared calendar nobody has to sign up for. Who runs it, how it's paid for, and how to reach us.">
-<meta property="og:title" content="About pastecal">
-<meta property="og:description" content="Shared calendars that just work. No login required, nothing to install.">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/legal.css">
+<!-- Link previews: the site card (public/img/og-card.png, cloudflare/scripts/render-preview-cards.mjs). -->
+<meta property="og:site_name" content="pastecal">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://pastecal.com/about">
+<meta property="og:title" content="About · pastecal">
+<meta property="og:description" content="pastecal is the shared calendar nobody has to sign up for. Who runs it, how it's paid for, and how to reach us.">
+<meta property="og:image" content="https://pastecal.com/img/og-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="pastecal: Add events. Paste your link. Done.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://pastecal.com/img/og-card.png">
+<link rel="icon" type="image/png" href="/img/icons/favicon-96x96.png" sizes="96x96">
+<link rel="icon" type="image/svg+xml" href="/img/icons/favicon.svg">
+<link rel="shortcut icon" href="/img/icons/favicon.ico">
+<link rel="apple-touch-icon" sizes="180x180" href="/img/icons/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<meta name="theme-color" content="#ffffff">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/components.css"><link rel="stylesheet" href="/legal.css">
 <script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>
 <link rel="stylesheet" href="/site.css">
-<style>.about-hi { font-size: 20px; font-weight: 700; margin-top: 8px }
-/* The photo as on BetterExplained: a slightly tilted print with a warm border, floating right. */
-:root { --about-frame: #e8d1bb }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --about-frame: #6b5847 } }
-:root[data-theme="dark"] { --about-frame: #6b5847 }
-.about-photo { float: right; width: 200px; height: auto; border-radius: 10px; border: 4px solid var(--about-frame); transform: rotate(3deg); margin: 0 0 1rem 1.5rem }
+<style>.about-hi { font-size: var(--pc-fs-2xl); font-weight: 700; margin-top: 8px }
+/* The photo as on BetterExplained: a slightly tilted print with a warm border, floating right. The frame is a
+   warm tan mixed from the warning tokens, so it follows the theme without raw colors. */
+.about-photo { float: right; width: 200px; height: auto; border-radius: var(--pc-radius-card); border: 4px solid color-mix(in srgb, var(--pc-warning) 22%, var(--pc-warning-soft)); transform: rotate(3deg); margin: 0 0 1rem 1.5rem }
 @media (max-width: 560px) { .about-photo { width: 120px; margin: 0 0 .75rem 1rem } }
 @media (prefers-reduced-motion: reduce) { .about-photo { transform: none } } .about-sig { margin-top: 24px; color: var(--pc-text-muted) }</style>
 </head>
@@ -26,10 +40,12 @@
     <nav class="site-nav" aria-label="Site">
       <a class="site-link" href="/help" data-from="site-header">Help</a>
       <a class="site-link" href="/pricing" data-from="site-header">Pricing</a>
+      <a class="site-link site-acct" href="/account" data-from="site-header" id="siteAccount" hidden>Account</a>
       <a class="site-cta" href="/" data-from="site-header">Make a calendar</a>
     </nav>
   </div>
 </header>
+<script>/* "Account" while signed in: pc_in is a hint cookie set by the pages that sign in (the session itself is HttpOnly) */try{if(/(?:^|;\s*)pc_in=1/.test(document.cookie))document.getElementById('siteAccount').hidden=false}catch(e){}</script>
 <!-- /site-header -->
 <main>
 <h1>About pastecal</h1>

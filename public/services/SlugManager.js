@@ -153,6 +153,9 @@ class SlugManager {
     // because their call sites are template-gated by canEdit.
     static getViewerBasePath(calendar, isReadOnly) {
         if (isReadOnly) {
+            // An @link (pastecal.com/@handle/<name>) is itself the address to share.
+            const at = window.location.pathname.match(/^\/@[^/?#]+\/[^/?#]+/);
+            if (at && document.querySelector('meta[name="pc-view"]')) return at[0];
             const slug = this.getReadOnlySlug(calendar) || this._slugFromLocation();
             // Refuse to fall back to /${calendar.id} in read-only mode — that would leak
             // the editable id. Caller treats null as "no shareable base path"; UI should

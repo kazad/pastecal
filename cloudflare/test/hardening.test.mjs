@@ -114,7 +114,7 @@ function tab(id) {
     assert.equal(r.t, 'error'); assert.equal(r.code, 'no_calendar');
     t.close();
     assert.equal((await fetch(url(id))).status, 404, 'still no calendar');
-    assert.deepEqual(await (await fetch(url(id, '/authors'))).json(), [], 'no author row stored either');
+    assert.deepEqual(await (await fetch(url(id, '/authors'), { headers: { Authorization: `Bearer ${SECRET}` } })).json(), [], 'no author row stored either');
     assert.deepEqual(await (await fetch(url(id, '/history'))).json(), [], 'no history');
     // The real way still works, and the name is then writable over the socket.
     assert.equal((await create(id, { title: 'real', events: [] })).status, 201);

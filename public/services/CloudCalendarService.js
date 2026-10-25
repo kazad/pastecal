@@ -177,6 +177,12 @@ class CloudCalendarService extends CalendarDataService {
         (async () => {
             try {
                 const lookup = await this.lookupCalendar(slug);
+                // A Pro short name whose account was deleted: a neutral "This link has ended" page (the Worker's).
+                if (lookup.data?.ended && typeof window !== 'undefined' && window.location) {
+                    this.close(slug);
+                    window.location.replace('/link-ended/' + encodeURIComponent(slug));
+                    return;
+                }
                 if (lookup.data?.found) {
                     if (lookup.data.isReadOnly) {
                         if (typeof window !== 'undefined' && window.location) {
@@ -422,6 +428,12 @@ class CloudCalendarService extends CalendarDataService {
         else this._sendMeta(room, meta, opts);
     }
 
+    /** This browser's IANA time zone, which the server stores as the calendar's (options.tz) while it has
+     *  none, so link previews show the right clock times. null if the browser can't say. */
+    static _browserTz() {
+        try { const tz = Intl.DateTimeFormat().resolvedOptions().timeZone; return typeof tz === 'string' && tz ? tz : null; } catch (e) { return null; }
+    }
+
     static _authorUid() {
         try {
             if (typeof AuthorSignal !== 'undefined' && typeof AuthorSignal.uid === 'function') {
@@ -435,15 +447,16 @@ class CloudCalendarService extends CalendarDataService {
         if (replay && this._overWriteBudget()) return;
         const id = `s${++room.seq}`;
         const author = this._authorUid();
-        const writer = this.writerId || author;
+        const writer = this.writerId || null;   // never the author id: history is public, the id proves who made it
         room.inflight = { id, kind: 'save', v: room.v, commands, journalT, replay, localEvents };
-        if (!this._send(room, { t: 'save', id, v: room.v, commands, author, writer })) { room.inflight = null; room.unsent = true; }
+        const tz = this._browserTz();
+        if (!this._send(room, { t: 'save', id, v: room.v, commands, author, writer, ...(tz ? { tz } : {}) })) { room.inflight = null; room.unsent = true; }
     }
 
     static _sendMeta(room, meta, opts = {}) {
         const id = `m${++room.seq}`;
         const author = this._authorUid();
-        const writer = this.writerId || author;
+        const writer = this.writerId || null;   // never the author id: history is public, the id proves who made it
         room.inflight = { id, kind: 'meta', v: room.v, meta, journalT: opts.journalT };
         if (!this._send(room, { t: 'meta', id, ...meta, author, writer })) { room.inflight = null; room.unsent = true; }
     }
@@ -522,7 +535,7 @@ class CloudCalendarService extends CalendarDataService {
 
     /** Is this name taken? First check directory, then HEAD /cal/<id>: 404 = free. */
     static async checkExists(id, callback_yes, callback_no) {
-        if (['beta', 'nativecal', 'view', 'dev', 'api', 'cal', 'report', 'signin', 'pro', 'pricing', 'explore', 'privacy', 'terms', 'contact'].includes(String(id || '').toLowerCase())) { callback_yes(); return; }
+        if (['beta', 'nativecal', 'view', 'dev', 'api', 'cal', 'report', 'signin', 'pro', 'pricing', 'explore', 'privacy', 'terms', 'contact', 'account'].includes(String(id || '').toLowerCase()) || String(id || '').startsWith('@')) { callback_yes(); return; }
         try {
             const lookup = await this.lookupCalendar(id);
             if (lookup.data?.found) { callback_yes(); return; }
@@ -538,6 +551,15 @@ class CloudCalendarService extends CalendarDataService {
     /** First save of a new calendar: POST /cal/<id>, accepted only into an empty room. */
     static createWithId(key, value, success) {
         const body = this._sanitizeForFirebase({ title: value.title, options: value.options, events: value.events });
+        // The calendar's time zone, from the browser that makes it (never replacing one it already has).
+        const tz = this._browserTz();
+        if (tz && body.options && typeof body.options === 'object' && !body.options.tz) body.options = { ...body.options, tz };
+        else if (tz && !body.options) body.options = { tz };
+        // The creating browser's pastecal id: recorded as the creator, which is who may upgrade it (never shown).
+        // Decided now (never null): a creation can't wait for a Firebase restore.
+        let author = null;
+        try { author = typeof AuthorSignal !== 'undefined' && AuthorSignal.uidNow ? AuthorSignal.uidNow() : this._authorUid(); } catch (e) { author = this._authorUid(); }
+        if (author) body.author = author;
         return fetch(this._url(key), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
             .then(async (r) => {
                 const out = await r.json().catch(() => ({}));

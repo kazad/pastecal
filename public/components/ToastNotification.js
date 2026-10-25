@@ -14,7 +14,7 @@ const ToastNotification = {
             leave-active-class="transition ease-in duration-100"
             leave-from-class="opacity-100"
             leave-to-class="opacity-0">
-            <div v-if="show" class="fixed bottom-4 left-1/2 transform -translate-x-1/2 z-[100] w-full max-w-md px-4 flex justify-center pointer-events-none"
+            <div v-if="show" class="pc-toast-wrap fixed bottom-4 left-1/2 transform -translate-x-1/2 z-[100] w-full max-w-md px-4 flex justify-center pointer-events-none"
                 @mouseenter="hovered = true" @mouseleave="hovered = false; resumeTimer()"
                 @focusin="focused = true" @focusout="onFocusOut">
                 <!-- One row, like Gmail's snackbar: the message, the action beside it, close. An icon only

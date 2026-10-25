@@ -72,6 +72,8 @@ test('summary: total, average and busiest day; a plain sentence when empty', () 
     const s = M.summary(rows, 'views', 'views');
     assert.match(s, /^41 views in 30 days, about 1\.4 a day\. Busiest day: Fri, Oct 23, 12\.$/);
     assert.equal(M.summary(series(30, () => ({ views: 0 })), 'views', 'views'), 'No views in these 30 days.');
+    // One view in a month: "1 view", and "less than one a day" rather than "about 0 a day".
+    assert.match(M.summary(series(30, (i) => ({ views: i === 29 ? 1 : 0 })), 'views', 'views'), /^1 view in 30 days, less than one a day\. Busiest day: /);
     // Followers are never added up across days: the same apps fetch every day.
     const f = M.summary(series(30, (i) => ({ followers: i === 10 ? 7 : 3 })), 'followers', 'followers');
     assert.equal(f, 'Up to 7 calendar apps fetched it on one day (Sun, Oct 4). Today: 3.');

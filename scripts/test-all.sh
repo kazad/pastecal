@@ -40,6 +40,7 @@ cloud-service|plain
 waitlist|plain
 hardening|plain
 view-socket|plain
+previews-tz|plain
 archive|plain+persist
 backup|plain+persist
 copyback|copyback (fake Firebase on 9099, started by the test)
@@ -52,6 +53,9 @@ billing|billing x3 (BASE, NOKEYS_BASE, TESTKEY_BASE; fake Stripe started by the 
 welcome|billing
 pro-health|billing
 test-inbox|billing
+trial|realbilling (real rooms, fake Stripe started by the test on FAKE_PORT)
+unlimited|realbilling
+handles|realbilling
 stripe-sandbox-e2e|SKIP: needs the real Stripe sandbox, its secret key and \`stripe listen\`
 pro-browser-e2e|SKIP: needs the real Stripe sandbox (same setup as stripe-sandbox-e2e) and Playwright
 cloud-journeys|SKIP: Playwright browser suite for the main app; not run here (browser test, see docs/pro-plan.md rule 6)
@@ -165,6 +169,9 @@ LOCK_VARS="$PLAIN_VARS --var UNSAFE_DEV_SESSION_HEADER:on --var LOCK_API_BASE:" 
 PRO_VARS="$LOCK_VARS --var ACCOUNTS_DEV_MODE:1"
 fake_stripe_vars() {   # needs FAKE_PORT
   BILLING_VARS="$PLAIN_VARS --var ACCOUNTS_DEV_MODE:1 --var LOCK_API_BASE:http://127.0.0.1:$FAKE_PORT/lockfake"
+  # Real rooms (no LOCK_API_BASE): trial, Pro (unlimited) and its names; the test starts fake Stripe on FAKE_PORT.
+  REAL_BILLING_VARS="$PLAIN_VARS --var ACCOUNTS_DEV_MODE:1 --var LOCK_API_BASE: --var STRIPE_PRICE_UNLIMITED_YEARLY:price_fake_unl_yearly \
+--var STRIPE_PRICE_UNLIMITED_MONTHLY:price_fake_unl_monthly"
   STRIPE_VARS="--var STRIPE_SECRET_KEY:fake-stripe-key --var STRIPE_WEBHOOK_SECRET:fake-webhook-secret \
 --var STRIPE_PRICE_PRO_YEARLY:price_fake_yearly --var STRIPE_PRICE_PRO_MONTHLY:price_fake_monthly \
 --var STRIPE_API_BASE:http://127.0.0.1:$FAKE_PORT/stripe"
@@ -207,7 +214,7 @@ run_one() {
   case "$name" in
     stripe-unit|collector|site|headers|ics-safety)
       run_node "$name" "$log" "$CF" "$NODE" "test/$name.test.mjs" ;;
-    sync|stress|phase3|firebase-sync|cloud-service|waitlist|hardening|view-socket|archive|backup)
+    sync|stress|phase3|firebase-sync|cloud-service|waitlist|hardening|view-socket|previews-tz|archive|backup)
       # shellcheck disable=SC2086
       start_wrangler "$name" "$persist" $PLAIN_VARS || { record "$name" FAIL - "$RUN_DIR/wrangler-$name.log"; return; }
       run_node "$name" "$log" "$CF" BASE="$LAST_BASE" PERSIST="$persist" IMPORT_SECRET="$SECRET" "$NODE" "test/$name.test.mjs" ;;
@@ -243,6 +250,11 @@ run_one() {
       fi
       run_node "$name" "$log" "$CF" BASE="$base" NOKEYS_BASE="$nokeys" TESTKEY_BASE="$testkey" FAKE_PORT="$FAKE_PORT" \
         IMPORT_SECRET="$SECRET" "$NODE" "test/$name.test.mjs" ;;
+    trial|unlimited|handles)
+      take_port FAKE_PORT; fake_stripe_vars
+      # shellcheck disable=SC2086
+      start_wrangler "$name" "$persist" $REAL_BILLING_VARS $STRIPE_VARS || { record "$name" FAIL - "$RUN_DIR/wrangler-$name.log"; return; }
+      run_node "$name" "$log" "$CF" BASE="$LAST_BASE" FAKE_PORT="$FAKE_PORT" IMPORT_SECRET="$SECRET" "$NODE" "test/$name.test.mjs" ;;
     unit)
       local l
       for l in node_modules functions/node_modules; do

@@ -1,8 +1,9 @@
 // @ts-check
 /**
- * Pro (beta), early access: while Stripe isn't configured (GET /api/pro/config -> {billing:false}), every place
- * Pro is offered says "Join the beta" and puts the email on the Pro waitlist instead of the trial or checkout.
- * With billing on, the offer is the trial and checkout as before. Pro carries a small "Beta" tag either way.
+ * Plus (beta), early access: while Stripe isn't configured (GET /api/pro/config -> {billing:false}), every place
+ * Plus is offered says "Join the beta" and puts the email on the Pro waitlist (plan 'pro') instead of the trial
+ * or checkout. With billing on, the offer is the trial and checkout. The offer lives in the side panel's Plus
+ * tab; Share keeps one "Upgrade" line pointing there. Plus carries a small "Beta" tag either way.
  *
  * Run against BOTH servers; each test skips on the other mode:
  *   billing off (plain local, no Stripe vars):
@@ -57,7 +58,7 @@ async function open(browser, path) {
 }
 async function openShare(page) {
   await page.getByTestId('share-pill-more').click();
-  await expect(page.getByTestId('share-pro-card')).toBeVisible();
+  await expect(page.getByTestId('share-plus-line')).toBeVisible();
 }
 async function waitlistRows(request) {
   const r = await request.get('/api/waitlist/export', { headers: { Authorization: `Bearer ${SECRET}` } });
@@ -69,30 +70,35 @@ async function waitlistRows(request) {
 
 // ---------- billing off ----------
 
-test('billing off: the Share card offers "Join the beta", and joining stores a waitlist row', async ({ browser, request }) => {
+test('billing off: Share points to Plus, whose "Join the beta" stores a waitlist row', async ({ browser, request }) => {
   test.skip(await billingOf(request) !== false, 'needs a server without Stripe');
   const { id } = await seed(request);
   const { ctx, page } = await open(browser, `/${id}?backend=cf`);
   await openShare(page);
-  const card = page.getByTestId('share-pro-card');
-  await expect(card).toContainText('Upgrade');
-  await expect(card).toContainText('Plus · $29 a year');
-  await expect(card.getByTestId('pro-beta-btn')).toHaveText('Join the beta');
-  await expect(card.getByTestId('share-pro-beta-tag')).toHaveText('Beta');
-  await expect(page.getByTestId('share-try-pro')).toHaveCount(0);
-  await expect(page.getByTestId('share-get-pro')).toHaveCount(0);
-  await expect(card.getByText(/Try Plus free|Try Pro free|Get Pro|Lock this calendar/)).toHaveCount(0);
+  // Share is for sharing: one line, no offer block.
+  await expect(page.getByTestId('share-plus-line')).toHaveText('Choose who can edit with Plus. Upgrade');
+  await expect(page.getByTestId('pro-panel')).toHaveCount(0);
+  await expect(page.getByTestId('pro-beta-btn')).toHaveCount(0);
+  await page.getByTestId('share-get-pro').click();
+  const tab = page.getByTestId('plus-panel');
+  await expect(page.getByTestId('side-tab-plus')).toHaveAttribute('aria-selected', 'true');
+  await expect(tab.getByTestId('plus-features')).toContainText('Choose who edits.');
+  await expect(tab.getByTestId('pro-beta-tag')).toHaveText('Beta');
+  await expect(tab.getByTestId('pro-beta-btn')).toHaveText('Join the beta');
+  await expect(tab.getByTestId('pro-trial-box')).toHaveCount(0);
+  await expect(tab.getByTestId('pro-lock-btn')).toHaveCount(0);
+  await expect(tab.getByText(/Try Plus free|Start 30-day|Get Pro|Lock this calendar|upgrade now/)).toHaveCount(0);
 
-  await card.getByTestId('pro-beta-btn').click();
-  const email = card.getByTestId('pro-beta-email');
+  await tab.getByTestId('pro-beta-btn').click();
+  const email = tab.getByTestId('pro-beta-email');
   await expect(email).toBeFocused();
   await email.fill('not-an-email');
-  await card.getByTestId('pro-beta-submit').click();
-  await expect(card.getByTestId('pro-beta-error')).toHaveText('Enter an email address, like you@example.com.');
+  await tab.getByTestId('pro-beta-submit').click();
+  await expect(tab.getByTestId('pro-beta-error')).toHaveText('Enter an email address, like you@example.com.');
   const addr = `beta-share-${run}@example.com`;
   await email.fill(addr);
-  await card.getByTestId('pro-beta-submit').click();
-  await expect(card.getByTestId('pro-beta-done')).toHaveText(DONE);
+  await tab.getByTestId('pro-beta-submit').click();
+  await expect(tab.getByTestId('pro-beta-done')).toHaveText(DONE);
 
   const tracked = await page.evaluate(() => window.__tracked.filter((e) => e.name === 'pro_beta_joined'));
   expect(tracked.map((e) => e.params)).toEqual([{ beta_surface: 'share' }]);
@@ -121,9 +127,10 @@ test('billing off: Stats and the Pro panel offer the beta, never the trial or ch
   await expect(teaser.getByTestId('pro-beta-done')).toHaveText(DONE);
   expect(await page.evaluate(() => window.__tracked.filter((e) => e.name === 'pro_beta_joined').map((e) => e.params))).toEqual([{ beta_surface: 'stats' }]);
 
-  // The upsell line ("Join the beta →") and every other way into the Pro offer open the panel on the beta form.
+  // The upsell line ("Join the beta →") opens the Plus tab on the beta form.
   await page.evaluate(() => document.querySelector('#app')._vnode.component.proxy.openProUpsell());
-  const panel = page.getByTestId('pro-panel');
+  await expect(page.getByTestId('side-tab-plus')).toHaveAttribute('aria-selected', 'true');
+  const panel = page.getByTestId('plus-panel');
   await expect(panel).toBeVisible();
   await expect(panel.getByTestId('pro-beta-tag')).toHaveText('Beta');
   await expect(panel.getByTestId('pro-beta-email')).toBeVisible();
@@ -142,11 +149,13 @@ test('billing off: pricing says "Join the beta", hides Get Plus, and the waitlis
   const { ctx, page } = await open(browser, '/pricing');
   const cta = page.locator('.plan.pro .cta');
   await expect(cta).toHaveText('Join the beta');
+  await expect(page.locator('#unlCta')).toHaveText('Join the beta');      // Pro too: not buyable yet
   await expect(page.locator('#plan option[value=pro]')).toHaveText('Plus beta, early access');
   await expect(page.locator('.plan.pro .badge')).toHaveText('Beta');
-  await expect(page.locator('thead th.pro .beta-tag')).toHaveText('Beta');
+  await expect(page.getByTestId('beta-line')).toHaveText('Plus and Pro are in beta. Early members keep their price.');   // one beta line, no table pills
+  await expect(page.locator('thead .beta-tag')).toHaveCount(0);
   await expect(page.locator('#get-pro')).toBeHidden();
-  await expect(page.getByText('Plus and Pro are in beta: features may change.')).toHaveCount(1);
+  await expect(page.getByText("Everything on their cards works today, except what's listed as coming.")).toHaveCount(1);
   await cta.click();
   await expect(page.locator('#plan')).toHaveValue('pro');
   await expect(page.locator('#email')).toBeFocused();
@@ -170,28 +179,27 @@ test('billing off: the hidden website field (a bot) is answered ok and stores no
 
 // ---------- billing on ----------
 
-test('billing on: the trial and checkout are offered as before, with the Beta tag', async ({ browser, request }) => {
+test('billing on: the Plus tab offers the trial first and checkout second, with the Beta tag', async ({ browser, request }) => {
   test.skip(await billingOf(request) !== true, 'needs a server with (fake) Stripe vars');
   const { id } = await seed(request);
   const { ctx, page } = await open(browser, `/${id}?backend=cf`);
   await openShare(page);
-  const card = page.getByTestId('share-pro-card');
-  await expect(card.getByTestId('share-pro-beta-tag')).toHaveText('Beta');
-  await expect(page.getByTestId('share-try-pro')).toHaveText('Try Plus free for 30 days. No card needed.');
   await expect(page.getByTestId('share-get-pro')).toHaveText('Upgrade');
-  await expect(page.getByTestId('share-get-pro')).toBeVisible();
-  await expect(card.getByTestId('pro-beta-btn')).toHaveCount(0);
   await page.getByTestId('share-get-pro').click();
-  const panel = page.getByTestId('pro-panel');
-  await expect(panel.getByTestId('pro-trial-box')).toBeVisible();
-  await expect(panel.getByTestId('pro-lock-btn')).toHaveText('Lock this calendar');
-  await expect(panel.getByTestId('pro-beta-tag')).toHaveText('Beta');
-  await expect(panel.getByTestId('pro-beta-join')).toHaveCount(0);
-  await page.getByTestId('share-show-all').click();
+  const tab = page.getByTestId('plus-panel');
+  await expect(tab.getByTestId('pro-trial-box')).toBeVisible();
+  await expect(tab.getByTestId('pro-trial-btn')).toHaveText('Start 30-day free trial');
+  await expect(tab.getByTestId('pro-trial-btn')).toHaveClass(/pc-btn--primary/);
+  await expect(tab.getByTestId('pro-lock-btn')).toHaveText('upgrade now: $29/year');
+  await expect(tab.getByTestId('pro-beta-tag')).toHaveText('Beta');
+  await expect(tab.getByTestId('pro-beta-join')).toHaveCount(0);
   await page.getByTestId('side-tab-stats').click();
   await expect(page.getByTestId('stats-get-pro')).toBeVisible();
   await expect(page.getByTestId('stats-pro-beta-tag')).toHaveText('Beta');
   await expect(page.getByTestId('stats-teaser').getByTestId('pro-beta-btn')).toHaveCount(0);
+  await page.getByTestId('stats-get-pro').click();
+  await expect(page.getByTestId('side-tab-plus')).toHaveAttribute('aria-selected', 'true');
+  await expect(tab.getByTestId('pro-trial-btn')).toBeVisible();
   await ctx.close();
 });
 
@@ -201,8 +209,12 @@ test('billing on: pricing keeps Get Plus and the picker, with the Beta tag', asy
   await expect(page.locator('.plan.pro .cta')).toHaveText('Get Plus');
   await expect(page.locator('.plan.pro .cta')).toBeVisible();
   await expect(page.locator('.plan.pro .badge')).toHaveText('Beta');
-  await expect(page.locator('thead th.pro .beta-tag')).toHaveText('Beta');
+  await expect(page.getByTestId('beta-line')).toHaveText('Plus and Pro are in beta. Early members keep their price.');   // one beta line, no table pills
+  await expect(page.locator('thead .beta-tag')).toHaveCount(0);
   await expect(page.locator('#get-pro')).toBeVisible();
+  // Pro Plus: buyable only when its own price is set too (/api/pro/config unlimited).
+  const unl = (await (await request.get('/api/pro/config')).json()).unlimited;
+  await expect(page.locator('#unlCta')).toHaveText(unl ? 'Get Pro' : 'Join the beta');
   await page.locator('.plan.pro .cta').click();
   await expect(page.locator('#calLink')).toBeFocused();
   await ctx.close();

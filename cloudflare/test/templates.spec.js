@@ -94,7 +94,7 @@ test('pick a template, switch, keep your own event, then Save & share saves it a
   expect(await input.inputValue()).not.toMatch(/tigers|practice/i);
   const slug = `test-tpl-${Date.now()}-${Math.floor(Math.random() * 1e5)}`;
   await input.fill(slug);
-  await page.locator('.pc-modal .pc-btn-primary').click();
+  await page.locator('.pc-modal .pc-btn--primary').click();
   await expect(page).toHaveURL(new RegExp(`/${slug}`, 'i'), { timeout: 20_000 });
   const saved = (await (await page.request.get(`/cal/${slug}`)).json()).calendar;
   const savedTitles = saved.events.map((e) => e.title);
@@ -158,9 +158,15 @@ test('Start blank clears the template; Cmd+Z undoes a pick and a switch', async 
   await ctx.close();
 });
 
-test('phone: the chips scroll sideways in one row under the header', async ({ browser }) => {
+test('phone: the chips wait behind "Start from a template", then scroll sideways in one row under the header', async ({ browser }) => {
   const { ctx, page } = await open(browser, { width: 390, height: 844 });
   const row = page.locator('.pc-tpl-row');
+  const toggle = page.getByTestId('tpl-toggle');
+  await expect(row).toBeHidden();                                        // the first screen is the calendar and Save & share
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await toggle.tap();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(row).toBeVisible();
   const box = await row.boundingBox();
   expect(box.height).toBeLessThan(44);                                   // one row, no wrapping
   expect(await row.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
@@ -171,5 +177,18 @@ test('phone: the chips scroll sideways in one row under the header', async ({ br
   await page.getByTestId('tpl-club').click();
   await expect.poll(() => titles(page)).toContain('Meeting: ch. 1-12');
   await expect(page.getByTestId('tpl-nudge')).toBeVisible();
+  await expect(toggle).toContainText('Club or class');                    // the toggle names the template in use
+  // closing the chips never hides Undo while there is something to undo
+  await page.evaluate(`(() => { const vm = ${VM}; vm.templateUndo = true; })()`);
+  await toggle.tap();
+  await expect(page.getByTestId('tpl-undo')).toBeVisible();
+  await page.evaluate(`(() => { const vm = ${VM}; vm.templateUndo = false; })()`);
+  await expect(row).toBeHidden();
+  await toggle.tap();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  // opened stays opened for the visit
+  await page.reload();
+  await page.waitForFunction(() => window.scheduleObj && document.querySelector('.e-work-cells'), null, { timeout: 20_000 });
+  await expect(row).toBeVisible();
   await ctx.close();
 });

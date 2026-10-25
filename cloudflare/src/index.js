@@ -2,6 +2,8 @@
  * pastecal-sync Worker: routes calendar requests to Durable Objects and static assets.
  *
  *   GET  /:id.ics, /view/:id.ics  iCalendar subscription feed (RFC 5545, ETag 304 caching)
+ *   GET  /@handle[/<name>[.ics]]  Pro Unlimited names: handle page, a calendar's view page, its feed (Names.js)
+ *   GET  /api/account, POST /api/names/*   /account's data and name changes (Names.js)
  *   GET  /api/lookup              Case-insensitive calendar / view lookup
  *   POST /lookupCalendar          Firebase callable compatible lookup endpoint
  *   POST /api/create-view         Create a view-only slug / random publicViewId
@@ -9,7 +11,7 @@
  *   GET  /cal/<id>/ws             WebSocket live sync
  *   GET  /cal/<id>                Calendar JSON
  *   GET  /cal/<id>/history        Recent changes history entries for undo
- *   GET  /cal/<id>/authors        Author signal continuity rankings
+ *   GET  /cal/<id>/authors        Author signal continuity rankings (Bearer IMPORT_SECRET: the uids are proof of creation)
  *   HEAD /cal/<id>                200 / 404 existence check
  *   POST /cal/<id>                Create empty calendar (rate-limited per IP)
  *   PUT  /cal/<id>/import         Full calendar replace (Bearer IMPORT_SECRET)
@@ -29,11 +31,13 @@ import { SlugService, RESERVED_CALENDAR_NAMES } from './SlugService.js';
 import { handleCollect } from './Collector.js';
 import { handleContact } from './Contact.js';
 import { applySecurityHeaders } from './SecurityHeaders.js';
+import { calendarTarget, previewPage, previewImage } from './preview/route.js';
 export { CalendarRoom } from './CalendarRoom.js';
 export { CalendarDirectory } from './CalendarDirectory.js';
 export { Waitlist } from './Waitlist.js';
 export { Accounts } from './Accounts.js';
 import { handleAccounts, sessionUserId as accountsSessionUserId } from './Accounts.js';
+import { handleNames, serveAt, serveNamePage } from './Names.js';
 import { PLANS } from './Waitlist.js';
 import { handleInsight, hitHeaders, withoutSourceParams } from './Insight.js';
 import { handleTestInboxEmail, handleTestInboxAdmin } from './TestInbox.js';
@@ -57,7 +61,7 @@ async function sha1Hex(str) {
 // Firebase). The Worker's own lookups go to the directory directly and still see targetId.
 function publicLookup(out) {
     if (!out || !out.isReadOnly) return out;
-    return { found: out.found, actualSlug: out.actualSlug, isReadOnly: true };
+    return { found: out.found, actualSlug: out.actualSlug, isReadOnly: true, ...(out.ended ? { ended: true } : {}) };
 }
 
 // The signed-in pastecal user making this request, or null. The accounts code fills this in
@@ -109,6 +113,9 @@ function hitFor(request, env, kind) {
     try { return hitHeaders(request, env, kind); } catch (e) { console.error('[stats] hit headers failed:', e && e.message); return null; }
 }
 
+// Pages search engines may list (public/_headers clears noindex for the same ones).
+const INDEXABLE_PAGES = new Set(['/', '/privacy', '/terms', '/pricing']);
+
 const ADMIN_LOCK_OPS = new Set(['lock', 'unlock', 'rotate-editor-key', 'lock-status']);
 
 function getDirectory(env) {
@@ -132,6 +139,40 @@ function withStagingHeaders(response) {
     return res;
 }
 
+// The iCalendar feed of the calendar in room `targetId`, named `actualSlug` (a view or short name keeps
+// its own name: the feed never shows an edit id). `fileName` overrides the download name.
+async function serveFeed(request, env, targetId, actualSlug, fileName = actualSlug) {
+    const room = env.CALENDARS.get(env.CALENDARS.idFromName(targetId));
+    // Counted as a follow inside the room, during the read it already does (Insight.js hitHeaders).
+    const hit = hitFor(request, env, 'follow');
+    const roomRes = await room.fetch(new Request(`http://internal/cal/${encodeURIComponent(targetId)}`, hit ? { headers: {
+        ...hit, 'CF-Connecting-IP': request.headers.get('CF-Connecting-IP') || '', 'User-Agent': request.headers.get('User-Agent') || '' } } : {}));
+    if (!roomRes.ok) return new Response('Calendar not found', { status: 404 });
+    const roomData = await roomRes.json();
+    const cal = roomData?.calendar;
+    if (!cal || !cal.id) return new Response('Calendar not found', { status: 404 });
+
+    const etag = '"' + await sha1Hex(JSON.stringify(cal.events ?? null)) + '"';
+    if (request.headers.get('if-none-match') === etag) {
+        return new Response(null, {
+            status: 304,
+            headers: { 'ETag': etag, 'Cache-Control': 'public, max-age=300' }
+        });
+    }
+
+    const icsText = ICSService.generateICS(cal, actualSlug);
+    return new Response(icsText, {
+        status: 200,
+        headers: {
+            'Content-Type': 'text/calendar; charset=utf-8',
+            // The name may hold quotes or non-ASCII ("TEAM NUÑEZ"): an ASCII fallback plus the RFC 5987 form.
+            'Content-Disposition': `inline; filename="${fileName.replace(/[^A-Za-z0-9._-]/g, '_')}.ics"; filename*=UTF-8''${encodeURIComponent(fileName)}.ics`,
+            'ETag': etag,
+            'Cache-Control': 'public, max-age=300'
+        }
+    });
+}
+
 export default {
     // Inbound mail from Email Routing: only the test inbox addresses are routed here.
     async email(message, env) {
@@ -148,7 +189,7 @@ export default {
     },
 };
 
-async function route(request, env) {
+async function route(request, env, ctx) {
         if (request.method === 'OPTIONS') {
             return new Response(null, {
                 status: 204,
@@ -164,7 +205,14 @@ async function route(request, env) {
         const url = new URL(request.url);
         const path = url.pathname;
 
-        // 1. ICS Feed: /:slug.ics and /view/:slug.ics
+        // Pro Unlimited names: pastecal.com/@handle[/<name>[.ics]] (before slug routing; a new calendar
+        // can't start with "@"). null: an old calendar whose id starts with "@" keeps its address.
+        if (path.startsWith('/@')) {
+            const at = await serveAt(request, env, url, { serveFeed });
+            if (at) return at;
+        }
+
+        // 1. ICS Feed: /:slug.ics and /view/:slug.ics (a short name is a read-only directory row too)
         const icsMatch = path.match(/^(\/view)?\/([^/]+)\.ics$/i);
         if (icsMatch) {
             let slug = '';
@@ -178,6 +226,7 @@ async function route(request, env) {
                 try {
                     const lookupRes = await dir.fetch(`http://internal/lookup?slug=${encodeURIComponent(slug)}`);
                     const lookup = await lookupRes.json();
+                    if (lookup.ended) return new Response('This link has ended', { status: 410 });   // a released account's short name
                     if (lookup.found) {
                         targetId = lookup.targetId || lookup.actualSlug;
                         actualSlug = lookup.actualSlug;
@@ -186,37 +235,12 @@ async function route(request, env) {
                     console.error('[Worker ICS] directory lookup error:', e);
                 }
             }
-
-            const room = env.CALENDARS.get(env.CALENDARS.idFromName(targetId));
-            // Counted as a follow inside the room, during the read it already does (Insight.js hitHeaders).
-            const hit = hitFor(request, env, 'follow');
-            const roomRes = await room.fetch(new Request(`http://internal/cal/${encodeURIComponent(targetId)}`, hit ? { headers: {
-                ...hit, 'CF-Connecting-IP': request.headers.get('CF-Connecting-IP') || '', 'User-Agent': request.headers.get('User-Agent') || '' } } : {}));
-            if (!roomRes.ok) return new Response('Calendar not found', { status: 404 });
-            const roomData = await roomRes.json();
-            const cal = roomData?.calendar;
-            if (!cal || !cal.id) return new Response('Calendar not found', { status: 404 });
-
-            const etag = '"' + await sha1Hex(JSON.stringify(cal.events ?? null)) + '"';
-            if (request.headers.get('if-none-match') === etag) {
-                return new Response(null, {
-                    status: 304,
-                    headers: { 'ETag': etag, 'Cache-Control': 'public, max-age=300' }
-                });
-            }
-
-            const icsText = ICSService.generateICS(cal, actualSlug);
-            return new Response(icsText, {
-                status: 200,
-                headers: {
-                    'Content-Type': 'text/calendar; charset=utf-8',
-                    // The name may hold quotes or non-ASCII ("TEAM NUÑEZ"): an ASCII fallback plus the RFC 5987 form.
-                    'Content-Disposition': `inline; filename="${actualSlug.replace(/[^A-Za-z0-9._-]/g, '_')}.ics"; filename*=UTF-8''${encodeURIComponent(actualSlug)}.ics`,
-                    'ETag': etag,
-                    'Cache-Control': 'public, max-age=300'
-                }
-            });
+            return serveFeed(request, env, targetId, actualSlug);
         }
+
+        // Account page data and Pro Unlimited names: /api/account, /api/names/*
+        const namesRes = await handleNames(request, env, url);
+        if (namesRes) return namesRes;
 
         // Pro stats and restore (before the accounts handler, which owns the rest of /api/pro/*).
         const insightRes = await handleInsight(request, env, url, sessionUserId);
@@ -404,6 +428,7 @@ async function route(request, env) {
             if (dir) {
                 const lookupRes = await dir.fetch(`http://internal/lookup?slug=${encodeURIComponent(viewId)}`);
                 const lookup = await lookupRes.json();
+                if (lookup.ended) return withCors(new Response('This link has ended', { status: 410 }));
                 if (lookup.found && lookup.isReadOnly) {
                     targetId = lookup.targetId;
                 }
@@ -426,6 +451,11 @@ async function route(request, env) {
             try { id = m && decodeURIComponent(m[1]); } catch { /* bad escape */ }
             if (!id || !validId(id)) return new Response('not found', { status: 404 });
 
+            // The author signal names browsers by uid, and a creator's uid is what lets them upgrade the
+            // calendar (CalendarRoom is-creator): support only, never public.
+            if (m[2] === '/authors' && (!env.IMPORT_SECRET || !bearerIsSecret(request, env))) {
+                return new Response('forbidden', { status: 403 });
+            }
             if (m[2] === '/archive' && (request.method !== 'POST' || !env.IMPORT_SECRET || !bearerIsSecret(request, env))) {
                 return new Response('forbidden', { status: 403 });
             }
@@ -438,8 +468,14 @@ async function route(request, env) {
             if (m[2] === '/ws' && request.headers.get('Upgrade') !== 'websocket') {
                 return new Response('expected a WebSocket', { status: 426 });
             }
-            if (request.method === 'POST' && !m[2] && RESERVED_CALENDAR_NAMES.has(id.toLowerCase())) {
+            if (request.method === 'POST' && !m[2] && (RESERVED_CALENDAR_NAMES.has(id.toLowerCase()) || id.startsWith('@'))) {
                 return withCors(Response.json({ ok: false, error: 'reserved name' }, { status: 409 }));
+            }
+            // A read-only name (a view link, or a Pro Unlimited short name) already answers at this address.
+            if (request.method === 'POST' && !m[2]) {
+                const dir = getDirectory(env);
+                const look = dir ? await (await dir.fetch(`http://internal/lookup?slug=${encodeURIComponent(id)}`)).json().catch(() => ({})) : {};
+                if (look.found && look.isReadOnly) return withCors(Response.json({ ok: false, error: 'name taken' }, { status: 409 }));
             }
             if (request.method === 'POST' && !m[2] && env.CREATE_LIMITER) {
                 const { success } = await env.CREATE_LIMITER.limit({ key: request.headers.get('CF-Connecting-IP') || 'unknown' });
@@ -453,15 +489,26 @@ async function route(request, env) {
             return withCors(await room.fetch(forRoom(request, withoutSourceParams(request.url), userId, hit)));
         }
 
-        // 7. Static assets & Single Page App rewrites
+        // Link-preview cards: /og/<name>.png, /og/view/<id>.png (preview/route.js). Always an image.
+        if ((request.method === 'GET' || request.method === 'HEAD') && path.startsWith('/og/')) return previewImage(request, env, ctx, url);
+
+        // 7. /link-ended/<name>: the app lands here for a short name whose account was deleted (Names.js).
+        const namePage = await serveNamePage(request, env, url);
+        if (namePage) return namePage;
+
+        // 8. Static assets & Single Page App rewrites
         const isFile = /\.[a-z0-9]+$/i.test(path);
         const beta = path === '/beta' || path.startsWith('/beta/') || (path.startsWith('/nativecal/') && !isFile);
-        const res = await env.ASSETS.fetch(beta ? new Request(new URL('/nativecal/', url), request) : request);
+        let res = await env.ASSETS.fetch(beta ? new Request(new URL('/nativecal/', url), request) : request);
+        // A calendar page (/<name>, /view/<id>): index.html with tags about that calendar, for link previews.
+        const target = !beta && request.method === 'GET' ? calendarTarget(path, url.search) : null;
+        if (target) res = await previewPage(request, env, res, target);
         const out = new Response(res.body, res);
         // Only the test site stays out of search. Sending this on every hostname told Google to drop
         // pastecal.com itself (Oct 2026: organic visitors fell from ~110/week to ~5).
-        // Pages served here are beta EDIT links; only / and /view/ may be indexed (see public/_headers).
-        const indexable = url.hostname !== 'new.pastecal.com' && (path === '/' || path.startsWith('/view/'));
+        // Every page passes through here now (link previews). Indexed: the same pages as public/_headers --
+        // the homepage, view-only links and the public site pages; never an edit link (/<name>).
+        const indexable = url.hostname !== 'new.pastecal.com' && (INDEXABLE_PAGES.has(path) || path.startsWith('/view/'));
         if (indexable) out.headers.delete('X-Robots-Tag'); else out.headers.set('X-Robots-Tag', 'noindex');
         if (/\.(js|css|json)$/.test(path) || beta) out.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
         applySecurityHeaders(out.headers, path);

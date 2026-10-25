@@ -103,7 +103,7 @@ const AddToCalendar = {
     },
     template: `
         <div class="pc-addcal" v-click-outside="() => { open = false }" @keydown.esc="open = false">
-            <button type="button" class="pc-addcal-btn" data-testid="view-add-to-cal" aria-haspopup="menu" :aria-expanded="open ? 'true' : 'false'" @click.stop="open = !open">
+            <button type="button" class="pc-btn pc-btn--sm pc-btn--pill pc-addcal-btn" data-testid="view-add-to-cal" aria-haspopup="menu" :aria-expanded="open ? 'true' : 'false'" @click.stop="open = !open">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M12 14v5M9.5 16.5h5"/></svg>
                 <span class="pc-addcal-label">Add to my calendar</span>
                 <svg class="pc-addcal-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
@@ -149,7 +149,7 @@ const COMPONENT_REGISTRY = {
     'lock-badge': LockBadge,                   // Pro lock icon + popover beside the title
     'add-to-calendar': AddToCalendar,          // View link: subscribe menu in the header
     'pro-panel': ProPanel,                     // Share dialog: Lock this calendar / owner panel
-    'pro-beta-join': ProBetaJoin,              // "Join the Pro beta" while billing is off (Go Pro card, Stats)
+    'pro-beta-join': ProBetaJoin,              // "Join the beta" while billing is off (Go Pro card, Stats)
     'pro-stats': ProStats,                     // Pro owner: views, visitors, followers, places
     'pro-history': ProHistory                  // Pro owner: saved versions, preview, restore
 };
@@ -164,6 +164,15 @@ const stripBase = (path) => {
     return path;
 };
 
+// The read-only name an @link page opens (pastecal.com/@handle/<name>; Worker: cloudflare/src/Names.js), or null.
+// Only on an /@ address: anywhere else the meta would be a stray copy.
+function atViewSlug() {
+    if (!/^\/@/.test(stripBase(window.location.pathname))) return null;
+    const m = document.querySelector('meta[name="pc-view"]');
+    const v = m && m.getAttribute('content');
+    return v && /^[A-Za-z0-9_-]{1,100}$/.test(v) ? v : null;
+}
+
 const CalendarVueApp = {
     components: COMPONENT_REGISTRY,
     directives: {
@@ -171,6 +180,7 @@ const CalendarVueApp = {
     },
     data() {
         // Normalized for the case-insensitive lookup; null for the homepage or a bad path.
+        // (On /view/<x> this is "view", on /@handle/<name> "@handle": never a calendar to open, and never the homepage.)
         let urlslug = SlugManager.slugFromPath(stripBase(window.location.pathname));
         if (urlslug) urlslug = SlugManager.normalizeSlug(urlslug);
 
@@ -212,9 +222,15 @@ const CalendarVueApp = {
             // Inside someone else's page (an iframe) or asked to look like it (?embed).
             embedded: (() => { try { return window.self !== window.top || new URLSearchParams(location.search).has('embed'); } catch (e) { return true; } })(),
             proTrialUsed: false,
-            proBilling: null,           // /api/pro/config: true = trial and checkout; false = "Join the Pro beta"; null = not known yet (neither shows)
-            pausedOwner: false,
-            homeTab: null,              // the homepage panel's tab when the visitor picked one ('recents' | 'guide')         // this browser owns the paused (Pro ended) calendar it's looking at: offer the way back
+            proUnlimited: false,        // the signed-in person has Pro (id unlimited): the Upgrade card locks with one click
+            proUnlimitedBusy: false,
+            proUnlimitedFull: false,    // Pro with its 5 used: the card offers the owner's @name instead
+            proHandle: '',
+            editorLinkStored: '',       // the owner's last editor link made in this browser (Pro panel, localStorage): "Share to edit"
+            shareNames: null,           // the owner's own links for this calendar ({handle, atName, shortNames}, /api/pro/status): Share leads with them
+            proBilling: null,           // /api/pro/config: true = trial and checkout; false = "Join the beta"; null = not known yet (neither shows)
+            homeTab: null,              // the homepage panel's tab when the visitor picked one ('recents' | 'guide')
+            pausedOwner: false,         // this browser owns the paused (Pro ended) calendar it's looking at: offer the way back
             proTrialActive: false,      // this browser owns the calendar and it is on its free trial (trial_feature_used)
             proSurface: 'share',        // where the Pro offer was opened from: 'share' | 'stats' | 'lock' (trial_started)        // this calendar already had its one free trial (/api/pro/status), so the Go Pro card doesn't offer it
             lockedOut: false,
@@ -247,7 +263,11 @@ const CalendarVueApp = {
             showProHistory: false,
             insightWhere: 'share_panel',    // which surface opened them, for analytics
             proOwner: false,            // this browser is signed in as the Pro calendar's owner
-            shareProFocus: false,       // Share opened from Get Pro: just the lock offer
+            showPlus: false,            // the side panel's Plus tab: what an upgrade adds, or the owner's plan, editors and billing
+            plusAutoJoin: false,        // billing off and they pressed "Join the beta" elsewhere: the Plus tab opens on the email field
+            proPlan: null,              // the lock's plan id (/api/pro/status), for planName: 'pro' is Plus
+            pausedTrial: false,         // the paused calendar's ended plan was a trial (its owner's pill says 'Trial ended')
+            upgradeNotice: null,        // {day, busy}: someone else upgraded it in the last 7 days and this browser may undo it
             showRecentChanges: false,   // the Activity tab of the side panel (id 'changes')
             showStatsInfo: false,       // the Stats tab when it can't show Pro stats: a draft, a free calendar, a non-owner
             freeStats: null,            // the Stats tab's free counts: {id, loading, error, none, unavailable, views, viewsPrev, followers}
@@ -345,6 +365,8 @@ const CalendarVueApp = {
             templateUndo: false,        // the template row's Undo, shown briefly after a switch that replaced edited events
             templateNudge: false,
             templateChips: CalendarTemplates.list(),
+            // Phones fold the template chips behind one "Start from a template" toggle; opened stays opened this visit.
+            templatesOpen: (() => { try { return sessionStorage.getItem('pc_tpl_open') === '1'; } catch (e) { return false; } })(),
             tourVariant: 'a',
             homeAsideHidden: (() => { try { return localStorage.getItem('pc_home_aside') === 'hidden'; } catch (e) { return false; } })(),
 
@@ -375,6 +397,7 @@ const CalendarVueApp = {
             if (this.showNotes) return 'notes';
             if (this.showShare) return 'share';
             if (this.showSettings) return 'settings';
+            if (this.showPlus) return 'plus';
             if (this.showSearch) return 'search';
             if (this.showHelp) return 'help';
             return null;
@@ -386,7 +409,8 @@ const CalendarVueApp = {
         // The tab row is for people who can change the calendar. Viewers see one thing at a
         // time under a plain title. Always the same five in the same order, so people learn
         // where things are: on a draft, Share, Activity and Stats say what they will hold once
-        // it is saved. Settings is a gear, so five fit the column without scrolling.
+        // it is saved. Plus: what an upgrade adds, or the owner's plan, editors and billing.
+        // Settings is a gear at the end, so six fit a 400px column (and a phone) without scrolling.
         sideTabs() {
             if (this.isReadOnly) return [];
             return [
@@ -394,7 +418,8 @@ const CalendarVueApp = {
                 { id: 'share', label: 'Share' },
                 { id: 'changes', label: 'Activity' },
                 { id: 'stats', label: 'Stats' },
-                { id: 'settings', label: 'Settings' },
+                { id: 'plus', label: 'Plus' },
+                { id: 'settings', label: 'Settings', icon: 'settings' },
             ];
         },
         // The tab that reads as selected. History (every saved version) opens from Activity, so it stays lit.
@@ -406,7 +431,7 @@ const CalendarVueApp = {
         },
         // Shown in the bar when there is no tab row, for the views without a heading of their own.
         sideTitle() {
-            return { notes: 'About this calendar', search: 'Search', help: 'Help', settings: 'Settings' }[this.sideTab] || '';
+            return { notes: 'About this calendar', search: 'Search', help: 'Help', settings: 'Settings', plus: planName(this.proPlan) }[this.sideTab] || '';
         },
         /** Why this tab can't edit a locked or paused calendar (toasts). */
         lockedOutMessage() { return this.lock.paused ? PRO_MESSAGES.paused : PRO_MESSAGES.lockedVisitor; },
@@ -651,7 +676,8 @@ const CalendarVueApp = {
         // page), 'editor' (quiet links on an edit link), or '' (homepage draft, still loading).
         pageFooter() {
             if (this.isLoading) return '';
-            if (this.isReadOnly) return this.hideBranding ? 'pro' : (this.embedded ? 'embed' : 'viewer');
+            // The paused calendar's owner isn't a visitor: no "make your own" pitch, just the hosted note.
+            if (this.isReadOnly) return this.hideBranding || this.pausedOwner ? 'pro' : (this.embedded ? 'embed' : 'viewer');
             return this.isExisting ? 'editor' : '';
         },
         // The footer's Report link (shown when branding is trimmed). The page's own path, so a view link
@@ -662,7 +688,12 @@ const CalendarVueApp = {
 
         // Homepage calendar (no slug and not an existing saved calendar)
         // Returning visitors open on their calendars; the guide is one click away.
-        homePanel() { return this.homeRecents.length ? (this.homeTab || 'recents') : 'guide'; },
+        // The phone's template toggle names the template in use, if any.
+        templateLabel() {
+            const t = this.template && this.templateChips.find(c => c.id === this.template.id);
+            return t ? t.label : '';
+        },
+        homePanel() { return this.homeTab || (this.homeRecents.length ? 'recents' : 'guide'); },
         isHomepageCalendar() {
             return !this.urlslug && !this.isExisting;
         },
@@ -671,7 +702,7 @@ const CalendarVueApp = {
         homeRecents() {
             const time = (item) => Date.parse(item.lastVisited || item.createdAt || 0) || 0;
             return [...(this.recentCalendars || [])].sort((a, b) => time(b) - time(a)).slice(0, 6)
-                .map(item => ({ ...item, ...RecentCalendars.display(item) }));
+                .map(item => ({ ...item, ...RecentCalendars.display(item), ago: item.lastVisited ? 'Opened ' + this.describeAgo(Date.parse(item.lastVisited)) : '' }));
         },
 
         // Headline and lead for the homepage pitch. One version for now; a later test adds more,
@@ -687,7 +718,7 @@ const CalendarVueApp = {
         // DOM render and doesn't reactively update them when set later — so settings must be
         // available for the pre-appendTo configuration block below, not just applied after.
         this.loadGlobalSettings();
-        // Can Pro be bought yet? Decides between the trial/checkout and "Join the Pro beta" everywhere Pro is offered.
+        // Can Pro be bought yet? Decides between the trial/checkout and "Join the beta" everywhere Pro is offered.
         if (typeof ProBilling !== 'undefined') ProBilling.load().then((b) => { this.proBilling = b; });
         else this.proBilling = true;
 
@@ -716,9 +747,12 @@ const CalendarVueApp = {
                 // readonly: pastecal.com/view/ID (supports alternative base paths via CAL_BASE)
                 let path = stripBase(location.pathname);
 
-                if (path?.startsWith('/view/')) {
+                // pastecal.com/@handle/<name>: the Worker serves this page with the read-only name to open
+                // (<meta name="pc-view">), so it opens exactly like /view/<that name> and the address stays.
+                const atView = atViewSlug();
+                if (path?.startsWith('/view/') || atView) {
                     // Read-only view mode
-                    const requestedSlug = path.split('/')[2];
+                    const requestedSlug = atView || path.split('/')[2];
             // Ensure explicit boolean normalization when setting read-only mode
             this.setIsReadOnly(true);
             this.viewRoute = true;
@@ -729,6 +763,8 @@ const CalendarVueApp = {
                     console.log('Looking up calendar for /view/ route:', requestedSlug);
                     const result = await CalendarDataService.lookupCalendar(requestedSlug);
 
+                    // A Pro short name whose account was deleted: a neutral "This link has ended" page (the Worker's).
+                    if (result.data.ended) { location.replace('/link-ended/' + encodeURIComponent(requestedSlug)); return; }
                     if (result.data.found && result.data.isReadOnly) {
                         // Found as read-only - subscribe with the actual slug
                         const actualSlug = result.data.actualSlug;
@@ -743,6 +779,8 @@ const CalendarVueApp = {
                             // Re-initialize local settings to load custom colors and labels
                             this.initializeLocalSettings();
                             // Add to recents when calendar loads, but mark as read-only
+                            // The tab says which calendar this is (a short link's page is static: the server can't).
+                            if (c.title) document.title = `${String(c.title).slice(0, 120)} · pastecal`;
                             if (c.title) {
                                 // A read-only calendar you were linked to is a visit,
                                 // not something you created.
@@ -825,13 +863,13 @@ const CalendarVueApp = {
                                 history.replaceState(history.state, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash);
                             }
                         } catch (e) { /* storage blocked: Share still opens below if the intent was kept */ }
-                        // Back from a Pro sign-in link: reopen Share, where "Lock this calendar" now continues.
+                        // Back from a sign-in link (trial, checkout, the reminder's Keep Plus): open the Plus tab,
+                        // where the trial or checkout continues.
                         const proIntent = typeof ProIntent !== 'undefined' ? ProIntent.get(this.calendar.id) : null;
                         if (proIntent) {
                             // Once: the panel reads the chosen interval as it mounts, then the intent is done.
                             this.$nextTick(() => {
-                                this.shareProFocus = true;
-                                if (!this.showShare) this.toggleShare();
+                                if (!this.showPlus) this.openPlusTab(proIntent.surface || 'share');
                                 this.$nextTick(() => {
                                     ProIntent.clear();
                                     // The lock offer sits at the bottom of Share: below the fold on a phone.
@@ -1922,13 +1960,14 @@ const CalendarVueApp = {
         'lock.locked': {
             handler(locked) {
                 this.proOwnerChecked = false;
-                if (!locked) { this.proOwner = false; if (this.showShare) this.refreshProTrial(); return; }
+                if (!locked) { this.proOwner = false; this.upgradeNotice = null; this.shareNames = null; if (this.showPlus) this.refreshProTrial(); return; }
                 this.refreshProOwner();
+                this.checkUpgradeNotice();
             },
         },
-        // Pro ended and the owner opened it: the Go Pro card is back, without the trial it already had.
+        // The plan ended and the owner opened it: the offer is back, without the trial it already had.
         'lock.paused'(paused) {
-            if (!paused && this.showShare) this.refreshProTrial();
+            if (!paused && this.showPlus) this.refreshProTrial();
             this.checkPausedOwner();
         },
         recordingRole: {
@@ -1942,9 +1981,13 @@ const CalendarVueApp = {
             if (!isOwner || !this.calendar || !this.calendar.id) return;
             const key = 'pastecal_pro_welcomed:' + String(this.calendar.id).toLowerCase();
             try { if (localStorage.getItem(key)) return; localStorage.setItem(key, '1'); } catch (e) { return; }
-            this.showToast('Locked with Pro. Everyone can view; only people with your editor link can edit.', 'info', {
-                actionLabel: 'Editor link', action: () => { if (!this.showShare) this.toggleShare(); }, duration: 10000,
+            this.showToast(`Upgraded with ${planName(this.proPlan)}. Everyone can view; only people with your editor link can edit.`, 'info', {
+                actionLabel: 'Editor link', action: () => { if (!this.showPlus) this.openPlusTab('share'); }, duration: 10000,
             });
+        },
+        showPlus(open) {
+            if (!open) { this.proSurface = 'share'; this.plusAutoJoin = false; return; }
+            if (this.isExisting && !this.lock.locked && this.canEdit) this.refreshProTrial();
         },
         showProStats(open) { this.focusInsight(open, 'proStatsPanel'); },
         showProHistory(open) { this.focusInsight(open, 'proHistoryPanel'); },
@@ -1965,11 +2008,10 @@ const CalendarVueApp = {
         },
 
         showShare(newValue) {
-            if (!newValue) { this.shareProFocus = false; this.showViewHelp = false; this.proSurface = 'share'; }   // the Get Pro view lasts until Share closes
+            if (!newValue) { this.showViewHelp = false; }
             if (newValue) {
                 this.updateCurrentViewURL();
                 this.startUpdateLinkTimer();
-                if (this.isExisting && !this.lock.locked && this.canEdit) this.refreshProTrial();
             } else {
                 this.stopUpdateLinkTimer();
             }
@@ -2637,6 +2679,11 @@ const CalendarVueApp = {
 
         // Switching templates is instant: no "are you sure", because one Undo (toast or Cmd+Z) puts back
         // exactly what was there, the same rule as deleting an event.
+        toggleTemplates() {
+            this.templatesOpen = !this.templatesOpen;
+            try { sessionStorage.setItem('pc_tpl_open', this.templatesOpen ? '1' : '0'); } catch (e) { /* this page view only */ }
+        },
+
         pickTemplate(id) {
             if (this.template && this.template.id === id) return;
             this.applyTemplate(id);
@@ -3081,7 +3128,9 @@ const CalendarVueApp = {
                 viewParam = viewLower;
             }
 
-            const baseURL = SlugManager.getViewerBaseURL(this.calendar, this.isReadOnly);
+            // The owner of a calendar with an @link or short link: "This view" starts from that view-only link too.
+            const named = !this.isReadOnly && this.shareNames ? this.shareViewURL() : null;
+            const baseURL = named || SlugManager.getViewerBaseURL(this.calendar, this.isReadOnly);
             // baseURL is null only if read-only mode somehow lacks a slug (server race + no
             // /view/<slug> in the URL). Fall back to the current href so we never leak the edit id.
             this.currentViewURL = baseURL
@@ -3123,6 +3172,7 @@ const CalendarVueApp = {
             // feed is the address being viewed, plus .ics.
             if (!this.viewRoute) return null;
             const parts = stripBase(window.location.pathname).split('/').filter(Boolean);
+            if (atViewSlug() && parts.length === 2) return `${window.location.origin}/${parts.map(encodeURIComponent).join('/').replace(/^%40/, '@')}.ics`;
             return parts[0] === 'view' && parts[1] ? `${window.location.origin}/view/${encodeURIComponent(parts[1])}.ics` : null;
         },
 
@@ -3158,13 +3208,14 @@ const CalendarVueApp = {
 
         /** Records which subscribe path was used, so the rate is measurable. */
         // A paused calendar opens in the view-only layout, which has no Share button. Its owner still needs
-        // the "Pro ended" choices (Open to everyone / Keep Pro), so ask the server whether this is the owner.
+        // the "Plus ended" choices (Open to everyone / Keep Plus), so ask the server whether this is the owner.
         async checkPausedOwner() {
             if (!this.lock.paused || !this.calendar || !this.calendar.id) { this.pausedOwner = false; return; }
             try {
                 const r = await fetch('/api/pro/status?calendar=' + encodeURIComponent(this.calendar.id), { credentials: 'same-origin' });
                 const st = r.ok ? await r.json() : null;
                 this.pausedOwner = !!(st && st.lapsedOwner);
+                if (this.pausedOwner) { this.proPlan = st.plan || null; this.pausedTrial = !!st.lapsedTrial; }   // which plan ended: 'Trial ended' / 'Plus ended'
             } catch (e) { this.pausedOwner = false; }
         },
 
@@ -3217,6 +3268,42 @@ const CalendarVueApp = {
         getReadOnlyURL() {
             // Use SlugManager for centralized read-only link operations
             return SlugManager.getReadOnlyURL(this.calendar);
+        },
+
+        /** /api/pro/status (here, or from the Pro panel after a change): the owner's @link and short links for
+         *  this calendar. Only its owner gets them, and only they are shown them. */
+        onProNames(st) {
+            if (!st || !st.isOwner || !this.calendar) { this.shareNames = null; return; }
+            const shortNames = Array.isArray(st.shortNames) ? st.shortNames.filter((n) => typeof n === 'string') : [];
+            this.shareNames = (st.handle && st.atName) || shortNames.length ? { handle: st.handle || '', atName: st.atName || '', shortNames } : null;
+        },
+        /** The editor link the Pro panel last made in this browser (same key as Pro.js storedLink and /pro/done). */
+        storedEditorLink() {
+            try { return (this.calendar && localStorage.getItem('pastecal_editor_link:' + String(this.calendar.id).toLowerCase())) || ''; } catch (e) { return ''; }
+        },
+        /** "Share to edit" with no editor link here yet: the Pro panel's Editor link section makes one (never resets one). */
+        /** Share to edit, no editor link made in this browser yet: they're made in the Plus tab, under Who can edit. */
+        goEditorLink() {
+            this.openPlusTab('share');
+            setTimeout(() => { const el = document.getElementById('pc-pro-editor'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 300);
+        },
+        /** "Share to view": one link, the best this calendar has: its @link, else a short link, else its view link.
+         *  All three open the view-only calendar. */
+        shareViewURL() {
+            const n = this.shareNames, origin = window.location.origin;
+            if (n && n.handle && n.atName) return `${origin}/@${n.handle}/${encodeURIComponent(n.atName)}`;
+            if (n && n.shortNames.length) return `${origin}/${encodeURIComponent(n.shortNames[0])}`;
+            return this.getReadOnlyURL();
+        },
+        /** Share's "Other links": the calendar's other view-only addresses, listed compactly under the main one. */
+        otherViewLinks() {
+            const n = this.shareNames, origin = window.location.origin, main = this.shareViewURL();
+            const all = [];
+            if (n && n.handle && n.atName) all.push(`${origin}/@${n.handle}/${encodeURIComponent(n.atName)}`);
+            if (n) for (const s of n.shortNames) all.push(`${origin}/${encodeURIComponent(s)}`);
+            const view = this.getReadOnlyURL();
+            if (view) all.push(view);
+            return all.filter((u) => u !== main);
         },
 
         getReadOnlyNotes() {
@@ -3513,6 +3600,7 @@ const CalendarVueApp = {
             else if (id === 'settings') this.toggleSettings();
             else if (id === 'changes') this.openRecentChanges();
             else if (id === 'stats') this.openStats();
+            else if (id === 'plus') this.openPlusTab('share');
             else if (id === 'history') this.openInsight(id, 'side_panel');
         },
         /** Stats: the Pro numbers for the owner; for everyone else, what Stats holds and how to get it. */
@@ -3551,10 +3639,10 @@ const CalendarVueApp = {
             this.notesEditing = true;
             this.$nextTick(() => { const el = this.$refs.notesInput; if (el) el.focus(); });
         },
-        /** From the Stats tab: Share, showing just the Pro offer (as when arriving from Get Pro). */
+        /** From the Stats tab: the Plus tab. */
         getProFromStats() {
             track(a => a.proStatsTeaserClicked());
-            this.openProOffer('stats');
+            this.openPlusTab('stats');
         },
 
         /** The panel's close button, its backdrop on small screens, and Escape. */
@@ -3671,7 +3759,7 @@ const CalendarVueApp = {
          * gets used, and lumping them together would hide the answer.
          */
         copyShareLink() {
-            const readOnly = this.getReadOnlyURL();
+            const readOnly = this.shareViewURL();
             const url = readOnly || this.getEditableURL();
             if (!url) return;
 
@@ -3755,6 +3843,7 @@ const CalendarVueApp = {
             this.showProStats = false;
             this.showProHistory = false;
             this.showStatsInfo = false;
+            this.showPlus = false;
         },
 
         togglePin(id) {
@@ -4139,22 +4228,11 @@ const CalendarVueApp = {
             track(a => a.proUpsellDismissed());
         },
 
-        // Opens Share with the Pro panel in view. The panel renders with the dialog, but the
-        // dialog animates in, so look for it for a moment rather than once.
+        // The quiet upsell line: the Plus tab. Billing not on yet: its beta email field is already open.
         openProUpsell() {
-            this.proSurface = 'lock';
             this.proUpsell = false;
             track(a => a.proUpsellClicked());
-            // Billing not on yet: Share's Pro view, where the Pro beta email field is already open.
-            if (this.proBilling === false) { this.openProOffer('lock'); this.proSurface = 'lock'; return; }
-            if (!this.showShare) this.toggleShare();
-            let tries = 0;
-            const reveal = () => {
-                const panel = document.querySelector('[data-testid="pro-panel"]');
-                if (panel) { panel.scrollIntoView({ block: 'start', behavior: 'smooth' }); return; }
-                if (++tries < 30) requestAnimationFrame(reveal);
-            };
-            this.$nextTick(reveal);
+            this.openPlusTab('lock', { join: this.proBilling === false });
         },
 
         /** Re-render every relative time from its stored timestamp. */
@@ -4436,7 +4514,8 @@ const CalendarVueApp = {
                 title: (e.title && e.title.trim()) ? e.title : 'Untitled event',
             }));
             if (entry.kind === 'restored') return ProInsightMath.restoredLabel(entry.label);   // "Restored the version from Oct 21"
-            if (entry.label) return entry.label;                 // server-written rows: "Locked with Pro", "Unlocked"
+            // Server-written rows: "Upgraded with Plus", "Unlocked". Rows written before the rename said Pro for the Plus plan.
+            if (entry.label) return { 'Locked with Pro': 'Upgraded with Plus', 'Pro ended. Editing paused by the owner': 'Plus ended. Editing paused by the owner' }[entry.label] || entry.label;
             if (entry.kind === 'wiped' || entry.kind === 'deleted') {
                 return gone.length ? `All events deleted (${gone.length})` : 'All events deleted';
             }
@@ -5176,18 +5255,16 @@ const CalendarVueApp = {
 
             navigator.clipboard.writeText(textToCopy).then(() => {
                 const originalContent = buttonElement.innerHTML;
-                const checkIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1 text-green-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                const checkIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>`;
                 buttonElement.innerHTML = `${checkIcon} Copied`;
-                buttonElement.classList.remove('bg-blue-500', 'hover:bg-blue-600');
-                buttonElement.classList.add('bg-green-500');
+                buttonElement.classList.add('bg-theme-success');
 
                 setTimeout(() => {
                     buttonElement.innerHTML = originalContent;
-                    buttonElement.classList.remove('bg-green-500');
-                    buttonElement.classList.add('bg-blue-500', 'hover:bg-blue-600');
-                }, 1500); // Revert after 1.5 seconds
+                    buttonElement.classList.remove('bg-theme-success');
+                                    }, 1500); // Revert after 1.5 seconds
 
             }).catch(err => {
                 console.error('Failed to copy: ', err);
@@ -5273,13 +5350,13 @@ const CalendarVueApp = {
             try {
                 const res = await fetch('/api/pro/status?calendar=' + encodeURIComponent(id), { credentials: 'same-origin' });
                 const data = res.ok ? await res.json() : null;
-                if (this.calendar && this.calendar.id === id) this.proTrialUsed = !!(data && data.trialUsed);
+                if (this.calendar && this.calendar.id === id) {
+                    this.proTrialUsed = !!(data && data.trialUsed);
+                    this.proUnlimited = !!(data && data.unlimited);
+                    this.proUnlimitedFull = !!(data && data.unlimitedFull);    // its 5 are used: this one goes under @name
+                    this.proHandle = (data && data.handle) || '';
+                }
             } catch (e) { /* offline: offer it; the server decides */ }
-        },
-        /** Go Pro card: "Try Pro free". Opens the Get Pro view straight on the trial. */
-        startProTrial() {
-            if (typeof ProIntent !== 'undefined') ProIntent.set(this.calendar.id, 'trial', false, this.proSurface);
-            this.shareProFocus = true;
         },
         /** During a trial: the first use of a Pro feature per calendar per day (Pro.js trialFeature). */
         trialFeatureUsed(feature) {
@@ -5293,6 +5370,9 @@ const CalendarVueApp = {
                 const data = res.ok ? await res.json() : null;
                 if (this.calendar && this.calendar.id === id) {
                     this.proOwner = !!(data && data.isOwner);
+                    this.proPlan = (data && data.plan) || null;
+                    this.onProNames(data);
+                    this.editorLinkStored = data && data.isOwner ? this.storedEditorLink() : '';
                     this.proTrialActive = !!(data && data.isOwner && data.trial);
                     this.trialFeatureUsed('lock');          // the owner on their locked calendar: the lock in use
                 }
@@ -5313,13 +5393,53 @@ const CalendarVueApp = {
             this.showToast(`Restored the version from ${label}`, 'success');
             this.loadUndoEntries();
         },
-        /** From Activity, a free calendar's creator: to the Pro offer in Share (its Get Pro view). */
-        openProOffer(surface) {
-            this.proSurface = surface === 'stats' ? 'stats' : 'share';
+        /**
+         * The Plus tab: what an upgrade adds (trial, checkout, or the beta list), or the owner's plan,
+         * editor links and billing. Every "Upgrade" and "Join the beta" in the app opens it.
+         * surface: where it was opened from, for trial_started / pro_beta_joined ('share' | 'stats' | 'lock').
+         * join: billing off and they pressed "Join the beta": open on the email field.
+         */
+        openPlusTab(surface, { join = false } = {}) {
             this.closeAllPanels();
-            this.showShare = true;
-            this.$nextTick(() => { this.shareProFocus = true; });
+            this.proSurface = surface === 'stats' || surface === 'lock' ? surface : 'share';
+            this.plusAutoJoin = !!join;
+            this.showPlus = true;
         },
+        /** Activity's line for a free calendar's creator. */
+        openProOffer() { this.openPlusTab('share'); },
+        /** Someone other than its creator upgraded this calendar lately: may this browser undo it? Only the
+         *  server knows (it checks this browser's author uid), so ask; the notice shows only on a yes. */
+        async checkUpgradeNotice(retried = false) {
+            const id = this.calendar && this.calendar.id;
+            this.upgradeNotice = null;
+            if (!id || !this.lock.locked || typeof proAuthor !== 'function') return;
+            // The author uid comes from an anonymous sign-in that may still be on its way: look once more shortly.
+            if (!proAuthor()) { if (!retried) setTimeout(() => this.checkUpgradeNotice(true), 4000); return; }
+            try {
+                const r = await fetch('/api/pro/upgrade-notice', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ calendarId: id, author: proAuthor() }) });
+                const d = r.ok ? await r.json() : null;
+                if (d && d.notice && this.calendar && this.calendar.id === id && this.lock.locked) {
+                    this.upgradeNotice = { day: new Date(d.notice.at).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' }), busy: false };
+                }
+            } catch (e) { /* offline: no notice */ }
+        },
+        async undoUpgrade() {
+            if (!this.upgradeNotice || !window.confirm('Undo this upgrade? The calendar goes back to a free calendar anyone with the link can edit, and any payment is refunded.')) return;
+            this.upgradeNotice.busy = true;
+            let r = null;
+            try {
+                r = await fetch('/api/pro/undo-upgrade', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ calendarId: this.calendar.id, author: await proAuthorReady() }) });
+            } catch (e) { /* offline */ }
+            const d = r ? await r.json().catch(() => ({})) : {};
+            if (r && r.ok) { this.upgradeNotice = null; this.showToast('Upgrade undone. Anyone with the link can edit again.', 'success'); return; }
+            if (this.upgradeNotice) this.upgradeNotice.busy = false;
+            this.showToast(d.message || (r ? 'That didn’t work. Write to support@pastecal.com and we’ll sort it out.' : 'We couldn’t reach pastecal. Check your connection and try again.'), 'error');
+            if (r && r.status === 410) this.upgradeNotice = null;
+        },
+        /** A plan id's display name (Pro.js planName), for templates: 'pro' is Plus, 'unlimited' is Pro. */
+        planName(plan) { return planName(plan); },
         focusInsight(open, ref) {
             if (open) {
                 this._insightOpener = this._insightOpener || document.activeElement;

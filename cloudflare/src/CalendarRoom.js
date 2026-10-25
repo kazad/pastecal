@@ -78,6 +78,8 @@
 import { DurableObject } from 'cloudflare:workers';
 import EventStore from '../../public/services/EventStore.js';
 import { initInsight, countHit, insightRoute, INSIGHT_ROUTES } from './RoomInsight.js';
+import { planName } from './Plans.js';
+import { validZone } from './preview/time.js';
 
 export const LIMITS = {
     savesPerMinute: 60,          // per calendar: far above people, far below a loop
@@ -106,7 +108,23 @@ function clientOptions(o) {
     return Object.fromEntries(Object.entries(o).filter(([k]) => !SERVER_ONLY_OPTIONS.test(k)));
 }
 
-const LOCK_ROUTES = new Set(['lock', 'unlock', 'rotate-editor-key', 'lock-status', 'can-edit', 'set-view-id',
+// ---- The calendar's time zone (options.tz, an IANA name) ----
+// Browsers fill it in when it is unset (their own zone: Intl resolvedOptions); it is never changed
+// automatically after that (a Settings field may later send setTz). Link previews use it for clock times.
+// -> options with tz kept valid: an invalid incoming tz is dropped; a stored tz wins unless `explicit`.
+function withTz(incoming, stored, explicit = false) {
+    if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming) || !('tz' in incoming)) return incoming;
+    const out = { ...incoming };
+    const tz = validZone(out.tz);
+    const keep = stored && typeof stored.tz === 'string' && validZone(stored.tz) ? stored.tz : null;
+    if (keep && !(explicit && tz)) out.tz = keep;
+    else if (tz) out.tz = tz;
+    else if (keep) out.tz = keep;
+    else delete out.tz;
+    return out;
+}
+
+const LOCK_ROUTES = new Set(['lock', 'unlock', 'rotate-editor-key', 'lock-status', 'can-edit', 'set-view-id', 'editor-of-record',
     'create-editor-link', 'list-editor-links', 'revoke-editor-link', 'set-pro-settings', 'set-lapsed-mode', 'dev-legacy-key']);
 export const LAPSED_MODES = ['readonly', 'open'];
 export const PAUSED_MESSAGE = 'Editing is paused by the owner.';
@@ -286,6 +304,26 @@ export class CalendarRoom extends DurableObject {
         const p = this.proStored;
         return p && p.owner === this.lock.ownerId ? mergeProSettings(p.settings, {}).settings : mergeProSettings(null, {}).settings;
     }
+    // What a link preview may show (the Worker's preview/route.js): title, colors, and events that can
+    // still be upcoming -- series and anything not yet ended -- WITHOUT descriptions (notes never leave
+    // for a preview), plus the start times of recent all-day events, which only say what time zone
+    // the authors are in (preview/time.js inferZone). The same for edit and view links: view-safe.
+    previewData(now) {
+        const s = this.state, cutoff = now - 2 * 86400000, out = [], allDay = [];
+        for (const e of s.events) {
+            if (!e || !e.start) continue;
+            if (e.isAllDay) allDay.push(e.start);
+            const live = (e.recurrencerule && !e.recurrenceID) || Date.parse(e.end || e.start) >= cutoff;
+            if (!live || out.length >= 3000) continue;
+            out.push({ id: e.id, title: e.title, start: e.start, end: e.end, isAllDay: !!e.isAllDay, type: e.type,
+                recurrencerule: e.recurrencerule || '', recurrenceID: e.recurrenceID ?? null, recurrenceException: e.recurrenceException ?? null });
+        }
+        allDay.sort().reverse();
+        const ps = this.proSettings();
+        return { v: s.v, title: s.title, colors: Array.isArray(s.options && s.options.colors) ? s.options.colors.slice(0, 32) : null,
+            tz: s.options && typeof s.options.tz === 'string' ? s.options.tz : null,
+            events: out, zoneSamples: allDay.slice(0, 40), pro: !!this.lock, hideBranding: !!(ps && ps.hideBranding) };
+    }
     snapshotFor(att) {
         const cal = att.isViewOnly ? this.viewCalendar(att.viewId) : this.calendar();
         return { t: 'snapshot', v: this.state.v, calendar: cal, locked: !!this.lock, pro: !!this.lock, paused: this.paused(), canEdit: this.canWrite(att), role: this.roleOf(att), proSettings: this.proSettings() };
@@ -381,7 +419,28 @@ export class CalendarRoom extends DurableObject {
                 title: this.state.title || null,   // for the Pro welcome email's subject
                 // After Pro: who it lapsed from and whether it is paused. lapsedMode: the owner's choice (also while locked).
                 lapsed: lp && lp.lapsedAt != null && !l ? { ownerId: lp.ownerId, mode: lp.mode, at: lp.lapsedAt } : null,
-                lapsedMode: lp && (!l || lp.ownerId === l.ownerId) ? lp.mode : 'readonly' });
+                lapsedMode: lp && (!l || lp.ownerId === l.ownerId) ? lp.mode : 'readonly',
+                // Did the owner pick it, or is lapsedMode the default? (A trial with no choice ends open.)
+                lapsedModeChosen: !!(lp && (!l || lp.ownerId === l.ownerId)) });
+        }
+        if (op === 'editor-of-record') {
+            // For the Worker (trial, checkout, the 7-day undo): has this author uid run the calendar?
+            // An editor of record is the browser that created it (created_here), or one that edited it on
+            // at least 2 distinct days. A calendar with neither (from before authors were recorded, or
+            // edited once) falls back to its top author. The uids are never shown to anyone (GET
+            // /cal/<id>/authors is admin-only, history never carries one), so sending one is the proof.
+            if (!this.state.id) return no(404, 'not-found');
+            const uid = typeof body?.uid === 'string' ? body.uid.slice(0, 128) : '';
+            const nDays = (r) => { try { return JSON.parse(r.days).length; } catch { return 0; } };
+            const rows = this.sql.exec(`SELECT uid, first_seen, edit_count, created_here, days FROM authors`).toArray();
+            const qualifies = (r) => !!r.created_here || nDays(r) >= 2;
+            const me = uid ? rows.find((r) => r.uid === uid) : null;
+            let editor = !!(me && qualifies(me));
+            if (!editor && me && !rows.some(qualifies)) {
+                rows.sort((a, b) => nDays(b) - nDays(a) || a.first_seen - b.first_seen || b.edit_count - a.edit_count);
+                editor = rows[0].uid === uid;
+            }
+            return Response.json({ ok: true, known: rows.length > 0, editor, creator: !!(me && me.created_here) });
         }
         if (op === 'can-edit') {
             // For the Worker (create-view): may this caller change the calendar?
@@ -419,7 +478,8 @@ export class CalendarRoom extends DurableObject {
             // exchange adopts Firebase's copy as the baseline, applies none of it, and writes ours over it.
             this.setMeta('firebaseUntrusted', true);
             // Billing ending a subscription (lapse:true): paused unless the owner chose 'open'.
-            const pref = this.lapse && this.lapse.ownerId === l.ownerId ? this.lapse.mode : 'readonly';
+            // A trial with no choice made ends open (a free calendar again); anything paid ends read-only.
+            const pref = this.lapse && this.lapse.ownerId === l.ownerId ? this.lapse.mode : body.trial === true ? 'open' : 'readonly';
             if (body.lapse === true && pref === 'readonly') {
                 const at = Date.now();
                 this.sql.exec(`INSERT OR REPLACE INTO lapse (k, owner, mode, lapsed_at) VALUES (1, ?, 'readonly', ?)`, l.ownerId, at);
@@ -427,7 +487,7 @@ export class CalendarRoom extends DurableObject {
             } else {
                 this.sql.exec(`DELETE FROM lapse`); this.lapse = null;
             }
-            this.recordLockChange('unlocked', this.paused() ? 'Pro ended. Editing paused by the owner' : 'Unlocked');
+            this.recordLockChange('unlocked', this.paused() ? `${planName(l.plan)} ended. Editing paused by the owner` : body.undo === true ? 'Upgrade undone' : 'Unlocked');
             await this.scheduleCopyBack();
             return Response.json({ ok: true, paused: this.paused() });
         }
@@ -465,7 +525,7 @@ export class CalendarRoom extends DurableObject {
             // Billing locks with createLink:false: there is no browser to show a key to, and the owner
             // makes links from the calendar. The admin route still gets one 'Editors' key.
             const made = body.createLink !== false && !this.links.size ? this.createLink('Editors', k) : null;
-            this.recordLockChange('locked', 'Locked with Pro');
+            this.recordLockChange('locked', `Upgraded with ${planName(plan)}`);
             // Claim this calendar's own name (and view link) in the directory now, so a case variant
             // registered earlier can't keep its lookups. (A name held by another LOCKED calendar stays.)
             this.ctx.waitUntil(this.registerInDirectory(this.state.id, false, null, true));
@@ -745,6 +805,12 @@ export class CalendarRoom extends DurableObject {
             if (url.hostname !== 'internal' || isViewOnly) return new Response('not found', { status: 404 });
             return insightRoute(this, suffix, request);
         }
+        // Link previews (the Worker's preview/route.js): internal-only, and never counted as a view.
+        if (suffix === 'preview') {
+            if (url.hostname !== 'internal' || request.method !== 'GET') return new Response('not found', { status: 404 });
+            if (!this.state.id) return Response.json({ error: 'not found' }, { status: 404 });
+            return Response.json(this.previewData(Date.now()));
+        }
         if (this.statsReady && request.headers.get('X-PC-Hit')) countHit(this, request).catch((e) => console.error('[stats] count failed:', e && e.message));   // never awaited: stats never fail or delay a request
         if (LOCK_ROUTES.has(suffix)) {
             // Only Worker code calls these (stub.fetch('http://internal/...')). Public requests are
@@ -762,12 +828,24 @@ export class CalendarRoom extends DurableObject {
             // X-PC-User is trusted: the Worker deletes any a client sent and sets it from a session.
             const att = { saves: [], isViewOnly, viewId, author, user: isViewOnly ? null : request.headers.get('X-PC-User') || null };
             server.serializeAttachment(att);
-            if (author && this.canWrite(att) && this.state.id) this.recordAuthor(author, false);   // a name nobody created stores nothing
+            // Opening is not editing: an author is recorded on a save only (editor of record counts edit days).
             server.send(json(this.snapshotFor(att)));
             return new Response(null, { status: 101, webSocket: client });
         }
         if (request.method === 'POST' && suffix === 'archive') return Response.json(await this.archiveTestCalendar());
         if (request.method === 'HEAD') return new Response(null, { status: this.state.id ? 200 : 404 });
+        if (suffix === 'authors' && request.method === 'POST') {
+            // Test hook (ACCOUNTS_DEV_MODE only; the Worker already requires the admin secret for /authors):
+            // add an earlier active day to an author, so "edited on 2+ days" can be tested today.
+            if (this.env.ACCOUNTS_DEV_MODE !== '1') return Response.json({ error: 'forbidden' }, { status: 403 });
+            const b = await request.json().catch(() => ({}));
+            const r = this.sql.exec(`SELECT days FROM authors WHERE uid = ?`, String(b.uid || '')).toArray()[0];
+            if (!r || !/^\d{4}-\d{2}-\d{2}$/.test(String(b.day || ''))) return Response.json({ error: 'no-author' }, { status: 404 });
+            let days = []; try { days = JSON.parse(r.days); } catch {}
+            if (!days.includes(b.day)) days.unshift(b.day);
+            this.sql.exec(`UPDATE authors SET days = ? WHERE uid = ?`, json(days), String(b.uid));
+            return Response.json({ ok: true, days });
+        }
         if (request.method === 'GET') {
             if (suffix === 'history') {
                 const rows = this.sql.exec(`SELECT v, at, source, commands, entry FROM history ORDER BY v DESC LIMIT 20`).toArray();
@@ -866,7 +944,7 @@ export class CalendarRoom extends DurableObject {
         if (!cal || typeof cal !== 'object') return { ok: false, status: 400, error: 'bad calendar' };
         const title = cal.title ?? '';
         if (typeof title !== 'string' || title.length > LIMITS.maxTitle) return { ok: false, status: 400, error: 'bad title' };
-        const options = clientOptions(cal.options ?? {});
+        const options = withTz(clientOptions(cal.options ?? {}), null);
         if (typeof options !== 'object' || Array.isArray(options) || json(options).length > LIMITS.maxField * 5) {
             return { ok: false, status: 400, error: 'bad options' };
         }
@@ -889,6 +967,11 @@ export class CalendarRoom extends DurableObject {
         if (this.lock) return { ok: false, status: 423, error: 'locked' };
         if (this.paused()) return { ok: false, status: 423, error: 'paused' };          // same reason, after Pro
         cal = { ...cal, options: clientOptions(cal.options) };
+        // The Firebase shadow never carries tz: a stored zone stays (and an invalid one never lands).
+        if (cal.options && typeof cal.options === 'object' && !Array.isArray(cal.options)) {
+            const stored = this.state.options && validZone(this.state.options.tz) ? this.state.options.tz : null;
+            cal.options = stored && !('tz' in cal.options) ? { ...cal.options, tz: stored } : withTz(cal.options, this.state.options);
+        }
         const { events, renamed } = this.dedupe(cal);
         const why = this.tooBig(events, { title: cal.title ?? '', options: cal.options || {} });
         if (why) return { ok: false, error: why };
@@ -1217,7 +1300,13 @@ export class CalendarRoom extends DurableObject {
             const beforeOptions = this.state.options;
             const touched = new Set([...result.added, ...result.changed].map(EventStore.keyOf));
             this.storeEvents(result.events, touched);
-            this.bump('save', m.commands, { beforeEvents, beforeTitle, beforeOptions, writer: m.writer || author });
+            // An editing browser names its time zone; it is stored once, only while the calendar has none.
+            const tz = validZone(m.tz);
+            if (tz && !(this.state.options && validZone(this.state.options.tz))) {
+                this.state.options = { ...(this.state.options || {}), tz };
+                this.setMeta('options', this.state.options);
+            }
+            this.bump('save', m.commands, { beforeEvents, beforeTitle, beforeOptions, writer: m.writer || null });   // never the author uid: history is public, the uid proves who made it
             ws.send(json({ t: 'ack', id: m.id, v: this.state.v }));
             this.broadcast({ t: 'change', v: this.state.v, commands: m.commands }, ws);
             await this.scheduleCopyBack();
@@ -1234,7 +1323,7 @@ export class CalendarRoom extends DurableObject {
                 nextTitle = m.title; changed = true;
             }
             if (m.options && typeof m.options === 'object') {
-                const next = { ...s.options, ...clientOptions(m.options) };   // keys merge (publicViewId survives)
+                const next = { ...s.options, ...withTz(clientOptions(m.options), s.options, m.setTz === true) };   // keys merge (publicViewId survives); a stored tz stays
                 if (json(next).length > LIMITS.maxField * 5) return refuse('too_big', 'settings too large');
                 if (json(next) !== json(s.options)) { nextOptions = next; changed = true; }
             }
@@ -1243,7 +1332,7 @@ export class CalendarRoom extends DurableObject {
             if (why) return refuse('too_big', why);
             if (nextTitle !== s.title) { s.title = nextTitle; this.setMeta('title', s.title); }
             if (nextOptions !== s.options) { s.options = nextOptions; this.setMeta('options', s.options); }
-            this.bump('meta', [{ type: 'meta', title: m.title, options: m.options }], { beforeEvents, beforeTitle, beforeOptions, writer: m.writer || author });
+            this.bump('meta', [{ type: 'meta', title: m.title, options: m.options }], { beforeEvents, beforeTitle, beforeOptions, writer: m.writer || null });   // never the author uid: history is public, the uid proves who made it
             ws.send(json({ t: 'ack', id: m.id, v: s.v }));
             this.broadcast({ t: 'meta', v: s.v, title: s.title, options: s.options }, ws);
             await this.scheduleCopyBack();
