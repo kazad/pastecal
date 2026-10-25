@@ -143,7 +143,7 @@ test('Share in the panel still copies its links', async ({ browser, request }) =
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain(`/view/${viewId}`);
   // Nothing hidden behind a toggle; the full-access feed is labeled for what it gives.
   await expect(page.getByTestId('share-more-options')).toBeVisible();
-  await expect(page.getByTestId('share-editfeed-copy')).toContainText('edit access');
+  await expect(page.getByTestId('share-editfeed-copy')).toContainText('Edit link .ics');
   await page.getByTestId('share-view-help').click();
   await expect(page.getByTestId('share-view-help-body')).toContainText('view=week');
   await page.getByTestId('share-view-copy').click();

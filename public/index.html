@@ -989,7 +989,7 @@
                         <div v-if="getReadOnlyURL()" class="pc-link-item" data-testid="share-feed">
                             <div class="pc-link-head"><h4 class="pc-share-label">Calendar feed</h4><span class="pc-share-tag">.ics</span>
                                 <!-- The full-access feed carries the edit link inside it: kept, small, and labeled. -->
-                                <button v-if="canEdit" type="button" class="pc-link-extra pc-link-extra--quiet" title="A feed that also gives edit access" @click="copyLink('editfeed', getEditableICSURL(), 'ics')" data-testid="share-editfeed-copy">{{ copiedKey === 'editfeed' ? 'Copied' : 'Copy with edit access' }}</button></div>
+                                <button v-if="canEdit" type="button" class="pc-link-extra pc-link-extra--quiet" title="The same feed, from your edit link. Anyone with it can also edit, so share it only with editors." @click="copyLink('editfeed', getEditableICSURL(), 'ics')" data-testid="share-editfeed-copy">{{ copiedKey === 'editfeed' ? 'Copied' : 'Edit link .ics' }}</button></div>
                             <div class="pc-link-row">
                                 <button type="button" class="pc-link" :data-copy-key="'feed'" :class="{ 'is-copied': copiedKey === 'feed' }" :title="'Copy ' + getReadOnlyICSURL()" @click="copyLink('feed', getReadOnlyICSURL(), 'ics')" data-testid="share-feed-copy">
                                     <span class="pc-link-url">{{ copiedKey === 'feed' ? 'Copied to clipboard' : shortLink(getReadOnlyICSURL()) }}</span>
@@ -1030,8 +1030,9 @@
                             <ul class="pc-gopro-list">
                                 <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg><span><b>Lock editing</b> to you and people you choose</span></li>
                                 <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg><span><b>Stats</b>: views per day, followers, places</span></li>
-                                <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg><span><b>Custom links</b> and more ways to make it yours</span></li>
+                                <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg><span><b>History</b>: see who changed what, restore any version</span></li>
                             </ul>
+                            <p class="pc-gopro-soon">Coming: secret events, subcalendars, your logo. <a href="/pricing#compare" target="_blank" rel="noopener" data-from="share-pro-card" data-testid="share-pro-compare">See everything in Pro</a></p>
                             <!-- Saved calendars only (a draft shows Save & share instead of this card). One trial per calendar. -->
                             <button v-if="proBilling === true && !proTrialUsed" type="button" class="pc-gopro-trial" @click="startProTrial" data-testid="share-try-pro">Try Pro free for 30 days. No card needed.</button>
                             <!-- Billing not on yet (/api/pro/config): the Pro beta list instead of the trial and checkout -->
