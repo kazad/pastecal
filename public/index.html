@@ -1170,9 +1170,8 @@
                                 </div>
                             </div>
                             <!-- A copy of this calendar (events, colors, type names) as a new draft: next season, or your own. -->
-                            <div v-if="isExisting" class="pc-set-field pc-set-copy" data-testid="settings-copy">
-                                <span class="pc-set-label">Make a copy</span>
-                                <p class="pc-set-copy-hint">A new calendar with these events and colors, for next season or your own use. This one stays as it is.</p>
+                            <div v-if="isExisting" class="pc-set-copy" data-testid="settings-copy">
+                                <span class="pc-set-copy-hint">A new calendar with these events and colors, for next season or your own use.</span>
                                 <button type="button" class="pc-btn pc-btn--sm" @click="makeOwnCopy('full', 'settings')" data-testid="settings-copy-btn">Make a copy</button>
                             </div>
 
