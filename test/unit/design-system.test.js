@@ -146,8 +146,8 @@ test('theme colors exposed to Tailwind map to the CSS variables in style.css or 
 test('components.css defines the shared building blocks', () => {
   for (const cls of [
     '.pc-btn', '.pc-btn--primary', '.pc-btn--ghost', '.pc-btn--danger', '.pc-btn--sm', '.pc-btn--xs', '.pc-btn--lg',
-    '.pc-field', '.pc-field--sm', 'select.pc-field', '.pc-field-group', '.pc-chip', '.pc-tag', '.pc-card',
-    '.pc-tabs', '.pc-tab', '.pc-seg', '.pc-switch', '.pc-kbd', '.pc-link-field', '.pc-modal', '.pc-modal-panel',
+    '.pc-field', '.pc-field--sm', 'select.pc-field', '.pc-field-group', '.pc-chip', '.pc-pill', '.pc-card',
+    '.pc-tabs', '.pc-tab', '.pc-seg', '.pc-toggle', '.pc-kbd', '.pc-link-field', '.pc-modal', '.pc-modal-panel',
   ]) {
     assert.ok(COMPONENTS.includes(cls + ' ') || COMPONENTS.includes(cls + ','), `missing ${cls} in components.css`);
   }
@@ -162,7 +162,7 @@ test('shared surface classes derive their colors from theme variables', () => {
     return COMPONENTS.slice(i, COMPONENTS.indexOf('}', i));
   };
 
-  for (const selector of ['.pc-modal-panel', '.pc-field', '.pc-btn', '.pc-btn--primary', '.pc-chip', '.pc-tag', '.pc-card', '.pc-link-field']) {
+  for (const selector of ['.pc-modal-panel', '.pc-field', '.pc-btn', '.pc-btn--primary', '.pc-chip', '.pc-pill', '.pc-card', '.pc-link-field']) {
     assert.match(ruleOf(selector), /var\(--/,
       `${selector} should be built from theme variables`);
   }
@@ -284,7 +284,7 @@ test('NativeCal v2 solid events have white text, as in the main app', () => {
 });
 
 test('pages that load style.css load tokens.css, then components.css, then style.css', () => {
-  for (const page of ['public/index.html', 'public/nativecal/index.html', 'public/dev/pro.html', 'public/dev/design.html']) {
+  for (const page of ['public/index.html', 'public/nativecal/index.html', 'public/dev/pro.html']) {
     const src = read(page);
     const t = src.indexOf('/tokens.css'), c = src.indexOf('/components.css'), s = src.indexOf('/style.css');
     assert.ok(t !== -1 && t < c && c < s, `${page}: link tokens.css, components.css, style.css in that order`);
@@ -315,77 +315,5 @@ test('/beta serves NativeCal (the public beta), before the catch-all', () => {
   assert.match(read('public/services/CalendarDataService.js'), /\['beta', 'nativecal', 'view', 'dev', [^\]]*\]\.includes/);
 });
 
-
-// --- One central design system: values live in tokens.css, nowhere else -------------------
-// A raw hex color or a px font size outside tokens.css is a value the system can't change in
-// one place (and a dark mode it can't follow). The two exceptions are marked regions:
-//   style.css  /* @vendor-overrides */ ... /* @end-vendor-overrides */   the Syncfusion grid's tuned sizes
-//   style.css  /* @illustrations */ ... /* @end-illustrations */         the homepage's miniature scenes
-// Data URIs (SVG chevrons, masks) carry their own colors and are skipped; so are comments and
-// px inside clamp() (fluid marketing headings). pricing-next.html is a draft and not scanned.
-
-const CSS_SOURCES = [
-  ['public/components.css', COMPONENTS],
-  ['public/style.css', STYLE],
-  ['public/site.css', read('public/site.css')],
-  ['public/legal.css', read('public/legal.css')],
-  ...STATIC_PAGES.map((p) => [`${p} <style>`, inlineStyles(p)]),
-];
-
-/** The CSS a guard should judge: comments, allowed regions and data URIs removed. */
-function scannable(css) {
-  return css
-    .replace(/\/\*\s*@vendor-overrides\s*\*\/[\s\S]*?\/\*\s*@end-vendor-overrides\s*\*\//g, '')
-    .replace(/\/\*\s*@illustrations\s*\*\/[\s\S]*?\/\*\s*@end-illustrations\s*\*\//g, '')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/url\((["']?)data:[^)]*\1\)/g, 'url()');
-}
-/** Each "property: value" declaration, with the line it starts on. */
-function declarations(css) {
-  const out = [];
-  for (const m of css.matchAll(/([a-z-]+)\s*:\s*([^;{}]+)(?=[;}])/g)) out.push({ prop: m[1], value: m[2].trim() });
-  return out;
-}
-function rawHexColors(css) {
-  return declarations(scannable(css)).filter((d) => /#[0-9a-fA-F]{3,8}\b/.test(d.value)).map((d) => `${d.prop}: ${d.value}`);
-}
-function pxFontSizes(css) {
-  return declarations(scannable(css))
-    .filter((d) => d.prop === 'font-size' || d.prop === 'font')
-    .filter((d) => {
-      const v = d.value.replace(/clamp\([^)]*\)/g, '').replace(/\/\s*[\d.]+px/g, '');   // fluid headings; a line-height is not a size
-      return /(^|[\s(])[\d.]+px\b/.test(v);
-    })
-    .map((d) => `${d.prop}: ${d.value}`);
-}
-
-test('no raw hex colors outside tokens.css (components, screens, site and static pages)', () => {
-  const offenders = [];
-  for (const [file, css] of CSS_SOURCES) for (const d of rawHexColors(css)) offenders.push(`${file}: ${d}`);
-  assert.deepEqual(offenders, [], 'use a token from tokens.css (add one there if no token fits)');
-});
-
-test('no px font sizes outside tokens.css: every size is on the type scale', () => {
-  const offenders = [];
-  for (const [file, css] of CSS_SOURCES) for (const d of pxFontSizes(css)) offenders.push(`${file}: ${d}`);
-  assert.deepEqual(offenders, [], 'use var(--pc-fs-*) (2xs 11, xs 12, sm 13, md 14, lg 16, xl 18, 2xl 20, 3xl 28, 4xl 36, 5xl 40)');
-});
-
-test('the guards catch what they guard (a planted hex and px size fail)', () => {
-  assert.deepEqual(rawHexColors('.x { color: #ff0000 }'), ['color: #ff0000']);
-  assert.deepEqual(rawHexColors('#app .x { color: var(--pc-text) } /* #fff */ .y { background-image: url("data:image/svg+xml,%23fff") }'), []);
-  assert.deepEqual(pxFontSizes('.x { font: 600 13px/1 var(--pc-font) }'), ['font: 600 13px/1 var(--pc-font)']);
-  assert.deepEqual(pxFontSizes('.x { font-size: 12.5px }'), ['font-size: 12.5px']);
-  assert.deepEqual(pxFontSizes('.x { font: var(--pc-fw-bold) var(--pc-fs-sm)/18px var(--pc-font); font-size: clamp(26px, 3vw, 38px) }'), []);
-  assert.deepEqual(pxFontSizes('/* @illustrations */ .x { font-size: 9px } /* @end-illustrations */'), []);
-});
-
-test('the type scale and control heights are tokens, in order', () => {
-  const px = (t) => parseFloat(LIGHT[t]);
-  const scale = ['2xs', 'xs', 'sm', 'md', 'lg', 'xl', '2xl', '3xl', '4xl', '5xl'].map((n) => px(`--pc-fs-${n}`));
-  assert.ok(scale.every((v, i) => i === 0 || v > scale[i - 1]), `font scale must increase: ${scale}`);
-  assert.deepEqual(['xs', 'sm', 'md', 'lg'].map((n) => px(`--pc-h-${n}`)), [28, 32, 36, 44]);
-  assert.deepEqual(['control', 'card', 'dialog'].map((n) => px(`--pc-radius-${n}`)), [8, 12, 16]);
-  assert.equal(LIGHT['--pc-link'], LIGHT['--pc-primary'], 'one blue: links and the primary action are the same color');
-  assert.equal(DARK['--pc-link'], DARK['--pc-primary'], 'one blue in dark mode too');
-});
+// The value guards (raw colors, font sizes, radii, shadows, Tailwind, buttons, page links) are in
+// design-guards.test.js.
