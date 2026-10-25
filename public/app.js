@@ -401,6 +401,10 @@ const CalendarVueApp = {
         displayTypeLabels() {
             return this.COLORS.map((_, i) => this.typeLabelFor(i));
         },
+        // Which of those a calendar actually named ("Practice"); the rest are a color's own name.
+        namedTypes() {
+            return this.COLORS.map((_, i) => this.hasTypeLabel(i));
+        },
 
         /**
          * The changes list, grouped by calendar day.
@@ -3374,6 +3378,67 @@ const CalendarVueApp = {
             window.location.href = '/';
         },
 
+        // The logo menu's "Start over" on the homepage draft: back to a fresh blank draft -- every
+        // event (the visitor's own too), the title, notes, color names and colors. The events go as
+        // ONE store change, and that undo entry also carries everything else, so one Cmd+Z (or the
+        // toast's Undo) brings the whole draft back (undoLastLocal). The URL name stays the visitor's.
+        startOver() {
+            this.closeRecents();
+            if (this.isExisting) return;
+            const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
+            const before = {
+                title: this.calendar.title,
+                options: clone(this.calendar.options || {}),
+                colors: [...this.COLORS],
+                localColors: [...(this.localSettings.colors || this.COLORS)],
+                labels: [...(this.localSettings.typeLabels || [])],
+                template: clone(this.template),
+                templateNudge: this.templateNudge,
+                userAddedEvent: this.userAddedEvent,
+            };
+            const commands = (this.calendar.events || []).map(e => ({ type: 'remove', key: EventStore.keyOf(e) }));
+            this.calendar.sampleEvents().forEach(e => commands.push({ type: 'add', event: e }));
+            const label = 'Started over';
+            const r = this.store().dispatch({ type: 'batch', commands, label }, { label });
+            if (!r.ok) return;
+            const stack = this.store().undoStack;
+            (this._templateUndo = this._templateUndo || []).push({ entry: stack[stack.length - 1], restore: () => this.restoreDraftMeta(before) });
+            this.restoreDraftMeta({
+                title: Calendar.DEFAULT_TITLE,
+                options: { notes: '', defaultView: before.options.defaultView || 'week' },
+                colors: [...this.DEFAULT_COLORS],
+                localColors: [...this.DEFAULT_COLORS],
+                labels: this.DEFAULT_COLORS.map((_, i) => `Type ${i + 1}`),
+                template: null,
+                templateNudge: false,
+                userAddedEvent: false,
+            });
+            clearTimeout(this._templateUndoTimer);
+            this.templateUndo = false;
+            track(a => a.featureUsed('start_over'));
+            this.offerUndo('Started over with a blank calendar');
+        },
+
+        // Put a draft's title, options, palette, color names and template back as given (startOver and its undo).
+        restoreDraftMeta(m) {
+            this.calendar.title = m.title;
+            this.calendar.options = JSON.parse(JSON.stringify(m.options || {}));
+            this.COLORS = [...m.colors];
+            this.localSettings.colors = [...m.localColors];
+            this.localSettings.typeLabels = [...m.labels];
+            this.syncColorFiltersLength();
+            this.storeColorsInCalendarOptions();
+            this.storeTypeLabelsInCalendarOptions();
+            this.updateColorCSS();
+            this.template = m.template;
+            this.templateNudge = !!m.templateNudge;
+            this.userAddedEvent = !!m.userAddedEvent;
+            try {
+                if (m.template) localStorage.setItem('pastecal_template', JSON.stringify(m.template));
+                else localStorage.removeItem('pastecal_template');
+            } catch (e) { /* this visit only */ }
+        },
+
         // ============================================================
         // REGION: UI State Management (Panels & Toggles)
         // ============================================================
@@ -5242,8 +5307,13 @@ const CalendarVueApp = {
             const tpl = this._templateUndo && this._templateUndo[this._templateUndo.length - 1];
             const templateChange = !!tpl && tpl.entry === stack[stack.length - 1];
             const undone = this.store().undo();
-            // Undoing "Started from ..." also puts back the title, notes and labels from before it.
-            if (undone && templateChange) this.setTemplate(this._templateUndo.pop().state);
+            // Undoing "Started from ..." also puts back the title, notes and labels from before it;
+            // undoing "Started over" puts back the whole draft (startOver).
+            if (undone && templateChange) {
+                const t = this._templateUndo.pop();
+                if (t.restore) t.restore();
+                else this.setTemplate(t.state);
+            }
             if (!undone) return null;
             this._handledUndo.push({ at: this.serverNow(), delta: this.deltaBetween(before, this.calendar.events) });
             this.showToast(`Undid: ${undone}`, 'success');
