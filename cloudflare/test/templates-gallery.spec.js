@@ -30,3 +30,12 @@ test('the pages are indexable and listed in the sitemap', async ({ request }) =>
   const sm = await (await request.get('/sitemap.xml')).text();
   for (const p of ['/templates', '/templates/sports-team', '/templates/on-call-rota']) expect(sm).toContain(`https://pastecal.com${p}<`);
 });
+
+test('template pages may be indexed; a calendar edit link never', async ({ request }) => {
+  for (const p of ['/templates', '/templates/sports-team', '/about', '/help']) {
+    expect((await request.get(p)).headers()['x-robots-tag'] || '', p).not.toContain('noindex');
+  }
+  const id = `test-robots-${Date.now()}`;
+  expect((await request.post(`/cal/${id}`, { data: { title: 'Robots', options: {}, events: [] } })).status()).toBe(201);
+  expect((await request.get(`/${id}`)).headers()['x-robots-tag'] || '').toContain('noindex');
+});
