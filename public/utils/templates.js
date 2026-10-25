@@ -25,9 +25,21 @@ const CalendarTemplates = {
         shifts: { label: 'Volunteer shifts' },
         guests: { label: 'Guest visits' },
         club: { label: 'Club or class' },
+        // In the /templates gallery only (pastecal.com/templates); the homepage keeps its seven chips.
+        oncall: { label: 'On-call rota', gallery: true },
+        office: { label: 'Office hours', gallery: true },
+        carpool: { label: 'Carpool', gallery: true },
+        chores: { label: 'Chores', gallery: true },
+        trip: { label: 'Trip plan', gallery: true },
     },
 
+    // The homepage chips: every template not marked gallery-only.
     list() {
+        return CalendarTemplates.all().filter((t) => !CalendarTemplates.TEMPLATES[t.id].gallery);
+    },
+
+    // Every template, gallery-only ones too (the /templates pages, and ?template=<id> links).
+    all() {
         return Object.keys(CalendarTemplates.TEMPLATES).map((id) => ({ id, label: CalendarTemplates.TEMPLATES[id].label }));
     },
 
@@ -206,6 +218,90 @@ const CalendarTemplates = {
                 labels: { 1: 'Meeting', 5: 'Reading' },
                 notes: ['We meet every other Thursday at 7pm, at a different house each time.',
                     'This month: The Remains of the Day, by Kazuo Ishiguro.', 'Suggest the next book in the notes before the last meeting.'],
+            };
+        },
+
+        // A weekly on-call rotation, handoff on Mondays, plus a holiday swap and a training day.
+        oncall({ on, timed, allDay }) {
+            const people = ['Priya', 'Marcus', 'Elena', 'Jake', 'Sofia'];
+            on(1).forEach((d, i) => allDay(d, 7, `On call: ${people[i % people.length]}`, 1));
+            on(1).forEach((d) => timed(d, 9, 0, 15, 'Handoff call', 6, 'Outgoing person walks through open issues.'));
+            allDay(on(5)[1], 1, 'Swap: Elena covers for Marcus', 5);
+            timed(on(3)[2], 14, 0, 90, 'Runbook review', 2, 'Bring one thing that confused you on your last shift.');
+            return {
+                title: 'Support on-call',
+                labels: { 1: 'On call', 2: 'Training', 5: 'Swap', 6: 'Handoff' },
+                notes: ['Shifts run Monday 9am to Monday 9am.', 'Need a swap? Find someone, then add it as Swap so everyone sees.',
+                    'Escalation: page the on-call person first, then the team lead.'],
+            };
+        },
+
+        // Two drop-in blocks a week, one cancelled, and a review session before the exam.
+        office({ on, timed }) {
+            on(2).forEach((d) => timed(d, 15, 0, 60, 'Office hours (Room 204)', 1, 'Drop in, no appointment needed.'));
+            on(4).forEach((d) => timed(d, 11, 0, 60, 'Office hours (online)', 1, 'Link in the course page.'));
+            timed(on(2)[1], 15, 0, 60, 'Cancelled: conference', 7);
+            timed(on(3)[2], 18, 0, 90, 'Midterm review session', 2, 'Bring questions from the practice exam.');
+            return {
+                title: 'Office hours: Intro to Stats',
+                labels: { 1: 'Office hours', 2: 'Review', 7: 'Cancelled' },
+                notes: ['Office hours are first come, first served.', 'Check here before you come: changes show up right away.',
+                    'Email for anything private.'],
+            };
+        },
+
+        // Who drives the school run each weekday, mornings and afternoons.
+        carpool({ on, timed }) {
+            const drivers = ['Lee family', 'Patel family', 'Okafor family', 'Diaz family'];
+            let k = 0;
+            for (let dow = 1; dow <= 5; dow++) {
+                on(dow).forEach((d) => {
+                    timed(d, 7, 30, 30, `AM: ${drivers[k % 4]}`, 1);
+                    timed(d, 15, 15, 30, `PM: ${drivers[(k + 1) % 4]}`, 4);
+                    k++;
+                });
+            }
+            return {
+                title: 'School carpool',
+                labels: { 1: 'Morning', 4: 'Afternoon' },
+                notes: ["Can't drive? Swap with another family and change the name on the event.",
+                    'Pickup is at the side entrance on Oak St.', 'Running late? Text the group chat.'],
+            };
+        },
+
+        // A weekly rotation of household jobs, plus two one-off tasks.
+        chores({ on, timed }) {
+            const people = ['Alex', 'Sam', 'Jordan'];
+            on(0).forEach((d, i) => {
+                timed(d, 10, 0, 30, `Bathroom: ${people[i % 3]}`, 1);
+                timed(d, 10, 30, 30, `Kitchen: ${people[(i + 1) % 3]}`, 1);
+            });
+            on(2).forEach((d, i) => timed(d, 20, 0, 15, `Trash out: ${people[(i + 2) % 3]}`, 4));
+            timed(on(6)[1], 11, 0, 60, 'Grocery run', 5, 'List is in the notes.');
+            timed(on(6)[3] || on(6)[2], 14, 0, 120, 'Deep clean the fridge', 5);
+            return {
+                title: 'House chores',
+                labels: { 1: 'Weekly', 4: 'Trash', 5: 'One-off' },
+                notes: ['Done? Add a check to the title so everyone knows.', "Swap a chore by changing the name. Tell the person first.",
+                    'Groceries: milk, eggs, coffee, dish soap.'],
+            };
+        },
+
+        // A week away: travel days, where you're staying, and a few plans.
+        trip({ on, timed, allDay }) {
+            const start = on(5)[1];
+            timed(start, 8, 0, 300, 'Flight to Lisbon (TP 204)', 1, 'Check in opens 24 hours before.');
+            allDay(start, 4, 'Stay: Casa do Rio, Alfama', 4);
+            allDay(start + 4, 3, 'Stay: Porto riverside apartment', 4);
+            timed(start + 1, 10, 0, 180, 'Walking tour', 5, 'Meet at Praça do Comércio.');
+            timed(start + 3, 19, 30, 120, 'Dinner reservation', 5, 'Under the name Rivera.');
+            timed(start + 4, 9, 0, 180, 'Train to Porto', 1);
+            timed(start + 7, 14, 0, 300, 'Flight home', 1);
+            return {
+                title: 'Portugal trip',
+                labels: { 1: 'Travel', 4: 'Stay', 5: 'Plans' },
+                notes: ['Add anything you want to do; we will sort it out together.', 'Passport check: everyone by the week before.',
+                    'Shared costs: keep receipts, we will split at the end.'],
             };
         },
     },

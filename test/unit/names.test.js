@@ -31,7 +31,7 @@ test('handles and short names: 3-30 of a-z 0-9 -, no reserved words; links under
 test('new calendars may not start with "@" or be named account (server and both apps)', () => {
     assert.match(fs.readFileSync(path.join(root, 'cloudflare/src/index.js'), 'utf8'), /RESERVED_CALENDAR_NAMES\.has\(id\.toLowerCase\(\)\) \|\| id\.startsWith\('@'\)/);
     for (const f of ['public/services/CloudCalendarService.js', 'public/services/CalendarDataService.js']) {
-        assert.match(fs.readFileSync(path.join(root, f), 'utf8'), /'account'\]\.includes\(String\(id \|\| ''\)\.toLowerCase\(\)\) \|\| String\(id \|\| ''\)\.startsWith\('@'\)/, f);
+        assert.match(fs.readFileSync(path.join(root, f), 'utf8'), /'account'(, '[a-z]+')*\]\.includes\(String\(id \|\| ''\)\.toLowerCase\(\)\) \|\| String\(id \|\| ''\)\.startsWith\('@'\)/, f);
     }
     // Every page path reaches the Worker ("/*" minus static files, og-cards), so /@... does too.
     assert.match(fs.readFileSync(path.join(root, 'cloudflare/wrangler.jsonc'), 'utf8'), /"\/\*",/, 'production sends /@... to the Worker');

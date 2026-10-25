@@ -755,8 +755,7 @@ const CalendarVueApp = {
         // Returning visitors open on their calendars; the guide is one click away.
         // The phone's template toggle names the template in use, if any.
         templateLabel() {
-            const t = this.template && this.templateChips.find(c => c.id === this.template.id);
-            return t ? t.label : '';
+            return this.template ? CalendarTemplates.label(this.template.id) : '';   // gallery-only templates have no chip
         },
         homePanel() { return this.homeTab || (this.homeRecents.length ? 'recents' : 'guide'); },
         isHomepageCalendar() {
@@ -1898,6 +1897,17 @@ const CalendarVueApp = {
                 this.calendar.setEvents(this.calendar.sampleEvents());
             }
             this.updateCalendarView();
+
+            // "Use this template" on pastecal.com/templates: /?template=<id> starts the draft from it (events the
+            // visitor already added stay, as with the chips). The parameter is then dropped, so a reload doesn't redo it.
+            try {
+                const want = new URLSearchParams(location.search).get('template');
+                if (want && CalendarTemplates.label(want)) {
+                    this.$nextTick(() => { this.pickTemplate(want); track(a => a.featureUsed('template_link', want)); });
+                    const u = new URL(location.href); u.searchParams.delete('template');
+                    history.replaceState(history.state, '', u.pathname + u.search + u.hash);
+                }
+            } catch (e) { /* a bad link opens the plain draft */ }
         }
 
         // Global keyboard shortcut for quick-add (Cmd/Ctrl+E)
