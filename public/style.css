@@ -1373,3 +1373,12 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
 .pc-slug-edit.pc-slug-edit:hover, .pc-slug-edit.pc-slug-edit:focus { border-bottom-style: solid; border-bottom-color: var(--pc-primary) }
 .pc-slug-pencil { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 24px; height: 24px; margin-left: 2px; border-radius: 50%; color: var(--pc-text-muted); cursor: pointer }
 .pc-slug-pencil:hover { color: var(--pc-primary); background: var(--pc-primary-soft) }
+
+/* Search panel: the box on top, then the color filter, then results. */
+.pc-search { display: flex; flex-direction: column; gap: 14px; width: 100% }
+.pc-search-filter { display: flex; flex-direction: column; gap: 8px }
+.pc-search-filter-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; font-size: var(--pc-fs-xs); font-weight: var(--pc-fw-semibold); color: var(--pc-text-2) }
+.pc-search-filter-hint { font-weight: var(--pc-fw-regular); color: var(--pc-text-muted) }
+.pc-filter-count { color: var(--pc-text-muted); font-weight: var(--pc-fw-regular); font-variant-numeric: tabular-nums }
+.pc-filter-chip.is-off { opacity: .6; text-decoration: line-through; border-style: dashed }
+.pc-filter-chip.is-off::before { background: transparent }

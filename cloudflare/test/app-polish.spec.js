@@ -350,3 +350,28 @@ for (const viewport of [DESKTOP, PHONE]) {
     await ctx.close();
   });
 }
+
+// ---- Search: the box first; the filter lists only colors in use, with counts; Show all undoes it ----
+test('search lists only the colors events use, and a hidden one is plainly off', async ({ browser }) => {
+  const { ctx, page } = await open(browser);
+  await page.evaluate(() => {
+    const vm = document.querySelector('#app')._vnode.component.proxy;
+    vm.calendar.options.typeLabels = ['Work', 'Fun'];
+    const d = new Date();
+    const mk = (i, t) => { const s = new Date(d.getFullYear(), d.getMonth(), 3 + i, 10); return { id: 'e' + i, title: 'Event ' + i, start: s.toISOString(), end: new Date(+s + 3600e3).toISOString(), type: t }; };
+    vm.calendar.events = [mk(1, 1), mk(2, 1), mk(3, 2), mk(4, 5)];
+  });
+  await page.getByTestId('search-button-desktop').click();
+  const box = page.getByRole('searchbox', { name: 'Search events' });
+  const filter = page.getByTestId('color-filter');
+  expect((await box.boundingBox()).y).toBeLessThan((await filter.boundingBox()).y);
+  const chips = filter.getByRole('switch');
+  await expect(chips).toHaveText([/Work\s*2/, /Fun\s*1/, /\s*1$/]);   // three colors used; the unused ones are not listed
+  await expect(page.getByTestId('color-filter-reset')).toHaveCount(0);
+  await chips.nth(1).click();
+  await expect(chips.nth(1)).toHaveAttribute('aria-checked', 'false');
+  await expect(chips.nth(1)).toHaveCSS('text-decoration-line', 'line-through');
+  await page.getByTestId('color-filter-reset').click();
+  await expect(chips.nth(1)).toHaveAttribute('aria-checked', 'true');
+  await ctx.close();
+});

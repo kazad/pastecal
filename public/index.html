@@ -806,57 +806,44 @@
                         </template>
                         <div v-if="isReadOnly" class="pc-side-notes-read" v-html="getReadOnlyNotes()"></div>
                     </div>
-                    <div v-if="showSearch" class="flex flex-col-reverse w-full" v-cloak>
+                    <div v-if="showSearch" class="pc-search" v-cloak>
+                        <input type="search" v-model="searchQuery" @input="searchEvents" aria-label="Search events"
+                            class="w-full p-2 border border-color-default rounded-lg focus:outline-none focus:ring-2 focus:ring-theme-primary text-sm"
+                            placeholder="Search events...">
 
-                        <section class="flex-1 flex flex-col space-y-4">
-                            <!-- Search Input -->
-                            <div class="flex flex-col gap-2">
-                                <input type="search" v-model="searchQuery" @input="searchEvents" aria-label="Search events"
-                                    class="w-full p-2 border border-color-default rounded-lg focus:outline-none focus:ring-2 focus:ring-theme-primary text-sm"
-                                    placeholder="Search events...">
+                        <!-- Color filter: only the colors this calendar's events use (plus any that are switched
+                             off, so they can be switched back on), each with its count. Hidden when there is
+                             nothing to choose between. -->
+                        <section v-if="filterChips.length > 1 || isColorFilterActive" class="pc-search-filter" data-testid="color-filter">
+                            <div class="pc-search-filter-head">
+                                <span>Filter by color <span class="pc-search-filter-hint">· tap to hide or show</span></span>
+                                <button v-if="isColorFilterActive" type="button" class="pc-link" @click="resetColorFilters" data-testid="color-filter-reset">Show all</button>
                             </div>
-
-                            <!-- Search Results -->
-                            <div v-if="searchResults.length > 0" class="max-h-64 overflow-auto">
-                                <div v-for="event in searchResults" :key="event.id" @click="jumpToEvent(event)"
-                                    :style="{ borderLeft: '3px solid ' + getTypeColor(event.type) }"
-                                    class="cursor-pointer p-1 pl-4 hover:bg-theme-hover transition-colors mb-1">
-                                    <div class="font-semibold text-color-2">{{ event.title }}</div>
-                                    <div class="text-xs text-color-1">{{ formatEventRange(event) }}</div>
-                                </div>
-                            </div>
-                        </section>
-
-                        <section class="flex-1 flex flex-col space-y-4 mb-2">
-
-                            <!-- Filter Options -->
-                            <div class="flex items-center space-x-2">
-                                <span class="text-xs text-color-1">Show</span>
-                                <div class="flex flex-wrap gap-2">
-                                    <!--
-                                        Real buttons, not spans: these are toggles, so they need a
-                                        name, a pressed state and keyboard focus. "Off" is shown by
-                                        emptying the dot as well as dimming it, because color alone
-                                        cannot carry the state -- the palette is user-editable and
-                                        two entries can be near-identical.
-                                    -->
-                                    <template v-for="(color, idx) in COLORS">
-                                        <button type="button" role="switch"
-                                            @click="toggleColorFilter(idx)"
-                                            :aria-checked="colorFilters[idx] ? 'true' : 'false'"
-                                            :aria-label="typeLabelFor(idx)"
-                                            :title="colorFilters[idx] ? typeLabelFor(idx) + ' (shown)' : typeLabelFor(idx) + ' (hidden)'"
-                                            class="pc-filter-dot cursor-pointer transition-all"
-                                            :class="[colorFilters[idx] ? 'is-on' : 'is-off', hasTypeLabel(idx) ? 'pc-chip pc-chip--dot pc-filter-chip' : 'w-5 h-5 rounded-full border-2']"
-                                            :style="hasTypeLabel(idx) ? { '--dot': color } : (colorFilters[idx]
-                                                ? { backgroundColor: color, borderColor: color }
-                                                : { backgroundColor: 'transparent', borderColor: color, opacity: .4, borderStyle: 'dashed' })">
-                                            <template v-if="hasTypeLabel(idx)">{{ typeLabelFor(idx) }}</template>
-                                        </button>
-                                    </template>
-                                </div>
+                            <div class="flex flex-wrap gap-2">
+                                <!-- Real switches: a name, a pressed state and keyboard focus. "Off" is shown by
+                                     a hollow dot and struck-through name as well as dimming, because color alone
+                                     cannot carry the state (the palette is user-editable). -->
+                                <button v-for="chip in filterChips" :key="chip.idx" type="button" role="switch"
+                                    @click="toggleColorFilter(chip.idx)"
+                                    :aria-checked="colorFilters[chip.idx] ? 'true' : 'false'"
+                                    :aria-label="chip.label + ', ' + chip.count + (chip.count === 1 ? ' event' : ' events')"
+                                    :title="chip.label + (colorFilters[chip.idx] ? ' (shown, tap to hide)' : ' (hidden, tap to show)')"
+                                    class="pc-filter-dot pc-chip pc-chip--dot pc-filter-chip"
+                                    :class="colorFilters[chip.idx] ? 'is-on' : 'is-off'"
+                                    :style="{ '--dot': chip.color }">
+                                    {{ chip.label }} <span class="pc-filter-count">{{ chip.count }}</span>
+                                </button>
                             </div>
                         </section>
+
+                        <div v-if="searchResults.length > 0" class="max-h-64 overflow-auto">
+                            <div v-for="event in searchResults" :key="event.id" @click="jumpToEvent(event)"
+                                :style="{ borderLeft: '3px solid ' + getTypeColor(event.type) }"
+                                class="cursor-pointer p-1 pl-4 hover:bg-theme-hover transition-colors mb-1">
+                                <div class="font-semibold text-color-2">{{ event.title }}</div>
+                                <div class="text-xs text-color-1">{{ formatEventRange(event) }}</div>
+                            </div>
+                        </div>
                     </div>
                     <div v-if="showHelp" class="text-sm text-color-2" v-cloak>
                         <div class="w-full overflow-hidden rounded-lg">

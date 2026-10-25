@@ -611,6 +611,18 @@ const CalendarVueApp = {
         // another week -- and a filter that is on while nothing says so is exactly the
         // condition behind #41. The banner keys off this, so it is shown for as long as
         // the filter is on, and reports the count only when it has one to report.
+        // The search panel's color filter: one chip per color some event uses, with how many use it.
+        // A color switched off stays listed even if unused, so it can always be switched back on.
+        filterChips() {
+            const counts = this.COLORS.map(() => 0);
+            for (const e of (this.calendar?.events || [])) {
+                if (e && e.recurrenceID) continue;   // an edited occurrence is part of its series
+                counts[this.filterSlotFor(e)]++;
+            }
+            return this.COLORS.map((color, idx) => ({ idx, color, count: counts[idx], label: this.typeLabelFor(idx) }))
+                .filter(c => c.count > 0 || this.colorFilters[c.idx] === false);
+        },
+
         isColorFilterActive() {
             return this.colorFilters.slice(0, this.COLORS.length).some(on => on === false);
         },
