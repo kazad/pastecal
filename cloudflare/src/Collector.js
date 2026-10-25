@@ -37,8 +37,9 @@ export function toDataPoints(body, country = '') {
                 str(p.browser, 12),
                 str(p.device, 12),
                 str(country, 4),
-                // detail; the trial_* events' one value each (feature, interval, mode, trial_surface) too
-                str(p.add_via ?? p.source ?? p.method ?? p.code ?? p.kind ?? p.reason ?? p.where ?? p.feature ?? p.interval ?? p.mode ?? p.trial_surface ?? p.type, 40),
+                // detail; the trial_* events' one value each (feature, interval, mode, trial_surface) too,
+                // contact_submitted's type and subscribe_nudge's action (last, so no earlier event's detail moves)
+                str(p.add_via ?? p.source ?? p.method ?? p.code ?? p.kind ?? p.reason ?? p.where ?? p.feature ?? p.interval ?? p.mode ?? p.trial_surface ?? p.type ?? p.action, 40),
                 str(p.cached, 4),
                 str(p.hv, 8),
             ],

@@ -71,7 +71,17 @@ if (MODE === 'seed') {
 } else {
     const g = JSON.parse(readFileSync(GOLDEN, 'utf8'));
     const now = await capture(g);
-    for (const k of Object.keys(g.responses)) assert.deepEqual(now[k], g.responses[k], `${k} changed`);
+    // Pro (launch-prep) adds these top-level fields to a calendar read; on a FREE calendar they must
+    // have exactly these values. Anything else in the body must still be byte-identical.
+    const PRO_ADDITIVE = { locked: false, pro: false, paused: false, proSettings: null };
+    const stripPro = (r) => {
+        if (!r || typeof r.body !== 'string' || !r.body.startsWith('{')) return r;
+        let j; try { j = JSON.parse(r.body); } catch { return r; }
+        if (!j || !j.calendar) return r;
+        for (const [k, v] of Object.entries(PRO_ADDITIVE)) if (k in j) { assert.deepEqual(j[k], v, `${k} on a free calendar`); delete j[k]; }
+        return { ...r, body: JSON.stringify(j) };
+    };
+    for (const k of Object.keys(g.responses)) assert.deepEqual(stripPro(now[k]), stripPro(g.responses[k]), `${k} changed`);
     step(`room ${g.id} written by master's code reads identically on the new code: ${Object.keys(g.responses).join(', ')}`);
 }
 process.exit(0);

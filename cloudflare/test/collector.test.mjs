@@ -13,6 +13,11 @@ for (const [name, params, detail] of [['trial_feature_used', { feature: 'stats_p
     ['trial_lapsed', { mode: 'readonly' }, 'readonly'], ['trial_started', { trial_surface: 'lock' }, 'lock']]) {
     assert.equal(toDataPoints({ events: [ev(name, params)] }, 'US')[0].blobs[5], detail, name);
 }
+// the launch funnel's other two (scripts/ux.sh trials): contact type, nudge action; test traffic never lands
+assert.equal(toDataPoints({ events: [ev('contact_submitted', { type: 'report' })] })[0].blobs[5], 'report');
+assert.equal(toDataPoints({ events: [ev('subscribe_nudge', { action: 'shown' })] })[0].blobs[5], 'shown');
+assert.equal(toDataPoints({ events: [ev('trial_reminder_clicked', {})] })[0].blobs[0], 'trial_reminder_clicked');
+assert.equal(toDataPoints({ events: [ev('trial_started', { trial_surface: 'lock', surface: 'test' })] }).length, 0, 'surface=test is dropped');
 assert.ok(!JSON.stringify(a).includes('secretcal'), 'calendar path must never be stored');
 
 // native vs classic from the path
