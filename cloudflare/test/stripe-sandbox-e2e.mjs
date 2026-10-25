@@ -3,9 +3,10 @@
 // Needs: wrangler dev on BASE with .dev.vars.e2e + .dev.vars.stripe (sandbox sk_test key, price
 // ids, the `stripe listen` signing secret, ACCOUNTS_DEV_MODE=1), and
 //   stripe listen --forward-to localhost:8850/api/stripe/webhook --events checkout.session.completed,
-//     customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.payment_failed,
-//     charge.refunded,charge.dispute.created
-// Run: NODE_PATH=<repo>/node_modules node test/stripe-sandbox-e2e.mjs   (never against production)
+//     customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,customer.subscription.trial_will_end,
+//     invoice.payment_failed,charge.refunded,charge.dispute.created
+// The stripe CLI must act on the same sandbox as the Worker: export STRIPE_API_KEY (the sk_test key) for it.
+// Run: NODE_PATH=<repo>/node_modules PRICE_MONTHLY=<price id> node test/stripe-sandbox-e2e.mjs   (never against production)
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 
@@ -51,7 +52,8 @@ step('paid with Stripe test card pm_card_visa: a real sandbox subscription is ac
 
 // 3. The webhook (via stripe listen) locks the calendar for this owner
 const st = await until(async () => { const s = await (await fetch(`${BASE}/api/pro/status?calendar=${cal}`, { headers: { Cookie: cookie } })).json(); return s.locked ? s : null; });
-assert.ok(st, 'calendar never locked'); assert.deepEqual(st, { locked: true, pro: true, isOwner: true });
+assert.ok(st, 'calendar never locked');
+assert.deepEqual([st.locked, st.pro, st.isOwner, st.paused, st.lapsedMode], [true, true, true, false, 'readonly']);
 const me = await (await fetch(BASE + '/api/me', { headers: { Cookie: cookie } })).json();
 const row = me.calendars.find((c) => c.id === cal);
 assert.equal(row.status, 'active'); assert.equal(row.interval, 'month');
@@ -74,13 +76,21 @@ assert.equal((await trySave(null)).code, 'locked');
 assert.notEqual((await trySave(editorKey)).t, 'error');
 step('a visitor\'s save is refused (locked); the owner\'s editor key can save');
 
-// 5. Cancel in Stripe; the webhook unlocks it
+// 5. Cancel in Stripe; the webhook ends the lock and the calendar falls back to read-only (paused, the default)
 const sub = JSON.parse(execFileSync('stripe', ['subscriptions', 'list', '--limit', '5'], { encoding: 'utf8' }).replace(/^[^{]*/, ''))
     .data.find((s) => s.metadata && s.metadata.calendar_id === cal);
 assert.ok(sub, 'subscription not found in Stripe');
 execFileSync('stripe', ['subscriptions', 'cancel', sub.id, '--confirm'], { stdio: 'ignore' });
 const unlocked = await until(async () => { const s = await (await fetch(`${BASE}/api/pro/status?calendar=${cal}`, { headers: { Cookie: cookie } })).json(); return s.locked ? null : s; });
-assert.ok(unlocked, 'calendar never unlocked'); assert.equal((await trySave(null)).t === 'error', false);
-step('cancelled in Stripe: the webhook unlocked it and anyone can edit again');
+assert.ok(unlocked, 'calendar never unlocked');
+assert.deepEqual([unlocked.locked, unlocked.paused, unlocked.lapsedOwner], [false, true, true]);
+assert.equal((await trySave(null)).code, 'paused');
+step('cancelled in Stripe: the webhook ended the lock; the calendar is read-only (paused) and saves are refused');
+
+// 6. The owner opens it: anyone can edit again
+r = await fetch(BASE + '/api/pro/lapsed-mode', { method: 'POST', headers: authed, body: JSON.stringify({ calendarId: cal, mode: 'open' }) });
+assert.equal(r.status, 200, await r.text());
+assert.notEqual((await trySave(null)).t, 'error');
+step('the owner chose "open": anyone can edit again');
 
 console.log(`\n${n} checks passed`); process.exit(0);
