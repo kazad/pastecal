@@ -2389,7 +2389,7 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
   .pc-tour-uses .pc-ico { margin-bottom: 6px }
   .pc-vs > section { padding: 16px }
 }
-/* Pricing: the four plans from /pricing, small. Pro Single is the one on sale, so it carries the accent. */
+/* Pricing: the four plans from /pricing, small. Pro is the one on sale, so it carries the accent. */
 .pc-tour .pc-tour-plans { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: stretch }
 .pc-tour-plans > .pc-tour-plan { position: relative; gap: 2px; padding: 18px 16px 16px }
 .pc-tour-plans h4 { margin: 0; font-size: 16px }

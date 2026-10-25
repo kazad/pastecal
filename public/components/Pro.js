@@ -455,7 +455,7 @@ const ProPanel = {
     },
     mounted() {
         const intent = ProIntent.get(this.calendarId);
-        // Pro Single is yearly only; an old 'month' intent becomes yearly.
+        // Pro is yearly only; an old 'month' intent becomes yearly.
         this.autoGo = !!(intent && intent.go);
         this.wantTrial = !!(intent && intent.interval === 'trial');
         this.trialSurface = (intent && intent.surface) || this.surface;
