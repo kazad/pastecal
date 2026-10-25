@@ -1382,3 +1382,21 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
 .pc-filter-count { color: var(--pc-text-muted); font-weight: var(--pc-fw-regular); font-variant-numeric: tabular-nums }
 .pc-filter-chip.is-off { opacity: .6; text-decoration: line-through; border-style: dashed }
 .pc-filter-chip.is-off::before { background: transparent }
+
+/* "6 Work events hidden · Show all events": a floating bar at the bottom of the screen, never above the
+   calendar, so turning a filter on never moves the grid (and never covers the toolbar). */
+.pc-hidden-pill { position: fixed; z-index: 30; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+  display: flex; align-items: center; gap: 10px; max-width: calc(100% - 32px); padding: 6px 8px 6px 14px;
+  border: 1px solid var(--pc-line); border-radius: var(--pc-radius-pill); background: var(--pc-bg); box-shadow: var(--pc-shadow-md);
+  font-size: var(--pc-fs-sm); color: var(--pc-text-2); white-space: nowrap }
+.pc-hidden-pill .pc-link { font-weight: var(--pc-fw-semibold); padding: 2px 6px }
+
+.pc-search-results { display: flex; flex-direction: column; gap: 4px; max-height: 60vh; overflow: auto }
+.pc-search-result { border-left: 3px solid var(--dot); border-radius: 0 var(--pc-radius-sm) var(--pc-radius-sm) 0 }
+.pc-search-result.is-open { background: var(--pc-soft) }
+.pc-search-result-head { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; padding: 6px 10px; text-align: left; background: none; border: 0; cursor: pointer; border-radius: inherit }
+.pc-search-result-head:hover { background: var(--pc-hover) }
+.pc-search-result-head:focus-visible { outline: var(--pc-focus-outline); outline-offset: -2px }
+.pc-search-result-body { padding: 0 10px 10px; display: flex; flex-direction: column; gap: 8px }
+.pc-search-result-notes { margin: 0; font-size: var(--pc-fs-sm); color: var(--pc-text-2); white-space: pre-line; overflow-wrap: anywhere }
+.pc-search-result-actions { display: flex; gap: 6px }

@@ -347,6 +347,7 @@ const CalendarVueApp = {
             EXTRA_COLORS: EXTRA_COLORS,
             MAX_COLORS: MAX_COLORS,
             colorFilters: COLORS.map(() => true), // allow all color types by default
+            searchOpenId: null,   // the search result shown open, if any
             // Bumped on every scheduler dataBound so hiddenEventCount, which reads the
             // visible date range off scheduleObj, recomputes when the view moves.
             viewTick: 0,
@@ -596,12 +597,10 @@ const CalendarVueApp = {
 
             if (n > 0) {
                 return named
-                    ? `${n} ${named} ${n === 1 ? 'event is' : 'events are'} hidden.`
-                    : `${n} ${n === 1 ? 'event is' : 'events are'} hidden by a filter.`;
+                    ? `${n} ${named} ${n === 1 ? 'event' : 'events'} hidden`
+                    : `${n} ${n === 1 ? 'event' : 'events'} hidden by a filter`;
             }
-            return named
-                ? `${named} events are hidden — none in this view.`
-                : 'Some event types are hidden — none in this view.';
+            return named ? `${named} events hidden` : 'Some event types hidden';
         },
 
         // Is any color switched off? Distinct from hiddenEventCount, which is 0 whenever
@@ -3515,6 +3514,12 @@ const CalendarVueApp = {
             return type - 1;
         },
 
+
+        // Edit from a search result: the same editor a double-click opens (a repeating event opens its series).
+        editSearchResult(event) {
+            const data = (scheduleObj.eventsData || []).find(e => String(e.Id) === String(event.id) && !e.RecurrenceID);
+            if (data) scheduleObj.openEditor(data, data.RecurrenceRule ? 'EditSeries' : 'Save');
+        },
 
         jumpToEvent(event) {
             let startDate = new Date(event.start);

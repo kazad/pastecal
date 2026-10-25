@@ -378,5 +378,14 @@ test('search lists only the colors events use, and a hidden one is plainly off',
   await expect(chips.nth(1)).toHaveCSS('text-decoration-line', 'line-through');
   await page.getByTestId('color-filter-reset').click();
   await expect(chips.nth(1)).toHaveAttribute('aria-checked', 'true');
+  // A result opens in place with its notes; Edit opens the event's editor.
+  await page.evaluate(() => { document.querySelector('#app')._vnode.component.proxy.calendar.events[0].description = 'Bring water.'; });
+  await box.fill('Event 1');
+  const result = page.getByTestId('search-results').getByRole('button', { name: /Event 1/ });
+  await result.click();
+  await expect(result).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByText('Bring water.')).toBeVisible();
+  await page.getByTestId('search-result-edit').click();
+  await expect(page.getByRole('dialog', { name: 'Edit event' })).toBeVisible();
   await ctx.close();
 });

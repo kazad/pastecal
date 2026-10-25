@@ -673,22 +673,6 @@
         </topbar>
 
 
-        <!--
-            Sits with the calendar, not inside the search panel, because the panel is
-            exactly what is not on screen when an event goes missing (issue #41). Whenever
-            the color filter is hiding something in view, this says so where the user is
-            already looking, and clicking it restores everything.
-        -->
-        <div v-if="isColorFilterActive" data-testid="hidden-events-banner"
-            class="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2 px-3 py-2 rounded-sm border border-color-default bg-2 text-sm"
-            v-cloak>
-            <span class="text-color-2">{{ hiddenEventsMessage }}</span>
-            <button @click="resetColorFilters" type="button"
-                class="pc-link">
-                Show all events
-            </button>
-        </div>
-
         <!-- Someone other than its creator upgraded this calendar, in the last 7 days: the creator's browser (and other
              editors of record) can undo it (checkUpgradeNotice; the server decides who sees it). -->
         <p v-if="upgradeNotice" class="pc-upsell" data-testid="upgrade-notice" role="status" v-cloak>
@@ -736,6 +720,13 @@
             <div class="pc-home-cal">
             <div id="cal2_wrap" style="width: 100%; height: 100%; position: relative;">
                 <div id="Schedule" data-testid="schedule-container"></div>
+                <!-- Whenever a color filter is on, say so on the calendar itself, not only in the search panel:
+                     in #41 an event "went missing" after the panel was closed. A floating bar at the bottom of
+                     the screen, so turning a filter on never pushes the calendar down. -->
+                <div v-if="isColorFilterActive" data-testid="hidden-events-banner" class="pc-hidden-pill" role="status" v-cloak>
+                    <span>{{ hiddenEventsMessage }}</span>
+                    <button @click="resetColorFilters" type="button" class="pc-link">Show all events</button>
+                </div>
                 <!-- Homepage: one tip on the grid itself until the first event. Clicks pass through it. -->
                 <div v-if="isHomepageCalendar && !userAddedEvent && !template && !isReadOnly" class="pc-grid-tip" data-testid="grid-tip" v-cloak>
                     Click any day to add your first event
@@ -836,12 +827,22 @@
                             </div>
                         </section>
 
-                        <div v-if="searchResults.length > 0" class="max-h-64 overflow-auto">
-                            <div v-for="event in searchResults" :key="event.id" @click="jumpToEvent(event)"
-                                :style="{ borderLeft: '3px solid ' + getTypeColor(event.type) }"
-                                class="cursor-pointer p-1 pl-4 hover:bg-theme-hover transition-colors mb-1">
-                                <div class="font-semibold text-color-2">{{ event.title }}</div>
-                                <div class="text-xs text-color-1">{{ formatEventRange(event) }}</div>
+                        <!-- A result opens in place: its notes, then Show on calendar (and Edit, for editors). -->
+                        <div v-if="searchResults.length > 0" class="pc-search-results" data-testid="search-results">
+                            <div v-for="event in searchResults" :key="event.id" class="pc-search-result"
+                                :class="{ 'is-open': searchOpenId === event.id }" :style="{ '--dot': getTypeColor(event.type) }">
+                                <button type="button" class="pc-search-result-head" @click="searchOpenId = searchOpenId === event.id ? null : event.id"
+                                    :aria-expanded="searchOpenId === event.id ? 'true' : 'false'">
+                                    <span class="font-semibold text-color-2">{{ event.title }}</span>
+                                    <span class="text-xs text-color-1">{{ formatEventRange(event) }}</span>
+                                </button>
+                                <div v-if="searchOpenId === event.id" class="pc-search-result-body">
+                                    <p v-if="(event.description || '').trim()" class="pc-search-result-notes">{{ event.description }}</p>
+                                    <div class="pc-search-result-actions">
+                                        <button type="button" class="pc-btn pc-btn--xs" @click="jumpToEvent(event)">Show on calendar</button>
+                                        <button v-if="canEdit" type="button" class="pc-btn pc-btn--xs" @click="editSearchResult(event)" data-testid="search-result-edit">Edit</button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
