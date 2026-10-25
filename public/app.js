@@ -68,13 +68,38 @@ function track(fn) {
 // Outlook, Other), as a small menu beside the title. Mounted in both headers; the menu itself
 // only exists while open, so its links are never in the page twice.
 // ============================================================
+// A returning viewer (2nd visit to this view link, in this browser) gets one gentle hint to subscribe.
+// It shows once: subscribing, opening the menu from it, or dismissing it ends it for good.
+const SUB_NUDGE = { visits: 'pc_view_visits', done: 'pc_sub_nudge_done' };
+const readJSON = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) || d; } catch (e) { return d; } };
+const writeJSON = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage blocked: no hint */ } };
+
 const AddToCalendar = {
-    props: { google: String, apple: String, outlook: String, other: String },
+    props: { google: String, apple: String, outlook: String, other: String, nudgeKey: String },
     emits: ['pick'],
     directives: { 'click-outside': clickOutside },
-    data() { return { open: false }; },
+    data() { return { open: false, nudge: false }; },
+    mounted() {
+        const key = this.nudgeKey;
+        if (!key) return;
+        const visits = readJSON(SUB_NUDGE.visits, {});
+        // The header renders this twice (desktop and phone rows): count the visit once per page load.
+        if (!SUB_NUDGE.counted) { SUB_NUDGE.counted = true; visits[key] = (visits[key] || 0) + 1; writeJSON(SUB_NUDGE.visits, visits); }
+        if (visits[key] >= 2 && !readJSON(SUB_NUDGE.done, []).includes(key)) {
+            this.nudge = true;
+            if (!SUB_NUDGE.shownLogged) { SUB_NUDGE.shownLogged = true; try { window.Analytics && Analytics.track('subscribe_nudge', { action: 'shown' }); } catch (e) {} }
+        }
+    },
     methods: {
-        pick(method) { this.$emit('pick', method); this.open = false; },
+        pick(method) { this.$emit('pick', method); this.open = false; this.endNudge('subscribed'); },
+        fromNudge() { this.open = true; this.endNudge('opened'); },
+        endNudge(action) {
+            if (!this.nudge) return;
+            this.nudge = false;
+            const done = readJSON(SUB_NUDGE.done, []);
+            if (!done.includes(this.nudgeKey)) writeJSON(SUB_NUDGE.done, [...done, this.nudgeKey].slice(-200));
+            try { window.Analytics && Analytics.track('subscribe_nudge', { action }); } catch (e) {}
+        },
     },
     template: `
         <div class="pc-addcal" v-click-outside="() => { open = false }" @keydown.esc="open = false">
@@ -83,6 +108,10 @@ const AddToCalendar = {
                 <span class="pc-addcal-label">Add to my calendar</span>
                 <svg class="pc-addcal-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
             </button>
+            <div v-if="nudge && !open" class="pc-addcal-nudge" role="status" data-testid="subscribe-nudge">
+                <button type="button" class="pc-addcal-nudge-text" @click.stop="fromNudge">Add it to your phone calendar. Updates show up on their own.</button>
+                <button type="button" class="pc-addcal-nudge-x" aria-label="Dismiss" @click.stop="endNudge('dismissed')">&times;</button>
+            </div>
             <div v-if="open" class="pc-addcal-menu" role="menu" data-testid="view-add-to-cal-menu">
                 <p class="pc-addcal-hint">Subscribe once. Every change shows up in your own calendar.</p>
                 <a role="menuitem" :href="google" target="_blank" rel="noopener" data-testid="view-subscribe-google" @click="pick('subscribe_google')">Google Calendar</a>

@@ -2402,3 +2402,11 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 @media (max-width: 520px) { .pc-tour .pc-tour-plans { grid-template-columns: minmax(0, 1fr) } }
 .pc-tour-plans p:not(.pc-plan-price) { color: var(--pc-text-2) }
 @media (max-width: 480px) { .pc-tour-facts { gap: 6px } .pc-tour-facts span { padding: 5px 10px; font-size: 13.5px; gap: 4px } }
+/* Returning viewers: one small hint under "Add to my calendar", pointing up at it. */
+.pc-addcal { position: relative }
+.pc-addcal-nudge { position: absolute; top: calc(100% + 10px); right: 0; z-index: 30; display: flex; align-items: center; gap: 4px; width: max-content; max-width: min(280px, calc(100vw - 32px));
+  padding: 8px 6px 8px 12px; border-radius: 10px; background: var(--pc-text); color: var(--pc-bg); box-shadow: 0 8px 24px -10px rgba(0,0,0,.35); font: 500 13px/1.35 var(--pc-font) }
+.pc-addcal-nudge::before { content: ""; position: absolute; top: -5px; right: 22px; width: 10px; height: 10px; background: inherit; transform: rotate(45deg) }
+.pc-addcal-nudge-text { border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; padding: 0 }
+.pc-addcal-nudge-x { flex: none; width: 24px; height: 24px; border: 0; border-radius: 6px; background: none; color: inherit; opacity: .7; font-size: 16px; cursor: pointer }
+.pc-addcal-nudge-x:hover { opacity: 1 }

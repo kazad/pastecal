@@ -125,3 +125,17 @@ test('edit link: the footer is quiet links only, with no Make your own', async (
   await expect(page.getByTestId('view-only-badge')).toHaveCount(0);
   await ctx.close();
 });
+
+// A returning viewer gets one hint to subscribe; it never comes back once used or dismissed.
+test('view link: second visit shows the subscribe hint once; opening it ends it', async ({ browser, request }) => {
+  const { viewId } = await seed(request);
+  const { ctx, page } = await open(browser, `/view/${viewId}?backend=cf`);
+  await expect(visible(page, 'subscribe-nudge')).toHaveCount(0);            // first visit: nothing
+  await page.reload(); await page.waitForFunction(() => window.scheduleObj);
+  await expect(visible(page, 'subscribe-nudge')).toContainText('phone calendar');
+  await visible(page, 'subscribe-nudge').locator('.pc-addcal-nudge-text').click();
+  await expect(visible(page, 'view-add-to-cal-menu')).toBeVisible();        // it opens the real menu
+  await page.reload(); await page.waitForFunction(() => window.scheduleObj);
+  await expect(visible(page, 'subscribe-nudge')).toHaveCount(0);            // and never shows again
+  await ctx.close();
+});
