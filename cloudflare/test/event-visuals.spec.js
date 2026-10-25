@@ -62,7 +62,7 @@ test('an all-day event shows no time, on its chip or in search', async ({ page }
   await expect(page.locator('.e-month-view .e-appointment', { hasText: 'Holiday' })).not.toContainText('12:00');
   await page.getByTestId('search-button-desktop').click();
   await page.locator('input[type="search"][aria-label="Search events"]').fill('Holiday');
-  const result = page.locator('[class*="max-h-64"] > div', { hasText: 'Holiday' });
+  const result = page.getByTestId('search-results').locator('.pc-search-result', { hasText: 'Holiday' });
   await expect(result).toBeVisible();
   await expect(result).not.toContainText('12:00');
   await expect(result).not.toContainText(':');   // dates only
