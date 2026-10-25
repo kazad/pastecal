@@ -89,21 +89,19 @@ function track(fn) {
 })();
 
 // ============================================================
-// "Add to my calendar" on a view link: the subscribe URLs Share hands out (Google, Apple,
-// Outlook, Other), as a small menu beside the title. Mounted in both headers; the menu itself
-// only exists while open, so its links are never in the page twice.
+// "Add to my calendar" on a view link: opens its add page (/view/<id>/add), which picks this
+// device's calendar app and says what happens next. Mounted in both headers.
 // ============================================================
 // A returning viewer (2nd visit to this view link, in this browser) gets one gentle hint to subscribe.
-// It shows once: subscribing, opening the menu from it, or dismissing it ends it for good.
+// It shows once: subscribing, opening the page from it, or dismissing it ends it for good.
 const SUB_NUDGE = { visits: 'pc_view_visits', done: 'pc_sub_nudge_done' };
 const readJSON = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) || d; } catch (e) { return d; } };
 const writeJSON = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage blocked: no hint */ } };
 
 const AddToCalendar = {
-    props: { google: String, apple: String, outlook: String, other: String, nudgeKey: String },
+    props: { href: String, nudgeKey: String },
     emits: ['pick'],
-    directives: { 'click-outside': clickOutside },
-    data() { return { open: false, nudge: false }; },
+    data() { return { nudge: false }; },
     mounted() {
         const key = this.nudgeKey;
         if (!key) return;
@@ -116,8 +114,8 @@ const AddToCalendar = {
         }
     },
     methods: {
-        pick(method) { this.$emit('pick', method); this.open = false; this.endNudge('subscribed'); },
-        fromNudge() { this.open = true; this.endNudge('opened'); },
+        pick() { this.$emit('pick', 'subscribe_page'); this.endNudge('subscribed'); },
+        fromNudge() { this.endNudge('opened'); this.$emit('pick', 'subscribe_page'); window.location.href = this.href; },
         endNudge(action) {
             if (!this.nudge) return;
             this.nudge = false;
@@ -127,22 +125,14 @@ const AddToCalendar = {
         },
     },
     template: `
-        <div class="pc-addcal" v-click-outside="() => { open = false }" @keydown.esc="open = false">
-            <button type="button" class="pc-btn pc-btn--sm pc-btn--pill pc-addcal-btn" data-testid="view-add-to-cal" aria-haspopup="menu" :aria-expanded="open ? 'true' : 'false'" @click.stop="open = !open">
+        <div class="pc-addcal">
+            <a class="pc-btn pc-btn--sm pc-btn--pill pc-addcal-btn" data-testid="view-add-to-cal" :href="href" target="_top" @click="pick">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M12 14v5M9.5 16.5h5"/></svg>
                 <span class="pc-addcal-label">Add to my calendar</span>
-                <svg class="pc-addcal-caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
-            </button>
-            <div v-if="nudge && !open" class="pc-addcal-nudge" role="status" data-testid="subscribe-nudge">
+            </a>
+            <div v-if="nudge" class="pc-addcal-nudge" role="status" data-testid="subscribe-nudge">
                 <button type="button" class="pc-addcal-nudge-text" @click.stop="fromNudge">Add it to your phone calendar. Updates show up on their own.</button>
                 <button type="button" class="pc-addcal-nudge-x" aria-label="Dismiss" @click.stop="endNudge('dismissed')">&times;</button>
-            </div>
-            <div v-if="open" class="pc-addcal-menu" role="menu" data-testid="view-add-to-cal-menu">
-                <p class="pc-addcal-hint">Subscribe once. Every change shows up in your own calendar.</p>
-                <a role="menuitem" :href="google" target="_blank" rel="noopener" data-testid="view-subscribe-google" @click="pick('subscribe_google')">Google Calendar</a>
-                <a role="menuitem" :href="apple" data-testid="view-subscribe-apple" @click="pick('subscribe_apple')">Apple Calendar</a>
-                <a role="menuitem" :href="outlook" target="_blank" rel="noopener" data-testid="view-subscribe-outlook" @click="pick('subscribe_outlook')">Outlook</a>
-                <a role="menuitem" :href="other" data-testid="view-subscribe-webcal" @click="pick('subscribe')">Other calendar app</a>
             </div>
         </div>`,
 };
@@ -3012,7 +3002,9 @@ const CalendarVueApp = {
                 this.printLink = view ? view.replace(/^https?:\/\//, '').replace(/\?.*$/, '') : '';
                 this.printDate = new Date().toLocaleDateString();
                 this.printQr = '';
-                if (view && typeof qrcode === 'function') { const q = qrcode(0, 'M'); q.addData(view.replace(/\?.*$/, '')); q.make(); this.printQr = q.createSvgTag({ cellSize: 3, margin: 0, scalable: true }); }
+                // The QR opens the subscribe page (this phone's calendar app, one tap); the printed text is the view link.
+                const scan = this.subscribePageURL() || view;
+                if (scan && typeof qrcode === 'function') { const q = qrcode(0, 'M'); q.addData(scan.replace(/\?.*$/, '')); q.make(); this.printQr = q.createSvgTag({ cellSize: 3, margin: 0, scalable: true }); }
             } catch (e) { /* print without the footer extras */ }
         },
 
@@ -3308,6 +3300,12 @@ const CalendarVueApp = {
          * click does nothing at all -- which is why the named app buttons and the
          * plain feed URL stay visible next to it.
          */
+        /** The add-to-calendar page for the read-only feed (/view/<id>/add): Add to my calendar, Share, the printed QR. */
+        subscribePageURL() {
+            const feed = this.getSubscribeICSURL();
+            return feed ? feed.replace(/\.ics$/i, '/add') : null;
+        },
+
         getWebcalURL() {
             const url = this.getSubscribeICSURL();
             if (!url) return null;
@@ -4066,11 +4064,8 @@ const CalendarVueApp = {
         shareUrl(url, title) {
             if (navigator.share) {
                 track(a => a.calendarShared('native'));
-                navigator.share({
-                    title: 'pastecal calendar',
-                    text: title,
-                    url: url
-                }).catch(err => {
+                // The message is the calendar's name and its link, nothing else: it reads like a person sent it.
+                navigator.share({ title: title || 'Calendar', text: title || '', url: url }).catch(err => {
                     console.log('Error sharing:', err);
                 });
             }

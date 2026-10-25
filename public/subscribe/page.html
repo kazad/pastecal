@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Add to your calendar · pastecal</title>
+<meta name="description" content="Follow this calendar in Google, Apple or Outlook. Changes show up on their own.">
+<meta name="robots" content="noindex">
+<link rel="icon" type="image/png" href="/img/icons/favicon-96x96.png" sizes="96x96">
+<link rel="icon" type="image/svg+xml" href="/img/icons/favicon.svg">
+<link rel="apple-touch-icon" sizes="180x180" href="/img/icons/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/components.css">
+<script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>
+<style>
+/* pastecal.com/view/<id>/add (served by the Worker): one big button for this device's calendar app,
+   the steps that follow it, then the other apps and the plain address. Sent as "Add to my calendar" on view
+   links, in Share, and printed as the QR code. */
+body { margin: 0; background: var(--pc-bg); color: var(--pc-text); font: var(--pc-fw-regular) var(--pc-fs-lg)/1.55 var(--pc-font) }
+.sub-top { display: flex; align-items: center; padding: 14px max(16px, env(safe-area-inset-left)) }
+.sub-brand { display: inline-flex; align-items: center; gap: 8px; color: var(--pc-text); font-weight: var(--pc-fw-bold); text-decoration: none }
+main { max-width: 520px; margin: 0 auto; padding: 8px 16px 48px; display: flex; flex-direction: column; gap: 22px }
+h1 { margin: 0; font-size: var(--pc-fs-3xl); line-height: 1.15; font-weight: var(--pc-fw-bold); letter-spacing: -.01em; text-wrap: balance }
+.sub-lede { margin: 6px 0 0; color: var(--pc-text-2) }
+.sub-card { background: var(--pc-surface); border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); padding: 18px; display: flex; flex-direction: column; gap: 12px }
+.sub-main { width: 100%; justify-content: center }
+.sub-steps { margin: 0; padding-left: 20px; color: var(--pc-text-2); font-size: var(--pc-fs-md); display: flex; flex-direction: column; gap: 4px }
+.sub-h { margin: 0; font-size: var(--pc-fs-sm); font-weight: var(--pc-fw-semibold); color: var(--pc-text-muted); letter-spacing: var(--pc-tracking-caps); text-transform: uppercase }
+.sub-apps { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px }
+.sub-apps a { justify-content: center }
+.sub-addr { display: flex; gap: 8px; align-items: center }
+.sub-addr code { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: var(--pc-fw-medium) var(--pc-fs-sm)/1.4 var(--pc-font-mono); background: var(--pc-soft); border-radius: var(--pc-radius-control); padding: 8px 10px }
+.sub-fine { margin: 0; font-size: var(--pc-fs-sm); color: var(--pc-text-muted) }
+.sub-back { font-weight: var(--pc-fw-semibold); color: var(--pc-link); text-decoration: none }
+[hidden] { display: none !important }
+</style>
+</head>
+<body>
+<header class="sub-top"><a class="sub-brand" href="/" data-from="subscribe-page"><img src="/img/pastecal.logo.svg" alt="" width="24" height="24">pastecal</a></header>
+<main>
+  <div>
+    <h1 id="title">Add this calendar to yours</h1>
+    <p class="sub-lede">Subscribe once. New events and changes show up in your calendar on their own.</p>
+  </div>
+
+  <section class="sub-card" data-testid="subscribe-primary">
+    <a id="main" class="pc-btn pc-btn--primary pc-btn--lg sub-main" data-testid="subscribe-main" href="#">Add to my calendar</a>
+    <ol id="steps" class="sub-steps"></ol>
+  </section>
+
+  <section class="sub-card">
+    <h2 class="sub-h">Use a different app</h2>
+    <div class="sub-apps" id="apps"></div>
+    <h2 class="sub-h">Or paste the address</h2>
+    <div class="sub-addr"><code id="addr" data-testid="subscribe-address"></code><button type="button" class="pc-btn pc-btn--sm" id="copy" data-testid="subscribe-copy">Copy</button></div>
+    <p class="sub-fine">In your calendar app, choose Add calendar, then From URL (or Subscribe), and paste it.</p>
+  </section>
+
+  <p class="sub-fine">Calendar apps check for changes on their own schedule, so an update can take a few hours to appear there. The pastecal page is always current.</p>
+  <a id="back" class="sub-back" href="/" data-testid="subscribe-back">See the schedule →</a>
+</main>
+<script>
+(function () {
+  // /view/<id>/add or /@handle/<name>/add: the calendar is the address without the last part.
+  var base = location.pathname.replace(/\/(add|subscribe)\/?$/, '');
+  var feed = location.origin + base + '.ics';
+  var webcal = feed.replace(/^https?:\/\//, 'webcal://');
+  var name = 'pastecal';
+  var ua = navigator.userAgent;
+  var ipad = /iPad/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  var iphone = /iPhone|iPod/.test(ua);
+  var mac = /Macintosh/.test(ua) && !ipad;
+  var android = /Android/.test(ua);
+  var windows = /Windows/.test(ua);
+
+  function apps() {
+    return {
+      apple: { label: 'Apple Calendar', href: webcal },
+      google: { label: 'Google Calendar', href: 'https://calendar.google.com/calendar/r?cid=' + encodeURIComponent(webcal), out: true },
+      outlook: { label: 'Outlook', href: 'https://outlook.live.com/calendar/0/addfromweb?url=' + encodeURIComponent(feed) + '&name=' + encodeURIComponent(name), out: true },
+    };
+  }
+  // This device's calendar app first, with what happens after the tap.
+  var pick = (iphone || ipad) ? { app: 'apple', label: 'Add to ' + (ipad ? 'iPad' : 'iPhone') + ' Calendar', steps: ['Tap Subscribe.', 'Tap Add.'] }
+    : mac ? { app: 'apple', label: 'Add to Apple Calendar', steps: ['Calendar opens: click Subscribe.', 'Click OK.'] }
+    : windows ? { app: 'outlook', label: 'Add to Outlook', steps: ['Sign in to Outlook if asked.', 'Click Import.'] }
+    : { app: 'google', label: 'Add to Google Calendar', steps: ['Sign in to Google if asked.', 'Click Add.', android ? 'It shows in the Calendar app on your phone within a few minutes.' : 'It also shows on your phone if you use Google Calendar there.'] };
+
+  function render() {
+    var a = apps();
+    var main = document.getElementById('main');
+    main.textContent = pick.label;
+    main.href = a[pick.app].href;
+    main.dataset.app = pick.app;
+    if (a[pick.app].out) { main.target = '_blank'; main.rel = 'noopener'; }
+    document.getElementById('steps').innerHTML = pick.steps.map(function (s) { return '<li>' + s + '</li>'; }).join('');
+    document.getElementById('apps').innerHTML = Object.keys(a).filter(function (k) { return k !== pick.app; }).map(function (k) {
+      return '<a class="pc-btn pc-btn--sm" data-testid="subscribe-' + k + '" href="' + a[k].href.replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '"' + (a[k].out ? ' target="_blank" rel="noopener"' : '') + '>' + a[k].label + '</a>';
+    }).join('');
+    document.getElementById('addr').textContent = feed;
+    document.getElementById('back').href = base;
+  }
+  render();
+
+  document.getElementById('copy').addEventListener('click', function () {
+    var b = this;
+    var done = function () { b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1600); };
+    if (navigator.clipboard) navigator.clipboard.writeText(feed).then(done, function () {}); else done();
+  });
+
+  // The calendar's name, for the heading and Outlook's label. View links only (the same read the page makes).
+  var m = base.match(/^\/view\/([^/]+)$/);
+  if (m) fetch('/cal/view/' + m[1]).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+    var t = d && d.calendar && d.calendar.title;
+    if (!t) return;
+    name = t;
+    document.getElementById('title').textContent = 'Add ' + t + ' to your calendar';
+    document.title = t + ' · Add to your calendar';
+    render();
+  }).catch(function () {});
+})();
+</script>
+</body>
+</html>

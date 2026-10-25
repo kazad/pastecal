@@ -1,7 +1,7 @@
 // @ts-check
 /**
  * The view link's own chrome, driven like a visitor: the title says "View only", "Add to my
- * calendar" opens the same subscribe options Share hands out (Google, Apple, Outlook, Other),
+ * calendar" opens the view link's add page (this device's calendar app first, then Google, Apple, Outlook),
  * "Make your own" goes home, and one quiet line under the calendar says who made it. Pro trims
  * that line to "Made with pastecal"; inside an embed it is a tiny corner credit. An edit link
  * gets only small links under the calendar, never the pitch.
@@ -49,20 +49,25 @@ test('view link: View only badge, Add to my calendar with the Share subscribe UR
   await expect(page.getByTestId('last-edit-link')).toHaveCount(0);
   await expect(page.getByLabel('Quick add event')).toHaveCount(0);
 
+  // Add to my calendar opens the view link's add page, which picks this device's calendar app.
+  await expect(visible(page, 'view-add-to-cal')).toHaveAttribute('href', new RegExp(`/view/${viewId}/add$`));
   await visible(page, 'view-add-to-cal').click();
-  const menu = page.getByTestId('view-add-to-cal-menu');
-  await expect(menu).toBeVisible();
-  await expect(menu.getByRole('menuitem')).toHaveText(['Google Calendar', 'Apple Calendar', 'Outlook', 'Other calendar app']);
+  await page.waitForURL(new RegExp(`/view/${viewId}/add$`));
+  await expect(page.locator('h1')).toHaveText('Add Viewer chrome test to your calendar');
   const feed = `/view/${viewId}.ics`;
-  const webcal = await page.getByTestId('view-subscribe-apple').getAttribute('href');
-  expect(webcal).toMatch(new RegExp(`^webcal://.*${feed.replace(/\./g, '\\.')}$`));
-  expect(await page.getByTestId('view-subscribe-webcal').getAttribute('href')).toBe(webcal);
-  expect(decodeURIComponent(await page.getByTestId('view-subscribe-google').getAttribute('href') || '')).toBe(`https://calendar.google.com/calendar/r?cid=${webcal}`);
-  expect(decodeURIComponent(await page.getByTestId('view-subscribe-outlook').getAttribute('href') || '')).toContain(`addfromweb?url=http://localhost`);
-  expect(decodeURIComponent(await page.getByTestId('view-subscribe-outlook').getAttribute('href') || '')).toContain(feed);
-  await page.keyboard.press('Escape');
-  await page.mouse.click(700, 500);
-  await expect(menu).toHaveCount(0);
+  // The big button is this device's app (the test browser's user agent decides which); the other two are listed.
+  const main = page.getByTestId('subscribe-main');
+  const app = await main.getAttribute('data-app');
+  const hrefs = { [app]: await main.getAttribute('href') };
+  for (const k of ['google', 'apple', 'outlook'].filter((k) => k !== app)) hrefs[k] = await page.getByTestId(`subscribe-${k}`).getAttribute('href');
+  const esc = feed.replace(/\./g, '\\.');
+  expect(hrefs.apple).toMatch(new RegExp(`^webcal://.*${esc}$`));
+  expect(decodeURIComponent(hrefs.google || '')).toMatch(new RegExp(`^https://calendar\\.google\\.com/calendar/r\\?cid=webcal://.*${esc}$`));
+  expect(decodeURIComponent(hrefs.outlook || '')).toContain(feed);
+  expect(decodeURIComponent(hrefs.outlook || '')).toContain('name=Viewer chrome test');
+  await expect(page.getByTestId('subscribe-address')).toHaveText(new RegExp(`${feed.replace(/\./g, '\\.')}$`));
+  await page.getByTestId('subscribe-back').click();
+  await page.waitForFunction(() => window.scheduleObj && document.querySelector('.e-month-view .e-appointment'), null, { timeout: 20_000 });
 
   const own = visible(page, 'make-own');
   await expect(own).toHaveAttribute('href', '/');
@@ -94,10 +99,9 @@ test('phone: the view link shows the badge and Add to my calendar in its header,
   const { viewId } = await seed(request);
   const { ctx, page } = await open(browser, `/view/${viewId}?backend=cf`, { width: 390, height: 844 });
   await expect(page.getByTestId('view-only-badge-mobile')).toBeVisible();
-  await visible(page, 'view-add-to-cal').click();
-  await expect(page.getByTestId('view-subscribe-google')).toBeVisible();
-  const m = await page.getByTestId('view-add-to-cal-menu').boundingBox();
-  expect(m && m.x >= 0 && m.x + m.width <= 390, 'the menu fits the screen').toBe(true);
+  const add = await visible(page, 'view-add-to-cal').boundingBox();
+  expect(add && add.x >= 0 && add.x + add.width <= 390, 'the button fits the screen').toBe(true);
+  await expect(visible(page, 'view-add-to-cal')).toHaveAttribute('href', new RegExp(`/view/${viewId}/add$`));
   await expect(visible(page, 'make-own-mobile')).toHaveAttribute('data-from', 'view-header');
   await expect(page.getByTestId('view-footer-cta')).toHaveText('Make one like this →');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'no sideways scroll').toBe(true);
@@ -134,8 +138,8 @@ test('view link: second visit shows the subscribe hint once; opening it ends it'
   await page.reload(); await page.waitForFunction(() => window.scheduleObj);
   await expect(visible(page, 'subscribe-nudge')).toContainText('phone calendar');
   await visible(page, 'subscribe-nudge').locator('.pc-addcal-nudge-text').click();
-  await expect(visible(page, 'view-add-to-cal-menu')).toBeVisible();        // it opens the real menu
-  await page.reload(); await page.waitForFunction(() => window.scheduleObj);
+  await page.waitForURL(new RegExp(`/view/${viewId}/add$`));                // it opens the add page
+  await page.goto(`/view/${viewId}?backend=cf`); await page.waitForFunction(() => window.scheduleObj);
   await expect(visible(page, 'subscribe-nudge')).toHaveCount(0);            // and never shows again
   await ctx.close();
 });
@@ -164,4 +168,27 @@ test('view link updates live: the editor adds an event, the viewer sees it withi
   expect(await viewer.page.evaluate(() => window.__noReload), 'the viewer did not reload').toBe(true);
   await editor.ctx.close();
   await viewer.ctx.close();
+});
+
+// Share's "Add to calendar app" is one link: the add page of the READ-ONLY view, never the edit link
+// (it goes to Google, Microsoft and the OS). Replaces test/e2e/subscribe-links.spec.js (Oct 25 2026).
+test('share: Add to calendar app is the view link\'s add page, never the edit link', async ({ browser, request }) => {
+  const { id, viewId } = await seed(request);
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await ctx.addInitScript(() => { window.__TEST__ = true; });
+  await ctx.route('**/*', (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
+  const page = await ctx.newPage();
+  await page.goto(`/${id}?backend=cf`);
+  await page.waitForFunction(() => window.__appMounted && window.scheduleObj, null, { timeout: 20_000 });
+  await page.getByTestId('share-pill-more').click();
+  const row = page.getByTestId('share-subscribe-copy');
+  await expect(row).toBeVisible();
+  const link = (await row.getAttribute('title') || '').replace(/^Copy /, '');
+  expect(link).toMatch(new RegExp(`/view/${viewId}/add$`));
+  expect(link).not.toContain(id);
+  const res = await request.get(new URL(link).pathname);
+  expect(res.status()).toBe(200);
+  expect(res.headers()['x-robots-tag']).toBe('noindex');
+  expect(await res.text()).toContain('data-testid="subscribe-main"');
+  await ctx.close();
 });

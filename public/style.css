@@ -756,20 +756,14 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-make-own { font-size: var(--pc-fs-sm); font-weight: var(--pc-fw-medium); color: var(--pc-link); white-space: nowrap }
 .pc-make-own:hover { color: var(--pc-link-hover); text-decoration: underline }
 .pc-addcal { position: relative }
-.pc-addcal-btn { padding: 0 10px 0 12px; font-size: var(--pc-fs-sm) }
-.pc-addcal-btn:hover:not(:disabled), .pc-addcal-btn[aria-expanded="true"] { border-color: var(--pc-link); background: var(--pc-hover) }
-.pc-addcal-btn .pc-addcal-caret { width: 14px; height: 14px; color: var(--pc-text-muted) }
-.pc-addcal-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: var(--pc-z-menu); width: 240px; padding: 6px;
-  border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); background: var(--pc-bg); box-shadow: var(--pc-shadow-md) }
-.pc-addcal-hint { margin: 4px 8px 6px; font-size: var(--pc-fs-sm); line-height: var(--pc-lh-tight); color: var(--pc-text-muted) }
-.pc-addcal-menu a { display: block; padding: 8px 10px; border-radius: var(--pc-radius-sm); font-size: var(--pc-fs-md); color: var(--pc-text) }
-.pc-addcal-menu a:hover, .pc-addcal-menu a:focus-visible { background: var(--pc-hover); color: var(--pc-link); outline: none }
+.pc-share-hint { margin: 6px 0 0; font-size: var(--pc-fs-sm); color: var(--pc-text-muted) }
+.pc-addcal-btn { padding: 0 12px; font-size: var(--pc-fs-sm); text-decoration: none }
+.pc-addcal-btn:hover { border-color: var(--pc-link); background: var(--pc-hover) }
 /* Phone: the second header row */
 .pc-viewer-row { display: flex; align-items: center; justify-content: space-between; gap: 8px }
 .pc-viewer-row .pc-view-badge { margin-left: 0 }
-.pc-viewer-row .pc-addcal-menu { right: auto; left: 50%; transform: translateX(-50%) }
 .pc-viewer-row .pc-viewer-actions { gap: 10px; min-width: 0 }
-.pc-viewer-row .pc-addcal-btn { padding: 0 8px 0 10px }
+.pc-viewer-row .pc-addcal-btn { padding: 0 10px }
 @media (max-width: 380px) { .pc-viewer-row .pc-view-badge { display: none } .pc-viewer-row { justify-content: flex-end } }
 
 /* Under the calendar: a view link's pitch, Pro's credit, an embed's corner, an edit link's links.
@@ -1299,6 +1293,7 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
 .pc-toast-x svg { width: 16px; height: 16px }
 /* Returning viewers: one small hint under "Add to my calendar", pointing up at it. */
 .pc-addcal { position: relative }
+.pc-share-hint { margin: 6px 0 0; font-size: var(--pc-fs-sm); color: var(--pc-text-muted) }
 .pc-addcal-nudge { position: absolute; top: calc(100% + 10px); right: 0; z-index: 30; display: flex; align-items: center; gap: 4px; width: max-content; max-width: min(280px, calc(100vw - 32px));
   padding: 8px 6px 8px 12px; border-radius: var(--pc-radius-control); background: var(--pc-text); color: var(--pc-bg); box-shadow: var(--pc-shadow-md); font: var(--pc-fw-medium) var(--pc-fs-sm)/1.35 var(--pc-font) }
 .pc-addcal-nudge::before { content: ""; position: absolute; top: -5px; right: 22px; width: 10px; height: 10px; background: inherit; transform: rotate(45deg) }
