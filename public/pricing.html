@@ -102,6 +102,7 @@ td small { display: block; color: var(--muted); font-size: 13px; font-weight: 40
    off (Pro can't be bought yet), the button joins the Pro beta list and Get Pro is gone. */
 html[data-billing="pending"] .plan.pro .cta, html[data-billing="pending"] #get-pro { visibility: hidden }
 html[data-billing="off"] #get-pro { display: none }
+html:not([data-billing="off"]) .if-billing-off, html:not([data-billing="on"]) .if-billing-on { display: none }
 .soon { display: inline-block; font-size: 11px; font-weight: 700; color: var(--soon); background: var(--soon-bg); border-radius: 999px; padding: 1px 7px; margin-left: 6px; vertical-align: 1px; white-space: nowrap }
 .swipe { display: none; font-size: 14px; color: var(--muted); margin: -6px 0 10px }
 .legend { font-size: 14px; color: var(--muted); margin: 10px 0 0 }
@@ -403,7 +404,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
     <details><summary>Why does Pro say Beta?</summary><p>Pro is in beta: features may change. Everything on the Pro Single card works today, except what's marked in development.</p></details>
     <details><summary>Does everyone I share with need to pay?</summary><p>No. You pay for the calendar, yearly or monthly. Everyone you share it with stays free.</p></details>
     <details><summary>Do I need an account for Pro?</summary><p>Only you do, so we know who owns the calendar, and it's made for you when you pay, from the email you give Stripe. Later you sign in with a link we email you, with no password. Nobody you share with ever needs an account.</p></details>
-    <details><summary>Is there a free trial?</summary><p>No. Pro Single is $24 a year or $2.99 a month, paid through Stripe, and renews automatically until you cancel.</p></details>
+    <details><summary>Is there a free trial?</summary><p>Yes: 30 days of Pro, free, with no card. <span class="if-billing-off">While Pro is in beta, join the beta and we’ll email you when your trial is ready.</span><span class="if-billing-on">Start it from any saved calendar’s Share panel.</span> When it ends you choose: keep Pro ($24 a year or $2.99 a month), or go back to a free calendar.</p></details>
     <details><summary>How do I cancel?</summary><p>Sign in and open Manage billing. You can cancel there any time.</p></details>
     <details><summary>What happens if I cancel?</summary><p>Pro lasts until the end of the period you paid for. Then your calendar stays, with everything in it, and goes back to the free plan, unlocked.</p></details>
     <details><summary>What if a payment fails?</summary><p>Stripe retries it, and your calendar stays locked meanwhile. If the subscription ends unpaid, the calendar goes back to the free plan, unlocked, with all its events.</p></details>
