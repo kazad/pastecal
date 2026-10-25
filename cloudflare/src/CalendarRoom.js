@@ -29,10 +29,11 @@
  * rate-limits it per IP). PUT /cal/<id>/import replaces everything (secret required).
  *
  * Storage (this object's own SQLite): meta(k, v), events(k, pos, data), history(v, at,
- * source, commands).
+ * source, commands), and the stats_* tables (counts only; see RoomInsight.js).
  */
 import { DurableObject } from 'cloudflare:workers';
 import EventStore from '../../public/services/EventStore.js';
+import { initInsight, countHit, insightRoute, INSIGHT_ROUTES } from './RoomInsight.js';
 
 export const LIMITS = {
     savesPerMinute: 60,          // per calendar: far above people, far below a loop
@@ -58,6 +59,9 @@ export class CalendarRoom extends DurableObject {
             this.sql.exec(`CREATE TABLE IF NOT EXISTS history (v INTEGER PRIMARY KEY, at INTEGER, source TEXT, commands TEXT, entry TEXT)`);
             try { this.sql.exec(`ALTER TABLE history ADD COLUMN entry TEXT`); } catch (_) {}
             this.sql.exec(`CREATE TABLE IF NOT EXISTS authors (uid TEXT PRIMARY KEY, first_seen INTEGER, last_seen INTEGER, edit_count INTEGER, created_here INTEGER, days TEXT)`);
+            // Stats tables (RoomInsight.js): additive only. If they can't be made, the calendar still
+            // opens; it just isn't counted (countHit is skipped while statsReady is false).
+            try { initInsight(this.sql); this.statsReady = true; } catch (e) { this.statsReady = false; console.error('[stats] init failed:', e && e.message); }
             this.load();
         });
     }
@@ -231,6 +235,16 @@ export class CalendarRoom extends DurableObject {
         const url = new URL(request.url);
         const viewId = url.searchParams.get('view') || request.headers.get('X-View-Id');
         const isViewOnly = !!viewId;
+        // Stats (RoomInsight.js): the dump is internal-only (Worker code, dev mode). Checked before the
+        // GET branch, which answers the calendar for any suffix.
+        const suffix = url.pathname.split('/')[3] || '';
+        if (INSIGHT_ROUTES.has(suffix)) {
+            if (url.hostname !== 'internal' || isViewOnly) return new Response('not found', { status: 404 });
+            return insightRoute(this, suffix, request);
+        }
+        // X-PC-Hit is set only by the Worker (it strips any a client sent). Not awaited: counting runs
+        // alongside the response and can never fail or delay a read.
+        if (this.statsReady && request.headers.get('X-PC-Hit')) countHit(this, request).catch((e) => console.error('[stats] count failed:', e && e.message));
         if (request.headers.get('Upgrade') === 'websocket') {
             const [client, server] = Object.values(new WebSocketPair());
             this.ctx.acceptWebSocket(server);

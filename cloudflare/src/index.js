@@ -14,10 +14,16 @@
  *   POST /cal/<id>                Create empty calendar (rate-limited per IP)
  *   PUT  /cal/<id>/import         Full calendar replace (Bearer IMPORT_SECRET)
  *   PUT  /cal/<id>/from-firebase  Firebase sync write (same auth)
+ *   GET  /api/admin/cal/<id>/stats-dump  stats rows, for tests (dev mode + secret only; Insight.js)
+ *
+ * Stats counting (Insight.js, RoomInsight.js): calendar reads by non-bots (GET /cal/<id>, its /ws,
+ * /cal/view/<id> and its /ws) are marked as views and .ics fetches as follows; the room counts them.
+ * Nothing reads the counts in production yet.
  */
 import { ICSService } from './ICSService.js';
 import { SlugService } from './SlugService.js';
 import { handleCollect } from './Collector.js';
+import { handleInsight, hitHeaders, withoutSourceParams } from './Insight.js';
 export { CalendarRoom } from './CalendarRoom.js';
 export { CalendarDirectory } from './CalendarDirectory.js';
 export { Waitlist } from './Waitlist.js';
@@ -42,6 +48,22 @@ function publicLookup(out) {
 
 function getDirectory(env) {
     return env.DIRECTORY ? env.DIRECTORY.get(env.DIRECTORY.idFromName('global')) : null;
+}
+
+// A request to forward to a room, without any X-PC-* header the client sent (rooms trust them).
+// `hit` is set only from hitHeaders (stats, Insight.js). The Referer is dropped too: rooms never use
+// it, and stats get only the category hitHeaders derived from it.
+function forRoom(request, url = request.url, hit = null) {
+    const headers = new Headers(request.headers);
+    for (const k of [...headers.keys()]) if (k.toLowerCase().startsWith('x-pc-')) headers.delete(k);
+    headers.delete('Referer');
+    if (hit) for (const [k, v] of Object.entries(hit)) headers.set(k, v);
+    return new Request(url, new Request(request, { headers }));
+}
+
+// hitHeaders, but a failure there only skips counting: it never fails the read.
+function hitFor(request, env, kind) {
+    try { return hitHeaders(request, env, kind); } catch (e) { console.error('[stats] hit headers failed:', e && e.message); return null; }
 }
 
 function withCors(response) {
@@ -92,7 +114,10 @@ export default {
             }
 
             const room = env.CALENDARS.get(env.CALENDARS.idFromName(targetId));
-            const roomRes = await room.fetch(new Request(`http://internal/cal/${encodeURIComponent(targetId)}`));
+            // Counted as a follow inside the room, during the read it already does (Insight.js hitHeaders).
+            const hit = hitFor(request, env, 'follow');
+            const roomRes = await room.fetch(new Request(`http://internal/cal/${encodeURIComponent(targetId)}`, hit ? { headers: {
+                ...hit, 'CF-Connecting-IP': request.headers.get('CF-Connecting-IP') || '', 'User-Agent': request.headers.get('User-Agent') || '' } } : {}));
             if (!roomRes.ok) return new Response('Calendar not found', { status: 404 });
             const roomData = await roomRes.json();
             const cal = roomData?.calendar;
@@ -234,6 +259,10 @@ export default {
             return withCors(await dir.fetch('http://internal/stats'));
         }
 
+        // Stats test hook (dev mode + secret only).
+        const insight = await handleInsight(request, env, url);
+        if (insight) return insight;
+
         // 5. Read-only views routing: /cal/view/:viewId/ws and /cal/view/:viewId
         const viewMatch = path.match(/^\/cal\/view\/([^/]+)(\/ws)?$/);
         if (viewMatch) {
@@ -254,7 +283,7 @@ export default {
             const subPath = viewMatch[2] === '/ws' ? '/ws' : '';
             const roomUrl = new URL(`http://internal/cal/${encodeURIComponent(targetId)}${subPath}`);
             roomUrl.searchParams.set('view', viewId);
-            return withCors(await room.fetch(new Request(roomUrl, request)));
+            return withCors(await room.fetch(forRoom(request, roomUrl, request.method === 'GET' ? hitFor(request, env, 'view') : null)));
         }
 
         // 6. Regular /cal/<id> endpoints
@@ -282,7 +311,8 @@ export default {
             }
 
             const room = env.CALENDARS.get(env.CALENDARS.idFromName(id));
-            return withCors(await room.fetch(request));
+            const hit = request.method === 'GET' && (!m[2] || m[2] === '/ws') ? hitFor(request, env, 'view') : null;
+            return withCors(await room.fetch(forRoom(request, withoutSourceParams(request.url), hit)));
         }
 
         // 7. Static assets & Single Page App rewrites
