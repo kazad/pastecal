@@ -2180,9 +2180,13 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 :root[data-theme="dark"] .e-quick-popup-wrapper .e-popup-footer,
 :root[data-theme="dark"] .e-more-popup-wrapper,
 :root[data-theme="dark"] .e-schedule-dialog.e-dialog,
+:root[data-theme="dark"] .e-quick-dialog.e-dialog,
 :root[data-theme="dark"] .e-schedule-dialog .e-dlg-header-content,
 :root[data-theme="dark"] .e-schedule-dialog .e-dlg-content,
 :root[data-theme="dark"] .e-schedule-dialog .e-footer-content,
+:root[data-theme="dark"] .e-quick-dialog .e-dlg-header-content,
+:root[data-theme="dark"] .e-quick-dialog .e-dlg-content,
+:root[data-theme="dark"] .e-quick-dialog .e-footer-content,
 :root[data-theme="dark"] .e-dropdown-popup,
 :root[data-theme="dark"] .e-ddl.e-popup,
 :root[data-theme="dark"] .e-ddl.e-popup .e-list-item:not(.e-active):not(.e-hover):not(.e-item-focus),
@@ -2200,6 +2204,7 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 :root[data-theme="dark"] .e-quick-popup-wrapper,
 :root[data-theme="dark"] .e-more-popup-wrapper,
 :root[data-theme="dark"] .e-schedule-dialog.e-dialog,
+:root[data-theme="dark"] .e-quick-dialog.e-dialog,
 :root[data-theme="dark"] .e-dropdown-popup,
 :root[data-theme="dark"] .e-ddl.e-popup,
 :root[data-theme="dark"] .e-datetimepicker.e-popup,
@@ -2209,4 +2214,6 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 }
 :root[data-theme="dark"] .e-schedule-dialog .e-dlg-header-content,
 :root[data-theme="dark"] .e-schedule-dialog .e-dlg-header,
-:root[data-theme="dark"] .e-schedule-dialog .e-dlg-content { color: var(--pc-text) }
+:root[data-theme="dark"] .e-schedule-dialog .e-dlg-content,
+:root[data-theme="dark"] .e-quick-dialog .e-dlg-header-content,
+:root[data-theme="dark"] .e-quick-dialog .e-dlg-content { color: var(--pc-text) }

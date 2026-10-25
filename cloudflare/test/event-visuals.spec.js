@@ -47,6 +47,14 @@ test('event text is dark on a light color and white on a dark one, in month, wee
   const header = page.locator('.e-quick-popup-wrapper .e-event-popup .e-popup-header');
   await expect(header).toBeVisible();
   expect(await header.locator('.e-subject').evaluate((el) => getComputedStyle(el).color)).toBe(INK);
+
+  // Opened from the agenda, where the chip has no fill, the header still pairs fill and text.
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => { scheduleObj.selectedDate = new Date(2026, 9, 13); scheduleObj.currentView = 'Agenda'; });
+  await page.locator('.e-agenda-view .e-appointment', { hasText: 'Orange thing' }).click();
+  await expect(header).toBeVisible();
+  expect(await header.evaluate((el) => [getComputedStyle(el).backgroundColor, getComputedStyle(el.querySelector('.e-subject')).color]))
+    .toEqual(['rgb(255, 152, 0)', INK]);
 });
 
 test('an all-day event shows no time, on its chip or in search', async ({ page }) => {
@@ -84,4 +92,13 @@ test('dark mode: the quick popup and editor use the app surface and hairline, no
   const cal = page.locator('.e-datepicker.e-popup-wrapper .e-calendar');
   await expect(cal).toBeVisible();
   expect(await cal.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(surface);
+  await dialog.locator('.e-dlg-closeicon-btn').click();
+  await expect(dialog).toBeHidden();
+
+  // "This event or the entire series?" is a dialog of its own.
+  await page.evaluate((VM) => eval(VM).store().dispatch({ type: 'add', event: { title: 'Weekly', start: new Date(2026, 9, 13, 14), end: new Date(2026, 9, 13, 15), type: 2, recurrencerule: 'FREQ=WEEKLY;COUNT=3' } }), VM);
+  await page.locator('.e-month-view .e-appointment', { hasText: 'Weekly' }).first().dblclick();
+  const series = page.locator('.e-quick-dialog.e-popup-open');
+  await expect(series).toBeVisible();
+  expect(await series.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(surface);
 });
