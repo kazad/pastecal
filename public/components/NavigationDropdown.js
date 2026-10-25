@@ -1,5 +1,5 @@
 // NavigationDropdown component
-// "New calendar", then your calendars and recently visited ones, with pin/remove controls,
+// "New calendar" (on the homepage draft: "Start over"), then your calendars and recently visited ones, with pin/remove controls,
 // then the Pro account section at the bottom.
 //
 // Only Pro owners have accounts, so there is no sign-in button anywhere else: free users never
@@ -67,7 +67,7 @@ const NAV_NETWORK_ERROR = 'We couldn’t reach pastecal. Check your connection a
 const NavigationDropdown = {
     template: /* html */ `
         <div class="pc-nav absolute top-full left-0 mt-2 bg-1 shadow-xl border border-color-default overflow-hidden z-50">
-            <!-- Starts a fresh draft on the homepage. Hidden on the draft itself: you're already on a new one. -->
+            <!-- Starts a fresh draft on the homepage. On the draft itself, "Start over" (below) takes its place. -->
             <a v-if="!onDraft" href="/" @click.prevent="$emit('go-homepage')" data-testid="nav-new"
                 class="pc-nav-row pc-nav-new flex items-center text-color-2 hover:bg-theme-hover transition-colors cursor-pointer group">
                 <span class="pc-nav-plus">
@@ -78,6 +78,18 @@ const NavigationDropdown = {
                     <span class="block text-xs text-color-1">No sign-up. Share it when it's ready.</span>
                 </span>
             </a>
+            <!-- On the draft itself: wipe it back to a fresh blank draft (events, title, notes, colors).
+                 One Cmd+Z, or the toast's Undo, brings it all back (app.js startOver). -->
+            <button v-else type="button" @click="$emit('start-over')" data-testid="nav-start-over"
+                class="pc-nav-row pc-nav-new flex items-center w-full text-left text-color-2 hover:bg-theme-hover transition-colors cursor-pointer group">
+                <span class="pc-nav-plus" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
+                </span>
+                <span class="min-w-0">
+                    <span class="block font-semibold group-hover:text-blue-500 transition-colors">Start over</span>
+                    <span class="block text-xs text-color-1">Clear this draft and begin again. Undo brings it back.</span>
+                </span>
+            </button>
             <!-- Help lives here, not as a header icon: the header keeps the calendar's own actions -->
             <a href="/help" target="_blank" rel="noopener" data-testid="nav-help"
                 class="pc-nav-row flex items-center w-full text-left text-color-2 hover:bg-theme-hover transition-colors cursor-pointer group">
@@ -197,7 +209,7 @@ const NavigationDropdown = {
         </div>
     `,
     props: ['recentCalendars', 'onDraft'],
-    emits: ['go-homepage', 'toggle-pin', 'remove-recent', 'open-stats', 'open-help'],
+    emits: ['go-homepage', 'start-over', 'toggle-pin', 'remove-recent', 'open-stats', 'open-help'],
     data() { return { acct: AccountMenu.state }; },
     mounted() { AccountMenu.load(); },     // never blocks opening: the section shows its own loading line
     computed: {

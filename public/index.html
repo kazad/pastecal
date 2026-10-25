@@ -306,7 +306,7 @@
                         </svg>
                     </div>
                     <navigation-dropdown v-if="showRecents" :recent-calendars="recentCalendars" :on-draft="!isExisting"
-                        @go-homepage="goToHomepage" @open-help="showRecents = false; toggleHelp()" @toggle-pin="togglePin" @remove-recent="removeRecent" @open-stats="openStatsFor"
+                        @go-homepage="goToHomepage" @start-over="startOver" @open-help="showRecents = false; toggleHelp()" @toggle-pin="togglePin" @remove-recent="removeRecent" @open-stats="openStatsFor"
                         class="mt-2"></navigation-dropdown>
                 </div>
 
@@ -415,7 +415,7 @@
         <!-- Mobile FAB removed - mobile menu will open the central quick-add dialog directly -->
 
         <!-- Single dialog instance used by button triggers -->
-        <quick-add-dialog ref="quickAddDialog" :colors="COLORS" :labels="displayTypeLabels" @event-created="handleQuickAddEvent"></quick-add-dialog>
+        <quick-add-dialog ref="quickAddDialog" :colors="COLORS" :labels="displayTypeLabels" :named="namedTypes" @event-created="handleQuickAddEvent"></quick-add-dialog>
 
         <topbar class="hidden md:flex justify-between items-center pb-1 md:pb-3 text-sm">
             <!-- Left section -->
@@ -450,7 +450,7 @@
 
                         <!-- Navigation dropdown component -->
                         <navigation-dropdown v-if="showRecents" :recent-calendars="recentCalendars" :on-draft="!isExisting"
-                            @go-homepage="goToHomepage" @open-help="showRecents = false; toggleHelp()" @toggle-pin="togglePin" @remove-recent="removeRecent" @open-stats="openStatsFor" v-cloak>
+                            @go-homepage="goToHomepage" @start-over="startOver" @open-help="showRecents = false; toggleHelp()" @toggle-pin="togglePin" @remove-recent="removeRecent" @open-stats="openStatsFor" v-cloak>
                         </navigation-dropdown>
                     </div>
                 </logo>
