@@ -543,22 +543,29 @@ export class CalendarRoom extends DurableObject {
         if (!this.env.DIRECTORY || !actualSlug) return;
         try {
             const dir = this.env.DIRECTORY.get(this.env.DIRECTORY.idFromName('global'));
-            // Never re-point a name that leads to a LOCKED calendar elsewhere. Registering is an
-            // upsert, so without this anyone could create a calendar carrying a locked calendar's
-            // publicViewId (it is in the view URL) and take over its /view/ link -- or create a
-            // case variant of its name and take over the name's lookups.
+            // Never re-point a name that leads to another live calendar. Registering is an upsert, so
+            // without this anyone could create a calendar carrying another calendar's publicViewId (it is
+            // in the view URL) and take over its /view/ link and feed -- or create a case variant of its
+            // name and take over the name's lookups. (Red team, Oct 24 2026: free calendars were open to this.)
             const target = targetId || actualSlug;
             // Fail closed: if we can't tell where the name leads now, or whether that calendar is locked,
             // leave the directory alone.
             const cur = await (await dir.fetch(`http://internal/lookup?slug=${encodeURIComponent(actualSlug)}`)).json().catch(() => null);
             if (!cur || typeof cur.found !== 'boolean') { console.warn(`[CalendarRoom] not registering ${actualSlug}: lookup unreadable`); return; }
             const curTarget = cur.found ? (cur.targetId || cur.actualSlug) : null;
-            if (curTarget && curTarget !== target && this.env.CALENDARS) {
+            if (curTarget && curTarget !== target) {
+                // The name leads to another calendar. Re-point it only if that calendar is gone (a stale entry).
+                // A view id never moves to a different calendar, even when forced: it is in a public URL, and
+                // whoever knows it could otherwise take over that /view/ page and its feed. An edit name may be
+                // reclaimed (force, from locking this calendar) from an unlocked case variant, never from a locked one.
+                if (!this.env.CALENDARS) return;
                 const st = await this.env.CALENDARS.get(this.env.CALENDARS.idFromName(curTarget))
                     .fetch(`http://internal/cal/${encodeURIComponent(curTarget)}/lock-status`);
-                const locked = st.ok ? (await st.json().catch(() => null))?.locked : st.status === 404 ? false : null;
-                if (locked !== false) {
-                    console.warn(`[CalendarRoom] not re-pointing ${actualSlug}: it leads to a ${locked ? 'locked' : 'possibly locked'} calendar`);
+                const gone = st.status === 404;
+                const locked = st.ok ? (await st.json().catch(() => null))?.locked : null;
+                const reclaim = force && !isReadOnly && locked === false;
+                if (!gone && !reclaim) {
+                    console.warn(`[CalendarRoom] not re-pointing ${actualSlug}: it leads to another calendar${locked ? ' (locked)' : ''}`);
                     return;
                 }
             }

@@ -17,7 +17,7 @@ superset of what production runs). Production before launch: Worker `pastecal-sy
 |---|---|---|
 | 0 | Before the day: Email Sending onboarded (b1-b3); sandbox loop proven (a) | (a), (b) |
 | 1 | Pre-checks: launch-prep, clean, code == 8f86dd1, live version 71aaca32 (or a later secret-only change), no dev/staging secret on production | (e1) |
-| 2 | Stripe LIVE catalog: `pro_yearly` $24/yr + `pro_monthly` $2.99/mo (reused if present, amount/interval checked); Dashboard checklists: activation, payment methods **card only**, portal (privacy/terms URLs, business name pastecal), restricted key | (c1)-(c4) |
+| 2 | Stripe LIVE catalog: `plus_yearly` $29/yr (the Plus plan) + `pro_monthly` $2.99/mo (reused if present, amount/interval checked); Dashboard checklists: activation, payment methods **card only**, portal (privacy/terms URLs, business name pastecal), restricted key | (c1)-(c4) |
 | 3 | `wrangler deploy --dry-run --env=""`, bindings checked | (e1) |
 | 4 | Deploy launch-prep to pastecal-sync (**billing off**), `scripts/pro-smoke.sh --expect-deployed` | (e2), (e3) |
 | 5 | Secrets: `STRIPE_SECRET_KEY` (wrangler hidden prompt), price ids, `CONTACT_NOTIFY_TO` (hidden prompt), then the live webhook endpoint (8 events) and `STRIPE_WEBHOOK_SECRET` **last** (piped from `stripe`, never shown); `pro-smoke.sh --expect-billing` | (d) |
@@ -50,7 +50,7 @@ The trial funnel (first-party, EU included): `./scripts/stats.sh trials -d 7`.
 
 ---
 
-Prices: **$24/year and $2.99/month, with a 30-day trial (no card) per calendar** (`POST /api/pro/trial`).
+Prices: **Plus $29/year (live lookup key `plus_yearly`; the dev/staging test prices below are still the old `pro_yearly` $24) and $2.99/month, with a 30-day trial (no card) per calendar** (`POST /api/pro/trial`).
 
 The sections below are the reference for each step; every command fits on one line and is safe to paste into zsh.
 
@@ -286,14 +286,14 @@ Do b1–b3 **before the deploy in (e)**. Otherwise the first sign-in emails fail
 ```zsh
 stripe switch acct_1CN6CpEBwAK7H2Dz --live
 stripe whoami
-stripe prices list --live --lookup-keys=pro_yearly --lookup-keys=pro_monthly 2>/dev/null | jq -r '.data[] | [.id, .lookup_key, .unit_amount, .recurring.interval] | @tsv'
+stripe prices list --live --lookup-keys=plus_yearly --lookup-keys=pro_monthly 2>/dev/null | jq -r '.data[] | [.id, .lookup_key, .unit_amount, .recurring.interval] | @tsv'
 ```
 
 `stripe whoami` must say `live`. Create the prices only if the list is empty:
 
 ```zsh
 PROD=$(stripe products create --live --name="pastecal Pro" --description="Lock your calendar: only you and people with your editor key can edit." 2>/dev/null | jq -er .id) && echo $PROD
-stripe prices create --live --product="$PROD" --currency=usd --unit-amount=2400 "--recurring[interval]=year" --lookup-key=pro_yearly --nickname="Pro yearly" 2>/dev/null | jq -r .id
+stripe prices create --live --product="$PROD" --currency=usd --unit-amount=2900 "--recurring[interval]=year" --lookup-key=plus_yearly --nickname="Plus yearly" 2>/dev/null | jq -r .id
 stripe prices create --live --product="$PROD" --currency=usd --unit-amount=299 "--recurring[interval]=month" --lookup-key=pro_monthly --nickname="Pro monthly" 2>/dev/null | jq -r .id
 ```
 
@@ -353,7 +353,7 @@ pbpaste | wr secret put STRIPE_SECRET_KEY && pbcopy < /dev/null
 d2 and d3. The price ids, looked up by lookup key. Price ids are not secret:
 
 ```zsh
-Y=$(stripe prices list --live --lookup-keys=pro_yearly 2>/dev/null | jq -er '.data[0].id') && echo $Y && print -r -- "$Y" | wr secret put STRIPE_PRICE_PRO_YEARLY
+Y=$(stripe prices list --live --lookup-keys=plus_yearly 2>/dev/null | jq -er '.data[0].id') && echo $Y && print -r -- "$Y" | wr secret put STRIPE_PRICE_PRO_YEARLY
 M=$(stripe prices list --live --lookup-keys=pro_monthly 2>/dev/null | jq -er '.data[0].id') && echo $M && print -r -- "$M" | wr secret put STRIPE_PRICE_PRO_MONTHLY
 UY=$(stripe prices list --live --lookup-keys=unlimited_yearly 2>/dev/null | jq -er '.data[0].id') && echo $UY && print -r -- "$UY" | wr secret put STRIPE_PRICE_UNLIMITED_YEARLY
 UM=$(stripe prices list --live --lookup-keys=unlimited_monthly 2>/dev/null | jq -er '.data[0].id') && echo $UM && print -r -- "$UM" | wr secret put STRIPE_PRICE_UNLIMITED_MONTHLY

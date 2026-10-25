@@ -13,7 +13,7 @@
 //   POST /api/pro/trial {calendarId}   -> {ok, trialEnd}      30 days free, no card (409 trial-used-calendar/-account)
 //   POST /api/pro/lapsed-mode {calendarId, mode} -> {ok, mode, paused}   'readonly' | 'open', after Pro ends
 //   POST /api/auth/signout
-//   GET  /api/pro/config               -> {billing}  false: every Pro offer is "Join the Pro beta" (ProBetaJoin)
+//   GET  /api/pro/config               -> {billing}  false: every Pro offer is "Join the beta" (ProBetaJoin)
 //   POST /api/waitlist {email, plan:'pro', use, page, website} -> {ok, returning}   the Pro beta list
 // Analytics get the step and the reason only: never the email, the calendar name or a key.
 
@@ -145,16 +145,16 @@ const ProBilling = {
     },
 };
 
-// "Join the Pro beta": while billing is off, this stands in for Try Pro free / Get Pro / Lock this calendar.
+// "Join the beta": while billing is off, this stands in for Try Pro free / Get Pro / Lock this calendar.
 // The button opens an email field; the address goes on the Pro waitlist (plan 'pro'), with the calendar's
 // path as the page it came from. Same honeypot and email check as the pricing page's waitlist form.
-const PRO_BETA_DONE = 'You’re on the list. We’ll email you when your Pro beta trial is ready.';
+const PRO_BETA_DONE = 'You’re on the list. We’ll email you when your trial is ready.';
 const ProBetaJoin = {
     template: /* html */ `
         <div class="pc-beta-join" data-testid="pro-beta-join">
-            <button v-if="step === 'idle'" type="button" :class="btnClass" @click="open" data-testid="pro-beta-btn">Join the Pro beta</button>
+            <button v-if="step === 'idle'" type="button" :class="btnClass" @click="open" data-testid="pro-beta-btn">Join the beta</button>
             <form v-else-if="step === 'email'" class="pc-pro-email" @submit.prevent="submit" novalidate data-testid="pro-beta-form">
-                <label :for="inputId">Your email. We’ll write when your Pro beta trial is ready.</label>
+                <label :for="inputId">Your email. We’ll write when your trial is ready.</label>
                 <div class="pc-pro-row">
                     <input :id="inputId" ref="email" type="email" v-model.trim="email" required autocomplete="email" placeholder="you@example.com"
                         data-hj-suppress data-clarity-mask="true" data-testid="pro-beta-email">
@@ -190,7 +190,7 @@ const ProBetaJoin = {
                 const page = this.calendarId ? '/' + this.calendarId : location.pathname;
                 const r = await proApi('POST', '/api/waitlist', { email: this.email, plan: 'pro', use: 'Pro beta', page, website: this.website });
                 if (r.status === 200 && r.data.ok) {
-                    this.done = r.data.returning ? 'You’re still on the list. We’ll email you when your Pro beta trial is ready.' : PRO_BETA_DONE;
+                    this.done = r.data.returning ? 'You’re still on the list. We’ll email you when your trial is ready.' : PRO_BETA_DONE;
                     this.step = 'done';
                     proTrack((a) => a.proBetaJoined(this.surface));
                     return;
@@ -260,7 +260,7 @@ const ProPanel = {
 
             <!-- Unlocked, editable, saved, never trialed: 30 days free, no card. Signing in starts it. -->
             <div v-if="mode === 'offer' && billing === true && !trialUsed" class="pc-pro-trial" data-testid="pro-trial-box">
-                <p class="pc-pro-lead"><b>Try Pro free for 30 days.</b> No card needed. When it ends, you choose: keep Pro, or a free calendar.</p>
+                <p class="pc-pro-lead"><b>Try Plus free for 30 days.</b> No card needed. When it ends, you choose: keep Plus, or a free calendar.</p>
                 <form v-if="trialStep === 'email'" class="pc-pro-email" @submit.prevent="sendTrialLink" data-testid="pro-trial-email-form">
                     <label for="pc-pro-trial-email">Your email. The link we send starts your trial. No password.</label>
                     <div class="pc-pro-row">
@@ -278,35 +278,35 @@ const ProPanel = {
 
             <!-- Unlocked, editable, billing not on yet (/api/pro/config): the Pro beta list instead of the offer -->
             <template v-if="mode === 'offer' && billing === false">
-                <p class="pc-pro-lead">Only you and people you invite can edit. Everyone else can still view. Pro is in beta: join, and we’ll email you when your trial is ready.</p>
+                <p class="pc-pro-lead">Only you and people you invite can edit. Everyone else can still view. Plus is in beta: join, and we’ll email you when your trial is ready.</p>
                 <pro-beta-join :surface="surface" :calendar-id="calendarId" auto-open></pro-beta-join>
             </template>
 
             <!-- Unlocked, editable: the offer -->
             <template v-if="mode === 'offer' && billing === true">
                 <p class="pc-pro-lead">Only you and people you invite can edit. Everyone else can still view.</p>
-                <!-- Which plan: this calendar (Single), or every calendar you run (Unlimited) -->
+                <!-- Which plan: this calendar (Plus), or every calendar you run (Pro) -->
                 <div v-if="unlimitedOn" class="pc-pro-tiers" role="radiogroup" aria-label="Plan" data-testid="pro-plan-choice">
                     <label class="pc-pro-tier" :class="{ on: plan === 'single' }">
                         <input type="radio" value="single" v-model="plan" name="pc-pro-plan">
-                        <span><b>Pro</b><small>This calendar</small></span>
+                        <span><b>Plus</b><small>This calendar</small></span>
                     </label>
                     <label class="pc-pro-tier" :class="{ on: plan === 'unlimited' }" data-testid="pro-plan-unlimited">
                         <input type="radio" value="unlimited" v-model="plan" name="pc-pro-plan">
-                        <span><b>Pro Plus</b><small>Every calendar you run</small></span>
+                        <span><b>Pro</b><small>Every calendar you run</small></span>
                     </label>
                 </div>
                 <div v-if="plan === 'unlimited'" class="pc-pro-plans" role="radiogroup" aria-label="Billing">
                     <label class="pc-pro-plan" :class="{ on: interval === 'year' }">
                         <input type="radio" value="year" v-model="interval" name="pc-pro-interval">
-                        <span><b>$60/year</b> <em class="pc-pro-save">Save 17%</em></span>
+                        <span><b>$96/year</b> <em class="pc-pro-save">Save 20%</em></span>
                     </label>
                     <label class="pc-pro-plan" :class="{ on: interval === 'month' }">
                         <input type="radio" value="month" v-model="interval" name="pc-pro-interval">
-                        <span><b>$6/month</b></span>
+                        <span><b>$10/month</b></span>
                     </label>
                 </div>
-                <p v-else class="pc-pro-price" data-testid="pro-price"><b>$24 a year</b> <span class="pc-pro-muted">That's $2 a month.</span></p>
+                <p v-else class="pc-pro-price" data-testid="pro-price"><b>$29 a year</b> <span class="pc-pro-muted">That's about $2.42 a month.</span></p>
                 <p v-if="plan === 'unlimited'" class="pc-pro-muted pc-pro-note" data-testid="pro-unlimited-note">Locks this calendar now. Lock any other calendar later from its Share panel with one click, no new checkout.</p>
                 <p v-if="testCardHint" class="pc-pro-muted pc-pro-note" data-testid="pro-test-card">{{ testCardHint }}</p>
 
@@ -354,10 +354,10 @@ const ProPanel = {
                     <button v-if="!keepOpen && billing !== false" type="button" class="pc-pro-btn" @click="keepProAfter" :disabled="busy" data-testid="pro-keep-btn">Keep Pro</button>
                 </div>
                 <div v-if="keepOpen" class="pc-pro-keep" data-testid="pro-keep-plans">
-                    <p class="pc-pro-price"><b>$24 a year</b> <span class="pc-pro-muted">That's $2 a month.</span></p>
+                    <p class="pc-pro-price"><b>$29 a year</b> <span class="pc-pro-muted">That's about $2.42 a month.</span></p>
                     <div class="pc-pro-row"><button type="button" class="pc-pro-btn" @click="keepCheckout" :disabled="busy" data-testid="pro-keep-checkout">{{ going ? 'Taking you to payment…' : 'Keep Pro' }}</button></div>
                 </div>
-                <p class="pc-pro-muted pc-pro-note">Open to everyone: a free calendar anyone with the edit link can change.<template v-if="billing !== false"> Keep Pro: locked again for you, $24 a year.</template></p>
+                <p class="pc-pro-muted pc-pro-note">Open to everyone: a free calendar anyone with the edit link can change.<template v-if="billing !== false"> Keep Pro: locked again for you, $29 a year.</template></p>
                 <p v-if="testCardHint" class="pc-pro-muted pc-pro-note">{{ testCardHint }}</p>
             </template>
 
@@ -367,7 +367,7 @@ const ProPanel = {
                     <a v-if="!status.trial.hasCard && billing !== false" href="#" class="pc-pro-link" @click.prevent="keepPro" data-testid="pro-keep-trial">Keep Pro</a>
                     <span v-else-if="status.trial.hasCard">card on file, Pro continues</span></p>
                 <div v-if="status.trial && keepOpen" class="pc-pro-keep" data-testid="pro-keep-plans">
-                    <p class="pc-pro-price"><b>$24 a year</b> <span class="pc-pro-muted">That's $2 a month.</span></p>
+                    <p class="pc-pro-price"><b>$29 a year</b> <span class="pc-pro-muted">That's about $2.42 a month.</span></p>
                     <div class="pc-pro-row"><button type="button" class="pc-pro-btn" @click="keepCheckout" :disabled="busy" data-testid="pro-keep-checkout">{{ going ? 'Taking you to payment…' : 'Keep Pro' }}</button>
                         <span class="pc-pro-muted">{{ keepNote }}</span></div>
                 </div>
@@ -693,7 +693,7 @@ const ProPanel = {
             } finally { this.busy = false; }
         },
         // Keep Pro, during the trial or after it ended: the ordinary checkout for this calendar, at the
-        // plan here ($24/year). The paid subscription replaces the trial.
+        // plan here ($29/year). The paid subscription replaces the trial.
         keepPro() { this.keepOpen = true; },
         keepProAfter() { this.keepOpen = true; },
         async keepCheckout() {

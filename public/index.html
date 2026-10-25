@@ -672,7 +672,7 @@
         <!-- Pro, quietly, on your own calendar after someone else changed it (maybeShowProUpsell). -->
         <p v-if="proUpsell" class="pc-upsell" data-testid="pro-upsell" v-cloak>
             <span>Changed since your last visit. Want only your team to edit?</span>
-            <button type="button" class="pc-upsell-go" data-testid="pro-upsell-open" @click="openProUpsell">{{ proBilling === false ? 'Join the Pro beta' : 'Lock this calendar' }}&nbsp;→</button>
+            <button type="button" class="pc-upsell-go" data-testid="pro-upsell-open" @click="openProUpsell">{{ proBilling === false ? 'Join the beta' : 'Lock this calendar' }}&nbsp;→</button>
             <button type="button" class="pc-upsell-x" data-testid="pro-upsell-dismiss" aria-label="Dismiss" @click="dismissProUpsell">×</button>
         </p>
 
@@ -928,7 +928,7 @@
                          the edit link, then Pro. The rest (this exact view, the link's name, raw feeds, an
                          embed) waits under "More sharing options". Same URLs and copy paths as before. -->
                     <div v-if="showShare && isExisting" class="pc-share" v-cloak>
-                        <h2 v-if="shareProFocus && !lock.locked && !lock.paused" class="text-lg font-bold mb-4">{{ proBilling === false ? 'Pro' : 'Get Pro' }} <span class="pc-beta-tag">Beta</span></h2>
+                        <h2 v-if="shareProFocus && !lock.locked && !lock.paused" class="text-lg font-bold mb-4">{{ proBilling === false ? 'Plus' : 'Get Plus' }} <span class="pc-beta-tag">Beta</span></h2>
                         <!-- Arriving from Get Pro: only the lock offer, the links one click away -->
                         <template v-if="!shareProFocus">
                         <!-- Every link is visible and is itself the copy button (GitHub-style). No captions: the
@@ -1026,7 +1026,7 @@
 
                         <!-- Pro, unlocked: one line and a link. The full offer (plans, checkout) is the Get Pro view. -->
                         <div v-if="!lock.locked && canEdit && proUnlimited" class="pc-share-pro pc-gopro" data-testid="share-unlimited-card">
-                            <div class="pc-gopro-head"><b>Pro Plus</b><span class="pc-gopro-price">Included</span>
+                            <div class="pc-gopro-head"><b>Pro</b><span class="pc-gopro-price">Included</span>
                                 <button v-if="!proUnlimitedFull" type="button" class="pc-gopro-btn" @click="lockWithUnlimited" :disabled="proUnlimitedBusy" data-testid="share-unlimited-lock">{{ proUnlimitedBusy ? 'Locking…' : 'Lock this calendar' }}</button>
                                 <button v-else type="button" class="pc-gopro-btn" @click="shareProFocus = true" data-testid="share-unlimited-under">{{ proHandle ? 'Put under @' + proHandle : 'Use your @name' }}</button></div>
                             <p v-if="proUnlimitedFull" class="pc-gopro-soon" data-testid="share-unlimited-full">You've used your 10. Put more under {{ proHandle ? '@' + proHandle : 'your @name' }}, without limit.</p>
@@ -1035,16 +1035,16 @@
                             </ul>
                         </div>
                         <div v-else-if="!lock.locked && canEdit" class="pc-share-pro pc-gopro" data-testid="share-pro-card">
-                            <div class="pc-gopro-head"><b>Go Pro</b><span class="pc-beta-tag" data-testid="share-pro-beta-tag">Beta</span><span class="pc-gopro-price">$24 a year</span>
-                                <button v-if="proBilling === true" type="button" class="pc-gopro-btn" @click="shareProFocus = true" data-testid="share-get-pro">Get Pro</button></div>
+                            <div class="pc-gopro-head"><b>Upgrade</b><span class="pc-beta-tag" data-testid="share-pro-beta-tag">Beta</span><span class="pc-gopro-price">Plus · $29 a year</span>
+                                <button v-if="proBilling === true" type="button" class="pc-gopro-btn" @click="shareProFocus = true" data-testid="share-get-pro">Upgrade</button></div>
                             <ul class="pc-gopro-list">
                                 <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg><span><b>Lock editing</b> to you and people you choose</span></li>
                                 <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg><span><b>Stats</b>: views per day, followers, places</span></li>
                                 <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg><span><b>History</b>: see who changed what, restore any version</span></li>
                             </ul>
-                            <p class="pc-gopro-soon">Coming: secret events, subcalendars, your logo. <a href="/pricing#compare" target="_blank" rel="noopener" data-from="share-pro-card" data-testid="share-pro-compare">See everything in Pro</a></p>
+                            <p class="pc-gopro-soon">Coming: subcalendars, secret events, your logo. <a href="/pricing#compare" target="_blank" rel="noopener" data-from="share-pro-card" data-testid="share-pro-compare">See everything</a></p>
                             <!-- Saved calendars only (a draft shows Save & share instead of this card). One trial per calendar. -->
-                            <button v-if="proBilling === true && !proTrialUsed" type="button" class="pc-gopro-trial" @click="startProTrial" data-testid="share-try-pro">Try Pro free for 30 days. No card needed.</button>
+                            <button v-if="proBilling === true && !proTrialUsed" type="button" class="pc-gopro-trial" @click="startProTrial" data-testid="share-try-pro">Try Plus free for 30 days. No card needed.</button>
                             <!-- Billing not on yet (/api/pro/config): the Pro beta list instead of the trial and checkout -->
                             <pro-beta-join v-if="proBilling === false" surface="share" :calendar-id="calendar.id" btn-class="pc-gopro-btn pc-gopro-btn--beta"></pro-beta-join>
                         </div>
@@ -1290,7 +1290,7 @@
                         Restore an earlier version <span class="pc-act-pro">Pro</span> <span aria-hidden="true">→</span>
                     </button>
                     <p v-else-if="!lock.locked && isMineCalendar" class="pc-changes-foot" data-testid="recent-pro-pitch">
-                        Pro keeps every version and can restore any date.
+                        Plus keeps every version and can restore any date.
                         <button type="button" class="pc-pro-link" @click="openProOffer">About Pro</button>
                     </p>
                     </template>
@@ -1344,7 +1344,7 @@
                                 <p v-if="freeStats && !freeStats.loading && !freeStats.unavailable && (freeStats.views || freeStats.followers)" class="pc-free-fine">Counts only. Never who.</p>
                             </div>
                             <div class="pc-stats-teaser pc-stats-teaser--compact" data-testid="stats-teaser">
-                                <p class="pc-stats-more">More with Pro <span class="pc-beta-tag" data-testid="stats-pro-beta-tag">Beta</span></p>
+                                <p class="pc-stats-more">More with Plus <span class="pc-beta-tag" data-testid="stats-pro-beta-tag">Beta</span></p>
                                 <ul class="pc-stats-list pc-stats-list--compact">
                                     <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
                                         <span><b>Views per day</b>, up to a year</span></li>
@@ -1353,7 +1353,7 @@
                                     <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
                                         <span><b>Places</b>: top countries and cities</span></li>
                                 </ul>
-                                <button v-if="proBilling === true" type="button" class="pc-side-btn pc-side-btn--primary" @click="getProFromStats" data-testid="stats-get-pro">Get Pro</button>
+                                <button v-if="proBilling === true" type="button" class="pc-side-btn pc-side-btn--primary" @click="getProFromStats" data-testid="stats-get-pro">Upgrade</button>
                                 <pro-beta-join v-if="proBilling === false" surface="stats" :calendar-id="isExisting ? calendar.id : ''" btn-class="pc-side-btn pc-side-btn--primary"></pro-beta-join>
                             </div>
                         </template>
@@ -1525,9 +1525,9 @@
                 <h3 class="pc-tour-label">Pricing</h3>
                 <div class="pc-tour-plans">
                     <a class="pc-tour-plan" href="/pricing" data-from="home-plan-free"><h4>Free</h4><p class="pc-plan-price"><b>$0</b></p><p>No login required.</p><span class="pc-tour-plan-more">Learn more →</span></a>
-                    <a class="pc-tour-plan pc-tour-plan-pro" href="/pricing" data-from="home-plan-pro"><span class="pc-plan-tag pc-plan-tag--on">Beta</span><h4>Pro</h4><p class="pc-plan-price"><b>$24</b> a year</p><p>{{ proBilling === true ? '1 Pro calendar. Try it free for 30 days, no card.' : proBilling === false ? '1 Pro calendar. Join the Pro beta for early access.' : '1 Pro calendar.' }}</p><span class="pc-tour-plan-more">Learn more →</span></a>
-                    <a class="pc-tour-plan" href="/pricing" data-from="home-plan-pro-unlimited"><span class="pc-plan-tag pc-plan-tag--on">Beta</span><h4>Pro Plus</h4><p class="pc-plan-price"><b>$60</b> a year <small>or $6 a month</small></p><p>10 Pro calendars, plus unlimited under your @name.</p><span class="pc-tour-plan-more">Learn more →</span></a>
-                    <a class="pc-tour-plan" href="/pricing" data-from="home-plan-teams"><span class="pc-plan-tag">In development</span><h4>Teams</h4><p class="pc-plan-price"><b>$290</b> a year <small>or $29 a month</small></p><p>Several admins, your logo.</p><span class="pc-tour-plan-more">Learn more →</span></a>
+                    <a class="pc-tour-plan pc-tour-plan-pro" href="/pricing" data-from="home-plan-pro"><span class="pc-plan-tag pc-plan-tag--on">Beta</span><h4>Plus</h4><p class="pc-plan-price"><b>$29</b> a year</p><p>{{ proBilling === true ? '1 upgraded calendar. Try it free for 30 days, no card.' : proBilling === false ? '1 upgraded calendar. Join the beta for early access.' : '1 upgraded calendar.' }}</p><span class="pc-tour-plan-more">Learn more →</span></a>
+                    <a class="pc-tour-plan" href="/pricing" data-from="home-plan-pro-unlimited"><span class="pc-plan-tag pc-plan-tag--on">Beta</span><h4>Pro</h4><p class="pc-plan-price"><b>$96</b> a year <small>or $10 a month</small></p><p>10 upgraded calendars, plus unlimited under your @name.</p><span class="pc-tour-plan-more">Learn more →</span></a>
+                    <a class="pc-tour-plan" href="/pricing" data-from="home-plan-teams"><span class="pc-plan-tag">In development</span><h4>Teams</h4><p class="pc-plan-price"><b>$490</b> a year <small>or $49 a month</small></p><p>Several admins, your logo.</p><span class="pc-tour-plan-more">Learn more →</span></a>
                 </div>
                 <p class="pc-tour-plans-more"><a href="/pricing" class="pc-pro-link" data-from="home-pricing">Compare plans →</a></p>
                 </div>
@@ -1538,7 +1538,7 @@
                     <details><summary>Is it private?</summary><p>Anyone with a link can open it, so pick a hard-to-guess name. Edit links are kept out of search engines.</p></details>
                     <details><summary>Can I undo a change?</summary><p>Yes. Click "Edited … ago" at the top to see recent changes and put any of them back.</p></details>
                     <details><summary>Does it work on phones?</summary><p>Yes, in any phone browser. There is nothing to install.</p></details>
-                    <details><summary>Is it free?</summary><p>Yes. Free does a lot: unlimited calendars and people, no login required. Pro adds control, like choosing who can edit, plus advanced stats: <a href="/pricing" data-from="home-faq">see Pro</a>.</p></details>
+                    <details><summary>Is it free?</summary><p>Yes. Free does a lot: unlimited calendars and people, no login required. Upgrade for control, like choosing who can edit, and full stats: <a href="/pricing" data-from="home-faq">see plans</a>.</p></details>
                     <details><summary>Can I put it on my website?</summary><p>Yes. Put the view-only link in an iframe:</p><code class="pc-tour-snippet">&lt;iframe src="https://pastecal.com/view/ni191jkhnx" width="100%" height="600" style="border:0"&gt;&lt;/iframe&gt;</code></details>
                 </div>
 

@@ -67,7 +67,7 @@
  *     editor-links also 400 bad-label, 409 too-many-links (20 live), 404 no-link.
  *   GET  /api/pro/config                         -> {billing, unlimited}: billing is true only when Stripe is configured (keys
  *                                                   and the Pro yearly price); unlimited also needs STRIPE_PRICE_UNLIMITED_YEARLY.
- *                                                   False: the site offers "Join the Pro beta" (the waitlist) instead of
+ *                                                   False: the site offers "Join the beta" (the waitlist) instead of
  *                                                   the trial and checkout. Public, cached 60 seconds.
  *   GET  /api/pro/status?calendar=<id>           -> {locked, pro, isOwner, paused, lapsedOwner, trialUsed}, plus unlimited:true
  *                                                   when the signed-in person has an active Pro Unlimited; the owner also
@@ -850,7 +850,7 @@ function formatDay(t) {
 // Does this subscription's payer have a card Stripe will charge (the subscription's own, or the customer's
 // default)? null when Stripe can't say. Used so trial emails never promise "nothing is charged" falsely.
 // Pro can be bought here: Stripe is configured with the yearly price (Pro is yearly only; a monthly
-// price, if set, is still honored for old links). Off, every Pro offer is "Join the Pro beta"
+// price, if set, is still honored for old links). Off, every Pro offer is "Join the beta"
 // (GET /api/pro/config), and checkout and the trial answer 503 billing-not-configured as before.
 function billingOn(env, host) {
     const cfg = stripeConfig(env, host);
@@ -890,7 +890,7 @@ async function sendTrialReminder(env, acc, cfg, s) {
             return await sendEmail(env, user.email, `Your Pro trial ends ${day}`, text, null, 'trial-reminder');
         }
         const text = `Your Pro trial for ${name} ends ${day}.\n\n`
-            + `Keep Pro: $24 a year, and nothing changes.\n${keep}\n\n`
+            + `Keep Pro: $29 a year, and nothing changes.\n${keep}\n\n`
             + `If you do nothing, nothing is charged. On ${day} Pro ends and the calendar becomes read-only: everyone can still view it and its calendar feed keeps working, but nobody can edit it. `
             + `You can then open it to everyone (a free calendar, editable by anyone with the link) or keep Pro, from the calendar's Share panel.\n\n`
             + `Questions? Write to support@pastecal.com.\n`;

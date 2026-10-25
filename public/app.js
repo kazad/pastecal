@@ -2968,7 +2968,8 @@ const CalendarVueApp = {
             // An untouched "Type N" label shows as its color's name (typeLabelFor).
             return Array(this.COLORS.length).fill().map((_, i) => {
                 let id = i + 1;
-                return { text: this.typeLabelFor(i), value: id, iconCss: `e-color-${id}` };
+                // Syncfusion renders item text as HTML, and labels are set by anyone with the edit link.
+                return { text: escapeHtml(this.typeLabelFor(i)), value: id, iconCss: `e-color-${id}` };
             });
         },
 
