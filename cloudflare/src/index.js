@@ -20,10 +20,14 @@
  *   POST /api/admin/cal/<id>/{lock,unlock,rotate-editor-key}, GET .../lock-status
  *                                 Pro lock, for support and tests (Bearer IMPORT_SECRET)
  *                                 (+ dev-legacy-key with ACCOUNTS_DEV_MODE=1: a test hook for the key migration)
+ *   POST /api/contact             Contact form, incl. calendar reports (Contact.js: same-site, honeypot,
+ *                                 fill time, 5 an hour per IP)
+ *   GET  /api/admin/messages      Contact messages, newest first (Bearer IMPORT_SECRET)
  */
 import { ICSService } from './ICSService.js';
 import { SlugService, RESERVED_CALENDAR_NAMES } from './SlugService.js';
 import { handleCollect } from './Collector.js';
+import { handleContact } from './Contact.js';
 import { applySecurityHeaders } from './SecurityHeaders.js';
 export { CalendarRoom } from './CalendarRoom.js';
 export { CalendarDirectory } from './CalendarDirectory.js';
@@ -262,6 +266,15 @@ async function route(request, env) {
                 return new Response('forbidden', { status: 403 });
             }
             return env.WAITLIST.get(env.WAITLIST.idFromName('pro')).fetch('http://internal/export');
+        }
+
+        // Contact form (and calendar reports): public/contact.html. Same-site only, so no CORS.
+        if (path === '/api/contact' && request.method === 'POST') return handleContact(request, env);
+        if (path === '/api/admin/messages' && request.method === 'GET') {
+            if (!env.WAITLIST || !env.IMPORT_SECRET || !bearerIsSecret(request, env)) {
+                return new Response('forbidden', { status: 403 });
+            }
+            return env.WAITLIST.get(env.WAITLIST.idFromName('pro')).fetch('http://internal/messages');
         }
 
         if (request.method === 'POST' && path === '/lookupCalendar') {

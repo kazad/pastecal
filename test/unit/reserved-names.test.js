@@ -14,7 +14,7 @@ test('the Worker and both apps reserve the same calendar names', () => {
   const server = /RESERVED_CALENDAR_NAMES = new Set\(\[([\s\S]*?)\]\)/.exec(read('cloudflare/src/SlugService.js'));
   assert.ok(server, 'RESERVED_CALENDAR_NAMES not found');
   const want = words(server[1]);
-  for (const name of ['report', 'signin', 'pro', 'pricing', 'explore']) assert.ok(want.includes(name), `${name} is reserved`);
+  for (const name of ['report', 'contact', 'signin', 'pro', 'pricing', 'explore']) assert.ok(want.includes(name), `${name} is reserved`);
   for (const file of ['public/services/CalendarDataService.js', 'public/services/CloudCalendarService.js']) {
     const m = /static (?:async )?checkExists[\s\S]*?\[([^\]]*)\]\.includes/.exec(read(file));
     assert.ok(m, `${file}: checkExists list not found`);
@@ -25,5 +25,5 @@ test('the Worker and both apps reserve the same calendar names', () => {
 test('read-only link names cannot take report or explore either', () => {
   const src = read('cloudflare/src/SlugService.js');
   const m = /RESERVED_WORDS = new Set\(\[([\s\S]*?)\]\)/.exec(src);
-  for (const name of ['report', 'explore', 'signin', 'pro', 'pricing']) assert.ok(words(m[1]).includes(name), name);
+  for (const name of ['report', 'contact', 'explore', 'signin', 'pro', 'pricing']) assert.ok(words(m[1]).includes(name), name);
 });
