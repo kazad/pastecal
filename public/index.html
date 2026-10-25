@@ -971,8 +971,20 @@
                             <button v-for="(u, i) in otherViewLinks()" :key="u" type="button" class="pc-other-link" :class="{ 'is-copied': copiedKey === 'other' + i }" :title="'Copy ' + u" @click="copyLink('other' + i, u, 'copy')" data-testid="share-other-link">{{ copiedKey === 'other' + i ? 'Copied' : shortLink(u) }}</button>
                         </div>
 
-                        <!-- Share to edit: the edit link. Locked, it edits only for its owner and people with an editor link (Pro panel). -->
-                        <div v-if="canEdit" class="pc-link-item pc-link-item--secondary" data-testid="share-helpers">
+                        <!-- Locked, the owner's: Share to edit is the editor link (made in the Pro panel), not the owner's own address. -->
+                        <div v-if="lock.locked && proOwner" class="pc-link-item" data-testid="share-editor">
+                            <div class="pc-link-head"><h4 class="pc-share-label">Share to edit</h4><span class="pc-share-tag pc-share-tag--warn">can edit</span></div>
+                            <div v-if="editorLinkStored" class="pc-link-row">
+                                <button type="button" class="pc-link" :class="{ 'is-copied': copiedKey === 'editor' }" title="Copy the editor link" @click="copyLink('editor', editorLinkStored, 'copy')" data-testid="share-editor-copy" data-hj-suppress data-clarity-mask="true">
+                                    <span class="pc-link-url">{{ copiedKey === 'editor' ? 'Copied to clipboard' : shortLink(editorLinkStored) }}</span>
+                                    <span class="pc-link-act" aria-label="Copy"><svg class="pc-link-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg></span>
+                                </button>
+                            </div>
+                            <button v-else type="button" class="pc-share-copy pc-share-copy--primary" @click="goEditorLink" data-testid="share-editor-get">Get an editor link</button>
+                        </div>
+
+                        <!-- The edit link: the owner's own address (secondary when locked: it edits only for its owner). -->
+                        <div v-if="canEdit" class="pc-link-item" :class="{ 'pc-link-item--secondary': lock.locked }" data-testid="share-helpers">
                             <div class="pc-link-head"><h4 class="pc-share-label">Edit link</h4><span class="pc-share-tag pc-share-tag--warn">can edit</span><span v-if="lock.locked" class="pc-share-tag">Locked</span></div>
                             <p v-if="lock.locked" class="pc-link-note" data-testid="share-edit-note">Edits only for you and people with your editor link. Everyone else sees it view-only.</p>
                             <div class="pc-link-row">
@@ -1069,7 +1081,7 @@
                         <!-- Pro: the lock offer (Get Pro view), or a locked calendar's owner section and editor links;
                              after Pro ended, the paused calendar's choices (owner) or why nobody can edit (everyone else) -->
                         <pro-panel v-if="isExisting && (shareProFocus || lock.locked || lock.paused)" ref="proPanel" :calendar-id="calendar.id" :calendar-title="calendar.title" :locked="lock.locked" :paused="lock.paused" :can-edit="canEdit" :surface="proSurface"
-                            @open-insight="openInsight($event, 'share_panel')" @owner="proOwner = $event" @names="onProNames($event)"></pro-panel>
+                            @open-insight="openInsight($event, 'share_panel')" @owner="proOwner = $event" @names="onProNames($event)" @editor-link="editorLinkStored = $event"></pro-panel>
                         <button v-if="shareProFocus" type="button" class="pc-share-all" @click="shareProFocus = false" data-testid="share-show-all">Show all sharing options</button>
                     </div>
 

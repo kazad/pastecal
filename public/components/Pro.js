@@ -412,7 +412,7 @@ const ProPanel = {
                 </div>
 
                 <div class="pc-pro-sub">
-                    <h5>Editor link</h5>
+                    <h5 id="pc-pro-editor" data-testid="pro-editor-sub">Editor link</h5>
                     <p class="pc-pro-muted">Share it with people who should be able to edit.</p>
                     <div v-if="editorLink" class="pc-pro-row">
                         <input ref="link" class="pc-pro-field" type="text" readonly :value="editorLink" @focus="$event.target.select()"
@@ -458,7 +458,7 @@ const ProPanel = {
     // open-insight: 'stats' | 'history' (owner only). owner: whether this browser owns the calendar,
     // so the app can offer History from Recent changes.
     // names: the status, after each load, so Share can lead with the calendar's @link or short link.
-    emits: ['open-insight', 'owner', 'names'],
+    emits: ['open-insight', 'owner', 'names', 'editor-link'],
     data() {
         return {
             svg: PRO_LOCK_SVG,
@@ -605,6 +605,7 @@ const ProPanel = {
         },
         rememberLink(link) {
             try { localStorage.setItem('pastecal_editor_link:' + String(this.calendarId).toLowerCase(), link); } catch (e) { /* storage blocked: shown for now */ }
+            this.$emit('editor-link', link);                     // Share's "Share to edit" shows it too
         },
         async lockNow() {
             this.error = ''; this.busy = true;

@@ -2174,6 +2174,8 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 .pc-other-link { border: 0; background: none; padding: 0; color: var(--pc-text-2); font: 500 12.5px/1.4 var(--pc-font); cursor: copy; overflow-wrap: anywhere; text-align: left }
 .pc-other-link:hover { color: var(--pc-link); text-decoration: underline }
 .pc-other-link.is-copied { color: var(--pc-success, #1f7a4d) }
+.pc-link-item--secondary .pc-share-label { font-size: 13px; color: var(--pc-text-2) }
+.pc-link-item--secondary .pc-link { height: 34px; font-size: 13px }
 .pc-link-note { margin: -2px 0 0; color: var(--pc-text-muted); font-size: 12.5px; line-height: 1.4 }
 .pc-pill-tag { margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: var(--pc-soft); color: var(--pc-text-muted); font-size: 10.5px; font-weight: 600 }
 .pc-link.is-copied .pc-link-act { color: var(--pc-success, #1f7a4d); background: transparent }

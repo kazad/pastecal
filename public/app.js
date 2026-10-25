@@ -226,6 +226,7 @@ const CalendarVueApp = {
             proUnlimitedBusy: false,
             proUnlimitedFull: false,    // Pro with its 5 used: the card offers the owner's @name instead
             proHandle: '',
+            editorLinkStored: '',       // the owner's last editor link made in this browser (Pro panel, localStorage): "Share to edit"
             shareNames: null,           // the owner's own links for this calendar ({handle, atName, shortNames}, /api/pro/status): Share leads with them
             proBilling: null,           // /api/pro/config: true = trial and checkout; false = "Join the beta"; null = not known yet (neither shows)
             homeTab: null,              // the homepage panel's tab when the visitor picked one ('recents' | 'guide')
@@ -3103,7 +3104,9 @@ const CalendarVueApp = {
                 viewParam = viewLower;
             }
 
-            const baseURL = SlugManager.getViewerBaseURL(this.calendar, this.isReadOnly);
+            // The owner of a calendar with an @link or short link: "This view" starts from that view-only link too.
+            const named = !this.isReadOnly && this.shareNames ? this.shareViewURL() : null;
+            const baseURL = named || SlugManager.getViewerBaseURL(this.calendar, this.isReadOnly);
             // baseURL is null only if read-only mode somehow lacks a slug (server race + no
             // /view/<slug> in the URL). Fall back to the current href so we never leak the edit id.
             this.currentViewURL = baseURL
@@ -3248,6 +3251,15 @@ const CalendarVueApp = {
             if (!st || !st.isOwner || !this.calendar) { this.shareNames = null; return; }
             const shortNames = Array.isArray(st.shortNames) ? st.shortNames.filter((n) => typeof n === 'string') : [];
             this.shareNames = (st.handle && st.atName) || shortNames.length ? { handle: st.handle || '', atName: st.atName || '', shortNames } : null;
+        },
+        /** The editor link the Pro panel last made in this browser (same key as Pro.js storedLink and /pro/done). */
+        storedEditorLink() {
+            try { return (this.calendar && localStorage.getItem('pastecal_editor_link:' + String(this.calendar.id).toLowerCase())) || ''; } catch (e) { return ''; }
+        },
+        /** "Share to edit" with no editor link here yet: the Pro panel's Editor link section makes one (never resets one). */
+        goEditorLink() {
+            const el = document.getElementById('pc-pro-editor');
+            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         },
         /** "Share to view": one link, the best this calendar has: its @link, else a short link, else its view link.
          *  All three open the view-only calendar. */
@@ -5361,6 +5373,7 @@ const CalendarVueApp = {
                 if (this.calendar && this.calendar.id === id) {
                     this.proOwner = !!(data && data.isOwner);
                     this.onProNames(data);
+                    this.editorLinkStored = data && data.isOwner ? this.storedEditorLink() : '';
                     this.proTrialActive = !!(data && data.isOwner && data.trial);
                     this.trialFeatureUsed('lock');          // the owner on their locked calendar: the lock in use
                 }

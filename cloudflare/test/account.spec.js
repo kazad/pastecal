@@ -127,6 +127,15 @@ test('Pro from /pricing (fake Stripe), claim @name, create a calendar under it',
   await expect(page.locator('[data-testid=share-group] h4')).toHaveText('Share to view');
   await expect(page.getByTestId('share-readonly-addr')).toContainText(`pastecal.com/@${handle}/soccer`);
   await expect(page.getByTestId('share-edit-note')).toContainText('view-only');
+  // Locked: "Share to edit" is the editor link (none made in this browser yet: a button to the Pro panel's), then the own address.
+  const heads = await page.locator('[data-testid=share-links] .pc-link-item h4').allTextContents();
+  expect(heads.slice(0, 3)).toEqual(['Share to view', 'Share to edit', 'Edit link']);
+  await expect(page.getByTestId('share-editor-get')).toBeVisible();
+  await page.getByTestId('share-editor-get').click();
+  page.once('dialog', (d) => d.accept());                                     // "Make a new editor link?"
+  await page.getByTestId('pro-key-btn').click();
+  await expect(page.getByTestId('share-editor-copy')).toContainText('#k=');
+  await expect(page.getByTestId('share-view-copy')).toContainText(`pastecal.com/@${handle}/soccer?date=`);   // This view: from the @link too
   await expect(page.getByTestId('share-pill-url')).toContainText(`pastecal.com/@${handle}/soccer`);
   await expect(page.getByTestId('share-pill-url')).toContainText('view only');
   expect(await page.getByTestId('share-pill-url').innerText()).not.toContain(calendarId);
