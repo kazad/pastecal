@@ -28,7 +28,7 @@ A small Vue front end on Cloudflare Workers, with each calendar stored in its ow
 
 ## Why it exists
 
-I wanted a link to a calendar that's easy to edit, without logging in or installing anything. It started as an answer to a [ViaPrize challenge](https://www.viaprize.org/prize/old/1) (and an idea from [what-to-code](https://github.com/joereynolds/what-to-code#websites)). More on the [about page](https://pastecal.com/about).
+I wanted a link to a calendar that's easy to edit, without logging in or installing anything. It started as an answer to a ViaPrize challenge (and an idea from [what-to-code](https://github.com/joereynolds/what-to-code#websites)). More on the [about page](https://pastecal.com/about).
 
 Feedback, ideas or something broken? Use [GitHub Discussions](https://github.com/kazad/pastecal/discussions) or [pastecal.com/contact](https://pastecal.com/contact).
 
