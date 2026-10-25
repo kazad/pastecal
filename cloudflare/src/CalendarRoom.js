@@ -286,6 +286,25 @@ export class CalendarRoom extends DurableObject {
         const p = this.proStored;
         return p && p.owner === this.lock.ownerId ? mergeProSettings(p.settings, {}).settings : mergeProSettings(null, {}).settings;
     }
+    // What a link preview may show (the Worker's preview/route.js): title, colors, and events that can
+    // still be upcoming -- series and anything not yet ended -- WITHOUT descriptions (notes never leave
+    // for a preview), plus the start times of recent all-day events, which only say what time zone
+    // the authors are in (preview/time.js inferZone). The same for edit and view links: view-safe.
+    previewData(now) {
+        const s = this.state, cutoff = now - 2 * 86400000, out = [], allDay = [];
+        for (const e of s.events) {
+            if (!e || !e.start) continue;
+            if (e.isAllDay) allDay.push(e.start);
+            const live = (e.recurrencerule && !e.recurrenceID) || Date.parse(e.end || e.start) >= cutoff;
+            if (!live || out.length >= 3000) continue;
+            out.push({ id: e.id, title: e.title, start: e.start, end: e.end, isAllDay: !!e.isAllDay, type: e.type,
+                recurrencerule: e.recurrencerule || '', recurrenceID: e.recurrenceID ?? null, recurrenceException: e.recurrenceException ?? null });
+        }
+        allDay.sort().reverse();
+        const ps = this.proSettings();
+        return { v: s.v, title: s.title, colors: Array.isArray(s.options && s.options.colors) ? s.options.colors.slice(0, 32) : null,
+            events: out, zoneSamples: allDay.slice(0, 40), pro: !!this.lock, hideBranding: !!(ps && ps.hideBranding) };
+    }
     snapshotFor(att) {
         const cal = att.isViewOnly ? this.viewCalendar(att.viewId) : this.calendar();
         return { t: 'snapshot', v: this.state.v, calendar: cal, locked: !!this.lock, pro: !!this.lock, paused: this.paused(), canEdit: this.canWrite(att), role: this.roleOf(att), proSettings: this.proSettings() };
@@ -744,6 +763,12 @@ export class CalendarRoom extends DurableObject {
         if (INSIGHT_ROUTES.has(suffix)) {
             if (url.hostname !== 'internal' || isViewOnly) return new Response('not found', { status: 404 });
             return insightRoute(this, suffix, request);
+        }
+        // Link previews (the Worker's preview/route.js): internal-only, and never counted as a view.
+        if (suffix === 'preview') {
+            if (url.hostname !== 'internal' || request.method !== 'GET') return new Response('not found', { status: 404 });
+            if (!this.state.id) return Response.json({ error: 'not found' }, { status: 404 });
+            return Response.json(this.previewData(Date.now()));
         }
         if (this.statsReady && request.headers.get('X-PC-Hit')) countHit(this, request).catch((e) => console.error('[stats] count failed:', e && e.message));   // never awaited: stats never fail or delay a request
         if (LOCK_ROUTES.has(suffix)) {

@@ -29,6 +29,7 @@ import { SlugService, RESERVED_CALENDAR_NAMES } from './SlugService.js';
 import { handleCollect } from './Collector.js';
 import { handleContact } from './Contact.js';
 import { applySecurityHeaders } from './SecurityHeaders.js';
+import { calendarTarget, previewPage, previewImage } from './preview/route.js';
 export { CalendarRoom } from './CalendarRoom.js';
 export { CalendarDirectory } from './CalendarDirectory.js';
 export { Waitlist } from './Waitlist.js';
@@ -109,6 +110,9 @@ function hitFor(request, env, kind) {
     try { return hitHeaders(request, env, kind); } catch (e) { console.error('[stats] hit headers failed:', e && e.message); return null; }
 }
 
+// Pages search engines may list (public/_headers clears noindex for the same ones).
+const INDEXABLE_PAGES = new Set(['/', '/privacy', '/terms', '/pricing']);
+
 const ADMIN_LOCK_OPS = new Set(['lock', 'unlock', 'rotate-editor-key', 'lock-status']);
 
 function getDirectory(env) {
@@ -148,7 +152,7 @@ export default {
     },
 };
 
-async function route(request, env) {
+async function route(request, env, ctx) {
         if (request.method === 'OPTIONS') {
             return new Response(null, {
                 status: 204,
@@ -453,15 +457,22 @@ async function route(request, env) {
             return withCors(await room.fetch(forRoom(request, withoutSourceParams(request.url), userId, hit)));
         }
 
+        // Link-preview cards: /og/<name>.png, /og/view/<id>.png (preview/route.js). Always an image.
+        if ((request.method === 'GET' || request.method === 'HEAD') && path.startsWith('/og/')) return previewImage(request, env, ctx, url);
+
         // 7. Static assets & Single Page App rewrites
         const isFile = /\.[a-z0-9]+$/i.test(path);
         const beta = path === '/beta' || path.startsWith('/beta/') || (path.startsWith('/nativecal/') && !isFile);
-        const res = await env.ASSETS.fetch(beta ? new Request(new URL('/nativecal/', url), request) : request);
+        let res = await env.ASSETS.fetch(beta ? new Request(new URL('/nativecal/', url), request) : request);
+        // A calendar page (/<name>, /view/<id>): index.html with tags about that calendar, for link previews.
+        const target = !beta && request.method === 'GET' ? calendarTarget(path, url.search) : null;
+        if (target) res = await previewPage(request, env, res, target);
         const out = new Response(res.body, res);
         // Only the test site stays out of search. Sending this on every hostname told Google to drop
         // pastecal.com itself (Oct 2026: organic visitors fell from ~110/week to ~5).
-        // Pages served here are beta EDIT links; only / and /view/ may be indexed (see public/_headers).
-        const indexable = url.hostname !== 'new.pastecal.com' && (path === '/' || path.startsWith('/view/'));
+        // Every page passes through here now (link previews). Indexed: the same pages as public/_headers --
+        // the homepage, view-only links and the public site pages; never an edit link (/<name>).
+        const indexable = url.hostname !== 'new.pastecal.com' && (INDEXABLE_PAGES.has(path) || path.startsWith('/view/'));
         if (indexable) out.headers.delete('X-Robots-Tag'); else out.headers.set('X-Robots-Tag', 'noindex');
         if (/\.(js|css|json)$/.test(path) || beta) out.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
         applySecurityHeaders(out.headers, path);

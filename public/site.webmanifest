@@ -1,6 +1,6 @@
 {
-    "name": "",
-    "short_name": "",
+    "name": "pastecal",
+    "short_name": "pastecal",
     "icons": [
         {
             "src": "/img/icons/web-app-manifest-192x192.png",
@@ -8,7 +8,7 @@
             "type": "image/png"
         },
         {
-            "src": "/img/icons//web-app-manifest-384x384.png",
+            "src": "/img/icons/web-app-manifest-512x512.png",
             "sizes": "512x512",
             "type": "image/png"
         }
