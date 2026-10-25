@@ -802,7 +802,7 @@ setup)
     rm -f "$dims_raw"
 
     missing=0
-    for p in where message source method feature named visit_bucket slug_length event_count_bucket has_custom_slug reason surface owned_bucket kind intent removing; do
+    for p in where message add_via source method feature named visit_bucket slug_length event_count_bucket has_custom_slug reason surface owned_bucket kind intent removing; do
         if echo " $dims " | grep -q " $p "; then
             printf '  ok       %s\n' "$p"
         else
@@ -851,7 +851,7 @@ MSG
     echo
     created=0
     failed=0
-    for p in where message source method feature named visit_bucket slug_length event_count_bucket has_custom_slug reason surface owned_bucket kind intent removing; do
+    for p in where message add_via source method feature named visit_bucket slug_length event_count_bucket has_custom_slug reason surface owned_bucket kind intent removing; do
         echo " $dims " | grep -q " $p " && continue
 
         case "$p" in
@@ -871,6 +871,7 @@ MSG
             kind)               label="Change kind" ;;
             intent)             label="Write intent" ;;
             removing)           label="Removing events" ;;
+            add_via)            label="How the event was added" ;;
         esac
 
         body="$(jq -n --arg p "$p" --arg l "$label" \
