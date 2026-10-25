@@ -5,7 +5,7 @@ const QuickAddDialog = {
     template: /* html */ `
         <div v-if="dialogVisible" 
                  class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div class="bg-1 rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4">
+                <div class="pc-qa-dialog bg-1 rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4">
                     <h3 class="text-lg font-semibold mb-4">Add event by typing</h3>
                     <form @submit.prevent="createEvent">
                         <div class="flex items-baseline gap-2 mb-1.5">
@@ -36,7 +36,7 @@ const QuickAddDialog = {
                             <label class="text-sm font-medium">Check the details</label>
                         </div>
 
-                        <div class="rounded mb-6 flex flex-col gap-3 pl-7">
+                        <div class="pc-qa-fields rounded mb-6 flex flex-col gap-3 pl-7">
                             <div class="flex items-center gap-2">
                                 <label for="qa-subject" class="w-14 shrink-0 text-sm opacity-70">Subject</label>
                                 <input id="qa-subject"
@@ -54,12 +54,12 @@ const QuickAddDialog = {
                                        v-model="fields.startDate"
                                        @input="pin('start')"
                                        aria-label="Start date"
-                                       class="w-44 shrink-0 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                       class="pc-qa-date w-44 shrink-0 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                                 <input type="time"
                                        v-model="fields.startTime"
                                        @input="pin('start')"
                                        aria-label="Start time"
-                                       class="w-32 shrink-0 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                       class="pc-qa-time w-32 shrink-0 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                             </div>
 
                             <div class="flex items-center gap-2">
@@ -69,12 +69,12 @@ const QuickAddDialog = {
                                        v-model="fields.endDate"
                                        @input="pin('end')"
                                        aria-label="End date"
-                                       class="w-44 shrink-0 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                       class="pc-qa-date w-44 shrink-0 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                                 <input type="time"
                                        v-model="fields.endTime"
                                        @input="pin('end')"
                                        aria-label="End time"
-                                       class="w-32 shrink-0 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                       class="pc-qa-time w-32 shrink-0 p-2 bg-1 border border-color-default rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                             </div>
 
                             <!-- Color. This dialog used to have none, so an event made here

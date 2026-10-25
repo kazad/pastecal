@@ -297,7 +297,7 @@
                         <div class="flex items-center gap-1.5">
                             <img class="h-8 w-8 dark:brightness-150" src="/img/pastecal.logo.svg" alt="pastecal">
                             <span
-                                class="text-sm font-medium text-blue-500 hover:text-blue-600 transition-colors">pastecal</span>
+                                class="pc-m-wordmark text-sm font-medium text-blue-500 hover:text-blue-600 transition-colors">pastecal</span>
                         </div>
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-color-1" fill="currentColor"
                             viewBox="0 0 16 16" aria-label="Recent calendars">
@@ -313,7 +313,7 @@
                 <!-- Center: Title (absolutely centered) -->
                 <div class="absolute left-1/2 transform -translate-x-1/2 z-30 flex items-center gap-1">
                     <calendar-title :title="calendar.title" :is-editing="editTitle" :is-read-only="isReadOnly" :heading="isHomepageCalendar ? 'div' : 'h1'"
-                        mode="mobile" input-ref="mobileTitleInput" class="overflow-hidden max-w-[120px]" :class="{ 'pc-title-fit': lock.locked }"
+                        mode="mobile" input-ref="mobileTitleInput" class="pc-m-title overflow-hidden max-w-[120px]" :class="{ 'pc-title-fit': lock.locked }"
                         @update:title="calendar.title = $event" @click="editTitle = true" @blur="editTitle = false"
                         @enter="editTitle = false">
                     </calendar-title>
@@ -330,6 +330,12 @@
 
                 <!-- Right Actions: Share + Menu -->
                 <div class="flex items-center gap-1 text-color-1 flex-shrink-0">
+                    <!-- Add event: the phone twin of desktop's "+ Add event" (same quick add dialog). -->
+                    <button v-if="canEdit" @click="openQuickAdd()" aria-label="Add event"
+                        data-testid="mobile-add-event-button" class="pc-m-add">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                    </button>
                     <!-- Share button -->
                     <button v-if="isExisting" @click="toggleShare()" aria-label="Share calendar" :class="{ 'pc-hdr-on': showShare }"
                         data-testid="share-button-mobile"
