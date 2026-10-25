@@ -4,6 +4,7 @@
 #   ./scripts/ux.sh [days]              # default 7
 #   ./scripts/ux.sh 28 --sql            # print the queries instead of running them
 #   ./scripts/ux.sh trials [days]       # the Pro trial funnel (also: ./scripts/stats.sh trials -d N)
+#   ./scripts/ux.sh usage [days]        # site-wide calendar visits, visitors, calendar-app followers, calendars in use
 #   UX_DATASET=pastecal_events_staging ./scripts/ux.sh trials   # another dataset (staging)
 #
 # Auth: CLOUDFLARE_API_TOKEN (Account Analytics: Read) + CLOUDFLARE_ACCOUNT_ID, or, when those are
@@ -15,6 +16,7 @@
 set -euo pipefail
 REPORT=ux
 if [ "${1:-}" = "trials" ]; then REPORT=trials; shift; fi
+if [ "${1:-}" = "usage" ]; then REPORT=usage; shift; fi
 DAYS="${1:-7}"; [[ "$DAYS" =~ ^[0-9]+$ ]] || { echo "days must be a number" >&2; exit 2; }
 PRINT=0; [ "${2:-}" = "--sql" ] && PRINT=1
 DS="${UX_DATASET:-pastecal_events}"
@@ -41,6 +43,26 @@ run() { # title, sql
   if [ "$(jq '(.data // []) | length' <<<"$out")" = 0 ]; then echo "  (none yet)"; return; fi
   jq -r '(.data // [])[] | [.[]] | @tsv' <<<"$out"
 }
+
+if [ "$REPORT" = usage ]; then
+  # Every calendar's own deduplicated counts (RoomInsight.countHit), summed across pastecal: visits (a
+  # visitor again after a gap), new visitors per calendar per day, and calendar-app followers (one per
+  # subscriber per calendar per day). blob9 is a hash of the calendar, so calendars can be counted, never named.
+  run "Per day: visits, visitors, calendar-app followers, calendars in use" \
+"SELECT toDate(timestamp) AS day,
+  SUM(_sample_interval * double1) AS visits,
+  SUM(_sample_interval * double2) AS visitors,
+  SUM(_sample_interval * double3) AS followers,
+  COUNT(DISTINCT blob9) AS calendars
+FROM $DS WHERE blob1 = 'cal_hit' AND $D GROUP BY day ORDER BY day"
+  run "Whole window: calendars viewed in a browser vs followed in a calendar app" \
+"SELECT blob6 AS how, COUNT(DISTINCT blob9) AS calendars, SUM(_sample_interval * (double1 + double3)) AS hits
+FROM $DS WHERE blob1 = 'cal_hit' AND $D GROUP BY how"
+  run "Whole window: calendars in use (viewed or followed at least once)" \
+"SELECT COUNT(DISTINCT blob9) AS calendars_in_use
+FROM $DS WHERE blob1 = 'cal_hit' AND $D"
+  exit 0
+fi
 
 if [ "$REPORT" = trials ]; then
   # Pro trial funnel. Events from public/utils/analytics.js (trialStarted etc.), app.js, contact.html.

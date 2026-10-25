@@ -13,6 +13,8 @@
 #   ./scripts/stats.sh northstar       # THE number: weekly active shared calendars (2+ people)
 #   ./scripts/stats.sh cohorts         # per birth week: reached a 2nd person? alive 4 weeks on?
 #   ./scripts/stats.sh ux              # UX scorecard from Cloudflare Analytics Engine (scripts/ux.sh)
+#   ./scripts/stats.sh usage           # THE usage number: calendar visits + calendar-app followers across
+#                                      # pastecal, and calendars in use (first-party, includes personal ones)
 #   ./scripts/stats.sh trials          # Pro trial funnel: started by surface, features used, converted
 #                                      # by interval, lapsed by mode, reminder clicks, nudge + contact
 #                                      # (first-party Analytics Engine via scripts/ux.sh; no GA4 setup)
@@ -97,6 +99,7 @@ CMD="${1:-summary}"
 # First-party (Cloudflare Analytics Engine, scripts/ux.sh), so no GA4 login: dispatched before the
 # gcloud checks. trials is the Pro trial funnel; it counts EU visitors too (GA4 is off for them).
 if [ "$CMD" = "trials" ]; then exec "$(dirname "$0")/ux.sh" trials "$DAYS"; fi
+if [ "$CMD" = "usage" ]; then exec "$(dirname "$0")/ux.sh" usage "$DAYS"; fi
 
 for tool in curl jq gcloud; do
     command -v "$tool" >/dev/null 2>&1 || { echo "ERROR: $tool is required." >&2; exit 1; }

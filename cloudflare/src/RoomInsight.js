@@ -194,6 +194,7 @@ export async function countHit(room, request) {
     const ua = request.headers.get('User-Agent') || '';
     const netHash = (await sha(`${salt}\n${net}`)).slice(0, 8);
     let hash = netHash + (await sha(`${salt}\n${net}\n${ua}`)).slice(0, 8);
+    const calHash = (await sha(`cal\n${room.state.id}`)).slice(0, 12);   // site-wide totals: tells calendars apart, never names one
     // From here on nothing awaits: the seen-check and the write can't interleave with another hit.
     if (room.statsSalt?.salt !== salt) return;               // the day rolled over while hashing
     const sql = room.sql;
@@ -227,6 +228,16 @@ export async function countHit(room, request) {
     sql.exec(`INSERT INTO stats_daily (day, views, visitors, followers) VALUES (?, ?, ?, ?)
         ON CONFLICT(day) DO UPDATE SET views = views + excluded.views, visitors = visitors + excluded.visitors, followers = followers + excluded.followers`,
         today, views, visitors, followers);
+    // Site-wide usage (scripts/ux.sh usage): the same deduplicated visits and follows, one point each, so
+    // "calendar views across pastecal" and "calendars in use" include personal calendars and calendar-app
+    // followers, which GA4 never sees. Same layout as Collector.js: blob1 name, blob5 country, blob6 detail.
+    try {
+        if (room.env && room.env.EVENTS) room.env.EVENTS.writeDataPoint({
+            indexes: ['cal_hit'],
+            blobs: ['cal_hit', '', '', '', (request.headers.get('X-PC-Geo-Country') || '').slice(0, 2), kind === 'f' ? 'follow' : 'view', '', '', calHash],
+            doubles: [views, visitors, followers],
+        });
+    } catch (e) { /* totals never fail a count */ }
     // The breakdowns and places, in the same synchronous step (see "Breakdowns" and "Places" at the top).
     const row = sql.exec(`SELECT countries_json, cities_json, apps_json, hours_json, sources_json FROM stats_daily WHERE day = ?`, today).one();
     const set = {};
