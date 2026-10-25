@@ -213,9 +213,9 @@ export class Accounts extends DurableObject {
     // Which email a sign-in link is for, without using it up; null when it would not sign in.
     async peekLoginToken(token) {
         const hash = await sha256(token);
-        const row = this.sql.exec(`SELECT hash, email, used, expires_at FROM login_tokens WHERE hash = ?`, hash).toArray()[0];
+        const row = this.sql.exec(`SELECT hash, email, used, expires_at, next FROM login_tokens WHERE hash = ?`, hash).toArray()[0];
         if (!row || !timingSafeEqual(row.hash, hash) || row.used || row.expires_at <= Date.now()) return null;
-        return row.email;
+        return { email: row.email, next: row.next || null };
     }
 
     // Uses up a sign-in link: the user (created on first sign-in) and a new session token.
@@ -865,8 +865,11 @@ async function route(request, env, url, path) {
             if (!success) return json({ ok: false, error: 'Too many tries. Wait a minute and open the link again.' }, 429);
         }
         if (!looksLikeToken(body.token)) return bad();
-        const email = await accounts(env).peekLoginToken(body.token);
-        return email ? json({ ok: true, email }) : bad();
+        const peeked = await accounts(env).peekLoginToken(body.token);
+        if (!peeked) return bad();
+        // What Continue will do, so the page can say it (never the calendar's name: anyone can make us send a link).
+        const kind = /\?pro=trial$/.test(peeked.next || '') ? 'trial' : /\?pro=keep$/.test(peeked.next || '') ? 'keep' : /\?pro=year$/.test(peeked.next || '') ? 'buy' : null;
+        return json({ ok: true, email: peeked.email, ...(kind ? { kind } : {}) });
     }
     if (path === '/api/auth/verify') {
         if (!looksLikeToken(body.token)) return json({ ok: false, error: 'This sign-in link is not valid. Ask for a new one.' }, 400);

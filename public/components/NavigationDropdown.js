@@ -201,7 +201,7 @@ const NavigationDropdown = {
                             <button type="submit" class="pc-btn pc-btn--sm pc-btn--primary" :disabled="acct.busy">{{ acct.busy ? 'Sending…' : 'Send link' }}</button>
                         </div>
                     </form>
-                    <button v-else type="button" class="pc-link pc-acct-link pc-acct-line" @click="startSignIn" data-testid="account-signin">Pro owner? Sign in</button>
+                    <button v-else type="button" class="pc-link pc-acct-link pc-acct-line" @click="startSignIn" data-testid="account-signin">Upgraded a calendar? Sign in</button>
                 </template>
 
                 <p v-if="acct.error" class="pc-acct-err" role="alert" data-testid="account-error">{{ acct.error }}</p>

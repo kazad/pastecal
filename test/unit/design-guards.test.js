@@ -34,7 +34,6 @@ const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
 // Every .html under public/ (top level, pro/, dev/) is a page, so a new page is checked by default.
 // Not checked, with why:
 const EXCLUDED = {
-  'public/pricing-next.html': 'a draft of the pricing page, not linked from anywhere',
   'public/design-ideas.html': 'a prototype scratch page, not linked from anywhere',
   'public/poll.html': 'an old standalone prototype with its own Tailwind accent, not linked from anywhere',
   // public/nativecal/** is not listed: the NativeCal beta (/beta) is a separate renderer with its own native.css.

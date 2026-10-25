@@ -100,7 +100,10 @@ const ProInsightMath = {
         for (const r of list) if ((Number(r[key]) || 0) > (Number(best[key]) || 0)) best = r;
         const avg = total / Math.max(1, list.length);
         const per = avg >= 10 ? Math.round(avg) : Math.round(avg * 10) / 10;
-        return `${total.toLocaleString()} ${noun} in ${list.length} days, about ${per.toLocaleString()} a day. Busiest day: ${this.dayLabel(best.day, { weekday: 'short', month: 'short', day: 'numeric' })}, ${Number(best[key]).toLocaleString()}.`;
+        // "1 view", and "less than one a day" rather than "about 0 a day".
+        const what = total === 1 ? noun.replace(/s$/, '') : noun;
+        const rate = per < 1 ? 'less than one a day' : `about ${per.toLocaleString()} a day`;
+        return `${total.toLocaleString()} ${what} in ${list.length} days, ${rate}. Busiest day: ${this.dayLabel(best.day, { weekday: 'short', month: 'short', day: 'numeric' })}, ${Number(best[key]).toLocaleString()}.`;
     },
 
     // 🇺🇸 from "US". Anything that isn't two letters gets no flag.

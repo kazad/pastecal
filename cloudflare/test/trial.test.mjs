@@ -119,6 +119,8 @@ try {
     // A trial link's verify without an editor's uid signs in but starts nothing (the calendar page continues it).
     await post('/api/auth/start', { email: `eve-trial-${run}@example.com`, next: `/${enc(calS)}?pro=trial` });
     const eveMail = (await outbox(`eve-trial-${run}@example.com`)).at(-1);
+    const peek = await (await post('/api/auth/peek', { token: eveMail.text.match(/#t=([A-Za-z0-9_-]+)/)[1] })).json();
+    assert.equal(peek.kind, 'trial', 'the sign-in page can say Continue starts the trial');
     const ev2 = await (await post('/api/auth/verify', { token: eveMail.text.match(/#t=([A-Za-z0-9_-]+)/)[1], author: 'someone-else' })).json();
     assert.deepEqual(ev2.trial, { ok: false, error: 'not-an-editor' });
     st = await status(calS);

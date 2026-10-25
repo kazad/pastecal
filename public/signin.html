@@ -65,7 +65,10 @@ p.bad { color: var(--bad); }
     if (!res.ok || !res.d.ok) return fail(res.d.error || 'Ask for a new sign-in link and try again.');
     var who = document.createElement('span'); who.className = 'who'; who.textContent = res.d.email;
     who.setAttribute('data-hj-suppress', ''); who.setAttribute('data-clarity-mask', 'true');
-    msg.textContent = ''; msg.append('Sign in to pastecal as ', who, '?');
+    // A link from "Start 30-day free trial" (or the reminder's Keep, or checkout) says what Continue does next.
+    var after = { trial: ' and start your free 30-day Plus trial', keep: ' and keep Plus', buy: ' and finish upgrading' }[res.d.kind] || '';
+    msg.textContent = ''; msg.append('Sign in to pastecal as ', who, after + '?');
+    if (res.d.kind === 'trial') confirm.textContent = 'Start my trial';
     confirm.hidden = false; confirm.focus();
   }).catch(offline);
   confirm.addEventListener('click', function () {
