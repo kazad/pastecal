@@ -47,7 +47,6 @@
     /* ---- meaning ------------------------------------------------------------------------ */
     --pc-success: #1f7a4d;  --pc-success-soft: #e3f3ea;
     --pc-warning: #8a5a00;  --pc-warning-soft: #fbefd4;   /* also "in development" (the Beta pill is the accent) */
-    --pc-photo-frame: #e8d1bb;   /* the warm print frame around the About photo */
     --pc-danger: #c62828;   --pc-danger-soft: #fdecea;
     --pc-toast: #1f2328;    --pc-on-toast: #f3f4f6;    --pc-toast-action: #8ab4ff; --pc-toast-error: #f87171;
     --pc-knob: #ffffff;          /* a toggle's thumb, in both themes */
@@ -152,7 +151,6 @@
 
     --pc-success: #6fd49c;  --pc-success-soft: #17372a;
     --pc-warning: #f0c46a;  --pc-warning-soft: #3a2e14;
-    --pc-photo-frame: #6b5847;
     --pc-danger: #ff8a80;   --pc-danger-soft: #3a1c1a;
     --pc-snackbar: #3a3b41;
     --pc-toast: #e9ecf1;    --pc-on-toast: #14171c;    --pc-toast-action: #0b5cad; --pc-toast-error: #b42318;

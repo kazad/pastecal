@@ -365,6 +365,8 @@ const CalendarVueApp = {
             templateUndo: false,        // the template row's Undo, shown briefly after a switch that replaced edited events
             templateNudge: false,
             templateChips: CalendarTemplates.list(),
+            // Phones fold the template chips behind one "Start from a template" toggle; opened stays opened this visit.
+            templatesOpen: (() => { try { return sessionStorage.getItem('pc_tpl_open') === '1'; } catch (e) { return false; } })(),
             tourVariant: 'a',
             homeAsideHidden: (() => { try { return localStorage.getItem('pc_home_aside') === 'hidden'; } catch (e) { return false; } })(),
 
@@ -686,7 +688,12 @@ const CalendarVueApp = {
 
         // Homepage calendar (no slug and not an existing saved calendar)
         // Returning visitors open on their calendars; the guide is one click away.
-        homePanel() { return this.homeRecents.length ? (this.homeTab || 'recents') : 'guide'; },
+        // The phone's template toggle names the template in use, if any.
+        templateLabel() {
+            const t = this.template && this.templateChips.find(c => c.id === this.template.id);
+            return t ? t.label : '';
+        },
+        homePanel() { return this.homeTab || (this.homeRecents.length ? 'recents' : 'guide'); },
         isHomepageCalendar() {
             return !this.urlslug && !this.isExisting;
         },
@@ -695,7 +702,7 @@ const CalendarVueApp = {
         homeRecents() {
             const time = (item) => Date.parse(item.lastVisited || item.createdAt || 0) || 0;
             return [...(this.recentCalendars || [])].sort((a, b) => time(b) - time(a)).slice(0, 6)
-                .map(item => ({ ...item, ...RecentCalendars.display(item) }));
+                .map(item => ({ ...item, ...RecentCalendars.display(item), ago: item.lastVisited ? 'Opened ' + this.describeAgo(Date.parse(item.lastVisited)) : '' }));
         },
 
         // Headline and lead for the homepage pitch. One version for now; a later test adds more,
@@ -2672,6 +2679,11 @@ const CalendarVueApp = {
 
         // Switching templates is instant: no "are you sure", because one Undo (toast or Cmd+Z) puts back
         // exactly what was there, the same rule as deleting an event.
+        toggleTemplates() {
+            this.templatesOpen = !this.templatesOpen;
+            try { sessionStorage.setItem('pc_tpl_open', this.templatesOpen ? '1' : '0'); } catch (e) { /* this page view only */ }
+        },
+
         pickTemplate(id) {
             if (this.template && this.template.id === id) return;
             this.applyTemplate(id);

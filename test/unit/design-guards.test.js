@@ -185,7 +185,6 @@ const BUTTON_COMPONENTS = {
   'pc-toast-x': 'the close on a toast, on the toast\'s inverted surface',
   'pc-addcal-nudge-text': 'the hint under "Add to my calendar", on an inverted tooltip surface',
   'pc-addcal-nudge-x': 'the close on that hint',
-  'pc-home-tab': 'a homepage panel tab (Welcome · Your calendars): plain text in the panel bar, the current one in full color (style.css)',
   'pc-paused-owner': 'the one warning-colored button: "Pro ended · Choose what happens"',
   'cta': 'pricing.html plan buttons (its own <style>, on tokens; Pro beta work is in flight there)',
 };
@@ -252,7 +251,8 @@ test('one accent: the main app and the pages never use NativeCal\'s pink or the 
 
 test('no decorative gradients outside the illustrations', () => {
   const offenders = [];
-  for (const [label, css] of sources()) for (const d of declarations(css)) if (/gradient\(/.test(d.value)) offenders.push(`${label}: ${d.prop}`);
+  // A mask's gradient draws nothing: it only fades the edge of a sideways-scrolling row (the template chips) to say "more this way".
+  for (const [label, css] of sources()) for (const d of declarations(css)) if (/gradient\(/.test(d.value) && !/^(-webkit-)?mask-image$/.test(d.prop)) offenders.push(`${label}: ${d.prop}`);
   assert.deepEqual(offenders, [], 'flat colors only (restraint). A drawing belongs in style.css /* @illustrations */.');
 });
 

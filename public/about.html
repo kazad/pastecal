@@ -26,8 +26,9 @@
 <script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>
 <link rel="stylesheet" href="/site.css">
 <style>.about-hi { font-size: var(--pc-fs-2xl); font-weight: 700; margin-top: 8px }
-/* The photo as on BetterExplained: a slightly tilted print with a warm border, floating right. */
-.about-photo { float: right; width: 200px; height: auto; border-radius: var(--pc-radius-card); border: 4px solid var(--pc-photo-frame); transform: rotate(3deg); margin: 0 0 1rem 1.5rem }
+/* The photo as on BetterExplained: a slightly tilted print with a warm border, floating right. The frame is a
+   warm tan mixed from the warning tokens, so it follows the theme without raw colors. */
+.about-photo { float: right; width: 200px; height: auto; border-radius: var(--pc-radius-card); border: 4px solid color-mix(in srgb, var(--pc-warning) 22%, var(--pc-warning-soft)); transform: rotate(3deg); margin: 0 0 1rem 1.5rem }
 @media (max-width: 560px) { .about-photo { width: 120px; margin: 0 0 .75rem 1rem } }
 @media (prefers-reduced-motion: reduce) { .about-photo { transform: none } } .about-sig { margin-top: 24px; color: var(--pc-text-muted) }</style>
 </head>
