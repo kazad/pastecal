@@ -155,6 +155,10 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
   .e-schedule .e-month-view .e-appointment .e-subject { padding-inline: 1px }   /* size stays 12px */
   .e-schedule .e-month-view .e-header-cells span[data-short] { font-size: 0 }
   .e-schedule .e-month-view .e-header-cells span[data-short]::after { content: attr(data-short); font-size: 12px }
+  .e-schedule .e-month-view .e-date-header-wrap .e-header-cells { padding-left: 8px !important; letter-spacing: .02em }   /* "WED" fits a 360px phone's 50px column */
+  .e-schedule .e-month-view .e-appointment .e-subject { text-overflow: clip !important }   /* a few more letters, not an ellipsis taking three */
+  .e-schedule .e-month-view .e-work-cells { height: var(--month-cell-h, 84px) !important }   /* a chip and "+ more": the month is about one screen (app.js fitMonthRows) */
+  .e-schedule .e-month-view .e-more-indicator { padding-inline: 2px !important; text-overflow: clip !important; font-size: var(--pc-fs-2xs) !important }
   /* Week: day columns are ~48px wide, so titles wrap instead of clipping (Syncfusion sets an inline
      max-height of one line); the time, already shown by the grid, gives way. */
   .e-schedule.e-schedule .e-vertical-view .e-appointment .e-subject { white-space: normal !important; max-height: none !important; overflow-wrap: normal !important; word-break: normal !important;
@@ -390,14 +394,14 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-home-line { display: none }
 .pc-home-aside { display: none }
 @media (max-width: 1099px) {
-  .pc-home-line { display: block; margin: 0 0 8px; padding: 0 4px; font-size: var(--pc-fs-md); line-height: 1.4; color: var(--pc-text-muted) }
+  .pc-home-line { display: block; margin: 0 0 var(--pc-space-2); padding: 0 4px; font-size: var(--pc-fs-sm); line-height: 1.4; color: var(--pc-text-muted) }
   .pc-home-line strong { color: var(--pc-text) }
-  .pc-home-line a { color: var(--pc-link); white-space: nowrap }
-  .pc-draft-links a { display: none }   /* the line above the calendar already links to the tour: one "How it works" per screen */
+  .pc-home-line a { margin-left: 2px; color: var(--pc-link); font-weight: var(--pc-fw-semibold); white-space: nowrap }
+  .pc-grid-tip { display: none }   /* the line above the calendar already says "Tap a day" */
 }
 @media (min-width: 1100px) {
   .pc-home-split { display: grid; grid-template-columns: minmax(0, 1fr) clamp(320px, 28vw, 420px); gap: 16px; align-items: stretch }
-  .pc-home-aside { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); background: var(--pc-surface) }
+  .pc-home-aside { display: flex; flex-direction: column; align-self: start; overflow: hidden; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); background: var(--pc-surface) }
   .pc-home-split ~ .pc-tour .pc-intro-full { display: none }   /* the guide carries the headline */
   .pc-home-split:has(.pc-home-aside) .pc-draft-links a { display: none }   /* the guide links to the tour */
   .pc-show-guide { display: inline-flex }
@@ -408,38 +412,49 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-home-split:has(.pc-home-aside) .pc-grid-tip { display: none }   /* the guide already says "Click a day" */
 
 /* ---- The guide ------------------------------------------------------------------------------ */
-.pc-home-bar { display: flex; align-items: center; justify-content: space-between; padding: 6px 6px 6px 16px; border-bottom: 1px solid var(--pc-line); background: var(--pc-surface);
-  font-size: var(--pc-fs-xs); font-weight: var(--pc-fw-semibold); letter-spacing: var(--pc-tracking-caps); text-transform: uppercase; color: var(--pc-text-muted) }
-/* A new visitor's guide has no title in its bar: the hide button floats in the corner instead. */
-.pc-home-bar--bare { position: absolute; top: 6px; right: 6px; padding: 0; border: 0; background: none }
-.pc-home-aside:has(.pc-home-bar--bare) { position: relative }
-.pc-home-aside:has(.pc-home-bar--bare) .pc-home-body { padding-top: 26px }
-.pc-home-aside:has(.pc-home-bar--bare) h1 { padding-right: 28px }
-.pc-home-body { flex: 1; display: flex; flex-direction: column; overflow: auto; padding: 20px 22px 24px }
-.pc-home-aside h1 { margin: 0 0 14px; font-size: var(--pc-fs-4xl); line-height: 1.06; font-weight: 900; letter-spacing: -.02em; color: var(--pc-text); text-wrap: balance }
+.pc-home-bar { flex: none; display: flex; align-items: stretch; justify-content: space-between; gap: var(--pc-space-1); min-height: 48px; padding: 0 6px 0 var(--pc-space-3); border-bottom: 1px solid var(--pc-line); background: var(--pc-soft) }
+.pc-home-tabs { flex: 1; gap: var(--pc-space-3) }
+.pc-home-tabs .pc-tab { padding: 0 var(--pc-space-1) }
+.pc-home-count { margin-left: 6px; padding: 1px 6px; border-radius: var(--pc-radius-pill); background: var(--pc-line); color: var(--pc-text-2); font-size: var(--pc-fs-2xs); font-weight: var(--pc-fw-semibold) }
+.pc-home-hide { align-self: center }
+.pc-home-body { padding: var(--pc-space-5) var(--pc-space-5) var(--pc-space-6) }
+.pc-home-pane { display: flex; flex-direction: column; min-width: 0 }
+.pc-home-aside h1 { margin: 0 0 var(--pc-space-3); font-size: var(--pc-fs-section); line-height: 1.12; font-weight: 900; letter-spacing: -.02em; color: var(--pc-text); text-wrap: balance }
 /* The headline's emphasized word: plain text now (no marker stroke; restraint). */
 .pc-hl { background: none; color: inherit; white-space: nowrap }
 .pc-home-steps { list-style: none; margin: 0 0 18px; padding: 0; display: grid; gap: 10px }
 .pc-home-steps li { display: grid; grid-template-columns: 28px 1fr; gap: 12px; align-items: center; font-size: var(--pc-fs-lg); color: var(--pc-text) }
 .pc-home-steps b { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--pc-soft); color: var(--pc-text-2); font-size: var(--pc-fs-xs); font-weight: var(--pc-fw-bold) }
-.pc-home-aside .pc-home-steps b { background: var(--pc-bg); border: 0 }
+.pc-home-aside .pc-home-steps { gap: var(--pc-space-2); margin-bottom: var(--pc-space-4) }
+.pc-home-aside .pc-home-steps li { font-size: var(--pc-fs-md) }
+.pc-home-aside .pc-home-steps b { width: 24px; height: 24px; background: var(--pc-soft); border: 0 }
 .pc-home-chips { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 4px 0 18px; color: var(--pc-text-muted); font-size: var(--pc-fs-md); font-weight: var(--pc-fw-semibold) }
+.pc-home-aside .pc-home-chips { margin: 0 0 var(--pc-space-4); font-size: var(--pc-fs-sm) }
 .pc-home-chips span::before { content: "✓ "; color: var(--pc-success) }
 .pc-home-links { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0 }
-.pc-home-aside .pc-home-links { margin-bottom: 18px }
+.pc-home-aside .pc-home-links { flex-direction: column; gap: var(--pc-space-1); margin-bottom: 0 }
 .pc-home-more { font-size: var(--pc-fs-lg); font-weight: var(--pc-fw-semibold); color: var(--pc-link) }
-/* Recent calendars are cards, not links: no underline, a border in blue on hover. */
-.pc-home-recents { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px }
-.pc-home-recents a { display: grid; gap: 1px; padding: 9px 12px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); background: var(--pc-surface) }
+.pc-home-aside .pc-home-more { font-size: var(--pc-fs-md) }
+/* Your calendars: one row each, title and pill on top, address and when you last opened it below. */
+.pc-home-recents { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--pc-space-2) }
+.pc-home-recents a { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px var(--pc-space-2); padding: 10px var(--pc-space-3); border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); background: var(--pc-bg); transition: border-color var(--pc-dur-fast) ease }
 .pc-home-recents a, .pc-home-recents a:hover, .pc-home-recents a * { text-decoration: none }
 .pc-home-recents a:hover, .pc-home-recents a:focus-visible { border-color: var(--pc-link) }
 .pc-recent-title { font-size: var(--pc-fs-md); font-weight: var(--pc-fw-semibold); color: var(--pc-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-.pc-recent-meta { font-size: var(--pc-fs-sm); color: var(--pc-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-.pc-recent-more { margin: 0 0 16px; font-size: var(--pc-fs-sm); color: var(--pc-text-muted) }
-.pc-home-new { margin: 18px 0 12px; font-size: var(--pc-fs-lg); line-height: 1.5; color: var(--pc-text-muted) }
-.pc-home-new strong { color: var(--pc-text) }
+.pc-recent-pill { grid-column: 2; grid-row: 1 }
+.pc-recent-meta { grid-column: 1 / -1; display: flex; min-width: 0; font-size: var(--pc-fs-xs); color: var(--pc-text-muted); white-space: nowrap }
+.pc-recent-addr { min-width: 0; overflow: hidden; text-overflow: ellipsis }
+.pc-recent-ago { flex: none }
+.pc-recent-more { margin: var(--pc-space-3) 0 0; font-size: var(--pc-fs-sm); color: var(--pc-text-muted) }
+.pc-home-empty { padding: var(--pc-space-6) var(--pc-space-4) }
+/* New calendar (Start over on a draft with events): the logo menu's first row, under the list. */
+.pc-home-new { display: flex; align-items: center; width: 100%; margin-top: var(--pc-space-4); padding: var(--pc-space-2); border: 1px dashed var(--pc-line); background: none; color: var(--pc-text); font: inherit; text-align: left; cursor: pointer; transition: border-color var(--pc-dur-fast) ease, background-color var(--pc-dur-fast) ease }
+.pc-home-new:hover { border-color: var(--pc-link); background: var(--pc-bg) }
+.pc-home-new:focus-visible { outline: var(--pc-focus-outline); outline-offset: 2px }
+.pc-home-new b { display: block; font-size: var(--pc-fs-md); font-weight: var(--pc-fw-semibold) }
+.pc-home-new small { display: block; font-size: var(--pc-fs-xs); color: var(--pc-text-muted) }
 /* Proof under the links: real numbers and who makes it. */
-.pc-home-proof { display: flex; flex-direction: column; gap: 4px; margin: 28px 0 0; padding-top: 18px; border-top: 1px solid var(--pc-line); font-size: var(--pc-fs-sm); color: var(--pc-text-muted) }
+.pc-home-proof { display: flex; flex-direction: column; gap: 4px; margin: var(--pc-space-5) 0 0; padding-top: var(--pc-space-4); border-top: 1px solid var(--pc-line); font-size: var(--pc-fs-sm); color: var(--pc-text-muted) }
 .pc-home-proof strong { color: var(--pc-text) }
 .pc-home-proof a { color: inherit; text-decoration: underline; text-underline-offset: 2px }
 .pc-demo-code { color: inherit; text-decoration: underline; text-decoration-color: var(--pc-line); text-underline-offset: 3px }
@@ -1196,12 +1211,21 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
 .pc-m-add { position: relative; margin-right: 4px }
 .pc-m-add::after { content: ""; position: absolute; inset: -6px; border-radius: var(--pc-radius-pill) }
 .pc-m-add svg { width: 20px; height: 20px }
-/* Narrow phones (iPhone SE/mini): logo, title, notes, +, share and menu all fit; under 350px the
-   wordmark goes. */
-@media (max-width: 379px) {
-  .pc-m-add { margin-right: 0 }
+.pc-m-notes-item { display: none }
+/* Phones: Notes moves into the menu so the title has room; +, share and menu are 44px targets (the
+   + still draws a 36px circle inside its box). */
+@media (max-width: 640px) {
+  .pc-m-notes { display: none }
+  /* A named title needs no room for the pencil (it shows on hover, and phones don't hover). */
+  .pc-m-title .pc-title-edit:not(.pc-title-unnamed) { padding: 4px 6px !important }
+  .pc-m-notes-item { display: flex }
+  [data-testid="mobile-header"] .pc-m-act { width: var(--pc-h-lg); height: var(--pc-h-lg) }
+  [data-testid="mobile-header"] .pc-m-add { width: var(--pc-h-lg); height: var(--pc-h-lg); margin: 0; padding: 4px; border: 0; background-clip: content-box }
+  .pc-m-add::after { content: none }
+  [data-testid="mobile-header"] .pc-m-add + .pc-m-act, [data-testid="mobile-header"] .pc-m-act + div { margin-left: -4px }
 }
-@media (max-width: 349px) { [data-testid="mobile-header"] .pc-m-wordmark { display: none } }
+/* Under 375px (small Android phones) the wordmark gives its room to the calendar's name; the logo still opens the menu. */
+@media (max-width: 374px) { [data-testid="mobile-header"] .pc-m-wordmark { display: none } }
 
 /* =========================================================================================
    Quick add (components/QuickAddDialog.js): describe it, then check the details
@@ -1233,18 +1257,33 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
   border: 1px solid var(--pc-line); border-radius: var(--pc-radius-pill); background: var(--pc-soft); font-size: var(--pc-fs-sm); line-height: 1.35; color: var(--pc-text-muted) }
 .pc-tpl-note b { color: var(--pc-text); font-weight: var(--pc-fw-semibold) }
 .pc-tpl-x { flex: none; font-size: var(--pc-fs-xl) }   /* + .pc-btn--ghost.pc-btn--icon */
+.pc-tpl-toggle { display: none }
+.pc-tpl-toggle b { font-weight: var(--pc-fw-semibold) }
+.pc-tpl-toggle svg { flex: none; transition: transform var(--pc-dur) var(--pc-ease) }
+.pc-tpl-toggle[aria-expanded="true"] svg { transform: rotate(180deg) }
 /* Phones and tablets: one row that scrolls sideways, never a lone chip wrapped onto a second line. */
 @media (max-width: 1023px) {
   .pc-tpl-row { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain;
     margin: 0 calc(-1 * var(--pc-space-2)); padding: 2px var(--pc-space-2) }   /* to the screen edges: body has 8px */
   .pc-tpl-row::-webkit-scrollbar { display: none }
+  /* Fades at the edges say "there is more this way". */
+  .pc-tpl-row { -webkit-mask-image: linear-gradient(to right, transparent, var(--pc-text) var(--pc-space-2), var(--pc-text) calc(100% - var(--pc-space-8)), transparent);
+    mask-image: linear-gradient(to right, transparent, var(--pc-text) var(--pc-space-2), var(--pc-text) calc(100% - var(--pc-space-8)), transparent) }
   .pc-tpl-label { flex: none; white-space: nowrap }
 }
 @media (max-width: 767px) {
   .pc-tpl { display: block; margin: 0 0 var(--pc-space-2) }
-  .pc-tpl-note { margin: 6px 0 0; padding: 10px 10px 10px 12px; border-radius: var(--pc-radius-card); gap: var(--pc-space-2) }
+  .pc-tpl-note { margin: 6px 0 var(--pc-space-2); padding: 10px 10px 10px 12px; border-radius: var(--pc-radius-card); gap: var(--pc-space-2) }
   .pc-tpl-note > span { flex: 1 1 100%; padding-right: 28px }
   .pc-tpl-x { position: absolute; top: 4px; right: 4px }
+}
+/* Phones: the chips wait behind "Start from a template", so the first screen is the calendar. */
+@media (max-width: 640px) {
+  .pc-tpl-toggle { display: inline-flex; align-items: center; gap: var(--pc-space-1); min-height: var(--pc-h-md); padding: 0 4px; font-size: var(--pc-fs-sm); font-weight: var(--pc-fw-medium); color: var(--pc-text-2) }
+  .pc-tpl-row:not(.is-open) { display: none }
+  .pc-tpl-label { display: none }
+  .pc-tpl-row.is-open { margin-bottom: var(--pc-space-1) }
+  .pc-tpl { margin: 0 }
 }
 
 /* =========================================================================================
@@ -1301,9 +1340,5 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
 .pc-plus-or { margin-top: var(--pc-space-3) }
 .pc-plus-or .pc-link { font-size: var(--pc-fs-sm) }
 .pc-share-plus { margin: var(--pc-space-4) 0 0; color: var(--pc-text-muted); font-size: var(--pc-fs-sm) }   /* + .pc-link */
-/* Homepage panel tabs: plain text, the current one in full color. */
-.pc-home-tabs { display: flex; gap: 16px }
-.pc-home-tabs button { background: none; border: 0; padding: 0; font: inherit; letter-spacing: inherit; text-transform: inherit; color: var(--pc-text-muted); cursor: pointer }
-.pc-home-tabs button.on { color: var(--pc-text) }
-.pc-home-tabs button:hover { color: var(--pc-text) }
-.pc-home-tabs button:focus-visible { outline: none; box-shadow: var(--pc-focus-ring); border-radius: 4px }
+/* Phones: the claim row (address, Draft, Save & share) keeps a little air between its parts. */
+@media (max-width: 767px) { .pc-m-claim input { padding-left: 0 } .pc-m-claim .pc-draft-chip { flex: none; margin: 0 6px } }

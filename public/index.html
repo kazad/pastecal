@@ -340,7 +340,7 @@
                     </calendar-title>
                     <lock-badge v-if="(lock.locked || lock.paused) && !editTitle" :can-edit="lock.canEdit" :paused="lock.paused" @copy="makeOwnCopy"></lock-badge>
                     <button v-if="!editTitle" v-on:click="toggleNotes" aria-label="Toggle notes" :aria-expanded="showNotes ? 'true' : 'false'" :class="{ 'pc-hdr-on': showNotes }"
-                        class="pc-btn pc-btn--ghost pc-btn--icon pc-btn--sm">
+                        class="pc-btn pc-btn--ghost pc-btn--icon pc-btn--sm pc-m-notes">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
                             stroke="currentColor" class="w-5 h-5">
                             <path stroke-linecap="round" stroke-linejoin="round"
@@ -360,13 +360,13 @@
                     <!-- Share button -->
                     <button v-if="isExisting" @click="toggleShare()" aria-label="Share calendar" :class="{ 'pc-hdr-on': showShare }"
                         data-testid="share-button-mobile"
-                        class="pc-btn pc-btn--ghost pc-btn--icon pc-btn--sm">
+                        class="pc-btn pc-btn--ghost pc-btn--icon pc-btn--sm pc-m-act">
                         <icon name="share" class="w-5 h-5"></icon>
                     </button>
                     <!-- Kebab Menu (...) -->
                     <div class="relative z-40">
-                        <button @click.stop="showMobileMenu = !showMobileMenu" aria-label="Open menu"
-                            class="pc-btn pc-btn--ghost pc-btn--icon pc-btn--sm">
+                        <button @click.stop="showMobileMenu = !showMobileMenu" aria-label="Open menu" data-testid="mobile-menu-button"
+                            class="pc-btn pc-btn--ghost pc-btn--icon pc-btn--sm pc-m-act">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24"
                                 stroke="currentColor" stroke-width="2">
                                 <path stroke-linecap="round" stroke-linejoin="round"
@@ -376,6 +376,11 @@
                         <!-- Dropdown -->
                         <div v-if="showMobileMenu" v-click-outside="() => showMobileMenu = false"
                             class="pc-menu absolute right-0 top-full mt-2 w-48 z-50">
+                        <!-- Phones: Notes lives here, so the title has room in the header. -->
+                        <button @click="showMobileMenu = false; toggleNotes()" data-testid="notes-button-mobile" class="pc-menu-item pc-m-notes-item">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
+                                Notes
+                            </button>
                         <button @click="showMobileMenu = false; toggleSearch()"
                                 data-testid="search-button-mobile"
                                 class="pc-menu-item">
@@ -419,7 +424,7 @@
             <!-- isNewCalendar, not !isExisting: a view-only calendar is never "existing", so on phones
                  this bar showed view-only visitors the calendar's EDIT address, with a Claim button. -->
             <div v-show="isNewCalendar"
-                class="flex items-center bg-1 border border-color-default rounded-lg p-2">
+                class="pc-m-claim flex items-center bg-1 border border-color-default rounded-lg p-2">
                 <span class="text-color-1 text-sm pl-1 pr-1 font-medium" id="url-prefix-mobile">pastecal.com/</span>
                 <input type="text" v-model="calendar.id" @input="handleSlugInput" @keyup.enter="create"
                     class="flex-1 bg-transparent border-none focus:ring-0 p-1 text-sm font-bold text-color-2 min-w-0"
@@ -690,7 +695,12 @@
         <!-- Homepage draft only: start from a template (utils/templates.js, applyTemplate in app.js), then a
              quiet nudge toward Save & share. In the page flow, so it never covers the calendar. -->
         <div v-if="isHomepageCalendar && !isReadOnly" class="pc-tpl" data-testid="templates" v-cloak>
-            <div class="pc-tpl-row" role="group" aria-label="Start from a template">
+            <!-- Phones: one quiet toggle, so the first screen is the calendar and Save & share. -->
+            <button type="button" class="pc-link pc-tpl-toggle" :aria-expanded="templatesOpen ? 'true' : 'false'" aria-controls="pc-tpl-row" data-testid="tpl-toggle" @click="toggleTemplates">
+                <template v-if="templateLabel">Template: <b>{{ templateLabel }}</b></template><template v-else>Start from a template</template>
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
+            </button>
+            <div id="pc-tpl-row" class="pc-tpl-row" :class="{ 'is-open': templatesOpen }" role="group" aria-label="Start from a template">
                 <span class="pc-tpl-label">Start from:</span>
                 <button type="button" class="pc-chip pc-chip--lg pc-tpl-chip" :class="{ 'is-on': !template }" :aria-pressed="!template ? 'true' : 'false'" data-testid="tpl-blank" @click="template && startBlank()">Blank</button>
                 <button v-for="t in templateChips" :key="t.id" type="button" class="pc-chip pc-chip--lg pc-tpl-chip" :class="{ 'is-on': template && template.id === t.id }"
@@ -704,9 +714,9 @@
             </p>
         </div>
 
-        <!-- Homepage only, narrow screens: what this is, before the calendar. -->
+        <!-- Homepage only, narrow screens: what to do, in one line. "How pastecal works" is under the calendar. -->
         <p v-if="isHomepageCalendar" class="pc-home-line" v-cloak>
-            <strong>The shared calendar nobody has to sign up for.</strong> Tap a day to add an event, then press Save &amp; share. <a href="/view/demo" data-from="home-line">See a demo</a> · <a href="#how">How it works&nbsp;↓</a>
+            Tap a day to add an event, then Save &amp; share. <a href="/view/demo" data-from="home-line">See a demo</a>
         </p>
 
         <!-- On the homepage at 1100px+, the calendar takes two thirds and the pitch the rest. Elsewhere
@@ -1367,32 +1377,50 @@
                 </div>
             </aside>
             <aside v-else-if="isHomepageCalendar && !homeAsideHidden" class="pc-home-aside" data-testid="home-aside" v-cloak>
-                <div class="pc-home-bar" :class="{ 'pc-home-bar--bare': !homeRecents.length }"><span v-if="homeRecents.length" class="pc-home-tabs" role="tablist" aria-label="Homepage panel"><button type="button" role="tab" :aria-selected="homePanel === 'guide'" :class="{ on: homePanel === 'guide' }" @click="homeTab = 'guide'" data-testid="home-tab-guide">Welcome</button><button type="button" role="tab" :aria-selected="homePanel === 'recents'" :class="{ on: homePanel === 'recents' }" @click="homeTab = 'recents'" data-testid="home-tab-recents">Your calendars</button></span><span v-else></span><button type="button" class="pc-btn pc-btn--ghost pc-btn--icon pc-btn--sm pc-home-hide" @click="toggleHomeAside" aria-label="Hide guide" title="Hide guide"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m8 9 3 3-3 3"/></svg></button></div>
-                <div class="pc-home-body">
-                <!-- Returning visitors: jump back into a recent calendar instead of reading the intro. -->
-                <template v-if="homePanel === 'recents'">
-                    <ul class="pc-home-recents" data-testid="home-recents">
+                <!-- Two tabs, the side panel's tab row (.pc-tabs). Returning visitors open on Your calendars. The panel
+                     is as tall as what it shows, top-aligned beside the month, so a short list never floats in a tall box. -->
+                <div class="pc-home-bar">
+                    <div class="pc-tabs pc-home-tabs" role="tablist" aria-label="Homepage panel">
+                        <button type="button" role="tab" class="pc-tab" :aria-selected="homePanel === 'guide' ? 'true' : 'false'" @click="homeTab = 'guide'" data-testid="home-tab-guide">Welcome</button>
+                        <button type="button" role="tab" class="pc-tab" :aria-selected="homePanel === 'recents' ? 'true' : 'false'" @click="homeTab = 'recents'" data-testid="home-tab-recents">Your calendars<span v-if="recentCalendars.length" class="pc-home-count">{{ recentCalendars.length }}</span></button>
+                    </div>
+                    <button type="button" class="pc-btn pc-btn--ghost pc-btn--icon pc-btn--sm pc-home-hide" @click="toggleHomeAside" aria-label="Hide guide" title="Hide guide"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m8 9 3 3-3 3"/></svg></button>
+                </div>
+                <div class="pc-home-body" role="tabpanel">
+                <!-- Your calendars: jump back into one instead of reading the intro. -->
+                <div v-if="homePanel === 'recents'" class="pc-home-pane pc-home-pane--recents">
+                    <ul v-if="homeRecents.length" class="pc-home-recents" data-testid="home-recents">
                         <li v-for="item in homeRecents" :key="item.id">
                             <a :href="item.path">
                                 <span class="pc-recent-title">{{ item.title }}</span>
-                                <span class="pc-recent-meta">{{ item.address }}<template v-if="item.mine"> · yours</template><template v-else-if="item.view"> · view only</template></span>
+                                <span v-if="item.mine" class="pc-pill pc-pill--info pc-recent-pill">yours</span><span v-else-if="item.view" class="pc-pill pc-recent-pill">view only</span>
+                                <span class="pc-recent-meta"><span class="pc-recent-addr">{{ item.address }}</span><span v-if="item.ago" class="pc-recent-ago">&nbsp;· {{ item.ago }}</span></span>
                             </a>
                         </li>
                     </ul>
+                    <p v-else class="pc-empty pc-home-empty" data-testid="home-recents-empty">No calendars yet.<br>The ones you make or open in this browser show up here.</p>
                     <p v-if="recentCalendars.length > homeRecents.length" class="pc-recent-more">{{ recentCalendars.length - homeRecents.length }} more in the menu next to the logo.</p>
-                    <p class="pc-home-new">Or click any day to start a new one.</p>
-                </template>
-                <template v-else>
-                <h1>The shared calendar <mark class="pc-hl">nobody</mark> has to sign up for.</h1>
-                <p class="pc-home-chips"><span>No login</span><span>Nothing to install</span><span>Free</span></p>
-                <ol class="pc-home-steps">
-                    <li><b>1</b><span>Click a day and type an event.</span></li>
-                    <li><b>2</b><span>Press <strong>Save &amp; share</strong>.</span></li>
-                    <li><b>3</b><span>Send the link to your group.</span></li>
-                </ol>
-                </template>
-                <p v-if="homePanel === 'guide'" class="pc-home-links"><a v-if="!template" class="pc-home-more" href="/view/demo" data-from="home-panel">See a demo calendar →</a><a class="pc-home-more" href="#how">How pastecal works ↓</a></p>
-                <p v-if="homePanel === 'guide'" class="pc-home-proof"><span><strong>3,000+</strong> calendars made since 2021</span></p>
+                    <!-- The logo menu's first row: New calendar, or Start over once this draft has something in it. -->
+                    <button v-if="userAddedEvent || template" type="button" class="pc-nav-row pc-home-new" data-testid="home-start-over" @click="startOver">
+                        <span class="pc-nav-plus" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg></span>
+                        <span><b>Start over</b><small>Clear this draft and begin again. Undo brings it back.</small></span>
+                    </button>
+                    <button v-else type="button" class="pc-nav-row pc-home-new" data-testid="home-new" @click="openQuickAdd()">
+                        <span class="pc-nav-plus" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" width="16" height="16"><path d="M12 5v14M5 12h14"/></svg></span>
+                        <span><b>New calendar</b><small>Click any day to add an event. No sign-up.</small></span>
+                    </button>
+                </div>
+                <div v-else class="pc-home-pane pc-home-pane--guide" data-testid="home-guide">
+                    <h1>The shared calendar <mark class="pc-hl">nobody</mark> has to sign up for.</h1>
+                    <p class="pc-home-chips"><span>No login</span><span>Nothing to install</span><span>Free</span></p>
+                    <ol class="pc-home-steps">
+                        <li><b>1</b><span>Click a day and type an event.</span></li>
+                        <li><b>2</b><span>Press <strong>Save &amp; share</strong>.</span></li>
+                        <li><b>3</b><span>Send the link to your group.</span></li>
+                    </ol>
+                    <p class="pc-home-links"><a v-if="!template" class="pc-home-more" href="/view/demo" data-from="home-panel">See a demo calendar →</a><a class="pc-home-more" href="#how">How pastecal works ↓</a></p>
+                    <p class="pc-home-proof"><span><strong>3,000+</strong> calendars made since 2021</span></p>
+                </div>
                 </div>
             </aside>
             <!-- Below the docking width the panel floats over the calendar; this dims what is behind it. -->
