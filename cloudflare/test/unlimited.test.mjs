@@ -19,8 +19,12 @@ const enc = encodeURIComponent;
 const fake = await startFakeStripe(Number(process.env.FAKE_PORT || 8832));
 let ip = 0;
 
+// Every calendar here is created by AUTHOR (the creating browser's pastecal id): locking one under Pro, moving
+// one under an @name and checkout carry it, like the app, unless a test sets `author` itself (editor of record).
+const AUTHOR = `author-${run}`;
+const CREATOR_PATHS = new Set(['/api/pro/lock', '/api/names/link', '/api/pro/checkout', '/api/pro/trial']);
 const post = (path, body, cookie) => fetch(BASE + path, {
-    method: 'POST', body: JSON.stringify(body),
+    method: 'POST', body: JSON.stringify(CREATOR_PATHS.has(path) && body && body.author === undefined ? { ...body, author: AUTHOR } : body),
     headers: { 'Content-Type': 'application/json', Origin: BASE, 'CF-Connecting-IP': `10.50.${Math.floor(++ip / 200)}.${ip % 200}`, ...(cookie ? { Cookie: cookie } : {}) },
 });
 const admin = (path, init = {}) => fetch(BASE + path, { ...init, headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' } });
@@ -42,7 +46,8 @@ const webhook = (event) => {
 let evN = 0;
 const event = (type, object, id) => ({ id: id || `evt_unl_${run}_${++evN}`, object: 'event', type, data: { object } });
 async function createCalendar(id) {
-    const r = await fetch(`${BASE}/cal/${enc(id)}`, { method: 'POST', body: JSON.stringify({ title: `Team ${id}`, options: {}, events: [] }) });
+    const r = await fetch(`${BASE}/cal/${enc(id)}`, { method: 'POST', headers: { 'CF-Connecting-IP': `10.51.${Math.floor(++ip / 200)}.${ip % 200}` },   // creates are limited per address
+        body: JSON.stringify({ title: `Team ${id}`, options: {}, events: [], author: AUTHOR }) });
     assert.equal(r.status, 201, await r.text());
 }
 const now = () => Math.floor(Date.now() / 1000);

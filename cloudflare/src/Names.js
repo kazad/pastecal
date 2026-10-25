@@ -37,6 +37,8 @@ import { LockClient } from './LockClient.js';
 import { SlugService, nameProblem } from './SlugService.js';
 import { applySecurityHeaders } from './SecurityHeaders.js';
 import { siteUrl } from './Site.js';
+import { previewPage } from './preview/page.js';
+import { metaBlock, STATIC_CARD } from './preview/meta.js';
 
 export const NAME_CHANGES_PER_HOUR = 20;
 export const SHORT_HOLD_DAYS = 90;
@@ -208,7 +210,7 @@ const NAME_OPS = {
         const set = await g.acc.setLink(g.handle.handle, name, id, alias);
         if (set.error) { await removeDirectoryName(env, alias); return json({ error: 'name-taken', message: `You already have @${g.handle.handle}/${name}.` }, 409); }
         // Living under the handle, it never counts toward the 10.
-        const lock = await lockForOwner(env, new URL(request.url).hostname, id, userId, title);
+        const lock = await lockForOwner(env, new URL(request.url).hostname, id, userId, title, { fresh: true });
         if (lock.error) {
             await g.acc.removeLink(id); await removeDirectoryName(env, alias);
             return json({ error: lock.error, ...(lock.message ? { message: lock.message } : {}) }, lock.status || 502);
@@ -242,7 +244,8 @@ const NAME_OPS = {
         const set = await g.acc.setLink(g.handle.handle, name, body.calendarId, alias);
         if (set.error) { if (!existing) await removeDirectoryName(env, alias); return json({ error: 'name-taken', message: `You already have @${g.handle.handle}/${name}.` }, 409); }
         if (!st.locked) {
-            const lock = await lockForOwner(env, new URL(request.url).hostname, body.calendarId, userId, st.title);
+            // A free calendar: only an editor of record moves it under the handle (the Plus rule, and its 7-day undo).
+            const lock = await lockForOwner(env, new URL(request.url).hostname, body.calendarId, userId, st.title, { author: typeof body.author === 'string' ? body.author.slice(0, 128) : '' });
             if (lock.error) {
                 if (!existing) { await g.acc.removeLink(body.calendarId); await removeDirectoryName(env, alias); }
                 return json({ error: lock.error, ...(lock.message ? { message: lock.message } : {}) }, lock.status || 502);
@@ -368,27 +371,19 @@ export async function serveAt(request, env, url, { serveFeed }) {
         if (!look.found || !look.isReadOnly) return new Response('Calendar not found', { status: 404 });
         return serveFeed(request, env, look.targetId, hit.alias, `${handle}-${name}`);
     }
-    // The app's view page, told which read-only name to open; the address stays /@handle/<name>.
+    // The app's view page, told which read-only name to open; the address stays /@handle/<name>. A texted
+    // or posted link previews as this calendar (og-cards: title, upcoming events, its card image), at this
+    // address; the card and tags use the hidden view name, never the calendar's edit id.
     const page = await env.ASSETS.fetch(new Request(new URL('/', url), { headers: { Accept: 'text/html' } }));
     const meta = `<meta name="pc-view" content="${esc(hit.alias)}"><meta name="pc-at" content="${esc('@' + handle + '/' + name)}">`;
-    // A texted or posted link previews as this calendar, at this address. setInnerContent escapes text;
-    // setAttribute escapes only '"', so attribute values go through esc() first (no double escaping).
     const title = hit.title || `@${handle}/${name}`;
-    const pageTitle = `${title} · pastecal`;
-    const desc = `${title}: a shared calendar on pastecal, view only. Open it to see the schedule, or add it to your calendar app.`;
     const at = `${siteUrl(env)}/@${handle}/${name}`;
-    const set = (v) => ({ element(e) { e.setAttribute('content', esc(v)); } });
+    const fallback = metaBlock({ title, docTitle: `${title} · pastecal`, url: at, image: `${siteUrl(env)}${STATIC_CARD}`, imageAlt: title,
+        description: `${title}: a shared calendar on pastecal, view only. Open it to see the schedule, or add it to your calendar app.` });
+    const previewed = await previewPage(request, env, page, { kind: 'view', id: hit.alias }, Date.now(), { url: at, fallback });
     const out = new HTMLRewriter()
         .on('head', { element(e) { e.prepend(meta, { html: true }); } })
-        .on('title', { element(e) { e.setInnerContent(pageTitle); } })
-        .on('meta[name="description"]', set(desc))
-        .on('meta[property="og:title"]', set(title))
-        .on('meta[property="og:description"]', set(desc))
-        .on('meta[property="og:url"]', set(at))
-        .on('meta[name="twitter:title"]', set(title))
-        .on('meta[name="twitter:description"]', set(desc))
-        .on('meta[property="twitter:url"]', set(at))
-        .transform(page);
+        .transform(previewed);
     const res = new Response(out.body, out);
     res.headers.set('Cache-Control', 'no-cache');
     res.headers.delete('X-Robots-Tag');

@@ -40,7 +40,8 @@ async function call(env, id, action, method, body) {
 export const LockClient = {
     // Billing has no browser to show a key to: no 'Editors' link is made (the owner makes links later).
     // takeover: support only (reassign), may lock a calendar paused for its previous owner.
-    lock: (env, id, ownerId, { takeover = false } = {}) => call(env, id, 'lock', 'POST', { ownerId, plan: 'pro', createLink: false, ...(takeover ? { takeover: true } : {}) }),
+    // plan: the lock's plan id ('pro' Plus, 'unlimited' Pro): Activity says "Upgraded with <its name>".
+    lock: (env, id, ownerId, { takeover = false, plan = 'pro' } = {}) => call(env, id, 'lock', 'POST', { ownerId, plan, createLink: false, ...(takeover ? { takeover: true } : {}) }),
     // trial: a trial ended unpaid, so it ends open unless the owner chose read-only.
     // undo: the 7-day undo of someone else's upgrade (Activity says "Upgrade undone").
     unlock: (env, id, ownerId, { lapse = false, trial = false, undo = false } = {}) => call(env, id, 'unlock', 'POST', { ownerId, ...(lapse ? { lapse: true } : {}), ...(trial ? { trial: true } : {}), ...(undo ? { undo: true } : {}) }),

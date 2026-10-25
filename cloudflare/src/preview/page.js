@@ -35,6 +35,7 @@ export async function loadPreview(env, target) {
     if (dir) {
         const look = await (await dir.fetch(`http://internal/lookup?slug=${encodeURIComponent(target.id)}`)).json();
         if (look && look.found) {
+            if (look.ended || (look.isReadOnly && !look.targetId)) return null;    // a tombstone ("This link has ended"): no room behind it
             if (target.kind === 'view' && !look.isReadOnly) return null;           // /view/<edit name> is no view link
             roomId = look.targetId || look.actualSlug;
         } else return null;
@@ -51,15 +52,24 @@ export function cardStamp(cal, now) {
     return `${cal.v || 0}-${isoDay(dayOf(now, 'UTC')).replace(/-/g, '')}${cal.pro && cal.hideBranding ? '-nb' : ''}`;
 }
 
-/** index.html (an assets Response) with this calendar's tags; the original on any problem or delay. */
-export async function previewPage(request, env, assetRes, target, now = Date.now()) {
+/**
+ * index.html (an assets Response) with this calendar's tags; the original on any problem or delay.
+ * url: the address as shared when it isn't the target's own (an @link previews its hidden view name).
+ * fallback: a meta block for when the calendar can't be read in time (else the page's generic tags).
+ */
+export async function previewPage(request, env, assetRes, target, now = Date.now(), { url = null, fallback = null } = {}) {
     if (!assetRes.ok || !(assetRes.headers.get('Content-Type') || '').includes('text/html')) return assetRes;
     const html = await assetRes.text();
-    const plain = () => new Response(html, assetRes);
+    const plain = () => {
+        if (!fallback) return new Response(html, assetRes);
+        const res = new Response(injectMeta(html, fallback), assetRes);
+        res.headers.delete('Content-Length'); res.headers.delete('ETag');
+        return res;
+    };
     try {
         const cal = await Promise.race([loadPreview(env, target), timeout(pageBudget(request))]);
         if (!cal) return plain();
-        const block = calendarMeta(publicOrigin(new URL(request.url)), target, { title: displayTitle(cal), description: describe(cal, now), stamp: cardStamp(cal, now) });
+        const block = calendarMeta(publicOrigin(new URL(request.url)), target, { title: displayTitle(cal), description: describe(cal, now), stamp: cardStamp(cal, now), url });
         const res = new Response(injectMeta(html, block), assetRes);
         res.headers.delete('Content-Length');
         res.headers.delete('ETag');                  // the asset's ETag names the generic page, not this one

@@ -425,6 +425,22 @@ export class Accounts extends DurableObject {
         this.sql.exec(`DELETE FROM name_events WHERE at < ?`, now - 30 * 24 * 3600 * 1000);
     }
     addOwned(userId, calendarId) { this.sql.exec(`INSERT OR IGNORE INTO account_calendars (user_id, calendar_id, added_at) VALUES (?, ?, ?)`, userId, calendarId, Date.now()); }
+    // The 7-day undo of a Pro lock: the calendar leaves the upgrader's Pro, their account list, @link and
+    // short links. -> {slugs: directory names to remove, handle, atNames}
+    releaseNamesFor(calendarId, userId) {
+        const link = this.linkFor(calendarId);
+        const h = this.handleOf(userId);
+        const mine = link && h && link.handle === h.handle ? link : null;
+        const shorts = this.sql.exec(`SELECT name FROM short_links WHERE user_id = ? AND calendar_id = ?`, userId, calendarId).toArray().map((r) => r.name);
+        this.ctx.storage.transactionSync(() => {
+            this.sql.exec(`DELETE FROM unlimited_locks WHERE calendar_id = ? AND user_id = ?`, calendarId, userId);
+            this.sql.exec(`DELETE FROM account_calendars WHERE user_id = ? AND calendar_id = ?`, userId, calendarId);
+            if (mine) this.sql.exec(`DELETE FROM handle_links WHERE calendar_id = ?`, calendarId);
+            for (const n of shorts) this.sql.exec(`DELETE FROM short_links WHERE name = ?`, n);
+        });
+        if (mine || shorts.length) this.noteNameEvent(userId, 'undo', calendarId);
+        return { slugs: [...(mine ? [mine.alias] : []), ...shorts], handle: mine ? mine.handle : null, atNames: mine ? [mine.name] : [] };
+    }
     ownedUnderAccount(userId, calendarId) { return this.sql.exec(`SELECT 1 FROM account_calendars WHERE user_id = ? AND calendar_id = ?`, userId, calendarId).toArray().length > 0; }
     removeOwned(userId, calendarId) { this.sql.exec(`DELETE FROM account_calendars WHERE user_id = ? AND calendar_id = ?`, userId, calendarId); }
     // Calendars under this owner's Unlimited that count toward its 10: those not living under the owner's @handle.
@@ -1363,8 +1379,22 @@ async function editorCheck(env, calendarId, author, userId) {
     const r = await LockClient.editorOfRecord(env, calendarId, typeof author === 'string' ? author.slice(0, 128) : '');
     const creator = !!(r.ok && r.creator);
     if (r.ok && r.editor) return { res: null, creator };
-    if (userId && await accounts(env).ownsOrOwned(calendarId, userId)) return { res: null, creator };
+    if (userId && (await accounts(env).ownsOrOwned(calendarId, userId) || await accounts(env).ownedUnderAccount(userId, calendarId))) return { res: null, creator };
     return { res: { error: 'not-an-editor', message: NOT_EDITOR }, creator };
+}
+
+// A Pro (unlimited) lock of an existing calendar: already theirs (locked by them, or paused for them) needs
+// no check; anything else is an editor of record, noted for the 7-day undo. -> {res: null} | {res, status}
+async function proEditorCheck(env, calendarId, author, userId) {
+    if (!validId(calendarId)) return { res: { error: 'bad-calendar' }, status: 400 };
+    const st = await LockClient.lockStatus(env, calendarId);
+    if (!st.ok) return { res: null };                  // 404 / unreachable: lockUnderUnlimited answers it
+    if ((st.locked && st.ownerId === userId) || (!st.locked && st.lapsed && st.lapsed.ownerId === userId)) return { res: null };
+    if (st.locked) return { res: null };               // someone else's lock: lockUnderUnlimited refuses it
+    const ed = await editorCheck(env, calendarId, author, userId);
+    if (ed.res) return { res: ed.res, status: 403 };
+    await accounts(env).noteUpgrade(calendarId, author, ed.creator);
+    return { res: null };
 }
 
 // POST /api/pro/trial, and a "Try Pro free" sign-in link's verify. -> [status, body]
@@ -1465,7 +1495,10 @@ async function undoUpgrade(request, env, body) {
     const acc = accounts(env);
     const cfg = stripeConfig(env, new URL(request.url).hostname);
     let refunded = false;
-    for (const sub of await acc.activeSubscriptionsFor(calendarId, row.user_id)) {
+    // Under its owner's Pro: the subscription pays for their other calendars, so it is never canceled or
+    // refunded here; this calendar just leaves it (below). activeSubscriptionsFor lists only per-calendar ones.
+    const underPro = await acc.coveredByUnlimited(calendarId, row.user_id);
+    for (const sub of underPro ? [] : await acc.activeSubscriptionsFor(calendarId, row.user_id)) {
         if (!cfg) return json({ error: 'billing-not-configured' }, 503);
         const g = await stripeRequest(cfg, 'GET', `/v1/subscriptions/${encodeURIComponent(sub.id)}`);
         if (!g.ok) return json({ error: 'stripe-error' }, 502);
@@ -1477,6 +1510,11 @@ async function undoUpgrade(request, env, body) {
     if (!un.ok) return json({ error: 'unavailable' }, 502);
     await acc.markUndone(calendarId);
     await acc.resetTrial(calendarId);                                                    // the trial was never really used
+    // Its Pro names come off too: no @link or short link of the upgrader keeps pointing at a calendar
+    // they no longer hold (short links are released; the @link and its hidden name are removed).
+    const freed = await acc.releaseNamesFor(calendarId, row.user_id);
+    for (const slug of freed.slugs) await removeDirectoryName(env, slug);
+    if (freed.handle) await purgeNames(freed.handle, freed.atNames);
     console.log('[accounts] upgrade undone by an editor of record:', calendarId);
     return json({ ok: true, refunded });
 }
@@ -1837,7 +1875,7 @@ async function checkoutUnlimited(request, env, body, cfg, { userId, claim, claim
     const [user, active, singles] = userId ? await Promise.all([acc.getUser(userId), acc.activeUnlimited(userId), acc.activeSingles(userId)]) : [null, null, []];
     if (userId && !user) return json({ error: 'signed-out' }, 401);
     if (active) return json({ error: 'already-unlimited' }, 409);
-    let calendarId = null;
+    let calendarId = null, upgrade = null;
     if (body.calendarId !== undefined && body.calendarId !== null && body.calendarId !== '') {
         if (!validId(body.calendarId)) return json({ error: 'bad-calendar' }, 400);
         calendarId = body.calendarId;
@@ -1846,6 +1884,10 @@ async function checkoutUnlimited(request, env, body, cfg, { userId, claim, claim
         if (!st.ok) return json({ error: 'unavailable' }, 502);
         if (st.locked && st.ownerId !== userId) return json({ error: 'locked-by-other' }, 409);
         if (st.lapsed && st.lapsed.mode === 'readonly' && st.lapsed.ownerId !== userId) return json({ error: userId ? 'locked-by-other' : 'signed-out' }, userId ? 409 : 401);
+        // Pro upgrades the calendar it was bought from: the same editor-of-record rule as Plus (and the undo).
+        const own = !!(userId && ((st.locked && st.ownerId === userId) || (st.lapsed && st.lapsed.ownerId === userId)));
+        upgrade = own ? null : await editorCheck(env, calendarId, body.author, userId);
+        if (upgrade && upgrade.res) return json(upgrade.res, 403);
     }
     const holdKey = unlimitedHoldKey(buyer);
     const hold = await acc.holdCheckout(holdKey, buyer, CHECKOUT_HOLD_MS);
@@ -1880,6 +1922,7 @@ async function checkoutUnlimited(request, env, body, cfg, { userId, claim, claim
     const r = await stripeRequest(cfg, 'POST', '/v1/checkout/sessions', params);
     if (!r.ok || !r.data.url) { console.error('[accounts] unlimited checkout failed:', r.status, r.data && r.data.error && r.data.error.code); return json({ error: 'stripe-error' }, 502); }
     if (r.data.id) await acc.setCheckoutSession(holdKey, buyer, r.data.id);
+    if (upgrade) await acc.noteUpgrade(calendarId, body.author, upgrade.creator);   // marked when the lock lands
     return json({ url: r.data.url }, 200, claim ? { 'Set-Cookie': claimCookie(claim, CLAIM_MAX_AGE) } : {});
 }
 
@@ -1917,9 +1960,10 @@ async function lockUnderUnlimited(env, acc, cfg, calendarId, userId, subscriptio
         }
         return { ok: true, already: true };
     }
-    const r = await LockClient.lock(env, calendarId, userId);
+    const r = await LockClient.lock(env, calendarId, userId, { plan: 'unlimited' });
     if (r.status >= 500 || r.status === 0) { await acc.uncoverUnlimited(calendarId, userId); return { retry: true }; }
     if (!r.ok) { await acc.uncoverUnlimited(calendarId, userId); return { status: r.status === 409 ? 409 : 502, error: r.error || 'unavailable' }; }
+    await acc.markUpgraded(calendarId, userId);       // the upgrade noted by the caller (editor check), for the 7-day undo
     await sendWelcomeEmail(env, acc, calendarId, userId, title || st.title, null, null, 'unlimited');
     return { ok: true };
 }
@@ -2002,21 +2046,30 @@ async function unlimitedLock(request, env, body) {
     const sub = await acc.activeUnlimited(userId);
     if (!sub) return json({ error: 'no-unlimited' }, 403);
     const title = typeof body.title === 'string' ? body.title : null;
+    const ed = await proEditorCheck(env, body.calendarId, body.author, userId);
+    if (ed.res) return json(ed.res, ed.status || 403);
     const r = await lockUnderUnlimited(env, acc, cfg, body.calendarId, userId, sub.id, title);
     if (r.retry) return json({ error: 'unavailable' }, 502);
     if (r.error) return json({ error: r.error, ...(r.message ? { message: r.message } : {}) }, r.status);
     return json({ ok: true, ...(r.already ? { already: true } : {}) });
 }
 
-// Lock a calendar under the owner's active Unlimited, for Names.js (a new calendar under @handle).
+// Lock a calendar under the owner's active Unlimited, for Names.js: a new calendar under @handle
+// (fresh: Names just made it, so this account is its creator), or an existing free calendar moving under
+// the @handle (author: this browser's pastecal id; the editor-of-record rule and the 7-day undo apply).
 // -> {ok, already?} | {status, error, message?}
-export async function lockForOwner(env, host, calendarId, userId, title = null) {
+export async function lockForOwner(env, host, calendarId, userId, title = null, { fresh = false, author = '' } = {}) {
     if (env.BETA_REAL_DATA) return { status: 403, error: 'buy-on-live', message: 'Plans are used on pastecal.com.' };
     const cfg = stripeConfig(env, host);
     if (!cfg) return { status: 503, error: 'billing-not-configured' };
     const acc = accounts(env);
     const sub = await acc.activeUnlimited(userId);
     if (!sub) return { status: 403, error: 'no-unlimited' };
+    if (fresh) await acc.noteUpgrade(calendarId, null, true);
+    else {
+        const ed = await proEditorCheck(env, calendarId, author, userId);
+        if (ed.res) return { status: ed.status || 403, ...ed.res };
+    }
     const r = await lockUnderUnlimited(env, acc, cfg, calendarId, userId, sub.id, title);
     if (r.retry) return { status: 502, error: 'unavailable' };
     return r;

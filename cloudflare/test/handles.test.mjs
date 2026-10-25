@@ -18,8 +18,12 @@ const run = Date.now().toString(36);
 const enc = encodeURIComponent;
 const fake = await startFakeStripe(Number(process.env.FAKE_PORT || 8832));
 let ip = 0;
+// Every calendar here is created by AUTHOR (the creating browser's pastecal id): locking one under Pro, moving
+// one under an @name and checkout carry it, like the app, unless a test sets `author` itself (editor of record).
+const AUTHOR = `author-${run}`;
+const CREATOR_PATHS = new Set(['/api/pro/lock', '/api/names/link', '/api/pro/checkout', '/api/pro/trial']);
 const post = (path, body, cookie) => fetch(BASE + path, {
-    method: 'POST', body: JSON.stringify(body),
+    method: 'POST', body: JSON.stringify(CREATOR_PATHS.has(path) && body && body.author === undefined ? { ...body, author: AUTHOR } : body),
     headers: { 'Content-Type': 'application/json', Origin: BASE, 'CF-Connecting-IP': `10.60.${Math.floor(++ip / 200)}.${ip % 200}`, ...(cookie ? { Cookie: cookie } : {}) },
 });
 const pj = async (path, body, cookie) => { const r = await post(path, body, cookie); return { status: r.status, d: await r.json().catch(() => ({})) }; };
@@ -42,7 +46,7 @@ const webhook = (event) => {
 let evN = 0;
 const event = (type, object) => ({ id: `evt_names_${run}_${++evN}`, object: 'event', type, data: { object } });
 async function createCalendar(id, title) {
-    const r = await fetch(`${BASE}/cal/${enc(id)}`, { method: 'POST', headers: { 'CF-Connecting-IP': `10.61.${Math.floor(++ip / 200)}.${ip % 200}` }, body: JSON.stringify({ title, options: {}, events: [{ id: 'e1', title: 'Practice', start: '2026-11-01T10:00:00.000Z', end: '2026-11-01T11:00:00.000Z' }] }) });
+    const r = await fetch(`${BASE}/cal/${enc(id)}`, { method: 'POST', headers: { 'CF-Connecting-IP': `10.61.${Math.floor(++ip / 200)}.${ip % 200}` }, body: JSON.stringify({ title, options: {}, events: [{ id: 'e1', title: 'Practice', start: '2026-11-01T10:00:00.000Z', end: '2026-11-01T11:00:00.000Z' }], author: AUTHOR }) });
     assert.equal(r.status, 201, await r.text());
 }
 const now = () => Math.floor(Date.now() / 1000);
@@ -58,6 +62,18 @@ async function endUnlimited(id, who, tag) {
     const ended = { ...paidSub(id, `cus_${run}_${tag}`, who.userId), status: 'canceled' };
     fake.subs.set(id, ended);
     assert.equal((await webhook(event('customer.subscription.deleted', ended))).status, 200);
+}
+// A second device that edited the calendar on 2 days: an editor of record (CalendarRoom editor-of-record).
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function secondDevice(calId, uid) {
+    const ws = new WebSocket(BASE.replace(/^http/, 'ws') + `/cal/${enc(calId)}/ws?author=${enc(uid)}`);
+    const got = []; ws.addEventListener('message', (e) => got.push(JSON.parse(e.data)));
+    const waitFor = async (pred) => { for (let i = 0; i < 200; i++) { const hit = got.find(pred); if (hit) return hit; await sleep(20); } throw new Error('socket timed out'); };
+    await waitFor((m) => m.t === 'snapshot');
+    ws.send(JSON.stringify({ t: 'save', id: 'sd1', v: 0, commands: [{ type: 'add', event: { id: `${uid}-e`, title: 'helper edit', start: '2026-11-06T09:00:00.000Z', end: '2026-11-06T10:00:00.000Z', type: 1 } }] }));
+    assert.equal((await waitFor((m) => m.id === 'sd1')).t, 'ack');
+    ws.close();
+    assert.equal((await admin(`/cal/${enc(calId)}/authors`, { method: 'POST', body: JSON.stringify({ uid, day: '2026-01-03' }) })).status, 200);
 }
 // The response must never carry the calendar's edit id: not in the body, not in a header.
 async function noEditId(res, editId, what) {
@@ -203,6 +219,16 @@ try {
     assert.equal(res.status, 200);
     assert.match(await noEditId(res, club, 'short feed'), /X-WR-CALNAME:Book club/);
     assert.equal(JSON.parse(await noEditId(await get(`/cal/view/${s1}`), club, 'short view')).calendar.title, 'Book club');
+    {   // a short link previews as its calendar (og-cards: run_worker_first sends it to the Worker), never with the edit id
+        const html = await noEditId(await get(`/${s1}`, null), club, 'short page');
+        const head = html.slice(0, html.indexOf('</head>'));
+        assert.match(head, /<meta property="og:title" content="Book club">/);
+        assert.match(head, new RegExp(`<link rel="canonical" href="http://localhost:\\d+/${s1}">|<link rel="canonical" href="https://[^/]+/${s1}">`));
+        assert.match(head, new RegExp(`/og/${s1}\\.png\\?v=`));
+        const card = await get(`/og/${s1}.png`);
+        assert.equal(card.status, 200); assert.notEqual(card.headers.get('x-preview'), 'static');
+        step('a short link page previews as its calendar (title, its own card), with no edit id');
+    }
     assert.equal((await pj('/api/names/short', { name: s1, calendarId: extra[0] }, bob.cookie)).d.error, 'not-owner');
     await createCalendar(`bobcal-${run}`, 'Bob');
     await pj('/api/pro/lock', { calendarId: `bobcal-${run}` }, bob.cookie);
@@ -307,6 +333,12 @@ try {
         assert.equal((await pj('/api/account/delete', {}, cory.cookie)).status, 200);
         const look = await (await get(`/api/lookup?slug=${tname}`)).json();
         assert.deepEqual(look, { found: true, actualSlug: tname, isReadOnly: true, ended: true }, 'a tombstone, never a target');
+        {   // link previews of a tombstone: the generic tags and the site card, and no room is made for the name
+            const head = (await (await get(`/${tname}`)).text()).split('</head>')[0];
+            assert.ok(!head.includes('Tigers U10') && !head.includes(`/og/${tname}`), 'no calendar tags on an ended link');
+            assert.equal((await get(`/og/${tname}.png`)).headers.get('x-preview'), 'static');
+            assert.equal((await admin(`/api/admin/cal/${enc(tname)}/lock-status`)).status, 404, 'no room was created for the ended name');
+        }
         assert.equal((await fetch(`${BASE}/cal/${tname}`, { method: 'POST', headers: { 'CF-Connecting-IP': '10.62.0.1' }, body: JSON.stringify({ title: 'Tigers U10 (new link!)', options: {}, events: [] }) })).status, 409, 'nobody can make a calendar there');
         assert.equal((await fetch(`${BASE}/cal/${tname.toUpperCase()}`, { method: 'POST', headers: { 'CF-Connecting-IP': '10.62.0.2' }, body: JSON.stringify({ title: 'x', options: {}, events: [] }) })).status, 409, 'nor in another case');
         const evecal = `evecal-${run}`; await createCalendar(evecal, 'Eve'); await pj('/api/pro/lock', { calendarId: evecal }, eve.cookie);
@@ -359,12 +391,20 @@ try {
         const meta = (sel) => { const m = new RegExp(`<meta ${sel} content="([^"]*)"`).exec(head); return m && m[1]; };
         assert.match(meta('property="og:title"'), /^Tigers &quot;U10&quot; &lt;script&gt;/, 'og:title is the calendar, escaped');
         assert.equal(meta('property="og:url"'), `https://pastecal.com/@${xh}/tigers`);
-        assert.equal(meta('property="twitter:url"'), `https://pastecal.com/@${xh}/tigers`);
-        assert.match(meta('property="og:description"'), /a shared calendar on pastecal, view only/);
-        assert.equal(meta('name="description"').split(':')[0], 'Tigers &quot;U10&quot; &lt;script&gt;alert(1)&lt;/script&gt;&lt;/title&gt;&lt;img src=x onerror=alert(2)&gt; &amp; co', 'escaped once, not twice');
+        assert.match(head, new RegExp(`<link rel="canonical" href="https://pastecal.com/@${xh}/tigers">`), 'canonical: the @ address');
+        // og-cards: the calendar's own description (upcoming events) and card, via its hidden view name.
+        assert.equal(meta('property="og:description"'), 'No upcoming events');
+        assert.equal(meta('name="description"'), 'No upcoming events');
+        const img = meta('property="og:image"');
+        assert.match(img, /\/og\/view\/[^/]+\.png\?v=/, 'the calendar card for its view name: ' + img);
+        assert.ok(!img.includes(made.d.calendarId), 'never the edit id');
+        const card = await get(new URL(img).pathname + new URL(img).search);
+        assert.equal(card.status, 200); assert.equal(card.headers.get('content-type'), 'image/png');
+        assert.notEqual(card.headers.get('x-preview'), 'static', 'its own card, not the site card');
         assert.match(meta('name="twitter:title"'), /^Tigers &quot;U10&quot;/);
         assert.ok(!head.includes('The shared calendar nobody has to sign up for'), 'not the homepage card');
-        step('@link page: its own <title>, description, og:/twitter: title and url (the @ address), every value escaped; no edit id');
+        assert.equal((head.match(/<!-- preview:meta -->/g) || []).length, 1, 'one meta block');
+        step('@link page: its own <title>, og:/twitter: title, canonical and og:url (the @ address), the calendar card (its view name, never the edit id), every value escaped');
     }
 
     // --- red team: a calendar under someone else's @name can't be re-linked, renamed, or used to dodge the 5
@@ -383,10 +423,59 @@ try {
         assert.equal(r.status, 409); assert.equal(r.d.error, 'linked-elsewhere');
         assert.equal((await get(`/@${fh}/club`)).status, 200, 'her @link is untouched');
         assert.equal((await get(`/@${gh}/mine`)).status, 404);
-        // Locking it is still allowed (it's open), but her old @link doesn't exempt it from his 10.
-        assert.equal((await pj('/api/pro/lock', { calendarId: club }, gus.cookie)).status, 200);
+        // Open, but he never edited it: knowing the URL is not enough (editors of record, like Plus).
+        assert.equal((await pj('/api/pro/lock', { calendarId: club }, gus.cookie)).d.error, 'not-an-editor');
+        // An editor of record may lock it, but her old @link doesn't exempt it from his 5.
+        await secondDevice(club, 'gus-device');
+        r = await pj('/api/pro/lock', { calendarId: club, author: 'gus-device' }, gus.cookie);
+        assert.equal(r.status, 200, JSON.stringify(r.d));
         assert.equal((await account(gus.cookie)).proCount, 1, 'it counts toward his 5');
         step('red team: a calendar with another account\'s @link can\'t be linked under yours (409 linked-elsewhere, theirs untouched), and their link never exempts it from your 5');
+    }
+
+    // --- editors of record: a Pro member who only has a free calendar's URL can't take it over
+    {
+        const ivy = await signIn(`ivy-names-${run}@example.com`);
+        await giveUnlimited(ivy, 'ivy');
+        const ih = `ivy-${run}`.slice(0, 30);
+        assert.equal((await pj('/api/names/handle', { handle: ih }, ivy.cookie)).status, 200);
+        const theirs = `theirs-${run}`; await createCalendar(theirs, 'Their team');
+        for (const author of ['ivy-device', '']) {
+            let r = await pj('/api/names/link', { calendarId: theirs, name: 'grab', author }, ivy.cookie);
+            assert.equal(r.status, 403, JSON.stringify(r.d)); assert.equal(r.d.error, 'not-an-editor');
+            r = await pj('/api/pro/lock', { calendarId: theirs, author }, ivy.cookie);
+            assert.equal(r.status, 403, JSON.stringify(r.d)); assert.equal(r.d.error, 'not-an-editor');
+            r = await pj('/api/pro/checkout', { plan: 'unlimited', interval: 'year', calendarId: theirs, author });
+            assert.equal(r.status, 403, 'signed out Pro checkout from their calendar'); assert.equal(r.d.error, 'not-an-editor');
+        }
+        assert.equal((await lockStatus(theirs)).locked, false, 'still a free calendar');
+        assert.equal((await get(`/@${ih}/grab`)).status, 404, 'no @link was left behind');
+        assert.ok(!(await account(ivy.cookie)).calendars.some((c) => c.id === theirs), 'not in her account');
+        step('editors of record: a Pro member with only the URL can\'t lock a free calendar (POST /api/pro/lock), move it under her @name (POST /api/names/link) or buy Pro from it: 403 not-an-editor, nothing left behind');
+
+        // An editor of record on another device (edited it on 2 days) may; the creator's browser can undo it for 7 days.
+        await secondDevice(theirs, 'ivy-device');
+        let r = await pj('/api/pro/lock', { calendarId: theirs, author: 'ivy-device' }, ivy.cookie);
+        assert.equal(r.status, 200, JSON.stringify(r.d));
+        assert.equal((await pj('/api/names/link', { calendarId: theirs, name: 'team', author: 'ivy-device' }, ivy.cookie)).status, 200);
+        r = await pj('/api/names/short', { calendarId: theirs, name: `ivyteam-${run}` }, ivy.cookie);
+        assert.equal(r.status, 200, JSON.stringify(r.d));
+        assert.equal((await get(`/@${ih}/team`)).status, 200);
+        assert.equal((await (await get(`/api/pro/status?calendar=${enc(theirs)}`)).json()).plan, 'unlimited', 'it says Pro');
+        const notice = async (author) => (await pj('/api/pro/upgrade-notice', { calendarId: theirs, author })).d.notice;
+        assert.equal(await notice('ivy-device'), null, 'the upgrader sees no undo');
+        assert.ok(await notice(AUTHOR), 'the creator\'s browser does');
+        assert.equal((await pj('/api/pro/undo-upgrade', { calendarId: theirs, author: 'stranger' })).status, 403);
+        r = await pj('/api/pro/undo-upgrade', { calendarId: theirs, author: AUTHOR });
+        assert.equal(r.status, 200, JSON.stringify(r.d)); assert.equal(r.d.refunded, false, 'Pro pays for her other calendars: nothing refunded or canceled');
+        assert.equal((await lockStatus(theirs)).locked, false, 'a free calendar again');
+        assert.equal((await account(ivy.cookie)).plan, 'unlimited', 'her Pro is untouched');
+        assert.equal((await get(`/@${ih}/team`)).status, 404, 'her @link to it is gone');
+        assert.equal((await (await get(`/api/lookup?slug=ivyteam-${run}`)).json()).found, false, 'her short link to it is released');
+        const acct = await account(ivy.cookie);
+        assert.ok(!acct.calendars.some((c) => c.id === theirs) && !acct.shortNames.some((x) => x.calendarId === theirs), 'nothing of it left in her account');
+        assert.equal((await pj('/api/pro/undo-upgrade', { calendarId: theirs, author: AUTHOR })).status, 404, 'nothing left to undo');
+        step('7-day undo of a Pro lock by another editor of record: the creator\'s browser undoes it (not the upgrader, not a stranger); the calendar is free again, her Pro is not canceled or refunded, and her @link and short link to it are removed');
     }
 
     // --- rate limit on name changes

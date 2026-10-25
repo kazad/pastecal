@@ -14,14 +14,16 @@ export const STATIC_CARD = '/img/og-card.png';
 
 // Top-level pages that are not calendars (public/*.html and app routes), besides the reserved names.
 const SITE_PAGES = new Set(['about', 'help', 'contact', 'poll', 'signin', 'report', 'design-ideas', 'pricing-next', 'privacy', 'terms',
-    'pricing', 'index', 'og', 'img', 'vendor', 'components', 'services', 'models', 'utils', 'directives', 'demo', 'nativecal', 'beta']);
+    'pricing', 'index', 'og', 'img', 'vendor', 'components', 'services', 'models', 'utils', 'directives', 'demo', 'nativecal', 'beta',
+    'account', 'handle', 'link-ended']);
 
 // Any name Firebase allowed (index.js validId).
 const validId = (id) => typeof id === 'string' && id.length >= 1 && id.length <= 200 && !/[.#$\[\]\/\u0000-\u001f\u007f]/.test(id);
 
 /**
  * Which calendar a page path names: {kind: 'edit'|'view', id} or null (site pages, files, embeds).
- * Another link form (e.g. @handle) slots in here as a new kind; everything after works on {kind, id}.
+ * A Pro short link (/<short>) is an 'edit' target whose directory row is read-only: it previews its calendar.
+ * An @link (/@handle/<name>) is served by Names.js serveAt, which previews its hidden view name (kind 'view').
  */
 export function calendarTarget(pathname, search = '') {
     if (/(^|[?&])embed(=|&|$)/i.test(String(search).replace(/^\?/, '&'))) return null;     // embeds: no preview needed
@@ -86,11 +88,11 @@ export function injectMeta(html, block) {
 }
 
 /** The meta for a calendar page from its preview (model.js) values. */
-export function calendarMeta(origin, target, { title, description, stamp }) {
+export function calendarMeta(origin, target, { title, description, stamp, url = null }) {
     return metaBlock({
         title,
         description,
-        url: pageUrl(origin, target),
+        url: url || pageUrl(origin, target),          // url: the address as shared, when it isn't the target's own (an @link)
         image: cardUrl(origin, target, stamp),
         imageAlt: `${title}: upcoming events`,
         docTitle: `${title} · pastecal`,
