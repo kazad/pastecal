@@ -34,6 +34,23 @@ function track(fn) {
 (function installErrorReporting() {
     if (typeof window === 'undefined') return;
 
+    // A browser can bring back an old saved copy of the page (a restored tab) and fetch today's
+    // scripts for it, because the server ignores ?v=. The old page then lacks a script this code
+    // needs ("LockBadge is not defined", "slugFromPath is not a function") and the calendar never
+    // opens. Before the app has mounted, such an error reloads the page once, which fetches the
+    // matching copy. At most once a minute per tab, so a real bug is reported instead of looping.
+    const MISSING = /is not defined|Can't find variable|is not a function|is not a constructor|undefined is not an object/i;
+    const reloadIfStale = (message, where, ours) => {
+        try {
+            if (!ours || window.__appMounted || !MISSING.test(String(message))) return;
+            const last = Number(sessionStorage.getItem('pc-stale-reload') || 0);
+            if (Date.now() - last < 60000) return;
+            sessionStorage.setItem('pc-stale-reload', String(Date.now()));
+            track(a => a.track('stale_page_reload', { where: String(where).slice(0, 120) }));
+            setTimeout(() => location.reload(), 50);   // let the report leave first
+        } catch (err) { /* no storage: never risk a reload loop */ }
+    };
+
     const seen = new Set();   // one report per distinct failure, not one per repaint
     // Firebase errors embed database paths, and a path names the calendar: strip the key
     // after any of our roots so a slug never rides along to analytics.
@@ -54,8 +71,16 @@ function track(fn) {
         const where = e.filename
             ? `${String(e.filename).split('/').pop()}:${e.lineno || 0}`
             : 'unknown';
-        report('error', (e.error && e.error.message) || e.message, where);
+        const message = (e.error && e.error.message) || e.message;
+        report('error', message, where);
+        // Only our own files: an extension's content script failing must not reload the page.
+        reloadIfStale(message, where, String(e.filename || '').startsWith(location.origin + '/'));
     });
+    window.pcReportError = (err, where) => {
+        const message = (err && err.message) || String(err);
+        report('error', message, where);
+        reloadIfStale(message, where, true);
+    };
 
     window.addEventListener('unhandledrejection', (e) => {
         const r = e.reason;
@@ -5551,7 +5576,14 @@ const CalendarVueApp = {
     }
 };
 
-const app = Vue.createApp(CalendarVueApp)
+const vueApp = Vue.createApp(CalendarVueApp);
+// Vue catches errors in components itself, so they never reach window.onerror: report them the
+// same way (and let a stale page reload) while still logging them as Vue would.
+vueApp.config.errorHandler = (err, instance, info) => {
+    console.error(err);
+    try { window.pcReportError && window.pcReportError(err, `vue:${info}`); } catch (e) { /* never the failure */ }
+};
+const app = vueApp
     .component('quick-add-button', QuickAddButton)
     .component('quick-add-dialog', QuickAddDialog)
     .component('welcome-dock', WelcomeDock)
