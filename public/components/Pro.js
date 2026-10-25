@@ -236,62 +236,72 @@ const ProPanel = {
     template: /* html */ `
         <section class="pc-pro" data-testid="pro-panel" v-if="mode !== 'hidden'">
             <div class="pc-pro-head">
-                <span class="pc-pro-icon" v-html="svg"></span>
-                <h4 v-if="mode === 'owner'">Locked with Pro <span class="pc-pill pc-pill--beta" data-testid="pro-beta-tag">Beta</span></h4>
-                <h4 v-else-if="mode === 'lapsed'" data-testid="pro-lapsed-title">{{ status.lapsedTrial ? 'Trial ended' : 'Pro ended' }} — read-only</h4>
+                <h4 v-if="mode === 'owner'" data-testid="pro-owner-title">Upgraded with {{ plan }} <span class="pc-pill pc-pill--beta" data-testid="pro-beta-tag">Beta</span></h4>
+                <h4 v-else-if="mode === 'lapsed'" data-testid="pro-lapsed-title">{{ status.lapsedTrial ? 'Trial ended' : plan + ' ended' }} — read-only</h4>
                 <h4 v-else-if="mode === 'paused'">Editing is paused</h4>
                 <h4 v-else-if="mode === 'locked'">This calendar is locked</h4>
-                <h4 v-else>Lock this calendar <span class="pc-pill pc-pill--beta" data-testid="pro-beta-tag">Beta</span></h4>
+                <h4 v-else>Upgrade this calendar <span class="pc-pill pc-pill--beta" data-testid="pro-beta-tag">Beta</span></h4>
             </div>
 
-            <!-- Unlocked, editable, saved, never trialed: 30 days free, no card. Signing in starts it. -->
-            <div v-if="mode === 'offer' && billing === true && !trialUsed" class="pc-pro-trial" data-testid="pro-trial-box">
-                <p class="pc-pro-lead"><b>Try Plus free for 30 days.</b> No card needed. When it ends, you choose: keep Plus, or a free calendar.</p>
-                <form v-if="trialStep === 'email'" class="pc-pro-email" @submit.prevent="sendTrialLink" data-testid="pro-trial-email-form">
-                    <label for="pc-pro-trial-email">Your email. The link we send starts your trial. No password.</label>
-                    <div class="pc-pro-row">
-                        <input id="pc-pro-trial-email" class="pc-field" ref="trialEmail" type="email" v-model.trim="email" required autocomplete="email" placeholder="you@example.com">
-                        <button type="submit" class="pc-btn pc-btn--primary" :disabled="busy">{{ busy ? 'Sending…' : 'Send link' }}</button>
-                    </div>
-                </form>
-                <p v-else-if="trialStep === 'sent'" class="pc-pro-ok" data-testid="pro-trial-sent">Check your email. The link starts your trial and brings you back here.</p>
-                <div v-else class="pc-pro-row">
-                    <button type="button" class="pc-btn pc-btn--primary" @click="startTrial" :disabled="busy" data-testid="pro-trial-btn">{{ busy ? 'One moment…' : 'Start free trial' }}</button>
-                    <span v-if="me" class="pc-pro-muted">as <span data-hj-suppress data-clarity-mask="true">{{ me.email }}</span></span>
+            <!-- Unlocked and editable: what Plus adds, then one way to get it -->
+            <template v-if="mode === 'offer'">
+                <ul class="pc-plus-list" data-testid="plus-features">
+                    <li><b>Choose who edits.</b> You and people with your editor links. Everyone else can view.</li>
+                    <li><b>Its name is reserved</b> for you.</li>
+                    <li><b>Full stats:</b> views per day, followers, places.</li>
+                    <li><b>History:</b> every saved version, and restore any of them.</li>
+                </ul>
+                <p class="pc-pro-muted">Coming: subcalendars.</p>
+
+                <!-- Billing not on yet (/api/pro/config): the beta list instead of the trial and checkout -->
+                <div v-if="billing === false" class="pc-plus-cta">
+                    <p class="pc-pro-lead">Plus is in beta. Join, and we’ll email you when your trial is ready.</p>
+                    <pro-beta-join :surface="surface" :calendar-id="calendarId" :auto-open="autoJoin"></pro-beta-join>
                 </div>
-                <p class="pc-pro-muted pc-pro-or">Or pay now:</p>
-            </div>
 
-            <!-- Unlocked, editable, billing not on yet (/api/pro/config): the Pro beta list instead of the offer -->
-            <template v-if="mode === 'offer' && billing === false">
-                <p class="pc-pro-lead">Only you and people you invite can edit. Everyone else can still view. Plus is in beta: join, and we’ll email you when your trial is ready.</p>
-                <pro-beta-join :surface="surface" :calendar-id="calendarId" auto-open></pro-beta-join>
-            </template>
-
-            <!-- Unlocked, editable: the offer -->
-            <template v-if="mode === 'offer' && billing === true">
-                <p class="pc-pro-lead">Only you and people you invite can edit. Everyone else can still view.</p>
-                <p class="pc-pro-price" data-testid="pro-price"><b>$29 a year</b> <span class="pc-pro-muted">That's about $2.42 a month.</span></p>
-                <p v-if="testCardHint" class="pc-pro-muted pc-pro-note" data-testid="pro-test-card">{{ testCardHint }}</p>
-
-                <form v-if="step === 'email'" class="pc-pro-email" @submit.prevent="sendLink" data-testid="pro-email-form">
-                    <label for="pc-pro-email-input">Your email, so you can manage the lock later. No password.</label>
-                    <div class="pc-pro-row">
-                        <input id="pc-pro-email-input" class="pc-field" ref="email" type="email" v-model.trim="email" required
-                            autocomplete="email" placeholder="you@example.com">
-                        <button type="submit" class="pc-btn pc-btn--primary" :disabled="busy">{{ busy ? 'Sending…' : 'Send sign-in link' }}</button>
-                    </div>
-                </form>
-                <p v-else-if="step === 'sent'" class="pc-pro-ok" data-testid="pro-sent">
-                    Check your email for a sign-in link. It brings you back here to finish.
-                </p>
-                <div v-else class="pc-pro-row">
-                    <button type="button" class="pc-btn pc-btn--primary" @click="lockNow" :disabled="busy" data-testid="pro-lock-btn">
-                        {{ going ? 'Taking you to payment…' : busy ? 'One moment…' : 'Lock this calendar' }}
-                    </button>
-                    <span v-if="me" class="pc-pro-muted">Signed in as <span data-hj-suppress data-clarity-mask="true">{{ me.email }}</span> · <a href="#" @click.prevent="signOut">Sign out</a></span>
-                    <span v-else class="pc-pro-muted" data-testid="pro-next">Next: pay on Stripe's secure page. No account to set up.</span>
+                <!-- Never trialed: 30 days free, no card. Signing in starts it. -->
+                <div v-else-if="billing === true && !trialUsed" class="pc-plus-cta" data-testid="pro-trial-box">
+                    <form v-if="trialStep === 'email'" class="pc-pro-email" @submit.prevent="sendTrialLink" data-testid="pro-trial-email-form">
+                        <label for="pc-pro-trial-email">Your email. The link we send starts your trial. No password.</label>
+                        <div class="pc-pro-row">
+                            <input id="pc-pro-trial-email" class="pc-field" ref="trialEmail" type="email" v-model.trim="email" required autocomplete="email" placeholder="you@example.com">
+                            <button type="submit" class="pc-btn pc-btn--primary" :disabled="busy">{{ busy ? 'Sending…' : 'Send link' }}</button>
+                        </div>
+                    </form>
+                    <p v-else-if="trialStep === 'sent'" class="pc-pro-ok" data-testid="pro-trial-sent">Check your email. The link starts your trial and brings you back here.</p>
+                    <template v-else>
+                        <button type="button" class="pc-btn pc-btn--primary pc-plus-main" @click="startTrial" :disabled="busy" data-testid="pro-trial-btn">{{ busy ? 'One moment…' : 'Start 30-day free trial' }}</button>
+                        <p class="pc-pro-muted pc-pro-note">No card needed.<template v-if="me"> As <span data-hj-suppress data-clarity-mask="true">{{ me.email }}</span>.</template></p>
+                    </template>
+                    <p class="pc-pro-muted pc-pro-note">When the trial ends, the calendar stays view-only until you choose: keep Plus, or open it to everyone.</p>
+                    <p v-if="step === 'idle'" class="pc-pro-muted pc-plus-or">or <button type="button" class="pc-link" @click="lockNow" :disabled="busy" data-testid="pro-lock-btn">{{ going ? 'taking you to payment…' : 'upgrade now: $29/year' }}</button></p>
                 </div>
+
+                <!-- Already had its trial: pay -->
+                <div v-else-if="billing === true" class="pc-plus-cta">
+                    <p class="pc-pro-price" data-testid="pro-price"><b>$29 a year</b> <span class="pc-pro-muted">That's about $2.42 a month.</span></p>
+                    <div v-if="step === 'idle'" class="pc-pro-row">
+                        <button type="button" class="pc-btn pc-btn--primary pc-plus-main" @click="lockNow" :disabled="busy" data-testid="pro-lock-btn">
+                            {{ going ? 'Taking you to payment…' : busy ? 'One moment…' : 'Upgrade this calendar' }}
+                        </button>
+                    </div>
+                    <p v-if="step === 'idle' && me" class="pc-pro-muted pc-pro-note">Signed in as <span data-hj-suppress data-clarity-mask="true">{{ me.email }}</span> · <a href="#" @click.prevent="signOut">Sign out</a></p>
+                    <p v-else-if="step === 'idle'" class="pc-pro-muted pc-pro-note" data-testid="pro-next">Next: pay on Stripe's secure page. No account to set up.</p>
+                </div>
+
+                <!-- Pressed "upgrade now" while signed out and checkout asked for an email -->
+                <template v-if="billing === true">
+                    <form v-if="step === 'email'" class="pc-pro-email" @submit.prevent="sendLink" data-testid="pro-email-form">
+                        <label for="pc-pro-email-input">Your email, so you can manage your plan later. No password.</label>
+                        <div class="pc-pro-row">
+                            <input id="pc-pro-email-input" class="pc-field" ref="email" type="email" v-model.trim="email" required
+                                autocomplete="email" placeholder="you@example.com">
+                            <button type="submit" class="pc-btn pc-btn--primary" :disabled="busy">{{ busy ? 'Sending…' : 'Send sign-in link' }}</button>
+                        </div>
+                    </form>
+                    <p v-else-if="step === 'sent'" class="pc-pro-ok" data-testid="pro-sent">Check your email for a sign-in link. It brings you back here to finish.</p>
+                    <p v-if="testCardHint" class="pc-pro-muted pc-pro-note" data-testid="pro-test-card">{{ testCardHint }}</p>
+                </template>
             </template>
 
             <!-- Locked, and this browser is not signed in as the owner -->
@@ -307,46 +317,41 @@ const ProPanel = {
                 </form>
                 <p v-else-if="step === 'sent'" class="pc-pro-ok">Check your email for a sign-in link.</p>
                 <p v-else-if="me" class="pc-pro-muted">Signed in as <span data-hj-suppress data-clarity-mask="true">{{ me.email }}</span>, which doesn't own this calendar · <a href="#" @click.prevent="signOut">Sign out</a></p>
-                <a v-else href="#" class="pc-link" @click.prevent="step = 'email'; focusEmail()">Owner? Sign in to manage it</a>
+                <a v-else href="#" class="pc-link" @click.prevent="step = 'email'; focusEmail()" data-testid="pro-owner-signin">Owner? Sign in to manage it</a>
             </template>
 
-            <!-- Pro ended (trial or paid) and the calendar is paused: its owner chooses -->
+            <!-- The plan ended (trial or paid) and the calendar is paused: its owner chooses -->
             <template v-if="mode === 'lapsed'">
                 <p class="pc-pro-lead">Everyone can still view it and follow it in their calendar app. Nobody can edit it, you included.</p>
                 <div class="pc-pro-row">
                     <button type="button" class="pc-btn" @click="openToEveryone" :disabled="busy" data-testid="pro-open-btn">Open to everyone</button>
-                    <button v-if="!keepOpen && billing !== false" type="button" class="pc-btn pc-btn--primary" @click="keepProAfter" :disabled="busy" data-testid="pro-keep-btn">Keep Pro</button>
+                    <button v-if="!keepOpen && billing !== false" type="button" class="pc-btn pc-btn--primary" @click="keepProAfter" :disabled="busy" data-testid="pro-keep-btn">Keep {{ plan }}</button>
                 </div>
                 <div v-if="keepOpen" class="pc-pro-keep" data-testid="pro-keep-plans">
                     <p class="pc-pro-price"><b>$29 a year</b> <span class="pc-pro-muted">That's about $2.42 a month.</span></p>
-                    <div class="pc-pro-row"><button type="button" class="pc-btn pc-btn--primary" @click="keepCheckout" :disabled="busy" data-testid="pro-keep-checkout">{{ going ? 'Taking you to payment…' : 'Keep Pro' }}</button></div>
+                    <div class="pc-pro-row"><button type="button" class="pc-btn pc-btn--primary" @click="keepCheckout" :disabled="busy" data-testid="pro-keep-checkout">{{ going ? 'Taking you to payment…' : 'Keep ' + plan }}</button></div>
                 </div>
-                <p class="pc-pro-muted pc-pro-note">Open to everyone: a free calendar anyone with the edit link can change.<template v-if="billing !== false"> Keep Pro: locked again for you, $29 a year.</template></p>
+                <p class="pc-pro-muted pc-pro-note">Open to everyone: a free calendar anyone with the edit link can change.<template v-if="billing !== false"> Keep {{ plan }}: only you and your editors again, $29 a year.</template></p>
                 <p v-if="testCardHint" class="pc-pro-muted pc-pro-note">{{ testCardHint }}</p>
             </template>
 
             <!-- The owner -->
             <template v-if="mode === 'owner'">
-                <p v-if="status.trial" class="pc-pro-trial-line" data-testid="pro-trial-line">Pro trial · {{ trialLeft }} ·
-                    <a v-if="!status.trial.hasCard && billing !== false" href="#" class="pc-link" @click.prevent="keepPro" data-testid="pro-keep-trial">Keep Pro</a>
-                    <span v-else-if="status.trial.hasCard">card on file, Pro continues</span></p>
+                <p class="pc-pro-trial-line" data-testid="plus-plan-line">
+                    <template v-if="status.trial"><span data-testid="pro-trial-line">{{ plan }} trial · {{ trialLeft }}</span> ·
+                        <a v-if="!status.trial.hasCard && billing !== false" href="#" class="pc-link" @click.prevent="keepPro" data-testid="pro-keep-trial">Keep {{ plan }}</a>
+                        <span v-else-if="status.trial.hasCard" class="pc-pro-muted">card on file, {{ plan }} continues</span></template>
+                    <template v-else>{{ plan }}<span v-if="renewal" class="pc-pro-muted" data-testid="pro-renewal"> · {{ renewal }}</span></template>
+                </p>
                 <div v-if="status.trial && keepOpen" class="pc-pro-keep" data-testid="pro-keep-plans">
                     <p class="pc-pro-price"><b>$29 a year</b> <span class="pc-pro-muted">That's about $2.42 a month.</span></p>
-                    <div class="pc-pro-row"><button type="button" class="pc-btn pc-btn--primary" @click="keepCheckout" :disabled="busy" data-testid="pro-keep-checkout">{{ going ? 'Taking you to payment…' : 'Keep Pro' }}</button>
+                    <div class="pc-pro-row"><button type="button" class="pc-btn pc-btn--primary" @click="keepCheckout" :disabled="busy" data-testid="pro-keep-checkout">{{ going ? 'Taking you to payment…' : 'Keep ' + plan }}</button>
                         <span class="pc-pro-muted">{{ keepNote }}</span></div>
                 </div>
-                <p class="pc-pro-lead">Only you and people with your editor link can change it. Everyone else can view.
-                    <span v-if="renewal" data-testid="pro-renewal">{{ renewal }}</span></p>
 
-                <div class="pc-pro-row pc-pro-insight" data-testid="pro-insight-row">
-                    <button type="button" class="pc-btn" @click="$emit('open-insight', 'stats')" data-testid="pro-stats-btn">Stats</button>
-                    <button type="button" class="pc-btn" @click="$emit('open-insight', 'history')" data-testid="pro-history-btn">History</button>
-                    <span class="pc-pro-muted">Who’s following, where they’re from, and every saved version.</span>
-                </div>
-
-                <div class="pc-pro-sub">
-                    <h5>Editor link</h5>
-                    <p class="pc-pro-muted">Share it with people who should be able to edit.</p>
+                <div class="pc-pro-sub" data-testid="plus-editors">
+                    <h5>Who can edit</h5>
+                    <p class="pc-pro-muted">You, and people with your editor link. Everyone else can view.</p>
                     <div v-if="editorLink" class="pc-pro-row">
                         <input ref="link" class="pc-field pc-pro-field" type="text" readonly :value="editorLink" @focus="$event.target.select()"
                             aria-label="Editor link" data-testid="pro-editor-link" data-hj-suppress data-clarity-mask="true">
@@ -362,7 +367,7 @@ const ProPanel = {
                 </div>
 
                 <div class="pc-pro-sub" data-testid="pro-lapse-choice">
-                    <h5>If Pro ends</h5>
+                    <h5>If your plan ends</h5>
                     <label class="pc-pro-choice"><input type="radio" value="readonly" v-model="lapsedMode" @change="saveLapsedMode" name="pc-pro-lapse">
                         <span><b>Read-only.</b> Everyone can view; nobody edits until you decide.</span></label>
                     <label class="pc-pro-choice"><input type="radio" value="open" v-model="lapsedMode" @change="saveLapsedMode" name="pc-pro-lapse">
@@ -370,7 +375,7 @@ const ProPanel = {
                 </div>
 
                 <div class="pc-pro-row pc-pro-foot">
-                    <button type="button" class="pc-btn" @click="portal" :disabled="busy">Manage billing</button>
+                    <button type="button" class="pc-btn" @click="portal" :disabled="busy" data-testid="pro-billing-btn">Manage billing</button>
                     <a href="#" class="pc-link" @click.prevent="signOut">Sign out</a>
                     <span v-if="me" class="pc-pro-muted" data-hj-suppress data-clarity-mask="true">{{ me.email }}</span>
                 </div>
@@ -386,6 +391,7 @@ const ProPanel = {
         surface: { type: String, default: 'share' },   // where the Pro offer was opened from (trial_started)
         canEdit: Boolean,     // this tab may change the calendar
         calendarTitle: String, // named on Stripe's page, so the payer sees which calendar it's for
+        autoJoin: Boolean,    // billing off and they pressed "Join the beta" somewhere: the email field opens at once
     },
     components: { 'pro-beta-join': ProBetaJoin },
     // open-insight: 'stats' | 'history' (owner only). owner: whether this browser owns the calendar,
@@ -425,6 +431,8 @@ const ProPanel = {
             return 'offer';
         },
         trialUsed() { return !!(this.status && this.status.trialUsed); },
+        // The plan's display name: the lock's plan, or the ended plan for a paused calendar's owner.
+        plan() { return planName(this.status && this.status.plan); },
         // Matches the server (checkout carries the trial's end when it is over 49 hours away).
         keepNote() {
             const end = this.status && this.status.trial && this.status.trial.endsAt;
@@ -444,7 +452,7 @@ const ProPanel = {
             if (!c || !c.currentPeriodEnd || c.status === 'trialing') return '';     // a trial shows its own line
             const ms = c.currentPeriodEnd < 1e12 ? c.currentPeriodEnd * 1000 : c.currentPeriodEnd;
             const d = new Date(ms).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
-            return c.status === 'active' || c.status === 'trialing' ? `Renews ${d}.` : `Pro ends ${d}.`;
+            return c.status === 'active' || c.status === 'trialing' ? `Renews ${d}` : `Ends ${d}`;
         },
     },
     watch: {

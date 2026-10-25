@@ -246,7 +246,9 @@ const CalendarVueApp = {
             showProHistory: false,
             insightWhere: 'share_panel',    // which surface opened them, for analytics
             proOwner: false,            // this browser is signed in as the Pro calendar's owner
-            shareProFocus: false,       // Share opened from Get Pro: just the lock offer
+            showPlus: false,            // the side panel's Plus tab: what an upgrade adds, or the owner's plan, editors and billing
+            plusAutoJoin: false,        // billing off and they pressed "Join the beta" elsewhere: the Plus tab opens on the email field
+            proPlan: null,              // the lock's plan id (/api/pro/status), for planName: 'pro' is Plus
             showRecentChanges: false,   // the Activity tab of the side panel (id 'changes')
             showStatsInfo: false,       // the Stats tab when it can't show Pro stats: a draft, a free calendar, a non-owner
             freeStats: null,            // the Stats tab's free counts: {id, loading, error, none, unavailable, views, viewsPrev, followers}
@@ -374,6 +376,7 @@ const CalendarVueApp = {
             if (this.showNotes) return 'notes';
             if (this.showShare) return 'share';
             if (this.showSettings) return 'settings';
+            if (this.showPlus) return 'plus';
             if (this.showSearch) return 'search';
             if (this.showHelp) return 'help';
             return null;
@@ -385,7 +388,8 @@ const CalendarVueApp = {
         // The tab row is for people who can change the calendar. Viewers see one thing at a
         // time under a plain title. Always the same five in the same order, so people learn
         // where things are: on a draft, Share, Activity and Stats say what they will hold once
-        // it is saved. Settings is a gear, so five fit the column without scrolling.
+        // it is saved. Plus: what an upgrade adds, or the owner's plan, editors and billing.
+        // Settings is a gear at the end, so six fit a 400px column (and a phone) without scrolling.
         sideTabs() {
             if (this.isReadOnly) return [];
             return [
@@ -393,7 +397,8 @@ const CalendarVueApp = {
                 { id: 'share', label: 'Share' },
                 { id: 'changes', label: 'Activity' },
                 { id: 'stats', label: 'Stats' },
-                { id: 'settings', label: 'Settings' },
+                { id: 'plus', label: 'Plus' },
+                { id: 'settings', label: 'Settings', icon: 'settings' },
             ];
         },
         // The tab that reads as selected. History (every saved version) opens from Activity, so it stays lit.
@@ -405,7 +410,7 @@ const CalendarVueApp = {
         },
         // Shown in the bar when there is no tab row, for the views without a heading of their own.
         sideTitle() {
-            return { notes: 'About this calendar', search: 'Search', help: 'Help', settings: 'Settings' }[this.sideTab] || '';
+            return { notes: 'About this calendar', search: 'Search', help: 'Help', settings: 'Settings', plus: planName(this.proPlan) }[this.sideTab] || '';
         },
         /** Why this tab can't edit a locked or paused calendar (toasts). */
         lockedOutMessage() { return this.lock.paused ? PRO_MESSAGES.paused : PRO_MESSAGES.lockedVisitor; },
@@ -822,13 +827,13 @@ const CalendarVueApp = {
                                 history.replaceState(history.state, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash);
                             }
                         } catch (e) { /* storage blocked: Share still opens below if the intent was kept */ }
-                        // Back from a Pro sign-in link: reopen Share, where "Lock this calendar" now continues.
+                        // Back from a sign-in link (trial, checkout, the reminder's Keep Plus): open the Plus tab,
+                        // where the trial or checkout continues.
                         const proIntent = typeof ProIntent !== 'undefined' ? ProIntent.get(this.calendar.id) : null;
                         if (proIntent) {
                             // Once: the panel reads the chosen interval as it mounts, then the intent is done.
                             this.$nextTick(() => {
-                                this.shareProFocus = true;
-                                if (!this.showShare) this.toggleShare();
+                                if (!this.showPlus) this.openPlusTab(proIntent.surface || 'share');
                                 this.$nextTick(() => {
                                     ProIntent.clear();
                                     // The lock offer sits at the bottom of Share: below the fold on a phone.
@@ -1919,13 +1924,13 @@ const CalendarVueApp = {
         'lock.locked': {
             handler(locked) {
                 this.proOwnerChecked = false;
-                if (!locked) { this.proOwner = false; if (this.showShare) this.refreshProTrial(); return; }
+                if (!locked) { this.proOwner = false; if (this.showPlus) this.refreshProTrial(); return; }
                 this.refreshProOwner();
             },
         },
-        // Pro ended and the owner opened it: the Go Pro card is back, without the trial it already had.
+        // The plan ended and the owner opened it: the offer is back, without the trial it already had.
         'lock.paused'(paused) {
-            if (!paused && this.showShare) this.refreshProTrial();
+            if (!paused && this.showPlus) this.refreshProTrial();
             this.checkPausedOwner();
         },
         recordingRole: {
@@ -1939,9 +1944,13 @@ const CalendarVueApp = {
             if (!isOwner || !this.calendar || !this.calendar.id) return;
             const key = 'pastecal_pro_welcomed:' + String(this.calendar.id).toLowerCase();
             try { if (localStorage.getItem(key)) return; localStorage.setItem(key, '1'); } catch (e) { return; }
-            this.showToast('Locked with Pro. Everyone can view; only people with your editor link can edit.', 'info', {
-                actionLabel: 'Editor link', action: () => { if (!this.showShare) this.toggleShare(); }, duration: 10000,
+            this.showToast(`Upgraded with ${planName(this.proPlan)}. Everyone can view; only people with your editor link can edit.`, 'info', {
+                actionLabel: 'Editor link', action: () => { if (!this.showPlus) this.openPlusTab('share'); }, duration: 10000,
             });
+        },
+        showPlus(open) {
+            if (!open) { this.proSurface = 'share'; this.plusAutoJoin = false; return; }
+            if (this.isExisting && !this.lock.locked && this.canEdit) this.refreshProTrial();
         },
         showProStats(open) { this.focusInsight(open, 'proStatsPanel'); },
         showProHistory(open) { this.focusInsight(open, 'proHistoryPanel'); },
@@ -1962,11 +1971,10 @@ const CalendarVueApp = {
         },
 
         showShare(newValue) {
-            if (!newValue) { this.shareProFocus = false; this.showViewHelp = false; this.proSurface = 'share'; }   // the Get Pro view lasts until Share closes
+            if (!newValue) { this.showViewHelp = false; }
             if (newValue) {
                 this.updateCurrentViewURL();
                 this.startUpdateLinkTimer();
-                if (this.isExisting && !this.lock.locked && this.canEdit) this.refreshProTrial();
             } else {
                 this.stopUpdateLinkTimer();
             }
@@ -3155,13 +3163,14 @@ const CalendarVueApp = {
 
         /** Records which subscribe path was used, so the rate is measurable. */
         // A paused calendar opens in the view-only layout, which has no Share button. Its owner still needs
-        // the "Pro ended" choices (Open to everyone / Keep Pro), so ask the server whether this is the owner.
+        // the "Plus ended" choices (Open to everyone / Keep Plus), so ask the server whether this is the owner.
         async checkPausedOwner() {
             if (!this.lock.paused || !this.calendar || !this.calendar.id) { this.pausedOwner = false; return; }
             try {
                 const r = await fetch('/api/pro/status?calendar=' + encodeURIComponent(this.calendar.id), { credentials: 'same-origin' });
                 const st = r.ok ? await r.json() : null;
                 this.pausedOwner = !!(st && st.lapsedOwner);
+                if (this.pausedOwner) this.proPlan = st.plan || null;     // which plan ended, for its name
             } catch (e) { this.pausedOwner = false; }
         },
 
@@ -3508,6 +3517,7 @@ const CalendarVueApp = {
             else if (id === 'settings') this.toggleSettings();
             else if (id === 'changes') this.openRecentChanges();
             else if (id === 'stats') this.openStats();
+            else if (id === 'plus') this.openPlusTab('share');
             else if (id === 'history') this.openInsight(id, 'side_panel');
         },
         /** Stats: the Pro numbers for the owner; for everyone else, what Stats holds and how to get it. */
@@ -3546,10 +3556,10 @@ const CalendarVueApp = {
             this.notesEditing = true;
             this.$nextTick(() => { const el = this.$refs.notesInput; if (el) el.focus(); });
         },
-        /** From the Stats tab: Share, showing just the Pro offer (as when arriving from Get Pro). */
+        /** From the Stats tab: the Plus tab. */
         getProFromStats() {
             track(a => a.proStatsTeaserClicked());
-            this.openProOffer('stats');
+            this.openPlusTab('stats');
         },
 
         /** The panel's close button, its backdrop on small screens, and Escape. */
@@ -3750,6 +3760,7 @@ const CalendarVueApp = {
             this.showProStats = false;
             this.showProHistory = false;
             this.showStatsInfo = false;
+            this.showPlus = false;
         },
 
         togglePin(id) {
@@ -4134,22 +4145,11 @@ const CalendarVueApp = {
             track(a => a.proUpsellDismissed());
         },
 
-        // Opens Share with the Pro panel in view. The panel renders with the dialog, but the
-        // dialog animates in, so look for it for a moment rather than once.
+        // The quiet upsell line: the Plus tab. Billing not on yet: its beta email field is already open.
         openProUpsell() {
-            this.proSurface = 'lock';
             this.proUpsell = false;
             track(a => a.proUpsellClicked());
-            // Billing not on yet: Share's Pro view, where the Pro beta email field is already open.
-            if (this.proBilling === false) { this.openProOffer('lock'); this.proSurface = 'lock'; return; }
-            if (!this.showShare) this.toggleShare();
-            let tries = 0;
-            const reveal = () => {
-                const panel = document.querySelector('[data-testid="pro-panel"]');
-                if (panel) { panel.scrollIntoView({ block: 'start', behavior: 'smooth' }); return; }
-                if (++tries < 30) requestAnimationFrame(reveal);
-            };
-            this.$nextTick(reveal);
+            this.openPlusTab('lock', { join: this.proBilling === false });
         },
 
         /** Re-render every relative time from its stored timestamp. */
@@ -5269,11 +5269,6 @@ const CalendarVueApp = {
                 if (this.calendar && this.calendar.id === id) this.proTrialUsed = !!(data && data.trialUsed);
             } catch (e) { /* offline: offer it; the server decides */ }
         },
-        /** Go Pro card: "Try Pro free". Opens the Get Pro view straight on the trial. */
-        startProTrial() {
-            if (typeof ProIntent !== 'undefined') ProIntent.set(this.calendar.id, 'trial', false, this.proSurface);
-            this.shareProFocus = true;
-        },
         /** During a trial: the first use of a Pro feature per calendar per day (Pro.js trialFeature). */
         trialFeatureUsed(feature) {
             if (this.proTrialActive && this.calendar && typeof trialFeature === 'function') trialFeature(this.calendar.id, feature);
@@ -5286,6 +5281,7 @@ const CalendarVueApp = {
                 const data = res.ok ? await res.json() : null;
                 if (this.calendar && this.calendar.id === id) {
                     this.proOwner = !!(data && data.isOwner);
+                    this.proPlan = (data && data.plan) || null;
                     this.proTrialActive = !!(data && data.isOwner && data.trial);
                     this.trialFeatureUsed('lock');          // the owner on their locked calendar: the lock in use
                 }
@@ -5306,13 +5302,22 @@ const CalendarVueApp = {
             this.showToast(`Restored the version from ${label}`, 'success');
             this.loadUndoEntries();
         },
-        /** From Activity, a free calendar's creator: to the Pro offer in Share (its Get Pro view). */
-        openProOffer(surface) {
-            this.proSurface = surface === 'stats' ? 'stats' : 'share';
+        /**
+         * The Plus tab: what an upgrade adds (trial, checkout, or the beta list), or the owner's plan,
+         * editor links and billing. Every "Upgrade" and "Join the beta" in the app opens it.
+         * surface: where it was opened from, for trial_started / pro_beta_joined ('share' | 'stats' | 'lock').
+         * join: billing off and they pressed "Join the beta": open on the email field.
+         */
+        openPlusTab(surface, { join = false } = {}) {
             this.closeAllPanels();
-            this.showShare = true;
-            this.$nextTick(() => { this.shareProFocus = true; });
+            this.proSurface = surface === 'stats' || surface === 'lock' ? surface : 'share';
+            this.plusAutoJoin = !!join;
+            this.showPlus = true;
         },
+        /** Activity's line for a free calendar's creator. */
+        openProOffer() { this.openPlusTab('share'); },
+        /** A plan id's display name (Pro.js planName), for templates: 'pro' is Plus, 'unlimited' is Pro. */
+        planName(plan) { return planName(plan); },
         focusInsight(open, ref) {
             if (open) {
                 this._insightOpener = this._insightOpener || document.activeElement;

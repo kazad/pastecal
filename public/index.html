@@ -407,7 +407,7 @@
             <div v-if="!isLoading && isReadOnly" class="pc-viewer-row" data-testid="viewer-row-mobile">
                 <span v-if="!lock.locked" class="pc-view-badge" data-testid="view-only-badge-mobile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>View only</span>
                 <div class="pc-viewer-actions">
-                    <button v-if="lock.paused && pausedOwner" type="button" class="pc-paused-owner" data-testid="paused-owner-reopen" @click="toggleShare()">Pro ended · Choose what happens</button>
+                    <button v-if="lock.paused && pausedOwner" type="button" class="pc-paused-owner" data-testid="paused-owner-reopen" @click="openPlusTab('share')">{{ planName(proPlan) }} ended · Choose what happens</button>
                     <add-to-calendar v-if="getWebcalURL()" :nudge-key="calendar.id" :google="getGoogleSubscribeURL()" :apple="getWebcalURL()" :outlook="getOutlookSubscribeURL()" :other="getWebcalURL()" @pick="trackSubscribe"></add-to-calendar>
                     <a v-if="!hideBranding" href="/" target="_top" class="pc-make-own" data-testid="make-own-mobile" data-from="view-header">Make your own</a>
                 </div>
@@ -558,7 +558,7 @@
                 <!-- A view link's own actions: take it with you, or make one. "Make your own" is the free
                      plan's credit (Pro's trimmed branding drops it); the badge sits beside the title. -->
                 <div v-if="!isLoading && isReadOnly" class="pc-viewer-actions" data-testid="viewer-actions">
-                    <button v-if="lock.paused && pausedOwner" type="button" class="pc-paused-owner" data-testid="paused-owner-reopen" @click="toggleShare()">Pro ended · Choose what happens</button>
+                    <button v-if="lock.paused && pausedOwner" type="button" class="pc-paused-owner" data-testid="paused-owner-reopen" @click="openPlusTab('share')">{{ planName(proPlan) }} ended · Choose what happens</button>
                     <add-to-calendar v-if="getWebcalURL()" :nudge-key="calendar.id" :google="getGoogleSubscribeURL()" :apple="getWebcalURL()" :outlook="getOutlookSubscribeURL()" :other="getWebcalURL()" @pick="trackSubscribe"></add-to-calendar>
                     <a v-if="!hideBranding" href="/" target="_top" class="pc-make-own" data-testid="make-own" data-from="view-header">Make your own</a>
                 </div>
@@ -674,7 +674,7 @@
         <!-- Pro, quietly, on your own calendar after someone else changed it (maybeShowProUpsell). -->
         <p v-if="proUpsell" class="pc-upsell" data-testid="pro-upsell" v-cloak>
             <span>Changed since your last visit. Want only your team to edit?</span>
-            <button type="button" class="pc-link pc-upsell-go" data-testid="pro-upsell-open" @click="openProUpsell">{{ proBilling === false ? 'Join the beta' : 'Lock this calendar' }}&nbsp;→</button>
+            <button type="button" class="pc-link pc-upsell-go" data-testid="pro-upsell-open" @click="openProUpsell">{{ proBilling === false ? 'Join the beta' : 'Upgrade this calendar' }}&nbsp;→</button>
             <button type="button" class="pc-btn pc-btn--ghost pc-btn--icon pc-btn--xs pc-upsell-x" data-testid="pro-upsell-dismiss" aria-label="Dismiss" @click="dismissProUpsell">×</button>
         </p>
 
@@ -725,7 +725,7 @@
             </p>
             </div>
             <!--
-                The side panel: Notes, Share, Activity, Stats and Settings (plus Search, Help and a Pro
+                The side panel: Notes, Share, Activity, Stats, Settings and Plus (plus Search, Help and a Pro
                 owner's History, opened from Activity), one at a time. On wide screens it takes the guide's column and the
                 calendar narrows rather than moving down; narrower it slides over the calendar, and on
                 phones it is a bottom sheet (style.css, "Side panel"). Viewers get no tab row: a view
@@ -930,9 +930,6 @@
                          the edit link, then Pro. The rest (this exact view, the link's name, raw feeds, an
                          embed) waits under "More sharing options". Same URLs and copy paths as before. -->
                     <div v-if="showShare && isExisting" class="pc-share" v-cloak>
-                        <h2 v-if="shareProFocus && !lock.locked && !lock.paused" class="text-lg font-bold mb-4">{{ proBilling === false ? 'Plus' : 'Get Plus' }} <span class="pc-pill pc-pill--beta">Beta</span></h2>
-                        <!-- Arriving from Get Pro: only the lock offer, the links one click away -->
-                        <template v-if="!shareProFocus">
                         <!-- Every link is visible and is itself the copy button (GitHub-style). No captions: the
                              label and its "can view / can edit" tag say what the link does. -->
                         <section class="pc-links" data-testid="share-links">
@@ -1026,27 +1023,29 @@
 
                         </section>
 
-                        <!-- Pro, unlocked: one line and a link. The full offer (plans, checkout) is the Get Pro view. -->
-                        <div v-if="!lock.locked && canEdit" class="pc-gopro" data-testid="share-pro-card">
-                            <div class="pc-gopro-head"><b>Upgrade</b><span class="pc-pill pc-pill--beta" data-testid="share-pro-beta-tag">Beta</span><span class="pc-gopro-price">Plus · $29 a year</span>
-                                <button v-if="proBilling === true" type="button" class="pc-btn pc-btn--sm pc-btn--pill pc-btn--primary pc-gopro-btn" @click="shareProFocus = true" data-testid="share-get-pro">Upgrade</button></div>
-                            <ul class="pc-gopro-list">
-                                <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg><span><b>Lock editing</b> to you and people you choose</span></li>
-                                <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg><span><b>Stats</b>: views per day, followers, places</span></li>
-                                <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg><span><b>History</b>: see who changed what, restore any version</span></li>
-                            </ul>
-                            <p class="pc-gopro-soon">Coming: subcalendars, secret events, your logo. <a href="/pricing#compare" target="_blank" rel="noopener" data-from="share-pro-card" data-testid="share-pro-compare">See everything</a></p>
-                            <!-- Saved calendars only (a draft shows Save & share instead of this card). One trial per calendar. -->
-                            <button v-if="proBilling === true && !proTrialUsed" type="button" class="pc-link pc-gopro-trial" @click="startProTrial" data-testid="share-try-pro">Try Plus free for 30 days. No card needed.</button>
-                            <!-- Billing not on yet (/api/pro/config): the Pro beta list instead of the trial and checkout -->
-                            <pro-beta-join v-if="proBilling === false" surface="share" :calendar-id="calendar.id" btn-class="pc-btn--sm pc-btn--pill pc-btn--primary pc-gopro-btn--beta"></pro-beta-join>
+                        <!-- Sharing only. Plans, editor links and billing live in the Plus tab: one line points there. -->
+                        <p v-if="canEdit && !lock.locked && !lock.paused" class="pc-share-plus" data-testid="share-plus-line">Choose who can edit with Plus.
+                            <button type="button" class="pc-link" @click="openPlusTab('share')" data-testid="share-get-pro">Upgrade</button></p>
+                        <p v-else-if="lock.locked && proOwner" class="pc-share-plus" data-testid="share-plus-line">Editor links and billing are in
+                            <button type="button" class="pc-link" @click="openPlusTab('share')" data-testid="share-get-pro">{{ planName(proPlan) }}</button></p>
+                        <p v-else-if="lock.paused && pausedOwner" class="pc-share-plus" data-testid="share-plus-line">{{ planName(proPlan) }} ended.
+                            <button type="button" class="pc-link" @click="openPlusTab('share')" data-testid="share-get-pro">Choose what happens</button></p>
+                        <p v-else-if="lock.locked || lock.paused" class="pc-share-plus" data-testid="share-plus-line">Owner?
+                            <button type="button" class="pc-link" @click="openPlusTab('share')" data-testid="share-owner-signin">Sign in to manage it</button></p>
+                    </div>
+
+                    <!-- Plus: on a free calendar, what an upgrade adds and one way to get it (the trial, checkout,
+                         or the beta list); on an upgraded one, its owner's plan, editor links, what happens if the
+                         plan ends, and billing (Pro.js ProPanel). Editors and visitors of a locked calendar see why
+                         they can't change it and the owner's sign-in, never the owner's controls. -->
+                    <div v-if="showPlus" class="pc-side-plus" data-testid="plus-panel" v-cloak>
+                        <div v-if="!isExisting" class="pc-side-empty" data-testid="plus-draft">
+                            <p class="pc-side-empty-title">Upgrade once it’s saved.</p>
+                            <p class="pc-side-empty-text">Plus lets you choose who edits, reserves the calendar’s name, and keeps full stats and every version. Save it first to give it a name.</p>
+                            <button type="button" class="pc-btn pc-btn--sm pc-btn--primary" @click="share">Save &amp; share</button>
                         </div>
-                        </template>
-                        <!-- Pro: the lock offer (Get Pro view), or a locked calendar's owner section and editor links;
-                             after Pro ended, the paused calendar's choices (owner) or why nobody can edit (everyone else) -->
-                        <pro-panel v-if="isExisting && (shareProFocus || lock.locked || lock.paused)" ref="proPanel" :calendar-id="calendar.id" :calendar-title="calendar.title" :locked="lock.locked" :paused="lock.paused" :can-edit="canEdit" :surface="proSurface"
-                            @open-insight="openInsight($event, 'share_panel')" @owner="proOwner = $event"></pro-panel>
-                        <button v-if="shareProFocus" type="button" class="pc-link pc-share-all" @click="shareProFocus = false" data-testid="share-show-all">Show all sharing options</button>
+                        <pro-panel v-else ref="proPanel" :calendar-id="calendar.id" :calendar-title="calendar.title" :locked="lock.locked" :paused="lock.paused" :can-edit="canEdit"
+                            :surface="proSurface" :auto-join="plusAutoJoin" @open-insight="openInsight($event, 'share_panel')" @owner="proOwner = $event"></pro-panel>
                     </div>
 
                     <!-- Settings: two sub-tabs so neither scrolls. "This calendar" is what everyone with
@@ -1278,13 +1277,13 @@
 
                     <p v-if="!visibleUndoEntries.length" class="pc-side-empty-text mt-2" data-testid="activity-empty">Nothing has changed in the last 7 days.</p>
 
-                    <!-- Pro owner: every saved version. Free, the calendar's creator: one line about what Pro keeps. -->
+                    <!-- The owner: every saved version. Free, the calendar's creator: one line about what Plus keeps. -->
                     <button v-if="lock.locked && proOwner" type="button" class="pc-link pc-act-more" @click="openInsight('history', 'recent_changes')" data-testid="recent-history-link">
-                        Restore an earlier version <span class="pc-pill pc-pill--pro">Pro</span> <span aria-hidden="true">→</span>
+                        Restore an earlier version <span class="pc-pill pc-pill--pro">{{ planName(proPlan) }}</span> <span aria-hidden="true">→</span>
                     </button>
                     <p v-else-if="!lock.locked && isMineCalendar" class="pc-changes-foot" data-testid="recent-pro-pitch">
                         Plus keeps every version and can restore any date.
-                        <button type="button" class="pc-link" @click="openProOffer">About Pro</button>
+                        <button type="button" class="pc-link" @click="openProOffer" data-testid="recent-pro-about">About Plus</button>
                     </p>
                     </template>
                     </div>

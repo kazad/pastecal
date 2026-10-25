@@ -803,8 +803,6 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-pro { margin-top: 16px; padding: 16px; scroll-margin-top: 12px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); background: var(--pc-bg); color: var(--pc-text); font-family: var(--pc-font) }
 .pc-pro-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px }
 .pc-pro-head h4 { margin: 0; font-size: var(--pc-fs-lg); font-weight: var(--pc-fw-semibold) }
-.pc-pro-icon { display: inline-flex; color: var(--pc-text-muted) }
-.pc-pro-icon svg { width: 18px; height: 18px }
 .pc-pro-lead { margin: 0 0 12px; color: var(--pc-text-muted); font-size: var(--pc-fs-sm); line-height: 1.5 }
 .pc-pro-choice input { margin: 0; accent-color: var(--pc-link) }
 .pc-pro-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px }
@@ -819,8 +817,6 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-pro-sub { margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--pc-line) }
 .pc-pro-sub h5 { margin: 0; font-size: var(--pc-fs-md); font-weight: var(--pc-fw-semibold) }
 /* The 30-day trial: its offer, the owner's "Pro trial · N days left" line, and the "If Pro ends" choice */
-.pc-pro-trial { padding-bottom: 10px; border-bottom: 1px solid var(--pc-line) }
-.pc-pro-or { margin-top: 8px }
 .pc-pro-trial-line { margin: 0; font-size: var(--pc-fs-md); font-weight: var(--pc-fw-semibold); color: var(--pc-text) }
 .pc-pro-keep { display: grid; gap: 8px; margin: 2px 0 6px; padding-bottom: 12px; border-bottom: 1px solid var(--pc-line) }
 .pc-pro-choice { display: flex; gap: 8px; align-items: flex-start; margin-top: 6px; font-size: var(--pc-fs-sm); color: var(--pc-text-muted); cursor: pointer }
@@ -831,8 +827,6 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-pro-note { margin-top: 6px; font-size: var(--pc-fs-sm) }
 
 /* ---- Stats and History ---------------------------------------------------------------------- */
-.pc-pro-insight { margin: 0 0 12px }
-.pc-share-all { margin-top: var(--pc-space-3); font-size: var(--pc-fs-sm) }   /* + .pc-link */
 .pc-changes-foot { margin: var(--pc-space-2) 0 0; color: var(--pc-text-muted); font-size: var(--pc-fs-sm); line-height: var(--pc-lh-body) }
 .pc-changes-foot .pc-link, .pc-prev-more, .pc-insight-back .pc-link { font-size: var(--pc-fs-sm) }
 .pc-insight { font-family: var(--pc-font); color: var(--pc-text); font-variant-numeric: tabular-nums }
@@ -928,7 +922,7 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-side-handle { display: none }
 .pc-side-scrim { display: none }
 .pc-side-bar { flex: none; display: flex; align-items: stretch; gap: 4px; min-height: 48px; padding: 0 6px 0 8px; border-bottom: 1px solid var(--pc-line); background: var(--pc-soft) }
-/* The tabs (.pc-tabs .pc-tab): five labeled tabs fit the column; Settings is a gear at the end. */
+/* The tabs (.pc-tabs .pc-tab): five labeled tabs (Notes, Share, Activity, Stats, Plus) fit the column; Settings is a gear at the end. */
 .pc-side-tabs { flex: 1 }
 .pc-side-tab--icon { display: grid; place-items: center; width: 40px; margin-left: auto }
 .pc-side-tab--icon svg { width: 18px; height: 18px }
@@ -971,9 +965,14 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
   .pc-side-handle { display: flex; justify-content: center; flex: none; padding: 8px 0 2px }
   .pc-side-handle::before { content: ""; width: 40px; height: 5px; border-radius: var(--pc-radius-pill); background: var(--pc-line) }
   .pc-side-bar { background: transparent; padding: 0 6px 0 10px }
-  .pc-side-tabs .pc-tab { min-height: var(--pc-h-lg); font-size: var(--pc-fs-lg) }
+  .pc-side-tabs .pc-tab { min-height: var(--pc-h-lg); padding: 0 6px; font-size: var(--pc-fs-lg) }
   .pc-side-body { padding: 16px 16px 24px }
   .pc-side-notes-input { font-size: var(--pc-fs-lg) }   /* iOS zooms into smaller fields */
+}
+/* The narrowest phones (360px and under): one size smaller, so the six tabs still fit without scrolling. */
+@media (max-width: 380px) {
+  .pc-side-tabs .pc-tab { padding: 0 5px; font-size: var(--pc-fs-md) }
+  .pc-side-tab--icon { width: 34px }
 }
 @media (prefers-reduced-motion: no-preference) {
   @media (max-width: 767px) { .pc-side { animation: pc-sheet-in .2s var(--pc-ease) } }
@@ -1010,16 +1009,6 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-app-ext { width: 12px; height: 12px; opacity: .55; flex: none }
 .pc-share-app:hover .pc-app-ext { opacity: 1 }
 /* Go Pro: the benefits as a short checked list, in a soft blue well. */
-.pc-gopro { margin-top: 14px; padding: 12px 14px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); background: var(--pc-bg) }
-.pc-gopro-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px }
-.pc-gopro-head b { font-size: var(--pc-fs-md); color: var(--pc-text) }
-.pc-gopro-price { color: var(--pc-text-2); font-size: var(--pc-fs-sm); line-height: 1.4 }
-.pc-gopro-btn { margin-left: auto }
-.pc-gopro-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: var(--pc-fs-sm); line-height: 1.35; color: var(--pc-text-2) }
-.pc-gopro-list li { display: flex; gap: 6px; align-items: flex-start; text-wrap: pretty }
-.pc-gopro-list svg { width: 13px; height: 13px; flex: none; margin-top: 2px; color: var(--pc-success) }
-.pc-gopro-list b { color: var(--pc-text); font-weight: var(--pc-fw-semibold) }
-.pc-gopro-trial { display: block; margin: 8px 0 0; font-size: var(--pc-fs-sm); text-align: left }   /* + .pc-link */
 
 /* ---- Activity: day headings, then one row per change: dot, what, detail · time, Undo -------- */
 .pc-act-lead { margin-bottom: 6px }
@@ -1255,12 +1244,9 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
 .pc-home-site-footer .site-footer { margin-top: 0; border-top: 0 }
 
 /* ---- Pro beta (billing off): "Join the Pro beta" stands in for the trial and checkout -------- */
-.pc-gopro-btn--beta { margin: 10px 0 0 }
 .pc-beta-join .pc-pro-email { margin-top: 8px }
 .pc-beta-join .pc-pro-ok { font-size: var(--pc-fs-sm) }
 .pc-hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden }
-.pc-gopro-soon { margin: 8px 0 0; color: var(--pc-text-muted); font-size: var(--pc-fs-sm); line-height: 1.45 }
-.pc-gopro-soon a { color: var(--pc-link); white-space: nowrap }
 .pc-pro-price { margin: 10px 0 4px; font-size: var(--pc-fs-md) }
 /* Homepage plan cards: each opens /pricing; the whole card is the link, so it reads as text.
    "Learn more" shows on hover or focus where there is a pointer, always on touch screens. */
@@ -1272,3 +1258,16 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
 .pc-tour-plans .pc-tour-plan-more { margin-top: auto; padding-top: 10px; font-size: var(--pc-fs-md); font-weight: var(--pc-fw-semibold); color: var(--pc-link); opacity: 0; transition: opacity var(--pc-dur-fast) }
 .pc-tour-plan:hover .pc-tour-plan-more, .pc-tour-plan:focus-visible .pc-tour-plan-more { opacity: 1 }
 @media (hover: none) { .pc-tour-plans .pc-tour-plan-more { opacity: 1 } }
+
+/* ---- Plus tab (side panel): the ProPanel without its card, since the panel is already the surface ---- */
+.pc-side-plus .pc-pro { margin: 0; padding: 0; border: 0; background: none }
+.pc-side-plus .pc-pro-head { margin-bottom: var(--pc-space-3) }
+.pc-plus-list { list-style: none; margin: 0 0 var(--pc-space-2); padding: 0; display: grid; gap: var(--pc-space-2); font-size: var(--pc-fs-md); line-height: 1.45; color: var(--pc-text-2) }
+.pc-plus-list li { position: relative; padding-left: 22px; text-wrap: pretty }
+.pc-plus-list li::before { content: "✓"; position: absolute; left: 0; color: var(--pc-success); font-weight: var(--pc-fw-bold) }
+.pc-plus-list b { color: var(--pc-text); font-weight: var(--pc-fw-semibold) }
+.pc-plus-cta { margin-top: var(--pc-space-5); padding-top: var(--pc-space-4); border-top: 1px solid var(--pc-line) }
+.pc-plus-main { width: 100% }
+.pc-plus-or { margin-top: var(--pc-space-3) }
+.pc-plus-or .pc-link { font-size: var(--pc-fs-sm) }
+.pc-share-plus { margin: var(--pc-space-4) 0 0; color: var(--pc-text-muted); font-size: var(--pc-fs-sm) }   /* + .pc-link */
