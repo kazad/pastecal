@@ -1407,3 +1407,7 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
 /* The same lines atop the tour, for screens without the panel (it shows at 1100px+). */
 .pc-tour-know { max-width: 36rem; margin-left: auto; margin-right: auto; text-align: left; border-top: 0; padding-top: 0 }
 @media (min-width: 1100px) { .pc-tour-know { display: none } }
+/* Phones: the claim row is tight (name, pencil, Draft, Save & share); a smaller pencil keeps a 10-character name whole. */
+@media (max-width: 767px) { .pc-m-claim .pc-slug-pencil { width: 20px; height: 20px; margin-left: 0 } .pc-m-claim .pc-slug-pencil svg { width: 13px; height: 13px } .pc-m-claim input.pc-slug-edit { padding-right: 0 } .pc-m-claim .pc-draft-chip { margin: 0 4px 0 6px } }
+@media (max-width: 767px) { .pc-m-claim #url-prefix-mobile { font-size: var(--pc-fs-xs); padding-right: 0 } }
+@media (max-width: 374px) { .pc-m-claim .pc-slug-pencil { display: none } }   /* the dashed underline still says "type here" */
