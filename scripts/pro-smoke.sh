@@ -107,12 +107,13 @@ check_page() { # path expected-title is-pro-page
 check_page /         "$HOME_TITLE"            0
 check_page /pricing  "Pricing · pastecal"     0
 check_page /signin   "Sign in · pastecal"     1
-check_page /pro/done "Pro is on · pastecal"   1
+DONE_TITLE="$(python3 -c 'import re,sys; m=re.search(r"<title>(.*?)</title>", open(sys.argv[1]).read(), re.S); print(m.group(1).strip() if m else "")' "$(dirname "$0")/../public/pro/done.html")"
+check_page /pro/done "$DONE_TITLE"   1
 
-# --- 2. /api/pro/status reveals only yes/no flags: {isOwner, locked, pro, paused, lapsedOwner, trialUsed} ---
+# --- 2. /api/pro/status reveals only yes/no flags {isOwner, locked, pro, paused, lapsedOwner, trialUsed} and the plan id (or null) ---
 req GET "/api/pro/status?calendar=$CAL"
 if not_deployed; then record NOT-DEPLOYED "GET /api/pro/status" "HTTP $CODE $CTYPE"
-elif [ "$CODE" = 200 ] && is_json && [ "$(jget 'sorted(j.keys())')" = '["isOwner", "lapsedOwner", "locked", "paused", "pro", "trialUsed"]' ] && [ "$(jget 'all(isinstance(v, bool) for v in j.values())')" = 'True' ]; then
+elif [ "$CODE" = 200 ] && is_json && [ "$(jget 'sorted(k for k in j if k != "plan")')" = '["isOwner", "lapsedOwner", "locked", "paused", "pro", "trialUsed"]' ] && [ "$(jget 'all(isinstance(v, bool) for k, v in j.items() if k != "plan") and j.get("plan") in (None, "pro", "unlimited", "teams")')" = 'True' ]; then
     record PASS "GET /api/pro/status" "200, only yes/no flags ($(jget 'j'))"
 else record FAIL "GET /api/pro/status" "HTTP $CODE, body $(head -c 160 "$TMP/body")"; fi
 
@@ -135,6 +136,7 @@ billing_check() { # path name
     local err; err="$(jget 'j.get("error")')"
     if not_deployed; then record NOT-DEPLOYED "$2" "HTTP $CODE $CTYPE"
     elif [ "$CODE" = 401 ] && [ "$err" = signed-out ]; then BILLING="on"; record PASS "$2" "401 signed-out (billing configured)"
+    elif [ "$CODE" = 403 ] && [ "$err" = buy-on-live ]; then BILLING="on"; record PASS "$2" "403 buy-on-live (the staging copy never sells)"
     elif [ "$CODE" = 503 ] && [ "$err" = billing-not-configured ]; then
         BILLING="off"
         if [ "$EXPECT_BILLING" = 1 ]; then record FAIL "$2" "503 billing-not-configured (secrets missing)"
