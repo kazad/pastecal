@@ -4,7 +4,7 @@
 //
 // Only Pro owners have accounts, so there is no sign-in button anywhere else: free users never
 // need one. Signed in, the section lists the owner's Pro calendars with billing and sign-out;
-// signed out, it is one quiet "Pro owner? Sign in" line. Talks to this site's JSON API (cookie
+// signed out, it is one quiet "Upgraded a calendar? Sign in" line. Talks to this site's JSON API (cookie
 // session, cloudflare/src/Accounts.js): GET /api/me, POST /api/auth/start, /api/auth/signout,
 // /api/pro/portal. Analytics get the state only: never the email or a calendar name.
 // Each Pro calendar row has a "Stats" button beside it (open-stats, handled by app.js).
