@@ -213,7 +213,8 @@ const CalendarVueApp = {
             embedded: (() => { try { return window.self !== window.top || new URLSearchParams(location.search).has('embed'); } catch (e) { return true; } })(),
             proTrialUsed: false,
             proBilling: null,           // /api/pro/config: true = trial and checkout; false = "Join the Pro beta"; null = not known yet (neither shows)
-            pausedOwner: false,         // this browser owns the paused (Pro ended) calendar it's looking at: offer the way back
+            pausedOwner: false,
+            homeTab: null,              // the homepage panel's tab when the visitor picked one ('recents' | 'guide')         // this browser owns the paused (Pro ended) calendar it's looking at: offer the way back
             proTrialActive: false,      // this browser owns the calendar and it is on its free trial (trial_feature_used)
             proSurface: 'share',        // where the Pro offer was opened from: 'share' | 'stats' | 'lock' (trial_started)        // this calendar already had its one free trial (/api/pro/status), so the Go Pro card doesn't offer it
             lockedOut: false,
@@ -660,6 +661,8 @@ const CalendarVueApp = {
         },
 
         // Homepage calendar (no slug and not an existing saved calendar)
+        // Returning visitors open on their calendars; the guide is one click away.
+        homePanel() { return this.homeRecents.length ? (this.homeTab || 'recents') : 'guide'; },
         isHomepageCalendar() {
             return !this.urlslug && !this.isExisting;
         },
@@ -674,7 +677,7 @@ const CalendarVueApp = {
         // Headline and lead for the homepage pitch. One version for now; a later test adds more,
         // keyed by experiment variant.
         tourCopy() {
-            return { kicker: 'Shared calendars, refreshingly simple.', title: 'Add events. Paste your link. Done.' };
+            return { kicker: 'Shared calendars. No sign-ups.', title: 'Add events. Paste your link. Done.' };
         }
     },
 
@@ -3437,7 +3440,8 @@ const CalendarVueApp = {
         // toast's Undo) brings the whole draft back (undoLastLocal). The URL name stays the visitor's.
         startOver() {
             this.closeRecents();
-            if (this.isExisting) return;
+            // Only the homepage draft clears in place; anywhere else, starting over means the homepage.
+            if (!this.isHomepageCalendar) { this.goToHomepage(); return; }
             const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
             const before = {
                 title: this.calendar.title,
@@ -3470,6 +3474,7 @@ const CalendarVueApp = {
             this.templateUndo = false;
             track(a => a.featureUsed('start_over'));
             this.offerUndo('Started over with a blank calendar');
+            try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, 0); }
         },
 
         // Put a draft's title, options, palette, color names and template back as given (startOver and its undo).
