@@ -806,7 +806,7 @@ async function route(request, env, url, path) {
         const id = url.searchParams.get('calendar');
         if (!validId(id)) return json({ error: 'bad-calendar' }, 400);
         const [st, userId] = await Promise.all([LockClient.lockStatus(env, id), sessionUserId(request, env)]);
-        if (st.status === 404) return json({ locked: false, pro: false, isOwner: false, paused: false, lapsedOwner: false, trialUsed: false });
+        if (st.status === 404) return json({ locked: false, pro: false, plan: null, isOwner: false, paused: false, lapsedOwner: false, trialUsed: false });
         if (!st.ok && st.status >= 500) return json({ error: 'unavailable' }, 502);
         const locked = !!st.locked, isOwner = !!(locked && userId && st.ownerId === userId);
         const lapsed = !locked && st.lapsed ? st.lapsed : null;

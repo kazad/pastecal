@@ -53,7 +53,7 @@ const sub = (id, calendarId, userId, status, interval = 'year') => ({
     id, object: 'subscription', status, customer: `cus_${run}`, metadata: { calendar_id: calendarId, user_id: userId },
     items: { data: [{ current_period_end: 1830000000, price: { id: interval === 'year' ? 'price_fake_yearly' : 'price_fake_monthly', recurring: { interval } } }] },
 });
-const lockCalls = (id) => fake.log.filter((l) => l.path.startsWith(`/lockfake/cal/${id}/`) && !l.path.endsWith('lock-status'));
+const lockCalls = (id) => fake.log.filter((l) => l.path.startsWith(`/lockfake/cal/${id}/`) && !l.path.endsWith('lock-status') && !l.path.endsWith('editor-of-record'));   // reads, not lock changes
 const me = async (cookie) => (await fetch(BASE + '/api/me', { headers: { Cookie: cookie } })).json();
 const status = async (id, cookie) => (await fetch(`${BASE}/api/pro/status?calendar=${encodeURIComponent(id)}`, { headers: cookie ? { Cookie: cookie } : {} })).json();
 
@@ -234,7 +234,7 @@ try {
     assert.equal(r.status, 200);
     assert.equal(fake.cals.get(cal).locked, true); assert.equal(fake.cals.get(cal).ownerId, ann.userId);
     let mine = await me(ann.cookie);
-    assert.deepEqual(mine.calendars, [{ id: cal, status: 'active', plan: 'pro', interval: 'year', priceId: 'price_fake_yearly', currentPeriodEnd: 1830000000, trialEnd: null }]);
+    assert.deepEqual(mine.calendars, [{ id: cal, status: 'active', plan: 'pro', interval: 'year', priceId: 'price_fake_yearly', currentPeriodEnd: 1830000000, trialEnd: null, cancelAtPeriodEnd: false }]);
     step('a signed subscription.created locks the calendar for its owner; /api/me lists it with status and interval');
 
     const calls = lockCalls(cal).length;
@@ -248,12 +248,12 @@ try {
     // --- Status, editor key, portal
     const s1 = await status(cal, ann.cookie);
     // Trial fields: the owner also learns what happens when Pro ends (lapsedMode, default read-only).
-    assert.deepEqual(s1, { locked: true, pro: true, isOwner: true, paused: false, lapsedOwner: false, trialUsed: false, lapsedMode: 'readonly' });
+    assert.deepEqual(s1, { locked: true, pro: true, plan: 'pro', isOwner: true, paused: false, lapsedOwner: false, trialUsed: false, lapsedMode: 'readonly' });
     const s2 = await status(cal);
-    assert.deepEqual(s2, { locked: true, pro: true, isOwner: false, paused: false, lapsedOwner: false, trialUsed: false });
-    assert.deepEqual(Object.keys(s2).sort(), ['isOwner', 'lapsedOwner', 'locked', 'paused', 'pro', 'trialUsed']);
-    assert.deepEqual(await status(`missing-${run}`), { locked: false, pro: false, isOwner: false, paused: false, lapsedOwner: false, trialUsed: false });
-    step('status says {locked, pro, isOwner, paused, lapsedOwner, trialUsed} and nothing else (no owner id, no key)');
+    assert.deepEqual(s2, { locked: true, pro: true, plan: 'pro', isOwner: false, paused: false, lapsedOwner: false, trialUsed: false });
+    assert.deepEqual(Object.keys(s2).sort(), ['isOwner', 'lapsedOwner', 'locked', 'paused', 'plan', 'pro', 'trialUsed']);
+    assert.deepEqual(await status(`missing-${run}`), { locked: false, pro: false, plan: null, isOwner: false, paused: false, lapsedOwner: false, trialUsed: false });
+    step('status says {locked, pro, plan, isOwner, paused, lapsedOwner, trialUsed} and nothing else (no owner id, no key)');
 
     const bob = await signIn(BASE, `bob-${run}@example.com`);
     assert.equal((await post(BASE, '/api/pro/editor-key', { calendarId: cal })).status, 401);
@@ -314,7 +314,7 @@ try {
     // A paid cancel falls back like a lapsed trial: the room is told lapse:true (paused unless the owner chose open).
     const unlockCall = fake.log.slice(b4).find((l) => l.path === `/lockfake/cal/${cal}/unlock`);
     assert.deepEqual(unlockCall.body, { ownerId: ann.userId, lapse: true });
-    assert.deepEqual(await status(cal, ann.cookie), { locked: false, pro: false, isOwner: false, paused: false, lapsedOwner: false, trialUsed: false });
+    assert.deepEqual(await status(cal, ann.cookie), { locked: false, pro: false, plan: null, isOwner: false, paused: false, lapsedOwner: false, trialUsed: false });
     step('a failed payment keeps the lock (past_due); cancellation unlocks with lapse:true (the read-only fallback)');
 
     // --- Support: reassign a paid calendar to another email.
