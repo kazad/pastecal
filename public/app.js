@@ -1503,6 +1503,8 @@ const CalendarVueApp = {
                 const cs = foot && getComputedStyle(foot);
                 const footH = foot ? foot.offsetHeight + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom) : 0;
                 h = Math.max(100, Math.floor((window.innerHeight - (rect.top + window.scrollY) - 12 - chrome - footH) / rows.length));
+                // The homepage has "How pastecal works" below: keep rows modest so it peeks into view.
+                if (document.getElementById('how')) h = Math.min(h, 116);
             }
             const now = parseFloat(sched.style.getPropertyValue('--month-cell-h')) || 100;
             if (Math.abs(now - h) < 2) return false;
