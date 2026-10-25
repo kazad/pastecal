@@ -17,6 +17,8 @@
 //   POST /api/waitlist {email, plan:'pro', use, page, website} -> {ok, returning}   the Pro beta list
 // Analytics get the step and the reason only: never the email, the calendar name or a key.
 
+// Pro (id 'unlimited'): upgraded calendars with top-level short names (Accounts.js UNLIMITED_TOP_LEVEL); more go under @name.
+const PRO_SHORT_LIMIT = 5;
 const PRO_LOCK_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
 
 const PRO_MESSAGES = {
@@ -242,9 +244,9 @@ const ProPanel = {
 
             <!-- A Pro owner (plan id unlimited): every calendar of theirs is included, so locking is one click. -->
             <template v-if="mode === 'unlimited'">
-                <!-- Its 10 are used: more go under the owner's @name, without limit. -->
+                <!-- Its 5 are used: more go under the owner's @name, without limit. -->
                 <template v-if="status && status.unlimitedFull">
-                    <p class="pc-pro-lead" data-testid="pro-unlimited-full">You've used your 10 upgraded calendars.<template v-if="status.handle"> Put more under <b>@{{ status.handle }}</b>, without limit.</template></p>
+                    <p class="pc-pro-lead" data-testid="pro-unlimited-full">You've used your {{ PRO_SHORT_LIMIT }} upgraded calendars.<template v-if="status.handle"> Put more under <b>@{{ status.handle }}</b>, without limit.</template></p>
                     <form v-if="status.handle" class="pc-pro-row" @submit.prevent="saveAtName" data-testid="pro-put-under">
                         <span class="pc-pro-name"><span class="pc-pro-muted">@{{ status.handle }}/</span><input v-model.trim="atNameInput" maxlength="40" aria-label="Name" placeholder="name" autocapitalize="none" spellcheck="false"></span>
                         <button type="submit" class="pc-pro-btn" :disabled="busy || !atNameInput">{{ busy ? 'One moment…' : 'Put it there' }}</button>
@@ -395,7 +397,7 @@ const ProPanel = {
                             </select>
                             <button type="button" class="pc-pro-btn pc-pro-btn--quiet" :disabled="busy || !remapName" @click="nameChange('/api/names/short/remap', { name: remapName, calendarId })">Move here</button>
                         </div>
-                        <form v-if="(status.shortNames || []).length + (status.otherShortNames || []).length < 10" class="pc-pro-row" @submit.prevent="addShortName" data-testid="pro-short-form">
+                        <form v-if="(status.shortNames || []).length + (status.otherShortNames || []).length < PRO_SHORT_LIMIT" class="pc-pro-row" @submit.prevent="addShortName" data-testid="pro-short-form">
                             <span class="pc-pro-name"><span class="pc-pro-muted">{{ host }}/</span><input v-model.trim="shortInput" maxlength="30" aria-label="Short name" placeholder="name" autocapitalize="none" spellcheck="false" data-testid="pro-short-input"></span>
                             <button type="submit" class="pc-pro-btn pc-pro-btn--quiet" :disabled="busy || !shortInput">Add</button>
                         </form>
@@ -460,6 +462,7 @@ const ProPanel = {
     data() {
         return {
             svg: PRO_LOCK_SVG,
+            PRO_SHORT_LIMIT,
             status: null,         // /api/pro/status
             me: null,             // /api/me, or null when signed out
             interval: 'year',
@@ -498,7 +501,7 @@ const ProPanel = {
             return 'offer';
         },
         trialUsed() { return !!(this.status && this.status.trialUsed); },
-        // The plan's name as people see it: Pro (id 'unlimited', 10 + unlimited under @you) or Plus (id 'pro', one calendar).
+        // The plan's name as people see it: Pro (id 'unlimited', 5 + unlimited under @you) or Plus (id 'pro', one calendar).
         planName() { return this.status && this.status.plan === 'unlimited' ? 'Pro' : 'Plus'; },
         // Matches the server (checkout carries the trial's end when it is over 49 hours away).
         keepNote() {

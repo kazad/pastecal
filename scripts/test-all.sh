@@ -39,6 +39,7 @@ firebase-sync|plain
 cloud-service|plain
 waitlist|plain
 hardening|plain
+view-socket|plain
 archive|plain+persist
 backup|plain+persist
 copyback|copyback (fake Firebase on 9099, started by the test)
@@ -206,7 +207,7 @@ run_one() {
   case "$name" in
     stripe-unit|collector|site|headers|ics-safety)
       run_node "$name" "$log" "$CF" "$NODE" "test/$name.test.mjs" ;;
-    sync|stress|phase3|firebase-sync|cloud-service|waitlist|hardening|archive|backup)
+    sync|stress|phase3|firebase-sync|cloud-service|waitlist|hardening|view-socket|archive|backup)
       # shellcheck disable=SC2086
       start_wrangler "$name" "$persist" $PLAIN_VARS || { record "$name" FAIL - "$RUN_DIR/wrangler-$name.log"; return; }
       run_node "$name" "$log" "$CF" BASE="$LAST_BASE" PERSIST="$persist" IMPORT_SECRET="$SECRET" "$NODE" "test/$name.test.mjs" ;;

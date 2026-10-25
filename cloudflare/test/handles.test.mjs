@@ -1,5 +1,5 @@
 // Pro Plus (internally Pro Unlimited) names and /account: @handle, calendars under it, top-level short names,
-// the 10-calendar cap with the @handle exemption, view-only enforcement, lapse + the 90-day hold, account delete.
+// the 5-calendar cap (owner decision Oct 2026, was 10) with the @handle exemption, view-only enforcement, lapse + the 90-day hold, account delete.
 // REAL calendar rooms and fake Stripe, the same single `wrangler dev` as unlimited.test.mjs:
 //   node node_modules/.bin/wrangler dev --port 8827 --inspector-port 9247 --persist-to /tmp/pc-unlimited-state \
 //     --var COPY_BACK: --var FIREBASE_DB_URL: --var IMPORT_SECRET:dev-secret --var ACCOUNTS_DEV_MODE:1 \
@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import { startFakeStripe, signStripe } from './fake-stripe.mjs';
 
 const BASE = process.env.BASE || 'http://localhost:8827', SECRET = process.env.IMPORT_SECRET || 'dev-secret', WHSEC = 'fake-webhook-secret';
+const L = 5;   // Pro's upgraded calendars with short names (UNLIMITED_TOP_LEVEL)
 let n = 0; const step = (s) => console.log(`  ok ${++n} - ${s}`);
 const run = Date.now().toString(36);
 const enc = encodeURIComponent;
@@ -77,8 +78,8 @@ try {
     assert.equal((await pj('/api/names/handle', { handle: h }, ann.cookie)).status, 403, 'no Pro Plus: no name');
     const subA = await giveUnlimited(ann, 'ann');
     a = await account(ann.cookie);
-    assert.equal(a.plan, 'unlimited'); assert.equal(a.active, true); assert.equal(a.proCount, 0); assert.equal(a.proLimit, 10);
-    step('/api/account: 401 signed out; plan, Pro calendars 0 of 10; a name needs Pro Plus (403)');
+    assert.equal(a.plan, 'unlimited'); assert.equal(a.active, true); assert.equal(a.proCount, 0); assert.equal(a.proLimit, L);
+    step('/api/account: 401 signed out; plan, upgraded calendars 0 of 5; a name needs Pro (403)');
 
     // --- claim a handle
     let r = await pj('/api/names/handle', { handle: 'ab' }, ann.cookie);
@@ -105,10 +106,10 @@ try {
     assert.deepEqual([st.locked, st.ownerId, st.title], [true, ann.userId, 'U10 Soccer']);
     assert.equal((await pj('/api/names/calendar', { name: 'soccer' }, ann.cookie)).d.error, 'name-taken');
     a = await account(ann.cookie);
-    assert.equal(a.proCount, 0, 'under the handle it does not count toward the 10');
+    assert.equal(a.proCount, 0, 'under the handle it does not count toward the 5');
     const row = a.calendars.find((c) => c.id === soccer);
     assert.deepEqual([row.state, row.atName, row.show, row.title], ['unlimited', 'soccer', false, 'U10 Soccer']);
-    step('new calendar under @handle: made, locked for its owner under Pro Plus, owned (in /api/account), not counted toward the 10');
+    step('new calendar under @handle: made, locked for its owner under Pro Plus, owned (in /api/account), not counted toward the 5');
 
     // --- the @ link is view-only and never shows the edit id
     let res = await get(`/@${h}/soccer`);
@@ -170,25 +171,27 @@ try {
     assert.equal((await account(ann.cookie)).proCount, 1);
     step('existing calendar: @name moves it under the handle (not counted), rename (old name 404), someone else\'s refused, remove (counted again)');
 
-    // --- the 10 cap and the @handle exemption
+    // --- the 5 cap and the @handle exemption (club is already one of the 5)
     const extra = [];
-    for (let i = 0; i < 10; i++) { const id = `cap${i}-${run}`; extra.push(id); await createCalendar(id, `Cap ${i}`); }
-    for (const id of extra.slice(0, 9)) assert.equal((await pj('/api/pro/lock', { calendarId: id }, ann.cookie)).status, 200, id);
-    assert.equal((await account(ann.cookie)).proCount, 10);
-    const st11 = await (await get(`/api/pro/status?calendar=${enc(extra[9])}`, ann.cookie)).json();
-    assert.deepEqual([st11.unlimited, st11.unlimitedFull, st11.handle], [true, true, h]);
-    r = await pj('/api/pro/lock', { calendarId: extra[9] }, ann.cookie);
-    assert.equal(r.status, 409); assert.equal(r.d.error, 'unlimited-full');
-    assert.equal((await lockStatus(extra[9])).locked, false);
-    assert.equal((await pj('/api/names/link', { calendarId: extra[9], name: 'cap-ten' }, ann.cookie)).status, 200, 'under the handle it can still be Pro');
-    st = await lockStatus(extra[9]);
+    for (let i = 0; i < L; i++) { const id = `cap${i}-${run}`; extra.push(id); await createCalendar(id, `Cap ${i}`); }
+    for (const id of extra.slice(0, L - 1)) assert.equal((await pj('/api/pro/lock', { calendarId: id }, ann.cookie)).status, 200, id);
+    assert.equal((await account(ann.cookie)).proCount, L);
+    const st6 = await (await get(`/api/pro/status?calendar=${enc(extra[L - 1])}`, ann.cookie)).json();
+    assert.deepEqual([st6.unlimited, st6.unlimitedFull, st6.handle], [true, true, h]);
+    r = await pj('/api/pro/lock', { calendarId: extra[L - 1] }, ann.cookie);
+    assert.equal(r.status, 409); assert.equal(r.d.error, 'unlimited-full', 'the 6th is refused');
+    assert.equal(r.d.message, "You've used your 5. Put more under your @name, without limit.");
+    assert.equal((await lockStatus(extra[L - 1])).locked, false);
+    assert.equal((await pj('/api/names/link', { calendarId: extra[L - 1], name: 'cap-six' }, ann.cookie)).status, 200, 'under the handle it can still be Pro');
+    st = await lockStatus(extra[L - 1]);
     assert.deepEqual([st.locked, st.ownerId], [true, ann.userId]);
-    assert.equal((await account(ann.cookie)).proCount, 10);
+    assert.equal((await account(ann.cookie)).proCount, L);
     assert.equal((await pj('/api/names/calendar', { name: 'more' }, ann.cookie)).status, 200, 'new calendars under the handle: no limit');
-    r = await pj('/api/names/unlink', { calendarId: extra[9] }, ann.cookie);
-    assert.equal(r.status, 409); assert.equal(r.d.error, 'unlimited-full', 'can\'t leave the handle past the 10');
+    r = await pj('/api/names/unlink', { calendarId: extra[L - 1] }, ann.cookie);
+    assert.equal(r.status, 409); assert.equal(r.d.error, 'unlimited-full', 'can\'t leave the handle past the 5');
+    assert.match(r.d.message, /^You've used your 5\./);
     assert.equal((await pj('/api/pro/lock', { calendarId: club }, ann.cookie)).d.already, true, 'an already-covered calendar is fine');
-    step('the cap: 10 Pro calendars outside @handle (11th 409 unlimited-full, status says so), unlimited under it (link moves + locks a free calendar; new ones), unlink refused past 10');
+    step('the cap: 5 upgraded calendars outside @handle (6th 409 unlimited-full, status says so), unlimited under it (link moves + locks a free calendar; new ones), unlink refused past 5');
 
     // --- top-level short names
     const s1 = `go-${run}`.slice(0, 30);
@@ -219,20 +222,21 @@ try {
     step('short name: claimed for your calendar; the app\'s lookup says read-only (no target), feed + view JSON with no edit id; refused when taken, a calendar\'s or view link\'s name, or reserved (site pages, pastecal*, staff words); no calendar can take it, or start with @');
 
     const shorts = [s1];
-    for (let i = 1; i < 10; i++) { const nm = `s${i}-${run}`.slice(0, 30); assert.equal((await pj('/api/names/short', { name: nm, calendarId: extra[i] }, ann.cookie)).status, 200, nm); shorts.push(nm); }
-    r = await pj('/api/names/short', { name: `s10-${run}`.slice(0, 30), calendarId: club }, ann.cookie);
-    assert.equal(r.status, 409); assert.equal(r.d.error, 'short-limit');
+    for (let i = 1; i < L; i++) { const nm = `s${i}-${run}`.slice(0, 30); assert.equal((await pj('/api/names/short', { name: nm, calendarId: extra[i] }, ann.cookie)).status, 200, nm); shorts.push(nm); }
+    r = await pj('/api/names/short', { name: `s${L}-${run}`.slice(0, 30), calendarId: club }, ann.cookie);
+    assert.equal(r.status, 409); assert.equal(r.d.error, 'short-limit', 'the 6th short link is refused');
+    assert.match(r.d.message, /all 5 short links/);
     assert.equal((await pj('/api/names/short/remap', { name: s1, calendarId: soccer }, ann.cookie)).status, 200);
     assert.equal(JSON.parse(await (await get(`/cal/view/${s1}`)).text()).calendar.title, 'U10 Soccer', 'remapped');
     const ownerSt = await (await get(`/api/pro/status?calendar=${enc(soccer)}`, ann.cookie)).json();
-    assert.deepEqual([ownerSt.atName, ownerSt.shortNames, ownerSt.otherShortNames.length], ['soccer', [s1], 9], 'the owner panel lists its own short links and the ones it could take');
+    assert.deepEqual([ownerSt.atName, ownerSt.shortNames, ownerSt.otherShortNames.length], ['soccer', [s1], L - 1], 'the owner panel lists its own short links and the ones it could take');
     assert.equal((await pj('/api/names/short/remap', { name: s1, calendarId: `bobcal-${run}` }, ann.cookie)).d.error, 'not-owner');
     assert.equal((await pj('/api/names/short/remap', { name: s1, calendarId: club }, bob.cookie)).status, 404, 'not his name');
     a = await account(ann.cookie);
-    assert.equal(a.shortNames.length, 10); assert.equal(a.shortLimit, 10); assert.equal(a.holdDays, 90);
-    assert.equal((await pj('/api/names/short/release', { name: shorts[9] }, ann.cookie)).status, 200);
-    assert.equal((await (await get(`/api/lookup?slug=${shorts[9]}`)).json()).found, false);
-    step('short names: 10 at most (409 short-limit), remap to another of yours (not someone else\'s), release frees it');
+    assert.equal(a.shortNames.length, L); assert.equal(a.shortLimit, L); assert.equal(a.holdDays, 90);
+    assert.equal((await pj('/api/names/short/release', { name: shorts[L - 1] }, ann.cookie)).status, 200);
+    assert.equal((await (await get(`/api/lookup?slug=${shorts[L - 1]}`)).json()).found, false);
+    step('short names: 5 at most (409 short-limit), remap to another of yours (not someone else\'s), release frees it');
 
     // --- lapse: links keep working, nothing can be added or changed; the handle stays theirs
     await endUnlimited(subA, ann, 'ann');
@@ -256,7 +260,7 @@ try {
     assert.deepEqual(rel.released, []);
     assert.equal((await (await get(`/api/lookup?slug=${s1}`)).json()).found, true);
     rel = await (await admin('/api/admin/accounts/age-short-holds', { method: 'POST', body: JSON.stringify({ email: ann.email, ageMs: 2 * 86400000 }) })).json();
-    assert.deepEqual(rel.released.sort(), shorts.slice(0, 9).sort());
+    assert.deepEqual(rel.released.sort(), shorts.slice(0, L - 1).sort());
     assert.equal((await (await get(`/api/lookup?slug=${s1}`)).json()).found, false);
     assert.equal((await account(ann.cookie)).shortNames.length, 0);
     assert.equal((await pj('/api/names/short', { name: s1, calendarId: `bobcal-${run}` }, bob.cookie)).status, 200, 'free for anyone after the hold');
@@ -363,7 +367,7 @@ try {
         step('@link page: its own <title>, description, og:/twitter: title and url (the @ address), every value escaped; no edit id');
     }
 
-    // --- red team: a calendar under someone else's @name can't be re-linked, renamed, or used to dodge the 10
+    // --- red team: a calendar under someone else's @name can't be re-linked, renamed, or used to dodge the 5
     {
         const fay = await signIn(`fay-names-${run}@example.com`), gus = await signIn(`gus-names-${run}@example.com`);
         const subF = await giveUnlimited(fay, 'fay'); await giveUnlimited(gus, 'gus');
@@ -381,8 +385,8 @@ try {
         assert.equal((await get(`/@${gh}/mine`)).status, 404);
         // Locking it is still allowed (it's open), but her old @link doesn't exempt it from his 10.
         assert.equal((await pj('/api/pro/lock', { calendarId: club }, gus.cookie)).status, 200);
-        assert.equal((await account(gus.cookie)).proCount, 1, 'it counts toward his 10');
-        step('red team: a calendar with another account\'s @link can\'t be linked under yours (409 linked-elsewhere, theirs untouched), and their link never exempts it from your 10');
+        assert.equal((await account(gus.cookie)).proCount, 1, 'it counts toward his 5');
+        step('red team: a calendar with another account\'s @link can\'t be linked under yours (409 linked-elsewhere, theirs untouched), and their link never exempts it from your 5');
     }
 
     // --- rate limit on name changes

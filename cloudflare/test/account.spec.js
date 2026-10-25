@@ -104,14 +104,14 @@ test('Pro from /pricing (fake Stripe), claim @name, create a calendar under it',
   await expect(page.getByTestId('account-plan')).toHaveText(/^Pro · renews (January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}$/);
   await expect(page.locator('.who').getByTestId('account-signout')).toBeVisible();     // beside the email, not in the Plan card
   await expect(page.getByTestId('account-plan-card').getByTestId('account-signout')).toHaveCount(0);
-  await expect(page.getByTestId('account-meter')).toHaveText('Upgraded calendars: 0 of 10 · unlimited under your @name');
+  await expect(page.getByTestId('account-meter')).toHaveText('Upgraded calendars: 0 of 5 · unlimited under your @name');
   await page.getByTestId('handle-input').fill('pricing');
   await page.getByTestId('handle-claim').click();
   await expect(page.getByTestId('name-error')).toHaveText('That name is reserved. Try another.');
   await page.getByTestId('handle-input').fill(handle);
   await page.getByTestId('handle-claim').click();
   await expect(page.getByTestId('handle-link-own')).toHaveText(new RegExp(`/@${handle}$`));
-  await expect(page.getByTestId('account-meter')).toHaveText(`Upgraded calendars: 0 of 10 · unlimited under @${handle}`);
+  await expect(page.getByTestId('account-meter')).toHaveText(`Upgraded calendars: 0 of 5 · unlimited under @${handle}`);
 
   await page.getByTestId('newcal-input').fill('soccer');
   await page.getByTestId('newcal-create').click();
@@ -166,14 +166,14 @@ test('"Show on my page" lists it on pastecal.com/@name', async ({ browser }) => 
   await expect(page.getByTestId('handle-empty')).toBeVisible();
   await page.goto('/account');
   const row = page.locator(`[data-cal="${calendarId}"]`);
-  await expect(row.getByTestId('cal-status')).toHaveText(`Pro · under @${handle}`);   // doesn't use one of the 10
+  await expect(row.getByTestId('cal-status')).toHaveText(`Pro · under @${handle}`);   // doesn't use one of the 5
   // A calendar locked at its own address does: the meter and its row say so.
   const plain = `walk-plain-${run}`;
   expect((await page.request.post(`/cal/${plain}`, { data: JSON.stringify({ title: 'Book club', options: {}, events: [] }) })).status()).toBe(201);
   expect((await page.request.post('/api/pro/lock', { data: JSON.stringify({ calendarId: plain }), headers: { 'Content-Type': 'application/json', Origin: BASE } })).status()).toBe(200);
   await page.reload();
-  await expect(page.locator(`[data-cal="${plain}"]`).getByTestId('cal-status')).toHaveText('Pro · 1 of your 10');
-  await expect(page.getByTestId('account-meter')).toHaveText(`Upgraded calendars: 1 of 10 · unlimited under @${handle}`);
+  await expect(page.locator(`[data-cal="${plain}"]`).getByTestId('cal-status')).toHaveText('Pro · 1 of your 5');
+  await expect(page.getByTestId('account-meter')).toHaveText(`Upgraded calendars: 1 of 5 · unlimited under @${handle}`);
   await expect(page.locator('#newCalNote')).toContainText(`pastecal.com/@${handle}/… link`);
   await row.getByTestId('cal-at-edit').click();
   await row.getByTestId('cal-show').check();

@@ -430,6 +430,9 @@ async function route(request, env) {
                 }
             }
             if (!targetId) return new Response('not found', { status: 404 });
+            if (viewMatch[2] === '/ws' && request.headers.get('Upgrade') !== 'websocket') {
+                return new Response('expected a WebSocket', { status: 426 });
+            }
             const room = env.CALENDARS.get(env.CALENDARS.idFromName(targetId));
             const subPath = viewMatch[2] === '/ws' ? '/ws' : '';
             const roomUrl = new URL(`http://internal/cal/${encodeURIComponent(targetId)}${subPath}`);

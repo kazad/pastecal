@@ -18,9 +18,9 @@
  *   POST /api/names/link     {calendarId, name} -> {ok, path}       give (or rename) one of your calendars' @name; a free
  *                                                 calendar (unlocked) moves under the handle and is locked there
  *   POST /api/names/unlink   {calendarId}       -> {ok}             remove it (409 unlimited-full if it would
- *                                                 then count past the 10)
+ *                                                 then count past the 5)
  *   POST /api/names/show     {calendarId, show} -> {ok}             list it on pastecal.com/@handle (default off)
- *   POST /api/names/short    {name, calendarId} -> {ok}             claim pastecal.com/<name> for a calendar (10 at most)
+ *   POST /api/names/short    {name, calendarId} -> {ok}             claim pastecal.com/<name> for a calendar (5 at most: UNLIMITED_TOP_LEVEL)
  *   POST /api/names/short/remap   {name, calendarId} -> {ok}        point it at another of your calendars
  *   POST /api/names/short/release {name}             -> {ok}        let it go
  * Rules: names follow SlugService.nameProblem (reserved words and site pages refused); a top-level name
@@ -260,7 +260,7 @@ const NAME_OPS = {
         if (!validId(body.calendarId)) return json({ error: 'bad-calendar' }, 400);
         const l = await g.acc.linkFor(body.calendarId);
         if (!l || !g.handle || l.handle !== g.handle.handle) return json({ error: 'no-link' }, 404);
-        // Out from under the handle it would count toward the 10.
+        // Out from under the handle it would count toward the 5.
         if (g.active && (await g.acc.coveredByUnlimited(body.calendarId, userId)) && (await g.acc.proCount(userId)) >= UNLIMITED_TOP_LEVEL) {
             return json({ error: 'unlimited-full', message: `You've used your ${UNLIMITED_TOP_LEVEL}. This calendar can only stay upgraded under @${g.handle.handle}.` }, 409);
         }

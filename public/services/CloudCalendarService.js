@@ -47,9 +47,6 @@
  * Known gaps (docs/cloudflare-migration.md, Phase 3):
  *   - TODO(phase 3): case-insensitive name lookup. Names resolve by EXACT id here; the
  *     directory (lowercase -> real name) does not exist yet.
- *   - TODO(phase 3): real view-only links. subscribe_readonly polls GET /cal/<id>; that
- *     document contains the edit id and all options, so it must only be given a view id
- *     once views are served without the edit id. Today it is for the room's own id.
  *   - No history, author signal or auto read-only link in this mode.
  */
 class CloudCalendarService extends CalendarDataService {
@@ -557,27 +554,93 @@ class CloudCalendarService extends CalendarDataService {
 
     // ---- read-only views --------------------------------------------------------------------
 
-    /** Polls GET /cal/view/<slug> (or /cal/<slug>) and calls back when the version changes. */
+    /**
+     * A view link, live: a read-only WebSocket to /cal/view/<slug>/ws (the Worker finds the room through
+     * the directory, so this tab never learns the edit name) streams the view copy -- snapshot, then each
+     * change -- and the callback runs once per new version. Saves are never sent on it (the room refuses
+     * them anyway). If the socket is down, GET /cal/view/<slug> is polled every READONLY_POLL_MS until it
+     * is back; coming back to the tab fetches at once (a phone's socket can look open and be dead).
+     * Idle sockets cost nothing: the room hibernates, and this sends nothing on its own.
+     */
     static subscribe_readonly(slug, callback) {
         if (!slug) return;
-        let v = -1, stopped = false;
-        const tick = async () => {
-            if (stopped) return;
+        const enc = encodeURIComponent(slug), src = this._source(), qs = src ? '?src=' + src : '';
+        const hidden = () => typeof document !== 'undefined' && document.visibilityState === 'hidden';
+        let v = -1, cal = null, access = null, stopped = false, viewLink = true;
+        let ws = null, live = false, retries = 0, wsTimer = null, connectTimer = null, pollTimer = null;
+        const accessOf = (m) => ({ locked: !!m.locked, pro: !!m.pro, proSettings: m.proSettings || null });
+        const deliver = () => { if (!stopped) callback(JSON.parse(JSON.stringify(cal)), { ...access }); };
+        const fetchNow = async () => {
             try {
-                if (typeof document === 'undefined' || document.visibilityState !== 'hidden') {
-                    const src = this._source();
-                    let r = await fetch(`${this._base()}/cal/view/${encodeURIComponent(slug)}${src ? '?src=' + src : ''}`);
-                    if (r.status === 404) r = await fetch(this._url(slug));
-                    if (r.ok) {
-                        const out = await r.json();
-                        if (out.v !== v && out.calendar && out.calendar.id) { v = out.v; callback({ ...out.calendar, events: out.calendar.events }, { locked: !!out.locked, pro: !!out.pro, proSettings: out.proSettings || null }); }
-                    }
-                }
+                let r = await fetch(`${this._base()}/cal/view/${enc}${qs}`);
+                if (r.status === 404) { viewLink = false; r = await fetch(this._url(slug)); }
+                if (!r.ok || stopped) return;
+                const out = await r.json();
+                // Never older than what the socket already gave us (versions only go up).
+                if (out.calendar && out.calendar.id && out.v > v) { v = out.v; cal = out.calendar; access = accessOf(out); deliver(); }
             } catch (e) { /* offline: try again next time */ }
-            setTimeout(tick, this.READONLY_POLL_MS);
         };
+        const tick = async () => {
+            pollTimer = null;
+            if (stopped) return;
+            if (!live && !hidden()) await fetchNow();
+            if (!stopped) pollTimer = setTimeout(tick, this.READONLY_POLL_MS);
+        };
+        const reconnect = () => {
+            if (stopped || wsTimer || !viewLink) return;
+            const { baseMs, maxMs } = this.RECONNECT;
+            const delay = Math.min(maxMs, baseMs * 2 ** retries++) * (0.75 + Math.random() * 0.5);
+            wsTimer = setTimeout(() => { wsTimer = null; open(); }, delay);
+        };
+        const hello = (sock) => { try { sock.send(JSON.stringify({ t: 'hello' })); } catch (e) { /* closing */ } };
+        const onFrame = (sock, m) => {
+            if (m.t === 'snapshot') {
+                if (!m.calendar || !m.calendar.id) return;
+                retries = 0; live = true;
+                v = m.v; cal = m.calendar; access = accessOf(m);
+                return deliver();
+            }
+            if (!cal) return;
+            if ((m.t === 'change' || m.t === 'meta') && m.v !== v + 1) return hello(sock);   // missed one: start over
+            if (m.t === 'change') {
+                try { cal = { ...cal, events: EventStore.apply(cal.events || [], { type: 'batch', commands: m.commands }).events, lastEditedAt: Date.now() }; }
+                catch (e) { return hello(sock); }
+            } else if (m.t === 'meta') {
+                cal = { ...cal, title: m.title, options: m.options || {}, lastEditedAt: Date.now() };
+            } else if (m.t === 'pro') {
+                access = { ...access, proSettings: m.settings || null };
+                return deliver();
+            } else return;                                 // errors and anything newer: nothing to show
+            v = m.v;
+            deliver();
+        };
+        const open = () => {
+            if (stopped || ws || !viewLink || hidden()) return;        // a hidden tab connects when it comes back
+            let sock;
+            try { sock = new WebSocket(`${this._base()}/cal/view/${enc}/ws${qs}`.replace(/^http/, 'ws')); } catch (e) { return reconnect(); }
+            ws = sock;
+            // Some networks hang the handshake without closing it: give up on it and poll meanwhile.
+            connectTimer = setTimeout(() => { if (ws === sock && sock.readyState === 0) { try { sock.close(); } catch (e) { /* gone */ } } }, 5000);
+            sock.onopen = () => clearTimeout(connectTimer);
+            sock.onmessage = (ev) => { if (ws !== sock) return; let m; try { m = JSON.parse(ev.data); } catch (e) { return; } onFrame(sock, m); };
+            sock.onclose = () => { if (ws !== sock) return; clearTimeout(connectTimer); ws = null; live = false; reconnect(); };
+            sock.onerror = () => { /* onclose follows */ };
+        };
+        const onVisibility = () => {
+            if (stopped || hidden()) return;
+            fetchNow();
+            if (!ws) { clearTimeout(wsTimer); wsTimer = null; retries = 0; open(); }
+        };
+        if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisibility);
         tick();
-        return () => { stopped = true; };
+        open();
+        return () => {
+            stopped = true;
+            clearTimeout(pollTimer); clearTimeout(wsTimer); clearTimeout(connectTimer);
+            if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisibility);
+            const sock = ws; ws = null;
+            try { sock && sock.close(); } catch (e) { /* gone */ }
+        };
     }
 
     // ---- directory & history APIs -----------------------------------------------------------

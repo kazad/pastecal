@@ -139,3 +139,29 @@ test('view link: second visit shows the subscribe hint once; opening it ends it'
   await expect(visible(page, 'subscribe-nudge')).toHaveCount(0);            // and never shows again
   await ctx.close();
 });
+
+// Live view: an edit shows on an open view page at once (a read-only WebSocket), not on the next poll
+// (15 s), and without a reload.
+test('view link updates live: the editor adds an event, the viewer sees it within 2s without reloading', async ({ browser, request }) => {
+  const id = `test-live-view-${Date.now()}-${Math.floor(Math.random() * 1e5)}`;
+  const today = new Date(); today.setHours(9, 0, 0, 0);
+  const events = [{ id: 'e1', title: 'Already there', start: today.toISOString(), end: new Date(+today + 3600e3).toISOString(), type: 1 }];
+  expect((await request.post(`/cal/${id}`, { data: { title: 'Live view test', options: {}, events } })).status()).toBe(201);
+  const { publicViewId } = await (await request.post('/api/create-view', { data: { sourceCalendarId: id } })).json();
+
+  const viewer = await open(browser, `/view/${publicViewId}?backend=cf`);
+  await viewer.page.evaluate(() => { window.__noReload = true; });
+  const editor = await open(browser, `/${id}?backend=cf`);
+
+  const title = `Live ${Math.floor(Math.random() * 1e6)}`;
+  await editor.page.getByTestId('desktop-add-event-button').click();
+  await editor.page.locator('textarea[aria-label="Event description"]').fill(`${title} today 3pm`);
+  await editor.page.locator('.pc-qa-dialog button[type="submit"]').click();
+  await expect(editor.page.locator('.e-appointment', { hasText: title })).toBeVisible();
+  const t0 = Date.now();
+  await expect(viewer.page.locator('.e-appointment', { hasText: title })).toBeVisible({ timeout: 2000 });
+  console.log(`viewer saw the new event ${Date.now() - t0} ms after it showed in the editor`);
+  expect(await viewer.page.evaluate(() => window.__noReload), 'the viewer did not reload').toBe(true);
+  await editor.ctx.close();
+  await viewer.ctx.close();
+});

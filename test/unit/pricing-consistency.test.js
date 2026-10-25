@@ -58,7 +58,7 @@ test('four plans: Plus and Pro are in beta, Teams is in development', () => {
   assert.match(pro, /<strong>\$96<\/strong>/);
   assert.match(pro, /\$8 a month, billed yearly/);
   assert.match(pro, /\$10 month to month/);
-  assert.match(pro, /10 upgraded calendars/);
+  assert.match(pro, /5 upgraded calendars/);
   assert.match(pricing, /<option value="unlimited">Pro, \$96 a year or \$10 a month<\/option>/);
   assert.match(pricing, /<span class="badge">Beta<\/span>\s*<h3>Pro<\/h3>/, 'Pro carries the Beta badge');
   // Billing on: Get Pro opens the Get Plus section on Pro. Billing off: the page renames it Join the beta.
@@ -73,7 +73,7 @@ test('four plans: Plus and Pro are in beta, Teams is in development', () => {
   assert.match(block[0], /href="#waitlist"[^>]*>Join the waitlist<\/a>$/);
   assert.match(pricing, /<thead><tr><th>Feature<\/th><th>Free<\/th><th class="pro">Plus <span class="beta-tag">Beta<\/span><\/th><th>Pro <span class="beta-tag">Beta<\/span><\/th><th>Teams<\/th><\/tr><\/thead>/);
   assert.match(pricing, /<span>Upgraded calendars<\/span>/);
-  assert.match(pricing, /<tr><td>With a short name<small>[\s\S]*?<td class="n">—<\/td><td class="pro">1<\/td><td>10<\/td><td>10<\/td><\/tr>/);
+  assert.match(pricing, /<tr><td>With a short name<small>[\s\S]*?<td class="n">—<\/td><td class="pro">1<\/td><td>5<\/td><td>25<\/td><\/tr>/);
   assert.match(pricing, /<tr><td>Under your own name<small>[\s\S]*?<td class="n">—<\/td><td class="pro n">—<\/td><td>Unlimited<\/td><td>Unlimited<\/td><\/tr>/);
   assert.ok(!/Pro calendar/.test(pricing), 'the concept word is "upgraded calendar"');
 });

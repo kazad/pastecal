@@ -880,7 +880,7 @@ async function sendProWelcome(env, acc, userId, subscriptionId) {
         const host = siteHost(env);
         const text = `Thanks for getting Pro.\n\n`
             + `Next: claim your name. It's one name for all your calendars, like ${host}/@yourname/soccer, and you choose it once. Sign in with this email at:\n${siteUrl(env)}/account\n\n`
-            + `Then make calendars under your name, as many as you like. Or open any calendar you run, press Share, and choose Lock this calendar: up to 10 can have a short link like ${host}/soccer.\n\n`
+            + `Then make calendars under your name, as many as you like. Or open any calendar you run, press Share, and choose Lock this calendar: up to ${UNLIMITED_TOP_LEVEL} can have a short link like ${host}/soccer.\n\n`
             + `Short links and @links open the view-only calendar. You and your editors keep the edit link.\n\n`
             + `To manage billing: open your account page and choose Manage billing.\n\n`
             + `Questions? Write to support@pastecal.com.\n`;
@@ -1630,7 +1630,7 @@ async function applySubscription(env, acc, cfg, s) {
 //     like a Single that ended: unlock with lapse, so it is paused (read-only) unless the owner chose
 //     'open'. A calendar the owner still pays for another way (a newer Unlimited) moves to that one.
 const unlimitedHoldKey = (buyer) => 'unlimited:' + buyer;
-export const UNLIMITED_TOP_LEVEL = 10;   // Pro calendars outside the owner's @handle (and top-level short names)
+export const UNLIMITED_TOP_LEVEL = 5;    // (owner decision Oct 2026: was 10; Teams will get 25) Pro calendars outside the owner's @handle (and top-level short names)
 
 // POST /api/pro/checkout {plan:'unlimited', interval, calendarId?}: Stripe Checkout for Pro Unlimited.
 // calendarId (optional): the calendar it was bought from, locked under it as soon as it is active.
@@ -1676,7 +1676,7 @@ async function checkoutUnlimited(request, env, body, cfg, { userId, claim, claim
         expires_at: Math.floor((Date.now() + CHECKOUT_HOLD_MS) / 1000),
     };
     const paidSingles = singles.filter((x) => x.status !== 'trialing');
-    const forWhat = 'Pro: 10 upgraded calendars, plus unlimited under your @name.' + (paidSingles.length ? ' Your Plus calendars move to it, and their unused time is credited.' : '');
+    const forWhat = `Pro: ${UNLIMITED_TOP_LEVEL} upgraded calendars, plus unlimited under your @name.` + (paidSingles.length ? ' Your Plus calendars move to it, and their unused time is credited.' : '');
     params.custom_text = { submit: { message: cfg.livemode === false ? `${forWhat} ${TEST_CARD_HINT}` : forWhat } };
     // The upgrade credit lands on the paid Single's customer, so Unlimited is billed to that same customer.
     const customer = (paidSingles.find((x) => x.customer) || {}).customer || (userId ? await acc.customerForUser(userId) : null);
@@ -1712,7 +1712,7 @@ async function lockUnderUnlimited(env, acc, cfg, calendarId, userId, subscriptio
     const link = await acc.linkFor(calendarId), own = await acc.handleOf(userId);
     const underOwnHandle = !!(link && own && link.handle === own.handle);
     if (!(await acc.coveredByUnlimited(calendarId, userId)) && !underOwnHandle
-        && (await acc.proCount(userId)) >= UNLIMITED_TOP_LEVEL) return { status: 409, error: 'unlimited-full' };
+        && (await acc.proCount(userId)) >= UNLIMITED_TOP_LEVEL) return { status: 409, error: 'unlimited-full', message: `You've used your ${UNLIMITED_TOP_LEVEL}. Put more under your @name, without limit.` };
     if (!(await acc.coverUnlimited(calendarId, userId, subscriptionId))) return { status: 409, error: 'locked-by-other' };
     if (st.locked) {
         // Already theirs (a Single): it moves under Unlimited, and that Single is canceled with credit.
@@ -1808,7 +1808,7 @@ async function unlimitedLock(request, env, body) {
     const title = typeof body.title === 'string' ? body.title : null;
     const r = await lockUnderUnlimited(env, acc, cfg, body.calendarId, userId, sub.id, title);
     if (r.retry) return json({ error: 'unavailable' }, 502);
-    if (r.error) return json({ error: r.error }, r.status);
+    if (r.error) return json({ error: r.error, ...(r.message ? { message: r.message } : {}) }, r.status);
     return json({ ok: true, ...(r.already ? { already: true } : {}) });
 }
 

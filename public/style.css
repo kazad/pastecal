@@ -912,11 +912,40 @@ div#Schedule,
 .pc-art-dots { gap: 3px; opacity: 0; animation: pc-art-dots var(--art-dur) linear infinite }
 .pc-art-dots i { width: 4px; height: 4px; border-radius: 50%; background: var(--pc-text-muted) }
 .pc-art-reply { animation: pc-art-reply var(--art-dur) var(--pc-ease) infinite; transform-origin: left bottom }
-@keyframes pc-art-press { 0%, 8% { transform: none; box-shadow: 0 1px 2px rgba(0,0,0,.15) } 10% { transform: scale(.92) } 13% { transform: none; box-shadow: 0 0 0 4px rgba(37,99,235,.3) } 22%, 100% { box-shadow: 0 1px 2px rgba(0,0,0,.15) } }
-@keyframes pc-art-toast { 0%, 11% { opacity: 0; transform: translateY(-3px) } 14%, 30% { opacity: 1; transform: none } 34%, 100% { opacity: 0 } }
-@keyframes pc-art-bubble { 0%, 30% { opacity: 0; transform: translateY(8px) scale(.94) } 36%, 93% { opacity: 1; transform: none } 100% { opacity: 0 } }
-@keyframes pc-art-dots { 0%, 44% { opacity: 0 } 46%, 56% { opacity: 1 } 58%, 100% { opacity: 0 } }
-@keyframes pc-art-reply { 0%, 57% { opacity: 0; transform: scale(.9) } 62%, 93% { opacity: 1; transform: none } 100% { opacity: 0 } }
+@keyframes pc-art-press { 0%, 30% { transform: none; box-shadow: 0 1px 2px rgba(0,0,0,.15) } 32% { transform: scale(.92) } 35% { transform: none; box-shadow: 0 0 0 4px rgba(37,99,235,.3) } 44%, 100% { box-shadow: 0 1px 2px rgba(0,0,0,.15) } }
+@keyframes pc-art-toast { 0%, 33% { opacity: 0; transform: translateY(-3px) } 36%, 50% { opacity: 1; transform: none } 54%, 100% { opacity: 0 } }
+@keyframes pc-art-bubble { 0%, 46% { opacity: 0; transform: translateY(8px) scale(.94) } 52%, 93% { opacity: 1; transform: none } 100% { opacity: 0 } }
+@keyframes pc-art-dots { 0%, 58% { opacity: 0 } 60%, 68% { opacity: 1 } 70%, 100% { opacity: 0 } }
+/* Typing the link name: the name appears letter by letter (11 letters), a caret blinks while the field is in use,
+   and the field shows focus until Save & share is pressed. */
+.pc-art-name i { display: inline-block; font-style: normal; overflow: hidden; vertical-align: bottom; max-width: 0 }
+.pc-art-caret { display: inline-block; width: 1.5px; height: 12px; margin-left: 1px; vertical-align: -2px; background: var(--pc-text); animation: pc-art-caret var(--art-dur) linear infinite }
+.pc-art-head { animation: pc-art-focus var(--art-dur) var(--pc-ease) infinite }
+.pc-art-l1 { animation: pc-art-l1 var(--art-dur) infinite }
+.pc-art-l2 { animation: pc-art-l2 var(--art-dur) infinite }
+.pc-art-l3 { animation: pc-art-l3 var(--art-dur) infinite }
+.pc-art-l4 { animation: pc-art-l4 var(--art-dur) infinite }
+.pc-art-l5 { animation: pc-art-l5 var(--art-dur) infinite }
+.pc-art-l6 { animation: pc-art-l6 var(--art-dur) infinite }
+.pc-art-l7 { animation: pc-art-l7 var(--art-dur) infinite }
+.pc-art-l8 { animation: pc-art-l8 var(--art-dur) infinite }
+.pc-art-l9 { animation: pc-art-l9 var(--art-dur) infinite }
+.pc-art-l10 { animation: pc-art-l10 var(--art-dur) infinite }
+.pc-art-l11 { animation: pc-art-l11 var(--art-dur) infinite }
+@keyframes pc-art-l1 { 0%, 4% { max-width: 0 } 4.2%, 100% { max-width: 1em } }
+@keyframes pc-art-l2 { 0%, 6% { max-width: 0 } 6.2%, 100% { max-width: 1em } }
+@keyframes pc-art-l3 { 0%, 8% { max-width: 0 } 8.2%, 100% { max-width: 1em } }
+@keyframes pc-art-l4 { 0%, 10% { max-width: 0 } 10.2%, 100% { max-width: 1em } }
+@keyframes pc-art-l5 { 0%, 12% { max-width: 0 } 12.2%, 100% { max-width: 1em } }
+@keyframes pc-art-l6 { 0%, 14% { max-width: 0 } 14.2%, 100% { max-width: 1em } }
+@keyframes pc-art-l7 { 0%, 16% { max-width: 0 } 16.2%, 100% { max-width: 1em } }
+@keyframes pc-art-l8 { 0%, 18% { max-width: 0 } 18.2%, 100% { max-width: 1em } }
+@keyframes pc-art-l9 { 0%, 20% { max-width: 0 } 20.2%, 100% { max-width: 1em } }
+@keyframes pc-art-l10 { 0%, 22% { max-width: 0 } 22.2%, 100% { max-width: 1em } }
+@keyframes pc-art-l11 { 0%, 24% { max-width: 0 } 24.2%, 100% { max-width: 1em } }
+@keyframes pc-art-caret { 0%, 3% { opacity: 1 } 3.5%, 5% { opacity: 0 } 5.5%, 28% { opacity: 1 } 29%, 100% { opacity: 0 } }
+@keyframes pc-art-focus { 0%, 1% { border-color: var(--pc-line) } 3%, 30% { border-color: var(--pc-link); box-shadow: 0 0 0 3px color-mix(in srgb, var(--pc-link) 18%, transparent) } 33%, 100% { border-color: var(--pc-line) } }
+@keyframes pc-art-reply { 0%, 69% { opacity: 0; transform: scale(.9) } 73%, 93% { opacity: 1; transform: none } 100% { opacity: 0 } }
 
 /* 3. Stay in sync: an edit on one phone shows up on the other */
 .pc-art-sync { gap: 4px; padding-bottom: 6px }
@@ -953,6 +982,7 @@ div#Schedule,
 @media (prefers-reduced-motion: reduce) {
   .pc-tour-art *, .pc-tour-art *::before { animation: none !important }
 }
+@media (prefers-reduced-motion: reduce) { .pc-art-name i { max-width: none } .pc-art-caret { display: none } }
 .pc-tour-label { margin-top: 40px !important; margin-bottom: 12px !important; font-size: 13px !important; text-transform: uppercase; letter-spacing: .08em; color: var(--pc-link) !important }
 .pc-tour-links { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px }
 .pc-tour-links > div { border: 1px solid var(--pc-line); border-radius: 12px; background: var(--pc-surface); padding: 14px 16px }
@@ -2453,7 +2483,7 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 .pc-tour-plan:hover .pc-tour-plan-more, .pc-tour-plan:focus-visible .pc-tour-plan-more { opacity: 1 }
 @media (hover: none) { .pc-tour-plan-more { opacity: 1 } }
 .pc-tour-plan, .pc-tour-plan:hover, .pc-tour-plan * { text-decoration: none }
-/* Pro Plus short links in the owner panel: a fixed prefix (@handle/ or pastecal.com/) and the name. */
+/* Pro short links in the owner panel: a fixed prefix (@handle/ or pastecal.com/) and the name. */
 .pc-pro-name { display: inline-flex; align-items: center; flex: 1 1 0; max-width: 420px; min-width: 0; height: 36px; padding-left: 10px; border: 1px solid var(--pc-field); border-radius: var(--pc-radius-md, 8px); background: var(--pc-bg); font-size: 14px }
 .pc-pro-name:focus-within { border-color: var(--pc-link); box-shadow: var(--pc-focus-ring) }
 .pc-pro-name input { flex: 1; min-width: 40px; height: 100%; border: 0; outline: none; background: transparent; color: var(--pc-text); font: 14px var(--pc-font); padding: 0 10px 0 1px }
@@ -2462,3 +2492,9 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 a.pc-acct-btn { text-decoration: none }
 .pc-pro-release { margin-left: 10px; padding: 0; border: 0; background: none; cursor: pointer; font-family: var(--pc-font) }
 .pc-pro-select { flex: 1 1 0; min-width: 0; max-width: 420px; height: 36px; padding: 0 8px; border: 1px solid var(--pc-field); border-radius: var(--pc-radius-md, 8px); background: var(--pc-bg); color: var(--pc-text); font: 14px var(--pc-font) }
+/* Homepage panel tabs: plain text, the current one in full color. */
+.pc-home-tabs { display: flex; gap: 16px }
+.pc-home-tabs button { background: none; border: 0; padding: 0; font: inherit; letter-spacing: inherit; text-transform: inherit; color: var(--pc-text-muted); cursor: pointer }
+.pc-home-tabs button.on { color: var(--pc-text) }
+.pc-home-tabs button:hover { color: var(--pc-text) }
+.pc-home-tabs button:focus-visible { outline: none; box-shadow: var(--pc-focus-ring); border-radius: 4px }
