@@ -13,6 +13,9 @@
 #   ./scripts/stats.sh northstar       # THE number: weekly active shared calendars (2+ people)
 #   ./scripts/stats.sh cohorts         # per birth week: reached a 2nd person? alive 4 weeks on?
 #   ./scripts/stats.sh ux              # UX scorecard from Cloudflare Analytics Engine (scripts/ux.sh)
+#   ./scripts/stats.sh trials          # Pro trial funnel: started by surface, features used, converted
+#                                      # by interval, lapsed by mode, reminder clicks, nudge + contact
+#                                      # (first-party Analytics Engine via scripts/ux.sh; no GA4 setup)
 #   ./scripts/stats.sh raw <json>      # any runReport body, printed as JSON
 #   ./scripts/stats.sh setup           # check GA4 is configured to answer all of the above
 #   ./scripts/stats.sh setup --create  # create the missing custom dimensions
@@ -66,7 +69,7 @@ while [ $# -gt 0 ]; do
         -j) JSON_ONLY=1; shift ;;
         --today) INCLUDE_TODAY=1; shift ;;
         --live|--realtime) REALTIME=1; shift ;;
-        -h|--help) sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,38p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         --) shift; ARGS+=("$@"); break ;;
         # `setup --create` is documented, so --create must survive option
         # parsing and reach the subcommand rather than being rejected here.
@@ -90,6 +93,10 @@ DAYS=$((10#$DAYS))
 [ "$DAYS" -ge 1 ] || { echo "ERROR: -d must be at least 1." >&2; exit 1; }
 
 CMD="${1:-summary}"
+
+# First-party (Cloudflare Analytics Engine, scripts/ux.sh), so no GA4 login: dispatched before the
+# gcloud checks. trials is the Pro trial funnel; it counts EU visitors too (GA4 is off for them).
+if [ "$CMD" = "trials" ]; then exec "$(dirname "$0")/ux.sh" trials "$DAYS"; fi
 
 for tool in curl jq gcloud; do
     command -v "$tool" >/dev/null 2>&1 || { echo "ERROR: $tool is required." >&2; exit 1; }

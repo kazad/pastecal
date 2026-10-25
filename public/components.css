@@ -131,7 +131,7 @@ textarea.pc-field--lg { padding: 11px 14px }
 .pc-pill--warning { background: var(--pc-warning-soft); color: var(--pc-warning) }
 .pc-pill--danger { background: var(--pc-danger-soft); color: var(--pc-danger) }
 .pc-pill--pro { background: var(--pc-primary); color: var(--pc-on-primary) }   /* Pro: the one filled pill */
-.pc-pill--beta { background: var(--pc-warning-soft); color: var(--pc-warning) }   /* Beta, In development */
+.pc-pill--beta { background: var(--pc-primary-soft); color: var(--pc-primary) }   /* Beta: an invitation, in the accent */
 
 /* ---- Text: link, eyebrow, section title, empty state ---------------------------------------- */
 .pc-link { color: var(--pc-link); font-weight: var(--pc-fw-semibold); text-decoration: none; cursor: pointer }

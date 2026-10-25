@@ -46,7 +46,7 @@
 
     /* ---- meaning ------------------------------------------------------------------------ */
     --pc-success: #1f7a4d;  --pc-success-soft: #e3f3ea;
-    --pc-warning: #8a5a00;  --pc-warning-soft: #fbefd4;   /* also the Beta and "in development" pills */
+    --pc-warning: #8a5a00;  --pc-warning-soft: #fbefd4;   /* also "in development" (the Beta pill is the accent) */
     --pc-danger: #c62828;   --pc-danger-soft: #fdecea;
     --pc-toast: #1f2328;    --pc-on-toast: #f3f4f6;    --pc-toast-action: #8ab4ff; --pc-toast-error: #f87171;
     --pc-knob: #ffffff;          /* a toggle's thumb, in both themes */

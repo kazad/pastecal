@@ -174,7 +174,7 @@ const NavigationDropdown = {
                             :aria-label="'Stats for ' + c.title" data-testid="account-stats">Stats</button>
                     </div>
                     <p v-if="proCalendars.length === 0" class="pc-acct-muted pc-acct-line">No Pro calendars right now.</p>
-                    <a href="/pricing#get-pro" data-from="account-menu" class="pc-link pc-acct-link pc-acct-line" data-testid="account-get-pro">{{ proCalendars.length ? 'Get Pro for another calendar' : 'Get Pro for a calendar' }}</a>
+                    <a href="/pricing#get-pro" data-from="account-menu" class="pc-link pc-acct-link pc-acct-line" data-testid="account-get-pro">{{ billing === false ? 'Join the Pro beta' : proCalendars.length ? 'Get Pro for another calendar' : 'Get Pro for a calendar' }}</a>
                     <div class="pc-acct-actions">
                         <button type="button" class="pc-btn pc-btn--sm" @click="portal" :disabled="acct.busy" data-testid="account-billing">Manage billing</button>
                         <button type="button" class="pc-link pc-acct-link" @click="signOut" :disabled="acct.busy" data-testid="account-signout">Sign out</button>
@@ -210,8 +210,11 @@ const NavigationDropdown = {
     `,
     props: ['recentCalendars', 'onDraft'],
     emits: ['go-homepage', 'start-over', 'toggle-pin', 'remove-recent', 'open-stats', 'open-help'],
-    data() { return { acct: AccountMenu.state }; },
-    mounted() { AccountMenu.load(); },     // never blocks opening: the section shows its own loading line
+    data() { return { acct: AccountMenu.state, billing: null }; },   // billing: /api/pro/config (Pro.js ProBilling)
+    mounted() {
+        AccountMenu.load();
+        if (typeof ProBilling !== 'undefined') ProBilling.load().then((b) => { this.billing = b; });
+    },     // never blocks opening: the section shows its own loading line
     computed: {
         // Calendars this account pays for, lowercased id -> /api/me row.
         proById() {

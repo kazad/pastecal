@@ -495,6 +495,9 @@ const Analytics = {
     // trial_surface, not surface: every event already carries surface ('web' | 'test', baseParams), which
     // filters test traffic out; overriding it here would let test trials count as real ones.
     trialStarted(surface) { this.track('trial_started', { trial_surface: ['share', 'stats', 'lock'].includes(surface) ? surface : 'share' }); },
+    // "Join the Pro beta" (billing not on yet): where it was joined from, as beta_surface for the same reason
+    // as trial_surface. Never the email or the calendar.
+    proBetaJoined(surface) { this.track('pro_beta_joined', { beta_surface: ['share', 'stats', 'lock', 'pricing'].includes(surface) ? surface : 'share' }); },
     trialFeatureUsed(feature) {
         if (['lock', 'editor_link', 'stats_pro', 'restore', 'history', 'settings'].includes(feature)) this.track('trial_feature_used', { feature });
     },

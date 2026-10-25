@@ -544,7 +544,7 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-tour-uses .pc-ico { display: block; width: 20px; height: 20px; margin-top: 1px; color: var(--pc-text-muted) }
 /* Pricing: the four plans from /pricing, small. Pro Single is on sale, so it carries the blue. */
 .pc-tour .pc-tour-plans { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: stretch }
-.pc-tour-plans > div { position: relative; display: flex; flex-direction: column; gap: 2px; padding: 18px 16px 16px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); background: var(--pc-surface) }
+.pc-tour-plans > .pc-tour-plan { position: relative; display: flex; flex-direction: column; gap: 2px; padding: 18px 16px 16px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); background: var(--pc-surface) }
 .pc-tour-plans > .pc-tour-plan-pro { border: 2px solid var(--pc-primary) }
 .pc-tour-plans h4 { margin: 0; font-size: var(--pc-fs-lg); font-weight: var(--pc-fw-bold); color: var(--pc-text) }
 .pc-tour-plans h4 span { margin-left: 6px; font-size: var(--pc-fs-sm); font-weight: var(--pc-fw-semibold); color: var(--pc-text-muted) }
@@ -553,7 +553,6 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-tour-plans .pc-plan-price { margin: 6px 0; color: var(--pc-text-muted); font-size: var(--pc-fs-md) }
 .pc-plan-price b { font-size: var(--pc-fs-3xl); font-weight: 800; letter-spacing: -.02em; color: var(--pc-text); font-variant-numeric: tabular-nums }
 .pc-plan-price small { display: block; font-size: var(--pc-fs-sm) }
-.pc-tour-plans a { display: inline-block; margin-top: 10px; font-weight: var(--pc-fw-semibold); color: var(--pc-link) }
 .pc-tour-plans code { padding: 1px 5px; border-radius: var(--pc-radius-sm); background: var(--pc-soft); color: var(--pc-text); font-size: var(--pc-fs-sm); white-space: nowrap }
 .pc-plan-tag { position: absolute; top: -10px; left: 14px; padding: 2px 9px; border: 1px solid color-mix(in srgb, var(--pc-warning) 25%, transparent); border-radius: var(--pc-radius-pill);
   background: var(--pc-warning-soft); color: var(--pc-warning); font-size: var(--pc-fs-xs); font-weight: var(--pc-fw-bold) }
@@ -1260,3 +1259,22 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
 .pc-paused-owner:hover { filter: brightness(.97) }
 /* The homepage ends with the shared site footer, aligned to the tour's column; the tour's own background already separates it. */
 .pc-home-site-footer .site-footer { margin-top: 0; border-top: 0 }
+
+/* ---- Pro beta (billing off): "Join the Pro beta" stands in for the trial and checkout -------- */
+.pc-gopro-btn--beta { margin: 10px 0 0 }
+.pc-beta-join .pc-pro-email { margin-top: 8px }
+.pc-beta-join .pc-pro-ok { font-size: var(--pc-fs-sm) }
+.pc-hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden }
+.pc-gopro-soon { margin: 8px 0 0; color: var(--pc-text-muted); font-size: var(--pc-fs-sm); line-height: 1.45 }
+.pc-gopro-soon a { color: var(--pc-link); white-space: nowrap }
+.pc-pro-price { margin: 10px 0 4px; font-size: var(--pc-fs-md) }
+/* Homepage plan cards: each opens /pricing; the whole card is the link, so it reads as text.
+   "Learn more" shows on hover or focus where there is a pointer, always on touch screens. */
+.pc-tour-plan, .pc-tour-plan:hover, .pc-tour-plan * { color: inherit; text-decoration: none }
+.pc-tour-plan { transition: border-color var(--pc-dur-fast) var(--pc-ease) }
+.pc-tour-plan:hover { border-color: var(--pc-field) }
+.pc-tour-plan:focus-visible { outline: none; box-shadow: var(--pc-focus-ring) }
+.pc-tour-plan p { color: var(--pc-text-muted) }
+.pc-tour-plans .pc-tour-plan-more { margin-top: auto; padding-top: 10px; font-size: var(--pc-fs-md); font-weight: var(--pc-fw-semibold); color: var(--pc-link); opacity: 0; transition: opacity var(--pc-dur-fast) }
+.pc-tour-plan:hover .pc-tour-plan-more, .pc-tour-plan:focus-visible .pc-tour-plan-more { opacity: 1 }
+@media (hover: none) { .pc-tour-plans .pc-tour-plan-more { opacity: 1 } }
