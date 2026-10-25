@@ -7,7 +7,7 @@
 #
 # Steps (billing stays OFF through the deploy, as the runbook says; the webhook secret goes last):
 #   1. Pre-checks: tools, git (launch-prep, clean, code == the tested commit), live version, secrets
-#   2. Stripe LIVE catalog: product + prices pro_yearly ($24/yr) / pro_monthly ($2.99/mo), reused if
+#   2. Stripe LIVE catalog: product + price pro_yearly ($24/yr; Pro Single is yearly only), reused if
 #      they exist; the Dashboard checklists (activation, customer portal) for the owner
 #   3. Dry run: bundle, list the bindings, check them
 #   4. Deploy launch-prep to pastecal-sync, then scripts/pro-smoke.sh --expect-deployed (billing off)
@@ -152,9 +152,9 @@ if step 1 "Pre-checks" "Tools, git state, the live version (must be $EXPECTED_LI
 fi
 
 # ---------------------------------------------------------------- 2. Stripe live catalog
-if step 2 "Stripe LIVE: product, prices, Dashboard checklists" "Reuses the live prices with lookup keys pro_yearly / pro_monthly if they exist (checks amount and interval), creates whatever is missing. Then the Dashboard-only settings, which you do by hand."; then
+if step 2 "Stripe LIVE: product, prices, Dashboard checklists" "Reuses the live price with lookup key pro_yearly if it exists (checks amount and interval), creates whatever is missing. Then the Dashboard-only settings, which you do by hand."; then
     stripe_auth
-    for spec in "pro_yearly 2400 year Pro yearly" "pro_monthly 299 month Pro monthly"; do
+    for spec in "pro_yearly 2400 year Pro yearly"; do
         set -- $spec; key="$1"; amount="$2"; interval="$3"; nick="$4 $5"
         cur="$(st prices list --lookup-keys="$key" --active=true)" || { st_err; die "listing prices failed"; }
         if [ "$(jq '.data | length' <<<"$cur")" -gt 0 ]; then
@@ -240,7 +240,7 @@ if step 4 "Deploy launch-prep to $WORKER" "Uploads and deploys to pastecal.com (
 fi
 
 # ---------------------------------------------------------------- 5. secrets
-if step 5 "Turn billing on: secrets, then the live webhook" "STRIPE_SECRET_KEY (wrangler's hidden prompt), STRIPE_PRICE_PRO_YEARLY/MONTHLY (looked up live), CONTACT_NOTIFY_TO (hidden prompt), then the live webhook endpoint $WEBHOOK_URL and STRIPE_WEBHOOK_SECRET LAST. Each takes effect immediately."; then
+if step 5 "Turn billing on: secrets, then the live webhook" "STRIPE_SECRET_KEY (wrangler's hidden prompt), STRIPE_PRICE_PRO_YEARLY (looked up live), CONTACT_NOTIFY_TO (hidden prompt), then the live webhook endpoint $WEBHOOK_URL and STRIPE_WEBHOOK_SECRET LAST. Each takes effect immediately."; then
     stripe_auth
     say "5a. STRIPE_SECRET_KEY: paste the restricted live key at wrangler's hidden prompt."
     if yes_no "Set STRIPE_SECRET_KEY now?"; then
@@ -249,7 +249,7 @@ if step 5 "Turn billing on: secrets, then the live webhook" "STRIPE_SECRET_KEY (
         note "secret STRIPE_SECRET_KEY set"
     fi
     say "5b. Price ids (not secret)."
-    for pair in "STRIPE_PRICE_PRO_YEARLY pro_yearly" "STRIPE_PRICE_PRO_MONTHLY pro_monthly"; do
+    for pair in "STRIPE_PRICE_PRO_YEARLY pro_yearly"; do
         set -- $pair
         p="$(price_id "$2")" || true
         [ -n "$p" ] || { st_err; die "no live price with lookup key $2 (step 2)"; }
@@ -316,7 +316,7 @@ if step 6 "Post-checks (read-only)" "GETs against pastecal.com (curl's user agen
     secrets="$(wr secret list --name "$WORKER" 2>/dev/null | jq -r '.[].name' 2>/dev/null | sort | tr '\n' ' ')"
     say "  secrets: ${secrets:-<could not read>}"
     case " $secrets " in *" IMPORT_SECRET "*) ;; *) bad "secret list unreadable: check by eye with: wr secret list --name $WORKER --format pretty";; esac
-    for s in STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET STRIPE_PRICE_PRO_YEARLY STRIPE_PRICE_PRO_MONTHLY CONTACT_NOTIFY_TO; do
+    for s in STRIPE_SECRET_KEY STRIPE_WEBHOOK_SECRET STRIPE_PRICE_PRO_YEARLY CONTACT_NOTIFY_TO; do
         case " $secrets " in *" $s "*) ;; *) warn "$s is not set";; esac
     done
     for s in ACCOUNTS_DEV_MODE STRIPE_API_BASE LOCK_API_BASE UNSAFE_DEV_SESSION_HEADER; do
@@ -332,7 +332,7 @@ fi
 step 7 "Rollback notes and after launch" "Prints only." && cat <<EOF
 
 ${B}Rollback.${N} Start with the kill switches, which take seconds and keep the deploy:
-  Stop new sales:     wr secret delete STRIPE_PRICE_PRO_YEARLY --name $WORKER; wr secret delete STRIPE_PRICE_PRO_MONTHLY --name $WORKER
+  Stop new sales:     wr secret delete STRIPE_PRICE_PRO_YEARLY --name $WORKER
   All billing off:    wr secret delete STRIPE_SECRET_KEY --name $WORKER   (Stripe retries webhooks for 3 days)
 
 Code rollback to the pre-launch version $EXPECTED_LIVE:
