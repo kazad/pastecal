@@ -566,6 +566,7 @@ const ProPanel = {
             if (st.status === 200) this.status = st.data;
             if (this.status && this.status.lapsedMode) this.lapsedMode = this.status.lapsedMode;
             this.me = me.status === 200 ? me.data : null;
+            if ((me.status === 200 || me.status === 401) && typeof AccountMenu !== 'undefined') AccountMenu.hint(me.status === 200);   // the site header's Account link
             this.trackTrialOutcome();
             // "Try Pro free": back from its sign-in link (verify already started it; this explains a refusal),
             // or from the Go Pro card (signed out: straight to the email box).
@@ -794,6 +795,7 @@ const ProPanel = {
         },
         async signOut() {
             await proApi('POST', '/api/auth/signout', {});
+            if (typeof AccountMenu !== 'undefined') AccountMenu.hint(false);
             this.me = null; this.step = 'idle'; this.editorLink = '';
             if (typeof AccountMenu !== 'undefined') AccountMenu.reset();   // the logo menu fetches again
             this.refresh();

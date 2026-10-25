@@ -83,9 +83,15 @@ try {
     assert.equal((await webhook(created)).status, 200);
     let st = await status(c1, ann.cookie);
     assert.deepEqual([st.locked, st.isOwner, st.plan, st.unlimited], [true, true, 'unlimited', true]);
-    const mail = (await outbox(ann.email)).at(-1);
-    assert.match(mail.subject, /^Pro is on for /);
-    step('webhook: the Unlimited subscription is active; the calendar it was bought from is locked for its owner (welcome email)');
+    const mails = await outbox(ann.email);
+    assert.ok(mails.some((m) => /^Pro is on for /.test(m.subject)), 'the calendar it was bought from: its welcome');
+    const hello = mails.filter((m) => m.subject === 'Pro is on: claim your @name');
+    assert.equal(hello.length, 1, 'one Pro welcome');
+    assert.ok(hello[0].text.includes('https://pastecal.com/account') || /\/account\n/.test(hello[0].text), hello[0].text);
+    assert.match(hello[0].text, /view-only calendar/);
+    assert.equal((await webhook(created)).status, 200);
+    assert.equal((await outbox(ann.email)).filter((m) => m.subject === 'Pro is on: claim your @name').length, 1, 'a replayed event sends no second welcome');
+    step('webhook: the Unlimited subscription is active; the calendar it was bought from is locked for its owner (its welcome email), and one "Pro is on: claim your @name" email links to /account (not again on a replay)');
 
     // --- Lock 3 calendars without another checkout.
     const csBefore = fake.log.filter((l) => l.path === '/stripe/v1/checkout/sessions').length, logBefore = fake.log.length;

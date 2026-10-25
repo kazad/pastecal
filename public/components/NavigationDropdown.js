@@ -44,8 +44,8 @@ const AccountMenu = {
         if (!force && st.status !== 'idle' && !(st.retry && st.status === 'out' && st.step === 'idle')) return;
         st.status = 'loading'; st.error = ''; st.retry = false;
         const r = await this.api('GET', '/api/me');
-        if (r.status === 200) { st.me = r.data; st.status = 'in'; }
-        else if (r.status === 401) { st.me = null; st.status = 'out'; }
+        if (r.status === 200) { st.me = r.data; st.status = 'in'; this.hint(true); }
+        else if (r.status === 401) { st.me = null; st.status = 'out'; this.hint(false); }
         // Anything else (offline, a server error): most people opening this menu have no account,
         // so don't tell them one failed to load. Show the quiet line and try again next open.
         else { st.me = null; st.status = 'out'; st.retry = true; }
@@ -54,6 +54,10 @@ const AccountMenu = {
             const state = st.status === 'in' ? 'signed_in' : 'signed_out';
             this.track(a => a.accountMenuShown(state));
         }
+    },
+    // The site pages' header shows "Account" while this hint cookie is set (the session itself is HttpOnly).
+    hint(on) {
+        try { document.cookie = on ? 'pc_in=1; Path=/; Max-Age=34560000; SameSite=Lax' : 'pc_in=; Path=/; Max-Age=0; SameSite=Lax'; } catch (e) { /* no hint */ }
     },
     // Someone signed in or out elsewhere on the page (the share dialog): fetch again next open.
     reset() {

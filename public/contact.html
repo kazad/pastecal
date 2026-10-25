@@ -45,10 +45,12 @@
     <nav class="site-nav" aria-label="Site">
       <a class="site-link" href="/help" data-from="site-header">Help</a>
       <a class="site-link" href="/pricing" data-from="site-header">Pricing</a>
+      <a class="site-link site-acct" href="/account" data-from="site-header" id="siteAccount" hidden>Account</a>
       <a class="site-cta" href="/" data-from="site-header">Make a calendar</a>
     </nav>
   </div>
 </header>
+<script>/* "Account" while signed in: pc_in is a hint cookie set by the pages that sign in (the session itself is HttpOnly) */try{if(/(?:^|;\s*)pc_in=1/.test(document.cookie))document.getElementById('siteAccount').hidden=false}catch(e){}</script>
 <!-- /site-header -->
 <main>
 <h1>Contact</h1>

@@ -61,6 +61,13 @@ button.secondary { margin-top: 10px; background: transparent; color: var(--blue)
     <p class="small">You can make more links, or turn one off, from Share on your calendar.</p>
   </section>
 
+  <!-- Pro (plan=unlimited): the @name is what Pro adds, and nothing else teaches it -->
+  <section id="nextName" hidden data-testid="done-next-name">
+    <h2>Next: claim your name</h2>
+    <p class="small">One name for all your calendars, like <b>pastecal.com/@yourname/soccer</b>. Then make calendars under it, as many as you like. Links under your name open the view-only calendar.</p>
+    <a class="btn" href="/account" data-testid="done-claim-name">Claim your @name</a>
+  </section>
+
   <a class="btn" id="go" href="/">Back to your calendar</a>
 </main>
 <script>
@@ -85,13 +92,22 @@ button.secondary { margin-top: 10px; background: transparent; color: var(--blue)
     }
     return r;
   });
-  if (proUnlimited) $('title').textContent = 'Pro is on';
+  // The site header shows "Account" while this browser is signed in (a hint cookie; the session is HttpOnly).
+  claimed.then(function () { return api('GET', '/api/me'); }).then(function (r) {
+    try {
+      if (r.status === 200) document.cookie = 'pc_in=1; Path=/; Max-Age=34560000; SameSite=Lax';
+      else if (r.status === 401) document.cookie = 'pc_in=; Path=/; Max-Age=0; SameSite=Lax';
+    } catch (e) { /* no hint */ }
+  });
+  if (proUnlimited) { $('title').textContent = 'Pro is on'; $('nextName').hidden = false; }
   if (!proCalendar) {
-    // Pro bought from the pricing page: no calendar yet. Each one locks with one click from its Share panel.
+    // Pro bought from the pricing page: no calendar yet. Next is the @name (account page); each calendar
+    // also locks with one click from its Share panel.
     if (!proUnlimited) $('title').textContent = 'Thanks, your payment went through';
-    msg.textContent = proUnlimited ? 'Open any calendar you run, press Share, and choose Lock this calendar. No new checkout.'
+    msg.textContent = proUnlimited ? 'Your payment went through. You can also open any calendar you run, press Share, and choose Lock this calendar. No new checkout.'
       : 'Open your calendar and press Share to see its settings.';
     go.textContent = 'Back to pastecal';
+    if (proUnlimited) go.hidden = true;
     return;
   }
   var calPath = '/' + encodeURIComponent(proCalendar);

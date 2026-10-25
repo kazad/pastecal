@@ -847,6 +847,26 @@ async function sendWelcomeEmail(env, acc, calendarId, userId, title, trialEnd = 
     }
 }
 
+// Once per Pro subscription (id 'unlimited'), when it first turns active: the one thing Pro adds that
+// nothing else teaches is the @name, so this says to claim it on /account. Plain text, no link but the site's.
+async function sendProWelcome(env, acc, userId, subscriptionId) {
+    try {
+        if (!(await acc.claimWelcome('pro:' + subscriptionId, userId))) return;
+        const user = await acc.getUser(userId);
+        if (!user || !user.email) return;
+        const host = siteHost(env);
+        const text = `Thanks for getting Pro.\n\n`
+            + `Next: claim your name. It's one name for all your calendars, like ${host}/@yourname/soccer, and you choose it once. Sign in with this email at:\n${siteUrl(env)}/account\n\n`
+            + `Then make calendars under your name, as many as you like. Or open any calendar you run, press Share, and choose Lock this calendar: up to 10 can have a short link like ${host}/soccer.\n\n`
+            + `Short links and @links open the view-only calendar. You and your editors keep the edit link.\n\n`
+            + `To manage billing: open your account page and choose Manage billing.\n\n`
+            + `Questions? Write to support@pastecal.com.\n`;
+        await sendEmail(env, user.email, 'Pro is on: claim your @name', text, null, 'welcome');
+    } catch (err) {
+        console.error('[accounts] pro welcome email failed:', err && err.message);
+    }
+}
+
 // "October 24, 2026" for a Stripe timestamp (seconds) or ms. UTC, so the date doesn't depend on the server.
 function formatDay(t) {
     const ms = t < 1e12 ? t * 1000 : t;
@@ -1725,6 +1745,7 @@ async function applyUnlimited(env, acc, cfg, s) {
             if (r.retry) { await acc.releaseFirstLock(s.id); return { retry: true }; }
             if (r.error) console.warn('[accounts] unlimited: could not lock the calendar it was bought from:', r.error);
         }
+        await sendProWelcome(env, acc, userId, s.id);                    // once per subscription: claim your @name
         return {};
     }
 

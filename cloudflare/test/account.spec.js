@@ -1,6 +1,6 @@
 // @ts-check
 /**
- * /account and Pro Plus names in the browser: signed out -> magic link -> signed in (Free) -> Pro Plus bought on
+ * /account and Pro names in the browser: signed out -> magic link -> signed in (Free) -> Pro bought on
  * /pricing (fake Stripe) -> claim @name -> new calendar under it (opens locked, for its owner) -> a visitor opens
  * pastecal.com/@name/<name>: view-only, and the edit id appears nowhere (requests, responses, storage, DOM) ->
  * "Show on my page" lists it on pastecal.com/@name.
@@ -60,6 +60,7 @@ test('signed out: sign in by email link, land on /account (Free)', async ({ brow
   const { ctx, page } = await newPage(browser);
   await page.goto('/account');
   await expect(page.getByTestId('account-signed-out')).toContainText('Sign in to see your account');
+  await expect(page.locator('#siteAccount')).toBeHidden();
   await page.locator('#signinEmail').fill(email);
   await page.getByRole('button', { name: 'Send sign-in link' }).click();
   await expect(page.getByTestId('account-link-sent')).toBeVisible();
@@ -71,11 +72,14 @@ test('signed out: sign in by email link, land on /account (Free)', async ({ brow
   await expect(page.getByTestId('account-email')).toHaveText(email);
   await expect(page.getByTestId('account-plan')).toHaveText('Free');
   await expect(page.getByTestId('account-name-card')).toBeHidden();
+  await page.goto('/help');
+  await expect(page.locator('#siteAccount')).toBeVisible();          // the site header, while signed in
+  await expect(page.locator('#siteAccount')).toHaveAttribute('href', '/account');
   cookieJar = await ctx.storageState();
   await ctx.close();
 });
 
-test('Pro Plus from /pricing (fake Stripe), claim @name, create a calendar under it', async ({ browser, request }) => {
+test('Pro from /pricing (fake Stripe), claim @name, create a calendar under it', async ({ browser, request }) => {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, storageState: cookieJar });
   await ctx.route('**/*', (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
   await ctx.routeWebSocket((url) => !/localhost|127\.0\.0\.1/.test(String(url)), (ws) => ws.close());   // never a live Firebase socket
@@ -85,9 +89,18 @@ test('Pro Plus from /pricing (fake Stripe), claim @name, create a calendar under
   await page.locator('#unlCta').click();
   await page.getByRole('button', { name: 'Continue to payment' }).click();
   await page.waitForURL(/checkout\.stripe\.test/);
+  const checkoutId = new URL(page.url()).pathname.slice(1);
   await payFakeCheckout(request, page);
-
-  await page.goto('/account');
+  // Stripe's success page: Pro says what's next, the @name, on /account. And one email says the same.
+  await page.goto(`/pro/done?session_id=${checkoutId}&plan=unlimited`);
+  await expect(page.locator('#title')).toHaveText('Pro is on');
+  await expect(page.getByTestId('done-next-name')).toContainText('Next: claim your name');
+  await expect(page.getByTestId('done-claim-name')).toHaveAttribute('href', '/account');
+  const hello = (await admin(request, `/api/admin/accounts/outbox?email=${encodeURIComponent(email)}`)).emails.filter((m) => m.subject === 'Pro is on: claim your @name');
+  expect(hello.length).toBe(1);
+  expect(hello[0].text).toContain('/account');
+  await page.getByTestId('done-claim-name').click();
+  await page.waitForURL(/\/account$/);
   await expect(page.getByTestId('account-plan')).toContainText('Pro · renews');
   await expect(page.getByTestId('account-meter')).toHaveText('Upgraded calendars: 0 of 10 · unlimited under your @name');
   await page.getByTestId('handle-input').fill('pricing');
