@@ -358,8 +358,9 @@ const ProPanel = {
         trialLeft() {
             const end = this.status && this.status.trial && this.status.trial.endsAt;
             if (!end) return '';
-            const days = Math.max(0, Math.ceil((end * 1000 - Date.now()) / 86400000));
-            return days === 1 ? '1 day left' : `${days} days left`;
+            // Whole days, rounded down, the way Stripe's Checkout counts them ("29 days free").
+            const days = Math.max(0, Math.floor((end * 1000 - Date.now()) / 86400000));
+            return days === 0 ? 'Ends today' : days === 1 ? '1 day left' : `${days} days left`;
         },
         renewal() {
             const c = this.me && (this.me.calendars || []).find((x) => x.id === this.calendarId);

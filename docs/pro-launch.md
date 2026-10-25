@@ -84,7 +84,7 @@ stripe billing_portal configurations list 2>/dev/null | jq '.data[] | {id, is_de
 
 Webhook events the code acts on (`SUBSCRIPTION_EVENTS` and `CHARGE_EVENTS` in `Accounts.js`). The Worker records and ignores every other event:
 
-`checkout.session.completed, customer.subscription.created, customer.subscription.updated, customer.subscription.deleted, invoice.payment_failed, charge.refunded, charge.dispute.created`
+`checkout.session.completed, customer.subscription.created, customer.subscription.updated, customer.subscription.deleted, customer.subscription.trial_will_end, invoice.payment_failed, charge.refunded, charge.dispute.created`
 
 A full refund or a dispute cancels the subscription it paid for, which unlocks the calendar. A test-mode key (`sk_test_`/`rk_test_`) only works with `ACCOUNTS_DEV_MODE=1`; anywhere else billing answers `503 billing-not-configured` and logs `BILLING OFF`. Events whose `livemode` doesn't match the key's mode are ignored.
 
@@ -105,7 +105,7 @@ stripe prices list --lookup-keys=pro_monthly 2>/dev/null | jq -er '.data[0].id'
 4. In terminal 2, forward sandbox events to it:
 
 ```zsh
-stripe listen --forward-to localhost:8787/api/stripe/webhook --events checkout.session.completed,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,invoice.payment_failed,charge.refunded,charge.dispute.created
+stripe listen --forward-to localhost:8787/api/stripe/webhook --events checkout.session.completed,customer.subscription.created,customer.subscription.updated,customer.subscription.deleted,customer.subscription.trial_will_end,invoice.payment_failed,charge.refunded,charge.dispute.created
 ```
 
 5. Run the loop in a browser:
@@ -279,7 +279,7 @@ M=$(stripe prices list --live --lookup-keys=pro_monthly 2>/dev/null | jq -er '.d
 d4. Create the live webhook endpoint and store its signing secret. **Run this after (e).** Billing turns on when this finishes:
 
 ```zsh
-WH=$(stripe webhook_endpoints create --live --url=https://pastecal.com/api/stripe/webhook --description="pastecal Pro (Worker pastecal-sync)" --enabled-events=checkout.session.completed --enabled-events=customer.subscription.created --enabled-events=customer.subscription.updated --enabled-events=customer.subscription.deleted --enabled-events=invoice.payment_failed --enabled-events=charge.refunded --enabled-events=charge.dispute.created 2>/dev/null | jq -er .secret) && print -r -- "$WH" | wr secret put STRIPE_WEBHOOK_SECRET; unset WH
+WH=$(stripe webhook_endpoints create --live --url=https://pastecal.com/api/stripe/webhook --description="pastecal Pro (Worker pastecal-sync)" --enabled-events=checkout.session.completed --enabled-events=customer.subscription.created --enabled-events=customer.subscription.updated --enabled-events=customer.subscription.deleted --enabled-events=customer.subscription.trial_will_end --enabled-events=invoice.payment_failed --enabled-events=charge.refunded --enabled-events=charge.dispute.created 2>/dev/null | jq -er .secret) && print -r -- "$WH" | wr secret put STRIPE_WEBHOOK_SECRET; unset WH
 ```
 
 If `jq` printed an error, the endpoint may exist without its secret stored. Look for it with `stripe webhook_endpoints list --live 2>/dev/null | jq '.data[] | {id, url, enabled_events}'`. Then either roll its signing secret in the Dashboard (Developers → Webhooks → endpoint → Roll secret) and set it with `pbpaste | wr secret put STRIPE_WEBHOOK_SECRET`, or delete it (`stripe webhook_endpoints delete <we_id> --live`) and re-run d4.
@@ -547,7 +547,7 @@ Run from `~/worktrees/pastecal-pro-staging/cloudflare` (alias `wr` from section 
 6. `print -r -- price_1UTr8UEPgWTHeJ7W3PQwUvXH | wr secret put STRIPE_PRICE_PRO_YEARLY --env staging`
 7. `print -r -- price_1UTr8bEPgWTHeJ7WOtXnUtB1 | wr secret put STRIPE_PRICE_PRO_MONTHLY --env staging`
 8. `umask 077 && openssl rand -hex 32 > ~/.pastecal-staging-import-secret && wr secret put IMPORT_SECRET --env staging < ~/.pastecal-staging-import-secret`
-9. `WH=$(stripe webhook_endpoints create --url=https://preview.pastecal.com/api/stripe/webhook --description="pastecal staging (pastecal-staging)" --enabled-events=checkout.session.completed --enabled-events=customer.subscription.created --enabled-events=customer.subscription.updated --enabled-events=customer.subscription.deleted --enabled-events=invoice.payment_failed --enabled-events=charge.refunded --enabled-events=charge.dispute.created 2>/dev/null | jq -er .secret) && print -r -- "$WH" | wr secret put STRIPE_WEBHOOK_SECRET --env staging; unset WH`
+9. `WH=$(stripe webhook_endpoints create --url=https://preview.pastecal.com/api/stripe/webhook --description="pastecal staging (pastecal-staging)" --enabled-events=checkout.session.completed --enabled-events=customer.subscription.created --enabled-events=customer.subscription.updated --enabled-events=customer.subscription.deleted --enabled-events=customer.subscription.trial_will_end --enabled-events=invoice.payment_failed --enabled-events=charge.refunded --enabled-events=charge.dispute.created 2>/dev/null | jq -er .secret) && print -r -- "$WH" | wr secret put STRIPE_WEBHOOK_SECRET --env staging; unset WH`
 10. `wr secret list --env staging` — want exactly IMPORT_SECRET, the four STRIPE_* names; never FIREBASE_SA.
 11. Smoke: create a calendar and a view link on staging first, then `scripts/pro-smoke.sh --base https://preview.pastecal.com --calendar <cal> --view-slug <view> --expect-billing`.
 
