@@ -1363,6 +1363,6 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
 .pc-pro-release { margin-left: 10px; font-size: var(--pc-fs-sm) }
 .pc-pro-select { flex: 1 1 0; min-width: 0; max-width: 420px }
 /* Phones: the claim row (address, Draft, Save & share) keeps a little air between its parts. */
-@media (max-width: 767px) { .pc-m-claim input { padding-left: 0 } .pc-m-claim .pc-draft-chip { flex: none; margin: 0 6px } }
+@media (max-width: 767px) { .pc-m-claim input { padding-left: 0 } .pc-m-claim .pc-draft-chip { flex: none; margin: 0 6px 0 8px } }
 /* The header pill's tag after a view-only link ("view only"). */
 .pc-pill-tag { margin-left: 6px; padding: 1px 6px; border-radius: var(--pc-radius-pill); background: var(--pc-soft); color: var(--pc-text-muted); font-size: var(--pc-fs-2xs); font-weight: var(--pc-fw-semibold) }

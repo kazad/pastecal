@@ -426,7 +426,9 @@ export class Accounts extends DurableObject {
     }
     addOwned(userId, calendarId) { this.sql.exec(`INSERT OR IGNORE INTO account_calendars (user_id, calendar_id, added_at) VALUES (?, ?, ?)`, userId, calendarId, Date.now()); }
     // The 7-day undo of a Pro lock: the calendar leaves the upgrader's Pro, their account list, @link and
-    // short links. -> {slugs: directory names to remove, handle, atNames}
+    // short links. Short links were shared, so each becomes a tombstone ("This link has ended", nobody's,
+    // released after the 90-day hold like a deleted account's), never a free name someone could take.
+    // -> {slugs: directory names to remove (the @link's hidden name), ended: short names to tombstone, handle, atNames}
     releaseNamesFor(calendarId, userId) {
         const link = this.linkFor(calendarId);
         const h = this.handleOf(userId);
@@ -436,10 +438,11 @@ export class Accounts extends DurableObject {
             this.sql.exec(`DELETE FROM unlimited_locks WHERE calendar_id = ? AND user_id = ?`, calendarId, userId);
             this.sql.exec(`DELETE FROM account_calendars WHERE user_id = ? AND calendar_id = ?`, userId, calendarId);
             if (mine) this.sql.exec(`DELETE FROM handle_links WHERE calendar_id = ?`, calendarId);
-            for (const n of shorts) this.sql.exec(`DELETE FROM short_links WHERE name = ?`, n);
+            for (const n of shorts) this.sql.exec(`UPDATE short_links SET user_id = NULL, calendar_id = NULL, ended_at = COALESCE(ended_at, ?) WHERE name = ?`, Date.now(), n);
         });
+        if (shorts.length) this.scheduleSweep();
         if (mine || shorts.length) this.noteNameEvent(userId, 'undo', calendarId);
-        return { slugs: [...(mine ? [mine.alias] : []), ...shorts], handle: mine ? mine.handle : null, atNames: mine ? [mine.name] : [] };
+        return { slugs: mine ? [mine.alias] : [], ended: shorts, handle: mine ? mine.handle : null, atNames: mine ? [mine.name] : [] };
     }
     ownedUnderAccount(userId, calendarId) { return this.sql.exec(`SELECT 1 FROM account_calendars WHERE user_id = ? AND calendar_id = ?`, userId, calendarId).toArray().length > 0; }
     removeOwned(userId, calendarId) { this.sql.exec(`DELETE FROM account_calendars WHERE user_id = ? AND calendar_id = ?`, userId, calendarId); }
@@ -1517,6 +1520,7 @@ async function undoUpgrade(request, env, body) {
     // they no longer hold (short links are released; the @link and its hidden name are removed).
     const freed = await acc.releaseNamesFor(calendarId, row.user_id);
     for (const slug of freed.slugs) await removeDirectoryName(env, slug);
+    for (const slug of freed.ended) await endDirectoryName(env, slug);
     if (freed.handle) await purgeNames(freed.handle, freed.atNames);
     console.log('[accounts] upgrade undone by an editor of record:', calendarId);
     return json({ ok: true, refunded });

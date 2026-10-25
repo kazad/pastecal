@@ -471,11 +471,14 @@ try {
         assert.equal((await lockStatus(theirs)).locked, false, 'a free calendar again');
         assert.equal((await account(ivy.cookie)).plan, 'unlimited', 'her Pro is untouched');
         assert.equal((await get(`/@${ih}/team`)).status, 404, 'her @link to it is gone');
-        assert.equal((await (await get(`/api/lookup?slug=ivyteam-${run}`)).json()).found, false, 'her short link to it is released');
+        // Her short link was shared: it ends (a tombstone, released after the hold), never a free name a stranger could take.
+        assert.equal((await (await get(`/api/lookup?slug=ivyteam-${run}`)).json()).ended, true, 'her short link to it has ended');
+        assert.equal((await fetch(`${BASE}/cal/ivyteam-${run}`, { method: 'POST', headers: { 'CF-Connecting-IP': '10.63.0.9' }, body: JSON.stringify({ title: 'Grabbed', options: {}, events: [] }) })).status, 409, 'nobody can make a calendar at the ended short link');
+        assert.equal((await get(`/link-ended/ivyteam-${run}`)).status, 410);
         const acct = await account(ivy.cookie);
         assert.ok(!acct.calendars.some((c) => c.id === theirs) && !acct.shortNames.some((x) => x.calendarId === theirs), 'nothing of it left in her account');
         assert.equal((await pj('/api/pro/undo-upgrade', { calendarId: theirs, author: AUTHOR })).status, 404, 'nothing left to undo');
-        step('7-day undo of a Pro lock by another editor of record: the creator\'s browser undoes it (not the upgrader, not a stranger); the calendar is free again, her Pro is not canceled or refunded, and her @link and short link to it are removed');
+        step('7-day undo of a Pro lock by another editor of record: the creator\'s browser undoes it (not the upgrader, not a stranger); the calendar is free again, her Pro is not canceled or refunded, her @link to it is removed and her short link to it ends (a tombstone, nobody can create there)');
     }
 
     // --- rate limit on name changes
