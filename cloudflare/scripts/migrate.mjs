@@ -5,7 +5,8 @@ import { readFileSync } from 'node:fs';
 const [file, BASE = 'http://localhost:8787'] = process.argv.slice(2);
 // MODE=merge pushes through /from-firebase (keeps Cloudflare-side edits); default is a plain import.
 const ROUTE = process.env.MODE === 'merge' ? 'from-firebase' : 'import';
-const SECRET = process.env.IMPORT_SECRET || 'dev-secret';
+const SECRET = process.env.IMPORT_SECRET;
+if (!SECRET) { console.error('Set IMPORT_SECRET in the environment (never commit it).'); process.exit(1); }
 const all = JSON.parse(readFileSync(file, 'utf8'));
 const only = process.env.ONLY ? new Set(JSON.parse(process.env.ONLY)) : null;
 const ids = Object.keys(all).filter((k) => !only || only.has(k)).filter((k) => all[k] && typeof all[k] === 'object' && !/[.#$\[\]\/]/.test(k));
