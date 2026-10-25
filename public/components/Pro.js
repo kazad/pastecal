@@ -126,7 +126,7 @@ const LockBadge = {
     template: /* html */ `
         <span class="pc-lock" :class="{ 'pc-lock--open': open }" data-testid="lock-badge"
             @pointerenter="$event.pointerType === 'mouse' && (open = true)" @pointerleave="$event.pointerType === 'mouse' && (open = false)">
-            <button type="button" class="pc-lock-btn" :aria-label="label" :aria-expanded="open ? 'true' : 'false'"
+            <button type="button" class="pc-btn pc-btn--ghost pc-btn--icon pc-btn--xs pc-lock-btn" :aria-label="label" :aria-expanded="open ? 'true' : 'false'"
                 @click.stop="open = !open" @keydown.esc="open = false" @blur="open = false" v-html="svg"></button>
             <span v-if="open" class="pc-lock-pop" role="tooltip" data-testid="lock-tip">{{ label }}
                 <!-- mousedown.prevent keeps the button's blur from closing the popover before the click lands -->
@@ -226,7 +226,7 @@ const ProPanel = {
                 </form>
                 <p v-else-if="step === 'sent'" class="pc-pro-ok">Check your email for a sign-in link.</p>
                 <p v-else-if="me" class="pc-pro-muted">Signed in as <span data-hj-suppress data-clarity-mask="true">{{ me.email }}</span>, which doesn't own this calendar · <a href="#" @click.prevent="signOut">Sign out</a></p>
-                <a v-else href="#" class="pc-pro-link" @click.prevent="step = 'email'; focusEmail()">Owner? Sign in to manage it</a>
+                <a v-else href="#" class="pc-link" @click.prevent="step = 'email'; focusEmail()">Owner? Sign in to manage it</a>
             </template>
 
             <!-- Pro ended (trial or paid) and the calendar is paused: its owner chooses -->
@@ -250,7 +250,7 @@ const ProPanel = {
             <!-- The owner -->
             <template v-if="mode === 'owner'">
                 <p v-if="status.trial" class="pc-pro-trial-line" data-testid="pro-trial-line">Pro trial · {{ trialLeft }} ·
-                    <a v-if="!status.trial.hasCard" href="#" class="pc-pro-link" @click.prevent="keepPro" data-testid="pro-keep-trial">Keep Pro</a>
+                    <a v-if="!status.trial.hasCard" href="#" class="pc-link" @click.prevent="keepPro" data-testid="pro-keep-trial">Keep Pro</a>
                     <span v-else>card on file, Pro continues</span></p>
                 <div v-if="status.trial && keepOpen" class="pc-pro-keep" data-testid="pro-keep-plans">
                     <div class="pc-pro-plans" role="radiogroup" aria-label="Billing">
@@ -296,7 +296,7 @@ const ProPanel = {
 
                 <div class="pc-pro-row pc-pro-foot">
                     <button type="button" class="pc-btn" @click="portal" :disabled="busy">Manage billing</button>
-                    <a href="#" class="pc-pro-link" @click.prevent="signOut">Sign out</a>
+                    <a href="#" class="pc-link" @click.prevent="signOut">Sign out</a>
                     <span v-if="me" class="pc-pro-muted" data-hj-suppress data-clarity-mask="true">{{ me.email }}</span>
                 </div>
             </template>

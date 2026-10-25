@@ -4,7 +4,7 @@
 const QuickAddDialog = {
     template: /* html */ `
         <div v-if="dialogVisible" 
-                 class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                 class="fixed inset-0 pc-scrim flex items-center justify-center z-50">
                 <div class="pc-qa-dialog bg-1 rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4">
                     <h3 class="text-lg font-semibold mb-4">Add event by typing</h3>
                     <form @submit.prevent="createEvent">
@@ -84,11 +84,11 @@ const QuickAddDialog = {
                                  on or off never changes the dialog's height. -->
                             <div class="flex items-center gap-2">
                                 <span class="w-14 shrink-0" aria-hidden="true"></span>
-                                <label class="pc-switch pc-qa-switch">
+                                <label class="pc-toggle pc-qa-switch">
                                     <input type="checkbox" role="switch" data-testid="qa-all-day"
                                            :checked="isAllDay" :aria-checked="isAllDay ? 'true' : 'false'"
                                            @change="setAllDay($event.target.checked)">
-                                    <span class="pc-switch-track" aria-hidden="true"></span>
+                                    <span class="pc-toggle-track" aria-hidden="true"></span>
                                     <span>All day</span>
                                 </label>
                             </div>
@@ -117,20 +117,20 @@ const QuickAddDialog = {
                                                 :title="labels[i] || ('Type ' + (i + 1))"
                                                 :data-testid="'qa-color-' + (i + 1)"
                                                 @click="type = i + 1"
-                                                class="w-6 h-6 rounded-full transition-transform"
-                                                :class="type === i + 1 ? 'ring-2 ring-offset-2 ring-theme-primary scale-110' : 'hover:scale-110'"
+                                                class="pc-swatch"
+                                                :class="{ 'is-selected': type === i + 1 }"
                                                 :style="{ backgroundColor: c }"></button>
                                     </template>
                                 </div>
                             </div>
 
-                            <p v-if="endBeforeStart" class="text-sm text-red-500">End is before start.</p>
+                            <p v-if="endBeforeStart" class="text-sm text-theme-danger">End is before start.</p>
                             <!-- Say WHY Create is disabled. A greyed-out button with no reason
                                  is what #32 reported as "no way to save once you've written a
                                  description": the text had no date the parser could read, the
                                  date fields stayed empty, and nothing on screen said so. -->
                             <p v-else-if="fields.subject.trim() && !startDateTime"
-                               data-testid="qa-needs-date" class="text-sm text-amber-600">
+                               data-testid="qa-needs-date" class="text-sm text-theme-warning">
                                 Add a date — type one (e.g. "tomorrow 2pm") or pick it under Start.
                             </p>
                         </div>

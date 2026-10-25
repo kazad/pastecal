@@ -471,7 +471,7 @@ const ProHistory = {
                             </li>
                         </ul>
                     </div>
-                    <button v-if="shownGroups.length < previewGroups.length" type="button" class="pc-pro-link pc-prev-more" @click="showAll = true">
+                    <button v-if="shownGroups.length < previewGroups.length" type="button" class="pc-link pc-prev-more" @click="showAll = true">
                         Show all {{ previewGroups.length }} dates</button>
                 </template>
             </template>

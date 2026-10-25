@@ -5161,15 +5161,15 @@ const CalendarVueApp = {
 
             navigator.clipboard.writeText(textToCopy).then(() => {
                 const originalContent = buttonElement.innerHTML;
-                const checkIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1 text-green-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                const checkIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>`;
                 buttonElement.innerHTML = `${checkIcon} Copied`;
-                buttonElement.classList.add('bg-green-500');
+                buttonElement.classList.add('bg-theme-success');
 
                 setTimeout(() => {
                     buttonElement.innerHTML = originalContent;
-                    buttonElement.classList.remove('bg-green-500');
+                    buttonElement.classList.remove('bg-theme-success');
                                     }, 1500); // Revert after 1.5 seconds
 
             }).catch(err => {

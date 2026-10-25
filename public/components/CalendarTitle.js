@@ -59,7 +59,7 @@ const CalendarTitle = {
                 : 'text-lg font-bold text-color-2 leading-tight';
         },
         taglineClass() {
-            return 'text-color-1 text-xs -mt-0.5 text-[10px]';
+            return 'text-color-1 text-xs -mt-0.5';
         },
         titleClasses() {
             const base = this.mode === 'mobile'

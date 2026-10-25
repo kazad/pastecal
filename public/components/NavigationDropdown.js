@@ -74,7 +74,7 @@ const NavigationDropdown = {
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" width="16" height="16"><path d="M12 5v14M5 12h14"/></svg>
                 </span>
                 <span class="min-w-0">
-                    <span class="block font-semibold group-hover:text-theme-primary transition-colors">New calendar</span>
+                    <span class="block font-semibold transition-colors">New calendar</span>
                     <span class="block text-xs text-color-1">No sign-up. Share it when it's ready.</span>
                 </span>
             </a>
@@ -86,7 +86,7 @@ const NavigationDropdown = {
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
                 </span>
                 <span class="min-w-0">
-                    <span class="block font-semibold group-hover:text-theme-primary transition-colors">Start over</span>
+                    <span class="block font-semibold transition-colors">Start over</span>
                     <span class="block text-xs text-color-1">Clear this draft and begin again. Undo brings it back.</span>
                 </span>
             </button>
@@ -95,7 +95,7 @@ const NavigationDropdown = {
                 class="pc-nav-row flex items-center w-full text-left text-color-2 hover:bg-theme-hover transition-colors cursor-pointer group">
                 <span class="pc-nav-plus" aria-hidden="true">?</span>
                 <span class="min-w-0">
-                    <span class="block font-semibold group-hover:text-theme-primary transition-colors">Help</span>
+                    <span class="block font-semibold transition-colors">Help</span>
                     <span class="block text-xs text-color-1">Sharing, privacy, undo, shortcuts</span>
                 </span>
             </a>
@@ -111,9 +111,9 @@ const NavigationDropdown = {
                     <div v-for="item in group.items" :key="item.id"
                         class="pc-nav-row flex justify-between items-center hover:bg-theme-hover transition-colors group">
                         <a :href="item.path" class="flex-1 min-w-0 mr-3">
-                            <div class="pc-nav-title text-color-2 font-medium group-hover:text-theme-primary transition-colors">
+                            <div class="pc-nav-title text-color-2 font-medium transition-colors">
                                 <span class="truncate">{{ item.title }}</span>
-                                <span v-if="item.pro" class="pc-tag pc-nav-pro" data-testid="nav-pro-pill">Pro</span>
+                                <span v-if="item.pro" class="pc-pill pc-pill--pro pc-nav-pro" data-testid="nav-pro-pill">Pro</span>
                             </div>
                             <div class="text-xs text-color-1 truncate">
                                 {{ item.address }}<template v-if="item.view"> · view only</template>
@@ -122,7 +122,7 @@ const NavigationDropdown = {
                         <div class="flex items-center gap-1 transition-opacity"
                             :class="{ 'opacity-100': item.pinned, 'opacity-0 group-hover:opacity-100': !item.pinned }">
                             <button @click.stop="$emit('toggle-pin', item.id)"
-                                class="p-1.5 rounded-md hover:bg-theme-hover transition-colors text-color-1"
+                                class="pc-btn pc-btn--ghost pc-btn--icon pc-btn--sm"
                                 :class="{ 'text-color-2': item.pinned }"
                                 :title="item.pinned ? 'Unpin calendar' : 'Pin calendar'">
                                 <!-- Filled star when pinned -->
@@ -135,7 +135,7 @@ const NavigationDropdown = {
                                 </svg>
                             </button>
                             <button @click.stop="$emit('remove-recent', item.id)"
-                                class="p-1.5 rounded-md text-color-1 hover:text-red-500 hover:bg-theme-hover transition-colors"
+                                class="pc-btn pc-btn--ghost pc-btn--icon pc-btn--sm"
                                 title="Remove from recent">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none"
                                     viewBox="0 0 24 24" stroke="currentColor">
@@ -174,20 +174,20 @@ const NavigationDropdown = {
                             :aria-label="'Stats for ' + c.title" data-testid="account-stats">Stats</button>
                     </div>
                     <p v-if="proCalendars.length === 0" class="pc-acct-muted pc-acct-line">No Pro calendars right now.</p>
-                    <a href="/pricing#get-pro" data-from="account-menu" class="pc-acct-link pc-acct-line" data-testid="account-get-pro">{{ proCalendars.length ? 'Get Pro for another calendar' : 'Get Pro for a calendar' }}</a>
+                    <a href="/pricing#get-pro" data-from="account-menu" class="pc-link pc-acct-link pc-acct-line" data-testid="account-get-pro">{{ proCalendars.length ? 'Get Pro for another calendar' : 'Get Pro for a calendar' }}</a>
                     <div class="pc-acct-actions">
                         <button type="button" class="pc-btn pc-btn--sm" @click="portal" :disabled="acct.busy" data-testid="account-billing">Manage billing</button>
-                        <button type="button" class="pc-acct-link" @click="signOut" :disabled="acct.busy" data-testid="account-signout">Sign out</button>
+                        <button type="button" class="pc-link pc-acct-link" @click="signOut" :disabled="acct.busy" data-testid="account-signout">Sign out</button>
                     </div>
                     <!-- Asked in place, not with confirm(): a browser dialog would also close the menu -->
                     <div v-if="acct.confirmDelete" class="pc-acct-delete" data-testid="account-delete-confirm">
                         <p class="pc-acct-line">Delete your Pro account? This signs you out on every device and erases your email. Your calendars and their links stay as they are.</p>
                         <div class="pc-acct-actions">
                             <button type="button" class="pc-btn pc-btn--sm pc-btn--danger" @click="deleteAccount" :disabled="acct.busy" data-testid="account-delete-yes">{{ acct.busy ? 'Deleting…' : 'Delete account' }}</button>
-                            <button type="button" class="pc-acct-link" @click="acct.confirmDelete = false" :disabled="acct.busy" data-testid="account-delete-no">Cancel</button>
+                            <button type="button" class="pc-link pc-acct-link" @click="acct.confirmDelete = false" :disabled="acct.busy" data-testid="account-delete-no">Cancel</button>
                         </div>
                     </div>
-                    <button v-else type="button" class="pc-acct-link pc-acct-line pc-acct-delete-link" @click="acct.confirmDelete = true; acct.error = ''" :disabled="acct.busy" data-testid="account-delete">Delete account</button>
+                    <button v-else type="button" class="pc-link pc-acct-link pc-acct-line pc-acct-delete-link" @click="acct.confirmDelete = true; acct.error = ''" :disabled="acct.busy" data-testid="account-delete">Delete account</button>
                 </template>
 
                 <template v-else-if="acct.status === 'out'">
@@ -201,7 +201,7 @@ const NavigationDropdown = {
                             <button type="submit" class="pc-btn pc-btn--sm pc-btn--primary" :disabled="acct.busy">{{ acct.busy ? 'Sending…' : 'Send link' }}</button>
                         </div>
                     </form>
-                    <button v-else type="button" class="pc-acct-link pc-acct-line" @click="startSignIn" data-testid="account-signin">Pro owner? Sign in</button>
+                    <button v-else type="button" class="pc-link pc-acct-link pc-acct-line" @click="startSignIn" data-testid="account-signin">Pro owner? Sign in</button>
                 </template>
 
                 <p v-if="acct.error" class="pc-acct-err" role="alert" data-testid="account-error">{{ acct.error }}</p>

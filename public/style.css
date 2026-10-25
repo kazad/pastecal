@@ -1,7 +1,7 @@
 /* =========================================================================================
    pastecal app styles. Three layers, in this order of loading:
      tokens.css      color, type, space, shape, motion (the only place raw values live)
-     components.css  the building blocks: .pc-btn, .pc-field, .pc-chip, .pc-tag, .pc-card, ...
+     components.css  the building blocks: .pc-btn, .pc-field, .pc-chip, .pc-pill, .pc-card, ...
      style.css       this file: how each screen arranges them, and the Syncfusion overrides
    Sections: theme names · base · Syncfusion grid · popups and editor · welcome dock · homepage
    (guide, tour) · view pages · logo menu · Pro · side panel (notes, share, activity, stats,
@@ -140,12 +140,12 @@ html, div#Schedule, .e-control, .e-css, .e-toolbar, .e-tbar-btn, .e-tbar-btn-tex
 .e-schedule .e-vertical-view .e-header-cells .e-header-date { font-size: 20px !important; font-weight: 600 }
 .e-schedule .e-vertical-view .e-current-timeline { border-top: 2px solid var(--pc-primary) !important }
 .e-schedule .e-vertical-view .e-current-time { color: var(--pc-primary) !important }
-.e-schedule .e-vertical-view .e-appointment { border: 0 !important; border-radius: var(--pc-radius-md) !important; box-shadow: 0 0 0 1px var(--pc-bg) !important }
+.e-schedule .e-vertical-view .e-appointment { border: 0 !important; border-radius: var(--pc-radius-control) !important; box-shadow: 0 0 0 1px var(--pc-bg) !important }
 .e-schedule .e-vertical-view .e-appointment .e-subject { font-weight: 600 !important; font-size: 12.5px !important }
 /* The corner above the time column shows or hides the hours before the start hour. The text and
    its tooltip come from app.js (earlyHoursLabel, set in renderCell). */
 td.e-header-cells.e-disable-dates::before { content: attr(data-pc-label); display: inline-block; width: 100%; margin: 40% auto 0; text-align: center;
-  font-size: var(--pc-fs-small); color: var(--pc-link); cursor: pointer }
+  font-size: var(--pc-fs-sm); color: var(--pc-link); cursor: pointer }
 td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !important }
 .e-schedule .e-year-view .e-content-wrap { overflow: visible !important }   /* one scrollbar: the page's */
 
@@ -180,7 +180,7 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .e-quick-popup-wrapper .e-event-popup .e-popup-header *:not(.e-edit):not(.e-delete):not(.e-close) { color: var(--pc-on-event) !important }
 
 /* ---- Event popup ------------------------------------------------------------------------------ */
-.e-quick-popup-wrapper { max-height: calc(100vh - 20px) !important; border-radius: var(--pc-radius-lg); box-shadow: var(--pc-shadow-lg) }   /* long descriptions scroll inside */
+.e-quick-popup-wrapper { max-height: calc(100vh - 20px) !important; border-radius: var(--pc-radius-card); box-shadow: var(--pc-shadow-lg) }   /* long descriptions scroll inside */
 .e-quick-popup-wrapper .e-event-popup { max-height: inherit; display: flex; flex-direction: column }
 .e-quick-popup-wrapper .e-popup-content { overflow-y: auto }
 .e-quick-popup-wrapper .e-event-popup .e-popup-header .e-header-icon-wrapper .e-edit,
@@ -211,13 +211,13 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 
 /* ---- The editor and its confirm dialogs: pastecal blue, sentence case (the words come from the
    L10n strings in app.js), a filled primary button and a quiet secondary one ----------------- */
-.e-schedule-dialog.e-dialog, .e-quick-dialog.e-dialog { border-radius: var(--pc-radius-lg); box-shadow: var(--pc-shadow-xl) }
+.e-schedule-dialog.e-dialog, .e-quick-dialog.e-dialog { border-radius: var(--pc-radius-card); box-shadow: var(--pc-shadow-xl) }
 .e-schedule-dialog:not(.e-device) .e-dlg-header-content, .e-quick-dialog .e-dlg-header-content { padding: 20px 24px 6px }
 .e-schedule-dialog:not(.e-device) .e-dlg-content { padding: 6px 24px 4px }
 .e-schedule-dialog .e-footer-content, .e-quick-dialog .e-footer-content { padding: 12px 24px 20px }
 .e-quick-dialog .e-dlg-content { padding: 4px 24px 8px; color: var(--pc-text-2) }
 .e-schedule-dialog .e-dlg-header, .e-schedule-dialog .e-title-text, .e-quick-dialog .e-dlg-header {
-    font-size: var(--pc-fs-heading); font-weight: var(--pc-fw-semibold); letter-spacing: var(--pc-tracking-tight) }
+    font-size: var(--pc-fs-2xl); font-weight: var(--pc-fw-semibold); letter-spacing: var(--pc-tracking-tight) }
 .e-quick-popup-wrapper .e-popup-footer { padding: 4px 16px 16px }
 .e-schedule-dialog.e-device .e-save-icon::before { content: 'Save'; color: var(--pc-link); font-family: var(--pc-font); font-size: var(--pc-fs-lg); font-weight: var(--pc-fw-semibold) }
 .custom-field-row-color { position: absolute; top: 1rem; right: 25px }
@@ -230,7 +230,7 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .e-schedule-dialog .e-footer-content .e-btn,
 .e-quick-dialog .e-footer-content .e-btn {
     height: auto; min-height: var(--pc-h-md); padding: 8px 16px; border: 1px solid transparent; border-radius: var(--pc-radius-control) !important; box-shadow: none !important;
-    font-size: var(--pc-fs-body); font-weight: var(--pc-fw-semibold); line-height: var(--pc-lh-tight); letter-spacing: normal; text-transform: none;
+    font-size: var(--pc-fs-md); font-weight: var(--pc-fw-semibold); line-height: var(--pc-lh-tight); letter-spacing: normal; text-transform: none;
 }
 .e-quick-popup-wrapper .e-popup-footer .e-btn + .e-btn,
 .e-schedule-dialog .e-footer-content .e-btn + .e-btn,
@@ -355,8 +355,7 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 /* ---- First-run welcome dock: bottom-left, over the calendar's quietest corner, so it never covers
    the toolbar, the address pill or today's date ------------------------------------------------ */
 .welcome-dock { position: fixed; left: 16px; bottom: 16px; z-index: 45; width: 340px; max-width: calc(100vw - 32px); padding: 14px 15px; overflow: hidden;
-  border-radius: var(--pc-radius-card); background: var(--panel-bg); box-shadow: 0 2px 4px rgba(22, 32, 43, .07), 0 16px 32px -14px rgba(22, 32, 43, .4); animation: welcome-dock-in .25s ease-out }
-[data-theme="dark"] .welcome-dock { box-shadow: 0 2px 4px rgba(0, 0, 0, .5), 0 16px 32px -14px rgba(0, 0, 0, .8) }
+  border-radius: var(--pc-radius-card); background: var(--panel-bg); box-shadow: var(--pc-shadow-md); animation: welcome-dock-in .25s ease-out }
 .welcome-dock--leaving { opacity: 0; transform: translateY(8px); transition: opacity .3s ease, transform .3s ease; pointer-events: none }
 .welcome-dock__url { padding: .1em .35em; border-radius: var(--pc-radius-xs); font-family: var(--pc-font-mono); font-size: var(--pc-fs-2xs); white-space: nowrap }   /* never breaks mid-domain */
 /* The auto-dismiss running down, so the card doesn't vanish unexplained. Paused on hover/focus. */
@@ -379,9 +378,7 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-slug-taken { position: fixed; top: 56px; left: 50%; transform: translateX(-50%); z-index: 60; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px;
   max-width: calc(100vw - 24px); padding: 8px 10px 8px 12px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-control);
   background: var(--pc-bg); color: var(--pc-text-2); font-size: var(--pc-fs-sm); box-shadow: var(--pc-shadow-md) }
-.pc-slug-taken-option { padding: 2px 10px; border-radius: var(--pc-radius-pill); background: var(--pc-primary); color: var(--pc-on-primary); font-weight: var(--pc-fw-semibold) }
-.pc-slug-taken-option:hover { background: var(--pc-primary-hover) }
-.pc-slug-taken-close { padding: 0 4px; font-size: var(--pc-fs-xl); line-height: 1; color: var(--pc-text-muted) }
+.pc-slug-taken-close { font-size: var(--pc-fs-xl) }   /* + .pc-btn--ghost.pc-btn--icon */
 @media (max-width: 767px) { .pc-slug-taken { top: 122px } }   /* below the claim row: they need to see the name they typed */
 
 /* =========================================================================================
@@ -396,10 +393,11 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
   .pc-home-line { display: block; margin: 0 0 8px; padding: 0 4px; font-size: var(--pc-fs-md); line-height: 1.4; color: var(--pc-text-muted) }
   .pc-home-line strong { color: var(--pc-text) }
   .pc-home-line a { color: var(--pc-link); white-space: nowrap }
+  .pc-draft-links a { display: none }   /* the line above the calendar already links to the tour: one "How it works" per screen */
 }
 @media (min-width: 1100px) {
   .pc-home-split { display: grid; grid-template-columns: minmax(0, 1fr) clamp(320px, 28vw, 420px); gap: 16px; align-items: stretch }
-  .pc-home-aside { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); background: var(--pc-soft) }
+  .pc-home-aside { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); background: var(--pc-surface) }
   .pc-home-split ~ .pc-tour .pc-intro-full { display: none }   /* the guide carries the headline */
   .pc-home-split:has(.pc-home-aside) .pc-draft-links a { display: none }   /* the guide links to the tour */
   .pc-show-guide { display: inline-flex }
@@ -419,24 +417,17 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-home-aside:has(.pc-home-bar--bare) h1 { padding-right: 28px }
 .pc-home-body { flex: 1; display: flex; flex-direction: column; overflow: auto; padding: 20px 22px 24px }
 .pc-home-aside h1 { margin: 0 0 14px; font-size: var(--pc-fs-4xl); line-height: 1.06; font-weight: 900; letter-spacing: -.02em; color: var(--pc-text); text-wrap: balance }
-/* The highlighter: one phrase only, a marker stroke rather than a box -- tilted, uneven ends, ink
-   lighter where it thins. Yellow in both themes, dark text on it. */
-.pc-hl { position: relative; z-index: 0; background: none; color: inherit; white-space: nowrap }
-.pc-hl::before { content: ""; position: absolute; z-index: -1; left: -.12em; right: -.16em; top: .5em; bottom: .02em;
-  background: linear-gradient(100deg, color-mix(in srgb, var(--pc-highlight) 55%, transparent), color-mix(in srgb, var(--pc-highlight) 90%, transparent) 12%, color-mix(in srgb, var(--pc-highlight) 85%, transparent) 70%, color-mix(in srgb, var(--pc-highlight) 50%, transparent));
-  border-radius: .5em .25em .6em .3em / .4em .6em .35em .55em; transform: rotate(-1.6deg) skewX(-6deg) }
-:root[data-theme="dark"] .pc-hl::before { background: linear-gradient(100deg, color-mix(in srgb, var(--pc-highlight) 30%, transparent), color-mix(in srgb, var(--pc-highlight) 50%, transparent) 12%, color-mix(in srgb, var(--pc-highlight) 45%, transparent) 70%, color-mix(in srgb, var(--pc-highlight) 28%, transparent)) }
+/* The headline's emphasized word: plain text now (no marker stroke; restraint). */
+.pc-hl { background: none; color: inherit; white-space: nowrap }
 .pc-home-steps { list-style: none; margin: 0 0 18px; padding: 0; display: grid; gap: 10px }
 .pc-home-steps li { display: grid; grid-template-columns: 28px 1fr; gap: 12px; align-items: center; font-size: var(--pc-fs-lg); color: var(--pc-text) }
-.pc-home-steps b { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--pc-soft); color: var(--pc-link); font-size: var(--pc-fs-xs); font-weight: var(--pc-fw-bold) }
+.pc-home-steps b { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--pc-soft); color: var(--pc-text-2); font-size: var(--pc-fs-xs); font-weight: var(--pc-fw-bold) }
 .pc-home-aside .pc-home-steps b { background: var(--pc-bg); border: 0 }
 .pc-home-chips { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 4px 0 18px; color: var(--pc-text-muted); font-size: var(--pc-fs-md); font-weight: var(--pc-fw-semibold) }
 .pc-home-chips span::before { content: "✓ "; color: var(--pc-success) }
 .pc-home-links { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0 }
 .pc-home-aside .pc-home-links { margin-bottom: 18px }
 .pc-home-more { font-size: var(--pc-fs-lg); font-weight: var(--pc-fw-semibold); color: var(--pc-link) }
-.pc-home-hide { display: grid; place-items: center; width: var(--pc-h-sm); height: var(--pc-h-sm); border: 0; border-radius: var(--pc-radius-control); background: none; color: var(--pc-text-muted); cursor: pointer }
-.pc-home-hide:hover, .pc-home-hide:focus-visible { color: var(--pc-text); background: var(--pc-soft) }
 /* Recent calendars are cards, not links: no underline, a border in blue on hover. */
 .pc-home-recents { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 6px }
 .pc-home-recents a { display: grid; gap: 1px; padding: 9px 12px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); background: var(--pc-surface) }
@@ -464,7 +455,7 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-draft-note b { color: var(--pc-text) }
 .pc-draft-note a { margin-left: auto; color: var(--pc-link) }
 .pc-draft-links { display: inline-flex; gap: 14px; margin-left: auto }
-.pc-show-guide { display: none; align-items: center; gap: 5px; padding: 0; border: 0; background: none; color: var(--pc-link); font: inherit; cursor: pointer }
+.pc-show-guide { display: none; align-items: center; gap: 5px }   /* + .pc-link */
 .pc-show-guide svg { width: 15px; height: 15px }
 .pc-share-pulse { animation: pc-share-pulse 1.5s ease-out 2 }
 @keyframes pc-share-pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--pc-primary) 60%, transparent) } 100% { box-shadow: 0 0 0 12px transparent } }
@@ -473,20 +464,17 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 /* The quiet Pro line above the calendar (index.html pro-upsell). */
 .pc-upsell { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; margin: 0 0 8px; padding: 6px 4px 6px 12px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-control);
   background: var(--pc-surface); font: var(--pc-fs-md)/1.4 var(--pc-font); color: var(--pc-text-muted) }
-.pc-upsell-go { padding: 0; border: 0; background: none; font: inherit; font-weight: var(--pc-fw-semibold); color: var(--pc-link); cursor: pointer; white-space: nowrap }
-.pc-upsell-go:hover { color: var(--pc-link-hover); text-decoration: underline }
-.pc-upsell-x { margin-left: auto; width: var(--pc-h-xs); height: var(--pc-h-xs); border: 0; border-radius: var(--pc-radius-sm); background: none; font-size: var(--pc-fs-xl); line-height: 1; color: var(--pc-text-muted); cursor: pointer }
-.pc-upsell-x:hover { background: var(--pc-hover); color: var(--pc-text) }
-.pc-upsell-go:focus-visible, .pc-upsell-x:focus-visible { outline: var(--pc-focus-outline); outline-offset: 2px }
+.pc-upsell-go { white-space: nowrap }   /* + .pc-link */
+.pc-upsell-x { margin-left: auto; font-size: var(--pc-fs-xl) }   /* + .pc-btn--ghost.pc-btn--icon */
 
 /* ---- The tour ------------------------------------------------------------------------------ */
 .pc-tour { margin-top: 28px; border-top: 1px solid var(--pc-line); background: var(--pc-soft) }
-.pc-tour-inner { max-width: 1040px; margin: 0 auto; padding: 48px 16px 56px }
-.pc-tour h2 { margin: 0; font-size: clamp(26px, 3.6vw, 38px); line-height: 1.15; font-weight: 800; color: var(--pc-text); text-wrap: balance }
+.pc-tour-inner { max-width: var(--pc-page-max); margin: 0 auto; padding: 48px 16px 56px }
+.pc-tour h2 { margin: 0; font-size: var(--pc-fs-section); line-height: 1.15; font-weight: 800; color: var(--pc-text); text-wrap: balance }
 .pc-tour h3 { margin: 0 0 4px; font-size: var(--pc-fs-xl); font-weight: var(--pc-fw-bold); color: var(--pc-text) }
 .pc-tour p { color: var(--pc-text-muted) }
 .pc-tour .pc-tour-kicker { margin: 0 0 6px; font-size: var(--pc-fs-xl); font-weight: var(--pc-fw-bold); color: var(--pc-link) }
-.pc-tour-intro h2 { font-size: clamp(32px, 4.6vw, 52px); letter-spacing: -.02em; line-height: 1.05 }
+.pc-tour-intro h2 { font-size: var(--pc-fs-hero); letter-spacing: -.02em; line-height: 1.05 }
 .pc-tour-facts { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 0 }
 .pc-tour-facts span { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-pill); background: var(--pc-surface);
   color: var(--pc-text); font-size: var(--pc-fs-md); font-weight: var(--pc-fw-semibold) }
@@ -520,14 +508,14 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-vs-link--bad span { color: var(--pc-text-muted) }
 .pc-vs-link--bad span::before { content: "✕ "; color: var(--pc-danger) }
 /* The pastecal side: the blue panel, and the link people will actually remember. */
-.pc-vs > .pc-vs-new { border: 2px solid var(--pc-link); background: color-mix(in srgb, var(--pc-link) 6%, var(--pc-surface)) }
+.pc-vs > .pc-vs-new { border: 2px solid var(--pc-primary) }
 .pc-vs-new h4 small { background: var(--pc-primary-soft); color: var(--pc-link) }
 .pc-vs-new .pc-vs-steps li { color: var(--pc-text) }
 .pc-vs-new .pc-vs-steps::before { border-left-color: color-mix(in srgb, var(--pc-link) 40%, transparent) }
-.pc-vs-new .pc-vs-ico { border-color: var(--pc-primary); background: var(--pc-primary); stroke: var(--pc-on-primary) }
-.pc-vs-link--good code { padding: 12px 14px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); background: var(--pc-bg); box-shadow: var(--pc-shadow-md);
-  font-family: var(--pc-font); font-size: clamp(18px, 2.4vw, 26px); font-weight: var(--pc-fw-bold); letter-spacing: -.01em; color: var(--pc-text-muted); word-break: normal; white-space: nowrap; overflow-wrap: normal }
-.pc-vs-link--good code b { color: var(--pc-link); font-weight: 800 }
+.pc-vs-new .pc-vs-ico { border-color: var(--pc-line); background: var(--pc-bg); stroke: var(--pc-text-2) }
+.pc-vs-link--good code { padding: 12px 14px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); background: var(--pc-bg);
+  font-family: var(--pc-font); font-size: var(--pc-fs-2xl); font-weight: var(--pc-fw-bold); letter-spacing: -.01em; color: var(--pc-text-muted); word-break: normal; white-space: nowrap; overflow-wrap: normal }
+.pc-vs-link--good code b { color: var(--pc-link); font-weight: var(--pc-fw-bold) }
 .pc-vs-link--good span { color: var(--pc-text-2) }
 .pc-vs-link--good span::before { content: "✓ "; color: var(--pc-success) }
 /* The payoff under the pastecal steps: the whole group, in. */
@@ -548,16 +536,16 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-tour-links code { display: inline-block; margin: 6px 0; padding: 2px 7px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-sm); background: var(--pc-soft); color: var(--pc-text); font-size: var(--pc-fs-sm); overflow-wrap: anywhere }
 .pc-tour-links p { margin: 0; font-size: var(--pc-fs-lg) }
 /* What people use it for: a title and a few words each. */
-.pc-tour-uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; overflow: hidden; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); background: var(--pc-line) }
-.pc-tour-uses > div { display: grid; grid-template-columns: 20px minmax(0, 1fr); column-gap: 10px; align-items: start; align-content: start; padding: 14px 16px; background: var(--pc-surface) }
+.pc-tour-uses { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--pc-space-6) var(--pc-space-8) }   /* whitespace, not a grid of boxes */
+.pc-tour-uses > div { display: grid; grid-template-columns: 20px minmax(0, 1fr); column-gap: 10px; align-items: start; align-content: start }
 .pc-tour-uses > div > p { grid-column: 2 }
 .pc-tour-uses h4 { margin: 0 0 2px; font-size: var(--pc-fs-lg); font-weight: var(--pc-fw-semibold); color: var(--pc-text) }
 .pc-tour-uses p { margin: 0; font-size: var(--pc-fs-md); line-height: 1.45; color: var(--pc-text-muted) }
-.pc-tour-uses .pc-ico { display: block; width: 20px; height: 20px; margin-top: 1px; color: var(--pc-link) }
+.pc-tour-uses .pc-ico { display: block; width: 20px; height: 20px; margin-top: 1px; color: var(--pc-text-muted) }
 /* Pricing: the four plans from /pricing, small. Pro Single is on sale, so it carries the blue. */
 .pc-tour .pc-tour-plans { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: stretch }
 .pc-tour-plans > div { position: relative; display: flex; flex-direction: column; gap: 2px; padding: 18px 16px 16px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); background: var(--pc-surface) }
-.pc-tour-plans > .pc-tour-plan-pro { border: 2px solid var(--pc-link); background: color-mix(in srgb, var(--pc-link) 6%, var(--pc-surface)) }
+.pc-tour-plans > .pc-tour-plan-pro { border: 2px solid var(--pc-primary) }
 .pc-tour-plans h4 { margin: 0; font-size: var(--pc-fs-lg); font-weight: var(--pc-fw-bold); color: var(--pc-text) }
 .pc-tour-plans h4 span { margin-left: 6px; font-size: var(--pc-fs-sm); font-weight: var(--pc-fw-semibold); color: var(--pc-text-muted) }
 .pc-tour-plans p { margin: 0; font-size: var(--pc-fs-md); line-height: 1.45 }
@@ -576,7 +564,7 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-tour-quotes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 18px }
 .pc-tour-quotes blockquote { position: relative; margin: 0; padding: 18px 20px 18px 52px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); background: var(--pc-surface);
   font-size: var(--pc-fs-lg); line-height: 1.5; color: var(--pc-text) }
-.pc-tour-quotes blockquote::before { content: "\201C"; position: absolute; left: 16px; top: 6px; font: 900 var(--pc-fs-5xl)/1 Georgia, serif; color: var(--pc-link) }
+.pc-tour-quotes blockquote::before { content: "\201C"; position: absolute; left: 16px; top: 6px; font: 900 var(--pc-fs-4xl)/1 Georgia, serif; color: var(--pc-link) }
 .pc-tour-quotes cite { display: block; margin-top: 8px; font-style: normal; font-size: var(--pc-fs-sm); color: var(--pc-text-muted) }
 /* Questions, and the way back up. */
 .pc-tour-faq { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 32px }
@@ -596,7 +584,7 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 @media (max-width: 640px) { .pc-tour-quotes { grid-template-columns: 1fr } }
 @media (max-width: 520px) { .pc-tour .pc-tour-plans { grid-template-columns: minmax(0, 1fr) } }
 @media (max-width: 480px) {
-  .pc-tour-uses > div { grid-template-columns: minmax(0, 1fr); padding: 12px }
+  .pc-tour-uses > div { grid-template-columns: minmax(0, 1fr) }
   .pc-tour-uses > div > p { grid-column: 1 }
   .pc-tour-uses .pc-ico { margin-bottom: 6px }
   .pc-vs > section { padding: 16px }
@@ -721,7 +709,7 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 /* The badge beside the title; Add to my calendar + Make your own on the right. */
 .pc-view-badge { display: inline-flex; align-items: center; align-self: center; gap: 4px; flex: none; height: 22px; margin-left: 8px; padding: 0 8px;
   border: 1px solid var(--pc-line); border-radius: var(--pc-radius-pill); background: var(--pc-surface);
-  font-size: var(--pc-fs-caption); font-weight: var(--pc-fw-semibold); line-height: 1; color: var(--pc-text-muted); white-space: nowrap; cursor: default }
+  font-size: var(--pc-fs-2xs); font-weight: var(--pc-fw-semibold); line-height: 1; color: var(--pc-text-muted); white-space: nowrap; cursor: default }
 .pc-view-badge svg { width: 12px; height: 12px }
 .pc-viewer-actions { display: flex; align-items: center; gap: 12px; flex: none }
 .pc-make-own { font-size: var(--pc-fs-sm); font-weight: var(--pc-fw-medium); color: var(--pc-link); white-space: nowrap }
@@ -731,9 +719,9 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-addcal-btn:hover:not(:disabled), .pc-addcal-btn[aria-expanded="true"] { border-color: var(--pc-link); background: var(--pc-hover) }
 .pc-addcal-btn .pc-addcal-caret { width: 14px; height: 14px; color: var(--pc-text-muted) }
 .pc-addcal-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: var(--pc-z-menu); width: 240px; padding: 6px;
-  border: 1px solid var(--pc-line); border-radius: var(--pc-radius-lg); background: var(--pc-bg); box-shadow: var(--pc-shadow-md) }
-.pc-addcal-hint { margin: 4px 8px 6px; font-size: var(--pc-fs-small); line-height: var(--pc-lh-tight); color: var(--pc-text-muted) }
-.pc-addcal-menu a { display: block; padding: 8px 10px; border-radius: var(--pc-radius-sm); font-size: var(--pc-fs-body); color: var(--pc-text) }
+  border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); background: var(--pc-bg); box-shadow: var(--pc-shadow-md) }
+.pc-addcal-hint { margin: 4px 8px 6px; font-size: var(--pc-fs-sm); line-height: var(--pc-lh-tight); color: var(--pc-text-muted) }
+.pc-addcal-menu a { display: block; padding: 8px 10px; border-radius: var(--pc-radius-sm); font-size: var(--pc-fs-md); color: var(--pc-text) }
 .pc-addcal-menu a:hover, .pc-addcal-menu a:focus-visible { background: var(--pc-hover); color: var(--pc-link); outline: none }
 /* Phone: the second header row */
 .pc-viewer-row { display: flex; align-items: center; justify-content: space-between; gap: 8px }
@@ -763,15 +751,15 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
    ========================================================================================= */
 .pc-nav { width: min(300px, calc(100vw - 24px)); padding: 6px; border-radius: var(--pc-radius-card) }
 .pc-nav-row { gap: 12px; padding: 8px 10px; border-radius: var(--pc-radius-control); text-decoration: none }
-.pc-nav-plus { display: grid; place-items: center; flex: none; width: var(--pc-h-sm); height: var(--pc-h-sm); border-radius: var(--pc-radius-control); background: var(--pc-primary); color: var(--pc-on-primary) }
+.pc-nav-plus { display: grid; place-items: center; flex: none; width: var(--pc-h-sm); height: var(--pc-h-sm); border-radius: var(--pc-radius-control); background: var(--pc-soft); color: var(--pc-text-2) }   /* neutral: an icon, not an accent */
 .pc-nav-list { max-height: 32rem; overflow-y: auto }
 .pc-nav-label, .pc-nav-empty, .pc-acct { margin: 6px 4px 0; padding: 10px 6px 4px }
 .pc-nav-empty { line-height: 1.45 }
 .pc-nav a, .pc-nav a:hover { text-decoration: none }
 .pc-nav-title { display: flex; align-items: center; gap: var(--pc-space-2); min-width: 0 }
-.pc-nav-pro { padding-block: 0; line-height: 18px; color: var(--pc-text-2) }   /* + .pc-tag */
+.pc-nav-pro { padding-block: 0; line-height: 18px; color: var(--pc-text-2) }   /* + .pc-pill */
 .pc-acct { font-family: var(--pc-font); color: var(--pc-text) }
-.pc-acct-line, .pc-acct-email, .pc-acct-cal-status, .pc-acct-form label, .pc-acct-err { font-size: var(--pc-fs-small) }
+.pc-acct-line, .pc-acct-email, .pc-acct-cal-status, .pc-acct-form label, .pc-acct-err { font-size: var(--pc-fs-sm) }
 .pc-acct-muted { color: var(--pc-text-muted) }
 .pc-acct-line { display: block; margin: 0; padding: 2px 0; line-height: var(--pc-lh-body) }
 .pc-acct-head { display: flex; flex-direction: column; gap: 1px; margin-bottom: var(--pc-space-1) }
@@ -785,8 +773,7 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-acct-cal-status { color: var(--pc-text-muted) }
 .pc-acct-cal-status--warn { color: var(--pc-warning); font-weight: var(--pc-fw-medium) }
 .pc-acct-actions { display: flex; align-items: center; gap: var(--pc-space-3); margin-top: var(--pc-space-2) }
-.pc-acct-link { padding: 0; border: 0; background: none; color: var(--pc-link); font: inherit; cursor: pointer; text-align: left }
-.pc-acct-link:hover:not(:disabled) { color: var(--pc-link-hover); text-decoration: underline }
+.pc-acct-link { text-align: left }   /* + .pc-link */
 .pc-acct-link:disabled { opacity: .6; cursor: default }
 .pc-acct-line.pc-acct-link { color: var(--pc-text-muted) }
 .pc-acct-line.pc-acct-link:hover { color: var(--pc-link) }
@@ -805,10 +792,9 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
    components/ProInsight.js)
    ========================================================================================= */
 .pc-lock { position: relative; display: inline-flex; align-items: center; flex-shrink: 0 }
-.pc-lock-btn { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: var(--pc-radius-pill); background: transparent; color: var(--pc-text-muted); cursor: pointer }
+.pc-lock-btn { border-radius: var(--pc-radius-pill) }   /* + .pc-btn--ghost.pc-btn--icon */
 .pc-lock-btn svg { width: 15px; height: 15px }
-.pc-lock-btn:hover, .pc-lock--open .pc-lock-btn { color: var(--pc-text); background: var(--pc-soft) }
-.pc-lock-btn:focus-visible { outline: var(--pc-focus-outline); outline-offset: 1px }
+.pc-lock--open .pc-lock-btn { color: var(--pc-text); background: var(--pc-soft) }
 .pc-lock-pop { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); z-index: 60; width: max-content; max-width: min(260px, calc(100vw - 32px)); padding: 8px 10px;
   border: 1px solid var(--pc-line); border-radius: var(--pc-radius-control); background: var(--pc-bg); color: var(--pc-text); font: var(--pc-fw-medium) var(--pc-fs-sm)/1.4 var(--pc-font); text-align: left; box-shadow: var(--pc-shadow-md); white-space: normal }
 .pc-lock-copy { display: block; margin-top: 6px; color: var(--pc-link); font-weight: var(--pc-fw-semibold); text-decoration: none }
@@ -833,9 +819,8 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-pro-row .pc-field { flex: 1 1 220px; width: auto; max-width: 420px }
 .pc-pro-row .pc-pro-field { max-width: 560px; background-color: var(--pc-surface); font-family: var(--pc-font-mono); font-size: var(--pc-fs-sm) }
 .pc-pro-muted { margin: 0; color: var(--pc-text-muted); font-size: var(--pc-fs-sm) }
-.pc-pro-muted a, .pc-pro-link { color: var(--pc-link); font-size: var(--pc-fs-sm); text-decoration: none }
-.pc-pro-muted a:hover, .pc-pro-link:hover { text-decoration: underline }
-.pc-pro-link:focus-visible { outline: var(--pc-focus-outline); outline-offset: 2px }
+.pc-pro-muted a { color: var(--pc-link); font-size: var(--pc-fs-sm); text-decoration: none }
+.pc-pro-muted a:hover { text-decoration: underline }
 .pc-pro-ok { margin: 8px 0 0; color: var(--pc-success); font-size: var(--pc-fs-md); font-weight: var(--pc-fw-medium) }
 .pc-pro-err { margin: 10px 0 0; color: var(--pc-danger); font-size: var(--pc-fs-sm) }
 .pc-pro-sub { margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--pc-line) }
@@ -854,32 +839,30 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 
 /* ---- Stats and History ---------------------------------------------------------------------- */
 .pc-pro-insight { margin: 0 0 12px }
-.pc-share-all { margin-top: var(--pc-space-3); padding: 0; border: 0; background: none; color: var(--pc-link); font: var(--pc-fw-medium) var(--pc-fs-small) var(--pc-font); cursor: pointer }
-.pc-share-all:hover { text-decoration: underline }
-.pc-share-all:focus-visible { outline: var(--pc-focus-outline); outline-offset: 2px }
-.pc-changes-foot { margin: var(--pc-space-2) 0 0; color: var(--pc-text-muted); font-size: var(--pc-fs-small); line-height: var(--pc-lh-body) }
-.pc-changes-foot .pc-pro-link, .pc-prev-more, .pc-insight-back .pc-pro-link { padding: 0; border: 0; background: none; cursor: pointer; font-family: var(--pc-font) }
+.pc-share-all { margin-top: var(--pc-space-3); font-size: var(--pc-fs-sm) }   /* + .pc-link */
+.pc-changes-foot { margin: var(--pc-space-2) 0 0; color: var(--pc-text-muted); font-size: var(--pc-fs-sm); line-height: var(--pc-lh-body) }
+.pc-changes-foot .pc-link, .pc-prev-more, .pc-insight-back .pc-link { font-size: var(--pc-fs-sm) }
 .pc-insight { font-family: var(--pc-font); color: var(--pc-text); font-variant-numeric: tabular-nums }
 .pc-insight-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--pc-space-3); margin: 0 calc(var(--pc-space-8) + var(--pc-space-2)) var(--pc-space-4) 0 }
-.pc-insight-title { margin: 0; font-size: var(--pc-fs-heading); font-weight: var(--pc-fw-bold); color: var(--pc-text) }
+.pc-insight-title { margin: 0; font-size: var(--pc-fs-2xl); font-weight: var(--pc-fw-bold); color: var(--pc-text) }
 .pc-insight-head .pc-insight-title { margin-right: auto }
 #pro-history-title { margin-bottom: var(--pc-space-1) }
-.pc-insight-back { margin: 0 0 var(--pc-space-3); font-size: var(--pc-fs-small) }
-.pc-insight-muted { margin: 0; color: var(--pc-text-muted); font-size: var(--pc-fs-small); line-height: var(--pc-lh-body) }
+.pc-insight-back { margin: 0 0 var(--pc-space-3); font-size: var(--pc-fs-sm) }
+.pc-insight-muted { margin: 0; color: var(--pc-text-muted); font-size: var(--pc-fs-sm); line-height: var(--pc-lh-body) }
 .pc-insight-lead { margin-bottom: var(--pc-space-4); max-width: 34rem }
-.pc-insight-err { margin: var(--pc-space-3) 0; color: var(--pc-danger); font-size: var(--pc-fs-body) }
-.pc-insight-h { margin: 0 0 var(--pc-space-2); color: var(--pc-text-muted); font-size: var(--pc-fs-caption); font-weight: var(--pc-fw-semibold); letter-spacing: var(--pc-tracking-caps); text-transform: uppercase }
-.pc-insight-privacy { margin: var(--pc-space-5) 0 0; padding-top: var(--pc-space-3); border-top: 1px solid var(--pc-line); color: var(--pc-text-muted); font-size: var(--pc-fs-small) }
+.pc-insight-err { margin: var(--pc-space-3) 0; color: var(--pc-danger); font-size: var(--pc-fs-md) }
+.pc-insight-h { margin: 0 0 var(--pc-space-2); color: var(--pc-text-muted); font-size: var(--pc-fs-2xs); font-weight: var(--pc-fw-semibold); letter-spacing: var(--pc-tracking-caps); text-transform: uppercase }
+.pc-insight-privacy { margin: var(--pc-space-5) 0 0; padding-top: var(--pc-space-3); border-top: 1px solid var(--pc-line); color: var(--pc-text-muted); font-size: var(--pc-fs-sm) }
 .pc-insight-fine { margin-top: var(--pc-space-2) }
-.pc-insight-empty { padding: var(--pc-space-6) var(--pc-space-4); border: 1px dashed var(--pc-field); border-radius: var(--pc-radius-lg); text-align: center }
-.pc-insight-empty-title { margin: 0 0 var(--pc-space-1); color: var(--pc-text); font-size: var(--pc-fs-lead); font-weight: var(--pc-fw-semibold) }
+.pc-insight-empty { padding: var(--pc-space-6) var(--pc-space-4); border: 1px dashed var(--pc-field); border-radius: var(--pc-radius-card); text-align: center }
+.pc-insight-empty-title { margin: 0 0 var(--pc-space-1); color: var(--pc-text); font-size: var(--pc-fs-lg); font-weight: var(--pc-fw-semibold) }
 /* Headline cards (they also choose what the chart shows): .pc-card.pc-card--flat.pc-card--pad */
 .pc-stat-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--pc-space-2) }
 .pc-stat-card { display: flex; flex-direction: column; align-items: flex-start; gap: 2px }
-.pc-stat-label { color: var(--pc-text-2); font-size: var(--pc-fs-small); font-weight: var(--pc-fw-semibold) }
+.pc-stat-label { color: var(--pc-text-2); font-size: var(--pc-fs-sm); font-weight: var(--pc-fw-semibold) }
 .pc-stat-num { font-size: var(--pc-fs-3xl); font-weight: var(--pc-fw-bold); line-height: var(--pc-lh-tight); letter-spacing: var(--pc-tracking-tight) }
-.pc-stat-note { color: var(--pc-text-muted); font-size: var(--pc-fs-caption); line-height: var(--pc-lh-tight) }
-.pc-stat-delta { margin-top: var(--pc-space-1); font-size: var(--pc-fs-caption); font-weight: var(--pc-fw-semibold) }
+.pc-stat-note { color: var(--pc-text-muted); font-size: var(--pc-fs-2xs); line-height: var(--pc-lh-tight) }
+.pc-stat-delta { margin-top: var(--pc-space-1); font-size: var(--pc-fs-2xs); font-weight: var(--pc-fw-semibold) }
 .pc-stat-delta--up { color: var(--pc-success) }
 .pc-stat-delta--down { color: var(--pc-text-2) }
 .pc-stat-delta--flat { color: var(--pc-text-muted) }
@@ -887,49 +870,49 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 /* Daily bars, drawn as inline SVG */
 .pc-chart { margin: var(--pc-space-4) 0 0 }
 .pc-chart-plot { display: flex; gap: var(--pc-space-2); height: 150px }
-.pc-chart-y { display: flex; flex-direction: column; justify-content: space-between; min-width: 2ch; margin: -2px 0; color: var(--pc-text-muted); font-size: var(--pc-fs-caption); text-align: right; line-height: 1 }
+.pc-chart-y { display: flex; flex-direction: column; justify-content: space-between; min-width: 2ch; margin: -2px 0; color: var(--pc-text-muted); font-size: var(--pc-fs-2xs); text-align: right; line-height: 1 }
 .pc-chart-svg { flex: 1; min-width: 0; height: 100%; overflow: visible }
 .pc-chart-grid { stroke: var(--pc-line); stroke-width: 1; stroke-dasharray: 3 3 }
 .pc-chart-base { stroke: var(--pc-field); stroke-width: 1 }
 .pc-chart-bar { fill: var(--pc-link); opacity: .78 }
 .pc-chart-bar.today { opacity: 1 }
 .pc-chart-bar:hover { opacity: 1; fill: var(--pc-link-hover) }
-.pc-chart-x { display: flex; justify-content: space-between; margin: var(--pc-space-1) 0 0 calc(2ch + var(--pc-space-2)); color: var(--pc-text-muted); font-size: var(--pc-fs-caption) }
+.pc-chart-x { display: flex; justify-content: space-between; margin: var(--pc-space-1) 0 0 calc(2ch + var(--pc-space-2)); color: var(--pc-text-muted); font-size: var(--pc-fs-2xs) }
 .pc-chart-cap { margin-top: var(--pc-space-2) }
 /* Countries and cities */
 .pc-places { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--pc-space-6); margin-top: var(--pc-space-5) }
 .pc-place-list { margin: 0; padding: 0; list-style: none }
-.pc-place-list li { display: grid; grid-template-columns: minmax(0, 1fr) 64px 3.5ch; align-items: center; gap: var(--pc-space-2); padding: 5px 0; font-size: var(--pc-fs-body) }
+.pc-place-list li { display: grid; grid-template-columns: minmax(0, 1fr) 64px 3.5ch; align-items: center; gap: var(--pc-space-2); padding: 5px 0; font-size: var(--pc-fs-md) }
 .pc-place-list li + li { border-top: 1px solid var(--pc-line) }
 .pc-place-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .pc-flag { margin-right: var(--pc-space-2) }
-.pc-place-cc { margin-left: var(--pc-space-2); padding: 0 5px; border-radius: var(--pc-radius-xs); background: var(--pc-soft); color: var(--pc-text-muted); font-size: var(--pc-fs-caption); font-weight: var(--pc-fw-semibold) }
+.pc-place-cc { margin-left: var(--pc-space-2); padding: 0 5px; border-radius: var(--pc-radius-xs); background: var(--pc-soft); color: var(--pc-text-muted); font-size: var(--pc-fs-2xs); font-weight: var(--pc-fw-semibold) }
 .pc-place-bar { height: 6px; overflow: hidden; border-radius: var(--pc-radius-pill); background: var(--pc-soft) }
 .pc-place-bar i { display: block; height: 100%; border-radius: inherit; background: var(--pc-link); opacity: .7 }
 .pc-place-num { color: var(--pc-text-2); text-align: right }
 /* History: versions by day, and one version read-only */
 .pc-ver-group { margin-top: var(--pc-space-4) }
-.pc-ver-list { margin: 0; padding: 0; list-style: none; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-lg) }
+.pc-ver-list { margin: 0; padding: 0; list-style: none; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card) }
 .pc-ver { display: flex; flex-wrap: wrap; align-items: center; gap: var(--pc-space-2) var(--pc-space-3); padding: var(--pc-space-3) }
 .pc-ver + .pc-ver { border-top: 1px solid var(--pc-line) }
 .pc-ver-main { display: flex; flex-direction: column; flex: 1 1 12rem; min-width: 0 }
-.pc-ver-kind { font-size: var(--pc-fs-body); font-weight: var(--pc-fw-medium) }
+.pc-ver-kind { font-size: var(--pc-fs-md); font-weight: var(--pc-fw-medium) }
 .pc-ver-actions { display: flex; gap: var(--pc-space-2) }
-.pc-confirm { flex-basis: 100%; margin: var(--pc-space-1) 0 0; padding: var(--pc-space-3); border: 1px solid color-mix(in srgb, var(--pc-warning) 30%, transparent); border-radius: var(--pc-radius-md); background: var(--pc-warning-soft) }
-.pc-confirm-title { margin: 0 0 var(--pc-space-1); font-size: var(--pc-fs-body); font-weight: var(--pc-fw-semibold); color: var(--pc-text) }
+.pc-confirm { flex-basis: 100%; margin: var(--pc-space-1) 0 0; padding: var(--pc-space-3); border: 1px solid color-mix(in srgb, var(--pc-warning) 30%, transparent); border-radius: var(--pc-radius-control); background: var(--pc-warning-soft) }
+.pc-confirm-title { margin: 0 0 var(--pc-space-1); font-size: var(--pc-fs-md); font-weight: var(--pc-fw-semibold); color: var(--pc-text) }
 .pc-confirm .pc-insight-muted { color: var(--pc-text-2) }
 .pc-confirm-row { display: flex; flex-wrap: wrap; gap: var(--pc-space-2); margin-top: var(--pc-space-3) }
-.pc-preview-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--pc-space-2) var(--pc-space-3); margin: 0 var(--pc-space-8) var(--pc-space-3) 0; padding: var(--pc-space-3); border-radius: var(--pc-radius-md); background: var(--pc-soft) }
+.pc-preview-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--pc-space-2) var(--pc-space-3); margin: 0 var(--pc-space-8) var(--pc-space-3) 0; padding: var(--pc-space-3); border-radius: var(--pc-radius-control); background: var(--pc-soft) }
 .pc-preview-label { flex: 1 1 14rem; font-weight: var(--pc-fw-semibold) }
 .pc-preview-actions { display: flex; flex-wrap: wrap; gap: var(--pc-space-2) }
 .pc-preview-bar + .pc-confirm { margin-bottom: var(--pc-space-3) }
-.pc-preview-cal { margin: var(--pc-space-2) 0 var(--pc-space-3); font-size: var(--pc-fs-lead); font-weight: var(--pc-fw-semibold) }
+.pc-preview-cal { margin: var(--pc-space-2) 0 var(--pc-space-3); font-size: var(--pc-fs-lg); font-weight: var(--pc-fw-semibold) }
 .pc-prev-day { margin-top: var(--pc-space-3) }
 .pc-prev-list { margin: 0; padding: 0; list-style: none }
-.pc-prev-list li { display: flex; gap: var(--pc-space-3); padding: 3px 0; font-size: var(--pc-fs-body) }
-.pc-prev-time { flex: none; width: 5.5rem; color: var(--pc-text-muted); font-size: var(--pc-fs-small); line-height: 1.6 }
+.pc-prev-list li { display: flex; gap: var(--pc-space-3); padding: 3px 0; font-size: var(--pc-fs-md) }
+.pc-prev-time { flex: none; width: 5.5rem; color: var(--pc-text-muted); font-size: var(--pc-fs-sm); line-height: 1.6 }
 .pc-prev-title { min-width: 0; overflow-wrap: anywhere }
-.pc-prev-more { margin-top: var(--pc-space-3); color: var(--pc-link); font-size: var(--pc-fs-small) }
+.pc-prev-more { margin-top: var(--pc-space-3); color: var(--pc-link); font-size: var(--pc-fs-sm) }
 @media (max-width: 560px) {
   .pc-stat-cards { grid-template-columns: 1fr }
   .pc-stat-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--pc-space-3); align-items: baseline }
@@ -957,9 +940,7 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-side-tab--icon { display: grid; place-items: center; width: 40px; margin-left: auto }
 .pc-side-tab--icon svg { width: 18px; height: 18px }
 .pc-side-title { flex: 1; min-width: 0; margin: 0; padding-left: 12px; align-self: center; font-size: var(--pc-fs-lg); font-weight: var(--pc-fw-bold); color: var(--pc-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-.pc-side-close { flex: none; align-self: center; display: grid; place-items: center; width: var(--pc-h-md); height: var(--pc-h-md); border: 0; border-radius: var(--pc-radius-control); background: none; color: var(--pc-text-muted); cursor: pointer }
-.pc-side-close:hover { background: var(--pc-hover); color: var(--pc-text) }
-.pc-side-close:focus-visible { outline: var(--pc-focus-outline); outline-offset: -2px; border-radius: var(--pc-radius-sm) }
+.pc-side-close { align-self: center }   /* + .pc-btn--ghost.pc-btn--icon */
 .pc-side-body { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 18px 20px 22px }
 .pc-side-hint { margin: 0; font-size: var(--pc-fs-sm); line-height: 1.45; color: var(--pc-text-muted) }
 /* Empty states: what the tab will hold, in a sentence or two, and one button. Quiet, not a card. */
@@ -995,7 +976,7 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
   .pc-side { left: 0; right: 0; bottom: 0; height: min(64vh, 560px); height: min(64dvh, 560px); padding-bottom: env(safe-area-inset-bottom);
     border-bottom: 0; border-radius: var(--pc-radius-dialog) var(--pc-radius-dialog) 0 0 }
   .pc-side-handle { display: flex; justify-content: center; flex: none; padding: 8px 0 2px }
-  .pc-side-handle::before { content: ""; width: 40px; height: 5px; border-radius: 3px; background: var(--pc-line) }
+  .pc-side-handle::before { content: ""; width: 40px; height: 5px; border-radius: var(--pc-radius-pill); background: var(--pc-line) }
   .pc-side-bar { background: transparent; padding: 0 6px 0 10px }
   .pc-side-tabs .pc-tab { min-height: var(--pc-h-lg); font-size: var(--pc-fs-lg) }
   .pc-side-body { padding: 16px 16px 24px }
@@ -1019,9 +1000,8 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-link-item { display: flex; flex-direction: column; gap: 6px }
 .pc-link-head { display: flex; align-items: center; gap: 8px; min-height: 22px }
 .pc-share-label { margin: 0; font-size: var(--pc-fs-md); font-weight: 650; line-height: 1.35; color: var(--pc-text) }
-.pc-link-extra { margin-left: auto; padding: 2px 0; border: 0; background: none; color: var(--pc-link); font: var(--pc-fw-semibold) var(--pc-fs-sm)/1 var(--pc-font); cursor: pointer }
-.pc-link-extra:hover { text-decoration: underline }
-.pc-link-extra--quiet { margin: 0 0 0 auto; align-self: center; color: var(--pc-text-muted); font-weight: var(--pc-fw-medium) }
+.pc-link-extra { margin-left: auto; font-size: var(--pc-fs-sm) }   /* + .pc-link */
+.pc-link-extra--quiet { margin: 0 0 0 auto; align-self: center; color: var(--pc-text-muted) }
 .pc-link-row { display: flex; gap: 6px }
 .pc-link-share svg { width: 17px; height: 17px }
 .pc-share-link { display: flex; gap: 6px }   /* renaming the view-only link: prefix, field, Save */
@@ -1037,21 +1017,20 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-app-ext { width: 12px; height: 12px; opacity: .55; flex: none }
 .pc-share-app:hover .pc-app-ext { opacity: 1 }
 /* Go Pro: the benefits as a short checked list, in a soft blue well. */
-.pc-gopro { margin-top: 14px; padding: 12px 14px; border-radius: var(--pc-radius-card); background: color-mix(in srgb, var(--pc-link) 9%, var(--pc-bg)) }
+.pc-gopro { margin-top: 14px; padding: 12px 14px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); background: var(--pc-bg) }
 .pc-gopro-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px }
 .pc-gopro-head b { font-size: var(--pc-fs-md); color: var(--pc-text) }
 .pc-gopro-price { color: var(--pc-text-2); font-size: var(--pc-fs-sm); line-height: 1.4 }
 .pc-gopro-btn { margin-left: auto }
 .pc-gopro-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: var(--pc-fs-sm); line-height: 1.35; color: var(--pc-text-2) }
 .pc-gopro-list li { display: flex; gap: 6px; align-items: flex-start }
-.pc-gopro-list svg { width: 13px; height: 13px; flex: none; margin-top: 2px; color: var(--pc-link) }
+.pc-gopro-list svg { width: 13px; height: 13px; flex: none; margin-top: 2px; color: var(--pc-success) }
 .pc-gopro-list b { color: var(--pc-text); font-weight: var(--pc-fw-semibold) }
-.pc-gopro-trial { display: block; margin: 8px 0 0; padding: 0; border: 0; background: none; color: var(--pc-link); font: var(--pc-fw-semibold) var(--pc-fs-sm)/1.35 var(--pc-font); cursor: pointer; text-align: left }
-.pc-gopro-trial:hover { text-decoration: underline }
+.pc-gopro-trial { display: block; margin: 8px 0 0; font-size: var(--pc-fs-sm); text-align: left }   /* + .pc-link */
 
 /* ---- Activity: day headings, then one row per change: dot, what, detail · time, Undo -------- */
 .pc-act-lead { margin-bottom: 6px }
-.pc-act-day-head { display: flex; align-items: center; gap: 8px; margin: 14px 0 2px; font-size: var(--pc-fs-caption); font-weight: var(--pc-fw-bold); letter-spacing: var(--pc-tracking-caps); text-transform: uppercase; color: var(--pc-text-muted) }
+.pc-act-day-head { display: flex; align-items: center; gap: 8px; margin: 14px 0 2px; font-size: var(--pc-fs-2xs); font-weight: var(--pc-fw-bold); letter-spacing: var(--pc-tracking-caps); text-transform: uppercase; color: var(--pc-text-muted) }
 .pc-act-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--pc-line) }
 .pc-act-dot { flex: none; width: 9px; height: 9px; margin-top: 6px; border-radius: 50% }
 .pc-act-main { flex: 1; min-width: 0 }
@@ -1060,8 +1039,7 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-act-list { margin: 2px 0 0; padding: 0; list-style: none }
 .pc-act-list li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
 .pc-act-undo { align-self: center }
-.pc-act-more { display: inline-flex; align-items: center; gap: 6px; margin-top: 14px; padding: 0; border: 0; background: none; color: var(--pc-link); font: var(--pc-fw-semibold) var(--pc-fs-sm) var(--pc-font); cursor: pointer }
-.pc-act-more:focus-visible { outline: var(--pc-focus-outline); outline-offset: 2px }
+.pc-act-more { display: inline-flex; align-items: center; gap: 6px; margin-top: 14px; font-size: var(--pc-fs-sm) }   /* + .pc-link */
 /* The tab label is the title: the Pro Stats view's own heading stays for screen readers only. */
 .pc-side .pc-insight-head .pc-insight-title#pro-stats-title { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap }
 .pc-side .pc-insight-head { margin-right: 0 }
@@ -1071,9 +1049,9 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-free-tiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--pc-space-2) }
 .pc-free-tile { display: flex; flex-direction: column; gap: 2px }   /* + .pc-card */
 .pc-free-num { color: var(--pc-text); font-size: var(--pc-fs-3xl); font-weight: var(--pc-fw-bold); line-height: var(--pc-lh-tight); letter-spacing: var(--pc-tracking-tight); font-variant-numeric: tabular-nums }
-.pc-free-label { color: var(--pc-text-2); font-size: var(--pc-fs-small); font-weight: var(--pc-fw-semibold) }
+.pc-free-label { color: var(--pc-text-2); font-size: var(--pc-fs-sm); font-weight: var(--pc-fw-semibold) }
 .pc-free-tile .pc-stat-delta { margin-top: 2px }
-.pc-free-fine { margin: 0; color: var(--pc-text-muted); font-size: var(--pc-fs-caption) }
+.pc-free-fine { margin: 0; color: var(--pc-text-muted); font-size: var(--pc-fs-2xs) }
 .pc-stats-teaser { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 8px 0 }
 .pc-free-stats + .pc-stats-teaser { margin-top: 8px; padding-top: 14px; border-top: 1px solid var(--pc-line) }
 .pc-stats-teaser .pc-btn { margin-top: 4px }
@@ -1081,13 +1059,13 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-stats-list { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none }
 .pc-stats-list li { display: flex; align-items: flex-start; gap: 10px; font-size: var(--pc-fs-sm); line-height: 1.4; color: var(--pc-text-2) }
 .pc-stats-list b { color: var(--pc-text); font-weight: var(--pc-fw-semibold) }
-.pc-stats-list svg { flex: none; width: 16px; height: 16px; margin-top: 1px; color: var(--pc-link) }
+.pc-stats-list svg { flex: none; width: 16px; height: 16px; margin-top: 1px; color: var(--pc-text-muted) }
 /* On a draft: an example, visibly marked, so people see what they'll get. */
 .pc-stats-sample { position: relative }
 .pc-stats-sample .pc-free-tiles { opacity: .92 }
 .pc-sample-tag { align-self: flex-start; margin-bottom: 8px }
 .pc-sample-bars { display: grid; grid-template-columns: repeat(7, 1fr); align-items: end; gap: 6px; height: 72px; margin: 14px 0 4px; padding: 0 2px }
-.pc-sample-bars span { display: block; border-radius: 5px 5px 2px 2px; background: color-mix(in srgb, var(--pc-link) 55%, transparent) }
+.pc-sample-bars span { display: block; border-radius: var(--pc-radius-xs) var(--pc-radius-xs) 0 0; background: color-mix(in srgb, var(--pc-link) 55%, transparent) }
 .pc-sample-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; color: var(--pc-text-muted); font-size: var(--pc-fs-2xs); text-align: center }
 .pc-stats-sample .pc-btn { margin-top: 12px }
 
@@ -1104,8 +1082,7 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-set-label-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px }
 .pc-set-pair { display: flex; gap: 6px }
 .pc-set-pair .pc-set-num { flex: none; width: 64px }
-.pc-set-link { padding: 0; border: 0; background: none; color: var(--pc-link); font: var(--pc-fw-medium) var(--pc-fs-sm) var(--pc-font); cursor: pointer }
-.pc-set-link:hover { text-decoration: underline }
+.pc-set-link { font-size: var(--pc-fs-sm) }   /* + .pc-link */
 .pc-set-add { margin-top: 8px }
 .pc-set-check { display: flex; align-items: center; gap: 8px; font-size: var(--pc-fs-md); cursor: pointer }
 .pc-set-check input { width: 16px; height: 16px; accent-color: var(--pc-link) }
@@ -1113,7 +1090,7 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 /* Colors and labels: two columns of swatch + name. The swatch is the color picker. */
 .pc-set-colors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 12px }
 .pc-set-color { display: flex; align-items: center; gap: 8px; min-width: 0 }
-.pc-set-swatch { position: relative; flex: none; width: 20px; height: 20px; border-radius: 50%; cursor: pointer }
+.pc-set-swatch { position: relative; flex: none; width: 20px; height: 20px; border-radius: 50%; cursor: pointer; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pc-text) 22%, transparent) }   /* a hairline ring: Charcoal stays visible on dark */
 .pc-set-swatch:hover, .pc-set-swatch:focus-within { box-shadow: 0 0 0 2px var(--pc-bg), 0 0 0 4px var(--pc-link) }
 .pc-set-swatch input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer }
 
@@ -1124,16 +1101,12 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
    in the middle and truncates. Phones have their own header ([data-testid="mobile-header"]).
    ========================================================================================= */
 .pc-wordmark, .pc-m-wordmark { color: var(--pc-brand) }   /* the logo's own indigo, so icon and name read as one mark */
+logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: none }   /* the wordmark never underlines, menu open or not */
 [data-testid="desktop-title-area"] { overflow: hidden }
 [data-testid="desktop-title-area"] h1, [data-testid="desktop-title-area"] div { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
-/* "+ Add event": the one primary action on the left, a tinted button. */
-.pc-add-event { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px 4px 10px; border: 1px solid color-mix(in srgb, var(--pc-link) 45%, transparent); border-radius: var(--pc-radius-pill);
-  background: transparent; color: var(--pc-link); font-size: var(--pc-fs-sm); font-weight: var(--pc-fw-semibold); line-height: var(--pc-lh-tight); white-space: nowrap;
-  transition: background var(--pc-dur-fast) var(--pc-ease), border-color var(--pc-dur-fast) var(--pc-ease) }
-.pc-add-event-plus { font-size: var(--pc-fs-lg); font-weight: var(--pc-fw-medium); line-height: 1 }
-button:hover > .pc-add-event { background: color-mix(in srgb, var(--pc-link) 10%, transparent); border-color: var(--pc-link) }
-.pc-add-event-kbd { margin-left: 6px }   /* its Cmd/Ctrl+E (.pc-kbd), wide screens only */
-@media (max-width: 1099px) { .pc-add-event-kbd { display: none } }   /* the centered title needs the room */
+/* "+ Add event": a secondary .pc-btn; the plus is a little larger than the label. */
+.pc-add-event { padding: 0 14px 0 11px }
+.pc-add-event-plus { font-size: var(--pc-fs-xl); font-weight: var(--pc-fw-medium); line-height: 1; margin-top: -1px }
 /* The calendar's actions: one toolbar group (soft well, 1px line) of 32px buttons; the open panel's
    button is raised like a selected segment. */
 .pc-hdr-actions { display: flex; align-items: center; gap: 2px; margin-right: 10px }
@@ -1161,20 +1134,13 @@ button:hover > .pc-add-event { background: color-mix(in srgb, var(--pc-link) 10%
   topbar logo { height: 36px !important }
   topbar logo img { width: 28px !important; height: 28px !important; margin-right: 8px !important }
   .pc-wordmark { font-size: var(--pc-fs-xl); font-weight: 800; letter-spacing: -.01em }
-  topbar logo .text-\[10px\] { display: none !important }   /* the tiny tagline under the wordmark */
+  topbar logo .pc-logo-tagline { display: none !important }   /* the tiny tagline under the wordmark */
   topbar buttonarea { margin-left: 20px !important }
-  topbar buttonarea button { height: 34px }
   [data-testid="desktop-title-area"] { justify-content: center; margin: 0 !important }
   [data-testid="desktop-title-area"] > *, [data-testid="desktop-title-area"] .w-full { display: flex; align-items: center; height: 36px }
   [data-testid="desktop-title-area"] h1, [data-testid="desktop-title-area"] > div, [data-testid="desktop-title-area"] .w-full { margin: 0 !important; line-height: 36px !important }
   [data-testid="desktop-title-area"] h1, [data-testid="desktop-title-area"] > div { font-size: var(--pc-fs-lg); font-weight: var(--pc-fw-bold) }
 
-  topbar [data-testid="desktop-add-event-button"] { padding: 0 !important; border-radius: var(--pc-radius-control) }
-  topbar [data-testid="desktop-add-event-button"]:focus-visible { outline: var(--pc-focus-outline); outline-offset: 2px }
-  topbar .pc-add-event { height: var(--pc-h-md); padding: 0 14px 0 11px; gap: 6px; border: 0; border-radius: var(--pc-radius-control);
-    background: color-mix(in srgb, var(--pc-link) 13%, transparent); font-size: var(--pc-fs-md) }
-  topbar .pc-add-event-plus { font-size: var(--pc-fs-xl); margin-top: -1px }
-  topbar button:hover > .pc-add-event { background: color-mix(in srgb, var(--pc-link) 20%, transparent) }
 
   .pc-hdr-actions { flex: none; padding: 3px; margin-right: 12px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); background: var(--pc-soft) }
   .pc-hdr-btn { height: var(--pc-h-sm); border-radius: calc(var(--pc-radius-card) - 3px); color: var(--pc-text-2) }   /* concentric with the well */
@@ -1182,7 +1148,7 @@ button:hover > .pc-add-event { background: color-mix(in srgb, var(--pc-link) 10%
   .pc-hdr-icon { width: var(--pc-h-sm) }
   .pc-hdr-btn:hover { background: color-mix(in srgb, var(--pc-text) 7%, transparent); color: var(--pc-text) }
   .pc-hdr-btn:focus-visible { outline: var(--pc-focus-outline); outline-offset: 1px }
-  .pc-hdr-btn.pc-hdr-on { background: var(--pc-bg); color: var(--pc-link) !important; box-shadow: 0 1px 2px rgba(0,0,0,.12), 0 0 0 1px var(--pc-line) }
+  .pc-hdr-btn.pc-hdr-on { background: var(--pc-bg); color: var(--pc-link) !important; box-shadow: 0 0 0 1px var(--pc-line) }
 }
 @media (min-width: 768px) and (max-width: 1499px) { .pc-hdr-btn:not([aria-label="Toggle notes"]) { width: var(--pc-h-sm) } }
 /* 768-959px: "+ Add event" folds to its "+" (the name stays for screen readers), and under 900px
@@ -1196,9 +1162,9 @@ button:hover > .pc-add-event { background: color-mix(in srgb, var(--pc-link) 10%
   topbar.md\:flex { column-gap: 16px }
 }
 /* The address pill: a labeled Share button, and the Draft tag beside Save & share. */
-.pc-pill-share-btn { padding: 0 12px }
-.pc-pill-share-btn.pc-hdr-on { background: var(--pc-primary); color: var(--pc-on-primary) !important }   /* stays filled while Share is open */
-.pc-draft-chip { margin-right: 6px; letter-spacing: .02em; cursor: help }   /* + .pc-tag */
+.pc-addr-share-btn { padding: 0 12px }
+.pc-addr-share-btn.pc-hdr-on { background: var(--pc-primary); color: var(--pc-on-primary) !important }   /* stays filled while Share is open */
+.pc-draft-chip { margin-right: 6px; letter-spacing: .02em; cursor: help }   /* + .pc-pill */
 /* The calendar's name: a pill on hover with a pencil, so it reads as editable. An unnamed calendar
    says "Name this calendar", muted, with the pencil always showing. (CalendarTitle.js) */
 .pc-title-edit { position: relative; cursor: pointer; padding: 4px 30px 4px 12px !important; border-radius: var(--pc-radius-control); transition: background .15s }   /* beats Tailwind padding */
@@ -1210,18 +1176,18 @@ button:hover > .pc-add-event { background: color-mix(in srgb, var(--pc-link) 10%
 .pc-title-unnamed { color: var(--pc-text-muted) !important; font-weight: var(--pc-fw-semibold) !important }   /* beats the heading's Tailwind classes */
 .pc-title-unnamed:hover { color: var(--pc-text) !important }
 
-/* ---- Phone header: "+" as a tinted 34px circle (44px tap area via the halo) ----------------- */
-.pc-m-add { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; margin-right: 4px;
-  border-radius: var(--pc-radius-pill); background: color-mix(in srgb, var(--pc-link) 14%, transparent); color: var(--pc-link) }
+/* ---- Phone header: logo | the title, truncating in whatever room is left | + share menu ------- */
+.pc-m-center { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; justify-content: center; gap: var(--pc-space-1) }
+.pc-m-center .pc-m-title { min-width: 0; flex: 0 1 auto; width: auto }
+.pc-m-center .pc-m-title > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+/* "+": the phone's one filled button (.pc-btn--primary.pc-btn--icon), with a 44px tap area. */
+.pc-m-add { position: relative; margin-right: 4px }
 .pc-m-add::after { content: ""; position: absolute; inset: -6px; border-radius: var(--pc-radius-pill) }
 .pc-m-add svg { width: 20px; height: 20px }
-.pc-m-add:active { transform: scale(.94) }
-.pc-m-add:focus-visible { outline: var(--pc-focus-outline); outline-offset: 2px }
 /* Narrow phones (iPhone SE/mini): logo, title, notes, +, share and menu all fit; under 350px the
    wordmark goes. */
 @media (max-width: 379px) {
-  .pc-m-add { width: var(--pc-h-sm); height: var(--pc-h-sm); margin-right: 0 }
-  [data-testid="mobile-header"] .pc-m-title { max-width: 96px }
+  .pc-m-add { margin-right: 0 }
 }
 @media (max-width: 349px) { [data-testid="mobile-header"] .pc-m-wordmark { display: none } }
 
@@ -1232,7 +1198,7 @@ button:hover > .pc-add-event { background: color-mix(in srgb, var(--pc-link) 10%
   background: var(--pc-primary); color: var(--pc-on-primary); font-size: var(--pc-fs-xs); font-weight: var(--pc-fw-bold) }
 .pc-qa-examples { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 22px }
 .pc-qa-try { margin-right: 2px; font-size: var(--pc-fs-xs); font-weight: var(--pc-fw-semibold); color: var(--pc-text-muted) }
-/* All day is a switch (.pc-switch); while on, the times stay (blank, dimmed) so the height holds. */
+/* All day is a switch (.pc-toggle); while on, the times stay (blank, dimmed) so the height holds. */
 .pc-qa-dialog .pc-qa-time:disabled { opacity: .45; cursor: not-allowed }
 /* Phones: the dialog fits the screen, so no sideways scroll. Date stretches, time keeps its width. */
 @media (max-width: 639px) {
@@ -1249,22 +1215,22 @@ button:hover > .pc-add-event { background: color-mix(in srgb, var(--pc-link) 10%
    ========================================================================================= */
 .pc-tpl { display: flex; flex-wrap: wrap; align-items: center; gap: var(--pc-space-2) var(--pc-space-4); min-height: 40px; margin: 0 0 var(--pc-space-2) }
 .pc-tpl-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0 }
-.pc-tpl-label { margin-right: 2px; font-size: var(--pc-fs-body); font-weight: var(--pc-fw-semibold); color: var(--pc-text-2) }
-.pc-tpl-link { flex: none; padding: 4px 6px; border: 0; border-radius: var(--pc-radius-control); background: none; color: var(--pc-link); font: var(--pc-fw-semibold) var(--pc-fs-sm)/1.2 var(--pc-font); white-space: nowrap; cursor: pointer }
-.pc-tpl-link:hover { color: var(--pc-link-hover); text-decoration: underline }
+.pc-tpl-label { margin-right: 2px; font-size: var(--pc-fs-md); font-weight: var(--pc-fw-semibold); color: var(--pc-text-2) }
+.pc-tpl-link { flex: none; padding: 4px 6px; font-size: var(--pc-fs-sm); white-space: nowrap }   /* + .pc-link */
 .pc-tpl-note { position: relative; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 0 0 0 auto; padding: 4px 4px 4px 14px;
   border: 1px solid var(--pc-line); border-radius: var(--pc-radius-pill); background: var(--pc-soft); font-size: var(--pc-fs-sm); line-height: 1.35; color: var(--pc-text-muted) }
 .pc-tpl-note b { color: var(--pc-text); font-weight: var(--pc-fw-semibold) }
-.pc-tpl-x { flex: none; display: grid; place-items: center; width: var(--pc-h-xs); height: var(--pc-h-xs); border: 0; border-radius: 50%; background: none; color: var(--pc-text-muted); font-size: var(--pc-fs-xl); line-height: 1; cursor: pointer }
-.pc-tpl-x:hover { background: var(--pc-hover); color: var(--pc-text) }
-.pc-tpl-link:focus-visible, .pc-tpl-x:focus-visible { outline: none; box-shadow: var(--pc-focus-ring) }
-@media (max-width: 767px) {
-  .pc-tpl { display: block; margin: 0 0 var(--pc-space-2) }
+.pc-tpl-x { flex: none; font-size: var(--pc-fs-xl) }   /* + .pc-btn--ghost.pc-btn--icon */
+/* Phones and tablets: one row that scrolls sideways, never a lone chip wrapped onto a second line. */
+@media (max-width: 1023px) {
   .pc-tpl-row { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain;
     margin: 0 calc(-1 * var(--pc-space-2)); padding: 2px var(--pc-space-2) }   /* to the screen edges: body has 8px */
   .pc-tpl-row::-webkit-scrollbar { display: none }
   .pc-tpl-label { flex: none; white-space: nowrap }
-  .pc-tpl-note { margin: 6px 0 0; padding: 10px 10px 10px 12px; border-radius: var(--pc-radius-lg); gap: var(--pc-space-2) }
+}
+@media (max-width: 767px) {
+  .pc-tpl { display: block; margin: 0 0 var(--pc-space-2) }
+  .pc-tpl-note { margin: 6px 0 0; padding: 10px 10px 10px 12px; border-radius: var(--pc-radius-card); gap: var(--pc-space-2) }
   .pc-tpl-note > span { flex: 1 1 100%; padding-right: 28px }
   .pc-tpl-x { position: absolute; top: 4px; right: 4px }
 }
@@ -1273,7 +1239,7 @@ button:hover > .pc-add-event { background: color-mix(in srgb, var(--pc-link) 10%
    Toast (components/ToastNotification.js): one compact dark row, message + action + close
    ========================================================================================= */
 .pc-toast { pointer-events: auto; display: flex; align-items: center; gap: 4px; max-width: 100%; min-height: var(--pc-h-lg); padding: 6px 6px 6px 16px;
-  border-radius: var(--pc-radius-card); background: var(--pc-toast); color: var(--pc-on-toast); box-shadow: 0 10px 30px -10px rgba(0,0,0,.45); font: var(--pc-fw-medium) var(--pc-fs-md)/1.35 var(--pc-font) }
+  border-radius: var(--pc-radius-card); background: var(--pc-toast); color: var(--pc-on-toast); box-shadow: var(--pc-shadow-md); font: var(--pc-fw-medium) var(--pc-fs-md)/1.35 var(--pc-font) }
 .pc-toast-ico { width: 18px; height: 18px; flex: none; margin-right: 6px; color: var(--pc-toast-error) }
 .pc-toast-msg { margin: 0; padding: 4px 6px 4px 0; flex: 1 1 auto; min-width: 0 }
 .pc-toast-act { flex: none; height: var(--pc-h-sm); padding: 0 12px; border: 0; border-radius: var(--pc-radius-control); background: none; color: var(--pc-toast-action); font: var(--pc-fw-bold) var(--pc-fs-md)/1 var(--pc-font); cursor: pointer }
@@ -1284,7 +1250,7 @@ button:hover > .pc-add-event { background: color-mix(in srgb, var(--pc-link) 10%
 /* Returning viewers: one small hint under "Add to my calendar", pointing up at it. */
 .pc-addcal { position: relative }
 .pc-addcal-nudge { position: absolute; top: calc(100% + 10px); right: 0; z-index: 30; display: flex; align-items: center; gap: 4px; width: max-content; max-width: min(280px, calc(100vw - 32px));
-  padding: 8px 6px 8px 12px; border-radius: var(--pc-radius-md); background: var(--pc-text); color: var(--pc-bg); box-shadow: var(--pc-shadow-md); font: var(--pc-fw-medium) var(--pc-fs-sm)/1.35 var(--pc-font) }
+  padding: 8px 6px 8px 12px; border-radius: var(--pc-radius-control); background: var(--pc-text); color: var(--pc-bg); box-shadow: var(--pc-shadow-md); font: var(--pc-fw-medium) var(--pc-fs-sm)/1.35 var(--pc-font) }
 .pc-addcal-nudge::before { content: ""; position: absolute; top: -5px; right: 22px; width: 10px; height: 10px; background: inherit; transform: rotate(45deg) }
 .pc-addcal-nudge-text { border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; padding: 0 }
 .pc-addcal-nudge-x { flex: none; width: 24px; height: 24px; border: 0; border-radius: var(--pc-radius-sm); background: none; color: inherit; opacity: .7; font-size: var(--pc-fs-lg); cursor: pointer }
@@ -1293,5 +1259,4 @@ button:hover > .pc-add-event { background: color-mix(in srgb, var(--pc-link) 10%
 .pc-paused-owner { height: var(--pc-h-sm); padding: 0 14px; border: 0; border-radius: var(--pc-radius-pill); background: var(--pc-warning-soft); color: var(--pc-warning); font: var(--pc-fw-semibold) var(--pc-fs-sm)/1 var(--pc-font); cursor: pointer; white-space: nowrap }
 .pc-paused-owner:hover { filter: brightness(.97) }
 /* The homepage ends with the shared site footer, aligned to the tour's column; the tour's own background already separates it. */
-.pc-home-site-footer { --site-max: 1040px }
 .pc-home-site-footer .site-footer { margin-top: 0; border-top: 0 }
