@@ -373,11 +373,17 @@ test('search lists only the colors events use, and a hidden one is plainly off',
   const chips = filter.getByRole('switch');
   await expect(chips).toHaveText([/Work\s*2/, /Fun\s*1/, /\s*1$/]);   // three colors used; the unused ones are not listed
   await expect(page.getByTestId('color-filter-reset')).toHaveCount(0);
+  // A tap shows only that type, and with no words typed lists every event of it.
   await chips.nth(1).click();
-  await expect(chips.nth(1)).toHaveAttribute('aria-checked', 'false');
-  await expect(chips.nth(1)).toHaveCSS('text-decoration-line', 'line-through');
-  await page.getByTestId('color-filter-reset').click();
   await expect(chips.nth(1)).toHaveAttribute('aria-checked', 'true');
+  await expect(chips.nth(0)).toHaveAttribute('aria-checked', 'false');
+  await expect(chips.nth(0)).toHaveCSS('text-decoration-line', 'line-through');
+  await expect(page.getByTestId('search-results').getByRole('button')).toHaveCount(1);
+  await chips.nth(1).click();   // the same chip again: everything shows
+  await expect(chips.nth(0)).toHaveAttribute('aria-checked', 'true');
+  await chips.nth(0).click();
+  await page.getByTestId('color-filter-reset').click();
+  await expect(chips.nth(0)).toHaveAttribute('aria-checked', 'true');
   // A result opens in place with its notes; Edit opens the event's editor.
   await page.evaluate(() => { document.querySelector('#app')._vnode.component.proxy.calendar.events[0].description = 'Bring water.'; });
   await box.fill('Event 1');
@@ -387,5 +393,41 @@ test('search lists only the colors events use, and a hidden one is plainly off',
   await expect(page.getByText('Bring water.')).toBeVisible();
   await page.getByTestId('search-result-edit').click();
   await expect(page.getByRole('dialog', { name: 'Edit event' })).toBeVisible();
+  await ctx.close();
+});
+
+// ---- Search lists upcoming events first (soonest at the top), then Past ----
+test('search results: upcoming soonest first, then Past, most recent first', async ({ browser }) => {
+  const { ctx, page } = await open(browser);
+  await page.evaluate(() => {
+    const vm = document.querySelector('#app')._vnode.component.proxy;
+    const d = new Date();
+    const mk = (i, dd) => { const s = new Date(d.getFullYear(), d.getMonth(), d.getDate() + dd, 17); return { id: 'p' + i, title: 'Practice ' + dd, start: s.toISOString(), end: new Date(+s + 3600e3).toISOString(), type: 1 }; };
+    vm.calendar.events = [mk(1, -7), mk(2, 9), mk(3, -14), mk(4, 2)];
+  });
+  await page.getByTestId('search-button-desktop').click();
+  await page.getByRole('searchbox', { name: 'Search events' }).fill('practice');
+  const titles = page.getByTestId('search-results').locator('.pc-search-result-head > span:first-child');
+  await expect(titles).toHaveText(['Practice 2', 'Practice 9', 'Practice -7', 'Practice -14']);
+  await expect(page.getByTestId('search-past')).toHaveText(/past/i);
+  await ctx.close();
+});
+
+// ---- "Your calendars": a calendar you only opened can be removed; one you made cannot ----
+test('your calendars: remove one you opened, never one you made', async ({ browser }) => {
+  const { ctx, page } = await open(browser);
+  await page.evaluate(() => {
+    localStorage.setItem('myCalendars', JSON.stringify([{ id: 'made-here', title: 'Made here', lastVisited: new Date().toISOString() }]));
+    localStorage.setItem('recentCalendars', JSON.stringify([{ id: 'demo', title: 'Opened once', view: true, lastVisited: new Date().toISOString() }]));
+  });
+  await page.reload();
+  await page.waitForFunction(() => window.__appMounted && document.querySelector('.e-work-cells'), null, { timeout: 20_000 });
+  await page.getByTestId('home-tab-recents').click();
+  const rows = page.getByTestId('home-recents').locator('li');
+  await expect(rows).toHaveCount(2);
+  await expect(page.getByTestId('home-recent-remove')).toHaveCount(1);
+  await page.getByRole('button', { name: 'Remove Opened once from this list' }).click();
+  await expect(rows).toHaveCount(1);
+  await expect(rows.first()).toContainText('Made here');
   await ctx.close();
 });

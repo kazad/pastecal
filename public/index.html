@@ -807,7 +807,7 @@
                              nothing to choose between. -->
                         <section v-if="filterChips.length > 1 || isColorFilterActive" class="pc-search-filter" data-testid="color-filter">
                             <div class="pc-search-filter-head">
-                                <span>Filter by color <span class="pc-search-filter-hint">· tap to hide or show</span></span>
+                                <span>Filter by color <span class="pc-search-filter-hint">· tap one to show only it</span></span>
                                 <button v-if="isColorFilterActive" type="button" class="pc-link" @click="resetColorFilters" data-testid="color-filter-reset">Show all</button>
                             </div>
                             <div class="flex flex-wrap gap-2">
@@ -815,10 +815,10 @@
                                      a hollow dot and struck-through name as well as dimming, because color alone
                                      cannot carry the state (the palette is user-editable). -->
                                 <button v-for="chip in filterChips" :key="chip.idx" type="button" role="switch"
-                                    @click="toggleColorFilter(chip.idx)"
+                                    @click="soloColorFilter(chip.idx)"
                                     :aria-checked="colorFilters[chip.idx] ? 'true' : 'false'"
                                     :aria-label="chip.label + ', ' + chip.count + (chip.count === 1 ? ' event' : ' events')"
-                                    :title="chip.label + (colorFilters[chip.idx] ? ' (shown, tap to hide)' : ' (hidden, tap to show)')"
+                                    :title="chip.label + (colorFilters[chip.idx] ? ' (shown)' : ' (hidden)') + ': tap to show only ' + chip.label"
                                     class="pc-filter-dot pc-chip pc-chip--dot pc-filter-chip"
                                     :class="colorFilters[chip.idx] ? 'is-on' : 'is-off'"
                                     :style="{ '--dot': chip.color }">
@@ -827,9 +827,12 @@
                             </div>
                         </section>
 
-                        <!-- A result opens in place: its notes, then Show on calendar (and Edit, for editors). -->
-                        <div v-if="searchResults.length > 0" class="pc-search-results" data-testid="search-results">
-                            <div v-for="event in searchResults" :key="event.id" class="pc-search-result"
+                        <!-- Results: upcoming first, then Past. A result opens in place: its notes, then Show on calendar
+                             (and Edit, for editors). With no words typed, a color filter lists every event it shows. -->
+                        <div v-if="searchList.count" class="pc-search-results" data-testid="search-results">
+                            <template v-for="group in [{ key: 'up', label: '', items: searchList.upcoming }, { key: 'past', label: 'Past', items: searchList.past }]" :key="group.key">
+                            <p v-if="group.label && group.items.length" class="pc-search-group" data-testid="search-past">{{ group.label }}</p>
+                            <div v-for="event in group.items" :key="event.id" class="pc-search-result"
                                 :class="{ 'is-open': searchOpenId === event.id }" :style="{ '--dot': getTypeColor(event.type) }">
                                 <button type="button" class="pc-search-result-head" @click="searchOpenId = searchOpenId === event.id ? null : event.id"
                                     :aria-expanded="searchOpenId === event.id ? 'true' : 'false'">
@@ -844,7 +847,9 @@
                                     </div>
                                 </div>
                             </div>
+                            </template>
                         </div>
+                        <p v-else-if="searchQuery.trim()" class="pc-side-empty-text" data-testid="search-none">No events match.</p>
                     </div>
                     <div v-if="showHelp" class="text-sm text-color-2" v-cloak>
                         <div class="w-full overflow-hidden rounded-lg">
@@ -1410,12 +1415,17 @@
                 <!-- Your calendars: jump back into one instead of reading the intro. -->
                 <div v-if="homePanel === 'recents'" class="pc-home-pane pc-home-pane--recents">
                     <ul v-if="homeRecents.length" class="pc-home-recents" data-testid="home-recents">
-                        <li v-for="item in homeRecents" :key="item.id">
+                        <li v-for="item in homeRecents" :key="item.id" :class="{ 'has-remove': !item.mine }">
                             <a :href="item.path">
                                 <span class="pc-recent-title">{{ item.title }}</span>
                                 <span v-if="item.mine" class="pc-pill pc-pill--info pc-recent-pill">yours</span><span v-else-if="item.view" class="pc-pill pc-recent-pill">view only</span>
                                 <span class="pc-recent-meta"><span class="pc-recent-addr">{{ item.address }}</span><span v-if="item.ago" class="pc-recent-ago">&nbsp;· {{ item.ago }}</span></span>
                             </a>
+                            <!-- Only calendars you opened, never ones you made: this forgets the link in this browser, nothing else. -->
+                            <button v-if="!item.mine" type="button" class="pc-btn pc-btn--ghost pc-btn--icon pc-btn--sm pc-recent-remove" @click="removeRecent(item.id)"
+                                :aria-label="'Remove ' + item.title + ' from this list'" title="Remove from this list" data-testid="home-recent-remove">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 18 18 6M6 6l12 12"/></svg>
+                            </button>
                         </li>
                     </ul>
                     <p v-else class="pc-empty pc-home-empty" data-testid="home-recents-empty">No calendars yet.<br>The ones you make or open in this browser show up here.</p>
