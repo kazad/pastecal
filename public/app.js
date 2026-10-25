@@ -1522,8 +1522,7 @@ const CalendarVueApp = {
             const sched = document.getElementById('Schedule');
             const rows = sched ? sched.querySelectorAll('.e-month-view .e-content-table tbody tr') : [];
             if (!rows.length) return false;
-            // Phones: 84px rows (a chip and "+ more") keep the month about one screen tall.
-            let h = window.innerWidth <= 640 ? 84 : 100;
+            let h = 100;
             if (window.innerWidth >= 1100) {
                 const rect = sched.getBoundingClientRect();
                 const chrome = rect.height - rows[0].getBoundingClientRect().height * rows.length;
@@ -1535,7 +1534,7 @@ const CalendarVueApp = {
                 // The homepage has "How pastecal works" below: keep rows modest so it peeks into view.
                 if (document.getElementById('how')) h = Math.min(h, 116);
             }
-            const now = parseFloat(sched.style.getPropertyValue('--month-cell-h')) || (window.innerWidth <= 640 ? 84 : 100);
+            const now = parseFloat(sched.style.getPropertyValue('--month-cell-h')) || 100;
             if (Math.abs(now - h) < 2) return false;
             sched.style.setProperty('--month-cell-h', h + 'px');
             return true;
