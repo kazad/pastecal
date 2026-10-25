@@ -97,7 +97,7 @@ const AuthorSignal = {
     touch(calendarId) {
         try {
             const uid = this._recordingUid(calendarId);
-            if (!uid) return;
+            if (!uid || (typeof window !== 'undefined' && window.pcNoProdSideEffects)) return;   // staging/local CF: no production writes
 
             const now = Date.now();
             if (this._lastWrite[calendarId] &&

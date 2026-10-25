@@ -33,3 +33,18 @@ for (const path of ['/', '/pricing']) {
     expect(seen.some((u) => /googletagmanager\.com/.test(u))).toBe(true);
   });
 }
+
+// A local copy on the Cloudflare backend must never touch production: no Firebase sign-in, no Firebase
+// database, no analytics. (Oct 2026: local runs were creating anonymous users in production Firebase Auth.)
+test('local Cloudflare-backend pages make no production requests', async ({ browser }) => {
+  const ctx = await browser.newContext({ timezoneId: 'America/New_York' });
+  const page = await ctx.newPage();
+  const seen = [];
+  await page.route(/identitytoolkit|securetoken|firebaseio\.com|firebasedatabase|googletagmanager|google-analytics|clarity\.ms|hotjar/, (r) => { seen.push(new URL(r.request().url()).hostname); return r.abort(); });
+  await page.goto('/?backend=cf');
+  await page.waitForFunction(() => window.scheduleObj, null, { timeout: 20_000 });
+  await page.waitForTimeout(2500);
+  expect(await page.evaluate(() => window.pcNoProdSideEffects)).toBe(true);
+  expect(seen, 'production hosts contacted').toEqual([]);
+  await ctx.close();
+});

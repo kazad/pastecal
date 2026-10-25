@@ -62,6 +62,21 @@
             catch (e) { return false; }
         })();
     </script>
+    <!-- No production side effects (Firebase auth/writes, analytics) from the staging copy or from a local
+         copy running the Cloudflare backend: those would write production data and count as real traffic. -->
+    <script>
+        window.pcNoProdSideEffects = (function () {
+            try {
+                var h = location.hostname;
+                if (h === 'preview.pastecal.com') return true;
+                var local = /^(localhost|127\.0\.0\.1|\[::1\]|::1)$/.test(h) || /\.(localhost|test)$/.test(h);
+                if (!local) return false;
+                var q = new URLSearchParams(location.search).get('backend');
+                if (q === 'firebase') return false;
+                return q === 'cf' || localStorage.getItem('pastecal_backend') === 'cf';
+            } catch (e) { return false; }
+        })();
+    </script>
     <!-- Analytics privacy: must run before Google Tag Manager (see the comment inside). -->
     <script>
         (function () {
@@ -86,7 +101,7 @@
     <script>
         (function (w, d, s, l, i) {
             // Off on the staging copy (preview.pastecal.com) too: friends' test checkouts are not production numbers.
-            const enableAnalytics = !(w.__TEST__ || w.pcInEurope || w.location.search.includes('no-analytics') || w.location.hostname === 'preview.pastecal.com');
+            const enableAnalytics = !(w.__TEST__ || w.pcInEurope || w.pcNoProdSideEffects || w.location.search.includes('no-analytics') || w.location.hostname === 'preview.pastecal.com');
             if (!enableAnalytics) {
                 console.log('[analytics] disabled by test mode');
                 return;
@@ -112,7 +127,7 @@
          sends one; leaving it on double-counts every pageview. -->
     <script>
         (function () {
-            if (window.__TEST__ || window.pcInEurope || window.location.search.includes('no-analytics') || window.location.hostname === 'preview.pastecal.com') return;
+            if (window.__TEST__ || window.pcInEurope || window.pcNoProdSideEffects || window.location.search.includes('no-analytics') || window.location.hostname === 'preview.pastecal.com') return;
             var s = document.createElement('script');
             s.async = true;
             s.src = 'https://www.googletagmanager.com/gtag/js?id=G-4J99GY9KE6';
@@ -193,7 +208,7 @@
         // did before -- writes still work, they just carry no author signal.
         // Not on the staging copy (preview.pastecal.com): it must never write to production Firebase, and
         // with no uid AuthorSignal records nothing.
-        if (location.hostname !== 'preview.pastecal.com') firebase.auth().signInAnonymously().catch(function (err) {
+        if (!window.pcNoProdSideEffects) firebase.auth().signInAnonymously().catch(function (err) {
             console.warn('[auth] anonymous sign-in unavailable:', err && err.code);
         });
 
