@@ -4,7 +4,7 @@
 //
 // Only Pro owners have accounts, so there is no sign-in button anywhere else: free users never
 // need one. Signed in, the section lists the owner's Pro calendars with billing and sign-out;
-// signed out, it is one quiet "Pro owner? Sign in" line. Talks to this site's JSON API (cookie
+// signed out, it is one quiet "Upgraded a calendar? Sign in" line. Talks to this site's JSON API (cookie
 // session, cloudflare/src/Accounts.js): GET /api/me, POST /api/auth/start, /api/auth/signout,
 // /api/pro/portal. Analytics get the state only: never the email or a calendar name.
 // Each Pro calendar row has a "Stats" button beside it (open-stats, handled by app.js).
@@ -74,7 +74,7 @@ const NavigationDropdown = {
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" width="16" height="16"><path d="M12 5v14M5 12h14"/></svg>
                 </span>
                 <span class="min-w-0">
-                    <span class="block font-semibold group-hover:text-blue-500 transition-colors">New calendar</span>
+                    <span class="block font-semibold transition-colors">New calendar</span>
                     <span class="block text-xs text-color-1">No sign-up. Share it when it's ready.</span>
                 </span>
             </a>
@@ -86,7 +86,7 @@ const NavigationDropdown = {
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" width="16" height="16"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
                 </span>
                 <span class="min-w-0">
-                    <span class="block font-semibold group-hover:text-blue-500 transition-colors">Start over</span>
+                    <span class="block font-semibold transition-colors">Start over</span>
                     <span class="block text-xs text-color-1">Clear this draft and begin again. Undo brings it back.</span>
                 </span>
             </button>
@@ -95,7 +95,7 @@ const NavigationDropdown = {
                 class="pc-nav-row flex items-center w-full text-left text-color-2 hover:bg-theme-hover transition-colors cursor-pointer group">
                 <span class="pc-nav-plus" aria-hidden="true">?</span>
                 <span class="min-w-0">
-                    <span class="block font-semibold group-hover:text-blue-500 transition-colors">Help</span>
+                    <span class="block font-semibold transition-colors">Help</span>
                     <span class="block text-xs text-color-1">Sharing, privacy, undo, shortcuts</span>
                 </span>
             </a>
@@ -111,9 +111,9 @@ const NavigationDropdown = {
                     <div v-for="item in group.items" :key="item.id"
                         class="pc-nav-row flex justify-between items-center hover:bg-theme-hover transition-colors group">
                         <a :href="item.path" class="flex-1 min-w-0 mr-3">
-                            <div class="pc-nav-title text-color-2 font-medium group-hover:text-blue-500 transition-colors">
+                            <div class="pc-nav-title text-color-2 font-medium transition-colors">
                                 <span class="truncate">{{ item.title }}</span>
-                                <span v-if="item.pro" class="pc-nav-pro" data-testid="nav-pro-pill">Pro</span>
+                                <span v-if="item.pro" class="pc-pill pc-pill--pro pc-nav-pro" data-testid="nav-pro-pill">{{ item.planName }}</span>
                             </div>
                             <div class="text-xs text-color-1 truncate">
                                 {{ item.address }}<template v-if="item.view"> · view only</template>
@@ -122,7 +122,7 @@ const NavigationDropdown = {
                         <div class="flex items-center gap-1 transition-opacity"
                             :class="{ 'opacity-100': item.pinned, 'opacity-0 group-hover:opacity-100': !item.pinned }">
                             <button @click.stop="$emit('toggle-pin', item.id)"
-                                class="p-1.5 rounded-md hover:bg-theme-hover transition-colors text-color-1"
+                                class="pc-btn pc-btn--ghost pc-btn--icon pc-btn--sm"
                                 :class="{ 'text-color-2': item.pinned }"
                                 :title="item.pinned ? 'Unpin calendar' : 'Pin calendar'">
                                 <!-- Filled star when pinned -->
@@ -135,7 +135,7 @@ const NavigationDropdown = {
                                 </svg>
                             </button>
                             <button @click.stop="$emit('remove-recent', item.id)"
-                                class="p-1.5 rounded-md text-color-1 hover:text-red-500 hover:bg-theme-hover transition-colors"
+                                class="pc-btn pc-btn--ghost pc-btn--icon pc-btn--sm"
                                 title="Remove from recent">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none"
                                     viewBox="0 0 24 24" stroke="currentColor">
@@ -170,24 +170,24 @@ const NavigationDropdown = {
                             <span class="pc-acct-cal-status" :class="{ 'pc-acct-cal-status--warn': c.problem }">{{ c.label }}</span>
                         </a>
                         <!-- Beside the row, not inside it: the row is a link to the calendar -->
-                        <button type="button" class="pc-acct-btn pc-acct-stats" @click="$emit('open-stats', c.id)"
+                        <button type="button" class="pc-btn pc-btn--xs pc-acct-stats" @click="$emit('open-stats', c.id)"
                             :aria-label="'Stats for ' + c.title" data-testid="account-stats">Stats</button>
                     </div>
                     <p v-if="proCalendars.length === 0" class="pc-acct-muted pc-acct-line">No upgraded calendars right now.</p>
-                    <a href="/pricing#get-pro" data-from="account-menu" class="pc-acct-link pc-acct-line" data-testid="account-get-pro">{{ billing === false ? 'Join the beta' : proCalendars.length ? 'Upgrade another calendar' : 'Upgrade a calendar' }}</a>
+                    <a href="/pricing#get-pro" data-from="account-menu" class="pc-link pc-acct-link pc-acct-line" data-testid="account-get-pro">{{ billing === false ? 'Join the beta' : proCalendars.length ? 'Upgrade another calendar' : 'Upgrade a calendar' }}</a>
                     <div class="pc-acct-actions">
-                        <button type="button" class="pc-acct-btn" @click="portal" :disabled="acct.busy" data-testid="account-billing">Manage billing</button>
-                        <button type="button" class="pc-acct-link" @click="signOut" :disabled="acct.busy" data-testid="account-signout">Sign out</button>
+                        <button type="button" class="pc-btn pc-btn--sm" @click="portal" :disabled="acct.busy" data-testid="account-billing">Manage billing</button>
+                        <button type="button" class="pc-link pc-acct-link" @click="signOut" :disabled="acct.busy" data-testid="account-signout">Sign out</button>
                     </div>
                     <!-- Asked in place, not with confirm(): a browser dialog would also close the menu -->
                     <div v-if="acct.confirmDelete" class="pc-acct-delete" data-testid="account-delete-confirm">
                         <p class="pc-acct-line">Delete your Pro account? This signs you out on every device and erases your email. Your calendars and their links stay as they are.</p>
                         <div class="pc-acct-actions">
-                            <button type="button" class="pc-acct-btn pc-acct-btn--danger" @click="deleteAccount" :disabled="acct.busy" data-testid="account-delete-yes">{{ acct.busy ? 'Deleting…' : 'Delete account' }}</button>
-                            <button type="button" class="pc-acct-link" @click="acct.confirmDelete = false" :disabled="acct.busy" data-testid="account-delete-no">Cancel</button>
+                            <button type="button" class="pc-btn pc-btn--sm pc-btn--danger" @click="deleteAccount" :disabled="acct.busy" data-testid="account-delete-yes">{{ acct.busy ? 'Deleting…' : 'Delete account' }}</button>
+                            <button type="button" class="pc-link pc-acct-link" @click="acct.confirmDelete = false" :disabled="acct.busy" data-testid="account-delete-no">Cancel</button>
                         </div>
                     </div>
-                    <button v-else type="button" class="pc-acct-link pc-acct-line pc-acct-delete-link" @click="acct.confirmDelete = true; acct.error = ''" :disabled="acct.busy" data-testid="account-delete">Delete account</button>
+                    <button v-else type="button" class="pc-link pc-acct-link pc-acct-line pc-acct-delete-link" @click="acct.confirmDelete = true; acct.error = ''" :disabled="acct.busy" data-testid="account-delete">Delete account</button>
                 </template>
 
                 <template v-else-if="acct.status === 'out'">
@@ -196,12 +196,12 @@ const NavigationDropdown = {
                     <form v-else-if="acct.step === 'email'" class="pc-acct-form" @submit.prevent="sendLink" data-testid="account-email-form">
                         <label for="pc-acct-email" class="pc-acct-muted">Use the email you paid with. No password.</label>
                         <div class="pc-acct-row">
-                            <input id="pc-acct-email" ref="email" type="email" v-model.trim="acct.email" required
+                            <input id="pc-acct-email" class="pc-field pc-field--sm" ref="email" type="email" v-model.trim="acct.email" required
                                 autocomplete="email" placeholder="you@example.com" @keydown.esc.stop="acct.step = 'idle'">
-                            <button type="submit" class="pc-acct-btn pc-acct-btn--primary" :disabled="acct.busy">{{ acct.busy ? 'Sending…' : 'Send link' }}</button>
+                            <button type="submit" class="pc-btn pc-btn--sm pc-btn--primary" :disabled="acct.busy">{{ acct.busy ? 'Sending…' : 'Send link' }}</button>
                         </div>
                     </form>
-                    <button v-else type="button" class="pc-acct-link pc-acct-line" @click="startSignIn" data-testid="account-signin">Pro owner? Sign in</button>
+                    <button v-else type="button" class="pc-link pc-acct-link pc-acct-line" @click="startSignIn" data-testid="account-signin">Upgraded a calendar? Sign in</button>
                 </template>
 
                 <p v-if="acct.error" class="pc-acct-err" role="alert" data-testid="account-error">{{ acct.error }}</p>
@@ -231,11 +231,12 @@ const NavigationDropdown = {
             for (const c of this.proById.values()) {
                 const end = c.currentPeriodEnd ? (c.currentPeriodEnd < 1e12 ? c.currentPeriodEnd * 1000 : c.currentPeriodEnd) : 0;
                 const date = end ? new Date(end).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+                const name = planName(c.plan);
                 let label;
                 if (c.status === 'past_due') label = 'Payment problem';
-                else if (c.status === 'active' || c.status === 'trialing') label = date ? `Pro · renews ${date}` : 'Pro';
-                else if (end > now) label = `Pro · ends ${date}`;
-                else continue;     // ended: no longer Pro
+                else if (c.status === 'active' || c.status === 'trialing') label = date ? `${c.status === 'trialing' ? name + ' trial · ends' : c.cancelAtPeriodEnd ? name + ' · ends' : name + ' · renews'} ${date}` : name;
+                else if (end > now) label = `${name} · ends ${date}`;
+                else continue;     // ended: no longer upgraded
                 out.push({ id: c.id, title: titles.get(String(c.id).toLowerCase()) || c.id,
                     path: '/' + encodeURIComponent(c.id), label, problem: c.status === 'past_due' });
             }
@@ -247,7 +248,7 @@ const NavigationDropdown = {
             const all = (this.recentCalendars || []).map(item => {
                 const shown = { ...item, ...RecentCalendars.display(item) };
                 const sub = !shown.view && this.proById.get(String(item.id).toLowerCase());
-                return { ...shown, pro: !!(sub && ACCOUNT_ACTIVE.includes(sub.status)) };
+                return { ...shown, pro: !!(sub && ACCOUNT_ACTIVE.includes(sub.status)), planName: planName(sub && sub.plan) };
             });
             return [
                 { label: 'Your calendars', items: all.filter(item => item.mine) },
@@ -316,7 +317,7 @@ const NavigationDropdown = {
                     return;
                 }
                 st.confirmDelete = false;
-                if (r.status === 409) st.error = 'You still have Pro on a calendar. Cancel it in Manage billing; you can delete your account once it has ended.';
+                if (r.status === 409) st.error = 'You still have a paid plan on a calendar. Cancel it in Manage billing; you can delete your account once it has ended.';
                 else if (r.status === 401) await AccountMenu.load(true);
                 else st.error = r.status === 0 ? NAV_NETWORK_ERROR : 'Something went wrong. Try again in a minute.';
             } finally { st.busy = false; }

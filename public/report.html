@@ -5,9 +5,9 @@
 <title>Report a calendar · pastecal</title>
 <meta name="description" content="Report a calendar hosted on pastecal.">
 <meta name="robots" content="noindex">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/legal.css">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/components.css"><link rel="stylesheet" href="/legal.css">
 <script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>
-<style>.report-go { display: inline-block; padding: 11px 20px; border-radius: 10px; background: var(--pc-link); color: #fff; font-weight: 700; text-decoration: none }</style>
+
 <link rel="stylesheet" href="/site.css">
 </head>
 <body>
@@ -27,7 +27,7 @@
 <h1>Report a calendar</h1>
 <p>Calendars on pastecal are made by the people who share them, not by pastecal. If a calendar is pretending to be someone it isn't, asks for passwords or payment, or links to something harmful, please tell us.</p>
 <p id="cal-line" hidden>The calendar you came from: <code id="cal-link"></code></p>
-<p><a class="report-go" id="report-go" href="/contact?type=report">Send a report</a></p>
+<p><a class="pc-btn pc-btn--primary pc-btn--lg" id="report-go" href="/contact?type=report">Send a report</a></p>
 <p>Don't enter passwords or card details on a calendar page. pastecal's sign-in page is pastecal.com/signin.</p>
 </main>
 <script>

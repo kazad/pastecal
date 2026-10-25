@@ -16,23 +16,19 @@
   var signinToken = (location.hash.match(/[#&]t=([A-Za-z0-9_-]+)/) || [])[1] || null;
   if (location.hash) history.replaceState(null, '', location.pathname);
 </script>
+<link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/components.css">
 <style>
-:root { --site-max: 720px }
-:root { --bg: #f5f6f8; --surface: #ffffff; --ink: #141a24; --muted: #5c6577; --line: #e2e6ed; --blue: #2563eb; --bad: #b42318;
-  --ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
-@media (prefers-color-scheme: dark) { :root { --bg: #0f131a; --surface: #171c25; --ink: #e8ecf3; --muted: #9aa4b5; --line: #2a3140; --blue: #6b9bff; --bad: #ff8a80; } }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 var(--ui); }
-main { max-width: 420px; margin: 8vh auto 0; padding: 32px 24px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
-h1 { font-size: 22px; margin: 0 0 8px; }
+:root { --bg: var(--pc-canvas); --surface: var(--pc-raised); --ink: var(--pc-text); --muted: var(--pc-text-muted); --line: var(--pc-line); --blue: var(--pc-primary); --bad: var(--pc-danger); --ui: var(--pc-font); }   /* tokens.css */
+body { margin: 0; background: var(--bg); color: var(--ink); font: var(--pc-fs-lg)/1.5 var(--ui); }
+main { max-width: 420px; margin: 8vh auto 0; padding: 32px 24px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--pc-radius-card); }
+h1 { font-size: var(--pc-fs-2xl); margin: 0 0 8px; }
 p { margin: 8px 0; color: var(--muted); }
 p.bad { color: var(--bad); }
-a.btn, button.btn { display: inline-block; margin-top: 16px; padding: 10px 16px; border-radius: 8px; border: 0; background: var(--blue); color: #fff; text-decoration: none; font: 600 16px var(--ui); cursor: pointer; }
-button.btn[disabled] { opacity: .6; cursor: default; }
+.pc-btn { margin-top: 16px }
 .who { color: var(--ink); font-weight: 600; word-break: break-all; }
 [hidden] { display: none !important; }
 @media (max-width: 480px) { main { margin: 24px 16px; } }
 </style>
-<link rel="stylesheet" href="/tokens.css">
 <link rel="stylesheet" href="/site.css">
 </head>
 <body>
@@ -52,8 +48,8 @@ button.btn[disabled] { opacity: .6; cursor: default; }
 <main>
   <h1 id="title">Sign in</h1>
   <p id="msg">One moment.</p>
-  <button class="btn" id="confirm" type="button" hidden>Continue</button>
-  <a class="btn" id="go" href="/" hidden>Continue</a>
+  <button class="pc-btn pc-btn--primary pc-btn--lg" id="confirm" type="button" hidden>Continue</button>
+  <a class="pc-btn pc-btn--primary pc-btn--lg" id="go" href="/" hidden>Continue</a>
 </main>
 <script>
 (function () {
@@ -69,7 +65,10 @@ button.btn[disabled] { opacity: .6; cursor: default; }
     if (!res.ok || !res.d.ok) return fail(res.d.error || 'Ask for a new sign-in link and try again.');
     var who = document.createElement('span'); who.className = 'who'; who.textContent = res.d.email;
     who.setAttribute('data-hj-suppress', ''); who.setAttribute('data-clarity-mask', 'true');
-    msg.textContent = ''; msg.append('Sign in to pastecal as ', who, '?');
+    // A link from "Start 30-day free trial" (or the reminder's Keep, or checkout) says what Continue does next.
+    var after = { trial: ' and start your free 30-day Plus trial', keep: ' and keep Plus', buy: ' and finish upgrading' }[res.d.kind] || '';
+    msg.textContent = ''; msg.append('Sign in to pastecal as ', who, after + '?');
+    if (res.d.kind === 'trial') confirm.textContent = 'Start my trial';
     confirm.hidden = false; confirm.focus();
   }).catch(offline);
   confirm.addEventListener('click', function () {

@@ -5,8 +5,8 @@
  * calendar keeps its top and narrows; closing gives the width back. A view link with notes
  * opens with them pinned; a phone gets the same panel as a bottom sheet. And what moved
  * must still work: a setting still applies, Share still copies, Activity can still undo.
- * The tabs are the same five in the same order for every editor, draft or saved; on a draft,
- * Share, Activity and Stats say what they will hold. Notes read first and edit on purpose.
+ * The tabs are the same six in the same order for every editor, draft or saved; on a draft,
+ * Share, Activity, Stats and Plus say what they will hold. Notes read first and edit on purpose.
  * Needs `wrangler dev` on BASE_URL (default http://localhost:8787); seeds one calendar and
  * one view link (the Worker allows 10 creates a minute per IP, so the tests share them).
  */
@@ -135,7 +135,7 @@ test('Share in the panel still copies its links', async ({ browser, request }) =
   // Ordered by what people do most: the read-only link first, then calendar apps, then helpers.
   const order = await panel(page).locator('.pc-link-item h4').allTextContents();
   expect(order).toEqual(['View-only link', 'Edit link', 'This view', 'Calendar feed']);
-  await expect(page.getByTestId('share-pro-card')).toContainText('Upgrade');
+  await expect(page.getByTestId('share-plus-line')).toContainText('Upgrade');   // Share is for sharing: one line to the Plus tab
   expect(await page.$eval('.pc-side-body', (b) => b.scrollHeight <= b.clientHeight + 1), 'Share fits without scrolling').toBe(true);
   await expect(page.getByTestId('share-readonly-addr')).toContainText(`pastecal.com/view/${viewId}`);
   await page.getByTestId('share-readonly-addr').click();                    // the field itself copies
@@ -189,16 +189,16 @@ test('phone: the panel is a bottom sheet over the calendar, with tabs, closed by
   await page.getByTestId('notes-edit').click();
   await expect(panel(page).getByLabel('Calendar notes')).toBeVisible();
   const row = await page.$eval('.pc-side-tabs', (e) => [e.scrollWidth, e.clientWidth]);
-  expect(row[0], 'all five tabs fit a phone').toBeLessThanOrEqual(row[1]);
+  expect(row[0], 'all six tabs fit a phone').toBeLessThanOrEqual(row[1]);
   await page.getByTestId('side-scrim').click({ position: { x: 195, y: 60 } });
   await expect(panel(page)).toHaveCount(0);
   await ctx.close();
 });
 
-const TABS = ['notes', 'share', 'changes', 'stats', 'settings'];
+const TABS = ['notes', 'share', 'changes', 'stats', 'plus', 'settings'];
 const tabIds = (page) => page.$$eval('[data-testid^="side-tab-"]', (els) => els.map((e) => e.dataset.testid.replace('side-tab-', '')));
 
-test('the same five tabs in the same order, and the row never scrolls', async ({ browser, request }) => {
+test('the same six tabs in the same order, and the row never scrolls', async ({ browser, request }) => {
   const { id } = await seed(request);
   for (const viewport of [{ width: 1440, height: 900 }, { width: 1100, height: 800 }, { width: 1000, height: 800 }]) {
     const { ctx, page } = await open(browser, `/${id}?backend=cf`, viewport);
@@ -260,7 +260,7 @@ test('draft: Share, Activity and Stats say what they will hold, with one Save & 
   await page.waitForTimeout(600);
   await page.getByTestId('settings-button-desktop').click();
   expect(await tabIds(page)).toEqual(TABS);
-  for (const [tab, testid, text] of [['share', 'share-draft', 'once you save it'], ['changes', 'activity-draft', 'once you share it'], ['stats', 'stats-draft', 'Your real numbers start once you share it']]) {
+  for (const [tab, testid, text] of [['share', 'share-draft', 'once you save it'], ['changes', 'activity-draft', 'once you share it'], ['stats', 'stats-draft', 'Your real numbers start once you share it'], ['plus', 'plus-draft', 'Save it first']]) {
     await page.getByTestId(`side-tab-${tab}`).click();
     await expect(page.getByTestId(testid)).toContainText(text);
     await expect(page.getByTestId(testid).getByRole('button')).toHaveText(['Save & share']);

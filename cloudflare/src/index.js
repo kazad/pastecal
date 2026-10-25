@@ -9,7 +9,7 @@
  *   GET  /cal/<id>/ws             WebSocket live sync
  *   GET  /cal/<id>                Calendar JSON
  *   GET  /cal/<id>/history        Recent changes history entries for undo
- *   GET  /cal/<id>/authors        Author signal continuity rankings
+ *   GET  /cal/<id>/authors        Author signal continuity rankings (Bearer IMPORT_SECRET: the uids are proof of creation)
  *   HEAD /cal/<id>                200 / 404 existence check
  *   POST /cal/<id>                Create empty calendar (rate-limited per IP)
  *   PUT  /cal/<id>/import         Full calendar replace (Bearer IMPORT_SECRET)
@@ -426,6 +426,11 @@ async function route(request, env) {
             try { id = m && decodeURIComponent(m[1]); } catch { /* bad escape */ }
             if (!id || !validId(id)) return new Response('not found', { status: 404 });
 
+            // The author signal names browsers by uid, and a creator's uid is what lets them upgrade the
+            // calendar (CalendarRoom is-creator): support only, never public.
+            if (m[2] === '/authors' && (!env.IMPORT_SECRET || !bearerIsSecret(request, env))) {
+                return new Response('forbidden', { status: 403 });
+            }
             if (m[2] === '/archive' && (request.method !== 'POST' || !env.IMPORT_SECRET || !bearerIsSecret(request, env))) {
                 return new Response('forbidden', { status: 403 });
             }

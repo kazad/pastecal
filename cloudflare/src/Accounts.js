@@ -14,7 +14,7 @@
  *                                                   but lose the link to the user. Cancels nothing: 409
  *                                                   {error:'active-subscription', calendars} while any subscription
  *                                                   is active, trialing or past_due (cancel it first). 401 signed-out
- *   GET  /api/me                                 -> {email, calendars:[{id, status, plan, interval, currentPeriodEnd}]} | 401;
+ *   GET  /api/me                                 -> {email, calendars:[{id, status, plan, interval, currentPeriodEnd, cancelAtPeriodEnd}]} | 401;
  *                                                   re-sends the cookie (fresh Max-Age) when the session was renewed
  *                                                   in the last day, so browsers keep it
  *   POST /api/pro/checkout    {calendarId, interval?:'year'|'month', editName?} -> {url} (Stripe Checkout).
@@ -60,11 +60,13 @@
  *   GET  /api/pro/config                         -> {billing}: true only when Stripe is configured (keys and both prices).
  *                                                   False: the site offers "Join the beta" (the waitlist) instead of
  *                                                   the trial and checkout. Public, cached 60 seconds.
- *   GET  /api/pro/status?calendar=<id>           -> {locked, pro, isOwner, paused, lapsedOwner, trialUsed}; the owner also
+ *   GET  /api/pro/status?calendar=<id>           -> {locked, pro, plan, isOwner, paused, lapsedOwner, trialUsed}; plan is the
+ *                                                   lock's plan id (null unlocked; Plans.js names it); the owner also
  *                                                   gets lapsedMode, and trial:{endsAt, hasCard} while trialing; the
  *                                                   paused calendar's owner gets lapsedTrial (its Pro was a trial)
  *   POST /api/stripe/webhook                     Stripe events (signed), see handleWebhook
  *   POST /api/admin/accounts/reassign {calendarId, email}   (Bearer IMPORT_SECRET; lost access, disputes)
+ *   POST /api/admin/accounts/reset-trial {calendarId}            (same) cancel its trial, unlock it (not paused), free its trial
  *   GET  /api/admin/accounts/lookup?email=                  (same)
  *   GET  /api/admin/accounts/conflicts                      (same) subscriptions refunded because they could not
  *                                                           get the lock (status refunded-conflict / conflict-refund-failed)
@@ -95,6 +97,7 @@ import { LockClient } from './LockClient.js';
 import { INTERVALS, stripeConfig, stripeRequest, verifyStripeSignature, summarizeSubscription, subscriptionIdOf, timingSafeEqual,
     eventModeMismatch, subscriptionOfInvoice, paymentOfInvoice, paymentOfInvoicePayments } from './Stripe.js';
 import { siteUrl, siteHost, allowedOrigins, isStaging } from './Site.js';
+import { planName } from './Plans.js';
 
 const LOGIN_TTL = 15 * 60 * 1000;
 const SESSION_TTL = 365 * 24 * 3600 * 1000;   // from the last renewal (see sessionUser)
@@ -106,7 +109,9 @@ const ACTIVE = new Set(['active', 'trialing', 'past_due']);
 const ENDED = new Set(['canceled', 'unpaid', 'incomplete_expired']);
 // Our own final statuses for a subscription we refunded and canceled because it could not get the
 // lock (another owner, or a duplicate). Later events for it change nothing.
-const CONFLICT = new Set(['refunded-conflict', 'conflict-refund-failed']);
+// 'undone' / 'undone-refund-failed': an editor of record undid someone else's upgrade within 7 days (undoUpgrade).
+const CONFLICT = new Set(['refunded-conflict', 'conflict-refund-failed', 'undone', 'undone-refund-failed']);
+const UNDO_DAYS = 7;
 const SUBSCRIPTION_EVENTS = new Set(['checkout.session.completed', 'customer.subscription.created',
     'customer.subscription.updated', 'customer.subscription.deleted', 'invoice.payment_failed', 'customer.subscription.trial_will_end']);
 const TRIAL_DAYS = 30;
@@ -130,7 +135,8 @@ const RESERVED_NEXT = new Set(['signin', 'pro', 'pricing', 'view', 'beta', 'nati
 function safeNext(raw) {
     if (raw === '/') return '/';
     if (typeof raw !== 'string' || raw.length > 700) return null;
-    const m = /^\/([^/?#\\\s]+)(\?pro=(?:year|month|trial))?$/.exec(raw);
+    // ?pro=keep: the trial reminder's Keep link, which may need a sign-in first (it opens the Plus tab on Keep).
+    const m = /^\/([^/?#\\\s]+)(\?pro=(?:year|trial|keep))?$/.exec(raw);
     if (!m) return null;
     let id; try { id = decodeURIComponent(m[1]); } catch { return null; }
     if (!validId(id) || RESERVED_NEXT.has(id.toLowerCase())) return null;
@@ -166,6 +172,9 @@ export class Accounts extends DurableObject {
             CREATE TABLE IF NOT EXISTS outbox (id INTEGER PRIMARY KEY AUTOINCREMENT, to_email TEXT, subject TEXT, text TEXT, at INTEGER);
             CREATE TABLE IF NOT EXISTS checkout_holds (calendar_id TEXT PRIMARY KEY, user_id TEXT, expires_at INTEGER);
             CREATE TABLE IF NOT EXISTS welcome_emails (calendar_id TEXT, user_id TEXT, at INTEGER, PRIMARY KEY (calendar_id, user_id));
+            -- Who upgraded a calendar, for the 7-day undo: the upgrading browser's author uid, whether it was the creator's,
+            -- and when the lock landed (NULL while a checkout is still open). Never shown: uids are proof (CalendarRoom).
+            CREATE TABLE IF NOT EXISTS upgrades (calendar_id TEXT PRIMARY KEY, user_id TEXT, author TEXT, by_creator INTEGER, at INTEGER, undone_at INTEGER);
             CREATE TABLE IF NOT EXISTS test_inbox (id INTEGER PRIMARY KEY AUTOINCREMENT, to_addr TEXT, from_addr TEXT, subject TEXT,
                 received_at INTEGER, text TEXT, truncated INTEGER, auth_results TEXT, arc_auth_results TEXT, has_dkim_signature INTEGER);
             CREATE INDEX IF NOT EXISTS test_inbox_to ON test_inbox(to_addr, id);
@@ -174,13 +183,14 @@ export class Accounts extends DurableObject {
                 subscription_id TEXT, started_at INTEGER);
             CREATE UNIQUE INDEX IF NOT EXISTS trials_user ON trials(user_id);
             CREATE UNIQUE INDEX IF NOT EXISTS trials_email ON trials(email_hash);
-            CREATE TABLE IF NOT EXISTS trial_reminders (subscription_id TEXT PRIMARY KEY, at INTEGER);`);
+            CREATE TABLE IF NOT EXISTS trial_reminders (subscription_id TEXT PRIMARY KEY, at INTEGER);
+            CREATE TABLE IF NOT EXISTS notice_emails (k TEXT PRIMARY KEY, at INTEGER);`);
         // Added later (an existing table keeps its columns): which subscription came first, and the
         // Checkout Session a hold guards plus how often its buyer restarted it.
         for (const col of ['subscriptions ADD COLUMN created INTEGER', 'checkout_holds ADD COLUMN session_id TEXT',
             'checkout_holds ADD COLUMN restarts INTEGER', 'checkout_holds ADD COLUMN window_start INTEGER',
             'sessions ADD COLUMN renewed_at INTEGER', 'users ADD COLUMN created_via TEXT', 'subscriptions ADD COLUMN trial_end INTEGER',
-            'subscriptions ADD COLUMN has_payment_method INTEGER']) {
+            'subscriptions ADD COLUMN has_payment_method INTEGER', 'subscriptions ADD COLUMN cancel_at_period_end INTEGER']) {
             try { this.sql.exec(`ALTER TABLE ${col}`); } catch (_) { /* already there */ }
         }
     }
@@ -203,9 +213,9 @@ export class Accounts extends DurableObject {
     // Which email a sign-in link is for, without using it up; null when it would not sign in.
     async peekLoginToken(token) {
         const hash = await sha256(token);
-        const row = this.sql.exec(`SELECT hash, email, used, expires_at FROM login_tokens WHERE hash = ?`, hash).toArray()[0];
+        const row = this.sql.exec(`SELECT hash, email, used, expires_at, next FROM login_tokens WHERE hash = ?`, hash).toArray()[0];
         if (!row || !timingSafeEqual(row.hash, hash) || row.used || row.expires_at <= Date.now()) return null;
-        return row.email;
+        return { email: row.email, next: row.next || null };
     }
 
     // Uses up a sign-in link: the user (created on first sign-in) and a new session token.
@@ -321,21 +331,21 @@ export class Accounts extends DurableObject {
         return {
             email: user.email,
             calendars: [...byCal.values()].map((r) => ({ id: r.calendar_id, status: r.status, plan: r.plan, interval: r.interval, priceId: r.price_id,
-                currentPeriodEnd: r.current_period_end, trialEnd: r.trial_end || null })),
+                currentPeriodEnd: r.current_period_end, trialEnd: r.trial_end || null, cancelAtPeriodEnd: !!r.cancel_at_period_end })),
         };
     }
 
     getSubscription(id) { return this.sql.exec(`SELECT * FROM subscriptions WHERE stripe_subscription_id = ?`, id).toArray()[0] || null; }
     upsertSubscription(s) {
-        this.sql.exec(`INSERT INTO subscriptions (stripe_subscription_id, user_id, stripe_customer_id, calendar_id, plan, interval, price_id, status, current_period_end, updated_at, created, trial_end, has_payment_method)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        this.sql.exec(`INSERT INTO subscriptions (stripe_subscription_id, user_id, stripe_customer_id, calendar_id, plan, interval, price_id, status, current_period_end, updated_at, created, trial_end, has_payment_method, cancel_at_period_end)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(stripe_subscription_id) DO UPDATE SET user_id = excluded.user_id, stripe_customer_id = excluded.stripe_customer_id,
                 calendar_id = excluded.calendar_id, plan = excluded.plan, interval = excluded.interval, price_id = excluded.price_id,
                 status = excluded.status, current_period_end = excluded.current_period_end, updated_at = excluded.updated_at,
                 created = COALESCE(excluded.created, subscriptions.created), trial_end = COALESCE(excluded.trial_end, subscriptions.trial_end),
-                has_payment_method = excluded.has_payment_method`,
+                has_payment_method = excluded.has_payment_method, cancel_at_period_end = excluded.cancel_at_period_end`,
             s.id, s.userId, s.customer || null, s.calendarId, 'pro', s.interval || null, s.priceId || null, s.status, s.currentPeriodEnd || null, Date.now(), s.created || null, s.trialEnd || null,
-            s.hasPaymentMethod ? 1 : 0);
+            s.hasPaymentMethod ? 1 : 0, s.cancelAtPeriodEnd ? 1 : 0);
     }
     setSubscriptionStatus(id, status) { this.sql.exec(`UPDATE subscriptions SET status = ?, updated_at = ? WHERE stripe_subscription_id = ?`, status, Date.now(), id); }
     // The calendar's other active subscriptions, oldest first (a row without `created` predates the column: oldest).
@@ -347,8 +357,19 @@ export class Accounts extends DurableObject {
     conflicts() {
         return this.sql.exec(`SELECT stripe_subscription_id, user_id, calendar_id, status, updated_at FROM subscriptions WHERE status IN ('refunded-conflict', 'conflict-refund-failed') ORDER BY updated_at DESC LIMIT 100`).toArray();
     }
+    // The Stripe customer for Manage billing with no calendar named: a paid (never-trial) subscription's if
+    // there is one, else the most recent. Each trial has its own customer, so "most recent" alone could open
+    // a trial's customer where the paid plan isn't listed.
     customerForUser(userId) {
-        const row = this.sql.exec(`SELECT stripe_customer_id FROM subscriptions WHERE user_id = ? AND stripe_customer_id IS NOT NULL ORDER BY updated_at DESC LIMIT 1`, userId).toArray()[0];
+        return this.paidCustomerForUser(userId) || (this.sql.exec(`SELECT stripe_customer_id FROM subscriptions WHERE user_id = ? AND stripe_customer_id IS NOT NULL
+            ORDER BY updated_at DESC LIMIT 1`, userId).toArray()[0] || {}).stripe_customer_id || null;
+    }
+    // A customer from a subscription that never was a trial. Checkout reuses only this one: a trial's customer
+    // must never get a card from another calendar's checkout, or that trial would charge it when it ends.
+    paidCustomerForUser(userId) {
+        const row = this.sql.exec(`SELECT stripe_customer_id FROM subscriptions WHERE user_id = ? AND stripe_customer_id IS NOT NULL
+            AND stripe_subscription_id NOT IN (SELECT subscription_id FROM trials WHERE subscription_id IS NOT NULL)
+            ORDER BY updated_at DESC LIMIT 1`, userId).toArray()[0];
         return row ? row.stripe_customer_id : null;
     }
     // One buyer at a time per calendar: a hold lasts as long as the Stripe Checkout page it guards
@@ -416,8 +437,38 @@ export class Accounts extends DurableObject {
             calendarId, userId, emailHash, subscriptionId, Date.now());
     }
     isTrialSubscription(id) { return this.sql.exec(`SELECT 1 FROM trials WHERE subscription_id = ?`, id).toArray().length > 0; }
+    // Support (reset-trial): this calendar's trial subscriptions, and freeing its one trial.
+    trialSubscriptionsFor(calendarId) {
+        return this.sql.exec(`SELECT s.stripe_subscription_id AS id, s.status FROM subscriptions s JOIN trials t ON t.subscription_id = s.stripe_subscription_id
+            WHERE t.calendar_id = ?`, calendarId).toArray();
+    }
+    resetTrial(calendarId) { this.sql.exec(`DELETE FROM trials WHERE calendar_id = ?`, calendarId); }
+    // ---- the 7-day undo ----
+    noteUpgrade(calendarId, author, byCreator) {
+        this.sql.exec(`INSERT OR REPLACE INTO upgrades (calendar_id, user_id, author, by_creator, at, undone_at) VALUES (?, NULL, ?, ?, NULL, NULL)`,
+            calendarId, author || null, byCreator ? 1 : 0);
+    }
+    markUpgraded(calendarId, userId) {
+        this.sql.exec(`UPDATE upgrades SET at = ?, user_id = ? WHERE calendar_id = ? AND at IS NULL`, Date.now(), userId, calendarId);
+    }
+    getUpgrade(calendarId) { return this.sql.exec(`SELECT * FROM upgrades WHERE calendar_id = ?`, calendarId).toArray()[0] || null; }
+    ageUpgrade(calendarId, ms) { this.sql.exec(`UPDATE upgrades SET at = at - ? WHERE calendar_id = ?`, ms, calendarId); }
+    markUndone(calendarId) { this.sql.exec(`UPDATE upgrades SET undone_at = ? WHERE calendar_id = ?`, Date.now(), calendarId); }
+    activeSubscriptionsFor(calendarId, userId) {
+        return this.sql.exec(`SELECT stripe_subscription_id AS id, status FROM subscriptions WHERE calendar_id = ? AND user_id = ?`, calendarId, userId)
+            .toArray().filter((r) => ACTIVE.has(r.status));
+    }
+    ownsOrOwned(calendarId, userId) {
+        return this.sql.exec(`SELECT 1 FROM subscriptions WHERE calendar_id = ? AND user_id = ? LIMIT 1`, calendarId, userId).toArray().length > 0;
+    }
     trialUsedForCalendar(calendarId) { return this.sql.exec(`SELECT 1 FROM trials WHERE calendar_id = ?`, calendarId).toArray().length > 0; }
     // Once per subscription, like claimWelcome: Stripe may send trial_will_end twice.
+    // Once per key ('ended:<sub>', 'canceled:<sub>'): claimed before sending, so retried webhooks send nothing twice.
+    claimNotice(k) {
+        if (this.sql.exec(`SELECT 1 FROM notice_emails WHERE k = ?`, k).toArray().length) return false;
+        this.sql.exec(`INSERT INTO notice_emails (k, at) VALUES (?, ?)`, k, Date.now());
+        return true;
+    }
     claimTrialReminder(subscriptionId) {
         if (this.sql.exec(`SELECT 1 FROM trial_reminders WHERE subscription_id = ?`, subscriptionId).toArray().length) return false;
         this.sql.exec(`INSERT INTO trial_reminders (subscription_id, at) VALUES (?, ?)`, subscriptionId, Date.now());
@@ -551,11 +602,12 @@ async function sendSignInEmail(env, to, token, next, kind) {
     // anyone can make us email any address, so nothing they chose goes in the message.
     const trial = typeof next === 'string' && /\?pro=trial$/.test(next);
     const buying = !trial && typeof next === 'string' && /\?pro=/.test(next), paid = kind === 'paid';
-    const subject = paid ? 'Your pastecal sign-in link: manage your new Pro' : trial ? 'Your pastecal sign-in link: start your free Pro trial'
-        : buying ? 'Your pastecal sign-in link: finish locking your calendar' : 'Your pastecal sign-in link';
-    const lead = paid ? 'Thanks for getting Pro. This email already has a pastecal account, so sign in here to get your editor link and manage Pro:'
-        : trial ? `Here is your link to sign in and start your free ${TRIAL_DAYS}-day Pro trial. No card needed:`
-        : buying ? 'Here is your link to sign in and finish locking your calendar. It takes you straight to payment:' : 'Here is your link to sign in to pastecal:';
+    // Checkout and the trial sell Plus (plan id 'pro'), so these name it.
+    const subject = paid ? 'Your pastecal sign-in link: manage your upgraded calendar' : trial ? 'Your pastecal sign-in link: start your free Plus trial'
+        : buying ? 'Your pastecal sign-in link: finish upgrading your calendar' : 'Your pastecal sign-in link';
+    const lead = paid ? 'Thanks for upgrading. This email already has a pastecal account, so sign in here to get your editor link and manage your plan:'
+        : trial ? `Here is your link to sign in and start your free ${TRIAL_DAYS}-day Plus trial. No card needed:`
+        : buying ? 'Here is your link to sign in and finish upgrading your calendar. It takes you straight to payment:' : 'Here is your link to sign in to pastecal:';
     const text = `${lead}\n\n${link}\n\n`
         + `It works once and expires in 15 minutes.\n\n`
         + `If you didn't ask to sign in, you can ignore this email. Nothing will change.\n`;
@@ -587,7 +639,7 @@ function cleanTitle(title, fallback) {
 
 // Once per (calendar, owner), the first time the webhook locks it. Plain text, no key, no token:
 // the owner makes editor links from the calendar itself.
-async function sendWelcomeEmail(env, acc, calendarId, userId, title, trialEnd = null, hasCard = null) {
+async function sendWelcomeEmail(env, acc, calendarId, userId, title, trialEnd = null, hasCard = null, plan = 'pro') {
     try {
         if (!(await acc.claimWelcome(calendarId, userId))) return;
         const user = await acc.getUser(userId);
@@ -597,15 +649,51 @@ async function sendWelcomeEmail(env, acc, calendarId, userId, title, trialEnd = 
         const trialLine = !trialEnd ? '' : hasCard === false
             ? `Your free trial runs until ${formatDay(trialEnd)}. No card is on file, so nothing will be charged. We'll email you a few days before it ends.\n\n`
             : `Your free trial runs until ${formatDay(trialEnd)}. We'll email you a few days before it ends.\n\n`;
-        const text = `Pro is on for ${name}.\n\n${trialLine}`
+        const P = planName(plan);
+        const text = `${P} is on for ${name}.\n\n${trialLine}`
             + `${link}\n\n`
-            + `What's locked now: only you (signed in with this email) and people with an editor link can change this calendar. Everyone else can still view it.\n\n`
-            + `To give someone editor access: open the calendar, choose Share, and copy the Editor link. You can reset or revoke editor links there at any time.\n\n`
-            + `To manage billing: open the calendar's Share panel, or the logo menu, and choose Manage billing. You can also sign in at ${siteHost(env)} with this email.\n\n`
+            + `Who can edit now: only you (signed in with this email) and people with an editor link. Everyone else can still view it.\n\n`
+            + `To give someone editor access: open the calendar, choose the Plus tab, and copy the Editor link. You can reset or revoke editor links there at any time.\n\n`
+            + `To manage billing: open the calendar's Plus tab, or the logo menu, and choose Manage billing. You can also sign in at ${siteHost(env)} with this email.\n\n`
             + `Questions? Write to support@pastecal.com.\n`;
-        await sendEmail(env, user.email, trialEnd ? `Your Pro trial is on for ${name}` : `Pro is on for ${name}`, text, null, 'welcome');
+        await sendEmail(env, user.email, trialEnd ? `Your ${P} trial is on for ${name}` : `${P} is on for ${name}`, text, null, 'welcome');
     } catch (err) {
         console.error('[accounts] welcome email failed:', err && err.message);
+    }
+}
+
+// The owner hears when their plan changes on its own: a trial or plan ended (and what the calendar is now),
+// or they canceled in the portal (when it ends, and what happens then). Plain, short, once per subscription.
+async function sendPlanNotice(env, acc, kind, s, calendarId, userId, { paused = false } = {}) {
+    try {
+        if (!(await acc.claimNotice(`${kind}:${s.id}`))) return;
+        const user = await acc.getUser(userId);
+        if (!user || !user.email) return;
+        const st = await LockClient.lockStatus(env, calendarId);
+        const name = cleanTitle(st.title, cleanTitle(calendarId, 'your calendar'));
+        const row = await acc.getSubscription(s.id);
+        const P = planName(row && row.plan);
+        const link = `${siteUrl(env)}/${encodeURIComponent(calendarId)}`;
+        const now = paused
+            ? `${name} is now read-only: everyone can still view it and follow it in their calendar app, but nobody can edit it until you choose. `
+            : `${name} is a free calendar again: anyone with the edit link can change it. `;
+        let subject, text;
+        if (kind === 'canceled') {
+            const day = s.currentPeriodEnd ? formatDay(s.currentPeriodEnd) : 'the end of the period you paid for';
+            const then = st.lapsedMode === 'open' && st.lapsedModeChosen ? 'a free calendar anyone with the edit link can change' : 'read-only (everyone can view, nobody edits until you choose)';
+            subject = `${P} for ${name} ends ${day}`;
+            text = `You canceled ${P} for ${name}. Nothing else will be charged.\n\n`
+                + `It stays upgraded until ${day}. Then it becomes ${then}. You can change that, or keep ${P}, from the calendar's Plus tab:\n${link}\n\n`
+                + `Questions? Write to support@pastecal.com.\n`;
+        } else {
+            subject = kind === 'trial-ended' ? `Your ${P} trial for ${name} ended` : `${P} for ${name} ended`;
+            text = (kind === 'trial-ended' ? `Your ${P} trial for ${name} ended. Nothing was charged.\n\n` : `${P} for ${name} ended.\n\n`)
+                + now + `\n\nTo keep ${P}${paused ? ' or open it to everyone' : ''}, open the calendar's Plus tab:\n${link}\n\n`
+                + `Questions? Write to support@pastecal.com.\n`;
+        }
+        await sendEmail(env, user.email, subject, text, null, 'plan-notice');
+    } catch (err) {
+        console.error('[accounts] plan notice failed:', err && err.message);
     }
 }
 
@@ -648,21 +736,23 @@ async function sendTrialReminder(env, acc, cfg, s) {
         const st = await LockClient.lockStatus(env, calendarId);
         const name = cleanTitle(st.title, cleanTitle(calendarId, 'your calendar'));
         const day = formatDay(s.trialEnd || s.currentPeriodEnd);
-        // A plain link to the calendar (a Billing Portal link would expire): its Share panel has Keep Pro.
+        // A plain link to the calendar (a Billing Portal link would expire): it opens the Plus tab, which has Keep Plus.
         const keep = `${siteUrl(env)}/${encodeURIComponent(calendarId)}?pro=keep`;
+        const P = planName(row.plan);
         if (card !== false) {
             // A card is on file (or Stripe couldn't say): never promise that nothing is charged.
-            const text = `Your Pro trial for ${name} ends ${day}.\n\n`
-                + `A card is on file for this subscription, so Pro continues after ${day} and the card is charged then. To change or cancel it, open the calendar's Share panel and choose Manage billing:\n${keep}\n\n`
+            const text = `Your ${P} trial for ${name} ends ${day}.\n\n`
+                + `A card is on file for this subscription, so ${P} continues after ${day} and the card is charged then. To change or cancel it, open the calendar's Plus tab and choose Manage billing:\n${keep}\n\n`
                 + `Questions? Write to support@pastecal.com.\n`;
-            return await sendEmail(env, user.email, `Your Pro trial ends ${day}`, text, null, 'trial-reminder');
+            return await sendEmail(env, user.email, `Your ${P} trial ends ${day}`, text, null, 'trial-reminder');
         }
-        const text = `Your Pro trial for ${name} ends ${day}.\n\n`
-            + `Keep Pro: $29 a year, and nothing changes.\n${keep}\n\n`
-            + `If you do nothing, nothing is charged. On ${day} Pro ends and the calendar becomes read-only: everyone can still view it and its calendar feed keeps working, but nobody can edit it. `
-            + `You can then open it to everyone (a free calendar, editable by anyone with the link) or keep Pro, from the calendar's Share panel.\n\n`
+        const text = `Your ${P} trial for ${name} ends ${day}.\n\n`
+            + `Keep ${P}: $29 a year, and nothing changes.\n${keep}\n\n`
+            + (st.lapsedModeChosen && st.lapsedMode === 'readonly'
+                ? `If you do nothing, nothing is charged. On ${day} ${P} ends and, as you chose, the calendar becomes read-only: everyone can still view it and its calendar feed keeps working, but nobody can edit it until you open it or keep ${P}, from the calendar's Plus tab.\n\n`
+                : `If you do nothing, nothing is charged. On ${day} ${P} ends and the calendar goes back to a free calendar anyone with the edit link can change. To make it read-only instead, choose that in the calendar's Plus tab.\n\n`)
             + `Questions? Write to support@pastecal.com.\n`;
-        await sendEmail(env, user.email, `Your Pro trial ends ${day}`, text, null, 'trial-reminder');
+        await sendEmail(env, user.email, `Your ${P} trial ends ${day}`, text, null, 'trial-reminder');
     } catch (err) {
         console.error('[accounts] trial reminder failed:', err && err.message);
     }
@@ -716,20 +806,23 @@ async function route(request, env, url, path) {
         const id = url.searchParams.get('calendar');
         if (!validId(id)) return json({ error: 'bad-calendar' }, 400);
         const [st, userId] = await Promise.all([LockClient.lockStatus(env, id), sessionUserId(request, env)]);
-        if (st.status === 404) return json({ locked: false, pro: false, isOwner: false, paused: false, lapsedOwner: false, trialUsed: false });
+        if (st.status === 404) return json({ locked: false, pro: false, plan: null, isOwner: false, paused: false, lapsedOwner: false, trialUsed: false });
         if (!st.ok && st.status >= 500) return json({ error: 'unavailable' }, 502);
         const locked = !!st.locked, isOwner = !!(locked && userId && st.ownerId === userId);
         const lapsed = !locked && st.lapsed ? st.lapsed : null;
-        const out = { locked, pro: locked && st.plan === 'pro', isOwner, paused: !!(lapsed && lapsed.mode === 'readonly'),
+        // plan: the lock's plan id, for its display name (Plans.js): 'pro' is Plus, 'unlimited' is Pro.
+        const out = { locked, pro: locked && st.plan === 'pro', plan: locked ? (st.plan || 'pro') : null, isOwner, paused: !!(lapsed && lapsed.mode === 'readonly'),
             lapsedOwner: !!(lapsed && userId && lapsed.ownerId === userId), trialUsed: await accounts(env).trialUsedForCalendar(id) };
         if (out.lapsedOwner) {
             // Which words the owner sees: "Trial ended" or "Pro ended".
             const sub = await accounts(env).subscriptionFor(id, userId);
             out.lapsedTrial = !!(sub && sub.trial_end && !sub.has_payment_method);
+            out.plan = (sub && sub.plan) || 'pro';           // which plan ended, for "Plus ended" / "Pro ended"
         }
         if (isOwner) {
-            out.lapsedMode = st.lapsedMode || 'readonly';
             const sub = await accounts(env).subscriptionFor(id, userId);
+            // Not chosen yet: a trial ends open, a paid plan read-only (CalendarRoom unlock).
+            out.lapsedMode = st.lapsedModeChosen === false ? (sub && sub.status === 'trialing' ? 'open' : 'readonly') : (st.lapsedMode || 'readonly');
             if (sub && sub.status === 'trialing') {
                 const cfg = stripeConfig(env, url.hostname);
                 const card = await payerHasCard(cfg, { hasPaymentMethod: !!sub.has_payment_method, customer: sub.stripe_customer_id });
@@ -772,8 +865,11 @@ async function route(request, env, url, path) {
             if (!success) return json({ ok: false, error: 'Too many tries. Wait a minute and open the link again.' }, 429);
         }
         if (!looksLikeToken(body.token)) return bad();
-        const email = await accounts(env).peekLoginToken(body.token);
-        return email ? json({ ok: true, email }) : bad();
+        const peeked = await accounts(env).peekLoginToken(body.token);
+        if (!peeked) return bad();
+        // What Continue will do, so the page can say it (never the calendar's name: anyone can make us send a link).
+        const kind = /\?pro=trial$/.test(peeked.next || '') ? 'trial' : /\?pro=keep$/.test(peeked.next || '') ? 'keep' : /\?pro=year$/.test(peeked.next || '') ? 'buy' : null;
+        return json({ ok: true, email: peeked.email, ...(kind ? { kind } : {}) });
     }
     if (path === '/api/auth/verify') {
         if (!looksLikeToken(body.token)) return json({ ok: false, error: 'This sign-in link is not valid. Ask for a new one.' }, 400);
@@ -784,7 +880,9 @@ async function route(request, env, url, path) {
         const tm = typeof out.next === 'string' && /^\/([^/?]+)\?pro=trial$/.exec(out.next);
         if (tm) {
             const s = await accounts(env).sessionUser(out.session);
-            const [status, res] = s ? await startTrial(request, env, s.userId, decodeURIComponent(tm[1])) : [401, { error: 'signed-out' }];
+            // body.author: the calendar page's author uid when it has one; without it the trial waits for the
+            // calendar page, which starts it with the uid (Pro.js startTrial).
+            const [status, res] = s ? await startTrial(request, env, s.userId, decodeURIComponent(tm[1]), body.author) : [401, { error: 'signed-out' }];
             trial = status === 200 ? { ok: true } : { ok: false, error: res.error };
         }
         return json({ ok: true, email: out.email, next: out.next || null, ...(trial ? { trial } : {}) }, 200, { 'Set-Cookie': sessionCookie(out.session, COOKIE_MAX_AGE) });
@@ -801,17 +899,21 @@ async function route(request, env, url, path) {
     if (path === '/api/pro/trial') {
         const userId = await sessionUserId(request, env);
         if (!userId) return json({ error: 'signed-out' }, 401);
-        const [status, res] = await startTrial(request, env, userId, body.calendarId);
+        const [status, res] = await startTrial(request, env, userId, body.calendarId, body.author);
         return json(res, status);
     }
     if (path === '/api/pro/lapsed-mode') return setLapsedMode(request, env, body);
+    if (path === '/api/pro/upgrade-notice') return upgradeNotice(request, env, body);
+    if (path === '/api/pro/undo-upgrade') return undoUpgrade(request, env, body);
     if (path === '/api/pro/claim') return claimCheckout(request, env, body);
     if (path === '/api/pro/portal') {
         const cfg = stripeConfig(env, new URL(request.url).hostname);
         if (!cfg) return json({ error: 'billing-not-configured' }, 503);
         const userId = await sessionUserId(request, env);
         if (!userId) return json({ error: 'signed-out' }, 401);
-        const customer = await accounts(env).customerForUser(userId);
+        // The calendar's own subscription's customer (each trial has its own customer); none named: the account's.
+        const sub = validId(body.calendarId) ? await accounts(env).subscriptionFor(body.calendarId, userId) : null;
+        const customer = validId(body.calendarId) ? (sub && sub.stripe_customer_id) || null : await accounts(env).customerForUser(userId);
         if (!customer) return json({ error: 'no-billing-account' }, 404);
         const site = siteUrl(env);
         const returnUrl = validId(body.calendarId) ? `${site}/${encodeURIComponent(body.calendarId)}` : `${site}/`;
@@ -872,7 +974,7 @@ async function deleteAccount(request, env) {
     if (!userId) return json({ error: 'signed-out' }, 401);
     const r = await accounts(env).deleteAccount(userId);
     if (r.active) return json({ error: 'active-subscription', calendars: r.active,
-        message: 'Cancel your Pro subscription first (Manage billing), then delete your account.' }, 409);
+        message: 'Cancel your plan first (Manage billing), then delete your account.' }, 409);
     return json({ ok: true, deleted: true }, 200, { 'Set-Cookie': sessionCookie('', 0) });
 }
 
@@ -933,12 +1035,24 @@ async function claimCheckout(request, env, body) {
     return Response.json({ ok: true, signedIn: true, email }, { headers });
 }
 
+// Trial and checkout are for an editor of record (CalendarRoom editor-of-record: the browser that created
+// the calendar, or one that edited it on 2+ days), or an account that already owns it. Knowing the URL is
+// not enough: anyone can edit a free calendar. -> {res: null | 403 body, creator}
+const NOT_EDITOR = 'To upgrade, use a device you’ve edited this calendar on, or ask the person who runs it.';
+async function editorCheck(env, calendarId, author, userId) {
+    const r = await LockClient.editorOfRecord(env, calendarId, typeof author === 'string' ? author.slice(0, 128) : '');
+    const creator = !!(r.ok && r.creator);
+    if (r.ok && r.editor) return { res: null, creator };
+    if (userId && await accounts(env).ownsOrOwned(calendarId, userId)) return { res: null, creator };
+    return { res: { error: 'not-an-editor', message: NOT_EDITOR }, creator };
+}
+
 // POST /api/pro/trial, and a "Try Pro free" sign-in link's verify. -> [status, body]
 // A direct subscription with a 30-day trial and no payment method (Stripe ends it, canceled, if no card
 // was added: trial_settings.end_behavior.missing_payment_method=cancel). It is applied at once, so the
 // calendar is locked before this answers; the webhook's copy of the same events changes nothing.
-async function startTrial(request, env, userId, calendarId) {
-    if (env.BETA_REAL_DATA) return [403, { error: 'buy-on-live', message: 'Pro is started on pastecal.com. The beta shows the new design on your real calendars.' }];
+async function startTrial(request, env, userId, calendarId, author) {
+    if (env.BETA_REAL_DATA) return [403, { error: 'buy-on-live', message: 'Plus is started on pastecal.com. The beta shows the new design on your real calendars.' }];
     const cfg = stripeConfig(env, new URL(request.url).hostname);
     if (!cfg) return [503, { error: 'billing-not-configured' }];
     if (!validId(calendarId)) return [400, { error: 'bad-calendar' }];
@@ -957,6 +1071,9 @@ async function startTrial(request, env, userId, calendarId) {
         return sub && sub.status === 'trialing' ? [200, { ok: true, already: true, trialEnd: sub.trial_end || null }] : [409, { error: 'already-pro' }];
     }
     if (st.lapsed && st.lapsed.mode === 'readonly' && st.lapsed.ownerId !== userId) return [409, { error: 'locked-by-other' }];
+    const ownPaused = !!(st.lapsed && st.lapsed.ownerId === userId);
+    const ed = ownPaused ? { res: null, creator: true } : await editorCheck(env, calendarId, author, userId);
+    if (ed.res) return [403, ed.res];
     const claim = await acc.claimTrial(calendarId, userId, await sha256(user.email));
     // A finished trial of this person's on this calendar counts as used too.
     const err = claim.error || (claim.retry && claim.subscriptionId ? 'trial-used-calendar' : null);
@@ -982,6 +1099,7 @@ async function startTrial(request, env, userId, calendarId) {
     }, { idempotencyKey: `trial-${calendarId}-${userId}` });
     if (!r.ok || !r.data.id) return failed(r, 'subscription');
     await acc.setTrialSubscription(calendarId, r.data.id);
+    if (!ownPaused) await acc.noteUpgrade(calendarId, author, ed.creator);       // for the 7-day undo (marked when the lock lands)
     const s = summarizeSubscription(r.data);
     const outcome = await applySubscription(env, acc, cfg, s);
     const now = await LockClient.lockStatus(env, calendarId);
@@ -991,6 +1109,54 @@ async function startTrial(request, env, userId, calendarId) {
         return [502, { error: 'unavailable', started: true }];
     }
     return [200, { ok: true, trialEnd: s.trialEnd }];
+}
+
+// ---- The 7-day undo. Someone who isn't the calendar's creator upgraded it (an editor of record on
+// another device, or a stranger who got past the check). For 7 days the creator's browser and other
+// editors of record see a notice with Undo; undoing cancels the subscription (refunding any payment),
+// unlocks it as a normal free calendar, logs it in Activity, and frees its trial. After 7 days only
+// support can (POST /api/admin/accounts/reset-trial).
+// -> {row, st} when this author may undo it now, else {error:[status, body]}.
+async function undoable(env, calendarId, author) {
+    if (!validId(calendarId)) return { error: [400, { error: 'bad-calendar' }] };
+    const acc = accounts(env);
+    const row = await acc.getUpgrade(calendarId);
+    const st = await LockClient.lockStatus(env, calendarId);
+    if (!row || !row.at || row.undone_at || row.by_creator || !st.locked || st.ownerId !== row.user_id) return { error: [404, { error: 'nothing-to-undo' }] };
+    const uid = typeof author === 'string' ? author.slice(0, 128) : '';
+    if (!uid || uid === row.author) return { error: [403, { error: 'not-an-editor' }] };
+    const r = await LockClient.editorOfRecord(env, calendarId, uid);
+    if (!(r.ok && r.editor)) return { error: [403, { error: 'not-an-editor' }] };
+    if (Date.now() - row.at > UNDO_DAYS * 86400000) return { error: [410, { error: 'too-late', message: 'It’s been more than 7 days. Write to support@pastecal.com and we’ll sort it out.' }] };
+    return { row, st };
+}
+// POST /api/pro/upgrade-notice {calendarId, author} -> {notice: {at} | null}. POST so the uid stays out of URLs.
+async function upgradeNotice(request, env, body) {
+    const u = await undoable(env, body.calendarId, body.author);
+    return json({ notice: u.error ? null : { at: u.row.at } });
+}
+// POST /api/pro/undo-upgrade {calendarId, author} -> {ok, refunded}
+async function undoUpgrade(request, env, body) {
+    const u = await undoable(env, body.calendarId, body.author);
+    if (u.error) return json(u.error[1], u.error[0]);
+    const { row } = u, calendarId = body.calendarId;
+    const acc = accounts(env);
+    const cfg = stripeConfig(env, new URL(request.url).hostname);
+    let refunded = false;
+    for (const sub of await acc.activeSubscriptionsFor(calendarId, row.user_id)) {
+        if (!cfg) return json({ error: 'billing-not-configured' }, 503);
+        const g = await stripeRequest(cfg, 'GET', `/v1/subscriptions/${encodeURIComponent(sub.id)}`);
+        if (!g.ok) return json({ error: 'stripe-error' }, 502);
+        const out = await refundConflict(acc, cfg, summarizeSubscription(g.data), 'undo', true);
+        if (out.retry) return json({ error: 'stripe-error' }, 502);
+        refunded = refunded || !(await acc.isTrialSubscription(sub.id));
+    }
+    const un = await LockClient.unlock(env, calendarId, row.user_id, { undo: true });   // a plain unlock: open, not paused
+    if (!un.ok) return json({ error: 'unavailable' }, 502);
+    await acc.markUndone(calendarId);
+    await acc.resetTrial(calendarId);                                                    // the trial was never really used
+    console.log('[accounts] upgrade undone by an editor of record:', calendarId);
+    return json({ ok: true, refunded });
 }
 
 // POST /api/pro/lapsed-mode {calendarId, mode:'readonly'|'open'}: what happens when Pro ends (owner,
@@ -1008,7 +1174,7 @@ async function setLapsedMode(request, env, body) {
 async function checkout(request, env, body) {
     // The beta (preview.pastecal.com) runs on live calendars with Stripe in test mode: a test card must
     // never lock a real calendar, so Pro is bought on pastecal.com.
-    if (env.BETA_REAL_DATA) return json({ error: 'buy-on-live', message: 'Pro is bought on pastecal.com. The beta shows the new design on your real calendars.' }, 403);
+    if (env.BETA_REAL_DATA) return json({ error: 'buy-on-live', message: 'Plus is bought on pastecal.com. The beta shows the new design on your real calendars.' }, 403);
     const cfg = stripeConfig(env, new URL(request.url).hostname);
     if (!cfg) return json({ error: 'billing-not-configured' }, 503);
     const userId = await sessionUserId(request, env);
@@ -1025,7 +1191,8 @@ async function checkout(request, env, body) {
     const calendarId = body.calendarId;
     if (!validId(calendarId)) return json({ error: 'bad-calendar' }, 400);
     const interval = body.interval === undefined ? 'year' : body.interval;
-    if (!Object.hasOwn(INTERVALS, interval)) return json({ error: 'bad-interval' }, 400);
+    // Plus (plan id 'pro') is yearly only. A monthly price, if still configured, is never sold.
+    if (interval !== 'year' || !Object.hasOwn(INTERVALS, interval)) return json({ error: 'bad-interval', message: 'Plus is yearly: $29 a year.' }, 400);
     const price = cfg.prices[interval];
     if (!price) return json({ error: 'billing-not-configured' }, 503);
 
@@ -1039,9 +1206,15 @@ async function checkout(request, env, body) {
     if (st.locked && !keepingTrial) return json({ error: userId && st.ownerId === userId ? 'already-pro' : 'locked-by-other' }, 409);
     // Paused after Pro: only its owner can buy it back (signed out can't prove that; the room refuses others too).
     if (st.lapsed && st.lapsed.mode === 'readonly' && st.lapsed.ownerId !== userId) return json({ error: userId ? 'locked-by-other' : 'signed-out' }, userId ? 409 : 401);
+    // Only an editor of record (or the account that owns it) upgrades it. Keeping one's own trial and buying
+    // back one's own paused calendar are already the owner's.
+    const ownsIt = keepingTrial || !!(userId && st.lapsed && st.lapsed.ownerId === userId);
+    const ed = ownsIt ? null : await editorCheck(env, calendarId, body.author, userId);
+    if (ed && ed.res) return json(ed.res, 403);
 
     const acc = accounts(env);
-    const [user, customer] = userId ? await Promise.all([acc.getUser(userId), acc.customerForUser(userId)]) : [null, null];
+    // Keep during a trial: that trial's customer. Anything else: a paid customer only, never another trial's.
+    const [user, customer] = userId ? await Promise.all([acc.getUser(userId), keepingTrial ? trialSub.stripe_customer_id : acc.paidCustomerForUser(userId)]) : [null, null];
     if (userId && !user) return json({ error: 'signed-out' }, 401);
     const hold = await acc.holdCheckout(calendarId, buyer, CHECKOUT_HOLD_MS);
     if (!hold.ok) return json({ error: hold.error }, hold.error === 'too-many-checkouts' ? 429 : 409);
@@ -1076,7 +1249,7 @@ async function checkout(request, env, body) {
     // Right above Stripe's Pay button: which calendar this is for (the title is the payer's own, shown
     // only to them), and on staging which test card to use.
     const title = typeof body.title === 'string' ? body.title.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 60) : '';
-    const forWhat = `Pro for ${title ? `“${title}” (${siteHost(env)}/${back})` : `${siteHost(env)}/${back}`}.`;
+    const forWhat = `Plus for ${title ? `“${title}” (${siteHost(env)}/${back})` : `${siteHost(env)}/${back}`}.`;
     params.custom_text = { submit: { message: cfg.livemode === false ? `${forWhat} ${TEST_CARD_HINT}` : forWhat } };
     // Stripe limits client_reference_id's characters; calendar names can be anything, and metadata has the real id.
     if (/^[A-Za-z0-9_-]{1,200}$/.test(calendarId)) params.client_reference_id = calendarId;
@@ -1084,6 +1257,7 @@ async function checkout(request, env, body) {
     const r = await stripeRequest(cfg, 'POST', '/v1/checkout/sessions', params);
     if (!r.ok || !r.data.url) { console.error('[accounts] checkout session failed:', r.status, r.data && r.data.error && r.data.error.code); return json({ error: 'stripe-error' }, 502); }
     if (r.data.id) await acc.setCheckoutSession(calendarId, buyer, r.data.id);
+    if (ed) await acc.noteUpgrade(calendarId, body.author, ed.creator);           // for the 7-day undo, once the lock lands
     return json({ url: r.data.url }, 200, claim ? { 'Set-Cookie': claimCookie(claim, CLAIM_MAX_AGE) } : {});
 }
 
@@ -1191,23 +1365,24 @@ async function latestPayment(cfg, s) {
 // pays for this calendar): refund what it took, cancel it now, and mark it. Refund first, so a
 // retry after a failure still finds it active; both calls carry idempotency keys, so a retry
 // never refunds or cancels twice. {retry:true} when Stripe could not be reached.
-async function refundConflict(acc, cfg, s, why) {
-    console.error('[accounts] refunded-conflict:', why, s.id);                 // health check: GET /api/admin/accounts/conflicts
+async function refundConflict(acc, cfg, s, why, undo = false) {
+    if (!undo) console.error('[accounts] refunded-conflict:', why, s.id);     // health check: GET /api/admin/accounts/conflicts
+    const tag = undo ? 'undo' : 'conflict';
     let failed = false;
     const pay = await latestPayment(cfg, s);
     if (pay.retry) return { retry: true };
     if (pay.ref) {
-        const r = await stripeRequest(cfg, 'POST', '/v1/refunds', { ...pay.ref, reason: 'duplicate', metadata: { subscription: s.id, why } },
-            { idempotencyKey: `refund-conflict-${s.id}` });
+        const r = await stripeRequest(cfg, 'POST', '/v1/refunds', { ...pay.ref, reason: undo ? 'requested_by_customer' : 'duplicate', metadata: { subscription: s.id, why } },
+            { idempotencyKey: `refund-${tag}-${s.id}` });
         if (retryable(r)) return { retry: true };
         const already = r.data && r.data.error && r.data.error.code === 'charge_already_refunded';
         if (!r.ok && !already) { failed = true; console.error('[accounts] conflict refund FAILED:', s.id, r.status, r.data && r.data.error && r.data.error.code); }
     } else if (pay.failed) { failed = true; console.error('[accounts] conflict refund FAILED: no payment found for', s.id); }
-    const d = await stripeRequest(cfg, 'DELETE', `/v1/subscriptions/${encodeURIComponent(s.id)}`, null, { idempotencyKey: `cancel-conflict-${s.id}` });
+    const d = await stripeRequest(cfg, 'DELETE', `/v1/subscriptions/${encodeURIComponent(s.id)}`, null, { idempotencyKey: `cancel-${tag}-${s.id}` });
     if (retryable(d)) return { retry: true };
-    if (!d.ok) console.warn('[accounts] conflict cancel answered', d.status, s.id);
-    await acc.setSubscriptionStatus(s.id, failed ? 'conflict-refund-failed' : 'refunded-conflict');
-    return {};
+    if (!d.ok) console.warn(`[accounts] ${tag} cancel answered`, d.status, s.id);
+    await acc.setSubscriptionStatus(s.id, undo ? (failed ? 'undone-refund-failed' : 'undone') : (failed ? 'conflict-refund-failed' : 'refunded-conflict'));
+    return { failed };
 }
 
 // Make the calendar match the subscription. {retry:true} when the calendar (or Stripe) couldn't be reached.
@@ -1226,6 +1401,10 @@ async function applySubscription(env, acc, cfg, s) {
     }
     if (!validId(calendarId) || !userId) { console.warn('[accounts] subscription without calendar/user metadata:', s.id); return {}; }
     await acc.upsertSubscription({ ...s, calendarId, userId });
+    // Canceled in the portal just now (still running to the period's end): say what happens and when.
+    if (s.cancelAtPeriodEnd && !(prev && prev.cancel_at_period_end) && ACTIVE.has(s.status) && s.status !== 'trialing') {
+        await sendPlanNotice(env, acc, 'canceled', s, calendarId, userId);
+    }
     if (s.trial) {
         const u = await acc.getUser(userId);
         await acc.noteTrial(calendarId, userId, u && u.email ? await sha256(u.email) : null, s.id);
@@ -1270,8 +1449,10 @@ async function applySubscription(env, acc, cfg, s) {
         if (!r.ok) console.warn('[accounts] could not lock paid calendar:', calendarId, r.status, r.error);
         else {
             await acc.releaseCheckout(calendarId);
+            await acc.markUpgraded(calendarId, userId);
             const trialEnd = s.status === 'trialing' ? s.trialEnd || s.currentPeriodEnd : null;
-            await sendWelcomeEmail(env, acc, calendarId, userId, st.title, trialEnd, trialEnd ? await payerHasCard(cfg, s) : null);
+            const row = await acc.getSubscription(s.id);
+            await sendWelcomeEmail(env, acc, calendarId, userId, st.title, trialEnd, trialEnd ? await payerHasCard(cfg, s) : null, row && row.plan);
         }
         return {};
     }
@@ -1279,9 +1460,14 @@ async function applySubscription(env, acc, cfg, s) {
     const heir = others[0];                                             // another person's active subscription, oldest first
     if (st.locked && st.ownerId === userId) {
         // Nobody else pays: Pro ended, so the calendar pauses (read-only) unless the owner chose 'open'.
-        const r = await LockClient.unlock(env, calendarId, userId, { lapse: !heir });
+        // A trial that ends unpaid goes back to open unless its owner chose read-only (a squatter's trial can't freeze it).
+        // "Was a trial" is the state just before it ended: a trial that became paid (a card was added) keeps its trial
+        // metadata, but it ends like any paid plan (read-only, "Plus ended", never "nothing was charged").
+        const wasTrial = !!(prev && prev.status === 'trialing');
+        const r = await LockClient.unlock(env, calendarId, userId, { lapse: !heir, trial: wasTrial });
         if (r.status >= 500) return { retry: true };
-        if (!heir && r.ok && (s.trial || await acc.isTrialSubscription(s.id))) console.log(`[trial] lapsed mode=${r.paused ? 'readonly' : 'open'}`);
+        if (!heir && r.ok) await sendPlanNotice(env, acc, wasTrial ? 'trial-ended' : 'ended', s, calendarId, userId, { paused: !!r.paused });
+        if (!heir && r.ok && wasTrial) console.log(`[trial] lapsed mode=${r.paused ? 'readonly' : 'open'}`);
     } else if (st.locked || !heir) return {};
     if (!heir) return {};
     // The ex-owner's lock passes to the person still paying, instead of staying with someone who isn't.
@@ -1356,9 +1542,38 @@ async function handleAdmin(request, env, url, path) {
         }
         return json({ ok: true, userId, calendarId: body.calendarId, relocked });
     }
+    if (path === '/api/admin/accounts/reset-trial' && request.method === 'POST') {
+        // Support: someone else trialed this calendar (or it needs a fresh start). Cancels its trial
+        // subscriptions in Stripe, unlocks it to a normal free calendar (no pause), and frees its one trial.
+        const body = (await readJson(request)) || {};
+        if (!validId(body.calendarId)) return json({ error: 'need calendarId' }, 400);
+        const cfg = stripeConfig(env, url.hostname);
+        const canceled = [];
+        for (const sub of await acc.trialSubscriptionsFor(body.calendarId)) {
+            if (cfg && ACTIVE.has(sub.status)) {
+                const d = await stripeRequest(cfg, 'DELETE', `/v1/subscriptions/${encodeURIComponent(sub.id)}`, null, { idempotencyKey: `reset-trial-${sub.id}` });
+                if (!d.ok && d.status !== 404) return json({ error: 'stripe-error', subscription: sub.id }, 502);
+            }
+            await acc.setSubscriptionStatus(sub.id, 'canceled');
+            canceled.push(sub.id);
+        }
+        const st = await LockClient.lockStatus(env, body.calendarId);
+        if (st.status === 404) return json({ error: 'no-calendar' }, 404);
+        let unlocked = false;
+        if (st.locked) unlocked = (await LockClient.unlock(env, body.calendarId, st.ownerId)).ok;          // no lapse: a plain unlock, nothing paused
+        else if (st.lapsed) unlocked = (await LockClient.setLapsedMode(env, body.calendarId, st.lapsed.ownerId, 'open')).ok;   // paused: open it
+        await acc.resetTrial(body.calendarId);
+        return json({ ok: true, calendarId: body.calendarId, canceled, unlocked });
+    }
     // Test hooks, dev mode only.
     if (devMode(env) && path === '/api/admin/accounts/outbox' && request.method === 'GET') {
         return json({ emails: await acc.listOutbox(String(url.searchParams.get('email') || '').toLowerCase()) });
+    }
+    if (devMode(env) && path === '/api/admin/accounts/age-upgrade' && request.method === 'POST') {
+        // Moves a calendar's upgrade back in time, for the 7-day undo limit.
+        const body = (await readJson(request)) || {};
+        await acc.ageUpgrade(String(body.calendarId || ''), Number(body.ageMs) || 0);
+        return json({ ok: true });
     }
     if (devMode(env) && path === '/api/admin/accounts/expire-tokens' && request.method === 'POST') {
         const body = (await readJson(request)) || {};
@@ -1383,7 +1598,8 @@ async function handleAdmin(request, env, url, path) {
         const id = 'sub_dev_' + body.calendarId.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 40) + '_' + userId.slice(-8);
         await acc.upsertSubscription({ id, userId, calendarId: body.calendarId, status,
             interval: body.interval === 'month' ? 'month' : 'year',
-            currentPeriodEnd: Number.isFinite(body.currentPeriodEnd) ? body.currentPeriodEnd : Math.floor(Date.now() / 1000) + 365 * 86400 });
+            currentPeriodEnd: Number.isFinite(body.currentPeriodEnd) ? body.currentPeriodEnd : Math.floor(Date.now() / 1000) + 365 * 86400,
+            cancelAtPeriodEnd: !!body.cancelAtPeriodEnd });
         return json({ ok: true, userId, subscriptionId: id });
     }
     return json({ error: 'not-found' }, 404);

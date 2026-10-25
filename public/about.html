@@ -6,15 +6,12 @@
 <meta name="description" content="pastecal is the shared calendar nobody has to sign up for. Who runs it, how it's paid for, and how to reach us.">
 <meta property="og:title" content="About pastecal">
 <meta property="og:description" content="Shared calendars that just work. No login required, nothing to install.">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/legal.css">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/components.css"><link rel="stylesheet" href="/legal.css">
 <script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>
 <link rel="stylesheet" href="/site.css">
-<style>.about-hi { font-size: 20px; font-weight: 700; margin-top: 8px }
+<style>.about-hi { font-size: var(--pc-fs-2xl); font-weight: 700; margin-top: 8px }
 /* The photo as on BetterExplained: a slightly tilted print with a warm border, floating right. */
-:root { --about-frame: #e8d1bb }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --about-frame: #6b5847 } }
-:root[data-theme="dark"] { --about-frame: #6b5847 }
-.about-photo { float: right; width: 200px; height: auto; border-radius: 10px; border: 4px solid var(--about-frame); transform: rotate(3deg); margin: 0 0 1rem 1.5rem }
+.about-photo { float: right; width: 200px; height: auto; border-radius: var(--pc-radius-card); border: 4px solid var(--pc-photo-frame); transform: rotate(3deg); margin: 0 0 1rem 1.5rem }
 @media (max-width: 560px) { .about-photo { width: 120px; margin: 0 0 .75rem 1rem } }
 @media (prefers-reduced-motion: reduce) { .about-photo { transform: none } } .about-sig { margin-top: 24px; color: var(--pc-text-muted) }</style>
 </head>

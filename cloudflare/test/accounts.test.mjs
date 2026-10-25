@@ -124,8 +124,9 @@ assert.equal(await nextFor('/%2F%2Fevil.example'), null, 'a slash hidden in an e
 assert.equal(await nextFor('/'), '/');
 assert.equal(await nextFor('/Team%20NU%C3%91EZ'), '/Team%20NU%C3%91EZ', 'an encoded calendar name');
 assert.equal(await nextFor('/team?pro=year'), '/team?pro=year', 'the plan being bought rides along');
-assert.equal(await nextFor('/team?pro=month'), '/team?pro=month');
-assert.equal(await nextFor('/team?pro=lifetime'), null, 'only year or month');
+assert.equal(await nextFor('/team?pro=keep'), '/team?pro=keep', 'the reminder\'s Keep link survives a sign-in');
+assert.equal(await nextFor('/team?pro=month'), null, 'Plus is yearly only');
+assert.equal(await nextFor('/team?pro=lifetime'), null, 'only year, trial or keep');
 assert.equal(await nextFor('/team?pro=year&x=1'), null, 'nothing after it');
 assert.equal(await nextFor('/pro/done?pro=year'), null);
 step('next is only ever "/" or one calendar on pastecal, optionally ?pro=year|month (no open redirect, no /pro/ or /signin, no other query)');

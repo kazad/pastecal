@@ -78,6 +78,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import EventStore from '../../public/services/EventStore.js';
 import { initInsight, countHit, insightRoute, INSIGHT_ROUTES } from './RoomInsight.js';
+import { planName } from './Plans.js';
 
 export const LIMITS = {
     savesPerMinute: 60,          // per calendar: far above people, far below a loop
@@ -106,7 +107,7 @@ function clientOptions(o) {
     return Object.fromEntries(Object.entries(o).filter(([k]) => !SERVER_ONLY_OPTIONS.test(k)));
 }
 
-const LOCK_ROUTES = new Set(['lock', 'unlock', 'rotate-editor-key', 'lock-status', 'can-edit', 'set-view-id',
+const LOCK_ROUTES = new Set(['lock', 'unlock', 'rotate-editor-key', 'lock-status', 'can-edit', 'set-view-id', 'editor-of-record',
     'create-editor-link', 'list-editor-links', 'revoke-editor-link', 'set-pro-settings', 'set-lapsed-mode', 'dev-legacy-key']);
 export const LAPSED_MODES = ['readonly', 'open'];
 export const PAUSED_MESSAGE = 'Editing is paused by the owner.';
@@ -381,7 +382,28 @@ export class CalendarRoom extends DurableObject {
                 title: this.state.title || null,   // for the Pro welcome email's subject
                 // After Pro: who it lapsed from and whether it is paused. lapsedMode: the owner's choice (also while locked).
                 lapsed: lp && lp.lapsedAt != null && !l ? { ownerId: lp.ownerId, mode: lp.mode, at: lp.lapsedAt } : null,
-                lapsedMode: lp && (!l || lp.ownerId === l.ownerId) ? lp.mode : 'readonly' });
+                lapsedMode: lp && (!l || lp.ownerId === l.ownerId) ? lp.mode : 'readonly',
+                // Did the owner pick it, or is lapsedMode the default? (A trial with no choice ends open.)
+                lapsedModeChosen: !!(lp && (!l || lp.ownerId === l.ownerId)) });
+        }
+        if (op === 'editor-of-record') {
+            // For the Worker (trial, checkout, the 7-day undo): has this author uid run the calendar?
+            // An editor of record is the browser that created it (created_here), or one that edited it on
+            // at least 2 distinct days. A calendar with neither (from before authors were recorded, or
+            // edited once) falls back to its top author. The uids are never shown to anyone (GET
+            // /cal/<id>/authors is admin-only, history never carries one), so sending one is the proof.
+            if (!this.state.id) return no(404, 'not-found');
+            const uid = typeof body?.uid === 'string' ? body.uid.slice(0, 128) : '';
+            const nDays = (r) => { try { return JSON.parse(r.days).length; } catch { return 0; } };
+            const rows = this.sql.exec(`SELECT uid, first_seen, edit_count, created_here, days FROM authors`).toArray();
+            const qualifies = (r) => !!r.created_here || nDays(r) >= 2;
+            const me = uid ? rows.find((r) => r.uid === uid) : null;
+            let editor = !!(me && qualifies(me));
+            if (!editor && me && !rows.some(qualifies)) {
+                rows.sort((a, b) => nDays(b) - nDays(a) || a.first_seen - b.first_seen || b.edit_count - a.edit_count);
+                editor = rows[0].uid === uid;
+            }
+            return Response.json({ ok: true, known: rows.length > 0, editor, creator: !!(me && me.created_here) });
         }
         if (op === 'can-edit') {
             // For the Worker (create-view): may this caller change the calendar?
@@ -419,7 +441,8 @@ export class CalendarRoom extends DurableObject {
             // exchange adopts Firebase's copy as the baseline, applies none of it, and writes ours over it.
             this.setMeta('firebaseUntrusted', true);
             // Billing ending a subscription (lapse:true): paused unless the owner chose 'open'.
-            const pref = this.lapse && this.lapse.ownerId === l.ownerId ? this.lapse.mode : 'readonly';
+            // A trial with no choice made ends open (a free calendar again); anything paid ends read-only.
+            const pref = this.lapse && this.lapse.ownerId === l.ownerId ? this.lapse.mode : body.trial === true ? 'open' : 'readonly';
             if (body.lapse === true && pref === 'readonly') {
                 const at = Date.now();
                 this.sql.exec(`INSERT OR REPLACE INTO lapse (k, owner, mode, lapsed_at) VALUES (1, ?, 'readonly', ?)`, l.ownerId, at);
@@ -427,7 +450,7 @@ export class CalendarRoom extends DurableObject {
             } else {
                 this.sql.exec(`DELETE FROM lapse`); this.lapse = null;
             }
-            this.recordLockChange('unlocked', this.paused() ? 'Pro ended. Editing paused by the owner' : 'Unlocked');
+            this.recordLockChange('unlocked', this.paused() ? `${planName(l.plan)} ended. Editing paused by the owner` : body.undo === true ? 'Upgrade undone' : 'Unlocked');
             await this.scheduleCopyBack();
             return Response.json({ ok: true, paused: this.paused() });
         }
@@ -465,7 +488,7 @@ export class CalendarRoom extends DurableObject {
             // Billing locks with createLink:false: there is no browser to show a key to, and the owner
             // makes links from the calendar. The admin route still gets one 'Editors' key.
             const made = body.createLink !== false && !this.links.size ? this.createLink('Editors', k) : null;
-            this.recordLockChange('locked', 'Locked with Pro');
+            this.recordLockChange('locked', `Upgraded with ${planName(plan)}`);
             // Claim this calendar's own name (and view link) in the directory now, so a case variant
             // registered earlier can't keep its lookups. (A name held by another LOCKED calendar stays.)
             this.ctx.waitUntil(this.registerInDirectory(this.state.id, false, null, true));
@@ -762,12 +785,24 @@ export class CalendarRoom extends DurableObject {
             // X-PC-User is trusted: the Worker deletes any a client sent and sets it from a session.
             const att = { saves: [], isViewOnly, viewId, author, user: isViewOnly ? null : request.headers.get('X-PC-User') || null };
             server.serializeAttachment(att);
-            if (author && this.canWrite(att) && this.state.id) this.recordAuthor(author, false);   // a name nobody created stores nothing
+            // Opening is not editing: an author is recorded on a save only (editor of record counts edit days).
             server.send(json(this.snapshotFor(att)));
             return new Response(null, { status: 101, webSocket: client });
         }
         if (request.method === 'POST' && suffix === 'archive') return Response.json(await this.archiveTestCalendar());
         if (request.method === 'HEAD') return new Response(null, { status: this.state.id ? 200 : 404 });
+        if (suffix === 'authors' && request.method === 'POST') {
+            // Test hook (ACCOUNTS_DEV_MODE only; the Worker already requires the admin secret for /authors):
+            // add an earlier active day to an author, so "edited on 2+ days" can be tested today.
+            if (this.env.ACCOUNTS_DEV_MODE !== '1') return Response.json({ error: 'forbidden' }, { status: 403 });
+            const b = await request.json().catch(() => ({}));
+            const r = this.sql.exec(`SELECT days FROM authors WHERE uid = ?`, String(b.uid || '')).toArray()[0];
+            if (!r || !/^\d{4}-\d{2}-\d{2}$/.test(String(b.day || ''))) return Response.json({ error: 'no-author' }, { status: 404 });
+            let days = []; try { days = JSON.parse(r.days); } catch {}
+            if (!days.includes(b.day)) days.unshift(b.day);
+            this.sql.exec(`UPDATE authors SET days = ? WHERE uid = ?`, json(days), String(b.uid));
+            return Response.json({ ok: true, days });
+        }
         if (request.method === 'GET') {
             if (suffix === 'history') {
                 const rows = this.sql.exec(`SELECT v, at, source, commands, entry FROM history ORDER BY v DESC LIMIT 20`).toArray();
@@ -1217,7 +1252,7 @@ export class CalendarRoom extends DurableObject {
             const beforeOptions = this.state.options;
             const touched = new Set([...result.added, ...result.changed].map(EventStore.keyOf));
             this.storeEvents(result.events, touched);
-            this.bump('save', m.commands, { beforeEvents, beforeTitle, beforeOptions, writer: m.writer || author });
+            this.bump('save', m.commands, { beforeEvents, beforeTitle, beforeOptions, writer: m.writer || null });   // never the author uid: history is public, the uid proves who made it
             ws.send(json({ t: 'ack', id: m.id, v: this.state.v }));
             this.broadcast({ t: 'change', v: this.state.v, commands: m.commands }, ws);
             await this.scheduleCopyBack();
@@ -1243,7 +1278,7 @@ export class CalendarRoom extends DurableObject {
             if (why) return refuse('too_big', why);
             if (nextTitle !== s.title) { s.title = nextTitle; this.setMeta('title', s.title); }
             if (nextOptions !== s.options) { s.options = nextOptions; this.setMeta('options', s.options); }
-            this.bump('meta', [{ type: 'meta', title: m.title, options: m.options }], { beforeEvents, beforeTitle, beforeOptions, writer: m.writer || author });
+            this.bump('meta', [{ type: 'meta', title: m.title, options: m.options }], { beforeEvents, beforeTitle, beforeOptions, writer: m.writer || null });   // never the author uid: history is public, the uid proves who made it
             ws.send(json({ t: 'ack', id: m.id, v: s.v }));
             this.broadcast({ t: 'meta', v: s.v, title: s.title, options: s.options }, ws);
             await this.scheduleCopyBack();

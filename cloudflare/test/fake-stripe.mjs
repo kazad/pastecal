@@ -10,7 +10,7 @@
 //            POST /stripe/v1/customers, POST /stripe/v1/subscriptions (trials: a trialing sub with trial_end, put in `subs`;
 //            the same Idempotency-Key returns the same object; hooks.createFails refuses the next N with a 400)
 //   Lock:    the CalendarRoom lock API from the pastecal-pro-lock branch, over `cals`:
-//            GET lock-status, POST lock / unlock / rotate-editor-key
+//            GET lock-status, POST lock / unlock / rotate-editor-key / editor-of-record
 // Everything the Worker sent is in `log`, form bodies decoded.
 import http from 'node:http';
 import crypto from 'node:crypto';
@@ -104,11 +104,13 @@ export function startFakeStripe(port) {
                 }
                 return send(res, 404, { error: { message: 'fake: no route' } });
             }
-            const lm = decodeURIComponent(p).match(/^\/lockfake\/cal\/(.+)\/(lock|unlock|rotate-editor-key|lock-status)$/);
+            const lm = decodeURIComponent(p).match(/^\/lockfake\/cal\/(.+)\/(lock|unlock|rotate-editor-key|lock-status|editor-of-record)$/);
             if (!lm) return send(res, 404, { ok: false });
             const [, id, action] = lm, cal = cals.get(id);
-            if (action !== 'lock-status' && hooks.lockFails > 0) { hooks.lockFails--; return send(res, 503, { ok: false, error: 'unavailable' }); }
+            if (action !== 'lock-status' && action !== 'editor-of-record' && hooks.lockFails > 0) { hooks.lockFails--; return send(res, 503, { ok: false, error: 'unavailable' }); }
             if (!cal) return send(res, 404, { ok: false, error: 'no-calendar' });
+            // No authors table here: every author is an editor of record (and the creator) unless the test set cal.creator.
+            if (action === 'editor-of-record') { const yes = !cal.creator || (body && body.uid) === cal.creator; return send(res, 200, { ok: true, known: true, editor: yes, creator: yes }); }
             if (action === 'lock-status') return send(res, 200, { locked: cal.locked, ownerId: cal.ownerId || null, plan: cal.plan || null, lockedAt: cal.lockedAt || null, title: cal.title || null });
             if (action === 'lock') {
                 if (cal.locked && cal.ownerId !== body.ownerId) return send(res, 409, { ok: false, error: 'locked-by-other' });

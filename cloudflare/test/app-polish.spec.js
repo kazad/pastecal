@@ -299,3 +299,22 @@ test('homepage panel: a returning visitor sees Your calendars, and Getting start
   await expect(aside.getByTestId('home-recents')).toContainText('Tab check');
   await ctx.close();
 });
+
+// ---- 5. The header never overlaps itself between 768 and 1000px ----
+// At ~800px "+ Add event" ran under the centered calendar title (the left column could shrink to 0).
+// Now the left and right columns keep their content width and the title truncates in between.
+for (const width of [768, 800, 860, 900, 1000]) {
+  test(`header at ${width}px: Add event, the title and the address pill don't overlap`, async ({ browser }) => {
+    const { ctx, page } = await open(browser, { viewport: { width, height: 800 } });
+    const add = await page.getByTestId('desktop-add-event-button').boundingBox();
+    const title = await page.getByTestId('desktop-title-area').boundingBox();
+    const right = await page.locator('topbar > section:last-child').boundingBox();
+    const sep = (a, b) => a.x + a.width <= b.x + 1;
+    expect(sep(add, title), `add ${JSON.stringify(add)} vs title ${JSON.stringify(title)}`).toBe(true);
+    expect(sep(title, right), `title ${JSON.stringify(title)} vs right ${JSON.stringify(right)}`).toBe(true);
+    expect(title.width).toBeGreaterThan(40);   // the name still shows, truncated if it must
+    await expect(page.getByTestId('desktop-add-event-button')).toHaveAccessibleName(/Add event/);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await ctx.close();
+  });
+}

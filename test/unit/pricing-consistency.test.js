@@ -73,7 +73,13 @@ test('homepage plan cards match the pricing page', () => {
   const home = read('public/index.html');
   assert.match(home, /<h4>Plus<\/h4><p class="pc-plan-price"><b>\$29<\/b> a year<\/p>/);
   assert.match(home, /<h4>Pro<\/h4><p class="pc-plan-price"><b>\$96<\/b> a year <small>or \$10 a month<\/small><\/p>/);
-  assert.match(home, /<span class="pc-gopro-price">Plus · \$29 a year<\/span>/);
+});
+
+test('the Plus tab names the Plus price', () => {
+  const pro = read('public/components/Pro.js');
+  assert.match(pro, />\{\{ going \? 'taking you to payment…' : 'upgrade now: \$29\/year' \}\}</);
+  assert.match(pro, /<b>\$29 a year<\/b> <span class="pc-pro-muted">That's about \$2\.42 a month\.<\/span>/);
+  assert.ok(!/\$24 a year|\$2 a month/.test(pro), 'no old Plus price');
 });
 
 test('branding removal is a Teams feature; Plus and Pro keep a small footer', () => {

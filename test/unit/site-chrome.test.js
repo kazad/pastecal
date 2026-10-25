@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 
 const root = path.join(__dirname, '..', '..');
-const PAGES = ['pricing', 'pricing-next', 'help', 'about', 'privacy', 'terms', 'report', 'contact', 'signin'].map(n => `public/${n}.html`);
+const PAGES = ['pricing', 'help', 'about', 'privacy', 'terms', 'report', 'contact', 'signin'].map(n => `public/${n}.html`);
 const partial = (n) => fs.readFileSync(path.join(root, 'scripts/site-chrome', n), 'utf8').trim();
 const FIX = 'Run `node scripts/sync-site-chrome.mjs` to fix it.';
 
@@ -20,6 +20,7 @@ for (const rel of PAGES) {
         }
         assert.match(html, /<link rel="stylesheet" href="\/site\.css">/, `${rel} does not link /site.css. ${FIX}`);
         assert.match(html, /<link rel="stylesheet" href="\/tokens\.css">/, `${rel} does not link /tokens.css. ${FIX}`);
+        assert.match(html, /href="\/tokens\.css"><link rel="stylesheet" href="\/components\.css">/, `${rel} must link /components.css right after /tokens.css. ${FIX}`);
     });
 }
 
