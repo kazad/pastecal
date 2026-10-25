@@ -141,12 +141,16 @@ test('the logo in the renderer is the app\'s logo, path for path', async () => {
     assert.equal(LOGO_PATH, file.match(/\sd="([^"]+)"/)[1].replace(/\s+/g, ' ').trim());
 });
 
+// What the room's preview route sends (CalendarRoom.previewData): the events plus the all-day starts.
+// `raw: true` rooms answer as a room running older code would: the whole calendar.
+const asPreview = (cal) => (cal.raw ? cal.body : { ...cal, zoneSamples: cal.events.filter((e) => e.isAllDay).map((e) => e.start) });
+
 // A fake Worker env: a directory and rooms answering like the real ones.
 function fakeEnv({ lookup = {}, rooms = {}, delayMs = 0, fail = false } = {}) {
     const later = (v) => new Promise((resolve, reject) => setTimeout(() => (fail ? reject(new Error('boom')) : resolve(v)), delayMs));
     return {
         DIRECTORY: { idFromName: () => 'g', get: () => ({ fetch: async (u) => later(Response.json(lookup[new URL(u).searchParams.get('slug')] || { found: false })) }) },
-        CALENDARS: { idFromName: (n) => n, get: (n) => ({ fetch: async (u) => { assert.match(String(u), /^http:\/\/internal\/cal\/[^/]+\/preview$/); return later(rooms[n] ? Response.json(rooms[n]) : Response.json({}, { status: 404 })); } }) },
+        CALENDARS: { idFromName: (n) => n, get: (n) => ({ fetch: async (u) => { assert.match(String(u), /^http:\/\/internal\/cal\/[^/]+\/preview$/); return later(rooms[n] ? Response.json(asPreview(rooms[n])) : Response.json({}, { status: 404 })); } }) },
     };
 }
 const page = () => new Response(fs.readFileSync(path.join(__dirname, '../../public/index.html'), 'utf8'), { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
@@ -173,6 +177,10 @@ test('a missing, failing or slow calendar leaves the page exactly as it was', as
         failing: fakeEnv({ fail: true, rooms: { choir: choir() } }),
         slow: fakeEnv({ delayMs: PAGE_BUDGET_MS + 300, lookup: { choir: { found: true, targetId: 'choir' } }, rooms: { choir: choir() } }),
         viewOfEditName: fakeEnv({ lookup: { choir: { found: true, isReadOnly: false, targetId: 'choir' } }, rooms: { choir: choir() } }),
+        // Not in the directory: no room is asked (it would be created empty for every scanned path).
+        notInDirectory: fakeEnv({ rooms: { choir: choir() } }),
+        // A room on older code answers /preview with {v, calendar}: not mistaken for an empty calendar.
+        olderRoom: fakeEnv({ lookup: { choir: { found: true, targetId: 'choir' } }, rooms: { choir: { raw: true, body: { v: 3, calendar: choir() } } } }),
     };
     for (const [name, env] of Object.entries(cases)) {
         const kind = name === 'viewOfEditName' ? 'view' : 'edit';
@@ -185,6 +193,19 @@ test('a missing, failing or slow calendar leaves the page exactly as it was', as
     // Not HTML (a 404 from the assets, say): passed through untouched.
     const notHtml = new Response('nope', { status: 404 });
     assert.equal(await previewPage(new Request('https://pastecal.com/x'), fakeEnv(), notHtml, { kind: 'edit', id: 'x' }, NOW), notHtml);
+});
+
+test('link-preview fetchers wait longer than people for the real tags (a miss is cached by them)', async () => {
+    const { previewPage, PAGE_BUDGET_MS, BOT_BUDGET_MS } = await src('page.js');
+    const env = fakeEnv({ delayMs: PAGE_BUDGET_MS + 200, lookup: { choir: { found: true, targetId: 'choir' } }, rooms: { choir: choir() } });
+    assert.ok(BOT_BUDGET_MS >= 1500);
+    for (const ua of ['facebookexternalhit/1.1', 'Slackbot-LinkExpanding 1.0', 'Mozilla/5.0 (compatible; Discordbot/2.0)', 'WhatsApp/2.23', 'Twitterbot/1.0', 'LinkedInBot/1.0']) {
+        const req = new Request('https://pastecal.com/choir', { headers: { 'User-Agent': ua } });
+        const html = await (await previewPage(req, env, page(), { kind: 'edit', id: 'choir' }, NOW)).text();
+        assert.match(html, /og:title" content="Riverside/, ua);
+    }
+    const person = new Request('https://pastecal.com/choir', { headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh) Safari/605.1.15' } });
+    assert.ok(!(await (await previewPage(person, env, page(), { kind: 'edit', id: 'choir' }, NOW)).text()).includes('og:title" content="Riverside'));
 });
 
 test('the card version stamp changes with the calendar, the date and the branding setting', async () => {
