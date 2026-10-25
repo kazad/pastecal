@@ -176,6 +176,39 @@ test('"Show on my page" lists it on pastecal.com/@name', async ({ browser }) => 
   await ctx.close();
 });
 
+test('a short link moves to another calendar only on Save (Change, pick, Save; Cancel leaves it)', async ({ browser }) => {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, storageState: cookieJar });
+  await ctx.routeWebSocket((url) => !/localhost|127\.0\.0\.1/.test(String(url)), (ws) => ws.close());
+  const page = await ctx.newPage();
+  await page.goto('/account');
+  const made = await page.request.post('/api/names/calendar', { data: JSON.stringify({ name: 'hockey', title: 'Hockey' }), headers: { 'Content-Type': 'application/json', Origin: BASE } });
+  expect(made.status()).toBe(200);
+  const hockey = (await made.json()).calendarId;
+  const short = `sh${run}`.slice(0, 30);
+  await page.reload();
+  await page.getByTestId('short-input').fill(short);
+  await page.getByTestId('short-calendar').selectOption(calendarId);
+  await page.getByTestId('short-add').click();
+  const row = page.getByTestId('short-row').filter({ hasText: short });
+  await expect(row).toContainText('→ Soccer');
+  await expect(row.getByTestId('short-remap')).toBeHidden();                 // no select that moves it on change
+  const target = async () => (await (await page.request.get('/api/account')).json()).shortNames.find((x) => x.name === short).calendarId;
+  await row.getByTestId('short-change').click();
+  await row.getByTestId('short-remap').selectOption(hockey);
+  expect(await target()).toBe(calendarId);                                    // picking alone moves nothing
+  await row.getByTestId('short-remap-cancel').click();
+  await expect(row.getByTestId('short-pick')).toBeHidden();
+  expect(await target()).toBe(calendarId);
+  await row.getByTestId('short-change').click();
+  await expect(row.getByTestId('short-remap-save')).toBeDisabled();           // same calendar: nothing to save
+  await row.getByTestId('short-remap').selectOption(hockey);
+  await row.getByTestId('short-remap-save').click();
+  await expect(page.getByTestId('short-ok')).toHaveText(`pastecal.com/${short} now opens Hockey.`);
+  await expect(page.getByTestId('short-row').filter({ hasText: short })).toContainText('→ Hockey');
+  expect(await target()).toBe(hockey);
+  await ctx.close();
+});
+
 test('a deleted account\'s short link opens "This link has ended", never a calendar anyone can edit', async ({ browser, playwright }) => {
   const api = await playwright.request.newContext({ baseURL: BASE, extraHTTPHeaders: { Origin: BASE } });
   const post = async (path, body, headers = {}) => api.post(path, { data: JSON.stringify(body), headers: { 'Content-Type': 'application/json', ...headers } });

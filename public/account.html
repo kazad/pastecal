@@ -67,6 +67,8 @@ select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); borde
 .short-name { font-weight: 600; overflow-wrap: anywhere; color: var(--pc-link); text-decoration: none; }
 .short-name:hover { text-decoration: underline; }
 .short-row .grow { flex: 1 1 200px; color: var(--pc-text-muted); min-width: 0; overflow-wrap: anywhere; }
+.short-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 8px; }
+.ok:empty { display: none; }
 .danger-zone { background: transparent; border-style: dashed; }
 .danger-zone h2 { color: var(--pc-text); }
 .signin { max-width: 440px; margin: 6vh auto 0; }
@@ -157,6 +159,7 @@ select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); borde
       </form>
       <p class="muted" id="shortNote">If Pro ends, your short links keep working but can't be changed. We hold them for you for 90 days after it ends, then release them for anyone to use.</p>
       <p class="err" id="shortErr" role="alert" data-testid="short-error"></p>
+      <p class="ok" id="shortOk" role="status" aria-live="polite" data-testid="short-ok"></p>
     </section>
 
     <section class="card" data-testid="account-calendars-card">
@@ -288,19 +291,39 @@ select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); borde
     var list = $('shortList'); list.textContent = '';
     shorts.forEach(function (x) {
       var cal = A.calendars.filter(function (c) { return c.id === x.calendarId; })[0];
+      var picker = null;
+      var rel = el('button', { type: 'button', class: 'link', 'data-testid': 'short-release', text: 'Release' });
+      rel.addEventListener('click', function () {
+        if (!window.confirm('Release ' + host + '/' + x.name + '? It stops working, and anyone can take the name.')) return;
+        change('/api/names/short/release', { name: x.name }, 'shortErr');
+      });
       var row = el('div', { class: 'short-row' }, [
         el('a', { class: 'short-name', href: '/' + x.name, target: '_blank', rel: 'noopener', text: host + '/' + x.name }),
         el('span', { class: 'grow', text: '→ ' + (cal ? cal.title : 'a calendar') })]);
+      // Moving a link that may be printed on flyers: Change opens a picker, and only Save moves it.
       if (unl && mine.length > 1) {
-        var re = el('select', { 'aria-label': 'Point ' + x.name + ' at', 'data-testid': 'short-remap' });
+        var chg = el('button', { type: 'button', class: 'link', 'data-testid': 'short-change', text: 'Change' });
+        var re = el('select', { 'aria-label': 'Point ' + host + '/' + x.name + ' at', 'data-testid': 'short-remap' });
         mine.forEach(function (c) { var o = el('option', { value: c.id, text: c.title }); if (c.id === x.calendarId) o.selected = true; re.appendChild(o); });
-        re.addEventListener('change', function () { change('/api/names/short/remap', { name: x.name, calendarId: re.value }, 'shortErr'); });
-        row.appendChild(re);
+        var save = el('button', { type: 'button', class: 'btn', 'data-testid': 'short-remap-save', text: 'Save' });
+        var cancel = el('button', { type: 'button', class: 'link', 'data-testid': 'short-remap-cancel', text: 'Cancel' });
+        picker = el('div', { class: 'short-pick', 'data-testid': 'short-pick' }, [re, save, cancel]); picker.hidden = true;
+        var sync = function () { save.disabled = re.value === x.calendarId; };
+        re.addEventListener('change', sync); sync();
+        chg.addEventListener('click', function () { picker.hidden = false; chg.hidden = true; rel.hidden = true; re.focus(); });
+        cancel.addEventListener('click', function () { re.value = x.calendarId; sync(); picker.hidden = true; chg.hidden = false; rel.hidden = false; });
+        save.addEventListener('click', function () {
+          var to = A.calendars.filter(function (c) { return c.id === re.value; })[0];
+          save.disabled = true; save.textContent = 'Saving…';
+          change('/api/names/short/remap', { name: x.name, calendarId: re.value }, 'shortErr').then(function (d) {
+            if (d) { $('shortOk').textContent = host + '/' + x.name + ' now opens ' + (to ? to.title : 'that calendar') + '.'; return; }
+            save.disabled = false; save.textContent = 'Save';
+          });
+        });
+        row.appendChild(chg);
       }
-      var rel = el('button', { type: 'button', class: 'link', 'data-testid': 'short-release', text: 'Release' });
-      rel.addEventListener('click', function () { change('/api/names/short/release', { name: x.name }, 'shortErr'); });
       row.appendChild(rel);
-      list.appendChild(el('li', { 'data-testid': 'short-row' }, [row]));
+      list.appendChild(el('li', { 'data-testid': 'short-row' }, picker ? [row, picker] : [row]));
     });
 
     renderCalendars(unl);
@@ -351,6 +374,7 @@ select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); borde
 
   function change(path, body, errId) {
     var err = $(errId); if (err) err.textContent = '';
+    if ($('shortOk')) $('shortOk').textContent = '';
     return api('POST', path, body).then(function (r) {
       if (r.status === 200 && r.d.ok) return load().then(function () { return r.d; });
       var msg = r.d.message || (r.status === 0 ? OFFLINE : r.status === 401 ? 'Sign in again.' : r.d.error === 'not-owner' ? 'That calendar isn’t yours.' : 'Something went wrong. Try again in a minute.');
