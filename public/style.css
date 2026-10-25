@@ -2306,3 +2306,8 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 /* Homepage pricing cards: equal height, link pinned to the bottom. */
 .pc-tour-plans > div { display: flex; flex-direction: column }
 .pc-tour-plans > div > p { flex: 1 }
+/* Homepage guide: three plain facts instead of a sentence that repeated the steps; the quote follows
+   the links (no stretch to the bottom, which left a dead gap on tall windows). */
+.pc-home-chips { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 4px 0 18px; color: var(--pc-text-muted); font-size: 15px; font-weight: 600 }
+.pc-home-chips span::before { content: "✓ "; color: var(--pc-success, #1f7a4d) }
+.pc-home-proof { margin: 28px 0 0 !important }
