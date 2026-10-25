@@ -587,6 +587,11 @@ const CalendarVueApp = {
                 return this.spansRange(start, ms(e.end), range);
             }).length;
         },
+        // An unset default view is undefined in saved calendars; the select's Auto option is null.
+        calendarDefaultView: {
+            get() { return this.calendar.options.defaultView ?? null; },
+            set(v) { this.calendar.options.defaultView = v; }
+        },
         calendarAutoViewLabel() {
             return 'Month'; // Could be dynamic based on screen size etc.
         },

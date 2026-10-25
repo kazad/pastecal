@@ -1087,8 +1087,8 @@
 
                             <div class="pc-set-grid">
                                 <div class="pc-set-field">
-                                    <label class="pc-set-label" for="set-cal-view">Default view</label>
-                                    <select id="set-cal-view" v-model="calendar.options.defaultView" class="pc-set-input">
+                                    <label class="pc-set-label" for="set-cal-view">Default view for everyone</label>
+                                    <select id="set-cal-view" v-model="calendarDefaultView" class="pc-set-input">
                                         <option :value="null">Auto ({{ calendarAutoViewLabel }})</option>
                                         <option value="Day">Day</option>
                                         <option value="Week">Week</option>

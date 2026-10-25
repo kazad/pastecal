@@ -109,7 +109,9 @@ test('a setting changed in the panel still applies at once', async ({ browser, r
   // One page, two sections: "This calendar" then "Only me", and it fits without scrolling.
   await expect(page.getByTestId('settings-calendar')).toContainText('This calendar');
   await expect(page.getByTestId('settings-me')).toContainText('Only me');
-  await expect(panel(page).getByLabel('Default view', { exact: true })).toBeVisible();
+  await expect(panel(page).getByLabel('Default view for everyone')).toBeVisible();
+  // A calendar that never set one shows Auto, not a blank select.
+  expect(await panel(page).getByLabel('Default view for everyone').evaluate((e) => e.options[e.selectedIndex]?.text || '')).toMatch(/^Auto/);
   await expect(panel(page).getByLabel('First day of week')).toBeVisible();
   expect(await page.$eval('.pc-side-body', (b) => b.scrollHeight <= b.clientHeight + 1), 'Settings fits without scrolling').toBe(true);
   await panel(page).getByLabel('First day of week').selectOption('1');   // Monday
@@ -118,9 +120,9 @@ test('a setting changed in the panel still applies at once', async ({ browser, r
   await panel(page).getByLabel('First day of week').selectOption('0');
   await expect.poll(() => page.evaluate(() => scheduleObj.firstDayOfWeek)).toBe(0);
   // A calendar setting still binds to the calendar.
-  await panel(page).getByLabel('Default view', { exact: true }).selectOption('Week');
+  await panel(page).getByLabel('Default view for everyone').selectOption('Week');
   await expect.poll(() => page.evaluate(() => document.querySelector('#app')._vnode.component.proxy.calendar.options.defaultView)).toBe('Week');
-  await panel(page).getByLabel('Default view', { exact: true }).selectOption({ index: 0 })   // Auto;
+  await panel(page).getByLabel('Default view for everyone').selectOption({ index: 0 })   // Auto;
   await expect.poll(() => page.evaluate(() => document.querySelector('#app')._vnode.component.proxy.calendar.options.defaultView)).toBe(null);
   await ctx.close();
 });
