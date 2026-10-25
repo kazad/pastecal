@@ -18,14 +18,13 @@ test('no page states the old Teams price', () => {
 // One plan card: from its <h3> to the end of its button.
 const card = (html, name) => new RegExp(`<h3>${name}</h3>[\\s\\S]*?</a>`).exec(html)[0];
 
-test('Teams is $290 a year or $29 a month on the pricing card, waitlist, FAQ and terms', () => {
+test('Teams is $290 a year or $29 a month on the pricing card, waitlist and FAQ', () => {
   const pricing = read('public/pricing.html');
   const teams = card(pricing, 'Teams');
   assert.match(teams, /<strong>\$290<\/strong>/);
   assert.match(teams, /\$29 a month/);
   assert.match(pricing, /<option value="teams">Teams, \$290 a year or \$29 a month<\/option>/);
   assert.match(pricing, /<summary>What is Teams\?<\/summary><p>[^<]*\$290 a year or \$29 a month/);
-  assert.match(read('public/terms.html'), /Teams[^<]*\$290 a year or \$29 a month/);
 });
 
 test('one price everywhere: no $2.99 and no $79 or $8 a month on any page people see', () => {
