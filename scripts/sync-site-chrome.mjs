@@ -11,6 +11,9 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const PAGES = ['pricing', 'pricing-next', 'help', 'about', 'privacy', 'terms', 'report', 'contact', 'signin'].map(n => `public/${n}.html`);
+// The homepage has the app's own header, and ends with the same site footer (inside its markers).
+export const FOOTER_ONLY = ['public/index.html'];
+export const syncFooter = (html, footer = partial('footer.html')) => html.replace(markerRe('site-footer'), () => block('site-footer', footer));
 const partial = (n) => fs.readFileSync(path.join(root, 'scripts/site-chrome', n), 'utf8').trim();
 export const block = (name, html) => `<!-- ${name} -->\n${html}\n<!-- /${name} -->`;
 export const markerRe = (name) => new RegExp(`<!-- ${name} -->[\\s\\S]*?<!-- /${name} -->`);
@@ -45,6 +48,13 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     const file = path.join(root, rel);
     const before = fs.readFileSync(file, 'utf8');
     const after = sync(before);
+    if (after !== before) { fs.writeFileSync(file, after); console.log('updated', rel); } else console.log('ok     ', rel);
+  }
+  for (const rel of FOOTER_ONLY) {
+    const file = path.join(root, rel);
+    const before = fs.readFileSync(file, 'utf8');
+    if (!markerRe('site-footer').test(before)) throw new Error(`${rel} has no <!-- site-footer --> markers`);
+    const after = syncFooter(before);
     if (after !== before) { fs.writeFileSync(file, after); console.log('updated', rel); } else console.log('ok     ', rel);
   }
 }
