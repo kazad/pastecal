@@ -49,7 +49,8 @@ const event = (type, object) => ({ id: `evt_trial_${run}_${++evN}`, object: 'eve
 const at = (d, h) => new Date(Date.UTC(2026, 10, d, h)).toISOString();
 const ev = (id, title, d) => ({ id, title, start: at(d, 9), end: at(d, 10), type: 1 });
 async function createCalendar(id) {
-    const r = await fetch(`${BASE}/cal/${enc(id)}`, { method: 'POST', body: JSON.stringify({ title: `Team ${id}`, options: {}, events: [ev('a', 'first', 1)], author: AUTHOR }) });
+    const r = await fetch(`${BASE}/cal/${enc(id)}`, { method: 'POST', headers: { 'CF-Connecting-IP': `10.41.${Math.floor(++ip / 200)}.${ip % 200}` },   // creates are limited per address
+        body: JSON.stringify({ title: `Team ${id}`, options: {}, events: [ev('a', 'first', 1)], author: AUTHOR }) });
     assert.equal(r.status, 201, await r.text());
 }
 // One browser tab on the calendar's socket; cookie = signed in (the Worker turns it into the owner's id).
@@ -412,6 +413,36 @@ try {
     await webhook(event('customer.subscription.deleted', { id: carlSub.id, object: 'subscription' }));
     assert.equal((await status(cal2, carl.cookie)).isOwner, true, 'the trial\'s own deleted event does not unlock a paid calendar');
     step('Keep Pro during a trial is the normal checkout ($24/year or $2.99/month); the paid subscription replaces the trial (canceled, not refunded), the lock stays');
+
+    // --- Billing goes to the right Stripe customer: Manage billing opens the named calendar's own customer, and a
+    // checkout never reuses a trial's customer (a card saved there would turn that trial into a charge).
+    const jo = await signIn(`jo-trial-${run}@example.com`);
+    const calJ1 = `jo-trial-${run}`, calJ2 = `jo-paid-${run}`; await createCalendar(calJ1); await createCalendar(calJ2);
+    assert.equal((await post('/api/pro/trial', { calendarId: calJ1 }, jo.cookie)).status, 200);
+    const joTrialCus = [...fake.subs.values()].find((x) => x.metadata.calendar_id === calJ1).customer;
+    let mark = fake.log.length;
+    assert.equal((await post('/api/pro/checkout', { calendarId: calJ2 }, jo.cookie)).status, 200);
+    const joCheckout = fake.log.slice(mark).find((l) => l.method === 'POST' && l.path === '/stripe/v1/checkout/sessions');
+    assert.notEqual(joCheckout.body.customer, joTrialCus, 'never the trial\'s customer');
+    assert.equal(joCheckout.body.customer_email, `jo-trial-${run}@example.com`, 'a fresh customer from the email');
+    fake.subs.set(`sub_${run}_jo`, { id: `sub_${run}_jo`, object: 'subscription', status: 'active', customer: `cus_${run}_jo_paid`, metadata: { calendar_id: calJ2, user_id: jo.userId },
+        created: Math.floor(Date.now() / 1000), items: { data: [{ current_period_end: 1830000000, price: { id: 'price_fake_yearly', recurring: { interval: 'year' } } }] } });
+    assert.equal((await webhook(event('customer.subscription.created', { id: `sub_${run}_jo` }))).status, 200);
+    // A newer trial row update must not move Manage billing for the paid calendar.
+    await webhook(event('customer.subscription.trial_will_end', { id: [...fake.subs.values()].find((x) => x.metadata.calendar_id === calJ1).id, object: 'subscription' }));
+    const portalCustomer = async (calendarId) => {
+        const m = fake.log.length;
+        assert.equal((await post('/api/pro/portal', calendarId ? { calendarId } : {}, jo.cookie)).status, 200);
+        return fake.log.slice(m).find((l) => l.path === '/stripe/v1/billing_portal/sessions').body.customer;
+    };
+    assert.equal(await portalCustomer(calJ2), `cus_${run}_jo_paid`, 'the paid calendar opens its own customer');
+    assert.equal(await portalCustomer(calJ1), joTrialCus, 'the trial calendar opens the trial\'s customer');
+    assert.equal(await portalCustomer(null), `cus_${run}_jo_paid`, 'no calendar named: the paid customer');
+    mark = fake.log.length;
+    const calJ3 = `jo-more-${run}`; await createCalendar(calJ3);
+    assert.equal((await post('/api/pro/checkout', { calendarId: calJ3 }, jo.cookie)).status, 200);
+    assert.equal(fake.log.slice(mark).find((l) => l.path === '/stripe/v1/checkout/sessions').body.customer, `cus_${run}_jo_paid`, 'a later checkout reuses the paid customer');
+    step('Manage billing opens the named calendar\'s own Stripe customer (paid or trial), and checkout reuses only a paid customer, never a trial\'s');
 
     anonTab.close(); ownerTab.close();
     console.log(`\n${n} checks passed`);

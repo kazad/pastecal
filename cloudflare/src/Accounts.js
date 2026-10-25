@@ -355,8 +355,19 @@ export class Accounts extends DurableObject {
     conflicts() {
         return this.sql.exec(`SELECT stripe_subscription_id, user_id, calendar_id, status, updated_at FROM subscriptions WHERE status IN ('refunded-conflict', 'conflict-refund-failed') ORDER BY updated_at DESC LIMIT 100`).toArray();
     }
+    // The Stripe customer for Manage billing with no calendar named: a paid (never-trial) subscription's if
+    // there is one, else the most recent. Each trial has its own customer, so "most recent" alone could open
+    // a trial's customer where the paid plan isn't listed.
     customerForUser(userId) {
-        const row = this.sql.exec(`SELECT stripe_customer_id FROM subscriptions WHERE user_id = ? AND stripe_customer_id IS NOT NULL ORDER BY updated_at DESC LIMIT 1`, userId).toArray()[0];
+        return this.paidCustomerForUser(userId) || (this.sql.exec(`SELECT stripe_customer_id FROM subscriptions WHERE user_id = ? AND stripe_customer_id IS NOT NULL
+            ORDER BY updated_at DESC LIMIT 1`, userId).toArray()[0] || {}).stripe_customer_id || null;
+    }
+    // A customer from a subscription that never was a trial. Checkout reuses only this one: a trial's customer
+    // must never get a card from another calendar's checkout, or that trial would charge it when it ends.
+    paidCustomerForUser(userId) {
+        const row = this.sql.exec(`SELECT stripe_customer_id FROM subscriptions WHERE user_id = ? AND stripe_customer_id IS NOT NULL
+            AND stripe_subscription_id NOT IN (SELECT subscription_id FROM trials WHERE subscription_id IS NOT NULL)
+            ORDER BY updated_at DESC LIMIT 1`, userId).toArray()[0];
         return row ? row.stripe_customer_id : null;
     }
     // One buyer at a time per calendar: a hold lasts as long as the Stripe Checkout page it guards
@@ -854,7 +865,9 @@ async function route(request, env, url, path) {
         if (!cfg) return json({ error: 'billing-not-configured' }, 503);
         const userId = await sessionUserId(request, env);
         if (!userId) return json({ error: 'signed-out' }, 401);
-        const customer = await accounts(env).customerForUser(userId);
+        // The calendar's own subscription's customer (each trial has its own customer); none named: the account's.
+        const sub = validId(body.calendarId) ? await accounts(env).subscriptionFor(body.calendarId, userId) : null;
+        const customer = validId(body.calendarId) ? (sub && sub.stripe_customer_id) || null : await accounts(env).customerForUser(userId);
         if (!customer) return json({ error: 'no-billing-account' }, 404);
         const site = siteUrl(env);
         const returnUrl = validId(body.calendarId) ? `${site}/${encodeURIComponent(body.calendarId)}` : `${site}/`;
@@ -1153,7 +1166,8 @@ async function checkout(request, env, body) {
     if (ed && ed.res) return json(ed.res, 403);
 
     const acc = accounts(env);
-    const [user, customer] = userId ? await Promise.all([acc.getUser(userId), acc.customerForUser(userId)]) : [null, null];
+    // Keep during a trial: that trial's customer. Anything else: a paid customer only, never another trial's.
+    const [user, customer] = userId ? await Promise.all([acc.getUser(userId), keepingTrial ? trialSub.stripe_customer_id : acc.paidCustomerForUser(userId)]) : [null, null];
     if (userId && !user) return json({ error: 'signed-out' }, 401);
     const hold = await acc.holdCheckout(calendarId, buyer, CHECKOUT_HOLD_MS);
     if (!hold.ok) return json({ error: hold.error }, hold.error === 'too-many-checkouts' ? 429 : 409);
