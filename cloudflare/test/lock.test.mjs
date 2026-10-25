@@ -175,21 +175,21 @@ assert.equal(r.status, 201);
 await sleep(300);
 const lk = await (await fetch(`${BASE}/api/lookup?slug=${enc(id)}`)).json();
 assert.equal(lk.actualSlug, id, 'the name still leads to the locked calendar, not its case variant');
-// A case variant made BEFORE the lock holds the name's lookup; locking claims the name back.
+// A case variant can't take an unlocked calendar's lookup either (red team, Oct 24 2026), and locking keeps it.
 const claim = `test-lock-claim-${Date.now()}`;
 assert.equal((await fetch(`${BASE}/cal/${enc(claim)}`, { method: 'POST', body: JSON.stringify({ title: 'real', events: [] }) })).status, 201);
 await sleep(300);
 assert.equal((await fetch(`${BASE}/cal/${enc(claim.toUpperCase())}`, { method: 'POST', body: JSON.stringify({ title: 'variant', events: [] }) })).status, 201);
 await sleep(300);
-assert.equal((await (await fetch(`${BASE}/api/lookup?slug=${enc(claim)}`)).json()).actualSlug, claim.toUpperCase(), 'before the lock: the variant holds the lookup');
+assert.equal((await (await fetch(`${BASE}/api/lookup?slug=${enc(claim)}`)).json()).actualSlug, claim, 'before the lock: the original keeps the lookup');
 assert.equal((await admin(claim, 'lock', { ownerId: OWNER })).status, 200);
 await sleep(300);
-assert.equal((await (await fetch(`${BASE}/api/lookup?slug=${enc(claim)}`)).json()).actualSlug, claim, 'locking claims the name back');
+assert.equal((await (await fetch(`${BASE}/api/lookup?slug=${enc(claim)}`)).json()).actualSlug, claim, 'after the lock: still the original');
 r = await fetch(`${BASE}/cal/${enc(claim)}/archive`, { method: 'POST', headers: auth });
 assert.deepEqual(await r.json(), { ok: false, error: 'locked' }, 'a locked calendar is never archived');
 assert.equal((await get(claim)).calendar.title, 'real');
 await admin(claim, 'unlock', {});
-step('a new calendar carrying a locked calendar\'s publicViewId (the rename path), or a case variant of its name, does not re-point the view link or the name; locking claims the name back from an earlier variant');
+step('a new calendar carrying a locked calendar\'s publicViewId (the rename path), or a case variant of its name, does not re-point the view link or the name, locked or not');
 
 // 9. No key material or owner id anywhere public.
 const leaks = [];
