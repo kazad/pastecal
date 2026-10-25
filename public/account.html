@@ -269,7 +269,10 @@ select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); borde
     $('plan').textContent = planLine();
     var unl = A.plan === 'unlimited', lapsed = !unl && A.unlimited;
     $('meter').hidden = !unl;
-    if (unl) $('meter').textContent = 'Upgraded calendars: ' + A.proCount + ' of ' + A.proLimit + (A.handle ? ' · unlimited under @' + A.handle : ' · unlimited under your @name');
+    // An account from when Pro had 10 may hold more than the limit: those stay, nothing more can be added.
+    if (unl) $('meter').textContent = 'Upgraded calendars: ' + Math.min(A.proCount, A.proLimit) + ' of ' + A.proLimit
+      + (A.proCount > A.proLimit ? ' (plus ' + (A.proCount - A.proLimit) + ' from before; they stay)' : '')
+      + (A.handle ? ' · unlimited under @' + A.handle : ' · unlimited under your @name');
     $('planNote').hidden = !lapsed;
     if (lapsed) $('planNote').textContent = 'Your links keep working. Renew Pro to add or change names.';
     $('billing').hidden = !A.hasBilling;
