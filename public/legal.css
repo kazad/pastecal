@@ -1,6 +1,7 @@
 /* Privacy and Terms pages: plain reading pages on the app's own tokens (tokens.css). */
 body { margin: 0; background: var(--pc-bg); color: var(--pc-text); font: var(--pc-fs-lg)/1.65 var(--pc-font) }
-main { max-width: 680px; margin: 0 auto; padding: 24px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px)) }
+main { box-sizing: border-box; max-width: var(--pc-page-max); margin: 0 auto; padding: 24px max(16px, env(safe-area-inset-right, 0px)) 24px max(16px, env(safe-area-inset-left, 0px)) }
+main:not(.help) > * { max-width: 680px }   /* the reading column, left-aligned under the logo (header, text and footer share one left edge) */
 h1 { font-size: var(--pc-fs-4xl); line-height: 1.15; margin: 0 0 6px }
 .updated { color: var(--pc-text-muted); margin: 0 0 28px; font-size: var(--pc-fs-md) }
 h2 { font-size: var(--pc-fs-2xl); margin: 30px 0 6px }

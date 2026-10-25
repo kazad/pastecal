@@ -28,6 +28,9 @@
    changes as little as it can; state is a class (.on, .is-on, .is-copied) or an aria attribute.
    ========================================================================================= */
 
+/* Every block sizes border-box, on site pages too (the app gets it from Tailwind's reset). */
+.pc-btn, .pc-field, .pc-field-group, .pc-chip, .pc-pill, .pc-card, .pc-link-field, .pc-modal-panel, .pc-menu, .pc-menu-item, .pc-seg, .pc-swatch { box-sizing: border-box }
+
 /* ---- Button ------------------------------------------------------------------------------- */
 .pc-btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 6px; flex: none;
