@@ -177,10 +177,13 @@ const CalendarVueApp = {
         return {
             isReadOnly: false,
             // Pro lock, from the live snapshot (CloudCalendarService.onLockState). lockedOut =
-            // locked and this tab has no rights: the calendar is shown read-only.
-            lock: { locked: false, pro: false, canEdit: true, proSettings: null },
+            // locked (or paused after Pro ended) and this tab has no rights: the calendar is shown read-only.
+            lock: { locked: false, pro: false, paused: false, canEdit: true, proSettings: null },
             // Inside someone else's page (an iframe) or asked to look like it (?embed).
             embedded: (() => { try { return window.self !== window.top || new URLSearchParams(location.search).has('embed'); } catch (e) { return true; } })(),
+            proTrialUsed: false,
+            proTrialActive: false,      // this browser owns the calendar and it is on its free trial (trial_feature_used)
+            proSurface: 'share',        // where the Pro offer was opened from: 'share' | 'stats' | 'lock' (trial_started)        // this calendar already had its one free trial (/api/pro/status), so the Go Pro card doesn't offer it
             lockedOut: false,
             lockKnown: false,   // a lock state has arrived for this calendar (the default above is a guess)
             viewRoute: false,   // /view/<slug>: read-only for its own reason, whatever the lock says
@@ -372,6 +375,8 @@ const CalendarVueApp = {
         sideTitle() {
             return { notes: 'About this calendar', search: 'Search', help: 'Help', settings: 'Settings' }[this.sideTab] || '';
         },
+        /** Why this tab can't edit a locked or paused calendar (toasts). */
+        lockedOutMessage() { return this.lock.paused ? PRO_MESSAGES.paused : PRO_MESSAGES.lockedVisitor; },
         // Stats can show the real numbers: the owner of a Pro calendar (the server answers no one else).
         canSeeProStats() {
             return this.isExisting && this.lock.locked && this.proOwner;
@@ -763,10 +768,13 @@ const CalendarVueApp = {
                         // It continues to payment only right after that sign-in, never from a shared link.
                         try {
                             const q = new URLSearchParams(location.search), plan = q.get('pro');
-                            if ((plan === 'year' || plan === 'month') && typeof ProIntent !== 'undefined') {
+                            // trial: the sign-in link already started it; the panel shows how it went (and retries, to explain a refusal).
+                            // keep: the trial reminder's Keep Pro link: just open the panel.
+                            if ((plan === 'year' || plan === 'month' || plan === 'trial' || plan === 'keep') && typeof ProIntent !== 'undefined') {
                                 const fresh = sessionStorage.getItem('pastecal_signed_in_to') || '';
                                 sessionStorage.removeItem('pastecal_signed_in_to');
-                                if (!ProIntent.get(this.calendar.id)) ProIntent.set(this.calendar.id, plan, fresh.endsWith('?pro=' + plan));
+                                if (plan === 'keep') track(a => a.trialReminderClicked());     // only the day-27 email links ?pro=keep
+                                if (!ProIntent.get(this.calendar.id)) ProIntent.set(this.calendar.id, plan, plan !== 'keep' && fresh.endsWith('?pro=' + plan));
                                 q.delete('pro');
                                 history.replaceState(history.state, '', location.pathname + (q.toString() ? '?' + q : '') + location.hash);
                             }
@@ -1108,7 +1116,7 @@ const CalendarVueApp = {
 
             if (args.type === 'Editor' && this.lockedOut) {
                 args.cancel = true;
-                this.showToast(PRO_MESSAGES.lockedVisitor, 'info');
+                this.showToast(this.lockedOutMessage, 'info');
                 return;
             }
             if (args.type === 'Editor') {
@@ -1392,7 +1400,7 @@ const CalendarVueApp = {
             const el = document.getElementById('Schedule');
             if (el) el.addEventListener('dblclick', (e) => {
                 if (this.lockedOut && e.target && e.target.closest && e.target.closest('.e-work-cells, .e-all-day-cells')) {
-                    this.showToast(PRO_MESSAGES.lockedVisitor, 'info');
+                    this.showToast(this.lockedOutMessage, 'info');
                 }
             });
         } catch (e) { /* no grid: nothing to explain */ }
@@ -1680,9 +1688,9 @@ const CalendarVueApp = {
         CalendarDataService.onLockState = (s) => this.applyLockState(s);
 
         CalendarDataService.onSyncRefused = ({ before, removing, recovered, events, code }) => {
-            if (code === 'locked') {
-                // The calendar is locked (or the editor link stopped working): undo the edit, say why.
-                this.showToast(PRO_MESSAGES.lockedVisitor, 'info');
+            if (code === 'locked' || code === 'paused') {
+                // The calendar is locked or paused (or the editor link stopped working): undo the edit, say why.
+                this.showToast(code === 'paused' ? PRO_MESSAGES.paused : PRO_MESSAGES.lockedVisitor, 'info');
                 if (Array.isArray(events)) {
                     this.applyRemoteCalendar({ ...this.calendar, events: JSON.parse(JSON.stringify(events)) }, { replace: true });
                 }
@@ -1866,10 +1874,12 @@ const CalendarVueApp = {
         'lock.locked': {
             handler(locked) {
                 this.proOwnerChecked = false;
-                if (!locked) { this.proOwner = false; return; }
+                if (!locked) { this.proOwner = false; if (this.showShare) this.refreshProTrial(); return; }
                 this.refreshProOwner();
             },
         },
+        // Pro ended and the owner opened it: the Go Pro card is back, without the trial it already had.
+        'lock.paused'(paused) { if (!paused && this.showShare) this.refreshProTrial(); },
         recordingRole: {
             handler(role) { track(a => a.tag('role', role)); },
             immediate: true,
@@ -1904,10 +1914,11 @@ const CalendarVueApp = {
         },
 
         showShare(newValue) {
-            if (!newValue) { this.shareProFocus = false; this.showViewHelp = false; }   // the Get Pro view lasts until Share closes
+            if (!newValue) { this.shareProFocus = false; this.showViewHelp = false; this.proSurface = 'share'; }   // the Get Pro view lasts until Share closes
             if (newValue) {
                 this.updateCurrentViewURL();
                 this.startUpdateLinkTimer();
+                if (this.isExisting && !this.lock.locked && this.canEdit) this.refreshProTrial();
             } else {
                 this.stopUpdateLinkTimer();
             }
@@ -3420,7 +3431,7 @@ const CalendarVueApp = {
         /** From the Stats tab: Share, showing just the Pro offer (as when arriving from Get Pro). */
         getProFromStats() {
             track(a => a.proStatsTeaserClicked());
-            this.openProOffer();
+            this.openProOffer('stats');
         },
 
         /** The panel's close button, its backdrop on small screens, and Escape. */
@@ -4008,6 +4019,7 @@ const CalendarVueApp = {
         // Opens Share with the Pro panel in view. The panel renders with the dialog, but the
         // dialog animates in, so look for it for a moment rather than once.
         openProUpsell() {
+            this.proSurface = 'lock';
             this.proUpsell = false;
             track(a => a.proUpsellClicked());
             if (!this.showShare) this.toggleShare();
@@ -5075,11 +5087,11 @@ const CalendarVueApp = {
          */
         applyLockState(s) {
             if (!s || (this.calendar && s.id && s.id !== this.calendar.id)) return;
-            this.lock = { locked: !!s.locked, pro: !!s.pro, canEdit: s.canEdit !== false, proSettings: s.proSettings || null };
+            this.lock = { locked: !!s.locked, pro: !!s.pro, paused: !!s.paused, canEdit: s.canEdit !== false, proSettings: s.proSettings || null };
             this.lockKnown = true;
-            if (this.lock.locked) this.proUpsell = false;
+            if (this.lock.locked || this.lock.paused) this.proUpsell = false;
             else this.$nextTick(() => this.maybeShowProUpsell());
-            const out = this.lock.locked && !this.lock.canEdit;
+            const out = (this.lock.locked || this.lock.paused) && !this.lock.canEdit;
             if (out !== this.lockedOut) {
                 this.lockedOut = out;
                 this.setIsReadOnly(out || this.viewRoute);
@@ -5098,7 +5110,7 @@ const CalendarVueApp = {
         /** Quick add from a menu: on a calendar this tab can't change, say why instead of opening it. */
         openQuickAdd() {
             if (!this.canEdit) {
-                this.showToast(this.lockedOut ? PRO_MESSAGES.lockedVisitor : 'This is a view-only link. You can’t add or change events.', 'info');
+                this.showToast(this.lockedOut ? this.lockedOutMessage : 'This is a view-only link. You can’t add or change events.', 'info');
                 return;
             }
             this.$refs.quickAddDialog && this.$refs.quickAddDialog.showDialog();
@@ -5108,6 +5120,7 @@ const CalendarVueApp = {
         /** Open Stats or History. The dialogs ask the server, which answers only the owner. */
         openInsight(view, where) {
             this.insightWhere = where || 'share_panel';
+            this.trialFeatureUsed(view === 'history' ? 'history' : 'stats_pro');
             this.closeAllPanels();
             this.showProHistory = view === 'history';
             this.showProStats = view !== 'history';
@@ -5122,13 +5135,36 @@ const CalendarVueApp = {
             ProInsightIntent.set(id, 'stats');
             window.location.href = '/' + encodeURIComponent(id);
         },
+        /** Has this calendar had its one free trial? Only so the Go Pro card doesn't offer one it can't have. */
+        async refreshProTrial() {
+            const id = this.calendar && this.calendar.id;
+            if (!id) return;
+            try {
+                const res = await fetch('/api/pro/status?calendar=' + encodeURIComponent(id), { credentials: 'same-origin' });
+                const data = res.ok ? await res.json() : null;
+                if (this.calendar && this.calendar.id === id) this.proTrialUsed = !!(data && data.trialUsed);
+            } catch (e) { /* offline: offer it; the server decides */ }
+        },
+        /** Go Pro card: "Try Pro free". Opens the Get Pro view straight on the trial. */
+        startProTrial() {
+            if (typeof ProIntent !== 'undefined') ProIntent.set(this.calendar.id, 'trial', false, this.proSurface);
+            this.shareProFocus = true;
+        },
+        /** During a trial: the first use of a Pro feature per calendar per day (Pro.js trialFeature). */
+        trialFeatureUsed(feature) {
+            if (this.proTrialActive && this.calendar && typeof trialFeature === 'function') trialFeature(this.calendar.id, feature);
+        },
         async refreshProOwner() {
             const id = this.calendar && this.calendar.id;
             if (!id) return;
             try {
                 const res = await fetch('/api/pro/status?calendar=' + encodeURIComponent(id), { credentials: 'same-origin' });
                 const data = res.ok ? await res.json() : null;
-                if (this.calendar && this.calendar.id === id) this.proOwner = !!(data && data.isOwner);
+                if (this.calendar && this.calendar.id === id) {
+                    this.proOwner = !!(data && data.isOwner);
+                    this.proTrialActive = !!(data && data.isOwner && data.trial);
+                    this.trialFeatureUsed('lock');          // the owner on their locked calendar: the lock in use
+                }
             } catch (e) { /* offline: leave it as it was */ }
             this.proOwnerChecked = true;
         },
@@ -5142,11 +5178,13 @@ const CalendarVueApp = {
             // This tab's own undo stack holds edits to the calendar as it was; replaying one now
             // would edit the restored version instead. The restore's undo is the version saved before it.
             if (this._eventStore && Array.isArray(this._eventStore.undoStack)) this._eventStore.undoStack.length = 0;
+            this.trialFeatureUsed('restore');
             this.showToast(`Restored the version from ${label}`, 'success');
             this.loadUndoEntries();
         },
         /** From Activity, a free calendar's creator: to the Pro offer in Share (its Get Pro view). */
-        openProOffer() {
+        openProOffer(surface) {
+            this.proSurface = surface === 'stats' ? 'stats' : 'share';
             this.closeAllPanels();
             this.showShare = true;
             this.$nextTick(() => { this.shareProFocus = true; });

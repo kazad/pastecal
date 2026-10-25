@@ -35,7 +35,9 @@
  * again on every snapshot). A tab holding an editor key (EditorKeys, from a #k= link) sends
  * {t:'auth', key} as soon as the socket opens; the first snapshot is held back until the answer
  * (or AUTH_WAIT_MS), so an editor never flashes the read-only view. Every change of access is
- * reported to the app through onLockState({id, locked, pro, canEdit, reason}).
+ * reported to the app through onLockState({id, locked, pro, paused, canEdit, reason}).
+ * paused: Pro ended and the owner left the calendar read-only (not locked, and nobody edits):
+ * blocked exactly like a locked calendar without rights.
  *
  * Pure decisions (planSave, rebuild, ackOutcome, metaDiff) are static and unit-tested in
  * test/unit/cloud-calendar-service.test.js; the socket code is exercised against
@@ -284,7 +286,7 @@ class CloudCalendarService extends CalendarDataService {
         try { if (typeof EditorKeys !== 'undefined') EditorKeys.forget(id); } catch (e) { /* storage blocked */ }
     }
     /** A locked calendar this tab may not change. */
-    static _blocked(room) { return !!(room.lock && room.lock.locked && !room.lock.canEdit); }
+    static _blocked(room) { return !!(room.lock && (room.lock.locked || room.lock.paused) && !room.lock.canEdit); }
     /** Access for the calendar this tab has open (the app's lock icon and read-only state). */
     static lockState(id) { const r = this._rooms[id]; return r ? { ...r.lock } : null; }
 
@@ -346,7 +348,7 @@ class CloudCalendarService extends CalendarDataService {
             return;
         }
         if (m.calendar && m.calendar.id) {
-            room.lock = { locked: !!m.locked, pro: !!m.pro, canEdit: m.canEdit !== false, proSettings: m.proSettings || null };
+            room.lock = { locked: !!m.locked, pro: !!m.pro, paused: !!m.paused, canEdit: m.canEdit !== false, proSettings: m.proSettings || null };
         }
         if (!m.calendar || !m.calendar.id) {            // no such calendar: the app treats it as a new one
             room.closed = true;
@@ -479,11 +481,11 @@ class CloudCalendarService extends CalendarDataService {
         }
         // Refused for what it says: replaying it would be refused again, so drop it, and show the server's data.
         if (f) { this._journalClear(room.id, f.journalT); room.force = f.localEvents || null; }
-        if (m.code === 'locked') {
-            // Locked under us (or the key stopped working): read-only from here, and drop the
-            // refused edit so the next snapshot does not send it again.
+        if (m.code === 'locked' || m.code === 'paused') {
+            // Locked (or paused after Pro) under us, or the key stopped working: read-only from here,
+            // and drop the refused edit so the next snapshot does not send it again.
             room.latest = null; room.unsent = false;
-            room.lock = { ...room.lock, locked: true, canEdit: false };
+            room.lock = m.code === 'paused' ? { ...room.lock, locked: false, paused: true, canEdit: false } : { ...room.lock, locked: true, canEdit: false };
             this._notifyLock(room);
         }
         if (typeof this.onSyncRefused === 'function') {

@@ -8,6 +8,11 @@ const [a] = toDataPoints({ events: [ev('page_perf', { ttfb_ms: 120, lcp_ms: 900,
 assert.deepEqual(a.indexes, ['page_perf']);
 assert.deepEqual(a.blobs, ['page_perf', 'classic', 'safari', 'phone', 'US', '', 'no', '']);
 assert.deepEqual(a.doubles, [120, 0, 900, 0, 0.01, 0, 1]);
+// trial events keep their one value in blob6 (detail)
+for (const [name, params, detail] of [['trial_feature_used', { feature: 'stats_pro' }, 'stats_pro'], ['trial_converted', { interval: 'month' }, 'month'],
+    ['trial_lapsed', { mode: 'readonly' }, 'readonly'], ['trial_started', { trial_surface: 'lock' }, 'lock']]) {
+    assert.equal(toDataPoints({ events: [ev(name, params)] }, 'US')[0].blobs[5], detail, name);
+}
 assert.ok(!JSON.stringify(a).includes('secretcal'), 'calendar path must never be stored');
 
 // native vs classic from the path

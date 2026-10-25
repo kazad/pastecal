@@ -306,6 +306,7 @@ async function route(request, env) {
             if (access.locked && !access.canEdit) {
                 return fail(403, { ok: false, error: 'locked', message: 'This calendar is locked. Only its owner and people with an editor key can change it.' });
             }
+            if (access.paused) return fail(403, { ok: false, error: 'paused', message: 'Editing is paused by the owner.' });   // after Pro ended
             if (customSlug) {
                 const typed = String(customSlug).trim();
                 for (const name of new Set([typed, typed.toLowerCase()])) {

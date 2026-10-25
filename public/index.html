@@ -317,7 +317,7 @@
                         @update:title="calendar.title = $event" @click="editTitle = true" @blur="editTitle = false"
                         @enter="editTitle = false">
                     </calendar-title>
-                    <lock-badge v-if="lock.locked && !editTitle" :can-edit="lock.canEdit" @copy="makeOwnCopy"></lock-badge>
+                    <lock-badge v-if="(lock.locked || lock.paused) && !editTitle" :can-edit="lock.canEdit" :paused="lock.paused" @copy="makeOwnCopy"></lock-badge>
                     <button v-if="!editTitle" v-on:click="toggleNotes" aria-label="Toggle notes" :aria-expanded="showNotes ? 'true' : 'false'" :class="{ 'pc-hdr-on': showNotes }"
                         class="text-color-1 hover:text-blue-500 p-1 transition-colors flex items-center justify-center flex-shrink-0">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5"
@@ -491,7 +491,7 @@
                     @update:title="calendar.title = $event" @click="editTitle = true" @blur="editTitle = false"
                     @enter="setTitle($event)">
                 </calendar-title>
-                <lock-badge v-if="lock.locked && !editTitle" :can-edit="lock.canEdit" @copy="makeOwnCopy"></lock-badge>
+                <lock-badge v-if="(lock.locked || lock.paused) && !editTitle" :can-edit="lock.canEdit" :paused="lock.paused" @copy="makeOwnCopy"></lock-badge>
 
 
             </section>
@@ -909,7 +909,7 @@
                          the edit link, then Pro. The rest (this exact view, the link's name, raw feeds, an
                          embed) waits under "More sharing options". Same URLs and copy paths as before. -->
                     <div v-if="showShare && isExisting" class="pc-share" v-cloak>
-                        <h2 v-if="shareProFocus" class="text-lg font-bold mb-4">Get Pro</h2>
+                        <h2 v-if="shareProFocus && !lock.locked && !lock.paused" class="text-lg font-bold mb-4">Get Pro</h2>
                         <!-- Arriving from Get Pro: only the lock offer, the links one click away -->
                         <template v-if="!shareProFocus">
                         <!-- Every link is visible and is itself the copy button (GitHub-style). No captions: the
@@ -1014,10 +1014,13 @@
                                 <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg><span><b>Stats</b>: views per day, followers, places</span></li>
                                 <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg><span><b>Custom links</b> and more ways to make it yours</span></li>
                             </ul>
+                            <!-- Saved calendars only (a draft shows Save & share instead of this card). One trial per calendar. -->
+                            <button v-if="!proTrialUsed" type="button" class="pc-gopro-trial" @click="startProTrial" data-testid="share-try-pro">Try Pro free for 30 days. No card needed.</button>
                         </div>
                         </template>
-                        <!-- Pro: the lock offer (Get Pro view), or a locked calendar's owner section and editor links -->
-                        <pro-panel v-if="isExisting && (shareProFocus || lock.locked)" ref="proPanel" :calendar-id="calendar.id" :calendar-title="calendar.title" :locked="lock.locked" :can-edit="canEdit"
+                        <!-- Pro: the lock offer (Get Pro view), or a locked calendar's owner section and editor links;
+                             after Pro ended, the paused calendar's choices (owner) or why nobody can edit (everyone else) -->
+                        <pro-panel v-if="isExisting && (shareProFocus || lock.locked || lock.paused)" ref="proPanel" :calendar-id="calendar.id" :calendar-title="calendar.title" :locked="lock.locked" :paused="lock.paused" :can-edit="canEdit" :surface="proSurface"
                             @open-insight="openInsight($event, 'share_panel')" @owner="proOwner = $event"></pro-panel>
                         <button v-if="shareProFocus" type="button" class="pc-share-all" @click="shareProFocus = false" data-testid="share-show-all">Show all sharing options</button>
                     </div>

@@ -7,6 +7,8 @@
 //            (`invoicePayments`, a list of {invoice, status, payment}), GET /stripe/v1/charges/<id> (`charges`),
 //            POST /stripe/v1/refunds (recorded in `refunds`; the same Idempotency-Key makes one refund)
 //            GET /stripe/v1/customers/<id> (`customers`, which the test sets)
+//            POST /stripe/v1/customers, POST /stripe/v1/subscriptions (trials: a trialing sub with trial_end, put in `subs`;
+//            the same Idempotency-Key returns the same object; hooks.createFails refuses the next N with a 400)
 //   Lock:    the CalendarRoom lock API from the pastecal-pro-lock branch, over `cals`:
 //            GET lock-status, POST lock / unlock / rotate-editor-key
 // Everything the Worker sent is in `log`, form bodies decoded.
@@ -14,8 +16,8 @@ import http from 'node:http';
 import crypto from 'node:crypto';
 
 export function startFakeStripe(port) {
-    const subs = new Map(), cals = new Map(), log = [], hooks = { lockFails: 0, refundFails: 0, expireFails: 0 };
-    const sessions = new Map(), invoices = new Map(), invoicePayments = [], charges = new Map(), refunds = [], customers = new Map();
+    const subs = new Map(), cals = new Map(), log = [], hooks = { lockFails: 0, refundFails: 0, expireFails: 0, createFails: 0 };
+    const sessions = new Map(), invoices = new Map(), invoicePayments = [], charges = new Map(), refunds = [], customers = new Map(), created = new Map();
     const send = (res, status, data) => { res.statusCode = status; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(data)); };
     const server = http.createServer((req, res) => {
         let raw = ''; req.on('data', (c) => (raw += c));
@@ -49,6 +51,31 @@ export function startFakeStripe(port) {
                     }
                 }
                 if (req.method === 'POST' && p === '/stripe/v1/billing_portal/sessions') return send(res, 200, { url: 'https://billing.stripe.test/p/session' });
+                // Trials: a customer, then a subscription made directly (no Checkout). The same
+                // Idempotency-Key returns the same object, as Stripe does.
+                if (req.method === 'POST' && (p === '/stripe/v1/customers' || p === '/stripe/v1/subscriptions')) {
+                    if (hooks.createFails > 0) { hooks.createFails--; return send(res, 400, { error: { type: 'invalid_request_error', message: 'fake: refused' } }); }
+                    const seen = idem && created.get(idem);
+                    if (seen) return send(res, 200, seen);
+                    const metadata = {};
+                    for (const [k, v] of Object.entries(body || {})) { const mm = k.match(/^metadata\[(.+)\]$/); if (mm) metadata[mm[1]] = v; }
+                    let obj;
+                    if (p === '/stripe/v1/customers') {
+                        obj = { id: 'cus_' + crypto.randomBytes(6).toString('hex'), object: 'customer', email: body.email, metadata };
+                        customers.set(obj.id, obj);
+                    } else {
+                        const now = Math.floor(Date.now() / 1000), days = Number(body.trial_period_days || 0);
+                        const price = body['items[0][price]'];
+                        obj = { id: 'sub_' + crypto.randomBytes(6).toString('hex'), object: 'subscription', status: days ? 'trialing' : 'active',
+                            customer: body.customer, metadata, created: now, trial_end: days ? now + days * 86400 : null, default_payment_method: null,
+                            trial_settings: { end_behavior: { missing_payment_method: body['trial_settings[end_behavior][missing_payment_method]'] || null } },
+                            items: { data: [{ current_period_end: days ? now + days * 86400 : now + 365 * 86400,
+                                price: { id: price, recurring: { interval: price === 'price_fake_monthly' ? 'month' : 'year' } } }] } };
+                        subs.set(obj.id, obj);
+                    }
+                    if (idem) created.set(idem, obj);
+                    return send(res, 200, obj);
+                }
                 const m = p.match(/^\/stripe\/v1\/subscriptions\/([^/]+)$/);
                 if ((req.method === 'GET' || req.method === 'DELETE') && m) {
                     const sub = subs.get(decodeURIComponent(m[1]));
