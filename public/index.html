@@ -196,7 +196,9 @@
             appId: "1:912998627577:web:aa652846c2618a986d8a28",
             measurementId: "G-4J99GY9KE6"
         };
-        firebase.initializeApp(firebaseConfig);
+        // Not on a copy with no production side effects (staging, local Cloudflare backend): no app means any
+        // stray firebase.* call fails loudly instead of quietly opening production's database.
+        if (!window.pcNoProdSideEffects) firebase.initializeApp(firebaseConfig);
 
         // Anonymous sign-in. NOT a login and not a permission check -- calendars stay
         // open read/write to everyone, which is the product. This only gives each browser
@@ -217,7 +219,7 @@
 
         ej.base.registerLicense('Ngo9BigBOggjHTQxAR8/V1NHaF1cW2hIfEx1RHxQdld5ZFRHallYTnNWUj0eQnxTdEZiW39fcXJXR2JUV0NyWg==');
 
-        if (location.href.includes("localhost") && location.href.includes("?local")) {
+        if (!window.pcNoProdSideEffects && location.href.includes("localhost") && location.href.includes("?local")) {
             firebase.functions().useEmulator("localhost", 5001);
         }
     </script>
@@ -323,7 +325,7 @@
                                 d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z" />
                         </svg>
                     </div>
-                    <navigation-dropdown v-if="showRecents" :recent-calendars="recentCalendars" :on-draft="!isExisting"
+                    <navigation-dropdown v-if="showRecents" :recent-calendars="recentCalendars" :on-draft="isHomepageCalendar"
                         @go-homepage="goToHomepage" @start-over="startOver" @open-help="showRecents = false; toggleHelp()" @toggle-pin="togglePin" @remove-recent="removeRecent" @open-stats="openStatsFor"
                         class="mt-2"></navigation-dropdown>
                 </div>
@@ -469,7 +471,7 @@
                         </div>
 
                         <!-- Navigation dropdown component -->
-                        <navigation-dropdown v-if="showRecents" :recent-calendars="recentCalendars" :on-draft="!isExisting"
+                        <navigation-dropdown v-if="showRecents" :recent-calendars="recentCalendars" :on-draft="isHomepageCalendar"
                             @go-homepage="goToHomepage" @start-over="startOver" @open-help="showRecents = false; toggleHelp()" @toggle-pin="togglePin" @remove-recent="removeRecent" @open-stats="openStatsFor" v-cloak>
                         </navigation-dropdown>
                     </div>
@@ -1365,10 +1367,10 @@
                 </div>
             </aside>
             <aside v-else-if="isHomepageCalendar && !homeAsideHidden" class="pc-home-aside" data-testid="home-aside" v-cloak>
-                <div class="pc-home-bar" :class="{ 'pc-home-bar--bare': !homeRecents.length }"><span>{{ homeRecents.length ? 'Your calendars' : '' }}</span><button type="button" class="pc-btn pc-btn--ghost pc-btn--icon pc-btn--sm pc-home-hide" @click="toggleHomeAside" aria-label="Hide guide" title="Hide guide"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m8 9 3 3-3 3"/></svg></button></div>
+                <div class="pc-home-bar" :class="{ 'pc-home-bar--bare': !homeRecents.length }"><span v-if="homeRecents.length" class="pc-home-tabs" role="tablist" aria-label="Homepage panel"><button type="button" role="tab" :aria-selected="homePanel === 'guide'" :class="{ on: homePanel === 'guide' }" @click="homeTab = 'guide'" data-testid="home-tab-guide">Welcome</button><button type="button" role="tab" :aria-selected="homePanel === 'recents'" :class="{ on: homePanel === 'recents' }" @click="homeTab = 'recents'" data-testid="home-tab-recents">Your calendars</button></span><span v-else></span><button type="button" class="pc-btn pc-btn--ghost pc-btn--icon pc-btn--sm pc-home-hide" @click="toggleHomeAside" aria-label="Hide guide" title="Hide guide"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M15 3v18"/><path d="m8 9 3 3-3 3"/></svg></button></div>
                 <div class="pc-home-body">
                 <!-- Returning visitors: jump back into a recent calendar instead of reading the intro. -->
-                <template v-if="homeRecents.length">
+                <template v-if="homePanel === 'recents'">
                     <ul class="pc-home-recents" data-testid="home-recents">
                         <li v-for="item in homeRecents" :key="item.id">
                             <a :href="item.path">
@@ -1389,8 +1391,8 @@
                     <li><b>3</b><span>Send the link to your group.</span></li>
                 </ol>
                 </template>
-                <p v-if="!homeRecents.length" class="pc-home-links"><a v-if="!template" class="pc-home-more" href="/view/demo" data-from="home-panel">See a demo calendar →</a><a class="pc-home-more" href="#how">How pastecal works ↓</a></p>
-                <p v-if="!homeRecents.length" class="pc-home-proof"><span><strong>3,000+</strong> calendars made since 2021</span></p>
+                <p v-if="homePanel === 'guide'" class="pc-home-links"><a v-if="!template" class="pc-home-more" href="/view/demo" data-from="home-panel">See a demo calendar →</a><a class="pc-home-more" href="#how">How pastecal works ↓</a></p>
+                <p v-if="homePanel === 'guide'" class="pc-home-proof"><span><strong>3,000+</strong> calendars made since 2021</span></p>
                 </div>
             </aside>
             <!-- Below the docking width the panel floats over the calendar; this dims what is behind it. -->
@@ -1424,9 +1426,9 @@
                         <p>Click any day and type.</p>
                     </li>
                     <li>
-                        <div class="pc-tour-art pc-art-send" role="img" aria-label="The Save and share button next to the calendar name soccer-fall, then the link pastecal.com/soccer-fall posted in a group chat, and a reply saying Perfect, thanks!">
+                        <div class="pc-tour-art pc-art-send" role="img" aria-label="Someone types the name soccer-fall for their calendar's link and presses Save and share, then the link pastecal.com/soccer-fall posted in a group chat, and a reply saying Perfect, thanks!">
                             <div class="pc-art-head">
-                                <span class="pc-art-url">pastecal.com/<b>soccer-fall</b></span>
+                                <span class="pc-art-url">pastecal.com/<b class="pc-art-name" aria-hidden="true"><i class="pc-art-l1">s</i><i class="pc-art-l2">o</i><i class="pc-art-l3">c</i><i class="pc-art-l4">c</i><i class="pc-art-l5">e</i><i class="pc-art-l6">r</i><i class="pc-art-l7">-</i><i class="pc-art-l8">f</i><i class="pc-art-l9">a</i><i class="pc-art-l10">l</i><i class="pc-art-l11">l</i></b><i class="pc-art-caret" aria-hidden="true"></i></span>
                                 <span class="pc-art-btn">Save &amp; share</span>
                                 <span class="pc-art-copied">Link copied</span>
                             </div>
@@ -1529,7 +1531,7 @@
                 <div class="pc-tour-plans">
                     <a class="pc-tour-plan" href="/pricing" data-from="home-plan-free"><h4>Free</h4><p class="pc-plan-price"><b>$0</b></p><p>No login required.</p><span class="pc-tour-plan-more">Learn more →</span></a>
                     <a class="pc-tour-plan pc-tour-plan-pro" href="/pricing" data-from="home-plan-pro"><span class="pc-plan-tag pc-plan-tag--on">Beta</span><h4>Plus</h4><p class="pc-plan-price"><b>$29</b> a year</p><p>{{ proBilling === true ? '1 upgraded calendar. Try it free for 30 days, no card.' : proBilling === false ? '1 upgraded calendar. Join the beta for early access.' : '1 upgraded calendar.' }}</p><span class="pc-tour-plan-more">Learn more →</span></a>
-                    <a class="pc-tour-plan" href="/pricing" data-from="home-plan-pro-unlimited"><span class="pc-plan-tag pc-plan-tag--on">Beta</span><h4>Pro</h4><p class="pc-plan-price"><b>$96</b> a year <small>or $10 a month</small></p><p>10 upgraded calendars, plus unlimited under your @name.</p><span class="pc-tour-plan-more">Learn more →</span></a>
+                    <a class="pc-tour-plan" href="/pricing" data-from="home-plan-pro-unlimited"><span class="pc-plan-tag pc-plan-tag--on">Beta</span><h4>Pro</h4><p class="pc-plan-price"><b>$96</b> a year <small>or $10 a month</small></p><p>5 upgraded calendars, plus unlimited under your @name.</p><span class="pc-tour-plan-more">Learn more →</span></a>
                     <a class="pc-tour-plan" href="/pricing" data-from="home-plan-teams"><span class="pc-plan-tag">In development</span><h4>Teams</h4><p class="pc-plan-price"><b>$490</b> a year <small>or $49 a month</small></p><p>Several admins, your logo.</p><span class="pc-tour-plan-more">Learn more →</span></a>
                 </div>
                 <p class="pc-tour-plans-more"><a href="/pricing" class="pc-link" data-from="home-pricing">Compare plans →</a></p>

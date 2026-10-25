@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pricing · pastecal</title>
-<meta name="description" content="pastecal is free to use. Plus upgrades one calendar for $29 a year: its name is reserved for you and you choose who edits. Pro is $96 a year for 10 upgraded calendars and unlimited under your own name. Teams ($490 a year) is in development.">
+<meta name="description" content="pastecal is free to use. Plus upgrades one calendar for $29 a year: its name is reserved for you and you choose who edits. Pro is $96 a year for 5 upgraded calendars with short names and unlimited under your own name. Teams ($490 a year) is in development.">
 <link rel="icon" href="/favicon.ico">
 <script>document.documentElement.setAttribute('data-billing', 'pending')</script>
 <script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>
@@ -261,7 +261,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
     <div class="plan">
       <span class="badge">Beta</span>
       <h3>Pro</h3>
-      <p class="size"><b>10 upgraded calendars</b>, plus unlimited under your @name</p>
+      <p class="size"><b>5 upgraded calendars</b>, plus unlimited under your @name</p>
       <p class="who">For everyone who runs more than one calendar.</p>
       <div class="price"><strong>$96</strong><span>per year</span></div>
       <p class="per">That's $8 a month, billed yearly. Or $10 month to month.</p>
@@ -286,6 +286,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
       <p class="per">Or $49 a month, for the whole group.</p>
       <ul>
         <li>Everything in Pro</li>
+        <li>25 short names</li>
         <li>Up to 10 admins</li>
         <li>Your logo</li>
         <li>No pastecal branding</li>
@@ -317,14 +318,14 @@ details p { color: var(--muted); margin: 8px 0 0 }
   </section>
 
   <h2 id="compare">Compare plans</h2>
-  <p class="explain">Every plan makes unlimited free calendars. <b>An upgraded calendar</b> has all the extras: its name is reserved for you, you choose who edits, and you get full stats and history. <b>Plus</b> gives you one. <b>Pro</b> gives you 10 with short names, like <code>pastecal.com/soccer</code>, and as many as you want under your own name, like <code>pastecal.com/@you/soccer</code>.</p>
+  <p class="explain">Every plan makes unlimited free calendars. <b>An upgraded calendar</b> has all the extras: its name is reserved for you, you choose who edits, and you get full stats and history. <b>Plus</b> gives you one. <b>Pro</b> gives you 5 with short names, like <code>pastecal.com/soccer</code>, and as many as you want under your own name, like <code>pastecal.com/@you/soccer</code>.</p>
   <p class="swipe">Swipe the table to see every plan.</p>
   <div class="gridwrap">
     <table>
       <thead><tr><th>Feature</th><th>Free</th><th class="pro">Plus <span class="beta-tag">Beta</span></th><th>Pro <span class="beta-tag">Beta</span></th><th>Teams</th></tr></thead>
       <tbody>
         <tr class="group"><td colspan="5"><span>Upgraded calendars</span></td></tr>
-        <tr><td>With a short name<small>Like <code>pastecal.com/soccer</code>, reserved for you</small></td><td class="n">—</td><td class="pro">1</td><td>10</td><td>10</td></tr>
+        <tr><td>With a short name<small>Like <code>pastecal.com/soccer</code>, reserved for you</small></td><td class="n">—</td><td class="pro">1</td><td>5</td><td>25</td></tr>
         <tr><td>Under your own name <span class="soon">In development</span><small>Like <code>pastecal.com/@you/soccer</code></small></td><td class="n">—</td><td class="pro n">—</td><td>Unlimited</td><td>Unlimited</td></tr>
 
         <tr class="group"><td colspan="5"><span>Sharing</span></td></tr>
@@ -420,8 +421,8 @@ details p { color: var(--muted); margin: 8px 0 0 }
     <details><summary>What happens if I cancel?</summary><p>Your plan lasts until the end of the period you paid for. Then your calendar stays, with everything in it, and it becomes read-only: everyone can still view it and follow it in their calendar app, and nobody can edit it until you choose to open it to everyone or upgrade again. You can choose ahead of time in the calendar’s Plus tab.</p></details>
     <details><summary>What if a payment fails?</summary><p>Stripe retries it, and your calendar stays upgraded meanwhile. If the subscription ends unpaid, the calendar keeps all its events, and it becomes read-only: everyone can still view it and follow it in their calendar app, and nobody can edit it until you choose to open it to everyone or upgrade again. You can choose ahead of time in the calendar’s Plus tab.</p></details>
     <details><summary>What happens to backups on the free plan?</summary><p>Every calendar is backed up daily, and you can see the last 7 days of changes. An upgraded calendar keeps the full history and lets you restore any earlier version.</p></details>
-    <details><summary>What is Pro?</summary><p>10 upgraded calendars with short names like pastecal.com/soccer, plus as many as you want under your own name, like pastecal.com/@you/soccer. $96 a year or $10 month to month. It's in beta: join the beta and we'll email you when it's ready.</p></details>
-    <details><summary>What is Teams?</summary><p>Everything in Pro, with up to 10 admins, your logo, no pastecal branding, a year of who changed what and invoices in your organization's name, for $490 a year or $49 a month. It's in development: join the waitlist and we'll email you once, when it opens.</p></details>
+    <details><summary>What is Pro?</summary><p>5 upgraded calendars with short names like pastecal.com/soccer, plus as many as you want under your own name, like pastecal.com/@you/soccer. $96 a year or $10 month to month. It's in beta: join the beta and we'll email you when it's ready.</p></details>
+    <details><summary>What is Teams?</summary><p>Everything in Pro, with 25 short names, up to 10 admins, your logo, no pastecal branding, a year of who changed what and invoices in your organization's name, for $490 a year or $49 a month. It's in development: join the waitlist and we'll email you once, when it opens.</p></details>
     <details><summary>Can I move an upgrade to a different calendar?</summary><p>Email <a href="mailto:support@pastecal.com">support@pastecal.com</a> and we'll help.</p></details>
     <details><summary>Can I see who looked at my calendar?</summary><p>No. Full stats show how many people viewed it, how many follow it in a calendar app, and which countries and cities they're in. Counts only. Never who.</p></details>
   </div>

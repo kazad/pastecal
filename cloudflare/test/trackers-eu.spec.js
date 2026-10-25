@@ -37,15 +37,25 @@ for (const path of ['/', '/pricing']) {
 
 // A local copy on the Cloudflare backend must never touch production: no Firebase sign-in, no Firebase
 // database, no analytics. (Oct 2026: local runs were creating anonymous users in production Firebase Auth.)
-test('local Cloudflare-backend pages make no production requests', async ({ browser }) => {
-  const ctx = await browser.newContext({ timezoneId: 'America/New_York' });
-  const page = await ctx.newPage();
-  const seen = [];
-  await page.route(/identitytoolkit|securetoken|firebaseio\.com|firebasedatabase|googletagmanager|google-analytics|clarity\.ms|hotjar/, (r) => { seen.push(new URL(r.request().url()).hostname); return r.abort(); });
-  await page.goto('/?backend=cf');
-  await page.waitForFunction(() => window.scheduleObj, null, { timeout: 20_000 });
-  await page.waitForTimeout(2500);
-  expect(await page.evaluate(() => window.pcNoProdSideEffects)).toBe(true);
-  expect(seen, 'production hosts contacted').toEqual([]);
-  await ctx.close();
+// page.route never sees a WebSocket, and Firebase's database talks over one (wss://*.firebaseio.com): a
+// reviewer saw one open from a local view page while this test passed. So sockets are watched too.
+test('local Cloudflare-backend pages make no production requests', async ({ browser, request }) => {
+  const id = `test-noprod-${Date.now()}-${Math.floor(Math.random() * 1e5)}`;
+  expect((await request.post(`/cal/${id}`, { data: { title: 'No prod', options: {}, events: [] } })).status()).toBe(201);
+  const view = await (await request.post('/api/create-view', { data: { sourceCalendarId: id } })).json();
+  expect(view.ok).toBe(true);
+  for (const path of ['/?backend=cf', `/view/${view.publicViewId}?backend=cf`]) {
+    const ctx = await browser.newContext({ timezoneId: 'America/New_York' });
+    const page = await ctx.newPage();
+    const seen = [];
+    const PROD = /identitytoolkit|securetoken|firebaseio\.com|firebasedatabase|googletagmanager|google-analytics|clarity\.ms|hotjar/;
+    page.on('websocket', (ws) => { if (PROD.test(ws.url())) seen.push('ws ' + new URL(ws.url()).hostname); });
+    await page.route(PROD, (r) => { seen.push(new URL(r.request().url()).hostname); return r.abort(); });
+    await page.goto(path);
+    await page.waitForFunction(() => window.scheduleObj, null, { timeout: 20_000 });
+    await page.waitForTimeout(2500);
+    expect(await page.evaluate(() => window.pcNoProdSideEffects), path).toBe(true);
+    expect(seen, `production hosts contacted from ${path}`).toEqual([]);
+    await ctx.close();
+  }
 });

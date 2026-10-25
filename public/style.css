@@ -647,11 +647,40 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-art-dots { gap: 3px; opacity: 0; animation: pc-art-dots var(--art-dur) linear infinite }
 .pc-art-dots i { width: 4px; height: 4px; border-radius: 50%; background: var(--pc-text-muted) }
 .pc-art-reply { animation: pc-art-reply var(--art-dur) var(--pc-ease) infinite; transform-origin: left bottom }
-@keyframes pc-art-press { 0%, 8% { transform: none; box-shadow: 0 1px 2px rgba(0,0,0,.15) } 10% { transform: scale(.92) } 13% { transform: none; box-shadow: 0 0 0 4px color-mix(in srgb, var(--pc-primary) 30%, transparent) } 22%, 100% { box-shadow: 0 1px 2px rgba(0,0,0,.15) } }
-@keyframes pc-art-toast { 0%, 11% { opacity: 0; transform: translateY(-3px) } 14%, 30% { opacity: 1; transform: none } 34%, 100% { opacity: 0 } }
-@keyframes pc-art-bubble { 0%, 30% { opacity: 0; transform: translateY(8px) scale(.94) } 36%, 93% { opacity: 1; transform: none } 100% { opacity: 0 } }
-@keyframes pc-art-dots { 0%, 44% { opacity: 0 } 46%, 56% { opacity: 1 } 58%, 100% { opacity: 0 } }
-@keyframes pc-art-reply { 0%, 57% { opacity: 0; transform: scale(.9) } 62%, 93% { opacity: 1; transform: none } 100% { opacity: 0 } }
+@keyframes pc-art-press { 0%, 30% { transform: none; box-shadow: 0 1px 2px rgba(0,0,0,.15) } 32% { transform: scale(.92) } 35% { transform: none; box-shadow: 0 0 0 4px color-mix(in srgb, var(--pc-primary) 30%, transparent) } 44%, 100% { box-shadow: 0 1px 2px rgba(0,0,0,.15) } }
+@keyframes pc-art-toast { 0%, 33% { opacity: 0; transform: translateY(-3px) } 36%, 50% { opacity: 1; transform: none } 54%, 100% { opacity: 0 } }
+@keyframes pc-art-bubble { 0%, 46% { opacity: 0; transform: translateY(8px) scale(.94) } 52%, 93% { opacity: 1; transform: none } 100% { opacity: 0 } }
+@keyframes pc-art-dots { 0%, 58% { opacity: 0 } 60%, 68% { opacity: 1 } 70%, 100% { opacity: 0 } }
+/* Typing the link name: the name appears letter by letter (11 letters), a caret blinks while the field is in use,
+   and the field shows focus until Save & share is pressed. */
+.pc-art-name i { display: inline-block; font-style: normal; overflow: hidden; vertical-align: bottom; max-width: 0 }
+.pc-art-caret { display: inline-block; width: 1.5px; height: 12px; margin-left: 1px; vertical-align: -2px; background: var(--pc-text); animation: pc-art-caret var(--art-dur) linear infinite }
+.pc-art-head { animation: pc-art-focus var(--art-dur) var(--pc-ease) infinite }
+.pc-art-l1 { animation: pc-art-l1 var(--art-dur) infinite }
+.pc-art-l2 { animation: pc-art-l2 var(--art-dur) infinite }
+.pc-art-l3 { animation: pc-art-l3 var(--art-dur) infinite }
+.pc-art-l4 { animation: pc-art-l4 var(--art-dur) infinite }
+.pc-art-l5 { animation: pc-art-l5 var(--art-dur) infinite }
+.pc-art-l6 { animation: pc-art-l6 var(--art-dur) infinite }
+.pc-art-l7 { animation: pc-art-l7 var(--art-dur) infinite }
+.pc-art-l8 { animation: pc-art-l8 var(--art-dur) infinite }
+.pc-art-l9 { animation: pc-art-l9 var(--art-dur) infinite }
+.pc-art-l10 { animation: pc-art-l10 var(--art-dur) infinite }
+.pc-art-l11 { animation: pc-art-l11 var(--art-dur) infinite }
+@keyframes pc-art-l1 { 0%, 4% { max-width: 0 } 4.2%, 100% { max-width: 1em } }
+@keyframes pc-art-l2 { 0%, 6% { max-width: 0 } 6.2%, 100% { max-width: 1em } }
+@keyframes pc-art-l3 { 0%, 8% { max-width: 0 } 8.2%, 100% { max-width: 1em } }
+@keyframes pc-art-l4 { 0%, 10% { max-width: 0 } 10.2%, 100% { max-width: 1em } }
+@keyframes pc-art-l5 { 0%, 12% { max-width: 0 } 12.2%, 100% { max-width: 1em } }
+@keyframes pc-art-l6 { 0%, 14% { max-width: 0 } 14.2%, 100% { max-width: 1em } }
+@keyframes pc-art-l7 { 0%, 16% { max-width: 0 } 16.2%, 100% { max-width: 1em } }
+@keyframes pc-art-l8 { 0%, 18% { max-width: 0 } 18.2%, 100% { max-width: 1em } }
+@keyframes pc-art-l9 { 0%, 20% { max-width: 0 } 20.2%, 100% { max-width: 1em } }
+@keyframes pc-art-l10 { 0%, 22% { max-width: 0 } 22.2%, 100% { max-width: 1em } }
+@keyframes pc-art-l11 { 0%, 24% { max-width: 0 } 24.2%, 100% { max-width: 1em } }
+@keyframes pc-art-caret { 0%, 3% { opacity: 1 } 3.5%, 5% { opacity: 0 } 5.5%, 28% { opacity: 1 } 29%, 100% { opacity: 0 } }
+@keyframes pc-art-focus { 0%, 1% { border-color: var(--pc-line) } 3%, 30% { border-color: var(--pc-link); box-shadow: 0 0 0 3px color-mix(in srgb, var(--pc-link) 18%, transparent) } 33%, 100% { border-color: var(--pc-line) } }
+@keyframes pc-art-reply { 0%, 69% { opacity: 0; transform: scale(.9) } 73%, 93% { opacity: 1; transform: none } 100% { opacity: 0 } }
 /* 3. Stay in sync: an edit on one phone shows up on the other */
 .pc-art-sync { gap: 4px; padding-bottom: 6px }
 .pc-art-phone { position: relative; display: flex; flex-direction: column; gap: 4px; width: 96px; height: 146px; padding: 18px 7px 7px; border: 1.5px solid var(--pc-field); border-radius: 16px; background: var(--pc-bg); box-shadow: var(--art-shadow) }
@@ -700,6 +729,7 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-ss-badge svg { fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round }
 .pc-ss-badge.pc-ss-ok { background: var(--pc-success) }
 @media (prefers-reduced-motion: reduce) { .pc-tour-art *, .pc-tour-art *::before { animation: none !important } }
+@media (prefers-reduced-motion: reduce) { .pc-art-name i { max-width: none } .pc-art-caret { display: none } }
 /* @end-illustrations */
 
 /* =========================================================================================
@@ -1271,3 +1301,9 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
 .pc-plus-or { margin-top: var(--pc-space-3) }
 .pc-plus-or .pc-link { font-size: var(--pc-fs-sm) }
 .pc-share-plus { margin: var(--pc-space-4) 0 0; color: var(--pc-text-muted); font-size: var(--pc-fs-sm) }   /* + .pc-link */
+/* Homepage panel tabs: plain text, the current one in full color. */
+.pc-home-tabs { display: flex; gap: 16px }
+.pc-home-tabs button { background: none; border: 0; padding: 0; font: inherit; letter-spacing: inherit; text-transform: inherit; color: var(--pc-text-muted); cursor: pointer }
+.pc-home-tabs button.on { color: var(--pc-text) }
+.pc-home-tabs button:hover { color: var(--pc-text) }
+.pc-home-tabs button:focus-visible { outline: none; box-shadow: var(--pc-focus-ring); border-radius: 4px }

@@ -292,3 +292,29 @@ for (const width of [768, 800, 860, 900, 1000]) {
     await ctx.close();
   });
 }
+
+test('unsaved draft at a typed address: the logo menu offers "New calendar", which goes to the homepage', async ({ browser }) => {
+  const id = `test-draft-${Date.now()}-${Math.floor(Math.random() * 1e5)}`;
+  const { ctx, page } = await open(browser, { path: `/${id}` });
+  await openMenu(page, false);
+  const menu = page.locator('.pc-nav').locator('visible=true');
+  await expect(menu.getByTestId('nav-start-over')).toHaveCount(0);
+  await menu.getByTestId('nav-new').click();
+  await expect(page).toHaveURL(/\/(\?.*)?$/);
+  await ctx.close();
+});
+
+test('homepage panel: a returning visitor sees Your calendars, and Getting started is one tab away', async ({ browser, request }) => {
+  const id = `test-hometab-${Date.now()}-${Math.floor(Math.random() * 1e5)}`;
+  expect((await request.post(`/cal/${id}`, { data: { title: 'Tab check', options: {}, events: [] } })).status()).toBe(201);
+  const { ctx, page } = await open(browser, { path: `/${id}` });
+  await page.goto('/?backend=cf');
+  const aside = page.getByTestId('home-aside');
+  await expect(aside.getByTestId('home-recents')).toContainText('Tab check');
+  await aside.getByTestId('home-tab-guide').click();
+  await expect(aside).toContainText('Click a day and type an event.');
+  await expect(aside.getByTestId('home-recents')).toHaveCount(0);
+  await aside.getByTestId('home-tab-recents').click();
+  await expect(aside.getByTestId('home-recents')).toContainText('Tab check');
+  await ctx.close();
+});
