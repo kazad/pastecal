@@ -1076,8 +1076,8 @@
                         <!-- Sharing only. Plans, editor links and billing live in the Plus tab: one line points there. -->
                         <p v-if="canEdit && !lock.locked && !lock.paused" class="pc-share-plus" data-testid="share-plus-line">Choose who can edit with Plus.
                             <button type="button" class="pc-link" @click="openPlusTab('share')" data-testid="share-get-pro">Upgrade</button></p>
-                        <p v-else-if="lock.locked && proOwner" class="pc-share-plus" data-testid="share-plus-line">Editor links and billing are in
-                            <button type="button" class="pc-link" @click="openPlusTab('share')" data-testid="share-get-pro">{{ planName(proPlan) }}</button></p>
+                        <p v-else-if="lock.locked && proOwner" class="pc-share-plus" data-testid="share-plus-line">Editor links and billing are in the
+                            <button type="button" class="pc-link" @click="openPlusTab('share')" data-testid="share-get-pro">Plus tab</button></p>
                         <p v-else-if="lock.paused && pausedOwner" class="pc-share-plus" data-testid="share-plus-line">{{ planName(proPlan) }} ended.
                             <button type="button" class="pc-link" @click="openPlusTab('share')" data-testid="share-get-pro">Choose what happens</button></p>
                         <p v-else-if="lock.locked || lock.paused" class="pc-share-plus" data-testid="share-plus-line">Owner?
