@@ -178,6 +178,13 @@ test('phone: the chips wait behind "Start from a template", then scroll sideways
   await expect.poll(() => titles(page)).toContain('Meeting: ch. 1-12');
   await expect(page.getByTestId('tpl-nudge')).toBeVisible();
   await expect(toggle).toContainText('Club or class');                    // the toggle names the template in use
+  // closing the chips never hides Undo while there is something to undo
+  await page.evaluate(`(() => { const vm = ${VM}; vm.templateUndo = true; })()`);
+  await toggle.tap();
+  await expect(page.getByTestId('tpl-undo')).toBeVisible();
+  await page.evaluate(`(() => { const vm = ${VM}; vm.templateUndo = false; })()`);
+  await expect(row).toBeHidden();
+  await toggle.tap();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   // opened stays opened for the visit
   await page.reload();

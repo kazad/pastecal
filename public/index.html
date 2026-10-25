@@ -317,7 +317,7 @@
                         <div class="flex items-center gap-1.5">
                             <img class="h-8 w-8 dark:brightness-150" src="/img/pastecal.logo.svg" alt="pastecal">
                             <span
-                                class="pc-m-wordmark text-sm font-medium">pastecal</span>
+                                class="pc-m-wordmark text-sm font-medium" :class="{ 'pc-m-wordmark--yields': !isHomepageCalendar }">pastecal</span>
                         </div>
                         <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 text-color-1" fill="currentColor"
                             viewBox="0 0 16 16" aria-label="Recent calendars">
@@ -700,7 +700,7 @@
                 <template v-if="templateLabel">Template: <b>{{ templateLabel }}</b></template><template v-else>Start from a template</template>
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>
             </button>
-            <div id="pc-tpl-row" class="pc-tpl-row" :class="{ 'is-open': templatesOpen }" role="group" aria-label="Start from a template">
+            <div id="pc-tpl-row" class="pc-tpl-row" :class="{ 'is-open': templatesOpen || templateUndo }" role="group" aria-label="Start from a template">
                 <span class="pc-tpl-label">Start from:</span>
                 <button type="button" class="pc-chip pc-chip--lg pc-tpl-chip" :class="{ 'is-on': !template }" :aria-pressed="!template ? 'true' : 'false'" data-testid="tpl-blank" @click="template && startBlank()">Blank</button>
                 <button v-for="t in templateChips" :key="t.id" type="button" class="pc-chip pc-chip--lg pc-tpl-chip" :class="{ 'is-on': template && template.id === t.id }"

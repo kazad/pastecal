@@ -156,7 +156,8 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
   .e-schedule .e-month-view .e-header-cells span[data-short] { font-size: 0 }
   .e-schedule .e-month-view .e-header-cells span[data-short]::after { content: attr(data-short); font-size: 12px }
   .e-schedule .e-month-view .e-date-header-wrap .e-header-cells { padding-left: 8px !important; letter-spacing: .02em }   /* "WED" fits a 360px phone's 50px column */
-  .e-schedule .e-month-view .e-appointment .e-subject { text-overflow: clip !important }   /* a few more letters, not an ellipsis taking three */
+  .e-schedule .e-month-view .e-appointment .e-subject { text-overflow: clip !important;   /* a few more letters, not an ellipsis taking three */
+    -webkit-mask-image: linear-gradient(to right, var(--pc-text) calc(100% - 6px), transparent); mask-image: linear-gradient(to right, var(--pc-text) calc(100% - 6px), transparent) }
   .e-schedule .e-month-view .e-more-indicator { padding-inline: 2px !important; text-overflow: clip !important; font-size: var(--pc-fs-2xs) !important }
   /* Week: day columns are ~48px wide, so titles wrap instead of clipping (Syncfusion sets an inline
      max-height of one line); the time, already shown by the grid, gives way. */
@@ -1223,8 +1224,10 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
   .pc-m-add::after { content: none }
   [data-testid="mobile-header"] .pc-m-add + .pc-m-act, [data-testid="mobile-header"] .pc-m-act + div { margin-left: -4px }
 }
-/* Under 375px (small Android phones) the wordmark gives its room to the calendar's name; the logo still opens the menu. */
-@media (max-width: 374px) { [data-testid="mobile-header"] .pc-m-wordmark { display: none } }
+/* Under 375px (small Android phones) a saved calendar's wordmark gives its room to the calendar's name (the logo
+   still opens the menu); the homepage keeps it down to 350px. */
+@media (max-width: 374px) { [data-testid="mobile-header"] .pc-m-wordmark--yields { display: none } }
+@media (max-width: 349px) { [data-testid="mobile-header"] .pc-m-wordmark { display: none } }
 
 /* =========================================================================================
    Quick add (components/QuickAddDialog.js): describe it, then check the details
