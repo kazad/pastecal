@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pricing · pastecal</title>
-<meta name="description" content="pastecal is free to use. Pro Single locks editing to people you choose: $24 a year or $2.99 a month per calendar. Pro Unlimited ($79 a year or $8 a month) and Teams ($290 a year or $29 a month) are in development.">
+<meta name="description" content="pastecal is free to use. Pro locks editing to people you choose: $24 a year per calendar, or $48 a year for every calendar you run. Teams ($290 a year) is in development.">
 <link rel="icon" href="/favicon.ico">
 <script>document.documentElement.setAttribute('data-billing', 'pending')</script>
 <script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>
@@ -231,11 +231,11 @@ details p { color: var(--muted); margin: 8px 0 0 }
     </div>
 
     <div class="plan pro">
-      <span class="badge">Recommended</span>
-      <div class="plan-name"><h3>Pro Single</h3><span class="beta-tag">Beta</span></div>
+      <span class="badge">Beta</span>
+      <h3>Pro Single</h3>
       <p class="who">One calendar you run: a team, a class, a shift schedule.</p>
       <div class="price"><strong>$24</strong><span>per calendar, per year</span></div>
-      <p class="per">That's $2 a month, billed yearly. Or $2.99 month to month.</p>
+      <p class="per">That's $2 a month, billed yearly.</p>
       <ul>
         <li>Everything in Free</li>
         <li>Lock editing with editor links you share</li>
@@ -253,19 +253,22 @@ details p { color: var(--muted); margin: 8px 0 0 }
     </div>
 
     <div class="plan">
-      <span class="badge dev">In development</span>
+      <span class="badge">Beta</span>
       <h3>Pro Unlimited</h3>
       <p class="who">For everyone who runs more than one calendar.</p>
-      <div class="price"><strong>$79</strong><span>per year</span></div>
-      <p class="per">Or $8 a month.</p>
+      <div class="price"><strong>$48</strong><span>per year</span></div>
+      <p class="per">That's $4 a month, billed yearly. Or $5 month to month.</p>
       <ul>
         <li>Everything in Pro Single</li>
-        <li>Unlimited locked calendars</li>
-        <li>Your own name: <code>pastecal.com/@name</code></li>
-        <li>Up to 10 locked short links</li>
-        <li>Up to 3 co-owners</li>
+        <li>Every calendar you run, one subscription</li>
       </ul>
-      <a class="cta" href="#waitlist" data-plan="unlimited" data-wait="unlimited">Join the waitlist</a>
+      <p class="coming-h">In development, included when ready</p>
+      <ul class="coming">
+        <li>Your own pastecal.com/@name</li>
+        <li>Locked short links</li>
+        <li>Co-owners</li>
+      </ul>
+      <a class="cta" href="#waitlist" data-plan="unlimited" data-wait="unlimited">Join the Pro beta</a>
     </div>
 
     <div class="plan">
@@ -288,10 +291,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
   <section class="howto" id="get-pro" aria-labelledby="getProH">
     <h2 id="getProH">Get Pro</h2>
     <p class="howto-sub">Pro Single is per calendar. Pick one and pay with Stripe. There's no account to set up first: yours is made from the email you give Stripe.</p>
-    <div class="intervals" role="radiogroup" aria-label="Billing">
-      <label class="interval on"><input type="radio" name="interval" value="year" checked><span><b>$24 a year</b> <em>Save 33%</em></span></label>
-      <label class="interval"><input type="radio" name="interval" value="month"><span><b>$2.99 a month</b></span></label>
-    </div>
+    <div class="intervals"><input type="radio" name="interval" value="year" checked hidden><p class="interval-one"><b>$24 a year</b>, per calendar</p></div>
     <div id="pickCals" hidden data-clarity-mask="true" data-hj-suppress>
       <h3 class="pick-h">Your calendars on this device</h3>
       <ul class="pick-list" id="pickList"></ul>
@@ -312,7 +312,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
   <p class="swipe">Swipe the table to see every plan.</p>
   <div class="gridwrap">
     <table>
-      <thead><tr><th>Feature</th><th>Free</th><th class="pro">Pro Single <span class="beta-tag">Beta</span></th><th>Pro Unlimited</th><th>Teams</th></tr></thead>
+      <thead><tr><th>Feature</th><th>Free</th><th class="pro">Pro Single <span class="beta-tag">Beta</span></th><th>Pro Unlimited <span class="beta-tag">Beta</span></th><th>Teams</th></tr></thead>
       <tbody>
         <tr class="group"><td colspan="5"><span>Sharing</span></td></tr>
         <tr><td>Calendars</td><td>Unlimited</td><td class="pro">Unlimited</td><td>Unlimited</td><td>Unlimited</td></tr>
@@ -380,7 +380,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
       <div class="formrow">
         <div class="field">
           <label for="plan">Plan</label>
-          <select id="plan" name="plan"><option value="unlimited">Pro Unlimited, $79 a year</option><option value="teams">Teams, $290 a year or $29 a month</option><option value="pro">In-development Pro features</option><option value="unsure">Not sure</option></select>
+          <select id="plan" name="plan"><option value="unlimited">Pro Unlimited, $48 a year</option><option value="teams">Teams, $290 a year or $29 a month</option><option value="pro">In-development Pro features</option><option value="unsure">Not sure</option></select>
         </div>
         <div class="field">
           <label for="use">Mostly for</label>
@@ -404,12 +404,12 @@ details p { color: var(--muted); margin: 8px 0 0 }
     <details><summary>Why does Pro say Beta?</summary><p>Pro is in beta: features may change. Everything on the Pro Single card works today, except what's marked in development.</p></details>
     <details><summary>Does everyone I share with need to pay?</summary><p>No. You pay for the calendar, yearly or monthly. Everyone you share it with stays free.</p></details>
     <details><summary>Do I need an account for Pro?</summary><p>Only you do, so we know who owns the calendar, and it's made for you when you pay, from the email you give Stripe. Later you sign in with a link we email you, with no password. Nobody you share with ever needs an account.</p></details>
-    <details><summary>Is there a free trial?</summary><p>Yes: 30 days of Pro, free, with no card. <span class="if-billing-off">While Pro is in beta, join the beta and we’ll email you when your trial is ready.</span><span class="if-billing-on">Start it from any saved calendar’s Share panel.</span> When it ends you choose: keep Pro ($24 a year or $2.99 a month), or go back to a free calendar.</p></details>
+    <details><summary>Is there a free trial?</summary><p>Yes: 30 days of Pro, free, with no card. <span class="if-billing-off">While Pro is in beta, join the beta and we’ll email you when your trial is ready.</span><span class="if-billing-on">Start it from any saved calendar’s Share panel.</span> When it ends you choose: keep Pro ($24 a year), or go back to a free calendar.</p></details>
     <details><summary>How do I cancel?</summary><p>Sign in and open Manage billing. You can cancel there any time.</p></details>
     <details><summary>What happens if I cancel?</summary><p>Pro lasts until the end of the period you paid for. Then your calendar stays, with everything in it, and goes back to the free plan, unlocked.</p></details>
     <details><summary>What if a payment fails?</summary><p>Stripe retries it, and your calendar stays locked meanwhile. If the subscription ends unpaid, the calendar goes back to the free plan, unlocked, with all its events.</p></details>
     <details><summary>What happens to backups on the free plan?</summary><p>Every calendar is backed up daily, and you can see the last 7 days of changes. Pro keeps the full history and lets you restore any earlier version.</p></details>
-    <details><summary>What is Pro Unlimited?</summary><p>Everything in Pro Single on as many calendars as you run, your own pastecal.com/@name, up to 10 locked short links and up to 3 co-owners, for $79 a year or $8 a month. It's in development: join the waitlist and we'll email you once, when it opens.</p></details>
+    <details><summary>What is Pro Unlimited?</summary><p>Everything in Pro Single on as many calendars as you run, your own pastecal.com/@name, up to 10 locked short links and up to 3 co-owners, for $48 a year or $5 a month. It's in development: join the waitlist and we'll email you once, when it opens.</p></details>
     <details><summary>What is Teams?</summary><p>Everything in Pro Unlimited, with up to 10 admins, no pastecal branding, a year of who changed what and invoices in your organization's name, for $290 a year or $29 a month. It's in development: join the waitlist and we'll email you once, when it opens.</p></details>
     <details><summary>Can I move Pro to a different calendar?</summary><p>Email <a href="mailto:support@pastecal.com">support@pastecal.com</a> and we'll help.</p></details>
     <details><summary>Can I see who looked at my calendar?</summary><p>No. Pro stats show how many people viewed it, how many follow it in a calendar app, and which countries and cities they're in. Counts only. Never who.</p></details>

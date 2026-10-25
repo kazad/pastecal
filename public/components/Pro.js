@@ -264,16 +264,7 @@ const ProPanel = {
             <!-- Unlocked, editable: the offer -->
             <template v-if="mode === 'offer' && billing === true">
                 <p class="pc-pro-lead">Only you and people you invite can edit. Everyone else can still view.</p>
-                <div class="pc-pro-plans" role="radiogroup" aria-label="Billing">
-                    <label class="pc-pro-plan" :class="{ on: interval === 'year' }">
-                        <input type="radio" value="year" v-model="interval" name="pc-pro-interval">
-                        <span><b>$24/year</b> <em class="pc-pro-save">Save 33%</em></span>
-                    </label>
-                    <label class="pc-pro-plan" :class="{ on: interval === 'month' }">
-                        <input type="radio" value="month" v-model="interval" name="pc-pro-interval">
-                        <span><b>$2.99/month</b></span>
-                    </label>
-                </div>
+                <p class="pc-pro-price" data-testid="pro-price"><b>$24 a year</b> <span class="pc-pro-muted">That's $2 a month.</span></p>
                 <p v-if="testCardHint" class="pc-pro-muted pc-pro-note" data-testid="pro-test-card">{{ testCardHint }}</p>
 
                 <form v-if="step === 'email'" class="pc-pro-email" @submit.prevent="sendLink" data-testid="pro-email-form">
@@ -320,13 +311,10 @@ const ProPanel = {
                     <button v-if="!keepOpen && billing !== false" type="button" class="pc-pro-btn" @click="keepProAfter" :disabled="busy" data-testid="pro-keep-btn">Keep Pro</button>
                 </div>
                 <div v-if="keepOpen" class="pc-pro-keep" data-testid="pro-keep-plans">
-                    <div class="pc-pro-plans" role="radiogroup" aria-label="Billing">
-                        <label class="pc-pro-plan" :class="{ on: interval === 'year' }"><input type="radio" value="year" v-model="interval" name="pc-pro-keep-interval2"><span><b>$24/year</b> <em class="pc-pro-save">Save 33%</em></span></label>
-                        <label class="pc-pro-plan" :class="{ on: interval === 'month' }"><input type="radio" value="month" v-model="interval" name="pc-pro-keep-interval2"><span><b>$2.99/month</b></span></label>
-                    </div>
+                    <p class="pc-pro-price"><b>$24 a year</b> <span class="pc-pro-muted">That's $2 a month.</span></p>
                     <div class="pc-pro-row"><button type="button" class="pc-pro-btn" @click="keepCheckout" :disabled="busy" data-testid="pro-keep-checkout">{{ going ? 'Taking you to payment…' : 'Keep Pro' }}</button></div>
                 </div>
-                <p class="pc-pro-muted pc-pro-note">Open to everyone: a free calendar anyone with the edit link can change.<template v-if="billing !== false"> Keep Pro: locked again for you, $24 a year or $2.99 a month.</template></p>
+                <p class="pc-pro-muted pc-pro-note">Open to everyone: a free calendar anyone with the edit link can change.<template v-if="billing !== false"> Keep Pro: locked again for you, $24 a year.</template></p>
                 <p v-if="testCardHint" class="pc-pro-muted pc-pro-note">{{ testCardHint }}</p>
             </template>
 
@@ -336,10 +324,7 @@ const ProPanel = {
                     <a v-if="!status.trial.hasCard && billing !== false" href="#" class="pc-pro-link" @click.prevent="keepPro" data-testid="pro-keep-trial">Keep Pro</a>
                     <span v-else-if="status.trial.hasCard">card on file, Pro continues</span></p>
                 <div v-if="status.trial && keepOpen" class="pc-pro-keep" data-testid="pro-keep-plans">
-                    <div class="pc-pro-plans" role="radiogroup" aria-label="Billing">
-                        <label class="pc-pro-plan" :class="{ on: interval === 'year' }"><input type="radio" value="year" v-model="interval" name="pc-pro-keep-interval"><span><b>$24/year</b> <em class="pc-pro-save">Save 33%</em></span></label>
-                        <label class="pc-pro-plan" :class="{ on: interval === 'month' }"><input type="radio" value="month" v-model="interval" name="pc-pro-keep-interval"><span><b>$2.99/month</b></span></label>
-                    </div>
+                    <p class="pc-pro-price"><b>$24 a year</b> <span class="pc-pro-muted">That's $2 a month.</span></p>
                     <div class="pc-pro-row"><button type="button" class="pc-pro-btn" @click="keepCheckout" :disabled="busy" data-testid="pro-keep-checkout">{{ going ? 'Taking you to payment…' : 'Keep Pro' }}</button>
                         <span class="pc-pro-muted">{{ keepNote }}</span></div>
                 </div>
@@ -470,7 +455,7 @@ const ProPanel = {
     },
     mounted() {
         const intent = ProIntent.get(this.calendarId);
-        if (intent && (intent.interval === 'year' || intent.interval === 'month')) this.interval = intent.interval;
+        // Pro Single is yearly only; an old 'month' intent becomes yearly.
         this.autoGo = !!(intent && intent.go);
         this.wantTrial = !!(intent && intent.interval === 'trial');
         this.trialSurface = (intent && intent.surface) || this.surface;
@@ -587,7 +572,7 @@ const ProPanel = {
             } finally { this.busy = false; }
         },
         // Keep Pro, during the trial or after it ended: the ordinary checkout for this calendar, at the
-        // plan picked here ($24/year or $2.99/month). The paid subscription replaces the trial.
+        // plan here ($24/year). The paid subscription replaces the trial.
         keepPro() { this.keepOpen = true; },
         keepProAfter() { this.keepOpen = true; },
         async keepCheckout() {

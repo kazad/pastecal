@@ -70,7 +70,7 @@ try {
     assert.deepEqual(await (await fetch(NOKEYS + '/api/pro/config')).json(), { billing: false });
     assert.deepEqual(await (await fetch(BASE + '/api/pro/config')).json(), { billing: true });
     assert.equal((await post(BASE, '/api/pro/config', {}, nk.cookie)).status, 405);
-    step('/api/pro/config: billing true with Stripe keys and both prices, false without');
+    step('/api/pro/config: billing true with Stripe keys and the yearly price, false without');
 
     // --- Checkout
     const ann = await signIn(BASE, `ann-${run}@example.com`);

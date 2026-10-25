@@ -1064,10 +1064,10 @@ div#Schedule,
 .pc-tour-uses .pc-ico { width: 20px; height: 20px; color: var(--pc-link); display: block; margin-top: 1px }
 .pc-tour-faq .pc-tour-snippet { display: block; margin-top: 8px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--pc-line); background: var(--pc-soft); font-size: 12.5px; overflow-wrap: anywhere; color: var(--pc-text) }
 .pc-tour-plans { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px }
-.pc-tour-plans > div { border: 1px solid var(--pc-line); border-radius: 12px; background: var(--pc-surface); padding: 16px 18px }
+.pc-tour-plans > .pc-tour-plan { border: 1px solid var(--pc-line); border-radius: 12px; background: var(--pc-surface); padding: 16px 18px }
 .pc-tour-plans h4 { margin: 0 0 6px; font-size: 17px; font-weight: 700; color: var(--pc-text) }
 .pc-tour-plans h4 span { font-size: 13px; font-weight: 600; color: var(--pc-text-muted); margin-left: 6px }
-.pc-tour-plans a { display: inline-block; margin-top: 10px; font-weight: 600; color: var(--pc-link) }
+.pc-tour-plans-more a { display: inline-block; margin-top: 10px; font-weight: 600; color: var(--pc-link) }
 .pc-tour-plan-pro { border-color: var(--pc-link) !important }
 @media (max-width: 640px) { .pc-tour-plans { grid-template-columns: minmax(0, 1fr) } }
 /* Phone week view: day columns are ~48px wide, so titles wrap instead of clipping (Syncfusion
@@ -2314,7 +2314,7 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 :root[data-theme="dark"] .e-quick-dialog .e-dlg-header-content,
 :root[data-theme="dark"] .e-quick-dialog .e-dlg-content { color: var(--pc-text) }
 /* Homepage pricing cards: equal height, link pinned to the bottom. */
-.pc-tour-plans > div { display: flex; flex-direction: column }
+.pc-tour-plans > .pc-tour-plan { display: flex; flex-direction: column }
 /* Homepage guide: three plain facts instead of a sentence that repeated the steps; the quote follows
    the links (no stretch to the bottom, which left a dead gap on tall windows). */
 .pc-home-chips { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 4px 0 18px; color: var(--pc-text-muted); font-size: 15px; font-weight: 600 }
@@ -2391,7 +2391,7 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 }
 /* Pricing: the four plans from /pricing, small. Pro Single is the one on sale, so it carries the accent. */
 .pc-tour .pc-tour-plans { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; align-items: stretch }
-.pc-tour-plans > div { position: relative; gap: 2px; padding: 18px 16px 16px }
+.pc-tour-plans > .pc-tour-plan { position: relative; gap: 2px; padding: 18px 16px 16px }
 .pc-tour-plans h4 { margin: 0; font-size: 16px }
 .pc-tour-plans p { margin: 0; font-size: 14px; line-height: 1.45 }
 .pc-tour-plans .pc-plan-price { margin: 6px 0 6px; color: var(--pc-text-muted); font-size: 14px }
@@ -2424,3 +2424,14 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 .pc-home-site-footer .site-footer { margin-top: 0; border-top: 0 }
 .pc-gopro-soon { margin: 8px 0 0; color: var(--pc-text-muted); font-size: 13px; line-height: 1.45 }
 .pc-gopro-soon a { color: var(--pc-link); white-space: nowrap }
+/* Each plan card opens /pricing; the whole card is the link, so it reads as text, not a link. */
+.pc-tour-plan { color: inherit; text-decoration: none; transition: border-color .15s }
+.pc-tour-plan:hover { border-color: var(--pc-link) }
+.pc-tour-plan:focus-visible { outline: none; box-shadow: var(--pc-focus-ring) }
+.pc-tour-plan p { color: var(--pc-text-muted) }
+.pc-pro-price { margin: 10px 0 4px; font-size: 15px }
+/* "Learn more" on each plan card: shown on hover or focus where there is a pointer, always on touch screens. */
+.pc-tour-plan-more { margin-top: auto; padding-top: 10px; font-size: 14px; font-weight: 600; color: var(--pc-link); opacity: 0; transition: opacity .15s }
+.pc-tour-plan:hover .pc-tour-plan-more, .pc-tour-plan:focus-visible .pc-tour-plan-more { opacity: 1 }
+@media (hover: none) { .pc-tour-plan-more { opacity: 1 } }
+.pc-tour-plan, .pc-tour-plan:hover, .pc-tour-plan * { text-decoration: none }
