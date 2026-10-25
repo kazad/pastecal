@@ -9,7 +9,7 @@
      one ('Editors') only when the calendar has none, through the named-links API. -->
 <meta name="referrer" content="no-referrer">
 <meta name="robots" content="noindex">
-<title>Pro is on · pastecal</title>
+<title>You're upgraded · pastecal</title>
 <link rel="icon" href="/favicon.ico">
 <script>
   var proCalendar = null, proSession = null, proUnlimited = false;
@@ -46,7 +46,7 @@ button.secondary { margin-top: 10px; background: transparent; color: var(--blue)
 </head>
 <body>
 <main>
-  <h1><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span id="title">Pro is on</span></h1>
+  <h1><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span id="title">Plus is on</span></h1>
   <p id="msg">Your payment went through. Locking <span class="cal" id="calname">your calendar</span>…</p>
 
   <p id="signin-note" class="small" hidden></p>
@@ -80,17 +80,17 @@ button.secondary { margin-top: 10px; background: transparent; color: var(--blue)
     if (r.status === 200 && r.data.ok && !r.data.signedIn) {
       existingAccount = true;
       var who = document.createElement('b'); who.textContent = r.data.email;
-      $('signin-note').textContent = ''; $('signin-note').append('This email already has a pastecal account, so we sent a sign-in link to ', who, '. Open it to get your editor link and manage Pro.');
+      $('signin-note').textContent = ''; $('signin-note').append('This email already has a pastecal account, so we sent a sign-in link to ', who, '. Open it to get your editor link and manage your plan.');
       $('signin-note').hidden = false;
     }
     return r;
   });
-  if (proUnlimited) $('title').textContent = 'Pro Plus is on';
+  if (proUnlimited) $('title').textContent = 'Pro is on';
   if (!proCalendar) {
-    // Pro Plus bought from the pricing page: no calendar yet. Each one locks with one click from its Share panel.
+    // Pro bought from the pricing page: no calendar yet. Each one locks with one click from its Share panel.
     if (!proUnlimited) $('title').textContent = 'Thanks, your payment went through';
     msg.textContent = proUnlimited ? 'Open any calendar you run, press Share, and choose Lock this calendar. No new checkout.'
-      : 'Open your calendar and press Share to see its Pro settings.';
+      : 'Open your calendar and press Share to see its settings.';
     go.textContent = 'Back to pastecal';
     return;
   }

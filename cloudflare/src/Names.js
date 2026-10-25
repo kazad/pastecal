@@ -152,7 +152,7 @@ async function accountData(env, userId) {
 async function gate(env, userId, { needActive = true, changes = true } = {}) {
     const acc = accounts(env);
     const active = !!(await acc.activeUnlimited(userId));
-    if (needActive && !active) return { res: json({ error: 'unlimited-ended', message: 'Your Pro Plus has ended. Renew it to add or change names; your links keep working.' }, 403) };
+    if (needActive && !active) return { res: json({ error: 'unlimited-ended', message: 'Your Pro plan has ended. Renew it to add or change names; your links keep working.' }, 403) };
     if (changes && (await acc.nameEventsLastHour(userId)) >= NAME_CHANGES_PER_HOUR) return { res: json({ error: 'slow-down', message: 'That\'s a lot of changes. Try again in an hour.' }, 429) };
     return { acc, active, handle: (await acc.handleOf(userId)) };
 }
@@ -254,7 +254,7 @@ const NAME_OPS = {
         if (!l || !g.handle || l.handle !== g.handle.handle) return json({ error: 'no-link' }, 404);
         // Out from under the handle it would count toward the 10.
         if (g.active && (await g.acc.coveredByUnlimited(body.calendarId, userId)) && (await g.acc.proCount(userId)) >= UNLIMITED_TOP_LEVEL) {
-            return json({ error: 'unlimited-full', message: `You've used your ${UNLIMITED_TOP_LEVEL}. This calendar can only stay Pro under @${g.handle.handle}.` }, 409);
+            return json({ error: 'unlimited-full', message: `You've used your ${UNLIMITED_TOP_LEVEL}. This calendar can only stay upgraded under @${g.handle.handle}.` }, 409);
         }
         await g.acc.removeLink(body.calendarId);
         await removeDirectoryName(env, l.alias);

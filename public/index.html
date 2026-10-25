@@ -405,7 +405,7 @@
             <div v-if="!isLoading && isReadOnly" class="pc-viewer-row" data-testid="viewer-row-mobile">
                 <span v-if="!lock.locked" class="pc-view-badge" data-testid="view-only-badge-mobile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>View only</span>
                 <div class="pc-viewer-actions">
-                    <button v-if="lock.paused && pausedOwner" type="button" class="pc-paused-owner" data-testid="paused-owner-reopen" @click="toggleShare()">Pro ended · Choose what happens</button>
+                    <button v-if="lock.paused && pausedOwner" type="button" class="pc-paused-owner" data-testid="paused-owner-reopen" @click="toggleShare()">Your plan ended · Choose what happens</button>
                     <add-to-calendar v-if="getWebcalURL()" :nudge-key="calendar.id" :google="getGoogleSubscribeURL()" :apple="getWebcalURL()" :outlook="getOutlookSubscribeURL()" :other="getWebcalURL()" @pick="trackSubscribe"></add-to-calendar>
                     <a v-if="!hideBranding" href="/" target="_top" class="pc-make-own" data-testid="make-own-mobile" data-from="view-header">Make your own</a>
                 </div>
@@ -556,7 +556,7 @@
                 <!-- A view link's own actions: take it with you, or make one. "Make your own" is the free
                      plan's credit (Pro's trimmed branding drops it); the badge sits beside the title. -->
                 <div v-if="!isLoading && isReadOnly" class="pc-viewer-actions" data-testid="viewer-actions">
-                    <button v-if="lock.paused && pausedOwner" type="button" class="pc-paused-owner" data-testid="paused-owner-reopen" @click="toggleShare()">Pro ended · Choose what happens</button>
+                    <button v-if="lock.paused && pausedOwner" type="button" class="pc-paused-owner" data-testid="paused-owner-reopen" @click="toggleShare()">Your plan ended · Choose what happens</button>
                     <add-to-calendar v-if="getWebcalURL()" :nudge-key="calendar.id" :google="getGoogleSubscribeURL()" :apple="getWebcalURL()" :outlook="getOutlookSubscribeURL()" :other="getWebcalURL()" @pick="trackSubscribe"></add-to-calendar>
                     <a v-if="!hideBranding" href="/" target="_top" class="pc-make-own" data-testid="make-own" data-from="view-header">Make your own</a>
                 </div>
@@ -1287,7 +1287,7 @@
 
                     <!-- Pro owner: every saved version. Free, the calendar's creator: one line about what Pro keeps. -->
                     <button v-if="lock.locked && proOwner" type="button" class="pc-act-more" @click="openInsight('history', 'recent_changes')" data-testid="recent-history-link">
-                        Restore an earlier version <span class="pc-act-pro">Pro</span> <span aria-hidden="true">→</span>
+                        Restore an earlier version <span class="pc-act-pro">Plus</span> <span aria-hidden="true">→</span>
                     </button>
                     <p v-else-if="!lock.locked && isMineCalendar" class="pc-changes-foot" data-testid="recent-pro-pitch">
                         Plus keeps every version and can restore any date.

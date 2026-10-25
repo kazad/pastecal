@@ -206,7 +206,7 @@ test('billing on: pricing keeps Get Plus and the picker, with the Beta tag', asy
   await expect(page.locator('#get-pro')).toBeVisible();
   // Pro Plus: buyable only when its own price is set too (/api/pro/config unlimited).
   const unl = (await (await request.get('/api/pro/config')).json()).unlimited;
-  await expect(page.locator('#unlCta')).toHaveText(unl ? 'Get Pro Plus' : 'Join the Pro beta');
+  await expect(page.locator('#unlCta')).toHaveText(unl ? 'Get Pro' : 'Join the beta');
   await page.locator('.plan.pro .cta').click();
   await expect(page.locator('#calLink')).toBeFocused();
   await ctx.close();

@@ -30,7 +30,7 @@ test('Teams is $490 a year or $49 a month on the pricing card, waitlist, FAQ and
 });
 
 test('one price everywhere: none of the old prices on any page people see', () => {
-  for (const f of ['public/index.html', 'public/pricing.html', 'public/terms.html', 'public/components/Pro.js', 'public/components/NavigationDropdown.js', 'cloudflare/src/Accounts.js']) {
+  for (const f of ['public/index.html', 'public/pricing.html', 'public/terms.html', 'public/account.html', 'public/pro/done.html', 'public/components/Pro.js', 'public/components/NavigationDropdown.js', 'cloudflare/src/Accounts.js', 'cloudflare/src/Names.js']) {
     const t = read(f);
     assert.ok(!/2\.99/.test(t), `${f} still mentions $2.99`);
     assert.ok(!/\$24\b|\$2 a month/.test(t), `${f} still has the old $24 price`);
@@ -38,6 +38,9 @@ test('one price everywhere: none of the old prices on any page people see', () =
     assert.ok(!/\$79\b/.test(t), `${f} still has $79`);
     assert.ok(!/\$290\b|\$29 a month/.test(t), `${f} still has the old Teams price`);
     assert.ok(!/Pro Plus|Join the Pro beta|Pro beta trial/.test(t), `${f} still uses the old plan names`);
+    // The one-calendar plan is Plus now: "Pro" means the 10-calendar plan (id 'unlimited').
+    const shown = t.replace(/<!--[\s\S]*?-->/g, '').replace(/^\s*(\/\/|\*|\/\*).*$/gm, '').replace(/\s\/\/ .*$/gm, '');
+    assert.ok(!/Keep Pro|Pro trial|Try Pro free|Locked with Pro<|Pro calendars?\b|Pro is on for|manage your new Pro/.test(shown), `${f} calls the one-calendar plan Pro (it is Plus)`);
   }
 });
 

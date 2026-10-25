@@ -149,7 +149,7 @@ const COMPONENT_REGISTRY = {
     'lock-badge': LockBadge,                   // Pro lock icon + popover beside the title
     'add-to-calendar': AddToCalendar,          // View link: subscribe menu in the header
     'pro-panel': ProPanel,                     // Share dialog: Lock this calendar / owner panel
-    'pro-beta-join': ProBetaJoin,              // "Join the Pro beta" while billing is off (Go Pro card, Stats)
+    'pro-beta-join': ProBetaJoin,              // "Join the beta" while billing is off (Go Pro card, Stats)
     'pro-stats': ProStats,                     // Pro owner: views, visitors, followers, places
     'pro-history': ProHistory                  // Pro owner: saved versions, preview, restore
 };
@@ -222,11 +222,11 @@ const CalendarVueApp = {
             // Inside someone else's page (an iframe) or asked to look like it (?embed).
             embedded: (() => { try { return window.self !== window.top || new URLSearchParams(location.search).has('embed'); } catch (e) { return true; } })(),
             proTrialUsed: false,
-            proUnlimited: false,        // the signed-in person has Pro Plus: the Go Pro card locks with one click
+            proUnlimited: false,        // the signed-in person has Pro (id unlimited): the Upgrade card locks with one click
             proUnlimitedBusy: false,
-            proUnlimitedFull: false,    // Pro Plus with its 10 used: the card offers the owner's @name instead
+            proUnlimitedFull: false,    // Pro with its 10 used: the card offers the owner's @name instead
             proHandle: '',
-            proBilling: null,           // /api/pro/config: true = trial and checkout; false = "Join the Pro beta"; null = not known yet (neither shows)
+            proBilling: null,           // /api/pro/config: true = trial and checkout; false = "Join the beta"; null = not known yet (neither shows)
             pausedOwner: false,         // this browser owns the paused (Pro ended) calendar it's looking at: offer the way back
             proTrialActive: false,      // this browser owns the calendar and it is on its free trial (trial_feature_used)
             proSurface: 'share',        // where the Pro offer was opened from: 'share' | 'stats' | 'lock' (trial_started)        // this calendar already had its one free trial (/api/pro/status), so the Go Pro card doesn't offer it
@@ -698,7 +698,7 @@ const CalendarVueApp = {
         // DOM render and doesn't reactively update them when set later — so settings must be
         // available for the pre-appendTo configuration block below, not just applied after.
         this.loadGlobalSettings();
-        // Can Pro be bought yet? Decides between the trial/checkout and "Join the Pro beta" everywhere Pro is offered.
+        // Can Pro be bought yet? Decides between the trial/checkout and "Join the beta" everywhere Pro is offered.
         if (typeof ProBilling !== 'undefined') ProBilling.load().then((b) => { this.proBilling = b; });
         else this.proBilling = true;
 
@@ -5294,7 +5294,7 @@ const CalendarVueApp = {
                 }
             } catch (e) { /* offline: offer it; the server decides */ }
         },
-        /** Go Pro card, for a Pro Plus owner: lock this calendar now (POST /api/pro/lock), no checkout.
+        /** Go Pro card, for a Pro owner: lock this calendar now (POST /api/pro/lock), no checkout.
          *  The room broadcasts the lock, so the page turns locked by itself; a refusal opens the Pro view to explain. */
         async lockWithUnlimited() {
             const id = this.calendar && this.calendar.id;

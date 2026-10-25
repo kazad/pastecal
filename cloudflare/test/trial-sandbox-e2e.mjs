@@ -97,14 +97,14 @@ try {
     assert.equal(trialA.items.data[0].price.id, PRICE_YEARLY);
     const daysLeft = (trialA.trial_end - Date.now() / 1000) / 86400;
     assert.ok(daysLeft > 29.9 && daysLeft <= 30.01, `30 days (got ${daysLeft})`);
-    assert.match((await outbox(emailA)).at(-1).subject, /^Your Pro trial is on for /);
+    assert.match((await outbox(emailA)).at(-1).subject, /^Your Plus trial is on for /);
     assert.equal((await trySave(calA)).code, 'locked');
     step('"Try Pro free" sign-in link started a real Stripe trial: trialing, 30 days, no card, cancel-if-no-card; calendar locked, visitors refused');
 
     const ownerA = await ctxWith(ann.cookie); const pa = await ownerA.newPage();
     await openPanel(pa, calA);
     await pa.locator('[data-testid=pro-trial-line]').waitFor({ timeout: 15000 });
-    assert.match(await pa.locator('[data-testid=pro-trial-line]').innerText(), /Pro trial/);
+    assert.match(await pa.locator('[data-testid=pro-trial-line]').innerText(), /Plus trial/);
     await pa.screenshot({ path: `${OUT}/A1-trial-owner-panel.png` });
     await pa.locator('[data-testid=pro-keep-trial]').click();
     await pa.locator('[data-testid=pro-keep-plans]').filter({ visible: true }).first().waitFor();
@@ -218,12 +218,12 @@ try {
     };
     const mailsBefore = (await outbox(emailC)).length;
     await advance(subC.trial_end - 2 * 86400);
-    const reminder = await until(async () => (await outbox(emailC)).slice(mailsBefore).find((m) => /^Your Pro trial ends /.test(m.subject)), 90000, 2000);
+    const reminder = await until(async () => (await outbox(emailC)).slice(mailsBefore).find((m) => /^Your Plus trial ends /.test(m.subject)), 90000, 2000);
     assert.ok(reminder, 'no trial_will_end reminder email');
     assert.ok(reminder.text.includes(`?pro=keep`), 'Keep Pro link');
     assert.match(reminder.text, /read-only/);
     await sleep(4000);
-    assert.equal((await outbox(emailC)).slice(mailsBefore).filter((m) => /^Your Pro trial ends /.test(m.subject)).length, 1, 'exactly one reminder');
+    assert.equal((await outbox(emailC)).slice(mailsBefore).filter((m) => /^Your Plus trial ends /.test(m.subject)).length, 1, 'exactly one reminder');
     step(`test clock advanced to 2 days before the end: Stripe sent trial_will_end and the owner got one "${reminder.subject.replace(/\d{4}/, 'YYYY')}" email with a Keep Pro link`);
 
     await advance(subC.trial_end + 3600);

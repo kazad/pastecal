@@ -17,7 +17,7 @@ const post = (path, body, cookie) => fetch(BASE + path, {
 });
 const admin = (path) => fetch(BASE + path, { headers: { Authorization: `Bearer ${SECRET}` } });
 const outbox = async (email) => (await (await admin(`/api/admin/accounts/outbox?email=${encodeURIComponent(email)}`)).json()).emails;
-const welcomes = async (email) => (await outbox(email)).filter((m) => m.subject.startsWith('Pro is on for'));
+const welcomes = async (email) => (await outbox(email)).filter((m) => m.subject.startsWith('Plus is on for'));
 async function signIn(email) {
     await post('/api/auth/start', { email });
     const token = (await outbox(email)).at(-1).text.match(/#t=([A-Za-z0-9_-]+)/)[1];
@@ -48,7 +48,7 @@ try {
     let mail = await welcomes(email);
     assert.equal(mail.length, 1);
     const [m] = mail;
-    assert.equal(m.subject, 'Pro is on for Robotics team Bcc: someone@example.com', 'no line breaks reach the subject');
+    assert.equal(m.subject, 'Plus is on for Robotics team Bcc: someone@example.com', 'no line breaks reach the subject');
     assert.ok(m.text.includes(`https://pastecal.com/${encodeURIComponent(cal)}\n`), 'links to the encoded calendar id');
     assert.match(m.text, /Share/); assert.match(m.text, /Editor link/); assert.match(m.text, /reset or revoke/);
     assert.match(m.text, /Manage billing/); assert.match(m.text, /sign in at pastecal\.com with this email/);
@@ -86,7 +86,7 @@ try {
     assert.equal((await welcomes(email)).length, 1, 'no email when the lock did not happen');
     assert.equal((await webhook(ev2)).status, 200);
     mail = await welcomes(email);
-    assert.equal(mail.length, 2); assert.equal(mail[1].subject, `Pro is on for ${cal2}`);
+    assert.equal(mail.length, 2); assert.equal(mail[1].subject, `Plus is on for ${cal2}`);
     assert.ok(mail[1].text.includes(`https://pastecal.com/${cal2}\n`));
     step('a failed lock sends nothing; its retry locks and sends one, titled with the id when the calendar has no title');
 
@@ -98,7 +98,7 @@ try {
         webhook(event('checkout.session.completed', { id: 'cs_w3', subscription: `sub_w${run}_d` })),
     ]);
     assert.deepEqual(rs.map((r) => r.status), [200, 200]);
-    assert.equal((await welcomes(email)).filter((x) => x.subject === 'Pro is on for Race').length, 1);
+    assert.equal((await welcomes(email)).filter((x) => x.subject === 'Plus is on for Race').length, 1);
     step('subscription.created and checkout.completed arriving together send one email');
 
     // --- Not active (incomplete): no lock, no email.

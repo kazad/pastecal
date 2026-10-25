@@ -109,7 +109,7 @@ assert.ok(lapsed, 'calendar never fell back to paused after cancel');
 await op.goto(`${BASE}/${cal}?backend=cf`); await op.waitForTimeout(3500);
 await vm(op, 'vm.showShare = true'); await op.waitForTimeout(1200);
 await op.locator('[data-testid=pro-lapsed-title]').waitFor({ timeout: 15000 });
-assert.match(await op.locator('[data-testid=pro-lapsed-title]').innerText(), /Pro ended/);
+assert.match(await op.locator('[data-testid=pro-lapsed-title]').innerText(), /Your plan ended/);
 await op.screenshot({ path: `${OUT}/8-owner-pro-ended.png` });
 assert.equal(await vm(vp, 'return vm.isReadOnly'), true, 'visitor stays read-only (paused)');
 await vp.screenshot({ path: `${OUT}/8-visitor-paused.png` });

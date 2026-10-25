@@ -86,15 +86,15 @@ test('Pro Plus from /pricing (fake Stripe), claim @name, create a calendar under
   await payFakeCheckout(request, page);
 
   await page.goto('/account');
-  await expect(page.getByTestId('account-plan')).toContainText('Pro Plus · renews');
-  await expect(page.getByTestId('account-meter')).toHaveText('Pro calendars: 0 of 10 · unlimited under your @name');
+  await expect(page.getByTestId('account-plan')).toContainText('Pro · renews');
+  await expect(page.getByTestId('account-meter')).toHaveText('Upgraded calendars: 0 of 10 · unlimited under your @name');
   await page.getByTestId('handle-input').fill('pricing');
   await page.getByTestId('handle-claim').click();
   await expect(page.getByTestId('name-error')).toHaveText('That name is reserved. Try another.');
   await page.getByTestId('handle-input').fill(handle);
   await page.getByTestId('handle-claim').click();
   await expect(page.getByTestId('handle-link-own')).toHaveText(new RegExp(`/@${handle}$`));
-  await expect(page.getByTestId('account-meter')).toHaveText(`Pro calendars: 0 of 10 · unlimited under @${handle}`);
+  await expect(page.getByTestId('account-meter')).toHaveText(`Upgraded calendars: 0 of 10 · unlimited under @${handle}`);
 
   await page.getByTestId('newcal-input').fill('soccer');
   await page.getByTestId('newcal-create').click();
@@ -137,7 +137,7 @@ test('"Show on my page" lists it on pastecal.com/@name', async ({ browser }) => 
   await expect(page.getByTestId('handle-empty')).toBeVisible();
   await page.goto('/account');
   const row = page.locator(`[data-cal="${calendarId}"]`);
-  await expect(row.getByTestId('cal-status')).toHaveText('Included in Pro Plus');
+  await expect(row.getByTestId('cal-status')).toHaveText('Included in Pro');
   await row.getByTestId('cal-at-edit').click();
   await row.getByTestId('cal-show').check();
   await expect(page.locator(`[data-cal="${calendarId}"]`).getByTestId('cal-show')).toBeChecked();

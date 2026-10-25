@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<!-- /account: the signed-in owner's plan, billing, calendars, Pro Plus names, and account delete.
+<!-- /account: the signed-in owner's plan (Plus = id 'pro', Pro = id 'unlimited'), billing, calendars, @name and short links, and account delete.
      Data: GET /api/account; changes: /api/names/* (cloudflare/src/Names.js), /api/pro/portal, /api/auth/*,
      /api/account/delete (Accounts.js). No analytics here. -->
 <meta name="robots" content="noindex">
@@ -134,7 +134,7 @@ select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); borde
         <p id="handleNote">Your public page lists the calendars you choose to show.</p>
         <div id="newCal">
           <h2 style="margin-top:18px" id="newCalH">New calendar</h2>
-          <p>Pro, locked to you, with its own short link. As many as you like.</p>
+          <p>Upgraded and locked to you, at its own pastecal.com/@you/… link. As many as you like.</p>
           <form class="inline" id="newCalForm" novalidate>
             <span class="field"><span class="pre" id="newCalPre"></span><input id="newCalInput" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="40" aria-label="Short name" placeholder="soccer" data-testid="newcal-input"></span>
             <button class="btn" type="submit" data-testid="newcal-create">Create</button>
@@ -153,13 +153,13 @@ select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); borde
         <select id="shortCal" aria-label="Calendar" data-testid="short-calendar"></select>
         <button class="btn" type="submit" data-testid="short-add">Add</button>
       </form>
-      <p class="muted" id="shortNote">If Pro Plus ends, your short links keep working but can't be changed. We hold them for you for 90 days after it ends, then release them for anyone to use.</p>
+      <p class="muted" id="shortNote">If Pro ends, your short links keep working but can't be changed. We hold them for you for 90 days after it ends, then release them for anyone to use.</p>
       <p class="err" id="shortErr" role="alert" data-testid="short-error"></p>
     </section>
 
     <section class="card" data-testid="account-calendars-card">
       <h2>Your calendars</h2>
-      <p id="calsEmpty" hidden>Calendars you lock with Pro show up here.</p>
+      <p id="calsEmpty" hidden>Calendars you upgrade show up here.</p>
       <ul class="list" id="calList"></ul>
     </section>
 
@@ -172,7 +172,7 @@ select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); borde
         <div class="row-actions"><button class="btn quiet" type="button" id="delPortal">Manage billing</button><button class="link" type="button" id="delCancel1">Never mind</button></div>
       </div>
       <form id="delConfirm" hidden novalidate data-testid="delete-confirm">
-        <p>Each calendar then follows its “If Pro ends” setting: paused (view only) or open to its edit link. Your @name links stop working, and your short links are held for 90 days, then released.</p>
+        <p>Each calendar then follows its “If your plan ends” setting: paused (view only) or open to its edit link. Your @name links stop working, and your short links are held for 90 days, then released.</p>
         <label class="muted" for="delInput" style="display:block;margin-top:12px">Type <b>delete</b> to confirm</label>
         <div class="row-actions" style="margin-top:6px">
           <span class="field" style="flex:0 1 220px"><input class="solo" id="delInput" autocomplete="off" autocapitalize="none" spellcheck="false" data-testid="delete-input"></span>
@@ -225,16 +225,16 @@ select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); borde
   // ---- plan ----
   function planLine() {
     var u = A.unlimited, s = A.singles || [];
-    if (A.plan === 'unlimited') return 'Pro Plus · ' + (u.cancelAtPeriodEnd ? 'ends ' : 'renews ') + day(u.currentPeriodEnd);
+    if (A.plan === 'unlimited') return 'Pro · ' + (u.cancelAtPeriodEnd ? 'ends ' : 'renews ') + day(u.currentPeriodEnd);
     var live = s.filter(function (x) { return ACTIVE[x.status]; });
     if (live.length) {
       var t = live.filter(function (x) { return x.status === 'trialing'; })[0];
-      if (t && live.length === 1) { var n = daysLeft(t.trialEnd || t.currentPeriodEnd); return 'Pro trial · ' + n + (n === 1 ? ' day left' : ' days left'); }
-      if (live.length === 1) return 'Pro · ' + (live[0].cancelAtPeriodEnd ? 'ends ' : 'renews ') + day(live[0].currentPeriodEnd);
-      return 'Pro · ' + live.length + ' calendars';
+      if (t && live.length === 1) { var n = daysLeft(t.trialEnd || t.currentPeriodEnd); return 'Plus trial · ' + n + (n === 1 ? ' day left' : ' days left'); }
+      if (live.length === 1) return 'Plus · ' + (live[0].cancelAtPeriodEnd ? 'ends ' : 'renews ') + day(live[0].currentPeriodEnd);
+      return 'Plus · ' + live.length + ' calendars';
     }
-    if (u) return 'Pro Plus · ended' + (u.endedAt ? ' ' + day(u.endedAt) : '');
-    if (s.length) return 'Pro ended';
+    if (u) return 'Pro · ended' + (u.endedAt ? ' ' + day(u.endedAt) : '');
+    if (s.length) return 'Plus · ended';
     return 'Free';
   }
   function hasActiveBilling() {
@@ -246,12 +246,12 @@ select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); borde
     $('plan').textContent = planLine();
     var unl = A.plan === 'unlimited', lapsed = !unl && A.unlimited;
     $('meter').hidden = !unl;
-    if (unl) $('meter').textContent = 'Pro calendars: ' + A.proCount + ' of ' + A.proLimit + (A.handle ? ' · unlimited under @' + A.handle : ' · unlimited under your @name');
+    if (unl) $('meter').textContent = 'Upgraded calendars: ' + A.proCount + ' of ' + A.proLimit + (A.handle ? ' · unlimited under @' + A.handle : ' · unlimited under your @name');
     $('planNote').hidden = !lapsed;
-    if (lapsed) $('planNote').textContent = 'Your links keep working. Renew Pro Plus to add or change names.';
+    if (lapsed) $('planNote').textContent = 'Your links keep working. Renew Pro to add or change names.';
     $('billing').hidden = !A.hasBilling;
     $('seePlans').hidden = A.plan !== null;
-    $('seePlans').textContent = lapsed ? 'Renew Pro Plus' : 'See plans';
+    $('seePlans').textContent = lapsed ? 'Renew Pro' : 'See plans';
 
     // Your name
     $('nameCard').hidden = !(unl || A.handle);
@@ -273,8 +273,8 @@ select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); borde
     $('shortForm').hidden = !unl || shorts.length >= A.shortLimit || !lockable.length;
     var held = shorts.map(function (x) { return x.endedAt; }).filter(Boolean).sort()[0];
     $('shortNote').textContent = held
-      ? 'Your Pro Plus has ended, so these can\u2019t be changed. They keep working, and stay yours until ' + day(held + A.holdDays * 86400000) + '. Renew to keep them.'
-      : 'If Pro Plus ends, your short links keep working but can\u2019t be changed. We hold them for you for ' + A.holdDays + ' days after it ends, then release them for anyone to use.';
+      ? 'Your Pro plan has ended, so these can\u2019t be changed. They keep working, and stay yours until ' + day(held + A.holdDays * 86400000) + '. Renew to keep them.'
+      : 'If Pro ends, your short links keep working but can\u2019t be changed. We hold them for you for ' + A.holdDays + ' days after it ends, then release them for anyone to use.';
     var mine = A.calendars.filter(function (c) { return c.state !== 'open' && c.state !== 'unknown'; });
     var sel = $('shortCal'); sel.textContent = '';
     mine.forEach(function (c) { sel.appendChild(el('option', { value: c.id, text: c.title })); });
@@ -299,7 +299,7 @@ select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); borde
     renderCalendars(unl);
   }
 
-  var LABEL = { unlimited: 'Included in Pro Plus', locked: 'Locked', trial: 'Trial', paused: 'Paused', open: 'Open', unknown: '…' };
+  var LABEL = { unlimited: 'Included in Pro', locked: 'Locked', trial: 'Trial', paused: 'Paused', open: 'Open', unknown: '…' };
   var open = {};
   function renderCalendars(unl) {
     var list = $('calList'); list.textContent = '';

@@ -783,10 +783,10 @@ async function sendSignInEmail(env, to, token, next, kind) {
     // anyone can make us email any address, so nothing they chose goes in the message.
     const trial = typeof next === 'string' && /\?pro=trial$/.test(next);
     const buying = !trial && typeof next === 'string' && /\?pro=/.test(next), paid = kind === 'paid';
-    const subject = paid ? 'Your pastecal sign-in link: manage your new Pro' : trial ? 'Your pastecal sign-in link: start your free Pro trial'
+    const subject = paid ? 'Your pastecal sign-in link: manage your new plan' : trial ? 'Your pastecal sign-in link: start your free Plus trial'
         : buying ? 'Your pastecal sign-in link: finish locking your calendar' : 'Your pastecal sign-in link';
-    const lead = paid ? 'Thanks for getting Pro. This email already has a pastecal account, so sign in here to get your editor link and manage Pro:'
-        : trial ? `Here is your link to sign in and start your free ${TRIAL_DAYS}-day Pro trial. No card needed:`
+    const lead = paid ? 'Thanks for upgrading. This email already has a pastecal account, so sign in here to get your editor link and manage your plan:'
+        : trial ? `Here is your link to sign in and start your free ${TRIAL_DAYS}-day Plus trial. No card needed:`
         : buying ? 'Here is your link to sign in and finish locking your calendar. It takes you straight to payment:' : 'Here is your link to sign in to pastecal:';
     const text = `${lead}\n\n${link}\n\n`
         + `It works once and expires in 15 minutes.\n\n`
@@ -819,7 +819,7 @@ function cleanTitle(title, fallback) {
 
 // Once per (calendar, owner), the first time the webhook locks it. Plain text, no key, no token:
 // the owner makes editor links from the calendar itself.
-async function sendWelcomeEmail(env, acc, calendarId, userId, title, trialEnd = null, hasCard = null) {
+async function sendWelcomeEmail(env, acc, calendarId, userId, title, trialEnd = null, hasCard = null, planName = 'Plus') {
     try {
         if (!(await acc.claimWelcome(calendarId, userId))) return;
         const user = await acc.getUser(userId);
@@ -829,13 +829,13 @@ async function sendWelcomeEmail(env, acc, calendarId, userId, title, trialEnd = 
         const trialLine = !trialEnd ? '' : hasCard === false
             ? `Your free trial runs until ${formatDay(trialEnd)}. No card is on file, so nothing will be charged. We'll email you a few days before it ends.\n\n`
             : `Your free trial runs until ${formatDay(trialEnd)}. We'll email you a few days before it ends.\n\n`;
-        const text = `Pro is on for ${name}.\n\n${trialLine}`
+        const text = `${planName} is on for ${name}.\n\n${trialLine}`
             + `${link}\n\n`
             + `What's locked now: only you (signed in with this email) and people with an editor link can change this calendar. Everyone else can still view it.\n\n`
             + `To give someone editor access: open the calendar, choose Share, and copy the Editor link. You can reset or revoke editor links there at any time.\n\n`
             + `To manage billing: open the calendar's Share panel, or the logo menu, and choose Manage billing. You can also sign in at ${siteHost(env)} with this email.\n\n`
             + `Questions? Write to support@pastecal.com.\n`;
-        await sendEmail(env, user.email, trialEnd ? `Your Pro trial is on for ${name}` : `Pro is on for ${name}`, text, null, 'welcome');
+        await sendEmail(env, user.email, trialEnd ? `Your ${planName} trial is on for ${name}` : `${planName} is on for ${name}`, text, null, 'welcome');
     } catch (err) {
         console.error('[accounts] welcome email failed:', err && err.message);
     }
@@ -884,17 +884,17 @@ async function sendTrialReminder(env, acc, cfg, s) {
         const keep = `${siteUrl(env)}/${encodeURIComponent(calendarId)}?pro=keep`;
         if (card !== false) {
             // A card is on file (or Stripe couldn't say): never promise that nothing is charged.
-            const text = `Your Pro trial for ${name} ends ${day}.\n\n`
-                + `A card is on file for this subscription, so Pro continues after ${day} and the card is charged then. To change or cancel it, open the calendar's Share panel and choose Manage billing:\n${keep}\n\n`
+            const text = `Your Plus trial for ${name} ends ${day}.\n\n`
+                + `A card is on file for this subscription, so Plus continues after ${day} and the card is charged then. To change or cancel it, open the calendar's Share panel and choose Manage billing:\n${keep}\n\n`
                 + `Questions? Write to support@pastecal.com.\n`;
-            return await sendEmail(env, user.email, `Your Pro trial ends ${day}`, text, null, 'trial-reminder');
+            return await sendEmail(env, user.email, `Your Plus trial ends ${day}`, text, null, 'trial-reminder');
         }
-        const text = `Your Pro trial for ${name} ends ${day}.\n\n`
-            + `Keep Pro: $29 a year, and nothing changes.\n${keep}\n\n`
-            + `If you do nothing, nothing is charged. On ${day} Pro ends and the calendar becomes read-only: everyone can still view it and its calendar feed keeps working, but nobody can edit it. `
-            + `You can then open it to everyone (a free calendar, editable by anyone with the link) or keep Pro, from the calendar's Share panel.\n\n`
+        const text = `Your Plus trial for ${name} ends ${day}.\n\n`
+            + `Keep Plus: $29 a year, and nothing changes.\n${keep}\n\n`
+            + `If you do nothing, nothing is charged. On ${day} Plus ends and the calendar becomes read-only: everyone can still view it and its calendar feed keeps working, but nobody can edit it. `
+            + `You can then open it to everyone (a free calendar, editable by anyone with the link) or keep Plus, from the calendar's Share panel.\n\n`
             + `Questions? Write to support@pastecal.com.\n`;
-        await sendEmail(env, user.email, `Your Pro trial ends ${day}`, text, null, 'trial-reminder');
+        await sendEmail(env, user.email, `Your Plus trial ends ${day}`, text, null, 'trial-reminder');
     } catch (err) {
         console.error('[accounts] trial reminder failed:', err && err.message);
     }
@@ -1127,7 +1127,7 @@ async function deleteAccount(request, env) {
     if (!userId) return json({ error: 'signed-out' }, 401);
     const r = await accounts(env).deleteAccount(userId);
     if (r.active) return json({ error: 'active-subscription', calendars: r.active,
-        message: 'Cancel your Pro subscription first (Manage billing), then delete your account.' }, 409);
+        message: 'Cancel your subscription first (Manage billing), then delete your account.' }, 409);
     if (r.deleted) await forgetNames(env, r);
     return json({ ok: true, deleted: true }, 200, { 'Set-Cookie': sessionCookie('', 0) });
 }
@@ -1200,7 +1200,7 @@ async function claimCheckout(request, env, body) {
 // was added: trial_settings.end_behavior.missing_payment_method=cancel). It is applied at once, so the
 // calendar is locked before this answers; the webhook's copy of the same events changes nothing.
 async function startTrial(request, env, userId, calendarId) {
-    if (env.BETA_REAL_DATA) return [403, { error: 'buy-on-live', message: 'Pro is started on pastecal.com. The beta shows the new design on your real calendars.' }];
+    if (env.BETA_REAL_DATA) return [403, { error: 'buy-on-live', message: 'Plans are started on pastecal.com. The beta shows the new design on your real calendars.' }];
     const cfg = stripeConfig(env, new URL(request.url).hostname);
     if (!cfg) return [503, { error: 'billing-not-configured' }];
     if (!validId(calendarId)) return [400, { error: 'bad-calendar' }];
@@ -1210,7 +1210,7 @@ async function startTrial(request, env, userId, calendarId) {
     const user = await acc.getUser(userId);
     if (!user) return [401, { error: 'signed-out' }];
     // Pro Unlimited already covers every calendar: lock it instead (no trial needed).
-    if (await acc.activeUnlimited(userId)) return [409, { error: 'has-unlimited', message: 'You have Pro Plus: lock this calendar instead.' }];
+    if (await acc.activeUnlimited(userId)) return [409, { error: 'has-unlimited', message: 'You have Pro: lock this calendar instead.' }];
     // Saved calendars only: a draft (only in one browser) has no room yet, so it answers 404.
     const st = await LockClient.lockStatus(env, calendarId);
     if (st.status === 404) return [404, { error: 'no-calendar' }];
@@ -1272,7 +1272,7 @@ async function setLapsedMode(request, env, body) {
 async function checkout(request, env, body) {
     // The beta (preview.pastecal.com) runs on live calendars with Stripe in test mode: a test card must
     // never lock a real calendar, so Pro is bought on pastecal.com.
-    if (env.BETA_REAL_DATA) return json({ error: 'buy-on-live', message: 'Pro is bought on pastecal.com. The beta shows the new design on your real calendars.' }, 403);
+    if (env.BETA_REAL_DATA) return json({ error: 'buy-on-live', message: 'Plans are bought on pastecal.com. The beta shows the new design on your real calendars.' }, 403);
     const cfg = stripeConfig(env, new URL(request.url).hostname);
     if (!cfg) return json({ error: 'billing-not-configured' }, 503);
     const userId = await sessionUserId(request, env);
@@ -1345,7 +1345,7 @@ async function checkout(request, env, body) {
     // Right above Stripe's Pay button: which calendar this is for (the title is the payer's own, shown
     // only to them), and on staging which test card to use.
     const title = typeof body.title === 'string' ? body.title.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 60) : '';
-    const forWhat = `Pro for ${title ? `“${title}” (${siteHost(env)}/${back})` : `${siteHost(env)}/${back}`}.`;
+    const forWhat = `Plus for ${title ? `“${title}” (${siteHost(env)}/${back})` : `${siteHost(env)}/${back}`}.`;
     params.custom_text = { submit: { message: cfg.livemode === false ? `${forWhat} ${TEST_CARD_HINT}` : forWhat } };
     // Stripe limits client_reference_id's characters; calendar names can be anything, and metadata has the real id.
     if (/^[A-Za-z0-9_-]{1,200}$/.test(calendarId)) params.client_reference_id = calendarId;
@@ -1565,7 +1565,7 @@ async function applySubscription(env, acc, cfg, s) {
 }
 
 // ---- Pro Unlimited ------------------------------------------------------------------------------
-// One subscription per account (Pro Plus: $60/year or $6/month) that pays for every calendar its owner locks
+// One subscription per account (Pro, id 'unlimited': $96/year or $10/month) that pays for every calendar its owner locks
 // under it. The Stripe subscription names no calendar (metadata.plan='unlimited', and lock_calendar
 // when it was bought from a calendar's Share panel); unlimited_locks records which calendars it covers.
 //   - While it is active, POST /api/pro/lock {calendarId} locks any calendar the owner can lock (not
@@ -1625,7 +1625,7 @@ async function checkoutUnlimited(request, env, body, cfg, { userId, claim, claim
         expires_at: Math.floor((Date.now() + CHECKOUT_HOLD_MS) / 1000),
     };
     const paidSingles = singles.filter((x) => x.status !== 'trialing');
-    const forWhat = 'Pro Plus: 10 Pro calendars, plus unlimited under your @name.' + (paidSingles.length ? ' Your Pro calendars move to it, and their unused time is credited.' : '');
+    const forWhat = 'Pro: 10 upgraded calendars, plus unlimited under your @name.' + (paidSingles.length ? ' Your Plus calendars move to it, and their unused time is credited.' : '');
     params.custom_text = { submit: { message: cfg.livemode === false ? `${forWhat} ${TEST_CARD_HINT}` : forWhat } };
     // The upgrade credit lands on the paid Single's customer, so Unlimited is billed to that same customer.
     const customer = (paidSingles.find((x) => x.customer) || {}).customer || (userId ? await acc.customerForUser(userId) : null);
@@ -1670,7 +1670,7 @@ async function lockUnderUnlimited(env, acc, cfg, calendarId, userId, subscriptio
     const r = await LockClient.lock(env, calendarId, userId);
     if (r.status >= 500 || r.status === 0) { await acc.uncoverUnlimited(calendarId, userId); return { retry: true }; }
     if (!r.ok) { await acc.uncoverUnlimited(calendarId, userId); return { status: r.status === 409 ? 409 : 502, error: r.error || 'unavailable' }; }
-    await sendWelcomeEmail(env, acc, calendarId, userId, title || st.title);
+    await sendWelcomeEmail(env, acc, calendarId, userId, title || st.title, null, null, 'Pro');
     return { ok: true };
 }
 
@@ -1741,7 +1741,7 @@ async function applyUnlimited(env, acc, cfg, s) {
 
 // POST /api/pro/lock {calendarId}: an Unlimited owner locks one of their calendars. No checkout.
 async function unlimitedLock(request, env, body) {
-    if (env.BETA_REAL_DATA) return json({ error: 'buy-on-live', message: 'Pro is used on pastecal.com. The beta shows the new design on your real calendars.' }, 403);
+    if (env.BETA_REAL_DATA) return json({ error: 'buy-on-live', message: 'Plans are used on pastecal.com. The beta shows the new design on your real calendars.' }, 403);
     const cfg = stripeConfig(env, new URL(request.url).hostname);
     if (!cfg) return json({ error: 'billing-not-configured' }, 503);
     const userId = await sessionUserId(request, env);
@@ -1760,7 +1760,7 @@ async function unlimitedLock(request, env, body) {
 // Lock a calendar under the owner's active Unlimited, for Names.js (a new calendar under @handle).
 // -> {ok, already?} | {status, error, message?}
 export async function lockForOwner(env, host, calendarId, userId, title = null) {
-    if (env.BETA_REAL_DATA) return { status: 403, error: 'buy-on-live', message: 'Pro is used on pastecal.com.' };
+    if (env.BETA_REAL_DATA) return { status: 403, error: 'buy-on-live', message: 'Plans are used on pastecal.com.' };
     const cfg = stripeConfig(env, host);
     if (!cfg) return { status: 503, error: 'billing-not-configured' };
     const acc = accounts(env);

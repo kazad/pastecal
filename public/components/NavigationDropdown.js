@@ -183,7 +183,7 @@ const NavigationDropdown = {
                     </div>
                     <!-- Asked in place, not with confirm(): a browser dialog would also close the menu -->
                     <div v-if="acct.confirmDelete" class="pc-acct-delete" data-testid="account-delete-confirm">
-                        <p class="pc-acct-line">Delete your Pro account? This signs you out on every device and erases your email. Your calendars and their links stay as they are.</p>
+                        <p class="pc-acct-line">Delete your account? This signs you out on every device and erases your email. Your calendars and their links stay as they are.</p>
                         <div class="pc-acct-actions">
                             <button type="button" class="pc-acct-btn pc-acct-btn--danger" @click="deleteAccount" :disabled="acct.busy" data-testid="account-delete-yes">{{ acct.busy ? 'Deleting…' : 'Delete account' }}</button>
                             <button type="button" class="pc-acct-link" @click="acct.confirmDelete = false" :disabled="acct.busy" data-testid="account-delete-no">Cancel</button>
@@ -203,7 +203,7 @@ const NavigationDropdown = {
                             <button type="submit" class="pc-acct-btn pc-acct-btn--primary" :disabled="acct.busy">{{ acct.busy ? 'Sending…' : 'Send link' }}</button>
                         </div>
                     </form>
-                    <button v-else type="button" class="pc-acct-link pc-acct-line" @click="startSignIn" data-testid="account-signin">Pro owner? Sign in</button>
+                    <button v-else type="button" class="pc-acct-link pc-acct-line" @click="startSignIn" data-testid="account-signin">Have Plus or Pro? Sign in</button>
                 </template>
 
                 <p v-if="acct.error" class="pc-acct-err" role="alert" data-testid="account-error">{{ acct.error }}</p>
@@ -218,15 +218,15 @@ const NavigationDropdown = {
         if (typeof ProBilling !== 'undefined') ProBilling.load().then((b) => { this.billing = b; });
     },     // never blocks opening: the section shows its own loading line
     computed: {
-        // The plan, at the top of the section: "Pro Plus · renews Oct 24, 2027", "Pro", or just the account.
+        // The plan, at the top of the section: "Pro · renews October 24, 2027", "Plus", or just the account.
         planLabel() {
             const me = this.acct.me || {};
             if (me.plan === 'unlimited') {
                 const u = me.unlimited || {}, end = u.currentPeriodEnd ? (u.currentPeriodEnd < 1e12 ? u.currentPeriodEnd * 1000 : u.currentPeriodEnd) : 0;
                 const date = end ? new Date(end).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
-                return u.status === 'past_due' ? 'Pro Plus · payment problem' : date ? `Pro Plus · renews ${date}` : 'Pro Plus';
+                return u.status === 'past_due' ? 'Pro · payment problem' : date ? `Pro · renews ${date}` : 'Pro';
             }
-            return me.plan === 'single' ? 'Pro' : 'Pro account';
+            return me.plan === 'single' ? 'Plus' : 'Your account';
         },
         // Calendars this account pays for, lowercased id -> /api/me row.
         proById() {
@@ -245,9 +245,9 @@ const NavigationDropdown = {
                 const date = end ? new Date(end).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
                 let label;
                 if (c.status === 'past_due') label = 'Payment problem';
-                else if (c.plan === 'unlimited' && (c.status === 'active' || c.status === 'trialing')) label = 'Locked · Unlimited';
-                else if (c.status === 'active' || c.status === 'trialing') label = date ? `Pro · renews ${date}` : 'Pro';
-                else if (end > now) label = `Pro · ends ${date}`;
+                else if (c.plan === 'unlimited' && (c.status === 'active' || c.status === 'trialing')) label = 'Locked · Pro';
+                else if (c.status === 'active' || c.status === 'trialing') label = date ? `Plus · renews ${date}` : 'Plus';
+                else if (end > now) label = `Plus · ends ${date}`;
                 else continue;     // ended: no longer Pro
                 out.push({ id: c.id, title: titles.get(String(c.id).toLowerCase()) || c.id,
                     path: '/' + encodeURIComponent(c.id), label, problem: c.status === 'past_due' });
@@ -329,7 +329,7 @@ const NavigationDropdown = {
                     return;
                 }
                 st.confirmDelete = false;
-                if (r.status === 409) st.error = 'You still have Pro on a calendar. Cancel it in Manage billing; you can delete your account once it has ended.';
+                if (r.status === 409) st.error = 'You still have an active plan. Cancel it in Manage billing; you can delete your account once it has ended.';
                 else if (r.status === 401) await AccountMenu.load(true);
                 else st.error = r.status === 0 ? NAV_NETWORK_ERROR : 'Something went wrong. Try again in a minute.';
             } finally { st.busy = false; }
