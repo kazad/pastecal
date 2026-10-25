@@ -1351,13 +1351,13 @@
                             </div>
                             <div class="pc-sample-bars" aria-hidden="true"><span style="height:32%"></span><span style="height:43%"></span><span style="height:39%"></span><span style="height:51%"></span><span style="height:73%"></span><span style="height:100%"></span><span style="height:62%"></span></div>
                             <div class="pc-sample-days" aria-hidden="true"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span></div>
-                            <p class="pc-free-fine">You’ll see how many people looked, but not who. Real numbers start once you share it.</p>
+                            <p class="pc-free-fine">You’ll see how many people looked, not who. Numbers start once you share.</p>
                             <button type="button" class="pc-btn pc-btn--sm pc-btn--primary" @click="share">Save &amp; share</button>
                         </div>
                         <p v-else-if="lock.locked && !proOwnerChecked" class="pc-side-hint" aria-live="polite">Loading…</p>
                         <div v-else-if="lock.locked" class="pc-side-empty" data-testid="stats-not-owner">
                             <p class="pc-side-empty-title">Stats are for the calendar’s owner.</p>
-                            <p class="pc-side-empty-text">They see how many people viewed it, follow it in a calendar app, and which cities they’re in, but not who anyone is.</p>
+                            <p class="pc-side-empty-text">They see how many people view and follow it, not who.</p>
                         </div>
                         <template v-else>
                             <div v-if="!(freeStats && freeStats.none)" class="pc-free-stats" data-testid="stats-free" :aria-busy="!freeStats || freeStats.loading ? 'true' : 'false'">
@@ -1375,7 +1375,7 @@
                                         <span class="pc-free-label">Calendar-app followers</span>
                                     </div>
                                 </div>
-                                <p v-if="freeStats && !freeStats.loading && !freeStats.unavailable && (freeStats.views || freeStats.followers)" class="pc-free-fine">Just numbers. pastecal doesn’t record who looked.</p>
+                                <p v-if="freeStats && !freeStats.loading && !freeStats.unavailable && (freeStats.views || freeStats.followers)" class="pc-free-fine">pastecal doesn’t record who looked.</p>
                             </div>
                             <div class="pc-stats-teaser pc-stats-teaser--compact" data-testid="stats-teaser">
                                 <p class="pc-stats-more">More with Plus <span class="pc-pill pc-pill--beta" data-testid="stats-pro-beta-tag">Beta</span></p>
