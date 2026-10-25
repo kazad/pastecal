@@ -745,7 +745,7 @@ const CalendarVueApp = {
         // Headline and lead for the homepage pitch. One version for now; a later test adds more,
         // keyed by experiment variant.
         tourCopy() {
-            return { kicker: 'How pastecal works', title: 'Add your events, then keep the link or send it to your group.' };
+            return { kicker: 'How pastecal works', title: 'Add events. Paste your link. Done.' };
         }
     },
 
