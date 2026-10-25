@@ -149,8 +149,8 @@ const CalendarVueApp = {
 
         // Define default colors
         const DEFAULT_COLORS = [
-            "#3f51b5", "#e3165b", "#ff6652", "#4caf50",
-            "#ff9800", "#03a9f4", "#9e9e9e", "#27282f"
+            "#3f51b5", "#e3165b", "#d0442f", "#2e7d32",
+            "#ff9800", "#03a9f4", "#757575", "#27282f"
         ];
 
         // Colors offered for categories 9-16, in order. Picked to stay distinguishable
@@ -2986,7 +2986,7 @@ const CalendarVueApp = {
         // Nearest plain-English name for a palette color, so a dot has a spoken label
         // even when its type was never given one.
         colorNameFor(index) {
-            // The default palette has fixed names (the hue math below would call #ff6652
+            // The default palette has fixed names (the hue math below would call #d0442f
             // "Red" next to #e3165b's "Pink", and #27282f "Black"). Only while the slot
             // still has its default color -- a recolored slot is named by its new color.
             const color = (this.COLORS[index] || '').toLowerCase();

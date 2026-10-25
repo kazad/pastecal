@@ -186,7 +186,7 @@ const NativeCalendar = (() => {
         computed: {
             palette() {
                 return (this.colors && this.colors.length) ? this.colors
-                    : ['#3f51b5', '#e3165b', '#ff6652', '#4caf50', '#ff9800', '#03a9f4', '#9e9e9e', '#27282f'];
+                    : ['#3f51b5', '#e3165b', '#d0442f', '#2e7d32', '#ff9800', '#03a9f4', '#757575', '#27282f'];
             },
             first() { return Number(this.firstDayOfWeek) || 0; },
             weekdayOrder() { return [0, 1, 2, 3, 4, 5, 6].map(i => (i + this.first) % 7); },

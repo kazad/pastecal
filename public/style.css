@@ -362,11 +362,11 @@ span.e-menu-icon.e-color-2 {
 }
 
 span.e-menu-icon.e-color-3 {
-    background: #ff6652;
+    background: #d0442f;
 }
 
 span.e-menu-icon.e-color-4 {
-    background: #4caf50;
+    background: #2e7d32;
 }
 
 span.e-menu-icon.e-color-5 {
@@ -378,7 +378,7 @@ span.e-menu-icon.e-color-6 {
 }
 
 span.e-menu-icon.e-color-7 {
-    background: #9e9e9e;
+    background: #757575;
 }
 
 span.e-menu-icon.e-color-8 {
@@ -2311,3 +2311,8 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 .pc-home-chips { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 4px 0 18px; color: var(--pc-text-muted); font-size: 15px; font-weight: 600 }
 .pc-home-chips span::before { content: "✓ "; color: var(--pc-success, #1f7a4d) }
 .pc-home-proof { margin: 28px 0 0 !important }
+/* App footers match the site footer: same type, spacing and hover (darker text, no underline, no dots). */
+.pc-edit-footer { gap: 6px 20px; font: 500 13px/1.4 var(--pc-font) }
+.pc-edit-footer a { color: var(--pc-text-muted); text-decoration: none }
+.pc-edit-footer a + a::before { content: none }
+.pc-edit-footer a:hover, .pc-view-footer a:hover { color: var(--pc-text); text-decoration: none }

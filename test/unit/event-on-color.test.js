@@ -29,8 +29,8 @@ test('every palette color gets text at 4.5:1 or better', () => {
 });
 
 test('light colors get dark text, dark colors get white', () => {
-  for (const c of ['#ff9800', '#03a9f4', '#9e9e9e', '#c0ca33', '#00bfa5', '#ff6652']) assert.strictEqual(ScheduleAdapter.onColor(c), INK, c);
-  for (const c of ['#3f51b5', '#27282f', '#880e4f', '#8e24aa', '#455a64']) assert.strictEqual(ScheduleAdapter.onColor(c), WHITE, c);
+  for (const c of ['#ff9800', '#03a9f4', '#c0ca33', '#00bfa5']) assert.strictEqual(ScheduleAdapter.onColor(c), INK, c);
+  for (const c of ['#3f51b5', '#27282f', '#880e4f', '#8e24aa', '#455a64', '#d0442f', '#2e7d32', '#757575']) assert.strictEqual(ScheduleAdapter.onColor(c), WHITE, c);
 });
 
 test('always the better of the two, even where neither reaches 4.5 (custom colors)', () => {

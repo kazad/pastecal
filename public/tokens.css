@@ -44,8 +44,8 @@
     --pc-snackbar: #26272b; --pc-on-snackbar: #f4f4f6; --pc-snackbar-action: #ff8fb1;
 
     /* ---- event palette: the defaults for categories 1-8, then 9-16 (app.js) ------------- */
-    --pc-event-1: #3f51b5;  --pc-event-2: #e3165b;  --pc-event-3: #ff6652;  --pc-event-4: #4caf50;
-    --pc-event-5: #ff9800;  --pc-event-6: #03a9f4;  --pc-event-7: #9e9e9e;  --pc-event-8: #27282f;
+    --pc-event-1: #3f51b5;  --pc-event-2: #e3165b;  --pc-event-3: #d0442f;  --pc-event-4: #2e7d32;
+    --pc-event-5: #ff9800;  --pc-event-6: #03a9f4;  --pc-event-7: #757575;  --pc-event-8: #27282f;
     --pc-event-9: #827717;  --pc-event-10: #c0ca33; --pc-event-11: #00836f; --pc-event-12: #8e24aa;
     --pc-event-13: #880e4f; --pc-event-14: #bf360c; --pc-event-15: #455a64; --pc-event-16: #00bfa5;
     --pc-event-tint: 22%;        /* light mode: how much of the event color a timed block's fill takes.
