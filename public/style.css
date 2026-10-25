@@ -2194,6 +2194,15 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 /* "Try Pro free": a quiet link-style line under the Go Pro list (saved, never-trialed calendars) */
 .pc-gopro-trial { display: block; margin: 8px 0 0; padding: 0; border: 0; background: none; color: var(--pc-link); font: 600 12.5px/1.35 var(--pc-font); cursor: pointer; text-align: left }
 .pc-gopro-trial:hover { text-decoration: underline }
+/* Pro is in beta: a small pill after "Go Pro", "More with Pro", the Pro panel's title. Billing off, "Join the Pro beta"
+   (ProBetaJoin) stands in for the trial and checkout: its button, then an email field in place. */
+.pc-beta-tag { display: inline-block; padding: 0 7px; border: 1px solid color-mix(in srgb, var(--pc-link) 40%, transparent); border-radius: 999px; background: color-mix(in srgb, var(--pc-link) 12%, transparent); color: var(--pc-link); font: 700 11px/1.5 var(--pc-font); letter-spacing: .02em; vertical-align: 2px }
+.pc-gopro-head .pc-beta-tag { margin-left: -2px }
+.pc-gopro-btn--beta { margin: 10px 0 0; display: inline-flex; align-items: center }
+.pc-beta-join { --pro-btn: #2563eb }
+.pc-beta-join .pc-pro-email { margin-top: 8px }
+.pc-beta-join .pc-pro-ok { font-size: 13px }
+.pc-hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden }
 .pc-link-head .pc-link-extra--quiet { margin: 0 0 0 auto; align-self: center }
 /* Notes: Edit sits top-right and the text flows beside it; double-click the text to edit too. */
 .pc-notes-edit { float: right; margin: -4px -4px 6px 12px }

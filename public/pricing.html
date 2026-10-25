@@ -5,6 +5,7 @@
 <title>Pricing · pastecal</title>
 <meta name="description" content="pastecal is free to use. Pro Single locks editing to people you choose: $24 a year or $2.99 a month per calendar. Pro Unlimited ($79 a year or $8 a month) and Teams ($290 a year or $29 a month) are in development.">
 <link rel="icon" href="/favicon.ico">
+<script>document.documentElement.setAttribute('data-billing', 'pending')</script>
 <script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/tokens.css">
 <style>
@@ -94,6 +95,13 @@ tbody tr:last-child td { border-bottom: 0 }
 .y { color: var(--ok); font-weight: 800 }
 .n { color: var(--muted) }
 td small { display: block; color: var(--muted); font-size: 13px; font-weight: 400 }
+.beta-tag { display: inline-block; font-size: 11px; font-weight: 800; letter-spacing: .02em; color: var(--blue); background: var(--blue-soft); border: 1px solid color-mix(in srgb, var(--blue) 30%, transparent); border-radius: 999px; padding: 0 7px; margin-left: 6px; vertical-align: 2px; white-space: nowrap }
+.plan-name { display: flex; align-items: baseline; gap: 2px; line-height: 1.55 }
+.plan-name .beta-tag { margin-left: 8px; vertical-align: 0; line-height: 1.5 }
+/* Billing: set from GET /api/pro/config. Until it answers, the Pro Single button and Get Pro wait unseen;
+   off (Pro can't be bought yet), the button joins the Pro beta list and Get Pro is gone. */
+html[data-billing="pending"] .plan.pro .cta, html[data-billing="pending"] #get-pro { visibility: hidden }
+html[data-billing="off"] #get-pro { display: none }
 .soon { display: inline-block; font-size: 11px; font-weight: 700; color: var(--soon); background: var(--soon-bg); border-radius: 999px; padding: 1px 7px; margin-left: 6px; vertical-align: 1px; white-space: nowrap }
 .swipe { display: none; font-size: 14px; color: var(--muted); margin: -6px 0 10px }
 .legend { font-size: 14px; color: var(--muted); margin: 10px 0 0 }
@@ -223,7 +231,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
 
     <div class="plan pro">
       <span class="badge">Recommended</span>
-      <h3>Pro Single</h3>
+      <div class="plan-name"><h3>Pro Single</h3><span class="beta-tag">Beta</span></div>
       <p class="who">One calendar you run: a team, a class, a shift schedule.</p>
       <div class="price"><strong>$24</strong><span>per calendar, per year</span></div>
       <p class="per">That's $2 a month, billed yearly. Or $2.99 month to month.</p>
@@ -240,7 +248,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
         <li>Secret events and subcalendars</li>
         <li>Your logo and theme</li>
       </ul>
-      <a class="cta primary" href="#get-pro" data-plan="pro">Get Pro</a>
+      <a id="proCta" class="cta primary" href="#get-pro" data-plan="pro">Get Pro</a>
     </div>
 
     <div class="plan">
@@ -303,7 +311,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
   <p class="swipe">Swipe the table to see every plan.</p>
   <div class="gridwrap">
     <table>
-      <thead><tr><th>Feature</th><th>Free</th><th class="pro">Pro Single</th><th>Pro Unlimited</th><th>Teams</th></tr></thead>
+      <thead><tr><th>Feature</th><th>Free</th><th class="pro">Pro Single <span class="beta-tag">Beta</span></th><th>Pro Unlimited</th><th>Teams</th></tr></thead>
       <tbody>
         <tr class="group"><td colspan="5"><span>Sharing</span></td></tr>
         <tr><td>Calendars</td><td>Unlimited</td><td class="pro">Unlimited</td><td>Unlimited</td><td>Unlimited</td></tr>
@@ -360,7 +368,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
   <section class="wait" id="waitlist" aria-labelledby="waitH">
     <div class="wait-copy">
       <h2 id="waitH">Join the waitlist</h2>
-      <p>For Pro Unlimited, Teams and the Pro features in development. We'll email you once, when they open.</p>
+      <p id="waitFor">For Pro Unlimited, Teams and the Pro features in development. We'll email you once, when they open.</p>
       <p class="wait-ideas">Have an idea for Pro, or something pastecal should do better? Add it to the form. We read every one.</p>
     </div>
     <form id="waitForm" novalidate>
@@ -392,6 +400,7 @@ details p { color: var(--muted); margin: 8px 0 0 }
   <div class="faq">
     <details><summary>What's free?</summary><p>Making, editing and sharing calendars, with no account. Pro adds features for people who run a calendar.</p></details>
     <details><summary>Which plan do I need?</summary><p>Free if anyone with the link can edit. Pro Single to lock one calendar, available now. Pro Unlimited, in development, for people who run several calendars or share the work with co-owners. Teams, in development, for an organization.</p></details>
+    <details><summary>Why does Pro say Beta?</summary><p>Pro is in beta: features may change. Everything on the Pro Single card works today, except what's marked in development.</p></details>
     <details><summary>Does everyone I share with need to pay?</summary><p>No. You pay for the calendar, yearly or monthly. Everyone you share it with stays free.</p></details>
     <details><summary>Do I need an account for Pro?</summary><p>Only you do, so we know who owns the calendar, and it's made for you when you pay, from the email you give Stripe. Later you sign in with a link we email you, with no password. Nobody you share with ever needs an account.</p></details>
     <details><summary>Is there a free trial?</summary><p>No. Pro Single is $24 a year or $2.99 a month, paid through Stripe, and renews automatically until you cancel.</p></details>
@@ -436,8 +445,11 @@ document.querySelectorAll('[data-plan]').forEach(a => a.addEventListener('click'
       const r = await fetch('/api/waitlist', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const out = await r.json().catch(() => ({}));
       if (!r.ok || !out.ok) throw new Error(out.error || "That didn't save. Please try again in a moment.");
-      done.textContent = out.returning ? "Updated. You're still on the list." : "You're on the list. We'll email you when it opens.";
+      const beta = body.plan === 'pro' && document.documentElement.dataset.billing === 'off';
+      done.textContent = beta ? (out.returning ? "You're still on the list. We'll email you when your Pro beta trial is ready." : "You're on the list. We'll email you when your Pro beta trial is ready.")
+        : out.returning ? "Updated. You're still on the list." : "You're on the list. We'll email you when it opens.";
       pcTrack('waitlist_joined', { kind: body.plan, returning: !!out.returning });
+      if (beta) pcTrack('pro_beta_joined', { beta_surface: 'pricing' });
       form.reset();
     } catch (err) { done.style.color = 'var(--soon)'; done.textContent = err.message; }
     btn.disabled = false;
@@ -532,10 +544,37 @@ document.querySelectorAll('[data-plan]').forEach(a => a.addEventListener('click'
   // The plan card's Get Pro: bring the picker into view and put the cursor where the next step is.
   document.querySelector('.plan.pro [data-plan=pro]').addEventListener('click', (e) => {
     e.preventDefault();
+    if (document.documentElement.dataset.billing === 'off') { joinBeta(); return; }
     document.getElementById('get-pro').scrollIntoView({ behavior: 'smooth', block: 'start' });
     const first = document.querySelector('#pickList .cta') || input;
     setTimeout(() => first.focus({ preventScroll: true }), 350);
   });
+})();
+</script>
+<script>
+// Pro (beta): can it be bought yet? GET /api/pro/config. Off, the Pro Single button is "Join the Pro beta": it
+// goes to the waitlist form with the Pro beta chosen, and the Get Pro picker (checkout) is hidden.
+function joinBeta() {
+  document.getElementById('plan').value = 'pro';
+  document.getElementById('waitlist').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  setTimeout(() => document.getElementById('email').focus({ preventScroll: true }), 350);
+}
+(() => {
+  const root = document.documentElement;
+  const apply = (billing) => {
+    root.dataset.billing = billing ? 'on' : 'off';
+    if (billing) return;
+    document.getElementById('proCta').textContent = 'Join the Pro beta';
+    document.getElementById('proCta').href = '#waitlist';
+    document.querySelector('#plan option[value=pro]').textContent = 'Pro beta, early access';
+    document.getElementById('waitFor').textContent = "For the Pro beta, Pro Unlimited and Teams. We'll email you once, when yours opens.";
+    // The account menu's "Join the Pro beta" (and old Get Pro links) land here.
+    if (location.hash === '#get-pro' || location.hash === '#pro-beta') joinBeta();
+  };
+  // Stalled for 4 seconds: show Get Pro as before (checkout still answers 503 if billing is off).
+  const ctl = new AbortController(); setTimeout(() => ctl.abort(), 4000);
+  fetch('/api/pro/config', { credentials: 'same-origin', signal: ctl.signal }).then(r => r.ok ? r.json() : null)
+    .then(d => apply(!(d && d.billing === false))).catch(() => apply(true));
 })();
 </script>
 <script src="/utils/preview.js"></script>

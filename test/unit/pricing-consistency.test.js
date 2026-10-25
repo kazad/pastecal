@@ -43,7 +43,7 @@ test('four plans: Pro Single is on sale, Pro Unlimited and Teams are in developm
     assert.ok(block, `${name} card carries the In development badge`);
     assert.match(block[0], /href="#waitlist"[^>]*>Join the waitlist<\/a>$/);
   }
-  assert.match(pricing, /<thead><tr><th>Feature<\/th><th>Free<\/th><th class="pro">Pro Single<\/th><th>Pro Unlimited<\/th><th>Teams<\/th><\/tr><\/thead>/);
+  assert.match(pricing, /<thead><tr><th>Feature<\/th><th>Free<\/th><th class="pro">Pro Single <span class="beta-tag">Beta<\/span><\/th><th>Pro Unlimited<\/th><th>Teams<\/th><\/tr><\/thead>/);
 });
 
 test('branding removal is a Teams feature; Pro keeps a small footer', () => {

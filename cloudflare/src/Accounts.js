@@ -57,6 +57,9 @@
  *                                                   mergeProSettings in CalendarRoom.js; 400 {error:'bad-settings', message})
  *     Owner routes answer 401 signed-out, 400 bad-calendar, 404 no-calendar, 409 not-locked, 403 not-owner;
  *     editor-links also 400 bad-label, 409 too-many-links (20 live), 404 no-link.
+ *   GET  /api/pro/config                         -> {billing}: true only when Stripe is configured (keys and both prices).
+ *                                                   False: the site offers "Join the Pro beta" (the waitlist) instead of
+ *                                                   the trial and checkout. Public, cached 60 seconds.
  *   GET  /api/pro/status?calendar=<id>           -> {locked, pro, isOwner, paused, lapsedOwner, trialUsed}; the owner also
  *                                                   gets lapsedMode, and trial:{endsAt, hasCard} while trialing; the
  *                                                   paused calendar's owner gets lapsedTrial (its Pro was a trial)
@@ -614,6 +617,13 @@ function formatDay(t) {
 
 // Does this subscription's payer have a card Stripe will charge (the subscription's own, or the customer's
 // default)? null when Stripe can't say. Used so trial emails never promise "nothing is charged" falsely.
+// Pro can be bought here: Stripe is configured with both prices. Off, every Pro offer is "Join the Pro beta"
+// (GET /api/pro/config), and checkout and the trial answer 503 billing-not-configured as before.
+function billingOn(env, host) {
+    const cfg = stripeConfig(env, host);
+    return !!(cfg && cfg.prices.year && cfg.prices.month);
+}
+
 async function payerHasCard(cfg, s) {
     if (s.hasPaymentMethod) return true;
     if (!cfg || !s.customer) return false;
@@ -695,6 +705,10 @@ async function route(request, env, url, path) {
         const me = s && await accounts(env).me(s.userId);
         if (!me) return json({ error: 'signed-out' }, 401);
         return json(me, 200, Date.now() - s.renewedAt < SESSION_RENEW_AFTER ? { 'Set-Cookie': sessionCookie(token, COOKIE_MAX_AGE) } : {});
+    }
+    if (path === '/api/pro/config') {
+        if (m !== 'GET') return json({ error: 'method' }, 405);
+        return json({ billing: billingOn(env, url.hostname) }, 200, { 'Cache-Control': 'public, max-age=60' });
     }
     if (path === '/api/pro/status') {
         if (m !== 'GET') return json({ error: 'method' }, 405);
