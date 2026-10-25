@@ -216,8 +216,16 @@ test('the same five tabs in the same order, and the row never scrolls', async ({
     expect(Math.abs(v.y - f.y), 'tiles side by side').toBeLessThan(2);
     expect(f.x).toBeGreaterThan(v.x + v.width - 1);
     await expect(page.getByTestId('stats-teaser')).toContainText('More with Pro');
-    await expect(page.getByTestId('stats-teaser')).toContainText('Get Pro');
-    await expect(page.getByTestId('stats-get-pro')).toBeVisible();
+    await expect(page.getByTestId('stats-teaser')).toContainText('Beta');
+    // Billing on (Stripe configured): Get Pro. Off (a plain local server): Join the Pro beta, and no Get Pro.
+    const { billing } = await (await page.request.get('/api/pro/config')).json();
+    if (billing) {
+      await expect(page.getByTestId('stats-teaser')).toContainText('Get Pro');
+      await expect(page.getByTestId('stats-get-pro')).toBeVisible();
+    } else {
+      await expect(page.getByTestId('stats-teaser').getByTestId('pro-beta-btn')).toHaveText('Join the Pro beta');
+      await expect(page.getByTestId('stats-get-pro')).toHaveCount(0);
+    }
     await ctx.close();
   }
 });

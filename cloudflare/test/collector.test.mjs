@@ -18,6 +18,10 @@ assert.equal(toDataPoints({ events: [ev('contact_submitted', { type: 'report' })
 assert.equal(toDataPoints({ events: [ev('subscribe_nudge', { action: 'shown' })] })[0].blobs[5], 'shown');
 assert.equal(toDataPoints({ events: [ev('trial_reminder_clicked', {})] })[0].blobs[0], 'trial_reminder_clicked');
 assert.equal(toDataPoints({ events: [ev('trial_started', { trial_surface: 'lock', surface: 'test' })] }).length, 0, 'surface=test is dropped');
+// pro_beta_joined keeps where it was joined (beta_surface) in detail; an earlier detail key still wins
+assert.equal(toDataPoints({ events: [ev('pro_beta_joined', { beta_surface: 'stats', surface: 'web' })] })[0].blobs[5], 'stats');
+assert.equal(toDataPoints({ events: [ev('x', { kind: 'pro', beta_surface: 'share' })] })[0].blobs[5], 'pro');
+assert.equal(toDataPoints({ events: [ev('pro_beta_joined', { beta_surface: 'stats', surface: 'test' })] }).length, 0, 'test events still dropped');
 assert.ok(!JSON.stringify(a).includes('secretcal'), 'calendar path must never be stored');
 
 // native vs classic from the path

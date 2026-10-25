@@ -11,6 +11,8 @@
 //   POST /api/pro/trial {calendarId}   -> {ok, trialEnd}      30 days free, no card (409 trial-used-calendar/-account)
 //   POST /api/pro/lapsed-mode {calendarId, mode} -> {ok, mode, paused}   'readonly' | 'open', after Pro ends
 //   POST /api/auth/signout
+//   GET  /api/pro/config               -> {billing}  false: every Pro offer is "Join the Pro beta" (ProBetaJoin)
+//   POST /api/waitlist {email, plan:'pro', use, page, website} -> {ok, returning}   the Pro beta list
 // Analytics get the step and the reason only: never the email, the calendar name or a key.
 
 const PRO_LOCK_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>';
@@ -122,6 +124,78 @@ async function proApi(method, path, body) {
     return { status: res.status, data };
 }
 
+// Can Pro be bought on this site? GET /api/pro/config, asked once per page. true | false; a failed
+// request counts as true, so the offer works as before (checkout and the trial still answer 503 when off).
+const ProBilling = {
+    _p: null,
+    load() {
+        if (!this._p) {
+            this._p = fetch('/api/pro/config', { credentials: 'same-origin' })
+                .then((r) => (r.ok ? r.json() : null))
+                .then((d) => (d && typeof d.billing === 'boolean' ? d.billing : true))
+                .catch(() => true);
+        }
+        return this._p;
+    },
+};
+
+// "Join the Pro beta": while billing is off, this stands in for Try Pro free / Get Pro / Lock this calendar.
+// The button opens an email field; the address goes on the Pro waitlist (plan 'pro'), with the calendar's
+// path as the page it came from. Same honeypot and email check as the pricing page's waitlist form.
+const PRO_BETA_DONE = 'You’re on the list. We’ll email you when your Pro beta trial is ready.';
+const ProBetaJoin = {
+    template: /* html */ `
+        <div class="pc-beta-join" data-testid="pro-beta-join">
+            <button v-if="step === 'idle'" type="button" :class="btnClass" @click="open" data-testid="pro-beta-btn">Join the Pro beta</button>
+            <form v-else-if="step === 'email'" class="pc-pro-email" @submit.prevent="submit" novalidate data-testid="pro-beta-form">
+                <label :for="inputId">Your email. We’ll write when your Pro beta trial is ready.</label>
+                <div class="pc-pro-row">
+                    <input :id="inputId" ref="email" type="email" v-model.trim="email" required autocomplete="email" placeholder="you@example.com"
+                        data-hj-suppress data-clarity-mask="true" data-testid="pro-beta-email">
+                    <button type="submit" class="pc-pro-btn" :disabled="busy" data-testid="pro-beta-submit">{{ busy ? 'Sending…' : 'Join' }}</button>
+                </div>
+                <div class="pc-hp" aria-hidden="true"><label :for="inputId + '-w'">Website</label><input :id="inputId + '-w'" v-model="website" tabindex="-1" autocomplete="off"></div>
+            </form>
+            <p v-else class="pc-pro-ok" role="status" data-testid="pro-beta-done">{{ done }}</p>
+            <p v-if="error" class="pc-pro-err" role="alert" data-testid="pro-beta-error">{{ error }}</p>
+        </div>
+    `,
+    props: {
+        surface: { type: String, default: 'share' },  // share | stats | lock (pro_beta_joined)
+        calendarId: String,
+        btnClass: { type: String, default: 'pc-pro-btn' },
+        autoOpen: Boolean,                              // already asked for Pro: show the email field at once
+    },
+    data() {
+        return { step: 'idle', email: '', website: '', busy: false, error: '', done: PRO_BETA_DONE,
+            inputId: 'pc-beta-email-' + Math.random().toString(36).slice(2, 8) };
+    },
+    mounted() { if (this.autoOpen) this.open(false); },
+    methods: {
+        open(focus = true) {
+            this.step = 'email'; this.error = '';
+            if (focus) this.$nextTick(() => { this.$refs.email && this.$refs.email.focus(); });
+        },
+        async submit() {
+            this.error = '';
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(this.email)) { this.error = 'Enter an email address, like you@example.com.'; this.$refs.email && this.$refs.email.focus(); return; }
+            this.busy = true;
+            try {
+                const page = this.calendarId ? '/' + this.calendarId : location.pathname;
+                const r = await proApi('POST', '/api/waitlist', { email: this.email, plan: 'pro', use: 'Pro beta', page, website: this.website });
+                if (r.status === 200 && r.data.ok) {
+                    this.done = r.data.returning ? 'You’re still on the list. We’ll email you when your Pro beta trial is ready.' : PRO_BETA_DONE;
+                    this.step = 'done';
+                    proTrack((a) => a.proBetaJoined(this.surface));
+                    return;
+                }
+                this.error = r.status === 0 ? 'We couldn’t reach pastecal. Check your connection and try again.'
+                    : (r.data.error && r.status < 500 ? r.data.error : 'That didn’t save. Try again in a minute.');
+            } finally { this.busy = false; }
+        },
+    },
+};
+
 const LockBadge = {
     template: /* html */ `
         <span class="pc-lock" :class="{ 'pc-lock--open': open }" data-testid="lock-badge"
@@ -153,15 +227,15 @@ const ProPanel = {
         <section class="pc-pro" data-testid="pro-panel" v-if="mode !== 'hidden'">
             <div class="pc-pro-head">
                 <span class="pc-pro-icon" v-html="svg"></span>
-                <h4 v-if="mode === 'owner'">Locked with Pro</h4>
+                <h4 v-if="mode === 'owner'">Locked with Pro <span class="pc-beta-tag" data-testid="pro-beta-tag">Beta</span></h4>
                 <h4 v-else-if="mode === 'lapsed'" data-testid="pro-lapsed-title">{{ status.lapsedTrial ? 'Trial ended' : 'Pro ended' }} — read-only</h4>
                 <h4 v-else-if="mode === 'paused'">Editing is paused</h4>
                 <h4 v-else-if="mode === 'locked'">This calendar is locked</h4>
-                <h4 v-else>Lock this calendar</h4>
+                <h4 v-else>Lock this calendar <span class="pc-beta-tag" data-testid="pro-beta-tag">Beta</span></h4>
             </div>
 
             <!-- Unlocked, editable, saved, never trialed: 30 days free, no card. Signing in starts it. -->
-            <div v-if="mode === 'offer' && !trialUsed" class="pc-pro-trial" data-testid="pro-trial-box">
+            <div v-if="mode === 'offer' && billing === true && !trialUsed" class="pc-pro-trial" data-testid="pro-trial-box">
                 <p class="pc-pro-lead"><b>Try Pro free for 30 days.</b> No card needed. When it ends, you choose: keep Pro, or a free calendar.</p>
                 <form v-if="trialStep === 'email'" class="pc-pro-email" @submit.prevent="sendTrialLink" data-testid="pro-trial-email-form">
                     <label for="pc-pro-trial-email">Your email. The link we send starts your trial. No password.</label>
@@ -178,8 +252,14 @@ const ProPanel = {
                 <p class="pc-pro-muted pc-pro-or">Or pay now:</p>
             </div>
 
+            <!-- Unlocked, editable, billing not on yet (/api/pro/config): the Pro beta list instead of the offer -->
+            <template v-if="mode === 'offer' && billing === false">
+                <p class="pc-pro-lead">Only you and people you invite can edit. Everyone else can still view. Pro is in beta: join, and we’ll email you when your trial is ready.</p>
+                <pro-beta-join :surface="surface" :calendar-id="calendarId" auto-open></pro-beta-join>
+            </template>
+
             <!-- Unlocked, editable: the offer -->
-            <template v-if="mode === 'offer'">
+            <template v-if="mode === 'offer' && billing === true">
                 <p class="pc-pro-lead">Only you and people you invite can edit. Everyone else can still view.</p>
                 <div class="pc-pro-plans" role="radiogroup" aria-label="Billing">
                     <label class="pc-pro-plan" :class="{ on: interval === 'year' }">
@@ -234,7 +314,7 @@ const ProPanel = {
                 <p class="pc-pro-lead">Everyone can still view it and follow it in their calendar app. Nobody can edit it, you included.</p>
                 <div class="pc-pro-row">
                     <button type="button" class="pc-pro-btn pc-pro-btn--quiet" @click="openToEveryone" :disabled="busy" data-testid="pro-open-btn">Open to everyone</button>
-                    <button v-if="!keepOpen" type="button" class="pc-pro-btn" @click="keepProAfter" :disabled="busy" data-testid="pro-keep-btn">Keep Pro</button>
+                    <button v-if="!keepOpen && billing !== false" type="button" class="pc-pro-btn" @click="keepProAfter" :disabled="busy" data-testid="pro-keep-btn">Keep Pro</button>
                 </div>
                 <div v-if="keepOpen" class="pc-pro-keep" data-testid="pro-keep-plans">
                     <div class="pc-pro-plans" role="radiogroup" aria-label="Billing">
@@ -243,15 +323,15 @@ const ProPanel = {
                     </div>
                     <div class="pc-pro-row"><button type="button" class="pc-pro-btn" @click="keepCheckout" :disabled="busy" data-testid="pro-keep-checkout">{{ going ? 'Taking you to payment…' : 'Keep Pro' }}</button></div>
                 </div>
-                <p class="pc-pro-muted pc-pro-note">Open to everyone: a free calendar anyone with the edit link can change. Keep Pro: locked again for you, $24 a year or $2.99 a month.</p>
+                <p class="pc-pro-muted pc-pro-note">Open to everyone: a free calendar anyone with the edit link can change.<template v-if="billing !== false"> Keep Pro: locked again for you, $24 a year or $2.99 a month.</template></p>
                 <p v-if="testCardHint" class="pc-pro-muted pc-pro-note">{{ testCardHint }}</p>
             </template>
 
             <!-- The owner -->
             <template v-if="mode === 'owner'">
                 <p v-if="status.trial" class="pc-pro-trial-line" data-testid="pro-trial-line">Pro trial · {{ trialLeft }} ·
-                    <a v-if="!status.trial.hasCard" href="#" class="pc-pro-link" @click.prevent="keepPro" data-testid="pro-keep-trial">Keep Pro</a>
-                    <span v-else>card on file, Pro continues</span></p>
+                    <a v-if="!status.trial.hasCard && billing !== false" href="#" class="pc-pro-link" @click.prevent="keepPro" data-testid="pro-keep-trial">Keep Pro</a>
+                    <span v-else-if="status.trial.hasCard">card on file, Pro continues</span></p>
                 <div v-if="status.trial && keepOpen" class="pc-pro-keep" data-testid="pro-keep-plans">
                     <div class="pc-pro-plans" role="radiogroup" aria-label="Billing">
                         <label class="pc-pro-plan" :class="{ on: interval === 'year' }"><input type="radio" value="year" v-model="interval" name="pc-pro-keep-interval"><span><b>$24/year</b> <em class="pc-pro-save">Save 33%</em></span></label>
@@ -312,6 +392,7 @@ const ProPanel = {
         canEdit: Boolean,     // this tab may change the calendar
         calendarTitle: String, // named on Stripe's page, so the payer sees which calendar it's for
     },
+    components: { 'pro-beta-join': ProBetaJoin },
     // open-insight: 'stats' | 'history' (owner only). owner: whether this browser owns the calendar,
     // so the app can offer History from Recent changes.
     emits: ['open-insight', 'owner'],
@@ -334,6 +415,7 @@ const ProPanel = {
             trialSurface: '',
             wantTrial: false,     // opened from "Try Pro free" (ProIntent 'trial')
             lapsedMode: 'readonly',
+            billing: null,        // /api/pro/config: false = Pro can't be bought yet, so the offer is the Pro beta list
             // The staging copy only (utils/preview.js): which test card to pay with.
             testCardHint: typeof PreviewSite !== 'undefined' && PreviewSite.is() ? PreviewSite.CHECKOUT_HINT : '',
         };
@@ -399,10 +481,14 @@ const ProPanel = {
     methods: {
         async refresh() {
             if (!this.calendarId) return;
-            const [st, me] = await Promise.all([
+            const [st, me, billing] = await Promise.all([
                 proApi('GET', `/api/pro/status?calendar=${encodeURIComponent(this.calendarId)}`),
                 proApi('GET', '/api/me'),
+                ProBilling.load(),
             ]);
+            this.billing = billing;
+            // Billing off: no trial or checkout to continue to. The panel shows the Pro beta list instead.
+            if (!billing) { this.wantTrial = false; this.autoGo = false; }
             if (st.status === 200) this.status = st.data;
             if (this.status && this.status.lapsedMode) this.lapsedMode = this.status.lapsedMode;
             this.me = me.status === 200 ? me.data : null;
