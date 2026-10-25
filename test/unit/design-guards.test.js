@@ -271,6 +271,7 @@ test('/dev/design has a sample for every component components.css documents', ()
   const page = read('public/dev/design.html');
   const missing = documented.filter((c) => !page.includes(`'${c}': function`));
   assert.deepEqual(missing, [], 'add a sample for each to SAMPLES in public/dev/design.html (the gallery draws every variant from it)');
+  assert.match(page, /getElementById\('out'\)\.innerHTML = html/, 'the gallery must still write what it builds into #out');
 });
 
 // --- The guards catch what they guard -----------------------------------------------------------
