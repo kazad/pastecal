@@ -1310,7 +1310,7 @@
                                         <span class="pc-free-label">Calendar-app followers</span>
                                     </div>
                                 </div>
-                                <p class="pc-free-fine">Counts only. Never who.</p>
+                                <p v-if="freeStats && !freeStats.loading && !freeStats.unavailable && (freeStats.views || freeStats.followers)" class="pc-free-fine">Counts only. Never who.</p>
                             </div>
                             <div class="pc-stats-teaser pc-stats-teaser--compact" data-testid="stats-teaser">
                                 <p class="pc-stats-more">More with Pro</p>
