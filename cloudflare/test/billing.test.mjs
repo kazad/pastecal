@@ -226,7 +226,7 @@ try {
     assert.equal(r.status, 200);
     assert.equal(fake.cals.get(cal).locked, true); assert.equal(fake.cals.get(cal).ownerId, ann.userId);
     let mine = await me(ann.cookie);
-    assert.deepEqual(mine.calendars, [{ id: cal, status: 'active', plan: 'pro', interval: 'year', priceId: 'price_fake_yearly', currentPeriodEnd: 1830000000, trialEnd: null }]);
+    assert.deepEqual(mine.calendars, [{ id: cal, status: 'active', plan: 'single', interval: 'year', priceId: 'price_fake_yearly', currentPeriodEnd: 1830000000, trialEnd: null }]);
     step('a signed subscription.created locks the calendar for its owner; /api/me lists it with status and interval');
 
     const calls = lockCalls(cal).length;
@@ -240,7 +240,7 @@ try {
     // --- Status, editor key, portal
     const s1 = await status(cal, ann.cookie);
     // Trial fields: the owner also learns what happens when Pro ends (lapsedMode, default read-only).
-    assert.deepEqual(s1, { locked: true, pro: true, isOwner: true, paused: false, lapsedOwner: false, trialUsed: false, lapsedMode: 'readonly' });
+    assert.deepEqual(s1, { locked: true, pro: true, isOwner: true, paused: false, lapsedOwner: false, trialUsed: false, lapsedMode: 'readonly', plan: 'single' });
     const s2 = await status(cal);
     assert.deepEqual(s2, { locked: true, pro: true, isOwner: false, paused: false, lapsedOwner: false, trialUsed: false });
     assert.deepEqual(Object.keys(s2).sort(), ['isOwner', 'lapsedOwner', 'locked', 'paused', 'pro', 'trialUsed']);

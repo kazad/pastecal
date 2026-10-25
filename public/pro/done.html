@@ -12,9 +12,10 @@
 <title>Pro is on · pastecal</title>
 <link rel="icon" href="/favicon.ico">
 <script>
-  var proCalendar = null, proSession = null;
+  var proCalendar = null, proSession = null, proUnlimited = false;
   try { proCalendar = decodeURIComponent(location.hash.slice(1)) || null; } catch (e) { proCalendar = null; }
   try { proSession = new URLSearchParams(location.search).get('session_id'); } catch (e) { proSession = null; }
+  try { proUnlimited = new URLSearchParams(location.search).get('plan') === 'unlimited'; } catch (e) { proUnlimited = false; }
   // First thing, before anything else on the page can read or record the address.
   history.replaceState(null, '', location.pathname);
 </script>
@@ -66,9 +67,30 @@ button.secondary { margin-top: 10px; background: transparent; color: var(--blue)
 (function () {
   var $ = function (id) { return document.getElementById(id); };
   var go = $('go'), msg = $('msg');
+  function api(method, path, body) {
+    var init = { method: method, credentials: 'same-origin', headers: {} };
+    if (body) { init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(body); }
+    return fetch(path, init).then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { status: r.status, data: d }; }); },
+      function () { return { status: 0, data: {} }; });
+  }
+  // Paid while signed out (pay first): this browser started the checkout, so it may be signed in now.
+  // An email that already has an account gets a sign-in link instead (the server decides).
+  var existingAccount = false;
+  var claimed = !proSession ? Promise.resolve(null) : api('POST', '/api/pro/claim', { sessionId: proSession }).then(function (r) {
+    if (r.status === 200 && r.data.ok && !r.data.signedIn) {
+      existingAccount = true;
+      var who = document.createElement('b'); who.textContent = r.data.email;
+      $('signin-note').textContent = ''; $('signin-note').append('This email already has a pastecal account, so we sent a sign-in link to ', who, '. Open it to get your editor link and manage Pro.');
+      $('signin-note').hidden = false;
+    }
+    return r;
+  });
+  if (proUnlimited) $('title').textContent = 'Pro Unlimited is on';
   if (!proCalendar) {
-    $('title').textContent = 'Thanks, your payment went through';
-    msg.textContent = 'Open your calendar and press Share to see its Pro settings.';
+    // Pro Unlimited bought from the pricing page: no calendar yet. Each one locks with one click from its Share panel.
+    if (!proUnlimited) $('title').textContent = 'Thanks, your payment went through';
+    msg.textContent = proUnlimited ? 'Open any calendar you run, press Share, and choose Lock this calendar. No new checkout.'
+      : 'Open your calendar and press Share to see its Pro settings.';
     go.textContent = 'Back to pastecal';
     return;
   }
@@ -84,13 +106,6 @@ button.secondary { margin-top: 10px; background: transparent; color: var(--blue)
     });
   } catch (e) { /* storage blocked: the address it is */ }
   $('calname').textContent = calName;
-
-  function api(method, path, body) {
-    var init = { method: method, credentials: 'same-origin', headers: {} };
-    if (body) { init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(body); }
-    return fetch(path, init).then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { status: r.status, data: d }; }); },
-      function () { return { status: 0, data: {} }; });
-  }
 
   function locked() {
     var span = document.createElement('span'); span.className = 'cal'; span.textContent = calName;
@@ -143,19 +158,6 @@ button.secondary { margin-top: 10px; background: transparent; color: var(--blue)
       });
     });
   }
-
-  // Paid while signed out (pay first): this browser started the checkout, so it may be signed in now.
-  // An email that already has an account gets a sign-in link instead (the server decides).
-  var existingAccount = false;
-  var claimed = !proSession ? Promise.resolve(null) : api('POST', '/api/pro/claim', { sessionId: proSession }).then(function (r) {
-    if (r.status === 200 && r.data.ok && !r.data.signedIn) {
-      existingAccount = true;
-      var who = document.createElement('b'); who.textContent = r.data.email;
-      $('signin-note').textContent = ''; $('signin-note').append('This email already has a pastecal account, so we sent a sign-in link to ', who, '. Open it to get your editor link and manage Pro.');
-      $('signin-note').hidden = false;
-    }
-    return r;
-  });
 
   // The webhook may land a few seconds after Stripe sends people here: ask every 1.5s for up to ~20s.
   var tries = 0;

@@ -1,7 +1,7 @@
 // L3 pricing consistency: one set of prices and one branding story on every page that states them.
-// Pro Single: $24 a year or $2.99 a month, with a small "Made with pastecal" footer. Pro Unlimited (in
-// development): $79 a year or $8 a month, also with the footer. Teams (in development): $290 a year or
-// $29 a month, and removing pastecal branding is a Teams-only feature.
+// Pro Single: $24 a year or $2.99 a month, with a small "Made with pastecal" footer. Pro Unlimited (on sale;
+// its @name, short links and co-owners still in development): $79 a year or $8 a month, also with the footer.
+// Teams (in development): $290 a year or $29 a month, and removing pastecal branding is a Teams-only feature.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
@@ -28,7 +28,7 @@ test('Teams is $290 a year or $29 a month on the pricing card, waitlist, FAQ and
   assert.match(read('public/terms.html'), /Teams[^<]*\$290 a year or \$29 a month/);
 });
 
-test('four plans: Pro Single is on sale, Pro Unlimited and Teams are in development', () => {
+test('four plans: Pro Single and Pro Unlimited are on sale, Teams is in development', () => {
   const pricing = read('public/pricing.html');
   const single = card(pricing, 'Pro Single');
   assert.match(single, /<strong>\$24<\/strong>/);
@@ -37,12 +37,23 @@ test('four plans: Pro Single is on sale, Pro Unlimited and Teams are in developm
   const unlimited = card(pricing, 'Pro Unlimited');
   assert.match(unlimited, /<strong>\$79<\/strong>/);
   assert.match(unlimited, /\$8 a month/);
-  assert.match(pricing, /<option value="unlimited">Pro Unlimited, \$79 a year<\/option>/);
-  for (const name of ['Pro Unlimited', 'Teams']) {
-    const block = new RegExp(`<span class="badge dev">In development</span>\\s*<h3>${name}</h3>[\\s\\S]*?</a>`).exec(pricing);
-    assert.ok(block, `${name} card carries the In development badge`);
-    assert.match(block[0], /href="#waitlist"[^>]*>Join the waitlist<\/a>$/);
-  }
+  // Pro Unlimited: Available now, bought from the Get Pro section; its @name rows stay In development.
+  assert.ok(/<span class="badge new">Available now<\/span>\s*<h3>Pro Unlimited<\/h3>/.test(pricing), 'Pro Unlimited carries the Available now badge');
+  assert.match(unlimited, /href="#get-pro" data-plan="unlimited">Get Pro Unlimited<\/a>$/);
+  assert.ok(!/Join the waitlist/.test(unlimited));
+  assert.match(unlimited, /In development, included when ready<\/p>\s*<ul class="coming">\s*<li>Your own name: <code>pastecal\.com\/@name<\/code><\/li>/,
+    '@name is listed under In development');
+  assert.match(pricing, /<tr><td>Your own name: <code>pastecal\.com\/@name<\/code> <span class="soon">In development<\/span>/);
+  const lockRow = /<tr><td>Lock editing to people you choose[\s\S]*?<\/tr>/.exec(pricing)[0];
+  assert.match(lockRow, /<td class="pro">1 calendar<\/td><td>Unlimited<\/td><td>Unlimited <span class="soon">In development<\/span><\/td><\/tr>$/,
+    'locking any number of calendars is available on Pro Unlimited, still in development for Teams');
+  assert.match(pricing, /body: JSON\.stringify\(\{ plan: 'unlimited', interval: interval\(\) \}\)/, 'Continue to payment checks out Pro Unlimited');
+  // Teams stays in development, with the waitlist.
+  const teamsBlock = /<span class="badge dev">In development<\/span>\s*<h3>Teams<\/h3>[\s\S]*?<\/a>/.exec(pricing);
+  assert.ok(teamsBlock, 'Teams card carries the In development badge');
+  assert.match(teamsBlock[0], /href="#waitlist"[^>]*>Join the waitlist<\/a>$/);
+  assert.match(pricing, /<meta name="description" content="[^"]*Pro Unlimited locks every calendar you run: \$79 a year or \$8 a month\. Teams \(\$290 a year or \$29 a month\) is in development\.">/);
+  assert.match(read('public/terms.html'), /Pro Unlimited is Pro for any number of calendars[^<]*\$79 a year or \$8 a month/);
   assert.match(pricing, /<thead><tr><th>Feature<\/th><th>Free<\/th><th class="pro">Pro Single<\/th><th>Pro Unlimited<\/th><th>Teams<\/th><\/tr><\/thead>/);
 });
 

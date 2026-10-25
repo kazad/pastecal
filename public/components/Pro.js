@@ -5,7 +5,9 @@
 //   GET  /api/pro/status?calendar=<id> -> {locked, pro, isOwner}
 //   GET  /api/me                       -> {email, calendars:[...]} | 401
 //   POST /api/auth/start {email, next} -> {ok}   (a sign-in link by email)
-//   POST /api/pro/checkout {calendarId, interval} -> {url}   503 / 409 handled
+//   POST /api/pro/checkout {calendarId, interval, plan?} -> {url}   plan 'single' (default) | 'unlimited'; 503 / 409 handled
+//   POST /api/pro/lock {calendarId}    -> {ok}                Pro Unlimited owners: lock this calendar, no checkout
+//   POST /api/pro/unlock {calendarId}  -> {ok}                ... and release it (a free calendar again)
 //   POST /api/pro/editor-key {calendarId} -> {editorKey}     ROTATES the key
 //   POST /api/pro/portal {calendarId, flow?} -> {url}         flow 'add-card': Keep Pro during a trial
 //   POST /api/pro/trial {calendarId}   -> {ok, trialEnd}      30 days free, no card (409 trial-used-calendar/-account)
@@ -160,6 +162,15 @@ const ProPanel = {
                 <h4 v-else>Lock this calendar</h4>
             </div>
 
+            <!-- A Pro Unlimited owner: every calendar of theirs is included, so locking is one click. -->
+            <template v-if="mode === 'unlimited'">
+                <p class="pc-pro-lead">Included in your <b>Pro Unlimited</b>. Only you and people you invite can edit. Everyone else can still view.</p>
+                <div class="pc-pro-row">
+                    <button type="button" class="pc-pro-btn" @click="lockUnlimited" :disabled="busy" data-testid="pro-unlimited-lock">{{ busy ? 'Locking…' : 'Lock this calendar' }}</button>
+                    <span v-if="me" class="pc-pro-muted">as <span data-hj-suppress data-clarity-mask="true">{{ me.email }}</span></span>
+                </div>
+            </template>
+
             <!-- Unlocked, editable, saved, never trialed: 30 days free, no card. Signing in starts it. -->
             <div v-if="mode === 'offer' && !trialUsed" class="pc-pro-trial" data-testid="pro-trial-box">
                 <p class="pc-pro-lead"><b>Try Pro free for 30 days.</b> No card needed. When it ends, you choose: keep Pro, or a free calendar.</p>
@@ -181,16 +192,28 @@ const ProPanel = {
             <!-- Unlocked, editable: the offer -->
             <template v-if="mode === 'offer'">
                 <p class="pc-pro-lead">Only you and people you invite can edit. Everyone else can still view.</p>
+                <!-- Which plan: this calendar (Single), or every calendar you run (Unlimited) -->
+                <div class="pc-pro-tiers" role="radiogroup" aria-label="Plan" data-testid="pro-plan-choice">
+                    <label class="pc-pro-tier" :class="{ on: plan === 'single' }">
+                        <input type="radio" value="single" v-model="plan" name="pc-pro-plan">
+                        <span><b>Pro Single</b><small>This calendar</small></span>
+                    </label>
+                    <label class="pc-pro-tier" :class="{ on: plan === 'unlimited' }" data-testid="pro-plan-unlimited">
+                        <input type="radio" value="unlimited" v-model="plan" name="pc-pro-plan">
+                        <span><b>Pro Unlimited</b><small>Every calendar you run</small></span>
+                    </label>
+                </div>
                 <div class="pc-pro-plans" role="radiogroup" aria-label="Billing">
                     <label class="pc-pro-plan" :class="{ on: interval === 'year' }">
                         <input type="radio" value="year" v-model="interval" name="pc-pro-interval">
-                        <span><b>$24/year</b> <em class="pc-pro-save">Save 33%</em></span>
+                        <span><b>{{ plan === 'unlimited' ? '$79/year' : '$24/year' }}</b> <em class="pc-pro-save">{{ plan === 'unlimited' ? 'Save 18%' : 'Save 33%' }}</em></span>
                     </label>
                     <label class="pc-pro-plan" :class="{ on: interval === 'month' }">
                         <input type="radio" value="month" v-model="interval" name="pc-pro-interval">
-                        <span><b>$2.99/month</b></span>
+                        <span><b>{{ plan === 'unlimited' ? '$8/month' : '$2.99/month' }}</b></span>
                     </label>
                 </div>
+                <p v-if="plan === 'unlimited'" class="pc-pro-muted pc-pro-note" data-testid="pro-unlimited-note">Locks this calendar now. Lock any other calendar later from its Share panel with one click, no new checkout.</p>
                 <p v-if="testCardHint" class="pc-pro-muted pc-pro-note" data-testid="pro-test-card">{{ testCardHint }}</p>
 
                 <form v-if="step === 'email'" class="pc-pro-email" @submit.prevent="sendLink" data-testid="pro-email-form">
@@ -206,7 +229,7 @@ const ProPanel = {
                 </p>
                 <div v-else class="pc-pro-row">
                     <button type="button" class="pc-pro-btn" @click="lockNow" :disabled="busy" data-testid="pro-lock-btn">
-                        {{ going ? 'Taking you to payment…' : busy ? 'One moment…' : 'Lock this calendar' }}
+                        {{ going ? 'Taking you to payment…' : busy ? 'One moment…' : plan === 'unlimited' ? 'Get Pro Unlimited' : 'Lock this calendar' }}
                     </button>
                     <span v-if="me" class="pc-pro-muted">Signed in as <span data-hj-suppress data-clarity-mask="true">{{ me.email }}</span> · <a href="#" @click.prevent="signOut">Sign out</a></span>
                     <span v-else class="pc-pro-muted" data-testid="pro-next">Next: pay on Stripe's secure page. No account to set up.</span>
@@ -260,6 +283,8 @@ const ProPanel = {
                     <div class="pc-pro-row"><button type="button" class="pc-pro-btn" @click="keepCheckout" :disabled="busy" data-testid="pro-keep-checkout">{{ going ? 'Taking you to payment…' : 'Keep Pro' }}</button>
                         <span class="pc-pro-muted">{{ keepNote }}</span></div>
                 </div>
+                <p v-if="status.plan === 'unlimited'" class="pc-pro-trial-line" data-testid="pro-unlimited-line">Included in Pro Unlimited ·
+                    <a href="#" class="pc-pro-link" @click.prevent="unlockUnlimited" data-testid="pro-unlimited-unlock">Unlock</a></p>
                 <p class="pc-pro-lead">Only you and people with your editor link can change it. Everyone else can view.
                     <span v-if="renewal" data-testid="pro-renewal">{{ renewal }}</span></p>
 
@@ -321,6 +346,7 @@ const ProPanel = {
             status: null,         // /api/pro/status
             me: null,             // /api/me, or null when signed out
             interval: 'year',
+            plan: 'single',       // 'single' (this calendar) | 'unlimited' (every calendar of this account)
             step: 'idle',         // idle | email | sent
             email: '',
             busy: false,
@@ -345,6 +371,7 @@ const ProPanel = {
             if (this.paused || (this.status && this.status.paused && !this.locked)) return 'paused';
             if (this.locked || (this.status && this.status.locked)) return 'locked';
             if (!this.canEdit) return 'hidden';
+            if (this.status && this.status.unlimited) return 'unlimited';
             return 'offer';
         },
         trialUsed() { return !!(this.status && this.status.trialUsed); },
@@ -386,6 +413,7 @@ const ProPanel = {
     mounted() {
         const intent = ProIntent.get(this.calendarId);
         if (intent && (intent.interval === 'year' || intent.interval === 'month')) this.interval = intent.interval;
+        if (intent && intent.plan === 'unlimited') this.plan = 'unlimited';
         this.autoGo = !!(intent && intent.go);
         this.wantTrial = !!(intent && intent.interval === 'trial');
         this.trialSurface = (intent && intent.surface) || this.surface;
@@ -452,16 +480,41 @@ const ProPanel = {
         },
         async checkout() {
             proTrack((a) => a.proCheckoutStarted(this.interval));
-            const r = await proApi('POST', '/api/pro/checkout', { calendarId: this.calendarId, interval: this.interval, title: this.calendarTitle || '' });
+            const plan = this.mode === 'offer' ? this.plan : 'single';       // Keep Pro (trial, lapsed) stays Single
+            const r = await proApi('POST', '/api/pro/checkout', { calendarId: this.calendarId, interval: this.interval, title: this.calendarTitle || '', ...(plan === 'unlimited' ? { plan } : {}) });
             if (r.status === 200 && r.data.url) { ProIntent.clear(); location.href = r.data.url; return; }
             const reason = r.status === 0 ? 'network' : (r.data.error || String(r.status));
             proTrack((a) => a.proCheckoutFailed(reason));
             if (r.status === 401) { this.me = null; this.step = 'email'; this.focusEmail(); return; }
             if (r.status === 503) { this.error = 'Pro isn’t available yet. Nothing was charged.'; return; }
             if (r.status === 409 && r.data.error === 'already-pro') { this.error = 'This calendar already has Pro.'; this.refresh(); return; }
+            if (r.status === 409 && (r.data.error === 'has-unlimited' || r.data.error === 'already-unlimited')) { this.error = 'You already have Pro Unlimited.'; this.refresh(); return; }
             if (r.status === 409) { this.error = 'Someone else has already locked this calendar.'; this.refresh(); return; }
             if (r.status === 0) { this.error = 'We couldn’t reach pastecal. Check your connection and try again.'; return; }
             this.error = 'Something went wrong. Nothing was charged. Try again in a minute.';
+        },
+        // ---- Pro Unlimited: lock or release this calendar, no checkout ----
+        async lockUnlimited() {
+            this.error = ''; this.busy = true;
+            try {
+                const r = await proApi('POST', '/api/pro/lock', { calendarId: this.calendarId, title: this.calendarTitle || '' });
+                if (r.status === 200 && r.data.ok) { if (typeof AccountMenu !== 'undefined') AccountMenu.reset(); await this.refresh(); return; }
+                if (r.status === 401) { this.me = null; this.refresh(); this.error = 'Sign in again to lock it.'; return; }
+                if (r.status === 409) { this.error = 'Someone else has already locked this calendar.'; this.refresh(); return; }
+                if (r.status === 403 && r.data.error === 'no-unlimited') { this.error = 'Your Pro Unlimited has ended.'; this.refresh(); return; }
+                if (r.status === 403 && r.data.message) { this.error = r.data.message; return; }
+                if (r.status === 404) { this.error = 'Save this calendar first. Then you can lock it.'; return; }
+                this.error = r.status === 0 ? 'We couldn’t reach pastecal. Check your connection and try again.' : 'Something went wrong. Try again in a minute.';
+            } finally { this.busy = false; }
+        },
+        async unlockUnlimited() {
+            if (!window.confirm('Unlock this calendar? It stays in your Pro Unlimited plan to lock again any time, but until then anyone with the edit link can change it.')) return;
+            this.error = ''; this.busy = true;
+            try {
+                const r = await proApi('POST', '/api/pro/unlock', { calendarId: this.calendarId });
+                if (r.status === 200) { if (typeof AccountMenu !== 'undefined') AccountMenu.reset(); await this.refresh(); return; }
+                this.error = r.status === 0 ? 'We couldn’t reach pastecal. Check your connection and try again.' : 'Something went wrong. Try again in a minute.';
+            } finally { this.busy = false; }
         },
         // ---- the 30-day trial and after Pro ----
         async startTrial() {

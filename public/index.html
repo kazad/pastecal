@@ -1021,8 +1021,15 @@
                         </section>
 
                         <!-- Pro, unlocked: one line and a link. The full offer (plans, checkout) is the Get Pro view. -->
-                        <div v-if="!lock.locked && canEdit" class="pc-share-pro pc-gopro" data-testid="share-pro-card">
-                            <div class="pc-gopro-head"><b>Go Pro</b><span class="pc-gopro-price">$24 a year</span>
+                        <div v-if="!lock.locked && canEdit && proUnlimited" class="pc-share-pro pc-gopro" data-testid="share-unlimited-card">
+                            <div class="pc-gopro-head"><b>Pro Unlimited</b><span class="pc-gopro-price">Included</span>
+                                <button type="button" class="pc-gopro-btn" @click="lockWithUnlimited" :disabled="proUnlimitedBusy" data-testid="share-unlimited-lock">{{ proUnlimitedBusy ? 'Locking…' : 'Lock this calendar' }}</button></div>
+                            <ul class="pc-gopro-list">
+                                <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg><span><b>One click</b>, no new checkout: only you and people you choose can edit</span></li>
+                            </ul>
+                        </div>
+                        <div v-else-if="!lock.locked && canEdit" class="pc-share-pro pc-gopro" data-testid="share-pro-card">
+                            <div class="pc-gopro-head"><b>Go Pro</b><span class="pc-gopro-price" data-testid="share-pro-prices">$24 a year · Unlimited $79</span>
                                 <button type="button" class="pc-gopro-btn" @click="shareProFocus = true" data-testid="share-get-pro">Get Pro</button></div>
                             <ul class="pc-gopro-list">
                                 <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"/></svg><span><b>Lock editing</b> to you and people you choose</span></li>
@@ -1509,7 +1516,7 @@
                 <div class="pc-tour-plans">
                     <div><h4>Free</h4><p class="pc-plan-price"><b>$0</b></p><p>No login required.</p></div>
                     <div class="pc-tour-plan-pro"><span class="pc-plan-tag pc-plan-tag--on">Available now</span><h4>Pro Single</h4><p class="pc-plan-price"><b>$24</b> a year</p><p>Lock one calendar. Try it free for 30 days, no card.</p></div>
-                    <div><span class="pc-plan-tag">In development</span><h4>Pro Unlimited</h4><p class="pc-plan-price"><b>$79</b> a year <small>or $8 a month</small></p><p>Unlimited calendars under your own <code>pastecal.com/@name</code></p></div>
+                    <div><span class="pc-plan-tag pc-plan-tag--on">Available now</span><h4>Pro Unlimited</h4><p class="pc-plan-price"><b>$79</b> a year <small>or $8 a month</small></p><p>Lock every calendar you run. Your own <code>pastecal.com/@name</code> is in development.</p></div>
                     <div><span class="pc-plan-tag">In development</span><h4>Teams</h4><p class="pc-plan-price"><b>$290</b> a year <small>or $29 a month</small></p><p>Several admins, your logo.</p></div>
                 </div>
                 <p class="pc-tour-plans-more"><a href="/pricing" class="pc-pro-link" data-from="home-pricing">Compare plans →</a></p>

@@ -2188,7 +2188,7 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 .pc-gopro-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px }
 .pc-gopro-head b { font-size: 14.5px; color: var(--pc-text) }
 .pc-gopro-price { color: var(--pc-text-muted); font-size: 12.5px }
-.pc-gopro-btn { margin-left: auto; height: 30px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--pc-link); color: var(--pc-on-accent, #fff); font: 600 13px/1 var(--pc-font); cursor: pointer }
+.pc-gopro-btn { margin-left: auto; white-space: nowrap; height: 30px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--pc-link); color: var(--pc-on-accent, #fff); font: 600 13px/1 var(--pc-font); cursor: pointer }
 .pc-gopro-btn:hover { filter: brightness(1.08) }
 .pc-gopro-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 12.5px; line-height: 1.35; color: var(--pc-text-muted) }
 .pc-gopro-list li { display: flex; gap: 6px; align-items: flex-start }
@@ -2410,3 +2410,10 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 .pc-addcal-nudge-text { border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; padding: 0 }
 .pc-addcal-nudge-x { flex: none; width: 24px; height: 24px; border: 0; border-radius: 6px; background: none; color: inherit; opacity: .7; font-size: 16px; cursor: pointer }
 .pc-addcal-nudge-x:hover { opacity: 1 }
+/* Pro plan choice (Share > Get Pro): Single (this calendar) or Unlimited (every calendar you run) */
+.pc-pro-tiers { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px }
+.pc-pro-tier { display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border: 1px solid var(--pc-field); border-radius: var(--pc-radius-md, 8px); cursor: pointer; font-size: 14px; background: var(--pc-bg) }
+.pc-pro-tier.on { border-color: var(--pc-link); box-shadow: inset 0 0 0 1px var(--pc-link) }
+.pc-pro-tier input { margin: 3px 0 0; accent-color: var(--pc-link) }
+.pc-pro-tier b { display: block; font-weight: 600 }
+.pc-pro-tier small { display: block; color: var(--pc-text-muted); font-size: 12px }

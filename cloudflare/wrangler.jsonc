@@ -68,7 +68,8 @@
   // Secrets (wrangler secret put): IMPORT_SECRET -- lets the Firebase shadow copy write;
   // FIREBASE_SA -- a service account key (JSON) that lets the room write to Firebase.
   // Billing (Accounts.js; off with a 503 until all are set): STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET,
-  // STRIPE_PRICE_PRO_YEARLY, STRIPE_PRICE_PRO_MONTHLY. ACCOUNTS_DEV_MODE, STRIPE_API_BASE and
+  // STRIPE_PRICE_PRO_YEARLY, STRIPE_PRICE_PRO_MONTHLY; Pro Unlimited also STRIPE_PRICE_UNLIMITED_YEARLY,
+  // STRIPE_PRICE_UNLIMITED_MONTHLY (without them only its checkout answers 503). ACCOUNTS_DEV_MODE, STRIPE_API_BASE and
   // LOCK_API_BASE are for local tests only (.dev.vars / --var); never set them here.
 
   // STAGING: preview.pastecal.com, for friends trying Pro with Stripe TEST cards. Deploy with
@@ -129,8 +130,8 @@
       "send_email": [{ "name": "EMAIL", "allowed_sender_addresses": ["login@pastecal.com"] }],
       "observability": { "enabled": true }
       // Secrets (wrangler secret put NAME --env staging): IMPORT_SECRET (its own), STRIPE_SECRET_KEY
-      // (sandbox sk_test_/rk_test_), STRIPE_WEBHOOK_SECRET (sandbox endpoint), STRIPE_PRICE_PRO_YEARLY and
-      // STRIPE_PRICE_PRO_MONTHLY (sandbox prices). Never FIREBASE_SA.
+      // (sandbox sk_test_/rk_test_), STRIPE_WEBHOOK_SECRET (sandbox endpoint), STRIPE_PRICE_PRO_YEARLY,
+      // STRIPE_PRICE_PRO_MONTHLY, STRIPE_PRICE_UNLIMITED_YEARLY and STRIPE_PRICE_UNLIMITED_MONTHLY (sandbox prices). Never FIREBASE_SA.
     }
   }
 }

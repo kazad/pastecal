@@ -161,7 +161,7 @@ const NavigationDropdown = {
 
                 <template v-else-if="acct.status === 'in'">
                     <div class="pc-acct-head">
-                        <span class="pc-acct-label">Pro account</span>
+                        <span class="pc-acct-label" data-testid="account-plan">{{ planLabel }}</span>
                         <span class="pc-acct-muted pc-acct-email" data-testid="account-email" data-hj-suppress data-clarity-mask="true">{{ acct.me.email }}</span>
                     </div>
                     <div v-for="c in proCalendars" :key="c.id" class="pc-acct-cal-row">
@@ -174,7 +174,8 @@ const NavigationDropdown = {
                             :aria-label="'Stats for ' + c.title" data-testid="account-stats">Stats</button>
                     </div>
                     <p v-if="proCalendars.length === 0" class="pc-acct-muted pc-acct-line">No Pro calendars right now.</p>
-                    <a href="/pricing#get-pro" data-from="account-menu" class="pc-acct-link pc-acct-line" data-testid="account-get-pro">{{ proCalendars.length ? 'Get Pro for another calendar' : 'Get Pro for a calendar' }}</a>
+                    <p v-if="acct.me.plan === 'unlimited'" class="pc-acct-muted pc-acct-line" data-testid="account-unlimited-hint">To lock another calendar, open it and choose Share.</p>
+                    <a v-else href="/pricing#get-pro" data-from="account-menu" class="pc-acct-link pc-acct-line" data-testid="account-get-pro">{{ proCalendars.length ? 'Get Pro for another calendar' : 'Get Pro for a calendar' }}</a>
                     <div class="pc-acct-actions">
                         <button type="button" class="pc-acct-btn" @click="portal" :disabled="acct.busy" data-testid="account-billing">Manage billing</button>
                         <button type="button" class="pc-acct-link" @click="signOut" :disabled="acct.busy" data-testid="account-signout">Sign out</button>
@@ -213,6 +214,16 @@ const NavigationDropdown = {
     data() { return { acct: AccountMenu.state }; },
     mounted() { AccountMenu.load(); },     // never blocks opening: the section shows its own loading line
     computed: {
+        // The plan, at the top of the section: "Pro Unlimited · renews Oct 24, 2027", "Pro Single", or just the account.
+        planLabel() {
+            const me = this.acct.me || {};
+            if (me.plan === 'unlimited') {
+                const u = me.unlimited || {}, end = u.currentPeriodEnd ? (u.currentPeriodEnd < 1e12 ? u.currentPeriodEnd * 1000 : u.currentPeriodEnd) : 0;
+                const date = end ? new Date(end).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+                return u.status === 'past_due' ? 'Pro Unlimited · payment problem' : date ? `Pro Unlimited · renews ${date}` : 'Pro Unlimited';
+            }
+            return me.plan === 'single' ? 'Pro Single' : 'Pro account';
+        },
         // Calendars this account pays for, lowercased id -> /api/me row.
         proById() {
             const map = new Map();
@@ -230,6 +241,7 @@ const NavigationDropdown = {
                 const date = end ? new Date(end).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
                 let label;
                 if (c.status === 'past_due') label = 'Payment problem';
+                else if (c.plan === 'unlimited' && (c.status === 'active' || c.status === 'trialing')) label = 'Locked · Unlimited';
                 else if (c.status === 'active' || c.status === 'trialing') label = date ? `Pro · renews ${date}` : 'Pro';
                 else if (end > now) label = `Pro · ends ${date}`;
                 else continue;     // ended: no longer Pro

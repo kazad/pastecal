@@ -211,6 +211,8 @@ const CalendarVueApp = {
             // Inside someone else's page (an iframe) or asked to look like it (?embed).
             embedded: (() => { try { return window.self !== window.top || new URLSearchParams(location.search).has('embed'); } catch (e) { return true; } })(),
             proTrialUsed: false,
+            proUnlimited: false,        // the signed-in person has Pro Unlimited: the Go Pro card locks with one click
+            proUnlimitedBusy: false,
             proTrialActive: false,      // this browser owns the calendar and it is on its free trial (trial_feature_used)
             proSurface: 'share',        // where the Pro offer was opened from: 'share' | 'stats' | 'lock' (trial_started)        // this calendar already had its one free trial (/api/pro/status), so the Go Pro card doesn't offer it
             lockedOut: false,
@@ -5241,8 +5243,24 @@ const CalendarVueApp = {
             try {
                 const res = await fetch('/api/pro/status?calendar=' + encodeURIComponent(id), { credentials: 'same-origin' });
                 const data = res.ok ? await res.json() : null;
-                if (this.calendar && this.calendar.id === id) this.proTrialUsed = !!(data && data.trialUsed);
+                if (this.calendar && this.calendar.id === id) {
+                    this.proTrialUsed = !!(data && data.trialUsed);
+                    this.proUnlimited = !!(data && data.unlimited);
+                }
             } catch (e) { /* offline: offer it; the server decides */ }
+        },
+        /** Go Pro card, for a Pro Unlimited owner: lock this calendar now (POST /api/pro/lock), no checkout.
+         *  The room broadcasts the lock, so the page turns locked by itself; a refusal opens the Pro view to explain. */
+        async lockWithUnlimited() {
+            const id = this.calendar && this.calendar.id;
+            if (!id || this.proUnlimitedBusy) return;
+            this.proUnlimitedBusy = true;
+            try {
+                const res = await fetch('/api/pro/lock', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ calendarId: id, title: this.calendar.title || '' }) });
+                if (res.ok) { if (typeof AccountMenu !== 'undefined') AccountMenu.reset(); this.refreshProOwner(); return; }
+                this.proUnlimited = false; this.shareProFocus = true;          // the Pro view shows where things stand
+            } catch (e) { this.shareProFocus = true; } finally { this.proUnlimitedBusy = false; }
         },
         /** Go Pro card: "Try Pro free". Opens the Get Pro view straight on the trial. */
         startProTrial() {
