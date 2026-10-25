@@ -211,6 +211,7 @@ const CalendarVueApp = {
             // Inside someone else's page (an iframe) or asked to look like it (?embed).
             embedded: (() => { try { return window.self !== window.top || new URLSearchParams(location.search).has('embed'); } catch (e) { return true; } })(),
             proTrialUsed: false,
+            pausedOwner: false,         // this browser owns the paused (Pro ended) calendar it's looking at: offer the way back
             proTrialActive: false,      // this browser owns the calendar and it is on its free trial (trial_feature_used)
             proSurface: 'share',        // where the Pro offer was opened from: 'share' | 'stats' | 'lock' (trial_started)        // this calendar already had its one free trial (/api/pro/status), so the Go Pro card doesn't offer it
             lockedOut: false,
@@ -1911,7 +1912,10 @@ const CalendarVueApp = {
             },
         },
         // Pro ended and the owner opened it: the Go Pro card is back, without the trial it already had.
-        'lock.paused'(paused) { if (!paused && this.showShare) this.refreshProTrial(); },
+        'lock.paused'(paused) {
+            if (!paused && this.showShare) this.refreshProTrial();
+            this.checkPausedOwner();
+        },
         recordingRole: {
             handler(role) { track(a => a.tag('role', role)); },
             immediate: true,
@@ -3140,6 +3144,17 @@ const CalendarVueApp = {
         },
 
         /** Records which subscribe path was used, so the rate is measurable. */
+        // A paused calendar opens in the view-only layout, which has no Share button. Its owner still needs
+        // the "Pro ended" choices (Open to everyone / Keep Pro), so ask the server whether this is the owner.
+        async checkPausedOwner() {
+            if (!this.lock.paused || !this.calendar || !this.calendar.id) { this.pausedOwner = false; return; }
+            try {
+                const r = await fetch('/api/pro/status?calendar=' + encodeURIComponent(this.calendar.id), { credentials: 'same-origin' });
+                const st = r.ok ? await r.json() : null;
+                this.pausedOwner = !!(st && st.lapsedOwner);
+            } catch (e) { this.pausedOwner = false; }
+        },
+
         trackSubscribe(method) {
             track(a => a.calendarShared(method));
         },

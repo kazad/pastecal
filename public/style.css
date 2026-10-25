@@ -2410,3 +2410,6 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 .pc-addcal-nudge-text { border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; padding: 0 }
 .pc-addcal-nudge-x { flex: none; width: 24px; height: 24px; border: 0; border-radius: 6px; background: none; color: inherit; opacity: .7; font-size: 16px; cursor: pointer }
 .pc-addcal-nudge-x:hover { opacity: 1 }
+/* The owner of a paused calendar: one clear button back to the "Pro ended" choices. */
+.pc-paused-owner { height: 32px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--pc-warning-soft); color: var(--pc-warning); font: 600 13px/1 var(--pc-font); cursor: pointer; white-space: nowrap }
+.pc-paused-owner:hover { filter: brightness(.97) }

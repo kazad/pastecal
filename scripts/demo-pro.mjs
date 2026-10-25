@@ -78,6 +78,7 @@ const vars = {
     STRIPE_SECRET_KEY: 'fake-stripe-key', STRIPE_WEBHOOK_SECRET: WHSEC,
     STRIPE_PRICE_PRO_YEARLY: 'price_fake_yearly', STRIPE_PRICE_PRO_MONTHLY: 'price_fake_monthly',
     STRIPE_API_BASE: `http://127.0.0.1:${fakePort}/stripe`,
+    LOCK_API_BASE: '',                                       // real rooms, even if cloudflare/.dev.vars points at a test fake
 };
 // wrangler listens on a private loopback port; the demo's own proxy on PORT passes everything through
 // and tightens the pages' Content-Security-Policy (demoCsp), so a browser on the demo can't reach
