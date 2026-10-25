@@ -101,7 +101,9 @@ test('Pro from /pricing (fake Stripe), claim @name, create a calendar under it',
   expect(hello[0].text).toContain('/account');
   await page.getByTestId('done-claim-name').click();
   await page.waitForURL(/\/account$/);
-  await expect(page.getByTestId('account-plan')).toContainText('Pro · renews');
+  await expect(page.getByTestId('account-plan')).toHaveText(/^Pro · renews (January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}$/);
+  await expect(page.locator('.who').getByTestId('account-signout')).toBeVisible();     // beside the email, not in the Plan card
+  await expect(page.getByTestId('account-plan-card').getByTestId('account-signout')).toHaveCount(0);
   await expect(page.getByTestId('account-meter')).toHaveText('Upgraded calendars: 0 of 10 · unlimited under your @name');
   await page.getByTestId('handle-input').fill('pricing');
   await page.getByTestId('handle-claim').click();

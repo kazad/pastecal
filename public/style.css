@@ -2241,6 +2241,9 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 :root[data-theme="dark"] .pc-link.is-copied .pc-link-act { color: #6ee7b7 }
 
 /* Toast: one compact dark row, message + action + close (Gmail-style snackbar). */
+/* Never over the side panel: beside it on a wide screen, above the bottom sheet on a phone. */
+@media (min-width: 768px) { body:has(.pc-side) .pc-toast-wrap { left: calc(50% - 220px) } }
+@media (max-width: 767px) { body:has(.pc-side) .pc-toast-wrap { bottom: auto; top: 12px } }
 .pc-toast { pointer-events: auto; display: flex; align-items: center; gap: 4px; max-width: 100%; min-height: 44px; padding: 6px 6px 6px 16px;
   border-radius: 12px; background: #1f2328; color: #f3f4f6; box-shadow: 0 10px 30px -10px rgba(0,0,0,.45); font: 500 14px/1.35 var(--pc-font) }
 :root[data-theme="dark"] .pc-toast { background: #e9ecf1; color: #14171c }

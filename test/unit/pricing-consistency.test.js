@@ -104,3 +104,17 @@ test('privacy covers visit counting, the welcome email and deleting an account',
   assert.match(p, /one welcome email when you first lock a calendar/);
   assert.match(p, /Deleting it removes your email, your sign-in links and your sessions/);
 });
+
+test('copy agrees with itself: cancel follows "If your plan ends" (read-only by default), the waitlist starts on Teams, one date format', () => {
+  const pricing = read('public/pricing.html');
+  assert.match(pricing, /<summary>What happens if I cancel\?<\/summary><p>[^<]*“If your plan ends”[^<]*read-only \(the default/);
+  assert.doesNotMatch(pricing, /goes back to the free plan, unlocked/);
+  assert.match(pricing, /<select id="plan" name="plan"><option value="teams">/, 'the waitlist does not default to a plan you can buy now');
+  // Renewal and end dates: "October 24, 2027" in UTC everywhere (the emails' formatDay, /account, the Share panel, the logo menu).
+  for (const f of ['public/account.html', 'public/components/Pro.js', 'public/components/NavigationDropdown.js']) {
+    const t = read(f);
+    for (const m of t.matchAll(/toLocaleDateString\(([^)]*)\)/g)) {
+      assert.match(m[1], /'en-US'/, `${f}: ${m[0]}`); assert.match(m[1], /month: 'long'/, `${f}: ${m[0]}`); assert.match(m[1], /timeZone: 'UTC'/, `${f}: ${m[0]}`);
+    }
+  }
+});

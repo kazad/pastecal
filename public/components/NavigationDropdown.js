@@ -227,7 +227,7 @@ const NavigationDropdown = {
             const me = this.acct.me || {};
             if (me.plan === 'unlimited') {
                 const u = me.unlimited || {}, end = u.currentPeriodEnd ? (u.currentPeriodEnd < 1e12 ? u.currentPeriodEnd * 1000 : u.currentPeriodEnd) : 0;
-                const date = end ? new Date(end).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+                const date = end ? new Date(end).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }) : '';
                 return u.status === 'past_due' ? 'Pro · payment problem' : date ? `Pro · renews ${date}` : 'Pro';
             }
             return me.plan === 'single' ? 'Plus' : 'Your account';
@@ -246,7 +246,7 @@ const NavigationDropdown = {
             const out = [];
             for (const c of this.proById.values()) {
                 const end = c.currentPeriodEnd ? (c.currentPeriodEnd < 1e12 ? c.currentPeriodEnd * 1000 : c.currentPeriodEnd) : 0;
-                const date = end ? new Date(end).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '';
+                const date = end ? new Date(end).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }) : '';
                 let label;
                 if (c.status === 'past_due') label = 'Payment problem';
                 else if (c.plan === 'unlimited' && (c.status === 'active' || c.status === 'trialing')) label = 'Locked · Pro';

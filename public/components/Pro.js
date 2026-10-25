@@ -518,7 +518,7 @@ const ProPanel = {
             const c = this.me && (this.me.calendars || []).find((x) => x.id === this.calendarId);
             if (!c || !c.currentPeriodEnd || c.status === 'trialing') return '';     // a trial shows its own line
             const ms = c.currentPeriodEnd < 1e12 ? c.currentPeriodEnd * 1000 : c.currentPeriodEnd;
-            const d = new Date(ms).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+            const d = new Date(ms).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });   // the same date as /account and the emails
             return c.status === 'active' || c.status === 'trialing' ? `Renews ${d}.` : `${this.planName} ends ${d}.`;
         },
     },

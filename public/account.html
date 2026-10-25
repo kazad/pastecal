@@ -112,7 +112,7 @@ select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); borde
   <!-- Signed in -->
   <div id="in" hidden data-testid="account-signed-in">
     <h1>Your account</h1>
-    <p class="who" id="email" data-testid="account-email"></p>
+    <p class="who"><span id="email" data-testid="account-email"></span> · <button class="link" type="button" id="signout" data-testid="account-signout">Sign out</button></p>
 
     <section class="card" data-testid="account-plan-card">
       <h2>Plan</h2>
@@ -122,7 +122,6 @@ select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); borde
       <div class="row-actions">
         <button class="btn quiet" type="button" id="billing" hidden data-testid="account-billing">Manage billing</button>
         <a class="btn quiet" href="/pricing" id="seePlans" hidden>See plans</a>
-        <button class="link" type="button" id="signout" data-testid="account-signout">Sign out</button>
       </div>
       <p class="err" id="planErr" role="alert"></p>
     </section>
@@ -217,7 +216,8 @@ select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); borde
       .catch(function () { return { status: 0, d: {} }; });
   };
   var OFFLINE = 'We couldn’t reach pastecal. Check your connection and try again.';
-  var day = function (t) { if (!t) return ''; var ms = t < 1e12 ? t * 1000 : t; return new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }); };
+  // One date everywhere (this page, the Share panel, the logo menu, the emails): "October 24, 2027", in UTC.
+  var day = function (t) { if (!t) return ''; var ms = t < 1e12 ? t * 1000 : t; return new Date(ms).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }); };
   var daysLeft = function (t) { var ms = (t < 1e12 ? t * 1000 : t) - Date.now(); return Math.max(0, Math.ceil(ms / 86400000)); };
   var ACTIVE = { active: 1, trialing: 1, past_due: 1 };
   var el = function (tag, attrs, kids) {
@@ -297,7 +297,7 @@ select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); borde
     $('shortForm').hidden = !unl || shorts.length >= A.shortLimit || !lockable.length;
     var held = shorts.map(function (x) { return x.endedAt; }).filter(Boolean).sort()[0];
     $('shortNote').textContent = held
-      ? 'Your Pro plan has ended, so these can\u2019t be changed. They keep working, and stay yours until ' + day(held + A.holdDays * 86400000) + '. Renew to keep them.'
+      ? 'Your Pro plan has ended, so these can\u2019t be changed, only released. They keep working, and stay yours until ' + day(held + A.holdDays * 86400000) + '. Renew to keep them.'
       : 'If Pro ends, your short links keep working but can\u2019t be changed. We hold them for you for ' + A.holdDays + ' days after it ends, then release them for anyone to use.';
     var mine = A.calendars.filter(function (c) { return c.state !== 'open' && c.state !== 'unknown'; });
     var sel = $('shortCal'); sel.textContent = '';
