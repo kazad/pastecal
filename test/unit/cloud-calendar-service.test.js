@@ -18,14 +18,18 @@ const ev = (id, title, d = 1, extra = {}) => ({ id, title, start: at(d, 9), end:
 const { Cloud, EventStore } = loadTab();
 const plain = (x) => JSON.parse(JSON.stringify(x));
 
-test('the flag: ?backend=cf turns it on and is remembered; ?backend=firebase turns it off (not on pastecal.com); pastecal.com and new.pastecal.com are always on', () => {
+test('the flag: local copies default to the local backend; ?backend=firebase is the deliberate, remembered way off (never on pastecal.com); pastecal.com and new.pastecal.com are always on', () => {
     const mem = () => { const s = {}; return { getItem: (k) => s[k] ?? null, setItem: (k, v) => { s[k] = v; }, removeItem: (k) => { delete s[k]; } }; };
     const store = mem();
-    assert.equal(Cloud.enabled({ search: '', hostname: 'localhost' }, store), false);
+    // A local copy never reaches production Firebase by default: only a deliberate ?backend=firebase does.
+    assert.equal(Cloud.enabled({ search: '', hostname: 'localhost' }, store), true, 'local default is the local Cloudflare backend');
+    assert.equal(Cloud.enabled({ search: '', hostname: '127.0.0.1' }, mem()), true);
+    assert.equal(Cloud.enabled({ search: '', hostname: 'pastecal.test' }, mem()), true);
+    assert.equal(Cloud.enabled({ search: '?backend=firebase', hostname: 'localhost' }, store), false);
+    assert.equal(Cloud.enabled({ search: '', hostname: 'localhost' }, store), false, 'the Firebase choice is remembered');
     assert.equal(Cloud.enabled({ search: '?backend=cf', hostname: 'localhost' }, store), true);
     assert.equal(Cloud.enabled({ search: '', hostname: 'localhost' }, store), true, 'remembered');
-    assert.equal(Cloud.enabled({ search: '?backend=firebase', hostname: 'localhost' }, store), false);
-    assert.equal(Cloud.enabled({ search: '', hostname: 'localhost' }, store), false, 'forgotten');
+    assert.equal(Cloud.enabled({ search: '', hostname: 'example.org' }, mem()), false, 'other hosts: off unless asked');
     assert.equal(Cloud.enabled({ search: '', hostname: 'pastecal.com' }, mem()), true);
     assert.equal(Cloud.enabled({ search: '?backend=firebase', hostname: 'pastecal.com' }, mem()), true, 'no way back to the stale Firebase copy on the live site');
     assert.equal(Cloud.enabled({ search: '?backend=firebase', hostname: 'www.pastecal.com' }, mem()), true);
@@ -33,7 +37,7 @@ test('the flag: ?backend=cf turns it on and is remembered; ?backend=firebase tur
 });
 
 test('flag off: the apps keep the Firebase class; flag on: they get the cloud one', () => {
-    const off = loadTab({ search: '' });
+    const off = loadTab({ search: '?backend=firebase' });
     assert.equal(off.Service.name, 'CalendarDataService');
     assert.equal(loadTab({ search: '?backend=cf' }).Service.name, 'CloudCalendarService');
 });

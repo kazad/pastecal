@@ -73,7 +73,8 @@
                 if (!local) return false;
                 var q = new URLSearchParams(location.search).get('backend');
                 if (q === 'firebase') return false;
-                return q === 'cf' || localStorage.getItem('pastecal_backend') === 'cf';
+                // Same rule as CloudCalendarService.enabled: a local copy is on its own backend unless Firebase was chosen.
+                return q === 'cf' || localStorage.getItem('pastecal_backend') !== 'firebase';
             } catch (e) { return false; }
         })();
     </script>
