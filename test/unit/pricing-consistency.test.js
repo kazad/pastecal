@@ -14,14 +14,14 @@ test('no page states the old Teams price', () => {
   for (const f of pages) assert.ok(!/\$80\b|\$8 each/.test(read(f)), `${f} still says $80 / $8 each`);
 });
 
-test('Teams is $100 a year or $10 a month on the pricing card, waitlist, FAQ and terms', () => {
+test('Teams is $290 a year or $29 a month on the pricing card, waitlist, FAQ and terms', () => {
   const pricing = read('public/pricing.html');
   const card = /<h3>Teams<\/h3>[\s\S]*?<\/div>\s*<\/div>/.exec(pricing)[0];
-  assert.match(card, /<strong>\$100<\/strong>/);
-  assert.match(card, /\$10 a month/);
-  assert.match(pricing, /<option value="teams">Teams, \$100 a year or \$10 a month<\/option>/);
-  assert.match(pricing, /<summary>What is Teams\?<\/summary><p>[^<]*\$100 a year or \$10 a month/);
-  assert.match(read('public/terms.html'), /Teams[^<]*\$100 a year or \$10 a month/);
+  assert.match(card, /<strong>\$290<\/strong>/);
+  assert.match(card, /\$29 a month/);
+  assert.match(pricing, /<option value="teams">Teams, \$290 a year or \$29 a month<\/option>/);
+  assert.match(pricing, /<summary>What is Teams\?<\/summary><p>[^<]*\$290 a year or \$29 a month/);
+  assert.match(read('public/terms.html'), /Teams[^<]*\$290 a year or \$29 a month/);
 });
 
 test('branding removal is a Teams feature; Pro keeps a small footer', () => {
