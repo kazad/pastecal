@@ -213,7 +213,8 @@ const CalendarVueApp = {
             embedded: (() => { try { return window.self !== window.top || new URLSearchParams(location.search).has('embed'); } catch (e) { return true; } })(),
             proTrialUsed: false,
             proBilling: null,           // /api/pro/config: true = trial and checkout; false = "Join the Pro beta"; null = not known yet (neither shows)
-            pausedOwner: false,         // this browser owns the paused (Pro ended) calendar it's looking at: offer the way back
+            pausedOwner: false,
+            homeTab: null,              // the homepage panel's tab when the visitor picked one ('recents' | 'guide')         // this browser owns the paused (Pro ended) calendar it's looking at: offer the way back
             proTrialActive: false,      // this browser owns the calendar and it is on its free trial (trial_feature_used)
             proSurface: 'share',        // where the Pro offer was opened from: 'share' | 'stats' | 'lock' (trial_started)        // this calendar already had its one free trial (/api/pro/status), so the Go Pro card doesn't offer it
             lockedOut: false,
@@ -660,6 +661,8 @@ const CalendarVueApp = {
         },
 
         // Homepage calendar (no slug and not an existing saved calendar)
+        // Returning visitors open on their calendars; the guide is one click away.
+        homePanel() { return this.homeRecents.length ? (this.homeTab || 'recents') : 'guide'; },
         isHomepageCalendar() {
             return !this.urlslug && !this.isExisting;
         },

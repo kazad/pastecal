@@ -2435,3 +2435,9 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 .pc-tour-plan:hover .pc-tour-plan-more, .pc-tour-plan:focus-visible .pc-tour-plan-more { opacity: 1 }
 @media (hover: none) { .pc-tour-plan-more { opacity: 1 } }
 .pc-tour-plan, .pc-tour-plan:hover, .pc-tour-plan * { text-decoration: none }
+/* Homepage panel tabs: plain text, the current one in full color. */
+.pc-home-tabs { display: flex; gap: 16px }
+.pc-home-tabs button { background: none; border: 0; padding: 0; font: inherit; letter-spacing: inherit; text-transform: inherit; color: var(--pc-text-muted); cursor: pointer }
+.pc-home-tabs button.on { color: var(--pc-text) }
+.pc-home-tabs button:hover { color: var(--pc-text) }
+.pc-home-tabs button:focus-visible { outline: none; box-shadow: var(--pc-focus-ring); border-radius: 4px }
