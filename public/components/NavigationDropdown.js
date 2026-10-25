@@ -187,7 +187,7 @@ const NavigationDropdown = {
                     </div>
                     <!-- Asked in place, not with confirm(): a browser dialog would also close the menu -->
                     <div v-if="acct.confirmDelete" class="pc-acct-delete" data-testid="account-delete-confirm">
-                        <p class="pc-acct-line">Delete your account? This signs you out on every device and erases your email. Your calendars and their links stay as they are.</p>
+                        <p class="pc-acct-line">Delete your account? This signs you out on every device and erases your email. Your calendars stay at their links, but paused ones stay read-only for good, and @links and short links end after 90 days. <a href="/account" class="pc-acct-link">See what happens to each</a>.</p>
                         <div class="pc-acct-actions">
                             <button type="button" class="pc-acct-btn pc-acct-btn--danger" @click="deleteAccount" :disabled="acct.busy" data-testid="account-delete-yes">{{ acct.busy ? 'Deleting…' : 'Delete account' }}</button>
                             <button type="button" class="pc-acct-link" @click="acct.confirmDelete = false" :disabled="acct.busy" data-testid="account-delete-no">Cancel</button>

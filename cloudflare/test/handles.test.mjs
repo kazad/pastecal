@@ -269,14 +269,27 @@ try {
     r = await pj('/api/account/delete', {}, ann.cookie);
     assert.equal(r.status, 200); assert.equal(r.d.deleted, true);
     assert.equal((await get('/api/account', ann.cookie)).status, 401, 'signed out everywhere');
-    assert.equal((await get(`/@${h}/soccer`)).status, 404, 'links stop');
-    assert.equal((await get(`/@${h}`)).status, 404);
-    assert.equal((await (await get(`/api/lookup?slug=${alias}`)).json()).found, false, 'the hidden view name is gone');
+    // The @links keep opening their view-only calendars for 90 days (shared links don't break overnight); the @ page goes.
+    res = await get(`/@${h}/soccer`);
+    assert.equal(res.status, 200, '@ link: still the view-only calendar');
+    await noEditId(res, soccer, '@ link after delete');
+    assert.equal((await get(`/@${h}/soccer.ics`)).status, 200);
+    assert.equal((await get(`/@${h}`)).status, 404, 'the @ page itself is gone');
+    assert.equal((await (await get(`/api/lookup?slug=${alias}`)).json()).isReadOnly, true, 'the hidden name stays read-only');
     st = await lockStatus(soccer);
     assert.equal(st.locked, false); assert.equal(st.lapsed && st.lapsed.mode, 'readonly', 'the calendar stays, paused per its setting');
     assert.equal((await get(`/cal/${soccer}`)).status, 200);
     assert.equal((await pj('/api/names/handle', { handle: h }, bob.cookie)).status, 409, 'a deleted account\'s handle is never reissued');
-    step('delete account: refused (409) while billing is active; otherwise sessions end, @ links and their hidden names stop, calendars stay (paused), the handle is never reissued');
+    // 90 days on: the @links and their hidden names are gone; the handle stays retired.
+    let gone = await (await admin('/api/admin/accounts/age-short-holds', { method: 'POST', body: JSON.stringify({ names: ['@' + h], ageMs: 89 * 86400000 }) })).json();
+    assert.ok(!gone.released.includes('@' + h));
+    assert.equal((await get(`/@${h}/soccer`)).status, 200);
+    gone = await (await admin('/api/admin/accounts/age-short-holds', { method: 'POST', body: JSON.stringify({ names: ['@' + h], ageMs: 2 * 86400000 }) })).json();
+    assert.ok(gone.released.includes('@' + h), JSON.stringify(gone));
+    assert.equal((await get(`/@${h}/soccer?after=hold`)).status, 404, '@ links end after 90 days');
+    assert.equal((await (await get(`/api/lookup?slug=${alias}`)).json()).found, false, 'and their hidden names');
+    assert.equal((await pj('/api/names/handle', { handle: h }, bob.cookie)).status, 409, 'still never reissued');
+    step('delete account: refused (409) while billing is active; otherwise sessions end, the @ page goes, @ links keep opening the view-only calendar (no edit id) for 90 days then end with their hidden names, calendars stay (paused), the handle is never reissued');
 
     // --- a deleted account's short names: held as tombstones for 90 days, never anyone's calendar meanwhile
     {

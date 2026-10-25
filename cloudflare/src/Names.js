@@ -234,6 +234,9 @@ const NAME_OPS = {
         const free = !st.locked && !(st.lapsed && st.lapsed.mode === 'readonly');
         if (!mine && !free) return json({ error: 'not-owner' }, 403);
         const existing = await g.acc.linkFor(body.calendarId);
+        // A calendar has one @link. One under someone else's name (a lapsed or deleted account's, still
+        // answering) is theirs: never renamed or taken over from here.
+        if (existing && existing.handle !== g.handle.handle) return json({ error: 'linked-elsewhere', message: 'This calendar already has a link under another name.' }, 409);
         const alias = existing ? existing.alias : await newAlias(env, body.calendarId);
         if (!alias) return json({ error: 'internal' }, 500);
         const set = await g.acc.setLink(g.handle.handle, name, body.calendarId, alias);

@@ -71,6 +71,9 @@ select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); borde
 .ok:empty { display: none; }
 .danger-zone { background: transparent; border-style: dashed; }
 .danger-zone h2 { color: var(--pc-text); }
+.del-facts { margin: 8px 0 0; padding-left: 20px; color: var(--pc-text-2); }
+.del-facts li { margin: 4px 0; }
+#delCals { margin-top: 12px; }
 .signin { max-width: 440px; margin: 6vh auto 0; }
 [hidden] { display: none !important; }
 @media (max-width: 480px) { h1 { font-size: 24px; } .card { padding: 16px; } .row-actions .btn { flex: 1 1 auto; } }
@@ -177,7 +180,17 @@ select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); borde
         <div class="row-actions"><button class="btn quiet" type="button" id="delPortal">Manage billing</button><button class="link" type="button" id="delCancel1">Never mind</button></div>
       </div>
       <form id="delConfirm" hidden novalidate data-testid="delete-confirm">
-        <p>Each calendar then follows its “If your plan ends” setting: paused (view only) or open to its edit link. Your @name links stop working, and your short links are held for 90 days, then released.</p>
+        <p>When your account is gone:</p>
+        <ul class="del-facts" data-testid="delete-facts">
+          <li id="delPaused"><b>Paused calendars stay read-only for good.</b> Nobody can reopen them, you included. To open one to everyone instead, open it and choose <b>Open to everyone</b> before you delete.</li>
+          <li id="delOpenCals"><b>Open calendars</b> stay editable by anyone with their edit link.</li>
+          <li id="delAt">Your <b>@links</b> keep opening the view-only calendars for 90 days, then stop. Your @name is never given to anyone else.</li>
+          <li id="delShort">Your <b>short links</b> say “This link has ended” for 90 days. Then anyone can take the names.</li>
+        </ul>
+        <div id="delCals" data-testid="delete-calendars">
+          <p class="muted">Save these edit links. Each is the only way back to its calendar:</p>
+          <ul class="list" id="delCalList"></ul>
+        </div>
         <label class="muted" for="delInput" style="display:block;margin-top:12px">Type <b>delete</b> to confirm</label>
         <div class="row-actions" style="margin-top:6px">
           <span class="field" style="flex:0 1 220px"><input class="solo" id="delInput" autocomplete="off" autocapitalize="none" spellcheck="false" data-testid="delete-input"></span>
@@ -423,8 +436,24 @@ select { height: 38px; max-width: 100%; border: 1px solid var(--pc-field); borde
       var u = A.plan === 'unlimited' && A.unlimited;
       $('delUntil').textContent = u && u.cancelAtPeriodEnd ? ' until ' + day(u.currentPeriodEnd) : '';
       $('delBilling').hidden = false;
-    } else { $('delConfirm').hidden = false; $('delInput').focus(); }
+    } else { renderDeleteFacts(); $('delConfirm').hidden = false; $('delInput').focus(); }
   });
+  // What happens to each thing the account has, and every calendar's edit link to keep.
+  function renderDeleteFacts() {
+    var cals = A.calendars.filter(function (c) { return c.state !== 'unknown'; });
+    $('delPaused').hidden = !cals.some(function (c) { return c.state === 'paused'; });
+    $('delOpenCals').hidden = !cals.some(function (c) { return c.state === 'open'; });
+    $('delAt').hidden = !A.handle;
+    $('delShort').hidden = !(A.shortNames || []).length;
+    $('delCals').hidden = !cals.length;
+    var list = $('delCalList'); list.textContent = '';
+    cals.forEach(function (c) {
+      var what = c.state === 'paused' ? 'Paused: stays read-only' : c.state === 'open' ? 'Open: anyone with the link can edit' : 'Locked';
+      list.appendChild(el('li', { 'data-testid': 'delete-cal' }, [
+        el('div', { class: 'cal-top' }, [el('span', { class: 'cal-title', text: c.title }), el('span', { class: 'chip' + (c.state === 'paused' ? ' warn' : ''), text: what })]),
+        el('div', { class: 'cal-links' }, [el('a', { href: '/' + encodeURIComponent(c.id), 'data-testid': 'delete-cal-link', text: host + '/' + c.id })])]));
+    });
+  }
   $('delCancel1').addEventListener('click', delReset);
   $('delCancel2').addEventListener('click', delReset);
   $('delInput').addEventListener('input', function () { $('delGo').disabled = $('delInput').value.trim().toLowerCase() !== 'delete'; });

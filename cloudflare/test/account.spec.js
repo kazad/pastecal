@@ -232,8 +232,25 @@ test('a deleted account\'s short link opens "This link has ended", never a calen
   expect((await post('/api/names/short', { name: short, calendarId: cal })).status()).toBe(200);
   const ended = { ...sub, status: 'canceled' }; fake.subs.set(sub.id, ended);
   await hook('customer.subscription.deleted', ended);
-  expect((await post('/api/account/delete', {})).status()).toBe(200);
+  // Deleting from /account: it says what becomes of each thing, and lists every calendar's edit link to keep.
+  const state = await api.storageState();
   await api.dispose();
+  const own = await browser.newContext({ viewport: { width: 1280, height: 900 }, storageState: state });
+  await own.routeWebSocket((url) => !/localhost|127\.0\.0\.1/.test(String(url)), (ws) => ws.close());
+  const op = await own.newPage();
+  await op.goto('/account');
+  await op.getByTestId('delete-open').click();
+  await expect(op.getByTestId('delete-confirm')).toBeVisible();
+  await expect(op.locator('#delPaused')).toContainText('Paused calendars stay read-only for good');
+  await expect(op.locator('#delShort')).toContainText('This link has ended');
+  await expect(op.locator('#delAt')).toBeHidden();                          // no @name on this account
+  await expect(op.getByTestId('delete-cal')).toHaveCount(1);
+  await expect(op.getByTestId('delete-cal')).toContainText('Paused: stays read-only');
+  await expect(op.getByTestId('delete-cal-link')).toHaveText(`pastecal.com/${cal}`);
+  await op.getByTestId('delete-input').fill('delete');
+  await op.getByTestId('delete-go').click();
+  await expect(op.getByTestId('account-deleted')).toBeVisible();
+  await own.close();
 
   const { ctx, page } = await newPage(browser);
   await page.goto(`/${short}`);

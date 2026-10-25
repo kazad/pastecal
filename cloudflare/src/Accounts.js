@@ -14,6 +14,12 @@
  *                                                   but lose the link to the user. Cancels nothing: 409
  *                                                   {error:'active-subscription', calendars} while any subscription
  *                                                   is active, trialing or past_due (cancel it first). 401 signed-out
+ *                                                   Names (decided Oct 2026): calendars already follow their "If your plan
+ *                                                   ends" choice (a paused one stays read-only for good: nobody owns it);
+ *                                                   @links keep serving the view-only calendar in place for 90 days (no
+ *                                                   redirect: that would need a view link, and the alias already is one),
+ *                                                   then end; the @ page goes at once; the handle is retired forever.
+ *                                                   Short names are tombstones ("This link has ended") for 90 days, then free.
  *   GET  /api/me                                 -> {email, plan:'unlimited'|'single'|null, unlimited:{status, interval, currentPeriodEnd}|null,
  *                                                   calendars:[{id, status, plan:'single'|'unlimited', interval, currentPeriodEnd}]} | 401;
  *                                                   re-sends the cookie (fresh Max-Age) when the session was renewed
@@ -204,7 +210,8 @@ export class Accounts extends DurableObject {
         for (const col of ['subscriptions ADD COLUMN created INTEGER', 'checkout_holds ADD COLUMN session_id TEXT',
             'checkout_holds ADD COLUMN restarts INTEGER', 'checkout_holds ADD COLUMN window_start INTEGER',
             'sessions ADD COLUMN renewed_at INTEGER', 'users ADD COLUMN created_via TEXT', 'subscriptions ADD COLUMN trial_end INTEGER',
-            'subscriptions ADD COLUMN has_payment_method INTEGER', 'subscriptions ADD COLUMN cancel_at_period_end INTEGER']) {
+            'subscriptions ADD COLUMN has_payment_method INTEGER', 'subscriptions ADD COLUMN cancel_at_period_end INTEGER',
+            'handles ADD COLUMN deleted_at INTEGER']) {
             try { this.sql.exec(`ALTER TABLE ${col}`); } catch (_) { /* already there */ }
         }
     }
@@ -317,8 +324,9 @@ export class Accounts extends DurableObject {
         if (!user) return { deleted: false };
         const active = this.sql.exec(`SELECT calendar_id, status FROM subscriptions WHERE user_id = ?`, userId).toArray().filter((r) => ACTIVE.has(r.status));
         if (active.length) return { active: [...new Set(active.map((r) => r.calendar_id || 'pro-unlimited'))] };
-        // Pro Unlimited names: links stop working at once (the caller removes their directory names and
-        // cache). The handle stays taken, by nobody, so an old shared @link can never be someone else's.
+        // Pro names: the @links keep opening their view-only calendars for 90 days (handles.deleted_at),
+        // then the sweep removes them and their hidden names; the @handle page itself is gone at once.
+        // The handle stays taken, by nobody, forever, so an old shared @link can never be someone else's.
         // Short names are held 90 days like after a lapse, then released (alarm), never re-pointed: their
         // directory rows become tombstones ("This link has ended"), so nobody can make a calendar there first.
         const now = Date.now();
@@ -333,17 +341,14 @@ export class Accounts extends DurableObject {
             this.sql.exec(`DELETE FROM unlimited_locks WHERE user_id = ?`, userId);   // only ever ended ones here
             this.sql.exec(`DELETE FROM outbox WHERE to_email = ?`, user.email);          // dev mode only ever writes here
             this.sql.exec(`UPDATE subscriptions SET user_id = NULL, updated_at = ? WHERE user_id = ?`, now, userId);
-            if (h) {
-                this.sql.exec(`DELETE FROM handle_links WHERE handle = ?`, h.handle);
-                this.sql.exec(`UPDATE handles SET user_id = NULL WHERE handle = ?`, h.handle);
-            }
+            if (h) this.sql.exec(`UPDATE handles SET user_id = NULL, deleted_at = ? WHERE handle = ?`, now, h.handle);
             this.sql.exec(`UPDATE short_links SET user_id = NULL, calendar_id = NULL, ended_at = COALESCE(ended_at, ?) WHERE user_id = ?`, now, userId);
             this.sql.exec(`DELETE FROM account_calendars WHERE user_id = ?`, userId);
             this.sql.exec(`DELETE FROM name_events WHERE user_id = ?`, userId);
             this.sql.exec(`DELETE FROM users WHERE id = ?`, userId);
         });
-        if (shorts.length) this.scheduleSweep();
-        return { deleted: true, handle: h ? h.handle : null, links: links.map((l) => l.name), removeSlugs: links.map((l) => l.alias), endSlugs: shorts, shortNames: shorts };
+        if (shorts.length || links.length) this.scheduleSweep();
+        return { deleted: true, handle: h ? h.handle : null, links: links.map((l) => l.name), removeSlugs: [], endSlugs: shorts, shortNames: shorts };
     }
 
     // ---- Pro Unlimited names: @handle, links under it, top-level short names ----
@@ -363,9 +368,10 @@ export class Accounts extends DurableObject {
     }
     linkFor(calendarId) { return this.sql.exec(`SELECT * FROM handle_links WHERE calendar_id = ?`, calendarId).toArray()[0] || null; }
     linkByName(handle, name) { return this.sql.exec(`SELECT * FROM handle_links WHERE handle = ? AND name = ?`, handle, name).toArray()[0] || null; }
-    // For the public pages: only a live handle (its account still exists) resolves.
+    // For the public pages: a live handle resolves, and a deleted account's for 90 days (then the sweep removes them).
     resolveLink(handle, name) {
-        const r = this.sql.exec(`SELECT l.alias FROM handle_links l JOIN handles h ON h.handle = l.handle WHERE l.handle = ? AND l.name = ? AND h.user_id IS NOT NULL`, handle, name).toArray()[0];
+        const r = this.sql.exec(`SELECT l.alias FROM handle_links l JOIN handles h ON h.handle = l.handle WHERE l.handle = ? AND l.name = ?
+            AND (h.user_id IS NOT NULL OR h.deleted_at > ?)`, handle, name, Date.now() - SHORT_HOLD_MS).toArray()[0];
         return r ? { alias: r.alias } : null;
     }
     handlePage(handle) {
@@ -411,7 +417,8 @@ export class Accounts extends DurableObject {
     removeOwned(userId, calendarId) { this.sql.exec(`DELETE FROM account_calendars WHERE user_id = ? AND calendar_id = ?`, userId, calendarId); }
     // Calendars under this owner's Unlimited that count toward its 10: those not living under the owner's @handle.
     proCount(userId) {
-        return this.sql.exec(`SELECT COUNT(*) AS n FROM unlimited_locks u WHERE u.user_id = ? AND NOT EXISTS (SELECT 1 FROM handle_links l WHERE l.calendar_id = u.calendar_id)`, userId).one().n;
+        return this.sql.exec(`SELECT COUNT(*) AS n FROM unlimited_locks u WHERE u.user_id = ? AND NOT EXISTS
+            (SELECT 1 FROM handle_links l JOIN handles h ON h.handle = l.handle WHERE l.calendar_id = u.calendar_id AND h.user_id = u.user_id)`, userId).one().n;
     }
     // The owner's Unlimited ended: their short names keep working, frozen, and are released 90 days later.
     markShortEnded(userId) {
@@ -420,8 +427,10 @@ export class Accounts extends DurableObject {
     }
     clearShortEnded(userId) { this.sql.exec(`UPDATE short_links SET ended_at = NULL WHERE user_id = ?`, userId); }
     scheduleSweep() {
-        const r = this.sql.exec(`SELECT MIN(ended_at) AS t FROM short_links WHERE ended_at IS NOT NULL`).one();
-        if (r.t) this.ctx.storage.setAlarm(r.t + SHORT_HOLD_MS);
+        const a = this.sql.exec(`SELECT MIN(ended_at) AS t FROM short_links WHERE ended_at IS NOT NULL`).one().t;
+        const b = this.sql.exec(`SELECT MIN(deleted_at) AS t FROM handles WHERE deleted_at IS NOT NULL`).one().t;
+        const t = [a, b].filter(Boolean).sort((x, y) => x - y)[0];
+        if (t) this.ctx.storage.setAlarm(t + SHORT_HOLD_MS);
     }
     // Release every short name held past 90 days: the row goes, and its directory name with it.
     async sweepShortHolds(now = Date.now()) {
@@ -431,6 +440,17 @@ export class Accounts extends DurableObject {
             if (this.env.DIRECTORY) await this.env.DIRECTORY.get(this.env.DIRECTORY.idFromName('global')).fetch('http://internal/remove', { method: 'POST', body: JSON.stringify({ slug: name }) });
             console.log('[names] short name released after the hold');
         }
+        // A deleted account's @links: gone 90 days after the delete, with their hidden names. The handle stays retired.
+        for (const h of this.sql.exec(`SELECT handle FROM handles WHERE user_id IS NULL AND deleted_at IS NOT NULL AND deleted_at <= ?`, now - SHORT_HOLD_MS).toArray()) {
+            const links = this.sql.exec(`SELECT name, alias FROM handle_links WHERE handle = ?`, h.handle).toArray();
+            for (const l of links) {
+                if (this.env.DIRECTORY) await this.env.DIRECTORY.get(this.env.DIRECTORY.idFromName('global')).fetch('http://internal/remove', { method: 'POST', body: JSON.stringify({ slug: l.alias }) });
+            }
+            this.sql.exec(`DELETE FROM handle_links WHERE handle = ?`, h.handle);
+            this.sql.exec(`UPDATE handles SET deleted_at = NULL WHERE handle = ?`, h.handle);
+            due.push('@' + h.handle, ...links.map((l) => `@${h.handle}/${l.name}`));
+            console.log('[names] a deleted account\'s @links ended after the hold');
+        }
         this.scheduleSweep();
         return due;
     }
@@ -439,7 +459,10 @@ export class Accounts extends DurableObject {
     // names instead (a deleted account has no email left to find them by).
     ageShortHolds(email, ageMs, names = null) {
         if (Array.isArray(names)) {
-            for (const n of names) this.sql.exec(`UPDATE short_links SET ended_at = COALESCE(ended_at, ?) - ? WHERE name = ?`, Date.now(), ageMs, String(n));
+            for (const n of names) {
+                if (String(n).startsWith('@')) this.sql.exec(`UPDATE handles SET deleted_at = deleted_at - ? WHERE handle = ? AND deleted_at IS NOT NULL`, ageMs, String(n).slice(1));
+                else this.sql.exec(`UPDATE short_links SET ended_at = COALESCE(ended_at, ?) - ? WHERE name = ?`, Date.now(), ageMs, String(n));
+            }
             return;
         }
         const u = this.findUser(email);
@@ -1685,7 +1708,10 @@ async function lockUnderUnlimited(env, acc, cfg, calendarId, userId, subscriptio
     if (st.locked && st.ownerId !== userId) return { status: 409, error: 'locked-by-other' };
     if (!st.locked && st.lapsed && st.lapsed.mode === 'readonly' && st.lapsed.ownerId !== userId) return { status: 409, error: 'locked-by-other' };
     // Pro Unlimited covers 10 calendars, plus any number living under the owner's @handle.
-    if (!(await acc.coveredByUnlimited(calendarId, userId)) && !(await acc.linkFor(calendarId))
+    // Only a link under THIS owner's @handle exempts it (another account's old link doesn't).
+    const link = await acc.linkFor(calendarId), own = await acc.handleOf(userId);
+    const underOwnHandle = !!(link && own && link.handle === own.handle);
+    if (!(await acc.coveredByUnlimited(calendarId, userId)) && !underOwnHandle
         && (await acc.proCount(userId)) >= UNLIMITED_TOP_LEVEL) return { status: 409, error: 'unlimited-full' };
     if (!(await acc.coverUnlimited(calendarId, userId, subscriptionId))) return { status: 409, error: 'locked-by-other' };
     if (st.locked) {
@@ -1908,7 +1934,10 @@ async function handleAdmin(request, env, url, path) {
         const body = (await readJson(request)) || {};
         if (!Number.isFinite(body.ageMs) || body.ageMs <= 0) return json({ error: 'need ageMs' }, 400);
         await acc.ageShortHolds(String(body.email || '').toLowerCase(), body.ageMs, Array.isArray(body.names) ? body.names.slice(0, 50) : null);
-        return json({ ok: true, released: await acc.sweepShortHolds() });
+        const released = await acc.sweepShortHolds();
+        // The sweep runs in the Accounts object; drop this data center's cached @ lookups for what it ended.
+        for (const r of released.filter((x) => x.includes('/'))) { const [hh, nn] = r.slice(1).split('/'); await purgeNames(hh, [nn]); }
+        return json({ ok: true, released });
     }
     if (devMode(env) && path === '/api/admin/accounts/dev-subscription' && request.method === 'POST') {
         const body = (await readJson(request)) || {};
