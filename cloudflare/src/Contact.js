@@ -74,7 +74,23 @@ export async function handleContact(request, env) {
     const wl = env.WAITLIST.get(env.WAITLIST.idFromName('pro'));
     const res = await wl.fetch('http://internal/message', { method: 'POST', body: JSON.stringify(entry) });
     if (res.status === 429) return Response.json({ ok: false, error: 'That\'s a lot of messages from here. Wait an hour and send it again.' }, { status: 429 });
+    if (res.ok) await notifyOwner(env, entry);
     return res;
+}
+
+// One plain email to the owner per stored message, when CONTACT_NOTIFY_TO is set (a secret, so no
+// address lives in the public repo). Best-effort: the message is already stored, so a failed send
+// is logged and never fails the form.
+async function notifyOwner(env, entry) {
+    const to = env.CONTACT_NOTIFY_TO;
+    if (!to || !env.EMAIL) return;
+    const lines = [`Type: ${entry.type}`, entry.calendar ? `Calendar: ${entry.calendar}` : '', entry.email ? `Reply to: ${entry.email}` : 'No reply address given.', '', entry.message];
+    try {
+        await env.EMAIL.send({ to, from: { email: 'login@pastecal.com', name: 'pastecal contact form' },
+            subject: `[pastecal] ${entry.type}: ${String(entry.message).slice(0, 60).replace(/\s+/g, ' ')}`,
+            text: lines.filter((l, i) => l !== '' || i === 3).join('\n'),
+            ...(entry.email ? { replyTo: entry.email } : {}) });
+    } catch (e) { console.error('[contact] notify failed', e && e.message); }
 }
 
 const tooBig = () => Response.json({ ok: false, error: `Shorten the message to ${MAX_MESSAGE} characters or fewer.` }, { status: 413 });
