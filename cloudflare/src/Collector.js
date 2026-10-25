@@ -37,7 +37,8 @@ export function toDataPoints(body, country = '') {
                 str(p.browser, 12),
                 str(p.device, 12),
                 str(country, 4),
-                str(p.source ?? p.method ?? p.code ?? p.kind ?? p.reason ?? p.where, 40),
+                // detail; the trial_* events' one value each (feature, interval, mode, trial_surface) too
+                str(p.source ?? p.method ?? p.code ?? p.kind ?? p.reason ?? p.where ?? p.feature ?? p.interval ?? p.mode ?? p.trial_surface, 40),
                 str(p.cached, 4),
                 str(p.hv, 8),
             ],

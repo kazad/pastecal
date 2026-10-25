@@ -267,6 +267,7 @@ try {
     assert.equal(r.status, 200, 'the trialing owner may check out');
     const cs = fake.log.filter((l) => l.path === '/stripe/v1/checkout/sessions').at(-1);
     assert.equal(cs.body['line_items[0][price]'], 'price_fake_monthly');
+    assert.equal(Number(cs.body['subscription_data[trial_end]']), carlSub.trial_end, 'the remaining trial days carry over');
     assert.equal((await post('/api/pro/checkout', { calendarId: cal2 }, bob.cookie)).status, 409);
     const refundsBefore = fake.refunds.length, bk = fake.log.length;
     fake.subs.set(`sub_${run}_carl_paid`, { id: `sub_${run}_carl_paid`, object: 'subscription', status: 'active', customer: `cus_${run}_carl`, created: Math.floor(Date.now() / 1000) + 5,

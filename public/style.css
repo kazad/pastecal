@@ -1453,6 +1453,7 @@ button:hover > .pc-add-event {
 .pc-pro-trial { padding-bottom: 10px; border-bottom: 1px solid var(--pc-line) }
 .pc-pro-or { margin-top: 8px }
 .pc-pro-trial-line { margin: 0; font-size: 14px; font-weight: 600; color: var(--pc-text) }
+.pc-pro-keep { display: grid; gap: 8px; margin: 2px 0 6px; padding-bottom: 12px; border-bottom: 1px solid var(--pc-line) }
 .pc-pro-choice { display: flex; gap: 8px; align-items: flex-start; margin-top: 6px; font-size: 13px; color: var(--pc-text-muted); cursor: pointer }
 .pc-pro-choice input { margin: 2px 0 0; accent-color: var(--pc-link) }
 .pc-pro-choice b { color: var(--pc-text); font-weight: 600 }

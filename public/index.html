@@ -1027,7 +1027,7 @@
                         </template>
                         <!-- Pro: the lock offer (Get Pro view), or a locked calendar's owner section and editor links;
                              after Pro ended, the paused calendar's choices (owner) or why nobody can edit (everyone else) -->
-                        <pro-panel v-if="isExisting && (shareProFocus || lock.locked || lock.paused)" ref="proPanel" :calendar-id="calendar.id" :calendar-title="calendar.title" :locked="lock.locked" :paused="lock.paused" :can-edit="canEdit"
+                        <pro-panel v-if="isExisting && (shareProFocus || lock.locked || lock.paused)" ref="proPanel" :calendar-id="calendar.id" :calendar-title="calendar.title" :locked="lock.locked" :paused="lock.paused" :can-edit="canEdit" :surface="proSurface"
                             @open-insight="openInsight($event, 'share_panel')" @owner="proOwner = $event"></pro-panel>
                         <button v-if="shareProFocus" type="button" class="pc-share-all" @click="shareProFocus = false" data-testid="share-show-all">Show all sharing options</button>
                     </div>

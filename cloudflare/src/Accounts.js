@@ -1019,7 +1019,8 @@ async function checkout(request, env, body) {
     if (st.status === 404) return json({ error: 'no-calendar' }, 404);
     if (!st.ok) return json({ error: 'unavailable' }, 502);
     // Keep Pro during a trial: the owner buys as usual; the paid subscription replaces the trial (applySubscription).
-    const keepingTrial = st.locked && userId && st.ownerId === userId && (await accounts(env).subscriptionFor(calendarId, userId))?.status === 'trialing';
+    const trialSub = st.locked && userId && st.ownerId === userId ? await accounts(env).subscriptionFor(calendarId, userId) : null;
+    const keepingTrial = !!(trialSub && trialSub.status === 'trialing');
     if (st.locked && !keepingTrial) return json({ error: userId && st.ownerId === userId ? 'already-pro' : 'locked-by-other' }, 409);
     // Paused after Pro: only its owner can buy it back (signed out can't prove that; the room refuses others too).
     if (st.lapsed && st.lapsed.mode === 'readonly' && st.lapsed.ownerId !== userId) return json({ error: userId ? 'locked-by-other' : 'signed-out' }, userId ? 409 : 401);
@@ -1050,7 +1051,9 @@ async function checkout(request, env, body) {
         payment_method_types: ['card'],
         wallet_options: { link: { display: 'never' } },   // no "save with Link" phone box or Link bank option
         metadata: { ...meta, interval },
-        subscription_data: { metadata: meta },
+        // Keep Pro mid-trial: the trial's remaining days carry over (first charge when it would have ended).
+        // Stripe needs a trial_end at least 48 hours ahead; closer than that, billing starts now.
+        subscription_data: { metadata: meta, ...(keepingTrial && trialSub.trial_end && trialSub.trial_end - Date.now() / 1000 > 49 * 3600 ? { trial_end: trialSub.trial_end } : {}) },
         success_url: `${siteUrl(env)}/pro/done?session_id={CHECKOUT_SESSION_ID}#${encodeURIComponent(calendarId)}`,
         cancel_url: `${siteUrl(env)}/${encodeURIComponent(back)}`,
         expires_at: Math.floor((Date.now() + CHECKOUT_HOLD_MS) / 1000),

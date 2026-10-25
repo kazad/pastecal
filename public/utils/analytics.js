@@ -487,6 +487,18 @@ const Analytics = {
     proVersionRestored(kind, unchanged) { this.track('pro_version_restored', { kind: kind === 'restore-point' ? 'restore-point' : 'daily', unchanged: !!unchanged }); },
     proStatsTeaserShown() { this.track('pro_stats_teaser_shown', { where: 'stats_tab' }); },
     proStatsTeaserClicked() { this.track('pro_stats_teaser_clicked', { where: 'stats_tab' }); },
+    // The 30-day trial: which Pro features trial users actually use. Fixed vocabularies only:
+    // never a calendar name, an email or an id. trial_feature_used fires once per feature per
+    // calendar per day (TrialUsage in components/Pro.js decides that).
+    // trial_surface, not surface: every event already carries surface ('web' | 'test', baseParams), which
+    // filters test traffic out; overriding it here would let test trials count as real ones.
+    trialStarted(surface) { this.track('trial_started', { trial_surface: ['share', 'stats', 'lock'].includes(surface) ? surface : 'share' }); },
+    trialFeatureUsed(feature) {
+        if (['lock', 'editor_link', 'stats_pro', 'restore', 'history', 'settings'].includes(feature)) this.track('trial_feature_used', { feature });
+    },
+    trialConverted(interval) { this.track('trial_converted', { interval: interval === 'month' ? 'month' : 'year' }); },
+    trialLapsed(mode) { this.track('trial_lapsed', { mode: mode === 'open' ? 'open' : 'readonly' }); },
+    trialReminderClicked() { this.track('trial_reminder_clicked', {}); },
 
     featureUsed(feature, detail) {
         this.track('feature_used', {

@@ -27,7 +27,8 @@ const PRO_MESSAGES = {
 const PRO_INTENT_KEY = 'pastecal_pro_intent';
 const ProIntent = {
     // go: they already pressed Lock and only had to sign in, so continue to payment once they're back.
-    set(id, interval, go = false) { try { localStorage.setItem(PRO_INTENT_KEY, JSON.stringify({ id, interval, go, t: Date.now() })); } catch (e) { /* storage blocked */ } },
+    // surface: where a trial was asked for ('share' | 'stats' | 'lock'), for trial_started.
+    set(id, interval, go = false, surface) { try { localStorage.setItem(PRO_INTENT_KEY, JSON.stringify({ id, interval, go, surface, t: Date.now() })); } catch (e) { /* storage blocked */ } },
     get(id) {
         try {
             const v = JSON.parse(localStorage.getItem(PRO_INTENT_KEY) || 'null');
@@ -75,6 +76,38 @@ const ProUpsell = {
         return (entries || []).some((e) => (e.parts || [e]).some((p) => p.savedAt > since && p.writer && p.writer !== me));
     },
 };
+
+// Trial analytics state, in this browser only (calendar ids never leave it):
+//   once(id, feature): true the first time a feature is used on this calendar today (trial_feature_used);
+//   trialing/lapsedSeen: so trial_converted / trial_lapsed fire once when the owner next sees the outcome.
+const TRIAL_USAGE_KEY = 'pastecal_trial_usage';
+const TrialUsage = {
+    _all() { try { const v = JSON.parse(localStorage.getItem(TRIAL_USAGE_KEY) || '{}'); return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; } catch (e) { return {}; } },
+    _save(all) {
+        try {
+            const keep = Object.entries(all).sort((a, b) => String(b[1]).localeCompare(String(a[1]))).slice(0, 300);
+            localStorage.setItem(TRIAL_USAGE_KEY, JSON.stringify(Object.fromEntries(keep)));
+        } catch (e) { /* storage blocked: may count again */ }
+    },
+    today() { return new Date().toISOString().slice(0, 10); },
+    once(id, feature) {
+        const all = this._all(), k = String(id).toLowerCase() + '|' + feature, d = this.today();
+        if (all[k] === d) return false;
+        all[k] = d; this._save(all);
+        return true;
+    },
+    flag(id, name, on) {
+        const all = this._all(), k = String(id).toLowerCase() + '#' + name;
+        if (on === undefined) return !!all[k];
+        if (on) all[k] = this.today(); else delete all[k];
+        this._save(all);
+        return on;
+    },
+};
+// During a trial, the first use per feature per calendar per day.
+function trialFeature(id, feature) {
+    if (id && TrialUsage.once(id, feature)) proTrack((a) => a.trialFeatureUsed(feature));
+}
 
 function proTrack(fn) {
     try { if (typeof Analytics !== 'undefined' && Analytics) fn(Analytics); } catch (e) { /* observational only */ }
@@ -201,9 +234,16 @@ const ProPanel = {
                 <p class="pc-pro-lead">Everyone can still view it and follow it in their calendar app. Nobody can edit it, you included.</p>
                 <div class="pc-pro-row">
                     <button type="button" class="pc-pro-btn pc-pro-btn--quiet" @click="openToEveryone" :disabled="busy" data-testid="pro-open-btn">Open to everyone</button>
-                    <button type="button" class="pc-pro-btn" @click="keepProAfter" :disabled="busy" data-testid="pro-keep-btn">{{ going ? 'Taking you to payment…' : 'Keep Pro' }}</button>
+                    <button v-if="!keepOpen" type="button" class="pc-pro-btn" @click="keepProAfter" :disabled="busy" data-testid="pro-keep-btn">Keep Pro</button>
                 </div>
-                <p class="pc-pro-muted pc-pro-note">Open to everyone: a free calendar anyone with the edit link can change. Keep Pro: locked again for you, $24 a year.</p>
+                <div v-if="keepOpen" class="pc-pro-keep" data-testid="pro-keep-plans">
+                    <div class="pc-pro-plans" role="radiogroup" aria-label="Billing">
+                        <label class="pc-pro-plan" :class="{ on: interval === 'year' }"><input type="radio" value="year" v-model="interval" name="pc-pro-keep-interval2"><span><b>$24/year</b> <em class="pc-pro-save">Save 33%</em></span></label>
+                        <label class="pc-pro-plan" :class="{ on: interval === 'month' }"><input type="radio" value="month" v-model="interval" name="pc-pro-keep-interval2"><span><b>$2.99/month</b></span></label>
+                    </div>
+                    <div class="pc-pro-row"><button type="button" class="pc-pro-btn" @click="keepCheckout" :disabled="busy" data-testid="pro-keep-checkout">{{ going ? 'Taking you to payment…' : 'Keep Pro' }}</button></div>
+                </div>
+                <p class="pc-pro-muted pc-pro-note">Open to everyone: a free calendar anyone with the edit link can change. Keep Pro: locked again for you, $24 a year or $2.99 a month.</p>
                 <p v-if="testCardHint" class="pc-pro-muted pc-pro-note">{{ testCardHint }}</p>
             </template>
 
@@ -212,6 +252,14 @@ const ProPanel = {
                 <p v-if="status.trial" class="pc-pro-trial-line" data-testid="pro-trial-line">Pro trial · {{ trialLeft }} ·
                     <a v-if="!status.trial.hasCard" href="#" class="pc-pro-link" @click.prevent="keepPro" data-testid="pro-keep-trial">Keep Pro</a>
                     <span v-else>card on file, Pro continues</span></p>
+                <div v-if="status.trial && keepOpen" class="pc-pro-keep" data-testid="pro-keep-plans">
+                    <div class="pc-pro-plans" role="radiogroup" aria-label="Billing">
+                        <label class="pc-pro-plan" :class="{ on: interval === 'year' }"><input type="radio" value="year" v-model="interval" name="pc-pro-keep-interval"><span><b>$24/year</b> <em class="pc-pro-save">Save 33%</em></span></label>
+                        <label class="pc-pro-plan" :class="{ on: interval === 'month' }"><input type="radio" value="month" v-model="interval" name="pc-pro-keep-interval"><span><b>$2.99/month</b></span></label>
+                    </div>
+                    <div class="pc-pro-row"><button type="button" class="pc-pro-btn" @click="keepCheckout" :disabled="busy" data-testid="pro-keep-checkout">{{ going ? 'Taking you to payment…' : 'Keep Pro' }}</button>
+                        <span class="pc-pro-muted">{{ keepNote }}</span></div>
+                </div>
                 <p class="pc-pro-lead">Only you and people with your editor link can change it. Everyone else can view.
                     <span v-if="renewal" data-testid="pro-renewal">{{ renewal }}</span></p>
 
@@ -260,6 +308,7 @@ const ProPanel = {
         calendarId: String,
         locked: Boolean,      // from the live snapshot
         paused: Boolean,      // from the live snapshot: Pro ended and the owner left it read-only
+        surface: { type: String, default: 'share' },   // where the Pro offer was opened from (trial_started)
         canEdit: Boolean,     // this tab may change the calendar
         calendarTitle: String, // named on Stripe's page, so the payer sees which calendar it's for
     },
@@ -281,6 +330,8 @@ const ProPanel = {
             editorLink: '',
             copied: false,
             trialStep: 'idle',    // idle | email | sent ("Try Pro free")
+            keepOpen: false,      // Keep Pro pressed: the plan choice and the checkout button show
+            trialSurface: '',
             wantTrial: false,     // opened from "Try Pro free" (ProIntent 'trial')
             lapsedMode: 'readonly',
             // The staging copy only (utils/preview.js): which test card to pay with.
@@ -297,6 +348,13 @@ const ProPanel = {
             return 'offer';
         },
         trialUsed() { return !!(this.status && this.status.trialUsed); },
+        // Matches the server (checkout carries the trial's end when it is over 49 hours away).
+        keepNote() {
+            const end = this.status && this.status.trial && this.status.trial.endsAt;
+            return end && end * 1000 - Date.now() > 49 * 3600 * 1000
+                ? 'Pay on Stripe’s secure page. Your free days still count: the first charge is when the trial ends.'
+                : 'Pay on Stripe’s secure page. Billing starts today.';
+        },
         trialLeft() {
             const end = this.status && this.status.trial && this.status.trial.endsAt;
             if (!end) return '';
@@ -329,6 +387,7 @@ const ProPanel = {
         if (intent && (intent.interval === 'year' || intent.interval === 'month')) this.interval = intent.interval;
         this.autoGo = !!(intent && intent.go);
         this.wantTrial = !!(intent && intent.interval === 'trial');
+        this.trialSurface = (intent && intent.surface) || this.surface;
         this.refresh();
         // Waiting on the email: they may sign in and pay in another tab or browser. Coming back here
         // shows where things stand instead of "Check your email".
@@ -346,8 +405,16 @@ const ProPanel = {
             if (st.status === 200) this.status = st.data;
             if (this.status && this.status.lapsedMode) this.lapsedMode = this.status.lapsedMode;
             this.me = me.status === 200 ? me.data : null;
+            this.trackTrialOutcome();
             // "Try Pro free": back from its sign-in link (verify already started it; this explains a refusal),
             // or from the Go Pro card (signed out: straight to the email box).
+            // Back from the trial sign-in link, and verify started it: that is the trial starting.
+            if (this.wantTrial && this.mode === 'owner' && this.status.trial) {
+                this.wantTrial = false; ProIntent.clear();
+                proTrack((a) => a.trialStarted(this.trialSurface));
+                TrialUsage.flag(this.calendarId, 'trialing', true);
+                return;
+            }
             if (this.wantTrial && this.mode === 'offer') {
                 const go = this.autoGo; this.wantTrial = false; this.autoGo = false;
                 if (go && this.me) { await this.startTrial(); return; }
@@ -402,7 +469,11 @@ const ProPanel = {
             this.busy = true;
             try {
                 const r = await proApi('POST', '/api/pro/trial', { calendarId: this.calendarId });
-                if (r.status === 200 && r.data.ok) { ProIntent.clear(); await this.refresh(); return; }
+                if (r.status === 200 && r.data.ok) {
+                    ProIntent.clear();
+                    if (!r.data.already) { proTrack((a) => a.trialStarted(this.trialSurface || this.surface)); TrialUsage.flag(this.calendarId, 'trialing', true); }
+                    await this.refresh(); return;
+                }
                 if (r.status === 401) { this.me = null; this.trialStep = 'email'; return; }
                 const e = r.data.error;
                 if (e === 'trial-used-calendar' || e === 'trial-used-account') { this.error = r.data.message; this.refresh(); return; }
@@ -420,17 +491,34 @@ const ProPanel = {
             this.busy = true;
             try {
                 const r = await proApi('POST', '/api/auth/start', { email: this.email, next: '/' + encodeURIComponent(this.calendarId) + '?pro=trial' });
-                if (r.status === 200 && r.data.ok) { ProIntent.set(this.calendarId, 'trial', true); this.trialStep = 'sent'; return; }
+                if (r.status === 200 && r.data.ok) { ProIntent.set(this.calendarId, 'trial', true, this.trialSurface || this.surface); this.trialStep = 'sent'; return; }
                 this.error = r.status === 0 ? 'We couldn’t reach pastecal. Check your connection and try again.'
                     : (r.data.error && r.status < 500 ? r.data.error : 'Something went wrong. Try again in a minute.');
             } finally { this.busy = false; }
         },
-        // During the trial: add a card in Stripe's Billing Portal; Pro then simply continues.
-        keepPro() { return this.portal('add-card'); },
-        // After Pro ended: buy it again (the paused calendar's owner may; checkout locks it again).
-        async keepProAfter() {
+        // Keep Pro, during the trial or after it ended: the ordinary checkout for this calendar, at the
+        // plan picked here ($24/year or $2.99/month). The paid subscription replaces the trial.
+        keepPro() { this.keepOpen = true; },
+        keepProAfter() { this.keepOpen = true; },
+        async keepCheckout() {
             this.busy = true; this.going = true;
             try { await this.checkout(); } finally { this.busy = false; this.going = false; }
+        },
+        // Once per outcome, when the owner next sees it: a trial that became paid Pro, or one that ended.
+        trackTrialOutcome() {
+            const id = this.calendarId, st = this.status;
+            if (!id || !st || !TrialUsage.flag(id, 'trialing')) return;
+            if (st.isOwner && !st.trial) {
+                const c = this.me && (this.me.calendars || []).find((x) => x.id === id);
+                proTrack((a) => a.trialConverted(c && c.interval));
+                TrialUsage.flag(id, 'trialing', false);
+            } else if (st.lapsedOwner) {
+                proTrack((a) => a.trialLapsed('readonly'));
+                TrialUsage.flag(id, 'trialing', false);
+            } else if (!st.locked && !st.paused && st.trialUsed) {
+                proTrack((a) => a.trialLapsed('open'));          // the owner had chosen "open" ahead of time
+                TrialUsage.flag(id, 'trialing', false);
+            }
         },
         async openToEveryone() {
             if (!window.confirm('Open this calendar to everyone? Anyone with the edit link will be able to change it.')) return;
@@ -445,6 +533,7 @@ const ProPanel = {
         async saveLapsedMode() {
             this.error = '';
             const r = await proApi('POST', '/api/pro/lapsed-mode', { calendarId: this.calendarId, mode: this.lapsedMode });
+            if (r.status === 200 && this.status && this.status.trial) trialFeature(this.calendarId, 'settings');
             if (r.status !== 200) { this.error = r.status === 0 ? 'We couldn’t reach pastecal. Check your connection and try again.' : 'That didn’t save. Try again in a minute.'; this.refresh(); }
         },
         async sendLink() {
@@ -476,6 +565,7 @@ const ProPanel = {
                     this.editorLink = `${location.origin}/${encodeURIComponent(this.calendarId)}#k=${r.data.editorKey}`;
                     this.rememberLink(this.editorLink);
                     proTrack((a) => a.proEditorLinkMade(kind));
+                    if (this.status && this.status.trial) trialFeature(this.calendarId, 'editor_link');
                     return;
                 }
                 if (r.status === 401 || r.status === 403) { this.error = 'Sign in as the owner to make an editor link.'; this.refresh(); return; }
