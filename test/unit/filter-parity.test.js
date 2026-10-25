@@ -98,7 +98,7 @@ test('the filter warning lives with the calendar, not inside the search panel', 
 test('the color dots are real, labeled toggle controls', () => {
   // They were <span>s: no name, no pressed state, no keyboard focus, and opacity as the
   // only "off" signal — which fails for colorblind users and near-identical palettes.
-  const at = INDEX.indexOf('toggleColorFilter(chip.idx)');
+  const at = INDEX.indexOf('soloColorFilter(chip.idx)');
   assert.ok(at !== -1, 'expected the color chips in the template');
   const dots = INDEX.slice(at - 900, at + 1200);
   const css = fs.readFileSync(path.join(__dirname, '../../public/style.css'), 'utf8');

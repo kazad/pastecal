@@ -623,6 +623,28 @@ const CalendarVueApp = {
                 .filter(c => c.count > 0 || this.colorFilters[c.idx] === false);
         },
 
+        // What the search panel lists: the matches for the words typed, or, with no words and a color
+        // filter on, every event that filter shows. Hidden types are left out, as on the calendar.
+        // Upcoming first (soonest at the top), then past (most recent first). A repeating event counts
+        // as upcoming until its UNTIL date.
+        searchList() {
+            const q = (this.searchQuery || '').trim();
+            const base = q ? this.searchResults : (this.isColorFilterActive ? (this.calendar?.events || []) : []);
+            const now = Date.now();
+            const shown = base.filter(e => e && this.colorFilters[this.filterSlotFor(e)] !== false);
+            const endOf = (e) => {
+                const rule = e.recurrencerule || e.RecurrenceRule || '';
+                if (rule) {
+                    const m = /UNTIL=(\d{4})(\d{2})(\d{2})/.exec(rule);
+                    return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], 23, 59) : Infinity;
+                }
+                return Date.parse(e.end || e.start) || 0;
+            };
+            const upcoming = shown.filter(e => endOf(e) >= now).sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
+            const past = shown.filter(e => endOf(e) < now).sort((a, b) => Date.parse(b.start) - Date.parse(a.start));
+            return { upcoming, past, count: upcoming.length + past.length };
+        },
+
         isColorFilterActive() {
             return this.colorFilters.slice(0, this.COLORS.length).some(on => on === false);
         },
@@ -3381,6 +3403,16 @@ const CalendarVueApp = {
 
         toggleColorFilter(index) {
             this.colorFilters[index] = !this.colorFilters[index];
+        },
+
+        // A search-panel chip: show only this type (and list its events). Tapping the one shown again
+        // shows everything. Seeing all of one color took a tap on every other chip before.
+        soloColorFilter(index) {
+            // Only types some event uses: switching off an unused one hides nothing and only adds clutter.
+            const used = new Set(this.filterChips.filter(c => c.count > 0).map(c => c.idx));
+            const onlyThis = this.colorFilters[index] !== false
+                && [...used].every(i => i === index || this.colorFilters[i] === false);
+            this.colorFilters = this.COLORS.map((_, i) => onlyThis || i === index || !used.has(i));
         },
 
         resetColorFilters() {
