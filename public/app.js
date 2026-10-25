@@ -3437,7 +3437,8 @@ const CalendarVueApp = {
         // toast's Undo) brings the whole draft back (undoLastLocal). The URL name stays the visitor's.
         startOver() {
             this.closeRecents();
-            if (this.isExisting) return;
+            // Only the homepage draft clears in place; anywhere else, starting over means the homepage.
+            if (!this.isHomepageCalendar) { this.goToHomepage(); return; }
             const clone = (v) => JSON.parse(JSON.stringify(v ?? null));
             const before = {
                 title: this.calendar.title,
@@ -3470,6 +3471,7 @@ const CalendarVueApp = {
             this.templateUndo = false;
             track(a => a.featureUsed('start_over'));
             this.offerUndo('Started over with a blank calendar');
+            try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, 0); }
         },
 
         // Put a draft's title, options, palette, color names and template back as given (startOver and its undo).

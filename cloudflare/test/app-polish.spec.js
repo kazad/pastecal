@@ -273,3 +273,14 @@ test('saved calendar: the logo menu keeps "New calendar", no Start over', async 
   await expect(menu.getByTestId('nav-start-over')).toHaveCount(0);
   await ctx.close();
 });
+
+test('unsaved draft at a typed address: the logo menu offers "New calendar", which goes to the homepage', async ({ browser }) => {
+  const id = `test-draft-${Date.now()}-${Math.floor(Math.random() * 1e5)}`;
+  const { ctx, page } = await open(browser, { path: `/${id}` });
+  await openMenu(page, false);
+  const menu = page.locator('.pc-nav').locator('visible=true');
+  await expect(menu.getByTestId('nav-start-over')).toHaveCount(0);
+  await menu.getByTestId('nav-new').click();
+  await expect(page).toHaveURL(/\/(\?.*)?$/);
+  await ctx.close();
+});

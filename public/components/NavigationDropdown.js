@@ -67,7 +67,7 @@ const NAV_NETWORK_ERROR = 'We couldn’t reach pastecal. Check your connection a
 const NavigationDropdown = {
     template: /* html */ `
         <div class="pc-nav absolute top-full left-0 mt-2 bg-1 shadow-xl border border-color-default overflow-hidden z-50">
-            <!-- Starts a fresh draft on the homepage. On the draft itself, "Start over" (below) takes its place. -->
+            <!-- Starts a fresh draft on the homepage. On the homepage draft itself, "Start over" (below) takes its place. -->
             <a v-if="!onDraft" href="/" @click.prevent="$emit('go-homepage')" data-testid="nav-new"
                 class="pc-nav-row pc-nav-new flex items-center text-color-2 hover:bg-theme-hover transition-colors cursor-pointer group">
                 <span class="pc-nav-plus">

@@ -322,7 +322,7 @@
                                 d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z" />
                         </svg>
                     </div>
-                    <navigation-dropdown v-if="showRecents" :recent-calendars="recentCalendars" :on-draft="!isExisting"
+                    <navigation-dropdown v-if="showRecents" :recent-calendars="recentCalendars" :on-draft="isHomepageCalendar"
                         @go-homepage="goToHomepage" @start-over="startOver" @open-help="showRecents = false; toggleHelp()" @toggle-pin="togglePin" @remove-recent="removeRecent" @open-stats="openStatsFor"
                         class="mt-2"></navigation-dropdown>
                 </div>
@@ -467,7 +467,7 @@
                         </div>
 
                         <!-- Navigation dropdown component -->
-                        <navigation-dropdown v-if="showRecents" :recent-calendars="recentCalendars" :on-draft="!isExisting"
+                        <navigation-dropdown v-if="showRecents" :recent-calendars="recentCalendars" :on-draft="isHomepageCalendar"
                             @go-homepage="goToHomepage" @start-over="startOver" @open-help="showRecents = false; toggleHelp()" @toggle-pin="togglePin" @remove-recent="removeRecent" @open-stats="openStatsFor" v-cloak>
                         </navigation-dropdown>
                     </div>
