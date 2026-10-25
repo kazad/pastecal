@@ -184,10 +184,13 @@ try {
     const plainCal = `plain-${run}`; fake.addCalendar(plainCal);
     const b2 = fake.log.length;
     r = await post(BASE, '/api/pro/checkout', { calendarId: plainCal, interval: 'month' }, ann.cookie);
+    assert.equal(r.status, 400); assert.equal((await r.json()).error, 'bad-interval');
+    assert.equal(fake.log.slice(b2).filter((l) => l.path === '/stripe/v1/checkout/sessions').length, 0, 'no monthly page, even with a monthly price set');
+    r = await post(BASE, '/api/pro/checkout', { calendarId: plainCal, interval: 'year' }, ann.cookie);
     assert.equal(r.status, 200);
     const cs2 = fake.log.slice(b2).find((l) => l.path === '/stripe/v1/checkout/sessions');
-    assert.equal(cs2.body['line_items[0][price]'], 'price_fake_monthly'); assert.equal(cs2.body.client_reference_id, plainCal);
-    step('checkout interval "month" uses the monthly price');
+    assert.equal(cs2.body['line_items[0][price]'], 'price_fake_yearly'); assert.equal(cs2.body.client_reference_id, plainCal);
+    step('Plus is yearly only: interval "month" is refused (400 bad-interval) even with a monthly price configured');
 
     // One buyer at a time: while ann's checkout for plainCal is open, nobody else can start one.
     const holder2 = await signIn(BASE, `bob-hold-${run}@example.com`);

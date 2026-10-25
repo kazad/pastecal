@@ -357,7 +357,7 @@ try {
     st = await status(cal3, ann.cookie);
     assert.deepEqual([st.locked, st.paused, st.lapsedOwner], [false, true, true]);
     // The owner, paused, buys again: checkout is allowed for them.
-    r = await post('/api/pro/checkout', { calendarId: cal3, interval: 'month' }, ann.cookie);
+    r = await post('/api/pro/checkout', { calendarId: cal3, interval: 'year' }, ann.cookie);
     assert.equal(r.status, 200);
     fake.subs.set(`sub_${run}_p2`, paidSub(`sub_${run}_p2`, 'active'));
     await webhook(event('customer.subscription.created', { id: `sub_${run}_p2` }));
@@ -395,10 +395,10 @@ try {
     step('with a card on file, status says hasCard and the day-27 email says the card is charged (never "nothing is charged")');
 
     // --- Keep Pro during the trial = the ordinary checkout; the paid subscription replaces the trial.
-    r = await post('/api/pro/checkout', { calendarId: cal2, interval: 'month' }, carl.cookie);
+    r = await post('/api/pro/checkout', { calendarId: cal2, interval: 'year' }, carl.cookie);
     assert.equal(r.status, 200, 'the trialing owner may check out');
     const cs = fake.log.filter((l) => l.path === '/stripe/v1/checkout/sessions').at(-1);
-    assert.equal(cs.body['line_items[0][price]'], 'price_fake_monthly');
+    assert.equal(cs.body['line_items[0][price]'], 'price_fake_yearly');
     assert.equal(Number(cs.body['subscription_data[trial_end]']), carlSub.trial_end, 'the remaining trial days carry over');
     assert.equal((await post('/api/pro/checkout', { calendarId: cal2 }, bob.cookie)).status, 409);
     const refundsBefore = fake.refunds.length, bk = fake.log.length;
@@ -412,7 +412,7 @@ try {
     assert.deepEqual([st.locked, st.isOwner, st.trial, st.paused], [true, true, undefined, false]);
     await webhook(event('customer.subscription.deleted', { id: carlSub.id, object: 'subscription' }));
     assert.equal((await status(cal2, carl.cookie)).isOwner, true, 'the trial\'s own deleted event does not unlock a paid calendar');
-    step('Keep Pro during a trial is the normal checkout ($24/year or $2.99/month); the paid subscription replaces the trial (canceled, not refunded), the lock stays');
+    step('Keep Plus during a trial is the normal checkout ($29/year); the paid subscription replaces the trial (canceled, not refunded), the lock stays');
 
     // --- Billing goes to the right Stripe customer: Manage billing opens the named calendar's own customer, and a
     // checkout never reuses a trial's customer (a card saved there would turn that trial into a charge).
@@ -443,6 +443,14 @@ try {
     assert.equal((await post('/api/pro/checkout', { calendarId: calJ3 }, jo.cookie)).status, 200);
     assert.equal(fake.log.slice(mark).find((l) => l.path === '/stripe/v1/checkout/sessions').body.customer, `cus_${run}_jo_paid`, 'a later checkout reuses the paid customer');
     step('Manage billing opens the named calendar\'s own Stripe customer (paid or trial), and checkout reuses only a paid customer, never a trial\'s');
+
+    // Plus is yearly only: a monthly checkout is refused even though this server has a monthly price set.
+    const calM = `monthly-${run}`; await createCalendar(calM);
+    mark = fake.log.length;
+    r = await post('/api/pro/checkout', { calendarId: calM, interval: 'month' }, jo.cookie);
+    assert.equal(r.status, 400); assert.deepEqual(await r.json(), { error: 'bad-interval', message: 'Plus is yearly: $29 a year.' });
+    assert.equal(fake.log.slice(mark).filter((l) => l.path === '/stripe/v1/checkout/sessions').length, 0);
+    step('Plus is yearly only: interval "month" is refused (400) and no Checkout page is made');
 
     anonTab.close(); ownerTab.close();
     console.log(`\n${n} checks passed`);

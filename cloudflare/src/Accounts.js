@@ -135,7 +135,8 @@ const RESERVED_NEXT = new Set(['signin', 'pro', 'pricing', 'view', 'beta', 'nati
 function safeNext(raw) {
     if (raw === '/') return '/';
     if (typeof raw !== 'string' || raw.length > 700) return null;
-    const m = /^\/([^/?#\\\s]+)(\?pro=(?:year|month|trial))?$/.exec(raw);
+    // ?pro=keep: the trial reminder's Keep link, which may need a sign-in first (it opens the Plus tab on Keep).
+    const m = /^\/([^/?#\\\s]+)(\?pro=(?:year|trial|keep))?$/.exec(raw);
     if (!m) return null;
     let id; try { id = decodeURIComponent(m[1]); } catch { return null; }
     if (!validId(id) || RESERVED_NEXT.has(id.toLowerCase())) return null;
@@ -1145,7 +1146,8 @@ async function checkout(request, env, body) {
     const calendarId = body.calendarId;
     if (!validId(calendarId)) return json({ error: 'bad-calendar' }, 400);
     const interval = body.interval === undefined ? 'year' : body.interval;
-    if (!Object.hasOwn(INTERVALS, interval)) return json({ error: 'bad-interval' }, 400);
+    // Plus (plan id 'pro') is yearly only. A monthly price, if still configured, is never sold.
+    if (interval !== 'year' || !Object.hasOwn(INTERVALS, interval)) return json({ error: 'bad-interval', message: 'Plus is yearly: $29 a year.' }, 400);
     const price = cfg.prices[interval];
     if (!price) return json({ error: 'billing-not-configured' }, 503);
 
