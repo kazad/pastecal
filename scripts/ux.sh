@@ -92,9 +92,9 @@ FROM $DS WHERE blob1 = 'trial_converted' AND $D GROUP BY plan_interval ORDER BY 
 "SELECT blob6 AS lapse_mode, SUM(_sample_interval) AS lapsed
 FROM $DS WHERE blob1 = 'trial_lapsed' AND $D GROUP BY lapse_mode ORDER BY lapsed DESC"
 
-  run "Around the funnel: subscribe nudge (by action), contact form (by type)" \
+  run "Around the funnel: subscribe nudge (by action), contact form (by type), print (by where)" \
 "SELECT blob1 AS event, blob6 AS detail, SUM(_sample_interval) AS n
-FROM $DS WHERE blob1 IN ('subscribe_nudge','contact_submitted') AND $D GROUP BY event, detail ORDER BY event, n DESC"
+FROM $DS WHERE blob1 IN ('subscribe_nudge','contact_submitted','print') AND $D GROUP BY event, detail ORDER BY event, n DESC"
   exit 0
 fi
 

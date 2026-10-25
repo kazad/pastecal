@@ -338,6 +338,7 @@ const CalendarVueApp = {
             MAX_COLORS: MAX_COLORS,
             colorFilters: COLORS.map(() => true), // allow all color types by default
             searchOpenId: null,   // the search result shown open, if any
+            printFrom: null,      // 'share' while Share's Print button opens the dialog (counted in beforeprint)
             printMonth: null, printLink: '', printQr: '', printDate: '',   // the printed page's header and footer (preparePrint)
             FREE_CHANGES_DAYS: 30,   // how far back Recent changes reaches on a free calendar (visibleUndoEntries)
             // Bumped on every scheduler dataBound so hiddenEventCount, which reads the
@@ -774,7 +775,11 @@ const CalendarVueApp = {
         // available for the pre-appendTo configuration block below, not just applied after.
         this.loadGlobalSettings();
         // Printing: fill the print header/footer first; the QR library loads once the page is idle, not before.
-        window.addEventListener('beforeprint', () => { this.preparePrint(); });
+        window.addEventListener('beforeprint', () => {
+            this.preparePrint();
+            track(a => a.printed((this.printFrom || 'browser') + (this.isReadOnly ? '_view' : '_edit')));
+            this.printFrom = null;
+        });
         setTimeout(() => { try { if (typeof qrcode !== 'function') { const sc = document.createElement('script'); sc.src = '/vendor/qrcode-generator-1.4.4/qrcode.js'; sc.async = true; document.head.appendChild(sc); } } catch (e) { /* no QR, still prints */ } }, 4000);
         this.$nextTick(() => this.fitSlugBox());   // after the title font is in: see fitSlugBox
         if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => this.fitSlugBox());
@@ -2989,6 +2994,12 @@ const CalendarVueApp = {
                 el.style.width = Math.ceil(Math.max(w, 60) + 4) + 'px';
             } catch (err) { /* layout nicety only */ }
         },
+        /** Share's Print button: the browser's print dialog (which also saves a PDF), counted as 'share'. */
+        printCalendar() {
+            this.printFrom = 'share';
+            try { window.print(); } catch (e) { this.printFrom = null; }
+        },
+
         // Before printing: the dates on screen, the view link (never the edit link: a printout gets passed around)
         // and its QR code, if the small QR library has loaded (it loads once the page is idle; see mounted).
         preparePrint() {

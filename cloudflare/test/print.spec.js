@@ -52,3 +52,30 @@ test('print: one page, name and month, events, +N more, QR to the add page, no e
   expect((pdf.toString('latin1').match(/\/Type\s*\/Page[^s]/g) || []).length).toBe(1);
   await ctx.close();
 });
+
+// Share's Print button opens the browser's print dialog and is counted, so we can see whether printing is used.
+test('print: Share has a Print button; it and Ctrl+P are counted by where they came from', async ({ browser, request }) => {
+  const id = `test-printbtn-${Date.now()}-${Math.floor(Math.random() * 1e5)}`;
+  expect((await request.post(`/cal/${id}`, { data: { title: 'Print button', options: {}, events: [] } })).status()).toBe(201);
+  await request.post('/api/create-view', { data: { sourceCalendarId: id } });
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await ctx.addInitScript(() => { window.__TEST__ = true; });
+  await ctx.route(/googletagmanager|google-analytics|clarity|hotjar/, (r) => r.abort());
+  const page = await ctx.newPage();
+  await page.goto(`/${id}?backend=cf`);
+  await page.waitForFunction(() => window.__appMounted && window.scheduleObj && window.Analytics, null, { timeout: 20_000 });
+  // The real dialog would block the test: stand in for it with the event the browser sends first.
+  await page.evaluate(() => {
+    window.__tracked = [];
+    const t = Analytics.track.bind(Analytics);
+    Analytics.track = (name, params) => { window.__tracked.push([name, params && params.source]); return t(name, params); };
+    window.print = () => window.dispatchEvent(new Event('beforeprint'));
+  });
+  await page.getByTestId('share-pill-more').click();
+  await expect(page.getByTestId('share-print-button')).toHaveText('Print or save as PDF');
+  await page.getByTestId('share-print-button').click();
+  await page.evaluate(() => window.dispatchEvent(new Event('beforeprint')));   // then Ctrl+P
+  const prints = await page.evaluate(() => window.__tracked.filter(([n]) => n === 'print').map(([, s]) => s));
+  expect(prints).toEqual(['share_edit', 'browser_edit']);
+  await ctx.close();
+});

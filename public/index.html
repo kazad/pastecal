@@ -1074,6 +1074,13 @@
                             <p class="pc-share-hint">Opens Google, Apple or Outlook. Changes show up on their own.</p>
                         </section>
 
+                        <!-- Print: one page for the month on screen, with a QR code to the calendar; the dialog also saves a PDF. -->
+                        <section class="pc-links-sec" data-testid="share-print">
+                            <h4 class="pc-share-more-title">Print</h4>
+                            <button type="button" class="pc-btn pc-btn--sm" @click="printCalendar" data-testid="share-print-button">Print or save as PDF</button>
+                            <p class="pc-share-hint">One page for the month you're on, with a QR code to the calendar.</p>
+                        </section>
+
                         <section v-if="getReadOnlyURL()" class="pc-links-sec" data-testid="share-more-options">
                             <h4 class="pc-share-more-title">Embed on a website</h4>
                             <div class="pc-link-row">

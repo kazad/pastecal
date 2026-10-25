@@ -392,6 +392,12 @@ const Analytics = {
         this.track('editor_abandoned', {});
     },
 
+    /** The calendar was printed (or saved as PDF from the print dialog): 'share_edit' from Share's Print button,
+     *  'browser_edit' / 'browser_view' from Ctrl+P or the browser menu. Measures whether printing is worth more work. */
+    printed(source) {
+        this.track('print', { source });
+    },
+
     /** The calendar was shared or its link copied — precedes most multi-user use. */
     calendarShared(method) {
         this.track('calendar_shared', { method }); // 'copy' | 'native' | 'ics'
