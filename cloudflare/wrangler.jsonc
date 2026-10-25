@@ -27,6 +27,7 @@
       "/*.ics",
       "/view/*.ics",
       "/@*",          // Pro Unlimited names: pastecal.com/@handle[/name] (Names.js); never an editable calendar
+      "/link-ended/*", // a deleted account's short name: "This link has ended" (Names.js serveNamePage)
       "/beta",
       "/beta/*",
       "/nativecal/*"

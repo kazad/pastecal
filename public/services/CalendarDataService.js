@@ -292,6 +292,8 @@ class CalendarDataService {
             const result = await this.lookupCalendar(slug);
             console.log('Function result:', result);
 
+            // A Pro short name whose account was deleted: a neutral "This link has ended" page (the Worker's).
+            if (result.data?.ended) { window.location.replace('/link-ended/' + encodeURIComponent(slug)); return; }
             if (result.data?.found) {
                 if (result.data.isReadOnly) {
                     // Found as read-only calendar - redirect to view URL

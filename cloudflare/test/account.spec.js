@@ -34,6 +34,7 @@ async function newPage(browser) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   await ctx.addInitScript(() => { window.__TEST__ = true; });
   await ctx.route('**/*', (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
+  await ctx.routeWebSocket((url) => !/localhost|127\.0\.0\.1/.test(String(url)), (ws) => ws.close());   // never a live Firebase socket
   return { ctx, page: await ctx.newPage() };
 }
 // The fake Stripe page a checkout opens: paying there is the subscription Stripe would make, and its webhook.
@@ -77,6 +78,7 @@ test('signed out: sign in by email link, land on /account (Free)', async ({ brow
 test('Pro Plus from /pricing (fake Stripe), claim @name, create a calendar under it', async ({ browser, request }) => {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, storageState: cookieJar });
   await ctx.route('**/*', (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
+  await ctx.routeWebSocket((url) => !/localhost|127\.0\.0\.1/.test(String(url)), (ws) => ws.close());   // never a live Firebase socket
   await ctx.route('https://checkout.stripe.test/**', (r) => r.fulfill({ contentType: 'text/html', body: '<h1>Test checkout</h1>' }));
   const page = await ctx.newPage();
   await page.goto('/pricing');
@@ -132,6 +134,7 @@ test('a visitor opens pastecal.com/@name/soccer: view-only, and the edit id is n
 
 test('"Show on my page" lists it on pastecal.com/@name', async ({ browser }) => {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, storageState: cookieJar });
+  await ctx.routeWebSocket((url) => !/localhost|127\.0\.0\.1/.test(String(url)), (ws) => ws.close());   // never a live Firebase socket
   const page = await ctx.newPage();
   await page.goto(`/@${handle}`);
   await expect(page.getByTestId('handle-empty')).toBeVisible();
@@ -147,5 +150,35 @@ test('"Show on my page" lists it on pastecal.com/@name', async ({ browser }) => 
   await expect(page.getByTestId('handle-link')).toContainText('Soccer');
   const html = await page.content();
   expect(html.includes(calendarId)).toBe(false);
+  await ctx.close();
+});
+
+test('a deleted account\'s short link opens "This link has ended", never a calendar anyone can edit', async ({ browser, playwright }) => {
+  const api = await playwright.request.newContext({ baseURL: BASE, extraHTTPHeaders: { Origin: BASE } });
+  const post = async (path, body, headers = {}) => api.post(path, { data: JSON.stringify(body), headers: { 'Content-Type': 'application/json', ...headers } });
+  const who = `gone-${run}@example.com`, cal = `gone-cal-${run}`, short = `gone-${run}`.slice(0, 30);
+  await post('/api/auth/start', { email: who });
+  const mail = (await (await api.get(`/api/admin/accounts/outbox?email=${encodeURIComponent(who)}`, { headers: { Authorization: `Bearer ${SECRET}` } })).json()).emails.at(-1);
+  expect((await post('/api/auth/verify', { token: mail.text.match(/#t=([A-Za-z0-9_-]+)/)[1] })).status()).toBe(200);
+  const userId = (await (await api.get(`/api/admin/accounts/lookup?email=${encodeURIComponent(who)}`, { headers: { Authorization: `Bearer ${SECRET}` } })).json()).user.id;
+  const sub = { id: `sub_gone_${run}`, object: 'subscription', status: 'active', customer: `cus_gone_${run}`, metadata: { plan: 'unlimited', user_id: userId }, created: Math.floor(Date.now() / 1000),
+    items: { data: [{ current_period_end: Math.floor(Date.now() / 1000) + 365 * 86400, price: { id: 'price_fake_unl_yearly', recurring: { interval: 'year' } } }] } };
+  const hook = async (type, object) => { const body = JSON.stringify({ id: `evt_gone_${run}_${type}`, object: 'event', type, data: { object } });
+    expect((await api.post('/api/stripe/webhook', { data: body, headers: { 'Content-Type': 'application/json', 'Stripe-Signature': signStripe(WHSEC, body) } })).status()).toBe(200); };
+  fake.subs.set(sub.id, sub);
+  await hook('customer.subscription.created', { id: sub.id });
+  expect((await api.post(`/cal/${cal}`, { data: JSON.stringify({ title: 'Tigers U10', options: {}, events: [] }) })).status()).toBe(201);
+  expect((await post('/api/pro/lock', { calendarId: cal })).status()).toBe(200);
+  expect((await post('/api/names/short', { name: short, calendarId: cal })).status()).toBe(200);
+  const ended = { ...sub, status: 'canceled' }; fake.subs.set(sub.id, ended);
+  await hook('customer.subscription.deleted', ended);
+  expect((await post('/api/account/delete', {})).status()).toBe(200);
+  await api.dispose();
+
+  const { ctx, page } = await newPage(browser);
+  await page.goto(`/${short}`);
+  await page.waitForURL(new RegExp(`/link-ended/${short}$`), { timeout: 20_000 });
+  await expect(page.getByTestId('link-ended')).toHaveText('This link has ended');
+  expect(await page.content()).not.toContain('Tigers');
   await ctx.close();
 });

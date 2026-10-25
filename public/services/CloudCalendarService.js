@@ -180,6 +180,12 @@ class CloudCalendarService extends CalendarDataService {
         (async () => {
             try {
                 const lookup = await this.lookupCalendar(slug);
+                // A Pro short name whose account was deleted: a neutral "This link has ended" page (the Worker's).
+                if (lookup.data?.ended && typeof window !== 'undefined' && window.location) {
+                    this.close(slug);
+                    window.location.replace('/link-ended/' + encodeURIComponent(slug));
+                    return;
+                }
                 if (lookup.data?.found) {
                     if (lookup.data.isReadOnly) {
                         if (typeof window !== 'undefined' && window.location) {

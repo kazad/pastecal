@@ -36,7 +36,7 @@ export { CalendarDirectory } from './CalendarDirectory.js';
 export { Waitlist } from './Waitlist.js';
 export { Accounts } from './Accounts.js';
 import { handleAccounts, sessionUserId as accountsSessionUserId } from './Accounts.js';
-import { handleNames, serveAt } from './Names.js';
+import { handleNames, serveAt, serveNamePage } from './Names.js';
 import { PLANS } from './Waitlist.js';
 import { handleInsight, hitHeaders, withoutSourceParams } from './Insight.js';
 import { handleTestInboxEmail, handleTestInboxAdmin } from './TestInbox.js';
@@ -60,7 +60,7 @@ async function sha1Hex(str) {
 // Firebase). The Worker's own lookups go to the directory directly and still see targetId.
 function publicLookup(out) {
     if (!out || !out.isReadOnly) return out;
-    return { found: out.found, actualSlug: out.actualSlug, isReadOnly: true };
+    return { found: out.found, actualSlug: out.actualSlug, isReadOnly: true, ...(out.ended ? { ended: true } : {}) };
 }
 
 // The signed-in pastecal user making this request, or null. The accounts code fills this in
@@ -222,6 +222,7 @@ async function route(request, env) {
                 try {
                     const lookupRes = await dir.fetch(`http://internal/lookup?slug=${encodeURIComponent(slug)}`);
                     const lookup = await lookupRes.json();
+                    if (lookup.ended) return new Response('This link has ended', { status: 410 });   // a released account's short name
                     if (lookup.found) {
                         targetId = lookup.targetId || lookup.actualSlug;
                         actualSlug = lookup.actualSlug;
@@ -423,6 +424,7 @@ async function route(request, env) {
             if (dir) {
                 const lookupRes = await dir.fetch(`http://internal/lookup?slug=${encodeURIComponent(viewId)}`);
                 const lookup = await lookupRes.json();
+                if (lookup.ended) return withCors(new Response('This link has ended', { status: 410 }));
                 if (lookup.found && lookup.isReadOnly) {
                     targetId = lookup.targetId;
                 }
@@ -475,7 +477,11 @@ async function route(request, env) {
             return withCors(await room.fetch(forRoom(request, withoutSourceParams(request.url), userId, hit)));
         }
 
-        // 7. Static assets & Single Page App rewrites
+        // 7. /link-ended/<name>: the app lands here for a short name whose account was deleted (Names.js).
+        const namePage = await serveNamePage(request, env, url);
+        if (namePage) return namePage;
+
+        // 8. Static assets & Single Page App rewrites
         const isFile = /\.[a-z0-9]+$/i.test(path);
         const beta = path === '/beta' || path.startsWith('/beta/') || (path.startsWith('/nativecal/') && !isFile);
         const res = await env.ASSETS.fetch(beta ? new Request(new URL('/nativecal/', url), request) : request);

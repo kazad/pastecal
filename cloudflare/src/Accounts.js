@@ -105,7 +105,7 @@ import { LockClient } from './LockClient.js';
 import { INTERVALS, PLANS, isUnlimited, stripeConfig, stripeRequest, verifyStripeSignature, summarizeSubscription, subscriptionIdOf, timingSafeEqual,
     eventModeMismatch, subscriptionOfInvoice, paymentOfInvoice, paymentOfInvoicePayments } from './Stripe.js';
 import { siteUrl, siteHost, allowedOrigins, isStaging } from './Site.js';
-import { removeDirectoryName, purgeNames } from './Names.js';
+import { removeDirectoryName, endDirectoryName, purgeNames } from './Names.js';
 
 const LOGIN_TTL = 15 * 60 * 1000;
 const SESSION_TTL = 365 * 24 * 3600 * 1000;   // from the last renewal (see sessionUser)
@@ -319,7 +319,8 @@ export class Accounts extends DurableObject {
         if (active.length) return { active: [...new Set(active.map((r) => r.calendar_id || 'pro-unlimited'))] };
         // Pro Unlimited names: links stop working at once (the caller removes their directory names and
         // cache). The handle stays taken, by nobody, so an old shared @link can never be someone else's.
-        // Short names are held 90 days like after a lapse, then released (alarm), never re-pointed.
+        // Short names are held 90 days like after a lapse, then released (alarm), never re-pointed: their
+        // directory rows become tombstones ("This link has ended"), so nobody can make a calendar there first.
         const now = Date.now();
         const h = this.handleOf(userId);
         const links = h ? this.sql.exec(`SELECT name, alias FROM handle_links WHERE handle = ?`, h.handle).toArray() : [];
@@ -342,7 +343,7 @@ export class Accounts extends DurableObject {
             this.sql.exec(`DELETE FROM users WHERE id = ?`, userId);
         });
         if (shorts.length) this.scheduleSweep();
-        return { deleted: true, handle: h ? h.handle : null, links: links.map((l) => l.name), removeSlugs: [...links.map((l) => l.alias), ...shorts], shortNames: shorts };
+        return { deleted: true, handle: h ? h.handle : null, links: links.map((l) => l.name), removeSlugs: links.map((l) => l.alias), endSlugs: shorts, shortNames: shorts };
     }
 
     // ---- Pro Unlimited names: @handle, links under it, top-level short names ----
@@ -434,8 +435,13 @@ export class Accounts extends DurableObject {
         return due;
     }
     async alarm() { await this.sweepShortHolds(); }
-    // Dev mode only: as if this account's Unlimited ended `ageMs` ago (the hold clock).
-    ageShortHolds(email, ageMs) {
+    // Dev mode only: as if this account's Unlimited ended `ageMs` ago (the hold clock). `names`: those short
+    // names instead (a deleted account has no email left to find them by).
+    ageShortHolds(email, ageMs, names = null) {
+        if (Array.isArray(names)) {
+            for (const n of names) this.sql.exec(`UPDATE short_links SET ended_at = COALESCE(ended_at, ?) - ? WHERE name = ?`, Date.now(), ageMs, String(n));
+            return;
+        }
         const u = this.findUser(email);
         if (u) this.sql.exec(`UPDATE short_links SET ended_at = COALESCE(ended_at, ?) - ? WHERE user_id = ?`, Date.now(), ageMs, u.id);
     }
@@ -1132,9 +1138,11 @@ async function deleteAccount(request, env) {
     return json({ ok: true, deleted: true }, 200, { 'Set-Cookie': sessionCookie('', 0) });
 }
 
-// After an account delete: its @links and short names stop resolving at once.
+// After an account delete: its @links stop resolving at once; its short names become tombstones (a
+// neutral "This link has ended" page, never creatable) until the sweep releases them.
 async function forgetNames(env, r) {
     for (const slug of r.removeSlugs || []) await removeDirectoryName(env, slug);
+    for (const slug of r.endSlugs || []) await endDirectoryName(env, slug);
     await purgeNames(r.handle, r.links || []);
 }
 
@@ -1878,7 +1886,7 @@ async function handleAdmin(request, env, url, path) {
     if (devMode(env) && path === '/api/admin/accounts/age-short-holds' && request.method === 'POST') {
         const body = (await readJson(request)) || {};
         if (!Number.isFinite(body.ageMs) || body.ageMs <= 0) return json({ error: 'need ageMs' }, 400);
-        await acc.ageShortHolds(String(body.email || '').toLowerCase(), body.ageMs);
+        await acc.ageShortHolds(String(body.email || '').toLowerCase(), body.ageMs, Array.isArray(body.names) ? body.names.slice(0, 50) : null);
         return json({ ok: true, released: await acc.sweepShortHolds() });
     }
     if (devMode(env) && path === '/api/admin/accounts/dev-subscription' && request.method === 'POST') {

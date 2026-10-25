@@ -15,6 +15,10 @@ export class CalendarDirectory extends DurableObject {
             )`);
             this.sql.exec(`CREATE INDEX IF NOT EXISTS idx_actual ON directory (actual_slug)`);
             this.sql.exec(`CREATE INDEX IF NOT EXISTS idx_target ON directory (target_id)`);
+            // ended_at: a tombstone. A Pro short name whose account was deleted keeps its row (read-only, no
+            // target) until the 90-day release, so nobody can make a calendar there or point it anywhere.
+            const cols = this.sql.exec(`PRAGMA table_info(directory)`).toArray().map((c) => c.name);
+            if (!cols.includes('ended_at')) this.sql.exec(`ALTER TABLE directory ADD COLUMN ended_at INTEGER`);
         });
     }
 
@@ -32,9 +36,11 @@ export class CalendarDirectory extends DurableObject {
                 return Response.json({ found: false });
             }
             const norm = SlugService.normalizeSlug(slug);
-            const rows = this.sql.exec(`SELECT actual_slug, is_readonly, target_id FROM directory WHERE normalized = ?`, norm).toArray();
+            const rows = this.sql.exec(`SELECT actual_slug, is_readonly, target_id, ended_at FROM directory WHERE normalized = ?`, norm).toArray();
             if (!rows.length) return Response.json({ found: false });
             const r = rows[0];
+            // A tombstone leads nowhere: no targetId (callers must not fall back to the name itself).
+            if (r.ended_at) return Response.json({ found: true, actualSlug: r.actual_slug, isReadOnly: true, ended: true, targetId: null });
             return Response.json({
                 found: true,
                 actualSlug: r.actual_slug,
@@ -94,7 +100,8 @@ export class CalendarDirectory extends DurableObject {
             const now = Date.now();
 
             // Check if existing mapping exists
-            const existing = this.sql.exec(`SELECT actual_slug, is_readonly FROM directory WHERE normalized = ?`, norm).toArray();
+            const existing = this.sql.exec(`SELECT actual_slug, is_readonly, ended_at FROM directory WHERE normalized = ?`, norm).toArray();
+            if (existing.length && existing[0].ended_at) return Response.json({ ok: false, conflict: true, ended: true });
             if (existing.length && existing[0].actual_slug !== actualSlug) {
                 // If the incumbent is read-only and incoming is editable (or vice versa), don't silently overwrite unless specified
                 if (!body.force && body.hasData === false) {
@@ -135,7 +142,17 @@ export class CalendarDirectory extends DurableObject {
             const body = await request.json().catch(() => null);
             if (!body || !body.slug || !body.targetId) return Response.json({ ok: false }, { status: 400 });
             const norm = SlugService.normalizeSlug(body.slug);
-            this.sql.exec(`UPDATE directory SET target_id = ? WHERE normalized = ? AND is_readonly = 1`, String(body.targetId).trim(), norm);
+            this.sql.exec(`UPDATE directory SET target_id = ? WHERE normalized = ? AND is_readonly = 1 AND ended_at IS NULL`, String(body.targetId).trim(), norm);
+            return Response.json({ ok: true });
+        }
+
+        // A short name whose account was deleted: keep the row as a tombstone (read-only, no target) until
+        // its release removes it (/remove). Lookups answer {found, ended}; nothing can be made there.
+        if (request.method === 'POST' && path === '/end') {
+            const body = await request.json().catch(() => null);
+            if (!body || !body.slug) return Response.json({ ok: false }, { status: 400 });
+            const norm = SlugService.normalizeSlug(body.slug);
+            this.sql.exec(`UPDATE directory SET ended_at = ?, target_id = NULL WHERE normalized = ? AND is_readonly = 1`, Date.now(), norm);
             return Response.json({ ok: true });
         }
 
@@ -163,6 +180,7 @@ export class CalendarDirectory extends DurableObject {
                 const norm = SlugService.normalizeSlug(actualSlug);
                 const isReadOnly = item.isReadOnly ? 1 : 0;
                 const targetId = item.targetId ? String(item.targetId).trim() : actualSlug;
+                if (this.sql.exec(`SELECT 1 FROM directory WHERE normalized = ? AND ended_at IS NOT NULL`, norm).toArray().length) continue;   // a tombstone stays
                 this.sql.exec(`INSERT OR REPLACE INTO directory (normalized, actual_slug, is_readonly, target_id, created_at) VALUES (?, ?, ?, ?, ?)`,
                     norm, actualSlug, isReadOnly, targetId, now);
                 inserted++;

@@ -275,6 +275,50 @@ try {
     assert.equal((await pj('/api/names/handle', { handle: h }, bob.cookie)).status, 409, 'a deleted account\'s handle is never reissued');
     step('delete account: refused (409) while billing is active; otherwise sessions end, @ links and their hidden names stop, calendars stay (paused), the handle is never reissued');
 
+    // --- a deleted account's short names: held as tombstones for 90 days, never anyone's calendar meanwhile
+    {
+        const cory = await signIn(`cory-names-${run}@example.com`), eve = await signIn(`eve-names-${run}@example.com`);
+        const subC = await giveUnlimited(cory, 'cory'); await giveUnlimited(eve, 'eve');
+        const tigers = `tigers-${run}`, tname = `tg-${run}`.slice(0, 30);
+        await createCalendar(tigers, 'Tigers U10');
+        assert.equal((await pj('/api/pro/lock', { calendarId: tigers }, cory.cookie)).status, 200);
+        assert.equal((await pj('/api/names/short', { name: tname, calendarId: tigers }, cory.cookie)).status, 200);
+        await endUnlimited(subC, cory, 'cory');
+        assert.equal((await pj('/api/account/delete', {}, cory.cookie)).status, 200);
+        const look = await (await get(`/api/lookup?slug=${tname}`)).json();
+        assert.deepEqual(look, { found: true, actualSlug: tname, isReadOnly: true, ended: true }, 'a tombstone, never a target');
+        assert.equal((await fetch(`${BASE}/cal/${tname}`, { method: 'POST', headers: { 'CF-Connecting-IP': '10.62.0.1' }, body: JSON.stringify({ title: 'Tigers U10 (new link!)', options: {}, events: [] }) })).status, 409, 'nobody can make a calendar there');
+        assert.equal((await fetch(`${BASE}/cal/${tname.toUpperCase()}`, { method: 'POST', headers: { 'CF-Connecting-IP': '10.62.0.2' }, body: JSON.stringify({ title: 'x', options: {}, events: [] }) })).status, 409, 'nor in another case');
+        const evecal = `evecal-${run}`; await createCalendar(evecal, 'Eve'); await pj('/api/pro/lock', { calendarId: evecal }, eve.cookie);
+        const ec = await pj('/api/names/short', { name: tname, calendarId: evecal }, eve.cookie);
+        assert.equal(ec.status, 409, 'nor claim it'); assert.equal(ec.d.error, 'taken');
+        const cv = await fetch(`${BASE}/api/create-view`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sourceCalendarId: existing, customSlug: tname }) });
+        assert.equal(cv.status, 409, 'nor name a view link after it');
+        // The calendar pages are static: the app's lookup sees {ended} and goes to /link-ended/<name> (the Worker's).
+        let page = await get(`/link-ended/${tname}`);
+        assert.equal(page.status, 410);
+        const html = await page.text();
+        assert.match(html, /data-testid="link-ended">This link has ended/);
+        assert.ok(!html.includes('Tigers') && !html.includes(tigers), 'the ended page names nothing');
+        assert.equal(page.headers.get('x-robots-tag'), 'noindex');
+        assert.equal((await get(`/link-ended/${s1}`)).status, 404, 'a live name is never called ended');
+        assert.equal((await get(`/link-ended/nothing-${run}`)).status, 404);
+        assert.equal((await get(`/${tname}.ics`)).status, 410);
+        assert.equal((await get(`/view/${tname}.ics`)).status, 410);
+        assert.equal((await get(`/cal/view/${tname}`)).status, 410);
+        assert.equal((await get(`/cal/${tigers}`)).status, 200, 'the calendar itself stays at its own address');
+        // 89 days: still held. Past 90: released, and the name is anyone's (a new free calendar, a new claim).
+        let rel = await (await admin('/api/admin/accounts/age-short-holds', { method: 'POST', body: JSON.stringify({ names: [tname], ageMs: 89 * 86400000 }) })).json();
+        assert.ok(!rel.released.includes(tname));
+        assert.equal((await get(`/link-ended/${tname}`)).status, 410);
+        rel = await (await admin('/api/admin/accounts/age-short-holds', { method: 'POST', body: JSON.stringify({ names: [tname], ageMs: 2 * 86400000 }) })).json();
+        assert.ok(rel.released.includes(tname), JSON.stringify(rel));
+        assert.equal((await (await get(`/api/lookup?slug=${tname}`)).json()).found, false);
+        assert.equal((await get(`/link-ended/${tname}`)).status, 404);
+        assert.equal((await fetch(`${BASE}/cal/${tname}`, { method: 'POST', headers: { 'CF-Connecting-IP': '10.62.0.3' }, body: JSON.stringify({ title: 'Fresh', options: {}, events: [] }) })).status, 201, 'released: creatable again');
+        step('deleted account: each short name is a tombstone (lookup ended, POST /cal 409 in any case, no claim or view link, feeds and view JSON 410, /link-ended/<name> says so (404 for any other name), the calendar stays); released after 90 days, then creatable');
+    }
+
     // --- rate limit on name changes
     const dan = await signIn(`dan-names-${run}@example.com`);
     await giveUnlimited(dan, 'dan');

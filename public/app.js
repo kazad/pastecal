@@ -743,6 +743,8 @@ const CalendarVueApp = {
                     console.log('Looking up calendar for /view/ route:', requestedSlug);
                     const result = await CalendarDataService.lookupCalendar(requestedSlug);
 
+                    // A Pro short name whose account was deleted: a neutral "This link has ended" page (the Worker's).
+                    if (result.data.ended) { location.replace('/link-ended/' + encodeURIComponent(requestedSlug)); return; }
                     if (result.data.found && result.data.isReadOnly) {
                         // Found as read-only - subscribe with the actual slug
                         const actualSlug = result.data.actualSlug;

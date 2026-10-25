@@ -77,6 +77,10 @@ async function directoryClaim(env, slug, targetId) {
 export async function removeDirectoryName(env, slug) {
     await directory(env).fetch('http://internal/remove', { method: 'POST', body: JSON.stringify({ slug }) });
 }
+// A deleted account's short name: a tombstone until its release (the directory answers {found, ended}).
+export async function endDirectoryName(env, slug) {
+    await directory(env).fetch('http://internal/end', { method: 'POST', body: JSON.stringify({ slug }) });
+}
 async function roomExists(env, id) {
     if (!validId(id)) return false;
     const r = await env.CALENDARS.get(env.CALENDARS.idFromName(id)).fetch(`http://internal/cal/${encodeURIComponent(id)}`, { method: 'HEAD' });
@@ -387,4 +391,23 @@ function handlePageResponse(env, url, page) {
 
 function notFound(env, url) {
     return sitePage(env, url, `<h1 data-testid="handle-404">Nothing here</h1><p class="h-muted">There's no calendar at this address. Check the link, or ask the person who shared it.</p><p><a class="h-btn" href="/">Make a calendar</a></p>`, 404, 'Not found · pastecal');
+}
+
+// ---- /link-ended/<name>: where the app sends a short name whose account was deleted ----
+// The calendar pages are static (they never reach the Worker), so the app's lookup sees {ended} and comes
+// here. Only a real tombstone (until its 90-day release) gets "This link has ended"; anything else is the
+// plain not-found page, so this address can't be used to say any other link has ended.
+const ENDED_RE = /^\/link-ended\/([^/]+)\/?$/;
+export async function serveNamePage(request, env, url) {
+    const m = ENDED_RE.exec(url.pathname);
+    if (!m) return null;
+    if ((request.method !== 'GET' && request.method !== 'HEAD') || !env.DIRECTORY) return notFound(env, url);
+    let slug;
+    try { slug = decodeURIComponent(m[1]); } catch { return notFound(env, url); }
+    if (!SlugService.isLookupable(slug)) return notFound(env, url);
+    const look = await directoryLookup(env, slug).catch(() => null);
+    if (!look || !look.found || !look.ended) return notFound(env, url);
+    const res = await sitePage(env, url, `<h1 data-testid="link-ended">This link has ended</h1><p class="h-muted">The calendar that was shared here isn't at this address anymore. Ask the person who shared it for a new link.</p><p><a class="h-btn" href="/">Make a calendar</a></p>`, 410, 'This link has ended · pastecal');
+    res.headers.set('X-Robots-Tag', 'noindex');
+    return res;
 }
