@@ -553,11 +553,12 @@ async function sendSignInEmail(env, to, token, next, kind) {
     // anyone can make us email any address, so nothing they chose goes in the message.
     const trial = typeof next === 'string' && /\?pro=trial$/.test(next);
     const buying = !trial && typeof next === 'string' && /\?pro=/.test(next), paid = kind === 'paid';
-    const subject = paid ? 'Your pastecal sign-in link: manage your new Pro' : trial ? 'Your pastecal sign-in link: start your free Pro trial'
-        : buying ? 'Your pastecal sign-in link: finish locking your calendar' : 'Your pastecal sign-in link';
-    const lead = paid ? 'Thanks for getting Pro. This email already has a pastecal account, so sign in here to get your editor link and manage Pro:'
-        : trial ? `Here is your link to sign in and start your free ${TRIAL_DAYS}-day Pro trial. No card needed:`
-        : buying ? 'Here is your link to sign in and finish locking your calendar. It takes you straight to payment:' : 'Here is your link to sign in to pastecal:';
+    // Checkout and the trial sell Plus (plan id 'pro'), so these name it.
+    const subject = paid ? 'Your pastecal sign-in link: manage your upgraded calendar' : trial ? 'Your pastecal sign-in link: start your free Plus trial'
+        : buying ? 'Your pastecal sign-in link: finish upgrading your calendar' : 'Your pastecal sign-in link';
+    const lead = paid ? 'Thanks for upgrading. This email already has a pastecal account, so sign in here to get your editor link and manage your plan:'
+        : trial ? `Here is your link to sign in and start your free ${TRIAL_DAYS}-day Plus trial. No card needed:`
+        : buying ? 'Here is your link to sign in and finish upgrading your calendar. It takes you straight to payment:' : 'Here is your link to sign in to pastecal:';
     const text = `${lead}\n\n${link}\n\n`
         + `It works once and expires in 15 minutes.\n\n`
         + `If you didn't ask to sign in, you can ignore this email. Nothing will change.\n`;
@@ -589,7 +590,7 @@ function cleanTitle(title, fallback) {
 
 // Once per (calendar, owner), the first time the webhook locks it. Plain text, no key, no token:
 // the owner makes editor links from the calendar itself.
-async function sendWelcomeEmail(env, acc, calendarId, userId, title, trialEnd = null, hasCard = null) {
+async function sendWelcomeEmail(env, acc, calendarId, userId, title, trialEnd = null, hasCard = null, plan = 'pro') {
     try {
         if (!(await acc.claimWelcome(calendarId, userId))) return;
         const user = await acc.getUser(userId);
@@ -599,13 +600,14 @@ async function sendWelcomeEmail(env, acc, calendarId, userId, title, trialEnd = 
         const trialLine = !trialEnd ? '' : hasCard === false
             ? `Your free trial runs until ${formatDay(trialEnd)}. No card is on file, so nothing will be charged. We'll email you a few days before it ends.\n\n`
             : `Your free trial runs until ${formatDay(trialEnd)}. We'll email you a few days before it ends.\n\n`;
-        const text = `Pro is on for ${name}.\n\n${trialLine}`
+        const P = planName(plan);
+        const text = `${P} is on for ${name}.\n\n${trialLine}`
             + `${link}\n\n`
-            + `What's locked now: only you (signed in with this email) and people with an editor link can change this calendar. Everyone else can still view it.\n\n`
-            + `To give someone editor access: open the calendar, choose Share, and copy the Editor link. You can reset or revoke editor links there at any time.\n\n`
-            + `To manage billing: open the calendar's Share panel, or the logo menu, and choose Manage billing. You can also sign in at ${siteHost(env)} with this email.\n\n`
+            + `Who can edit now: only you (signed in with this email) and people with an editor link. Everyone else can still view it.\n\n`
+            + `To give someone editor access: open the calendar, choose the Plus tab, and copy the Editor link. You can reset or revoke editor links there at any time.\n\n`
+            + `To manage billing: open the calendar's Plus tab, or the logo menu, and choose Manage billing. You can also sign in at ${siteHost(env)} with this email.\n\n`
             + `Questions? Write to support@pastecal.com.\n`;
-        await sendEmail(env, user.email, trialEnd ? `Your Pro trial is on for ${name}` : `Pro is on for ${name}`, text, null, 'welcome');
+        await sendEmail(env, user.email, trialEnd ? `Your ${P} trial is on for ${name}` : `${P} is on for ${name}`, text, null, 'welcome');
     } catch (err) {
         console.error('[accounts] welcome email failed:', err && err.message);
     }
@@ -650,21 +652,22 @@ async function sendTrialReminder(env, acc, cfg, s) {
         const st = await LockClient.lockStatus(env, calendarId);
         const name = cleanTitle(st.title, cleanTitle(calendarId, 'your calendar'));
         const day = formatDay(s.trialEnd || s.currentPeriodEnd);
-        // A plain link to the calendar (a Billing Portal link would expire): its Share panel has Keep Pro.
+        // A plain link to the calendar (a Billing Portal link would expire): it opens the Plus tab, which has Keep Plus.
         const keep = `${siteUrl(env)}/${encodeURIComponent(calendarId)}?pro=keep`;
+        const P = planName(row.plan);
         if (card !== false) {
             // A card is on file (or Stripe couldn't say): never promise that nothing is charged.
-            const text = `Your Pro trial for ${name} ends ${day}.\n\n`
-                + `A card is on file for this subscription, so Pro continues after ${day} and the card is charged then. To change or cancel it, open the calendar's Share panel and choose Manage billing:\n${keep}\n\n`
+            const text = `Your ${P} trial for ${name} ends ${day}.\n\n`
+                + `A card is on file for this subscription, so ${P} continues after ${day} and the card is charged then. To change or cancel it, open the calendar's Plus tab and choose Manage billing:\n${keep}\n\n`
                 + `Questions? Write to support@pastecal.com.\n`;
-            return await sendEmail(env, user.email, `Your Pro trial ends ${day}`, text, null, 'trial-reminder');
+            return await sendEmail(env, user.email, `Your ${P} trial ends ${day}`, text, null, 'trial-reminder');
         }
-        const text = `Your Pro trial for ${name} ends ${day}.\n\n`
-            + `Keep Pro: $29 a year, and nothing changes.\n${keep}\n\n`
-            + `If you do nothing, nothing is charged. On ${day} Pro ends and the calendar becomes read-only: everyone can still view it and its calendar feed keeps working, but nobody can edit it. `
-            + `You can then open it to everyone (a free calendar, editable by anyone with the link) or keep Pro, from the calendar's Share panel.\n\n`
+        const text = `Your ${P} trial for ${name} ends ${day}.\n\n`
+            + `Keep ${P}: $29 a year, and nothing changes.\n${keep}\n\n`
+            + `If you do nothing, nothing is charged. On ${day} ${P} ends and the calendar becomes read-only: everyone can still view it and its calendar feed keeps working, but nobody can edit it. `
+            + `You can then open it to everyone (a free calendar, editable by anyone with the link) or keep ${P}, from the calendar's Plus tab.\n\n`
             + `Questions? Write to support@pastecal.com.\n`;
-        await sendEmail(env, user.email, `Your Pro trial ends ${day}`, text, null, 'trial-reminder');
+        await sendEmail(env, user.email, `Your ${P} trial ends ${day}`, text, null, 'trial-reminder');
     } catch (err) {
         console.error('[accounts] trial reminder failed:', err && err.message);
     }
@@ -1080,7 +1083,7 @@ async function checkout(request, env, body) {
     // Right above Stripe's Pay button: which calendar this is for (the title is the payer's own, shown
     // only to them), and on staging which test card to use.
     const title = typeof body.title === 'string' ? body.title.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 60) : '';
-    const forWhat = `Pro for ${title ? `“${title}” (${siteHost(env)}/${back})` : `${siteHost(env)}/${back}`}.`;
+    const forWhat = `Plus for ${title ? `“${title}” (${siteHost(env)}/${back})` : `${siteHost(env)}/${back}`}.`;
     params.custom_text = { submit: { message: cfg.livemode === false ? `${forWhat} ${TEST_CARD_HINT}` : forWhat } };
     // Stripe limits client_reference_id's characters; calendar names can be anything, and metadata has the real id.
     if (/^[A-Za-z0-9_-]{1,200}$/.test(calendarId)) params.client_reference_id = calendarId;
@@ -1275,7 +1278,8 @@ async function applySubscription(env, acc, cfg, s) {
         else {
             await acc.releaseCheckout(calendarId);
             const trialEnd = s.status === 'trialing' ? s.trialEnd || s.currentPeriodEnd : null;
-            await sendWelcomeEmail(env, acc, calendarId, userId, st.title, trialEnd, trialEnd ? await payerHasCard(cfg, s) : null);
+            const row = await acc.getSubscription(s.id);
+            await sendWelcomeEmail(env, acc, calendarId, userId, st.title, trialEnd, trialEnd ? await payerHasCard(cfg, s) : null, row && row.plan);
         }
         return {};
     }

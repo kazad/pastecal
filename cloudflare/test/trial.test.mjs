@@ -70,8 +70,8 @@ try {
     const annEmail = `ann-trial-${run}@example.com`;
     const before = fake.log.length;
     const ann = await signIn(annEmail, `/${enc(cal)}?pro=trial`);
-    assert.equal(ann.mail.subject, 'Your pastecal sign-in link: start your free Pro trial');
-    assert.match(ann.mail.text, /free 30-day Pro trial\. No card needed/);
+    assert.equal(ann.mail.subject, 'Your pastecal sign-in link: start your free Plus trial');
+    assert.match(ann.mail.text, /free 30-day Plus trial\. No card needed/);
     assert.deepEqual(ann.verify.trial, { ok: true });
     assert.equal(ann.verify.next, `/${enc(cal)}?pro=trial`);
     const subCall = fake.log.slice(before).find((l) => l.method === 'POST' && l.path === '/stripe/v1/subscriptions');
@@ -88,7 +88,7 @@ try {
     assert.ok(daysLeft > 29.9 && daysLeft <= 30, `trial ends in 30 days (got ${daysLeft})`);
     assert.equal(st.trial.hasCard, false);
     const welcome = (await outbox(annEmail)).at(-1);
-    assert.match(welcome.subject, /^Your Pro trial is on for /);
+    assert.match(welcome.subject, /^Your Plus trial is on for /);
     assert.match(welcome.text, /No card is on file, so nothing will be charged/);
     step('a sign-in link from "Try Pro free" starts a 30-day trial on verify: direct subscription, no card, cancel at the end; the calendar is locked for that user');
 
@@ -140,10 +140,10 @@ try {
     assert.equal(mails.length, mails0 + 1, 'one reminder, even if Stripe sends the event twice');
     const reminder = mails.at(-1);
     const endDay = new Date(fake.subs.get(subId).trial_end * 1000).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
-    assert.equal(reminder.subject, `Your Pro trial ends ${endDay}`);
+    assert.equal(reminder.subject, `Your Plus trial ends ${endDay}`);
     assert.ok(reminder.text.includes(`https://pastecal.com/${enc(cal)}?pro=keep`), 'Keep Pro link to the calendar');
     assert.match(reminder.text, /becomes read-only: everyone can still view it/);
-    step('trial_will_end sends one "Your Pro trial ends <date>" email with a Keep Pro link (a repeat event sends nothing)');
+    step('trial_will_end sends one "Your Plus trial ends <date>" email with a Keep Plus link (a repeat event sends nothing)');
 
     // --- Day 30, no card: Stripe cancels it -> FREE and READ-ONLY by default.
     fake.subs.get(subId).status = 'canceled';
@@ -258,7 +258,7 @@ try {
     assert.equal((await status(cal2, carl.cookie)).trial.hasCard, true);
     await webhook(event('customer.subscription.trial_will_end', { id: carlSub.id, object: 'subscription' }));
     const cardMail = (await outbox(carlEmail)).at(-1);
-    assert.match(cardMail.subject, /^Your Pro trial ends /);
+    assert.match(cardMail.subject, /^Your Plus trial ends /);
     assert.match(cardMail.text, /A card is on file/); assert.doesNotMatch(cardMail.text, /nothing is charged/);
     step('with a card on file, status says hasCard and the day-27 email says the card is charged (never "nothing is charged")');
 
