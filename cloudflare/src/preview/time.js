@@ -103,6 +103,23 @@ export function inferZone(events) {
     }
     return bestScore >= Math.ceil(use.length / 2) ? best : null;
 }
+/**
+ * The same guess, only when it can be trusted for clock times: at least 3 all-day samples and 80% of
+ * them agreeing on one zone. A wrong time on a link card is worse than no time, so anything weaker is null.
+ */
+export function confidentZone(events) {
+    const all = (events || []).filter((e) => e && e.isAllDay && e.start && !isNaN(Date.parse(e.start)));
+    const use = all.map((e) => Date.parse(e.start)).sort((a, b) => b - a).slice(0, 40);
+    if (use.length < 3) return null;
+    const tz = inferZone(all);
+    if (!tz) return null;
+    const agree = use.filter((ms) => {
+        let o = -Math.round(((ms % DAY_MS) + DAY_MS) % DAY_MS / 60000);
+        if (o < -12 * 60) o += 1440;
+        return offsetMin(tz, ms) === o;
+    }).length;
+    return agree >= Math.ceil(use.length * 0.8) ? tz : null;
+}
 
 // ---- dates as day numbers (UTC-midnight ms of a calendar date) ---------------------------------
 export const dayKey = (y, m, d) => Date.UTC(y, m, d);

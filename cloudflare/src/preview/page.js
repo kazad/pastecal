@@ -49,7 +49,9 @@ export async function loadPreview(env, target) {
 
 // What changes the card: the calendar's version, the date (events pass), and the branding setting.
 export function cardStamp(cal, now) {
-    return `${cal.v || 0}-${isoDay(dayOf(now, 'UTC')).replace(/-/g, '')}${cal.pro && cal.hideBranding ? '-nb' : ''}`;
+    // the zone too: storing a calendar's time zone doesn't bump its version, but it changes the card's times
+    const zone = cal.tz ? '-' + String(cal.tz).replace(/[^A-Za-z]/g, '').slice(0, 12) : '';
+    return `${cal.v || 0}-${isoDay(dayOf(now, 'UTC')).replace(/-/g, '')}${zone}${cal.pro && cal.hideBranding ? '-nb' : ''}`;
 }
 
 /**

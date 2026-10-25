@@ -79,6 +79,7 @@ import { DurableObject } from 'cloudflare:workers';
 import EventStore from '../../public/services/EventStore.js';
 import { initInsight, countHit, insightRoute, INSIGHT_ROUTES } from './RoomInsight.js';
 import { planName } from './Plans.js';
+import { validZone } from './preview/time.js';
 
 export const LIMITS = {
     savesPerMinute: 60,          // per calendar: far above people, far below a loop
@@ -105,6 +106,22 @@ function clientOptions(o) {
     if (!o || typeof o !== 'object' || Array.isArray(o)) return o;
     if (!Object.keys(o).some((k) => SERVER_ONLY_OPTIONS.test(k))) return o;
     return Object.fromEntries(Object.entries(o).filter(([k]) => !SERVER_ONLY_OPTIONS.test(k)));
+}
+
+// ---- The calendar's time zone (options.tz, an IANA name) ----
+// Browsers fill it in when it is unset (their own zone: Intl resolvedOptions); it is never changed
+// automatically after that (a Settings field may later send setTz). Link previews use it for clock times.
+// -> options with tz kept valid: an invalid incoming tz is dropped; a stored tz wins unless `explicit`.
+function withTz(incoming, stored, explicit = false) {
+    if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming) || !('tz' in incoming)) return incoming;
+    const out = { ...incoming };
+    const tz = validZone(out.tz);
+    const keep = stored && typeof stored.tz === 'string' && validZone(stored.tz) ? stored.tz : null;
+    if (keep && !(explicit && tz)) out.tz = keep;
+    else if (tz) out.tz = tz;
+    else if (keep) out.tz = keep;
+    else delete out.tz;
+    return out;
 }
 
 const LOCK_ROUTES = new Set(['lock', 'unlock', 'rotate-editor-key', 'lock-status', 'can-edit', 'set-view-id', 'editor-of-record',
@@ -304,6 +321,7 @@ export class CalendarRoom extends DurableObject {
         allDay.sort().reverse();
         const ps = this.proSettings();
         return { v: s.v, title: s.title, colors: Array.isArray(s.options && s.options.colors) ? s.options.colors.slice(0, 32) : null,
+            tz: s.options && typeof s.options.tz === 'string' ? s.options.tz : null,
             events: out, zoneSamples: allDay.slice(0, 40), pro: !!this.lock, hideBranding: !!(ps && ps.hideBranding) };
     }
     snapshotFor(att) {
@@ -926,7 +944,7 @@ export class CalendarRoom extends DurableObject {
         if (!cal || typeof cal !== 'object') return { ok: false, status: 400, error: 'bad calendar' };
         const title = cal.title ?? '';
         if (typeof title !== 'string' || title.length > LIMITS.maxTitle) return { ok: false, status: 400, error: 'bad title' };
-        const options = clientOptions(cal.options ?? {});
+        const options = withTz(clientOptions(cal.options ?? {}), null);
         if (typeof options !== 'object' || Array.isArray(options) || json(options).length > LIMITS.maxField * 5) {
             return { ok: false, status: 400, error: 'bad options' };
         }
@@ -949,6 +967,11 @@ export class CalendarRoom extends DurableObject {
         if (this.lock) return { ok: false, status: 423, error: 'locked' };
         if (this.paused()) return { ok: false, status: 423, error: 'paused' };          // same reason, after Pro
         cal = { ...cal, options: clientOptions(cal.options) };
+        // The Firebase shadow never carries tz: a stored zone stays (and an invalid one never lands).
+        if (cal.options && typeof cal.options === 'object' && !Array.isArray(cal.options)) {
+            const stored = this.state.options && validZone(this.state.options.tz) ? this.state.options.tz : null;
+            cal.options = stored && !('tz' in cal.options) ? { ...cal.options, tz: stored } : withTz(cal.options, this.state.options);
+        }
         const { events, renamed } = this.dedupe(cal);
         const why = this.tooBig(events, { title: cal.title ?? '', options: cal.options || {} });
         if (why) return { ok: false, error: why };
@@ -1277,6 +1300,12 @@ export class CalendarRoom extends DurableObject {
             const beforeOptions = this.state.options;
             const touched = new Set([...result.added, ...result.changed].map(EventStore.keyOf));
             this.storeEvents(result.events, touched);
+            // An editing browser names its time zone; it is stored once, only while the calendar has none.
+            const tz = validZone(m.tz);
+            if (tz && !(this.state.options && validZone(this.state.options.tz))) {
+                this.state.options = { ...(this.state.options || {}), tz };
+                this.setMeta('options', this.state.options);
+            }
             this.bump('save', m.commands, { beforeEvents, beforeTitle, beforeOptions, writer: m.writer || null });   // never the author uid: history is public, the uid proves who made it
             ws.send(json({ t: 'ack', id: m.id, v: this.state.v }));
             this.broadcast({ t: 'change', v: this.state.v, commands: m.commands }, ws);
@@ -1294,7 +1323,7 @@ export class CalendarRoom extends DurableObject {
                 nextTitle = m.title; changed = true;
             }
             if (m.options && typeof m.options === 'object') {
-                const next = { ...s.options, ...clientOptions(m.options) };   // keys merge (publicViewId survives)
+                const next = { ...s.options, ...withTz(clientOptions(m.options), s.options, m.setTz === true) };   // keys merge (publicViewId survives); a stored tz stays
                 if (json(next).length > LIMITS.maxField * 5) return refuse('too_big', 'settings too large');
                 if (json(next) !== json(s.options)) { nextOptions = next; changed = true; }
             }

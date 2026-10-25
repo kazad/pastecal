@@ -17,7 +17,7 @@ const pdtMidnight = (d) => new Date(Date.parse(`${d}T07:00:00Z`)).toISOString();
 const at = (d, h) => new Date(Date.parse(`${d}T00:00:00Z`) + (h + 7) * 3600000).toISOString();
 
 const choir = () => ({
-    v: 7, title: 'Riverside "Youth" <Choir> & Friends',
+    v: 7, title: 'Riverside "Youth" <Choir> & Friends', tz: 'America/Los_Angeles',
     colors: ['#3f51b5', 'javascript:alert(1)', 'url(x)'],
     events: [
         { id: 1, title: 'Sectionals', start: pdtMidnight('2026-10-25'), end: pdtMidnight('2026-10-26'), isAllDay: true, type: 1 },
@@ -88,7 +88,7 @@ test('the description lists the next events with dates; no past events, no notes
 
 test('recurring events: the next occurrences, minus deleted ones, in the authors\' time zone', async () => {
     const { describe, cardModel } = await src('model.js');
-    const cal = { title: 'Weekly', events: [
+    const cal = { title: 'Weekly', tz: 'America/Los_Angeles', events: [
         { id: 'w', title: 'Practice', start: at('2026-10-06', 18), end: at('2026-10-06', 19), recurrencerule: 'FREQ=WEEKLY;BYDAY=TU;INTERVAL=1;', recurrenceException: '20261028T010000Z' },
         { id: 'z', title: 'Zone hint', start: pdtMidnight('2026-09-01'), end: pdtMidnight('2026-09-02'), isAllDay: true },
     ] };
@@ -162,7 +162,7 @@ test('calendar pages: tags about the calendar; edit and view links share the vie
     const view = await (await previewPage(new Request('https://pastecal.com/view/ut6uc46ub4'), env, page(), { kind: 'view', id: 'ut6uc46ub4' }, NOW)).text();
     assert.match(edit, /og:title" content="Riverside &quot;Youth&quot; &lt;Choir&gt; &amp; Friends"/);
     assert.match(edit, /og:description" content="Sun Oct 25 · Sectionals · Tue Oct 27 · Full &lt;b&gt;rehearsal&lt;\/b&gt; · Sun Nov 1 · Concert"/);
-    assert.match(edit, /og:image" content="https:\/\/pastecal\.com\/og\/choir\.png\?v=7-20261024"/);
+    assert.match(edit, /og:image" content="https:\/\/pastecal\.com\/og\/choir\.png\?v=7-20261024-AmericaLosAn"/);
     const desc = (h) => h.match(/og:description" content="([^"]*)"/)[1];
     assert.equal(desc(view), desc(edit));
     assert.ok(!view.includes('/choir'), 'a view link\'s tags never name the calendar behind it');
@@ -215,4 +215,44 @@ test('the card version stamp changes with the calendar, the date and the brandin
     assert.notEqual(cardStamp({ v: 8 }, NOW), a);
     assert.notEqual(cardStamp({ v: 7 }, NOW + DAY), a);
     assert.notEqual(cardStamp({ v: 7, pro: true, hideBranding: true }, NOW), a);
+});
+
+// ---- the calendar's own time zone (options.tz), and never a guessed clock time ----
+test('a calendar with its time zone: an LA 5pm practice is "Tue · 5pm" on the card and Tue Oct 27 in the description', async () => {
+    const { cardModel, describe } = await src('model.js');
+    const cal = { v: 3, title: 'Soccer', tz: 'America/Los_Angeles', events: [{ id: 'p', title: 'Practice', start: at('2026-10-27', 17), end: at('2026-10-27', 18), type: 1 }] };
+    const m = cardModel(cal, NOW);
+    assert.equal(m.events[0].time, '5pm');
+    assert.equal(new Date(m.events[0].day).getUTCDay(), 2, 'Tuesday');
+    assert.equal(describe(cal, NOW), 'Tue Oct 27 · Practice');
+});
+
+test('no stored time zone and no confident guess: dates and weekdays, no clock times (never a wrong time)', async () => {
+    const { cardModel, describe, chooseZone } = await src('model.js');
+    const cal = { v: 3, title: 'Soccer', events: [{ id: 'p', title: 'Practice', start: at('2026-10-27', 10), end: at('2026-10-27', 11), type: 1 }] };
+    assert.equal(chooseZone(cal, null).noTimes, true);
+    const m = cardModel(cal, NOW);
+    assert.equal(m.events[0].time, null, 'no clock time');
+    assert.equal(m.tzLabel, '');
+    assert.equal(describe(cal, NOW), 'Tue Oct 27 · Practice');
+    // One or two all-day events are not enough to trust a zone; three that agree are.
+    const allDay = (d) => ({ id: d, title: 'x', start: pdtMidnight(d), end: pdtMidnight(d), isAllDay: true });
+    assert.equal(chooseZone({ events: [allDay('2026-09-01'), allDay('2026-09-02')] }, null).noTimes, true);
+    const three = { events: [allDay('2026-09-01'), allDay('2026-09-02'), allDay('2026-09-03'), cal.events[0]] };
+    assert.deepEqual([chooseZone(three, null).tz, chooseZone(three, null).noTimes], ['America/Los_Angeles', false]);
+    assert.equal(cardModel(three, NOW).events.find((e) => e.title === 'Practice').time, '10am');
+    // An invalid stored zone is ignored, not trusted.
+    assert.equal(chooseZone({ ...cal, tz: 'Mars/Olympus' }, null).noTimes, true);
+});
+
+test('the card stamp changes when a time zone is stored (it does not bump the version)', async () => {
+    const { cardStamp } = await src('page.js');
+    assert.notEqual(cardStamp({ v: 3 }, NOW), cardStamp({ v: 3, tz: 'America/Los_Angeles' }, NOW));
+});
+
+test('the app sends its time zone: on create (when the calendar has none) and with each save', () => {
+    const cloud = fs.readFileSync(path.join(__dirname, '../../public/services/CloudCalendarService.js'), 'utf8');
+    assert.match(cloud, /Intl\.DateTimeFormat\(\)\.resolvedOptions\(\)\.timeZone/);
+    assert.match(cloud, /!body\.options\.tz\) body\.options = \{ \.\.\.body\.options, tz \}/, 'never replaces a tz the options already carry');
+    assert.match(cloud, /t: 'save', id, v: room\.v, commands, author, writer, \.\.\.\(tz \? \{ tz \} : \{\}\)/);
 });
