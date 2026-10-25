@@ -2422,3 +2422,5 @@ select.pc-set-input { padding-right: 6px; text-overflow: ellipsis }
 /* The homepage ends with the shared site footer, aligned to the tour's column; the tour's own background already separates it. */
 .pc-home-site-footer { --site-max: 1040px }
 .pc-home-site-footer .site-footer { margin-top: 0; border-top: 0 }
+.pc-gopro-soon { margin: 8px 0 0; color: var(--pc-text-muted); font-size: 13px; line-height: 1.45 }
+.pc-gopro-soon a { color: var(--pc-link); white-space: nowrap }
