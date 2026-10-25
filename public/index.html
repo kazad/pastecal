@@ -1355,7 +1355,7 @@
                 </ol>
                 </template>
                 <p v-if="!homeRecents.length" class="pc-home-links"><a v-if="!template" class="pc-home-more" href="/view/demo" data-from="home-panel">See a demo calendar →</a><a class="pc-home-more" href="#how">How pastecal works ↓</a></p>
-                <p v-if="!homeRecents.length" class="pc-home-proof"><span class="pc-quote">“I’ve introduced my apartment complex to it, as it has a shared space on the rooftop that we wanted people to be able to book, in an easy no-login way.”</span><span><strong>3,000+</strong> calendars made since 2021</span></p>
+                <p v-if="!homeRecents.length" class="pc-home-proof"><span><strong>3,000+</strong> calendars made since 2021</span></p>
                 </div>
             </aside>
             <!-- Below the docking width the panel floats over the calendar; this dims what is behind it. -->
@@ -1365,12 +1365,10 @@
                 <!-- Homepage only: what pastecal is, for people who scroll past the calendar. -->
         <section v-if="isHomepageCalendar" id="how" class="pc-tour" aria-labelledby="pc-tour-title" data-testid="homepage-tour" :data-variant="tourVariant" v-cloak>
             <div class="pc-tour-inner">
-                <div data-tour="intro">
-                <!-- With the side column showing (wide screens), it carries the headline, so this
-                     section opens with its own plain title instead of repeating it. -->
-                <h2 id="pc-tour-title" class="pc-intro-full">{{ tourCopy.title }}</h2>
-                <p class="pc-tour-lead pc-intro-full">{{ tourCopy.lead }}</p>
-                <h2 class="pc-intro-short">Add events. Paste a link. Done.</h2>
+                <div class="pc-tour-intro" data-tour="intro">
+                <p class="pc-tour-kicker">{{ tourCopy.kicker }}</p>
+                <h2 id="pc-tour-title">{{ tourCopy.title }}</h2>
+                <p class="pc-tour-facts"><span>No login</span><span>Nothing to install</span><span>Free</span></p>
                 </div>
 
                 <ol class="pc-tour-steps" data-tour="steps">
@@ -1404,7 +1402,7 @@
                             </div>
                         </div>
                         <h3>Paste your link</h3>
-                        <p>Press Save &amp; share, then paste it into your group chat or email.</p>
+                        <p>Press Save &amp; share. Paste it in the group chat.</p>
                     </li>
                     <li>
                         <div class="pc-tour-art pc-art-sync" role="img" aria-label="Two phones showing the same calendar. Game changes from 10am to 11am on the first phone, and the second phone updates a moment later.">
@@ -1427,73 +1425,89 @@
                             </div>
                         </div>
                         <h3>Everyone stays in sync</h3>
-                        <p>Change an event and everyone sees it instantly.</p>
+                        <p>Change an event. Everyone sees it.</p>
                     </li>
                 </ol>
                 <p class="pc-tour-cta"><a class="pc-tour-start" href="#" @click.prevent="startFromTour">Start your calendar ↑</a><a href="/view/demo" data-from="home-steps">See a demo calendar →</a></p>
 
-                <div class="pc-tour-why" data-tour="why">
+                <!-- Before / with pastecal: the setup other shared calendars ask for, next to this one's. -->
+                <div class="pc-vs-wrap" data-tour="why">
                 <h3 class="pc-tour-label">Why pastecal</h3>
-                <p class="pc-tour-why-lead"><b>Refreshingly simple.</b> Other shared calendars make everyone create an account, invite people one email at a time, and bury sharing in settings. With pastecal, the calendar is a link.</p>
-                <ul class="pc-tour-why-list">
-                    <li><h4>Pick any name</h4><p><code>pastecal.com/<i>your-name</i></code> is your calendar. Add events and you're done.</p></li>
-                    <li><h4>Nothing to install</h4><p>No login required and no app. Nobody you share with needs an account.</p></li>
-                    <li><h4>One link for everyone</h4><p>An edit link for helpers, a view-only link for the group chat.</p></li>
-                    <li><h4>Private when you want</h4><p>Pick a secret name nobody can guess. Edit links are kept out of search engines.</p></li>
-                    <li><h4>In their own calendar</h4><p>On their phone, laptop or desktop: subscribe once in Google, Apple or Outlook, and every change shows up there.</p></li>
-                    <li><h4>Pro when you need more</h4><p>Lock who can edit, see every change, and restore any version.</p></li>
-                </ul>
+                <div class="pc-vs">
+                    <section class="pc-vs-old" aria-labelledby="pc-vs-old">
+                        <h4 id="pc-vs-old"><span>Before</span><small>6 steps</small></h4>
+                        <ol class="pc-vs-steps">
+                            <li><svg class="pc-vs-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>Make an account</li>
+                            <li><svg class="pc-vs-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 12V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/><path d="m16 19 2 2 4-4"/></svg>Confirm your email</li>
+                            <li><svg class="pc-vs-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Invite people one by one</li>
+                            <li><svg class="pc-vs-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4"/></svg>Find the sharing settings</li>
+                            <li><svg class="pc-vs-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>Get everyone to install an app</li>
+                            <li><svg class="pc-vs-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>Send a link like this:</li>
+                        </ol>
+                        <p class="pc-vs-link pc-vs-link--bad"><code>calendar.example.com/embed?src=c_8f3k2q9x7v1m%40group.calendar.example.com&amp;ctz=America%2FNew_York</code><span>Hard to read. Impossible to remember.</span></p>
+                    </section>
+                    <section class="pc-vs-new" aria-labelledby="pc-vs-new">
+                        <h4 id="pc-vs-new"><span>With pastecal</span><small>3 steps</small></h4>
+                        <ol class="pc-vs-steps">
+                            <li><svg class="pc-vs-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>Pick a name</li>
+                        </ol>
+                        <p class="pc-vs-link pc-vs-link--good"><code>pastecal.com/<b>soccer-fall</b></code><span>Easy to read. Easy to remember. Your own name.</span></p>
+                        <ol class="pc-vs-steps" start="2">
+                            <li><svg class="pc-vs-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>Send it</li>
+                            <li><svg class="pc-vs-ico" viewBox="0 0 24 24" aria-hidden="true"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="m9 16 2 2 4-4"/></svg>Everyone sees it and adds it to their phone</li>
+                        </ol>
+                        <p class="pc-vs-done"><span class="pc-vs-crowd" aria-hidden="true"><i>A</i><i>J</i><i>M</i><i>S</i><i>+9</i></span><b>Done.</b></p>
+                    </section>
+                </div>
                 <div class="pc-tour-quotes">
                     <blockquote>“I’ve introduced my apartment complex to it, as it has a shared space on the rooftop that we wanted people to be able to book, in an easy no-login way.”</blockquote>
                     <blockquote>“I find it an amazing tool … simplicity is the great feature of pastecal.”</blockquote>
                 </div>
-                <p class="pc-tour-proof"><strong>3,000+</strong> calendars made since 2021</p>
+                <p class="pc-tour-proof pc-intro-full"><strong>3,000+</strong> calendars made since 2021</p>
                 </div>
+
                 <h3 class="pc-tour-label">How to share it</h3>
                 <div class="pc-tour-links" data-tour="share">
-                    <div><div class="pc-tour-art pc-share-scene" role="img" aria-label="The calendar at pastecal.com/soccer-fall with a Can edit badge: anyone with this link is adding an event."><div class="pc-ss-win"><div class="pc-ss-bar">pastecal.com/<b>soccer-fall</b></div><div class="pc-ss-row"><i>13<em class="c1">Practice</em></i><i>14</i><i>15<em class="pc-ss-adding">Snack: Joe</em></i><i>16</i><i>17<em class="c2">Game</em></i></div></div><span class="pc-ss-badge"><svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M17 3a2.8 2.8 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>Can edit</span></div><h4>Edit link <span>for helpers</span></h4><code>pastecal.com/soccer-fall</code><p>For the people who run the calendar. Anyone with it can add and change events.</p></div>
-                    <div class="pc-tour-link-main"><div class="pc-tour-art pc-share-scene" role="img" aria-label="A phone showing the same calendar with a View only badge: people see every event but cannot change it."><div class="pc-ss-phone"><b class="pc-ss-title">Tigers U10</b><span class="pc-ss-day">Sat 17</span><em class="c1">Practice 9am</em><em class="c2">Game 11am</em><span class="pc-ss-day">Sun 18</span><em class="pc-ss-c3">Picnic 1pm</em></div><span class="pc-ss-badge"><svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>View only</span></div><h4>View-only link <span>for everyone</span></h4><code><a href="/view/ni191jkhnx" data-from="home-share" class="pc-demo-code">pastecal.com/view/ni191jkhnx</a></code><p>Send it to the group chat, post it, or embed it. People see every change but can't edit, and never see the edit link.</p></div>
-                    <div><div class="pc-tour-art pc-share-scene" role="img" aria-label="Someone's own calendar app: their own events and the team's events side by side, marked Subscribed."><div class="pc-ss-phone pc-ss-app"><b class="pc-ss-title">My calendar · Today</b><em class="pc-ss-mine">9:00 Work standup</em><em class="c1">5:00 Practice <small>Tigers U10</small></em><em class="pc-ss-mine">7:30 Dinner with Sam</em><em class="c2">Sat 11:00 Game <small>Tigers U10</small></em></div><span class="pc-ss-badge pc-ss-ok"><svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 21v-5h5M21 3v5h-5"/></svg>Subscribed</span></div><h4>Add to phone or desktop</h4><code>pastecal.com/view/ni191jkhnx.ics</code><p>Subscribe in Google, Apple or Outlook Calendar. Events show up next to your own and stay up to date.</p></div>
+                    <div><div class="pc-tour-art pc-share-scene" role="img" aria-label="The calendar at pastecal.com/soccer-fall with a Can edit badge: anyone with this link is adding an event."><div class="pc-ss-win"><div class="pc-ss-bar">pastecal.com/<b>soccer-fall</b></div><div class="pc-ss-row"><i>13<em class="c1">Practice</em></i><i>14</i><i>15<em class="pc-ss-adding">Snack: Joe</em></i><i>16</i><i>17<em class="c2">Game</em></i></div></div><span class="pc-ss-badge"><svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M17 3a2.8 2.8 0 0 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>Can edit</span></div><h4>Edit link <span>for helpers</span></h4><code>pastecal.com/soccer-fall</code><p>For helpers. Anyone with it can add and change events.</p></div>
+                    <div><div class="pc-tour-art pc-share-scene" role="img" aria-label="A phone showing the same calendar with a View only badge: people see every event but cannot change it."><div class="pc-ss-phone"><b class="pc-ss-title">Tigers U10</b><span class="pc-ss-day">Sat 17</span><em class="c1">Practice 9am</em><em class="c2">Game 11am</em><span class="pc-ss-day">Sun 18</span><em class="pc-ss-c3">Picnic 1pm</em></div><span class="pc-ss-badge"><svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>View only</span></div><h4>View-only link <span>for everyone</span></h4><code><a href="/view/ni191jkhnx" data-from="home-share" class="pc-demo-code">pastecal.com/view/ni191jkhnx</a></code><p>For the group chat, a post or your website. People see every change but can't edit.</p></div>
+                    <div><div class="pc-tour-art pc-share-scene" role="img" aria-label="Someone's own calendar app: their own events and the team's events side by side, marked Subscribed."><div class="pc-ss-phone pc-ss-app"><b class="pc-ss-title">My calendar · Today</b><em class="pc-ss-mine">9:00 Work standup</em><em class="c1">5:00 Practice <small>Tigers U10</small></em><em class="pc-ss-mine">7:30 Dinner with Sam</em><em class="c2">Sat 11:00 Game <small>Tigers U10</small></em></div><span class="pc-ss-badge pc-ss-ok"><svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 21v-5h5M21 3v5h-5"/></svg>Subscribed</span></div><h4>Add to phone or desktop</h4><code>pastecal.com/view/ni191jkhnx.ics</code><p>Subscribe once in Google, Apple or Outlook. Events stay up to date.</p></div>
                 </div>
 
                 <div data-tour="uses">
                 <!-- Icons: Lucide (lucide.dev), ISC license. -->
                 <h3 class="pc-tour-label">What people use it for</h3>
                 <div class="pc-tour-uses">
-                    <div><svg class="pc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="8" height="4" x="8" y="2" rx="1" ry="1" /> <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /> <path d="m9 14 2 2 4-4" /></svg><h4>Sign-up sheets and volunteer shifts</h4><p>People put their name on a slot: shifts, coverage, chores, rides.</p></div>
-                    <div><svg class="pc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 4h3a2 2 0 0 1 2 2v14" /> <path d="M2 20h3" /> <path d="M13 20h9" /> <path d="M10 12v.01" /> <path d="M13 4.562v16.157a1 1 0 0 1-1.242.97L5 20V5.562a2 2 0 0 1 1.515-1.94l4-1A2 2 0 0 1 13 4.561Z" /></svg><h4>Booking a shared space</h4><p>Meeting rooms, studios, halls, parking. Rules go in the notes.</p></div>
-                    <div><svg class="pc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 8c0-2.76-2.46-5-5.5-5S2 5.24 2 8h2l1-1 1 1h4" /> <path d="M13 7.14A5.82 5.82 0 0 1 16.5 6c3.04 0 5.5 2.24 5.5 5h-3l-1-1-1 1h-3" /> <path d="M5.89 9.71c-2.15 2.15-2.3 5.47-.35 7.43l4.24-4.25.7-.7.71-.71 2.12-2.12c-1.95-1.96-5.27-1.8-7.42.35" /> <path d="M11 15.5c.5 2.5-.17 4.5-1 6.5h4c2-5.5-.5-12-1-14" /></svg><h4>Who's away or working from home</h4><p>Leave and remote days, one color per person or team.</p></div>
-                    <div><svg class="pc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /> <circle cx="9" cy="7" r="4" /> <path d="M22 21v-2a4 4 0 0 0-3-3.87" /> <path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg><h4>Club, faith and community events</h4><p>One public calendar for members, with a view-only link.</p></div>
-                    <div><svg class="pc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" /> <path d="M12 5 9.04 7.96a2.17 2.17 0 0 0 0 3.08c.82.82 2.13.85 3 .07l2.07-1.9a2.82 2.82 0 0 1 3.79 0l2.96 2.66" /> <path d="m18 15-2-2" /> <path d="m15 18-2-2" /></svg><h4>Caring for a family member</h4><p>Who visits when, who covers which day.</p></div>
-                    <div><svg class="pc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z" /> <path d="M22 10v6" /> <path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5" /></svg><h4>School and classes</h4><p>Exams, homework, games and concerts.</p></div>
-                    <div><svg class="pc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" /></svg><h4>Group trips and weddings</h4><p>Itineraries everyone can check from their phone.</p></div>
-                    <div><svg class="pc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13" /> <circle cx="6" cy="18" r="3" /> <circle cx="18" cy="16" r="3" /></svg><h4>Bands, studios and gigs</h4><p>Rehearsals, jam-room slots and shows.</p></div>
-                    <div><svg class="pc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7" /> <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" /> <path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4" /> <path d="M2 7h20" /> <path d="M22 7v3a2 2 0 0 1-2 2a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 16 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 12 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 8 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 4 12a2 2 0 0 1-2-2V7" /></svg><h4>Small business schedules</h4><p>Appointments by staff member, deliveries, promotions.</p></div>
+                    <div><svg class="pc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="8" height="4" x="8" y="2" rx="1" ry="1" /> <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /> <path d="m9 14 2 2 4-4" /></svg><h4>Sign-up sheets</h4><p>Shifts, chores, rides</p></div>
+                    <div><svg class="pc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 4h3a2 2 0 0 1 2 2v14" /> <path d="M2 20h3" /> <path d="M13 20h9" /> <path d="M10 12v.01" /> <path d="M13 4.562v16.157a1 1 0 0 1-1.242.97L5 20V5.562a2 2 0 0 1 1.515-1.94l4-1A2 2 0 0 1 13 4.561Z" /></svg><h4>Shared spaces</h4><p>Rooms, studios, parking</p></div>
+                    <div><svg class="pc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 8c0-2.76-2.46-5-5.5-5S2 5.24 2 8h2l1-1 1 1h4" /> <path d="M13 7.14A5.82 5.82 0 0 1 16.5 6c3.04 0 5.5 2.24 5.5 5h-3l-1-1-1 1h-3" /> <path d="M5.89 9.71c-2.15 2.15-2.3 5.47-.35 7.43l4.24-4.25.7-.7.71-.71 2.12-2.12c-1.95-1.96-5.27-1.8-7.42.35" /> <path d="M11 15.5c.5 2.5-.17 4.5-1 6.5h4c2-5.5-.5-12-1-14" /></svg><h4>Who's away</h4><p>Leave and remote days</p></div>
+                    <div><svg class="pc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /> <circle cx="9" cy="7" r="4" /> <path d="M22 21v-2a4 4 0 0 0-3-3.87" /> <path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg><h4>Clubs and community</h4><p>Members see every event</p></div>
+                    <div><svg class="pc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" /> <path d="M12 5 9.04 7.96a2.17 2.17 0 0 0 0 3.08c.82.82 2.13.85 3 .07l2.07-1.9a2.82 2.82 0 0 1 3.79 0l2.96 2.66" /> <path d="m18 15-2-2" /> <path d="m15 18-2-2" /></svg><h4>Family care</h4><p>Who visits when</p></div>
+                    <div><svg class="pc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z" /> <path d="M22 10v6" /> <path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5" /></svg><h4>School and classes</h4><p>Exams, games, concerts</p></div>
+                    <div><svg class="pc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" /></svg><h4>Trips and weddings</h4><p>The plan, on every phone</p></div>
+                    <div><svg class="pc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13" /> <circle cx="6" cy="18" r="3" /> <circle cx="18" cy="16" r="3" /></svg><h4>Bands and gigs</h4><p>Rehearsals and shows</p></div>
+                    <div><svg class="pc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7" /> <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" /> <path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4" /> <path d="M2 7h20" /> <path d="M22 7v3a2 2 0 0 1-2 2a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 16 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 12 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 8 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 4 12a2 2 0 0 1-2-2V7" /></svg><h4>Small business</h4><p>Staff, deliveries, promos</p></div>
                 </div>
                 </div>
-
-                <ul class="pc-tour-trust">
-                    <li>Recent changes can be undone.</li>
-                    <li>Calendars are backed up every day they change.</li>
-                    <li>Edit links are kept out of search engines.</li>
-                </ul>
 
                 <div data-tour="pricing">
                 <h3 class="pc-tour-label">Pricing</h3>
                 <div class="pc-tour-plans">
-                    <div><h4>Free</h4><p>Unlimited calendars and people, no login required. Edit and view-only links, calendar-app feeds, undo and daily backups.</p></div>
-                    <div class="pc-tour-plan-pro"><h4>Pro <span>from $24 a year</span></h4><p>For calendars you run: lock who can edit, restore any version, and see who's viewing and following, as counts.</p><a href="/pricing" class="pc-pro-link" data-from="home-pricing">Compare plans →</a></div>
+                    <div><h4>Free</h4><p class="pc-plan-price"><b>$0</b></p><p>No login required.</p></div>
+                    <div class="pc-tour-plan-pro"><span class="pc-plan-tag pc-plan-tag--on">Available now</span><h4>Pro Single</h4><p class="pc-plan-price"><b>$24</b> a year</p><p>Lock one calendar. Try it free for 30 days, no card.</p></div>
+                    <div><span class="pc-plan-tag">In development</span><h4>Pro Unlimited</h4><p class="pc-plan-price"><b>$79</b> a year <small>or $8 a month</small></p><p>Unlimited calendars under your own <code>pastecal.com/@name</code></p></div>
+                    <div><span class="pc-plan-tag">In development</span><h4>Teams</h4><p class="pc-plan-price"><b>$290</b> a year <small>or $29 a month</small></p><p>Several admins, your logo.</p></div>
                 </div>
+                <p class="pc-tour-plans-more"><a href="/pricing" class="pc-pro-link" data-from="home-pricing">Compare plans →</a></p>
                 </div>
 
                 <h3 class="pc-tour-label">Questions</h3>
                 <div class="pc-tour-faq" data-tour="faq">
-                    <details><summary>Who can change my calendar?</summary><p>Anyone with the edit link. Send the view-only link to people who only need to look.</p></details>
-                    <details><summary>Is it private?</summary><p>Anyone with a link can open it, so give a private calendar a hard-to-guess name. Edit links are kept out of search engines.</p></details>
+                    <details><summary>Who can change my calendar?</summary><p>Anyone with the edit link. Everyone else gets the view-only link.</p></details>
+                    <details><summary>Is it private?</summary><p>Anyone with a link can open it, so pick a hard-to-guess name. Edit links are kept out of search engines.</p></details>
                     <details><summary>Can I undo a change?</summary><p>Yes. Click "Edited … ago" at the top to see recent changes and put any of them back.</p></details>
                     <details><summary>Does it work on phones?</summary><p>Yes, in any phone browser. There is nothing to install.</p></details>
-                    <details><summary>Is it free?</summary><p>Yes. Making, editing and sharing calendars is free, with no card needed. Pro adds locking, full history and stats for $24 a year per calendar: <a href="/pricing" data-from="home-faq">see Pro</a>.</p></details>
-                    <details><summary>Can I put it on my website?</summary><p>Yes. Put the view-only link in an iframe and visitors see your calendar as it changes:</p><code class="pc-tour-snippet">&lt;iframe src="https://pastecal.com/view/ni191jkhnx" width="100%" height="600" style="border:0"&gt;&lt;/iframe&gt;</code></details>
+                    <details><summary>Is it free?</summary><p>Yes, with no card needed. Pro Single is $24 a year, to lock a calendar you run: <a href="/pricing" data-from="home-faq">see Pro</a>.</p></details>
+                    <details><summary>Can I put it on my website?</summary><p>Yes. Put the view-only link in an iframe:</p><code class="pc-tour-snippet">&lt;iframe src="https://pastecal.com/view/ni191jkhnx" width="100%" height="600" style="border:0"&gt;&lt;/iframe&gt;</code></details>
                 </div>
 
                 <p class="pc-tour-end">Your calendar is ready at the top of this page. <a href="#">Back to the calendar ↑</a></p>
