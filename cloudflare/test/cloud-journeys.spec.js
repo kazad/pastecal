@@ -1,7 +1,7 @@
 // @ts-check
 /**
  * The main app on Cloudflare data (?backend=cf), driven like a person: claim a name, add events
- * with +Event, open the link in a second tab, and leave a tab alone. Everything is checked
+ * with + Add event, open the link in a second tab, and leave a tab alone. Everything is checked
  * against the Worker (GET /cal/<id>), the only thing that counts, never an app flag.
  * Needs `wrangler dev` on BASE_URL (default http://localhost:8787).
  */
@@ -25,24 +25,24 @@ test('create on Cloudflare, add events, see them in a second tab, and an idle ta
   // 1. claim a name the way people do; ?backend=cf switches the backend and is remembered
   await page.goto('/?backend=cf');
   await page.locator('input[placeholder="your-name"]').fill(slug);
-  await page.locator('button:has-text("Claim")').locator('visible=true').first().click();
+  await page.getByTestId("share-new").locator("visible=true").first().click();
   await expect(page).toHaveURL(new RegExp(`/${slug}`, 'i'), { timeout: 20_000 });
   await page.waitForFunction(`${VM_SAFE}?.isExisting === true`, null, { timeout: 20_000 });
   expect((await onServer(page, slug)).id).toBe(slug);
   expect(await page.evaluate(() => CalendarDataService.name)).toBe('CloudCalendarService');
   await info.attach('backend', { body: 'CloudCalendarService' });
 
-  // 2. +Event, typed, three times
+  // 2. + Add event, typed, three times
   const names = ['Cloud one', 'Cloud two', 'Cloud three'];
   for (const [i, n] of names.entries()) {
-    await page.locator('text=+Event').locator('visible=true').first().click();
-    await expect(page.getByText('Add Event by Typing')).toBeVisible();
+    await page.getByTestId('desktop-add-event-button').click();
+    await expect(page.locator('textarea[aria-label="Event description"]')).toBeVisible();
     await page.keyboard.type(`${n} tomorrow at ${9 + i}:00`, { delay: 25 });
     await page.keyboard.press('Enter');
-    await expect(page.getByText('Add Event by Typing')).toHaveCount(0);
+    await expect(page.locator('textarea[aria-label="Event description"]')).toHaveCount(0);
     await page.waitForTimeout(300);
   }
-  await expect.poll(async () => (await onServer(page, slug)).events.map((e) => e.title).sort(), { timeout: 10_000 }).toEqual([...names, 'Sample event'].sort());   // a new calendar starts with a sample event
+  await expect.poll(async () => (await onServer(page, slug)).events.map((e) => e.title).sort(), { timeout: 10_000 }).toEqual([...names, 'Your event here'].sort());   // a new calendar starts with a sample event
   await page.screenshot({ path: 'snapshots/cf-main-app.png' });
 
   // 3. a second person opens the link: sees them, then adds one; the first tab shows it without a reload
@@ -52,7 +52,8 @@ test('create on Cloudflare, add events, see them in a second tab, and an idle ta
   await two.goto(`/${slug}?backend=cf`);
   await two.waitForFunction(`${VM_SAFE}?.isExisting === true`, null, { timeout: 20_000 });
   await expect(two.locator('.e-appointment', { hasText: 'Cloud two' }).first()).toBeVisible({ timeout: 15_000 });
-  await two.locator('text=+Event').locator('visible=true').first().click();
+  await two.getByTestId('desktop-add-event-button').click();
+  await expect(two.locator('textarea[aria-label="Event description"]')).toBeVisible();
   await two.keyboard.type('From tab two tomorrow at 15:00', { delay: 25 });
   await two.keyboard.press('Enter');
   // (the month cell folds a 4th event into "+2 more", so read the app's own list, not the grid)
