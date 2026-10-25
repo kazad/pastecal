@@ -119,7 +119,7 @@ test('edit link: the footer is quiet links only, with no Make your own', async (
   const { ctx, page } = await open(browser, `/${id}?backend=cf`);
   const footer = page.getByTestId('edit-footer');
   await expect(footer).toBeVisible();
-  await expect(footer.getByRole('link')).toHaveText(['pastecal · Simple shared calendars', 'Help', 'Privacy', 'Terms']);
+  await expect(footer.getByRole('link')).toHaveText(['pastecal · Simple shared calendars', 'Pricing', 'Help', 'Privacy', 'Terms']);
   await expect(page.getByText('Make your own')).toHaveCount(0);
   await expect(page.getByTestId('view-footer')).toHaveCount(0);
   await expect(page.getByTestId('view-only-badge')).toHaveCount(0);
