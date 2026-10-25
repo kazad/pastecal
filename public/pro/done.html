@@ -20,25 +20,23 @@
 </script>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap">
+<script>try{var m=(JSON.parse(localStorage.getItem('pastecal_global_settings'))||{}).darkMode||'auto';document.documentElement.setAttribute('data-theme',m==='dark'||(m==='auto'&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light')}catch(e){}</script>
+<link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/components.css">
 <style>
-:root { --bg: #f5f6f8; --surface: #ffffff; --ink: #141a24; --muted: #5c6577; --line: #e2e6ed; --field: #c9ccd2; --blue: #2563eb; --bad: #b42318; --ok: #1f7a4d;
-  --ui: "Figtree", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-@media (prefers-color-scheme: dark) { :root { --bg: #0f131a; --surface: #171c25; --ink: #e8ecf3; --muted: #9aa4b5; --line: #2a3140; --field: #3a4252; --blue: #3b6fe0; --bad: #ff8a80; --ok: #6fd49c; color-scheme: dark } }
-* { box-sizing: border-box }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 var(--ui); }
-main { max-width: 480px; margin: 12vh auto 0; padding: 32px 28px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
-h1 { font-size: 24px; margin: 0 0 6px; display: flex; align-items: center; gap: 10px }
-h1 svg { width: 22px; height: 22px; color: var(--ok); flex-shrink: 0 }
-h2 { font-size: 16px; margin: 24px 0 4px }
-p { margin: 8px 0; color: var(--muted); }
-p.bad { color: var(--bad); }
-.cal { color: var(--ink); font-weight: 600 }
+/* On tokens.css and components.css (.pc-btn, .pc-field), like every other page. */
+body { margin: 0; background: var(--pc-canvas); color: var(--pc-text); font: var(--pc-fs-lg)/1.5 var(--pc-font) }
+main { max-width: 480px; margin: 12vh auto 0; padding: 32px 28px; background: var(--pc-raised); border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card) }
+h1 { font-size: var(--pc-fs-2xl); margin: 0 0 6px; display: flex; align-items: center; gap: 10px }
+h1 svg { width: 22px; height: 22px; color: var(--pc-success); flex-shrink: 0 }
+h2 { font-size: var(--pc-fs-lg); margin: 24px 0 4px }
+p { margin: 8px 0; color: var(--pc-text-muted) }
+p.bad { color: var(--pc-danger) }
+.cal { color: var(--pc-text); font-weight: var(--pc-fw-semibold) }
 .row { display: flex; gap: 8px; margin-top: 10px }
-.row input { flex: 1; min-width: 0; height: 40px; padding: 0 10px; border: 1px solid var(--field); border-radius: 8px; background: var(--bg); color: var(--ink); font: 13px var(--mono) }
-button, a.btn { display: inline-flex; align-items: center; justify-content: center; height: 40px; padding: 0 16px; border-radius: 8px; border: 1px solid var(--blue); background: var(--blue); color: #fff; font: 600 15px var(--ui); text-decoration: none; cursor: pointer; white-space: nowrap }
-a.btn { margin-top: 24px }
-button.secondary { margin-top: 10px; background: transparent; color: var(--blue) }
-.small { font-size: 14px }
+.row .pc-field { flex: 1; font-family: var(--pc-font-mono); font-size: var(--pc-fs-sm) }
+#go { margin-top: 24px }
+#share { margin-top: 10px }
+.small { font-size: var(--pc-fs-md) }
 [hidden] { display: none !important }
 @media (max-width: 520px) { main { margin: 16px; padding: 24px 20px } }
 </style>
@@ -53,14 +51,14 @@ button.secondary { margin-top: 10px; background: transparent; color: var(--blue)
     <h2>Your editor link</h2>
     <p class="small">Share this with people who should be able to edit. Anyone else sees a read-only calendar.</p>
     <div class="row">
-      <input id="link" type="text" readonly aria-label="Editor link" data-hj-suppress data-clarity-mask="true">
-      <button id="copy" type="button">Copy</button>
+      <input id="link" class="pc-field pc-field--lg" type="text" readonly aria-label="Editor link" data-hj-suppress data-clarity-mask="true">
+      <button id="copy" type="button" class="pc-btn pc-btn--primary pc-btn--lg">Copy</button>
     </div>
-    <button id="share" type="button" class="secondary" hidden>Send it to your editors</button>
+    <button id="share" type="button" class="pc-btn pc-btn--secondary" hidden>Send it to your editors</button>
     <p class="small">You can make more links, or turn one off, from Share on your calendar.</p>
   </section>
 
-  <a class="btn" id="go" href="/">Back to your calendar</a>
+  <a class="pc-btn pc-btn--primary pc-btn--lg" id="go" href="/">Back to your calendar</a>
 </main>
 <script>
 (function () {

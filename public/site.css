@@ -3,11 +3,11 @@
 /* Shared header and footer for the static pages (pricing, help, about, privacy, terms, report,
    sign-in, contact), on tokens.css and components.css.
    The markup lives in scripts/site-chrome/ and is copied into each page by scripts/sync-site-chrome.mjs.
-   A page sets its content column with --site-max (the full width, gutters included). */
+   Header and footer are one width on every page (--pc-page-max), whatever the content column. */
 .site-header, .site-footer { box-sizing: border-box; font-family: var(--pc-font); color: var(--pc-text); }
 .site-header *, .site-footer * { box-sizing: border-box; }
 .site-header__in, .site-footer__in {
-    max-width: var(--site-max, 712px); margin: 0 auto;
+    max-width: var(--pc-page-max); margin: 0 auto;
     padding-inline: max(16px, env(safe-area-inset-left, 0px)) max(16px, env(safe-area-inset-right, 0px));
 }
 .site-header__in { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 14px; }

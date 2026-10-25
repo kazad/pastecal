@@ -6,25 +6,25 @@
 <meta name="description" content="How to use pastecal: quick start, link types, features, privacy, phone use and keyboard shortcuts.">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800&display=swap"><link rel="stylesheet" href="/tokens.css"><link rel="stylesheet" href="/components.css"><link rel="stylesheet" href="/legal.css">
 <style>
-:root { --site-max: 1052px }
 html { scroll-behavior: smooth; scroll-padding-top: 76px }
-kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px solid var(--pc-line); border-bottom-width: 2px; border-radius: var(--pc-radius-sm); background: var(--pc-soft); font: var(--pc-fw-semibold) var(--pc-fs-sm)/1.4 var(--pc-font); text-align: center }
-code { font: 500 .88em/1.4 var(--pc-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); background: var(--pc-soft); border: 1px solid var(--pc-line); border-radius: var(--pc-radius-sm); padding: 1px 5px; overflow-wrap: anywhere }
-main.help { max-width: 1020px }
+kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-xs); background: var(--pc-soft); font: var(--pc-fw-semibold) var(--pc-fs-sm)/1.4 var(--pc-font); text-align: center }
+code { font: var(--pc-fw-medium) var(--pc-fs-sm)/1.4 var(--pc-font-mono); background: var(--pc-soft); border-radius: var(--pc-radius-xs); padding: 1px 5px; overflow-wrap: anywhere }
+td code { white-space: nowrap; overflow-wrap: normal }   /* a URL pattern never breaks mid-word; the table scrolls instead */
+main.help { max-width: var(--pc-page-max) }
 .layout { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 48px; align-items: start }
 .toc { position: sticky; top: 24px; font-size: var(--pc-fs-md) }
-.toc b { display: block; font-size: var(--pc-fs-xs); letter-spacing: .06em; text-transform: uppercase; color: var(--pc-text-muted); margin-bottom: 8px }
+.toc b { display: block; font-size: var(--pc-fs-2xs); letter-spacing: var(--pc-tracking-caps); text-transform: uppercase; color: var(--pc-text-muted); margin-bottom: 8px }
 .toc a { display: block; padding: 5px 10px; margin-left: -10px; border-radius: var(--pc-radius-control); color: var(--pc-text); text-decoration: none }
 .toc a:hover, .toc a.on { background: var(--pc-soft); color: var(--pc-link) }
-.doc { min-width: 0; max-width: 700px }
+.doc { min-width: 0; max-width: 860px }
 .doc section { padding-top: 6px }
 .doc h2 { margin: 36px 0 8px; padding-top: 4px }
 .doc section:first-child h2 { margin-top: 0 }
 .doc h3 { font-size: var(--pc-fs-lg); margin: 20px 0 2px }
 .doc p { margin: 6px 0 }
-.steps { list-style: none; counter-reset: s; padding: 0; margin: 10px 0 0; display: grid; gap: 10px }
-.steps li { counter-increment: s; position: relative; padding: 12px 14px 12px 54px; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); background: var(--pc-surface) }
-.steps li::before { content: counter(s); position: absolute; left: 14px; top: 12px; width: 28px; height: 28px; border-radius: 50%; background: var(--pc-primary); color: var(--pc-on-primary); font-weight: 700; display: grid; place-items: center }
+.steps { list-style: none; counter-reset: s; padding: 0; margin: 12px 0 0; display: grid; gap: 16px }
+.steps li { counter-increment: s; position: relative; padding: 2px 0 2px 44px }
+.steps li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 28px; height: 28px; border-radius: 50%; background: var(--pc-soft); color: var(--pc-text-2); font-weight: var(--pc-fw-bold); display: grid; place-items: center }
 .steps li > b:first-child { display: block }
 .tw { overflow-x: auto; margin: 12px 0; border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card) }
 table { border-collapse: collapse; width: 100%; font-size: var(--pc-fs-md); line-height: 1.5 }
@@ -51,7 +51,7 @@ td:nth-child(2) { min-width: 210px }
   table, tbody, tr, td { display: block }
   thead { display: none }
   tr { border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); padding: 4px 0; margin-bottom: 10px }
-  td, td:nth-child(2) { border: 0; padding: 4px 14px; min-width: 0; white-space: normal }
+  td, td:nth-child(2) { border: 0; padding: 4px 14px; min-width: 0; white-space: normal; overflow-x: auto }
   td:first-child { font-size: var(--pc-fs-lg); padding-top: 10px }
   td[data-l]:not([data-l=""])::before { content: attr(data-l); display: block; font-size: var(--pc-fs-xs); color: var(--pc-text-muted); font-weight: 600 }
   h1 { font-size: var(--pc-fs-3xl) }

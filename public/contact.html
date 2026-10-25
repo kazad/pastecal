@@ -24,7 +24,6 @@
 .status:empty { display: none }
 .status.err { color: var(--pc-danger) }
 .thanks p { margin: 0 0 8px; font-weight: var(--pc-fw-semibold); font-size: var(--pc-fs-2xl) }
-.thanks button { padding: 0; border: 0; background: none; color: var(--pc-link); font: inherit; cursor: pointer; text-decoration: underline }
 @media (max-width: 480px) { .cform { padding: 16px } .send { align-self: stretch } }
 </style>
 <link rel="stylesheet" href="/site.css">
@@ -77,7 +76,7 @@
 </form>
 <div class="thanks" id="thanks" hidden>
   <p>Thanks. We'll take a look.</p>
-  <button type="button" id="again">Send another</button>
+  <button type="button" id="again" class="pc-link">Send another</button>
 </div>
 </main>
 <script src="/utils/analytics.js"></script>
