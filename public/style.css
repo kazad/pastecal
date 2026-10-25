@@ -1238,7 +1238,7 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
 .pc-addcal-nudge-x { flex: none; width: 24px; height: 24px; border: 0; border-radius: var(--pc-radius-sm); background: none; color: inherit; opacity: .7; font-size: var(--pc-fs-lg); cursor: pointer }
 .pc-addcal-nudge-x:hover { opacity: 1 }
 /* The owner of a paused calendar: one clear button back to the "Pro ended" choices. */
-.pc-paused-owner { height: var(--pc-h-sm); padding: 0 14px; border: 0; border-radius: var(--pc-radius-pill); background: var(--pc-warning-soft); color: var(--pc-warning); font: var(--pc-fw-semibold) var(--pc-fs-sm)/1 var(--pc-font); cursor: pointer; white-space: nowrap }
+.pc-paused-owner { min-height: var(--pc-h-sm); max-width: 100%; padding: 4px 14px; text-align: left; border: 0; border-radius: var(--pc-radius-pill); background: var(--pc-warning-soft); color: var(--pc-warning); font: var(--pc-fw-semibold) var(--pc-fs-sm)/1.25 var(--pc-font); cursor: pointer; white-space: normal }
 .pc-paused-owner:hover { filter: brightness(.97) }
 /* The homepage ends with the shared site footer, aligned to the tour's column; the tour's own background already separates it. */
 .pc-home-site-footer .site-footer { margin-top: 0; border-top: 0 }

@@ -249,6 +249,7 @@ const CalendarVueApp = {
             showPlus: false,            // the side panel's Plus tab: what an upgrade adds, or the owner's plan, editors and billing
             plusAutoJoin: false,        // billing off and they pressed "Join the beta" elsewhere: the Plus tab opens on the email field
             proPlan: null,              // the lock's plan id (/api/pro/status), for planName: 'pro' is Plus
+            pausedTrial: false,         // the paused calendar's ended plan was a trial (its owner's pill says 'Trial ended')
             upgradeNotice: null,        // {day, busy}: someone else upgraded it in the last 7 days and this browser may undo it
             showRecentChanges: false,   // the Activity tab of the side panel (id 'changes')
             showStatsInfo: false,       // the Stats tab when it can't show Pro stats: a draft, a free calendar, a non-owner
@@ -656,7 +657,8 @@ const CalendarVueApp = {
         // page), 'editor' (quiet links on an edit link), or '' (homepage draft, still loading).
         pageFooter() {
             if (this.isLoading) return '';
-            if (this.isReadOnly) return this.hideBranding ? 'pro' : (this.embedded ? 'embed' : 'viewer');
+            // The paused calendar's owner isn't a visitor: no "make your own" pitch, just the hosted note.
+            if (this.isReadOnly) return this.hideBranding || this.pausedOwner ? 'pro' : (this.embedded ? 'embed' : 'viewer');
             return this.isExisting ? 'editor' : '';
         },
         // The footer's Report link (shown when branding is trimmed). The page's own path, so a view link
@@ -3172,7 +3174,7 @@ const CalendarVueApp = {
                 const r = await fetch('/api/pro/status?calendar=' + encodeURIComponent(this.calendar.id), { credentials: 'same-origin' });
                 const st = r.ok ? await r.json() : null;
                 this.pausedOwner = !!(st && st.lapsedOwner);
-                if (this.pausedOwner) this.proPlan = st.plan || null;     // which plan ended, for its name
+                if (this.pausedOwner) { this.proPlan = st.plan || null; this.pausedTrial = !!st.lapsedTrial; }   // which plan ended: 'Trial ended' / 'Plus ended'
             } catch (e) { this.pausedOwner = false; }
         },
 

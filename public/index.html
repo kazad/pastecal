@@ -407,9 +407,9 @@
             <div v-if="!isLoading && isReadOnly" class="pc-viewer-row" data-testid="viewer-row-mobile">
                 <span v-if="!lock.locked" class="pc-view-badge" data-testid="view-only-badge-mobile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>View only</span>
                 <div class="pc-viewer-actions">
-                    <button v-if="lock.paused && pausedOwner" type="button" class="pc-paused-owner" data-testid="paused-owner-reopen" @click="openPlusTab('share')">{{ planName(proPlan) }} ended · Choose what happens</button>
+                    <button v-if="lock.paused && pausedOwner" type="button" class="pc-paused-owner" data-testid="paused-owner-reopen" @click="openPlusTab('share')">{{ pausedTrial ? 'Trial ended' : planName(proPlan) + ' ended' }} · Choose what happens</button>
                     <add-to-calendar v-if="getWebcalURL()" :nudge-key="calendar.id" :google="getGoogleSubscribeURL()" :apple="getWebcalURL()" :outlook="getOutlookSubscribeURL()" :other="getWebcalURL()" @pick="trackSubscribe"></add-to-calendar>
-                    <a v-if="!hideBranding" href="/" target="_top" class="pc-make-own" data-testid="make-own-mobile" data-from="view-header">Make your own</a>
+                    <a v-if="!hideBranding && !pausedOwner" href="/" target="_top" class="pc-make-own" data-testid="make-own-mobile" data-from="view-header">Make your own</a>
                 </div>
             </div>
 
@@ -558,9 +558,9 @@
                 <!-- A view link's own actions: take it with you, or make one. "Make your own" is the free
                      plan's credit (Pro's trimmed branding drops it); the badge sits beside the title. -->
                 <div v-if="!isLoading && isReadOnly" class="pc-viewer-actions" data-testid="viewer-actions">
-                    <button v-if="lock.paused && pausedOwner" type="button" class="pc-paused-owner" data-testid="paused-owner-reopen" @click="openPlusTab('share')">{{ planName(proPlan) }} ended · Choose what happens</button>
+                    <button v-if="lock.paused && pausedOwner" type="button" class="pc-paused-owner" data-testid="paused-owner-reopen" @click="openPlusTab('share')">{{ pausedTrial ? 'Trial ended' : planName(proPlan) + ' ended' }} · Choose what happens</button>
                     <add-to-calendar v-if="getWebcalURL()" :nudge-key="calendar.id" :google="getGoogleSubscribeURL()" :apple="getWebcalURL()" :outlook="getOutlookSubscribeURL()" :other="getWebcalURL()" @pick="trackSubscribe"></add-to-calendar>
-                    <a v-if="!hideBranding" href="/" target="_top" class="pc-make-own" data-testid="make-own" data-from="view-header">Make your own</a>
+                    <a v-if="!hideBranding && !pausedOwner" href="/" target="_top" class="pc-make-own" data-testid="make-own" data-from="view-header">Make your own</a>
                 </div>
 
                 <div v-if="!isLoading && !isReadOnly">
@@ -963,7 +963,11 @@
                         </div>
 
                         <div v-if="canEdit" class="pc-link-item" data-testid="share-helpers">
-                            <div class="pc-link-head"><h4 class="pc-share-label">Edit link</h4><span class="pc-pill pc-pill--danger">can edit</span><span v-if="lock.locked" class="pc-pill">Locked</span></div>
+                            <!-- Locked: the plain URL edits only for the owner (signed in) and editor-link holders, so it isn't
+                                 called an edit link; helpers need an editor link, which lives in the Plus tab. -->
+                            <div v-if="lock.locked" class="pc-link-head"><h4 class="pc-share-label">Calendar link</h4><span class="pc-pill">view only for others</span>
+                                <button type="button" class="pc-link pc-link-extra" @click="openPlusTab('share')" data-testid="share-editor-links">Editor links</button></div>
+                            <div v-else class="pc-link-head"><h4 class="pc-share-label">Edit link</h4><span class="pc-pill pc-pill--danger">can edit</span></div>
                             <div class="pc-link-row">
                                 <button type="button" class="pc-link-field" :data-copy-key="'edit'" :class="{ 'is-copied': copiedKey === 'edit' }" :title="'Copy ' + getEditableURL()" @click="copyLink('edit', getEditableURL(), 'copy')" data-testid="share-edit-copy">
                                     <span class="pc-link-url">{{ copiedKey === 'edit' ? 'Copied to clipboard' : shortLink(getEditableURL()) }}</span>
