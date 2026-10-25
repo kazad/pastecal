@@ -172,7 +172,7 @@ try {
     r = await fetch(`${BASE}/cal/${enc(cal)}/import`, { method: 'PUT', headers: { Authorization: `Bearer ${SECRET}` }, body: JSON.stringify({ id: cal, title: 'x', options: {}, events: [] }) });
     assert.equal(r.status, 423);
     r = await post('/createPublicLink', { sourceCalendarId: cal });
-    assert.equal(r.status, 403);
+    assert.equal(r.status, 403); assert.equal((await r.json()).error.error, 'paused');
     assert.equal((await getCal(cal)).calendar.events.length, 2);
     step('no card by day 30: subscription deleted -> free and read-only (paused): every tab is told, saves refused "Editing is paused by the owner.", the owner too; GET and the .ics feed work; Firebase/import/new view links refused');
 
@@ -248,6 +248,38 @@ try {
     assert.equal(snap.canEdit, true); assert.equal((await t4.save([{ type: 'add', event: ev('e', 'free again', 6) }])).t, 'ack');
     t4.close();
     step('an owner who chose "open" while locked gets a normal free calendar when Pro ends');
+
+    // --- A card on file: the reminder never says "nothing is charged".
+    r = await post('/api/pro/trial', { calendarId: cal2 }, carl.cookie);
+    assert.equal(r.status, 200, 'carl\'s first try failed at Stripe, so his trial and cal2\'s are still unused');
+    const carlSub = [...fake.subs.values()].find((x) => x.metadata.calendar_id === cal2);
+    assert.notEqual(carlSub.customer, undefined);
+    fake.customers.get(carlSub.customer).invoice_settings = { default_payment_method: 'pm_fake_visa' };
+    assert.equal((await status(cal2, carl.cookie)).trial.hasCard, true);
+    await webhook(event('customer.subscription.trial_will_end', { id: carlSub.id, object: 'subscription' }));
+    const cardMail = (await outbox(carlEmail)).at(-1);
+    assert.match(cardMail.subject, /^Your Pro trial ends /);
+    assert.match(cardMail.text, /A card is on file/); assert.doesNotMatch(cardMail.text, /nothing is charged/);
+    step('with a card on file, status says hasCard and the day-27 email says the card is charged (never "nothing is charged")');
+
+    // --- Keep Pro during the trial = the ordinary checkout; the paid subscription replaces the trial.
+    r = await post('/api/pro/checkout', { calendarId: cal2, interval: 'month' }, carl.cookie);
+    assert.equal(r.status, 200, 'the trialing owner may check out');
+    const cs = fake.log.filter((l) => l.path === '/stripe/v1/checkout/sessions').at(-1);
+    assert.equal(cs.body['line_items[0][price]'], 'price_fake_monthly');
+    assert.equal((await post('/api/pro/checkout', { calendarId: cal2 }, bob.cookie)).status, 409);
+    const refundsBefore = fake.refunds.length, bk = fake.log.length;
+    fake.subs.set(`sub_${run}_carl_paid`, { id: `sub_${run}_carl_paid`, object: 'subscription', status: 'active', customer: `cus_${run}_carl`, created: Math.floor(Date.now() / 1000) + 5,
+        metadata: { calendar_id: cal2, user_id: carl.userId }, items: { data: [{ current_period_end: 1830000000, price: { id: 'price_fake_monthly', recurring: { interval: 'month' } } }] } });
+    assert.equal((await webhook(event('customer.subscription.created', { id: `sub_${run}_carl_paid` }))).status, 200);
+    assert.ok(fake.log.slice(bk).some((l) => l.method === 'DELETE' && l.path === `/stripe/v1/subscriptions/${carlSub.id}`), 'the trial is canceled');
+    assert.equal(fake.refunds.length, refundsBefore, 'nothing refunded: the paid subscription is not a duplicate');
+    assert.equal(fake.subs.get(carlSub.id).status, 'canceled');
+    st = await status(cal2, carl.cookie);
+    assert.deepEqual([st.locked, st.isOwner, st.trial, st.paused], [true, true, undefined, false]);
+    await webhook(event('customer.subscription.deleted', { id: carlSub.id, object: 'subscription' }));
+    assert.equal((await status(cal2, carl.cookie)).isOwner, true, 'the trial\'s own deleted event does not unlock a paid calendar');
+    step('Keep Pro during a trial is the normal checkout ($24/year or $2.99/month); the paid subscription replaces the trial (canceled, not refunded), the lock stays');
 
     anonTab.close(); ownerTab.close();
     console.log(`\n${n} checks passed`);
