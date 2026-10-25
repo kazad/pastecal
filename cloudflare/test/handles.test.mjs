@@ -83,7 +83,10 @@ try {
     // --- claim a handle
     let r = await pj('/api/names/handle', { handle: 'ab' }, ann.cookie);
     assert.equal(r.status, 400); assert.equal(r.d.error, 'bad-name');
-    for (const bad of ['pricing', 'account', 'api', '-ann', 'an_n', '@ann']) assert.equal((await pj('/api/names/handle', { handle: bad }, ann.cookie)).status, 400, bad);
+    for (const bad of ['pricing', 'account', 'api', '-ann', 'an_n', '@ann', 'pastecal', 'PasteCal', 'pastecal-team', 'pa5tecal', 'official', 'staff', 'support', 'billing', 'security', 'adrnin']) {
+        r = await pj('/api/names/handle', { handle: bad }, ann.cookie);
+        assert.equal(r.status, 400, bad); assert.equal(r.d.error, 'bad-name', bad);
+    }
     r = await pj('/api/names/handle', { handle: h.toUpperCase() }, ann.cookie);
     assert.equal(r.status, 200); assert.equal(r.d.handle, h, 'stored lowercase');
     assert.equal((await pj('/api/names/handle', { handle: `zz${run}` }, ann.cookie)).d.error, 'has-handle', 'claimed once');
@@ -204,7 +207,7 @@ try {
     const existing = `existing-${run}`;
     await createCalendar(existing, 'Somebody else');
     assert.equal((await pj('/api/names/short', { name: existing, calendarId: club }, ann.cookie)).d.error, 'taken', 'a calendar keeps its address');
-    for (const reserved of ['pricing', 'api', 'view', 'signin', 'account', 'handle', 'pricing-next', 'poll']) {
+    for (const reserved of ['pricing', 'api', 'view', 'signin', 'account', 'handle', 'pricing-next', 'poll', 'pastecal', 'sign-in', 'log-in', 'favicon', 'sitemap', 'official', 'help']) {
         assert.equal((await pj('/api/names/short', { name: reserved, calendarId: club }, ann.cookie)).status, 400, reserved);
     }
     const vr = await fetch(`${BASE}/api/create-view`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sourceCalendarId: existing, customSlug: `vw-${run}` }) });
@@ -213,7 +216,7 @@ try {
     // Nobody can make a calendar that a short name (or a view name) already answers for, or one starting with "@".
     assert.equal((await fetch(`${BASE}/cal/${s1}`, { method: 'POST', body: JSON.stringify({ title: 'x', options: {}, events: [] }) })).status, 409);
     assert.equal((await fetch(`${BASE}/cal/${enc('@' + h)}`, { method: 'POST', body: JSON.stringify({ title: 'x', options: {}, events: [] }) })).status, 409);
-    step('short name: claimed for your calendar; the app\'s lookup says read-only (no target), feed + view JSON with no edit id; refused when taken, a calendar\'s or view link\'s name, or reserved; no calendar can take it, or start with @');
+    step('short name: claimed for your calendar; the app\'s lookup says read-only (no target), feed + view JSON with no edit id; refused when taken, a calendar\'s or view link\'s name, or reserved (site pages, pastecal*, staff words); no calendar can take it, or start with @');
 
     const shorts = [s1];
     for (let i = 1; i < 10; i++) { const nm = `s${i}-${run}`.slice(0, 30); assert.equal((await pj('/api/names/short', { name: nm, calendarId: extra[i] }, ann.cookie)).status, 200, nm); shorts.push(nm); }

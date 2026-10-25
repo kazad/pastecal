@@ -35,3 +35,17 @@ test('new calendars may not start with "@" or be named account (server and both 
     }
     assert.match(fs.readFileSync(path.join(root, 'cloudflare/wrangler.jsonc'), 'utf8'), /"\/@\*",/, 'production sends /@... to the Worker');
 });
+
+test('names that read as pastecal, staff or a site function are reserved for handles and short names (case and look-alikes folded)', async () => {
+    const { nameProblem } = await load();
+    const no = ['pastecal', 'pastecal-team', 'team-pastecal', 'mypastecal', 'Pastecal', 'past-ecal', 'pastecai', 'pa5tecal', 'pa5t3cal', 'pastecal1',
+        'official', 'staff', 'admin', 'adrnin', 'support', 'supp0rt', 'help', 'billing', 'b1lling', 'security', 'team', 'root', 'system', 'sys-tem',
+        'sign-in', 'log-in', 'favicon', 'sitemap', 'verified', 'link-ended'];
+    for (const kind of ['handle', 'short']) {
+        for (const name of no) assert.equal(nameProblem(name, kind), 'That name is reserved. Try another.', `${kind} ${name}`);
+    }
+    for (const ok of ['kalid', 'tigers10', 'soccer-club', 'coach-sam', 'teams-u10', 'helper', 'staffing-co', 'pastel', 'castle']) {
+        assert.equal(nameProblem(ok, 'handle'), null, ok);
+    }
+    assert.equal(nameProblem('billing', 'link'), null, 'a name under your own @handle is yours: pastecal.com/@you/billing');
+});

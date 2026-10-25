@@ -33,6 +33,28 @@ export const STATIC_PAGE_NAMES = new Set([
     'selftest', 'services', 'signin', 'site', 'style', 'tailwind', 'terms', 'tokens', 'utils', 'vendor', 'account', 'handle',
 ]);
 
+// Names that would read as pastecal itself, staff, or a site function on a public @ page or a short
+// link (pastecal.com/@pastecal/billing "Account suspended..."). Refused for handles and short names,
+// compared by skeleton (namesSkeleton): case, dashes and look-alike digits/letters folded, so
+// "Past-ecaI", "pa5tecal" and "adrnin" are caught too. Anything containing "pastecal" is refused.
+export const RESERVED_NAME_WORDS = [
+    'official', 'staff', 'admin', 'administrator', 'support', 'help', 'helpdesk', 'billing', 'security', 'team',
+    'root', 'system', 'moderator', 'mod', 'owner', 'verify', 'verified', 'safety', 'trust', 'abuse', 'legal',
+    'payment', 'payments', 'invoice', 'refund', 'account', 'accounts', 'login', 'log-in', 'signin', 'sign-in',
+    'signup', 'sign-up', 'logout', 'password', 'favicon', 'sitemap', 'robots', 'link-ended', 'news', 'status',
+];
+const LOOKS = { 0: 'o', 1: 'l', 3: 'e', 4: 'a', 5: 's', 7: 't', 8: 'b', 9: 'g', i: 'l' };
+export function namesSkeleton(raw) {
+    return String(raw ?? '').toLowerCase().normalize('NFKC').replace(/[-_.\s]/g, '')
+        .replace(/rn/g, 'm').replace(/vv/g, 'w').replace(/[0-9i]/g, (c) => LOOKS[c] || c);
+}
+const RESERVED_SKELETONS = new Set(RESERVED_NAME_WORDS.map(namesSkeleton));
+const BRAND = namesSkeleton('pastecal');
+export function looksOfficial(raw) {
+    const k = namesSkeleton(raw);
+    return k.includes(BRAND) || RESERVED_SKELETONS.has(k);
+}
+
 // Pro Unlimited names. A handle (pastecal.com/@handle) and a top-level short name (pastecal.com/<name>):
 // 3-30 of a-z, 0-9 and "-", starting and ending with a letter or digit, never a reserved or site name.
 // A name under a handle (pastecal.com/@handle/<name>): 1-40 of the same.
@@ -42,7 +64,7 @@ export function nameProblem(raw, kind) {
     const s = String(raw ?? '').trim().toLowerCase();
     const re = kind === 'link' ? LINK_RE : NAME_RE;
     if (!re.test(s)) return kind === 'link' ? 'Use 1 to 40 letters, numbers or dashes.' : 'Use 3 to 30 letters, numbers or dashes.';
-    if (kind !== 'link' && (RESERVED_WORDS.has(s) || RESERVED_CALENDAR_NAMES.has(s) || STATIC_PAGE_NAMES.has(s))) return 'That name is reserved. Try another.';
+    if (kind !== 'link' && (RESERVED_WORDS.has(s) || RESERVED_CALENDAR_NAMES.has(s) || STATIC_PAGE_NAMES.has(s) || looksOfficial(s))) return 'That name is reserved. Try another.';
     return null;
 }
 
