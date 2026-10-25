@@ -4897,11 +4897,17 @@ const CalendarVueApp = {
         loadCustomColors() {
             // Load custom colors from calendar options if available
             if (this.calendar.options && this.calendar.options.colors && Array.isArray(this.calendar.options.colors)) {
+                // Calendars store a copy of the palette, so ones made before Oct 2026 still hold the
+                // old coral/green/gray, which only dark text could read. An exact old default shows as
+                // the deeper one (white text passes 4.5:1); a color someone picked themselves stays.
+                const UPGRADE = { '#ff6652': '#d0442f', '#4caf50': '#2e7d32', '#9e9e9e': '#757575' };
+                const colors = this.calendar.options.colors.map(c => UPGRADE[String(c).toLowerCase()] || c);
+
                 // Update local settings with stored colors
-                this.localSettings.colors = [...this.calendar.options.colors];
+                this.localSettings.colors = [...colors];
 
                 // Update the component COLORS array
-                this.COLORS = [...this.calendar.options.colors];
+                this.COLORS = [...colors];
 
                 // One filter flag per color. colorFilters is sized once at init from the
                 // default palette; COLORS is replaced here with whatever the calendar
