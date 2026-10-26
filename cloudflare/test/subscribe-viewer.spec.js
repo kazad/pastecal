@@ -117,16 +117,20 @@ test('embed: a tiny corner credit instead of the footer line', async ({ browser,
   await ctx.close();
 });
 
-// Was "no pitch on an edit link". Since Oct 25 2026, an edit link someone sent you gets the same one line
-// ("Make one like this"), above the quiet links; a calendar this browser made never does (app-polish.spec.js).
-test('edit link someone sent you: one "Make one like this" line above the quiet links', async ({ browser, request }) => {
+// Was "no pitch on an edit link", then a pitch line above the quiet links. Since Oct 26 2026 (owner: "I don't like
+// the 2 line footer") it is ONE line: the logo, "Make one like this" (a calendar this browser didn't make), Pricing,
+// Privacy, Terms. Help is in the logo menu.
+test('edit link someone sent you: one footer line with "Make one like this" and the quiet links', async ({ browser, request }) => {
   const { id } = await seed(request);
   const { ctx, page } = await open(browser, `/${id}?backend=cf`);
   const footer = page.getByTestId('edit-footer');
   await expect(footer).toBeVisible();
-  await expect(footer.getByRole('link')).toHaveText(['pastecal · Simple shared calendars', 'Pricing', 'Help', 'Privacy', 'Terms']);
+  await expect(footer.getByRole('link')).toHaveText(['pastecal', 'Pricing', 'Privacy', 'Terms']);
   await expect(page.getByText('Make your own')).toHaveCount(0);
-  await expect(page.getByTestId('view-footer-cta')).toHaveText('Make one like this →');
+  await expect(footer.getByTestId('view-footer-cta')).toHaveText('Make one like this →');
+  await expect(page.getByTestId('view-footer')).toHaveCount(0);
+  const rows = await footer.evaluate((el) => new Set([...el.children].filter((c) => c.getClientRects().length).map((c) => Math.round(c.getBoundingClientRect().top / 8))).size);
+  expect(rows, 'the footer is one line on desktop').toBe(1);
   await expect(page.getByTestId('view-only-badge')).toHaveCount(0);
   await ctx.close();
 });
@@ -191,5 +195,35 @@ test('share: Add to calendar app is the view link\'s add page, never the edit li
   expect(res.status()).toBe(200);
   expect(res.headers()['x-robots-tag']).toBe('noindex');
   expect(await res.text()).toContain('data-testid="subscribe-main"');
+  await ctx.close();
+});
+
+// Owner, Oct 26 2026: "the share button changes shape when the side bar is opened for it". The open state
+// (.pc-hdr-on) set square corners on every header button, so the Share pill turned into a rounded rectangle.
+test('Share keeps its pill shape and size while its panel is open; it says it is expanded', async ({ browser, request }) => {
+  const { id } = await seed(request);
+  const { ctx, page } = await open(browser, `/${id}?backend=cf`);
+  await page.emulateMedia({ colorScheme: 'dark' });
+  const share = page.getByTestId('share-pill-more');
+  await expect(share).toBeVisible();
+  const look = () => share.evaluate((el) => { const cs = getComputedStyle(el), r = el.getBoundingClientRect(); return { radius: cs.borderTopLeftRadius, w: Math.round(r.width), h: Math.round(r.height) }; });
+  const closed = await look();
+  await expect(share).toHaveAttribute('aria-expanded', 'false');
+  await page.screenshot({ path: 'snapshots/footer-share-closed-dark.png' });
+  await share.click();
+  await expect(share).toHaveAttribute('aria-expanded', 'true');
+  expect(await look()).toEqual(closed);
+  await page.screenshot({ path: 'snapshots/footer-share-open-dark.png' });
+  await ctx.close();
+});
+
+test('phone: the edit link footer and beta pill wrap cleanly, no sideways scroll', async ({ browser, request }) => {
+  const { id } = await seed(request);
+  const { ctx, page } = await open(browser, `/${id}?backend=cf`, { width: 390, height: 844 });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(page.getByTestId('edit-footer')).toBeVisible();
+  await page.getByTestId('edit-footer').scrollIntoViewIfNeeded();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: 'snapshots/footer-phone-dark.png' });
   await ctx.close();
 });

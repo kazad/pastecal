@@ -150,11 +150,11 @@ const CalSwitch = {
     template: `
         <button v-if="!native" type="button" class="pc-link pc-cal-try" data-testid="try-new-cal" @click="$emit('switch', 'native')">Try the new calendar (beta)</button>
         <span v-else class="pc-cal-pill" role="group" aria-label="New calendar (beta)" data-testid="new-cal-pill">
-            <span class="pc-cal-pill-name">New calendar (beta)</span>
+            <span class="pc-cal-pill-name" title="You're trying the new calendar">Beta</span>
             <span class="pc-cal-pill-dot" aria-hidden="true">·</span>
-            <button type="button" class="pc-link" data-testid="new-cal-feedback" @click="$emit('feedback')">Send feedback</button>
+            <button type="button" class="pc-link" data-testid="new-cal-feedback" aria-label="Send feedback on the new calendar" @click="$emit('feedback')">Feedback</button>
             <span class="pc-cal-pill-dot" aria-hidden="true">·</span>
-            <button type="button" class="pc-link" data-testid="back-to-classic" @click="$emit('switch', 'classic')">Back to classic</button>
+            <button type="button" class="pc-link" data-testid="back-to-classic" aria-label="Back to the classic calendar" @click="$emit('switch', 'classic')">Classic</button>
             <button type="button" class="pc-btn pc-btn--ghost pc-btn--icon pc-btn--xs pc-cal-pill-x" aria-label="Hide until next visit" title="Hide until next visit" data-testid="new-cal-pill-hide" @click="$emit('hide')">&times;</button>
         </span>`,
 };

@@ -772,6 +772,11 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-view-footer img { display: inline-block; width: 16px; height: 16px; margin-right: 6px; vertical-align: -3px }
 .pc-view-footer a { margin-left: 8px; color: var(--pc-link); font-weight: var(--pc-fw-medium); white-space: nowrap }
 .pc-edit-footer { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px 20px; margin: 12px 4px 4px; font: var(--pc-fw-medium) var(--pc-fs-sm)/1.4 var(--pc-font) }
+/* One line under an edit link: the logo, the pitch (a calendar someone sent you), three quiet links, the beta pill. */
+.pc-edit-footer { align-items: center; gap: 6px 16px }
+.pc-edit-footer-brand { display: inline-flex; align-items: center; gap: 6px }
+.pc-edit-footer-brand img { width: 16px; height: 16px }
+.pc-edit-footer .pc-edit-footer-cta { font: var(--pc-fw-semibold) var(--pc-fs-sm)/1.4 var(--pc-font); white-space: nowrap }
 .pc-edit-footer a { color: var(--pc-text-muted); text-decoration: none }
 .pc-edit-footer a:hover, .pc-view-footer a:hover { color: var(--pc-text); text-decoration: none }
 .pc-hosted-note { margin: 12px 4px 4px; font-size: var(--pc-fs-xs); color: var(--pc-text-muted); text-align: center }
@@ -996,7 +1001,7 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
 .pc-side--notes:not(:has(.pc-side-tabs)) .pc-side-bar { min-height: 52px; padding-top: 6px; border-bottom: 0; background: transparent }
 .pc-side--notes:not(:has(.pc-side-tabs)) .pc-side-body { padding-top: 6px }
 /* Header buttons light up while their tab is open. */
-.pc-hdr-on { color: var(--pc-link) !important; background: var(--pc-primary-soft); border-radius: var(--pc-radius-control) }   /* beats Tailwind text colors */
+.pc-hdr-on { color: var(--pc-link) !important; background: var(--pc-primary-soft) }   /* beats Tailwind text colors; never the shape: each button keeps its own corners (Share is a pill) */
 
 @media (min-width: 1100px) {
   .pc-home--side .pc-side { align-self: stretch }   /* the guide's column, the same width */
