@@ -241,3 +241,32 @@ test('saving an occurrence whose series was deleted meanwhile: the editor closes
   expect(sent).not.toContain('Standup');
   await A.ctx.close(); await B.ctx.close();
 });
+
+// =====================================================================================================
+// A timed series' skipped date is matched by the viewer's local DATE, as classic matches it (Syncfusion parses each
+// stamp and compares its local day): deleted at 9:00 PST in Los Angeles, the Nov 9 occurrence is 9:00 MST in
+// Phoenix (no DST), an hour from the stamp. Native compared to the minute and showed it again there.
+// Not fixed, in either renderer: a viewer whose local DAY differs (Tokyo) expands the weekly series on their own
+// weekday, so the occurrences (and the skipped one) fall at other instants. This test only holds native to classic.
+for (const zone of ['America/Phoenix', 'America/New_York', 'Asia/Tokyo', 'Europe/London']) {
+  test(`native skips the same occurrences of a timed series as classic for a viewer in ${zone}`, async ({ browser }) => {
+    const id = await seed([timed('s1', 'Standup', '2026-10-05T09:00:00-07:00', '2026-10-05T09:30:00-07:00',
+      { recurrencerule: 'FREQ=WEEKLY;BYDAY=MO;INTERVAL=1;', recurrenceException: '20261109T170000Z' })]);
+    const shown = async (native) => {
+      const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, timezoneId: zone, locale: 'en-US' });
+      await ctx.addInitScript(() => { window.__TEST__ = true; try { localStorage.setItem('pastecal_backend', 'cf'); } catch (e) { /* blocked */ } });
+      await ctx.route('**/*', (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
+      const page = await ctx.newPage();
+      await page.goto(`/${id}?backend=cf&view=month&date=2026-11-09${native ? '&cal=native' : ''}`);
+      await page.waitForFunction(() => document.querySelector('#app')?._vnode?.component?.proxy?.isLoading === false, null, { timeout: 20_000 });
+      await expect(page.locator(native ? '.nc' : '.e-schedule')).toBeVisible({ timeout: 20_000 });
+      await page.waitForTimeout(native ? 300 : 1500);
+      const out = await vm(page, (v) => v.calView.occurrences(new Date(2026, 10, 1), new Date(2026, 10, 20)).map((o) => o.start.toISOString()));
+      await ctx.close();
+      return out;
+    };
+    const classic = await shown(false);
+    expect(classic.length, 'classic draws the series').toBeGreaterThan(1);
+    expect(await shown(true)).toEqual(classic);
+  });
+}
