@@ -30,6 +30,24 @@ and a slow rollout, with the data format unchanged (both renderers read and writ
   offline edits on phones, analytics events the classic app sends.
 - `worktree-nativecal-parity` (July, 298 unmerged commits) is superseded by native-fixes; archive it, don't merge.
 
+## The shape of the work (corrected Oct 25)
+
+`/beta` is a separate copy of the app (its own index.html, app.js, settings), forked months ago. It lacks everything
+built since: Share, Plus, print, the add page, templates, the draft block. So the switch is NOT "turn /beta on".
+It is: mount `NativeCalendar` (props/emits, self-contained; needs window.rrule) and its editor/popover/quick-create
+inside the MAIN app in place of `#Schedule`, behind a flag, through a small calendar interface with two
+implementations (Syncfusion, native). Not a fake `scheduleObj` that imitates Syncfusion's shapes.
+
+- First inventory the main app's 119 `scheduleObj` uses and ScheduleAdapter into: data path (saves, deletes,
+  recurrence exceptions and their stamp format, the noteStart merge, all-day local midnight), view state
+  (currentView, selectedDate, range, readonly), Syncfusion workarounds (deleted, not ported), and features built
+  on its internals (draft block on `.e-selected-cell`, print's `getEvents` repeat expansion). That table defines
+  the interface.
+- Data safety during rollout: one calendar edited by classic and native browsers at once. Journeys edit in one
+  renderer, reload in the other, and assert on `GET /cal/<id>`: repeat exceptions (exact stamp format), all-day
+  events across time zones and a DST week, two browsers editing different fields of one event.
+- Speed only counts if Syncfusion's JS and CSS are not downloaded in native mode (a test asserts zero requests).
+
 ## Plan
 
 1. **No new features on Syncfusion.** Bug fixes only. New calendar UX ("who's coming") is built on native.
@@ -46,9 +64,14 @@ and a slow rollout, with the data format unchanged (both renderers read and writ
    classic vs native).
 5. **Roll out on pastecal.com,** each step held until errors, events added per visit, editor-abandoned and saves
    look the same or better than classic:
-   new calendars first, then 10%, 50%, 100% of existing ones by browser; a "Use the classic calendar" link for
-   two weeks; the flag can send everyone back in one deploy.
+   view links first (they never write, and they are where 79% of new people land), then new calendars, then 10%,
+   50%, 100% of existing ones by browser; a "Use the classic calendar" link for two weeks; the flag can send
+   everyone back in one deploy.
 6. **Delete Syncfusion:** vendor files, ScheduleAdapter, the workarounds, the license key. Measure the first
    load before and after.
 
-Rough size: steps 2-3 about two weeks of agent time; 4 a few days; 5 two weeks of watching; 6 a day.
+First milestone: view links render natively in the main app on preview, with no Syncfusion download, bytes measured
+before and after, and the cross-renderer data journeys in place.
+
+Rough size: steps 2-3 about three weeks of agent time (the main-app integration is the larger part); 4 a few days;
+5 two to three weeks of watching; 6 a day.
