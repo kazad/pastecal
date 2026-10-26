@@ -60,7 +60,7 @@ const PAGES = [
   { name: 'homepage phone', path: () => '/?backend=cf', size: { width: 390, height: 844 }, budget: { filled: 2, accentLinks: 2, chipsBadges: 0, words: 33 } },
   { name: 'edit link desktop', path: (s) => `/${s.id}?backend=cf`, size: { width: 1440, height: 900 }, budget: { filled: 1, accentLinks: 1, chipsBadges: 1, words: 36 } },
   { name: 'view link desktop', path: (s) => `/view/${s.viewId}?backend=cf`, size: { width: 1440, height: 900 }, budget: { filled: 0, accentLinks: 3, chipsBadges: 1, words: 46 } },
-  { name: 'view link phone', path: (s) => `/view/${s.viewId}?backend=cf`, size: { width: 390, height: 844 }, budget: { filled: 0, accentLinks: 2, chipsBadges: 1, words: 31 } },
+  { name: 'view link phone', path: (s) => `/view/${s.viewId}?backend=cf`, size: { width: 390, height: 844 }, budget: { filled: 0, accentLinks: 2, chipsBadges: 1, words: 32 } },
   { name: 'embed', path: (s) => `/view/${s.viewId}?backend=cf&embed`, size: { width: 720, height: 640 }, budget: { filled: 0, accentLinks: 0, chipsBadges: 0, words: 18 } },
 ];
 

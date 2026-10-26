@@ -253,7 +253,7 @@ for (const viewport of [DESKTOP, PHONE]) {
       const c = JSON.parse(localStorage.getItem('calendar') || '{}');
       return { title: c.title, notes: (c.options || {}).notes || '', events: (c.events || []).map(e => e.title) };
     })).toEqual({ title: 'New Calendar', notes: '', events: ['Your event here'] });
-    await expect(page.getByText('Started over with a blank calendar')).toBeVisible();
+    await expect(page.locator('.pc-toast').getByText('Started over with a blank calendar')).toBeVisible();
 
     // one Cmd+Z: all of it back
     await page.evaluate(() => document.activeElement && document.activeElement.blur());
