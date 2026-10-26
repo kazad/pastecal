@@ -1635,18 +1635,31 @@ const CalendarVueApp = {
             if (!this.nativeEdit || !this.nativeCanEdit()) return;
             this.nativePopover = null;
             if (full) { this.nativeQuick = null; this.openNativeEditor({ mode: 'Add', fresh: { start, end, isAllDay, title: '' } }); return; }
-            const w = Math.min(364, window.innerWidth - 16), h = 190;
+            // Beside the day (time grid) or under it (month), so the "New event" block stays in view; a phone shows
+            // the box as a sheet along the bottom instead (native-calendar.css).
+            const w = Math.min(364, window.innerWidth - 16), h = 180, pad = 8;
             const x = jsEvent && jsEvent.clientX != null ? jsEvent.clientX : window.innerWidth / 2;
             const y = jsEvent && jsEvent.clientY != null ? jsEvent.clientY : 120;
-            const left = Math.max(8, Math.min(x - 24, window.innerWidth - w - 8));
-            const top = y + 16 + h < window.innerHeight ? y + 16 : Math.max(8, y - h - 16);
+            const box = jsEvent && jsEvent.target && jsEvent.target.closest ? jsEvent.target.closest('.nc-col, .nc-cell, .nc-allday-cell') : null;
+            const r = box ? box.getBoundingClientRect() : { left: x, right: x, top: y, bottom: y };
+            let left, top;
+            if (box && box.classList.contains('nc-col')) {
+                left = r.right + pad + w < window.innerWidth ? r.right + pad : r.left - pad - w;
+                top = y - h / 2;
+            } else {
+                left = r.left;
+                top = r.bottom + pad + h < window.innerHeight ? r.bottom + pad : r.top - pad - h;
+            }
+            left = Math.max(pad, Math.min(left, window.innerWidth - w - pad));
+            top = Math.max(pad, Math.min(top, window.innerHeight - h - pad));
             this.nativeQuick = { start, end, isAllDay, title: '', top, left };
         },
         saveNativeQuick(title) {
             const q = this.nativeQuick;
             if (!q) return;
             this.nativeQuick = null;
-            this.nativeAction('eventCreate', { addedRecords: [{ Subject: title || '', StartTime: new Date(q.start), EndTime: nativeEnd(q.end, q.isAllDay),
+            // No title: "(No title)", as the editor saves it (classic stores Syncfusion's placeholder, "Add title").
+            this.nativeAction('eventCreate', { addedRecords: [{ Subject: title || '(No title)', StartTime: new Date(q.start), EndTime: nativeEnd(q.end, q.isAllDay),
                 IsAllDay: !!q.isAllDay, Type: 1, Description: '', RecurrenceRule: '' }] }, { action: 'Add' });
         },
         moreNativeQuick(title) {
@@ -1767,6 +1780,8 @@ const CalendarVueApp = {
         },
         // Whether people categorise events at all decides if type labels are worth building on (classic sends it too).
         onNativeColor() { track(a => a.featureUsed('event_type', 'popup')); },
+        // A double-click on an event opens its editor (classic's grid does the same).
+        onNativeOpen({ event, occurrence }) { this.nativeEditEvent(event, occurrence); },
         onNativePopoverEdit() {
             const p = this.nativePopover;
             if (p) this.nativeEditEvent(p.event, p.occurrence);

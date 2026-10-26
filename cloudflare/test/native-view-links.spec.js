@@ -6,7 +6,8 @@
  * views and next / previous work, an event opens its popup, the color filter hides events, an edit made on the
  * edit link shows up live, Ctrl+P prints the paper month with the repeat, ?embed works, and a phone gets no
  * sideways scroll. The same calendar drawn by both renderers lists the same occurrences, in Los Angeles and in
- * Tokyo. Without the flag the view link is classic (Syncfusion). Also measures the bytes of both.
+ * Tokyo. Without the flag the view link is classic (Syncfusion), and so is the edit link (its editing on the
+ * native calendar is native-editing.spec.js). Also measures the bytes of both.
  * Needs `wrangler dev` on BASE_URL (default http://localhost:8787).
  */
 const { test, expect } = require('@playwright/test');
@@ -241,10 +242,17 @@ test('flag off: the view link stays classic (Syncfusion), and ?cal=classic beats
   await page.waitForFunction(() => document.querySelector('.nc [data-testid^="event-"]'), null, { timeout: 20_000 });
   await page.goto(`/view/${viewId}?backend=cf&cal=classic`);
   await page.waitForFunction(() => window.scheduleObj && document.querySelector('.e-month-view .e-appointment'), null, { timeout: 20_000 });
-  // Edit links never switch, whatever the flag says.
-  await page.goto(`/${id}?backend=cf&cal=native`);
+  // Edit links follow the same flag since milestone 2 (?cal=native, or this browser's choice), but never the
+  // server's view-link default: with neither, the edit link is classic.
+  await page.goto(`/${id}?backend=cf`);
+  await page.waitForFunction(() => document.querySelector('.nc.nc-editable [data-testid^="event-"]'), null, { timeout: 20_000 });
+  await page.evaluate(() => localStorage.removeItem('pc_cal'));
+  await page.goto(`/${id}?backend=cf`);
   await page.waitForFunction(() => window.scheduleObj && document.querySelector('.e-month-view .e-appointment'), null, { timeout: 20_000 });
   await expect(page.locator('.nc')).toHaveCount(0);
+  await page.goto(`/${id}?backend=cf&cal=native`);
+  await page.waitForFunction(() => document.querySelector('.nc.nc-editable [data-testid^="event-"]'), null, { timeout: 20_000 });
+  expect(await page.evaluate(() => typeof window.ej === 'undefined')).toBe(true);
   await ctx.close();
 });
 

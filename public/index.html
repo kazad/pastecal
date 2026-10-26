@@ -771,7 +771,7 @@
                     :initial-view="nativeView" :initial-date="nativeLink.date" :custom-duration="nativeCustomDuration" :custom-unit="nativeCustomUnit"
                     :month-row-height="nativeRowHeight" open-day-on-click app-look :app-edits="nativeEdit" :draft="nativeDraft"
                     @event-click="openNativePopover" @range-change="onNativeRange" @event-create="onNativeCreate"
-                    @drag-start="onNativeDragStart" @event-move="onNativeMove"></native-calendar>
+                    @drag-start="onNativeDragStart" @event-move="onNativeMove" @event-open="onNativeOpen"></native-calendar>
                 <div v-else id="Schedule" data-testid="schedule-container"></div>
                 <event-popover v-if="nativeCal" :visible="!!nativePopover" :event="nativePopover && nativePopover.event" :occurrence="nativePopover && nativePopover.occurrence"
                     :top="nativePopover ? nativePopover.top : 0" :left="nativePopover ? nativePopover.left : 0" :time-format="globalSettings.timeFormat"

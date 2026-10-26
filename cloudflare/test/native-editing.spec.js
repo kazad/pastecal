@@ -485,6 +485,10 @@ test('delete with an Undo toast and no "Are you sure?", from the popup and from 
   await soon(async () => (await stored(id)).map((e) => e.id)).toEqual(['a']);
   await expect(page.getByRole('button', { name: 'Undo' })).toBeVisible();
   expect(await tracked(page)).toEqual([]);   // a delete from the editor is not an abandoned editor
+  // Recent changes (the server's history) lists what was done here, as it does for classic's edits.
+  await page.locator('button[aria-label="Settings"]').click();
+  await page.getByTestId('side-tab-changes').click();
+  await expect(page.getByTestId('recent-changes')).toContainText('Snack duty');
   expect(errors).toEqual([]);
   await ctx.close();
 });
@@ -511,10 +515,10 @@ test('keyboard: Tab to an event and Enter opens it, Escape closes; Cmd/Ctrl+E qu
   await expect(page.getByText('Add Event by Typing')).toBeVisible();
   await page.keyboard.press('Escape');
 
-  // The editor: Escape closes it (abandoned), Enter in the title saves.
-  await ev(page, 'd').click();
-  await page.getByTestId('popover-edit').click();
+  // The editor (a double-click on the event opens it, as on classic): Escape closes it (abandoned), Enter in the title saves.
+  await ev(page, 'd').dblclick();
   await expect(page.getByTestId('event-editor')).toBeVisible();
+  await expect(page.getByTestId('event-popover')).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect(page.getByTestId('event-editor')).toHaveCount(0);
   await ev(page, 'd').click();

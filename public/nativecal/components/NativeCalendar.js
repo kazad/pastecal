@@ -216,7 +216,8 @@ const NativeCalendar = (() => {
         // 'drag-start' { event, occurrence }: a drag or resize of an event began (appEdits).
         // 'event-move' { event, occurrence, start, end, allDay, mode }: an event was dropped or resized (appEdits).
         //     start/end are Dates; an all-day end is exclusive (the next local midnight).
-        emits: ['update:events', 'event-click', 'event-create', 'view-change', 'range-change', 'drag-start', 'event-move'],
+        // 'event-open' { event, occurrence }: an event was double-clicked (appEdits: the app opens its editor, as classic does).
+        emits: ['update:events', 'event-click', 'event-create', 'view-change', 'range-change', 'drag-start', 'event-move', 'event-open'],
         data() {
             return {
                 view: normView(this.initialView) || 'Month',
@@ -540,6 +541,10 @@ const NativeCalendar = (() => {
                 this.selectedCell = null;
                 this.$emit('event-click', { event: occ.event, occurrence: { start: occ.start, end: occ.end, recurring: occ.recurring }, jsEvent });
             },
+            openEvent(occ) {
+                if (!this.appEdits || this.readOnly || occ.event.__draft || this._swallowClick) return;
+                this.$emit('event-open', { event: occ.event, occurrence: { start: occ.start, end: occ.end, recurring: occ.recurring } });
+            },
             clickCell(day, jsEvent, hour, full) {
                 if (this._swallowClick || this._afterCreateDrag) return;
                 if (this.readOnly && this.openDayOnClick && hour === undefined && (this.view === 'Month' || this.view === 'Custom')) { this.openDay(day); return; }
@@ -763,7 +768,7 @@ const NativeCalendar = (() => {
         <div v-for="b in w.bars" :key="b.occ.key + w.key" class="nc-bar" :style="barStyle(b)"
           :class="{ long: b.occ.allDay || isMultiDayTimed(b.occ), tint: isTint(b), 'clip-l': b.clippedLeft, 'clip-r': b.clippedRight, 'nc-draft': b.occ.event.__draft, lifted: isLifted(b.occ) }"
           :data-testid="tid(b.occ)" :title="b.occ.title"
-          @mousedown="startDrag($event, b.occ, 'month')" @touchstart="touchStart($event, b.occ, 'month')" @click.stop="clickEvent(b.occ, $event)" tabindex="0" role="button" :aria-label="ariaLabel(b.occ)" @keydown.enter.prevent="clickEvent(b.occ, $event)" @keydown.space.prevent="clickEvent(b.occ, $event)">
+          @mousedown="startDrag($event, b.occ, 'month')" @touchstart="touchStart($event, b.occ, 'month')" @click.stop="clickEvent(b.occ, $event)" @dblclick.stop="openEvent(b.occ)" tabindex="0" role="button" :aria-label="ariaLabel(b.occ)" @keydown.enter.prevent="clickEvent(b.occ, $event)" @keydown.space.prevent="clickEvent(b.occ, $event)">
           <template v-if="b.occ.allDay || isMultiDayTimed(b.occ)">
             <span v-if="!b.occ.allDay && !b.clippedLeft" class="nc-bar-time">{{ time(b.occ.start) }}</span>
             <span class="nc-bar-title center">{{ b.occ.title }}</span>
@@ -795,7 +800,7 @@ const NativeCalendar = (() => {
             @mousedown="startDayCreate($event, d)" @click="clickCell(d, $event)" @dblclick="clickCell(d, $event, undefined, true)"></div>
           <div v-for="b in gridLayout.allDay" :key="b.occ.key" class="nc-bar long" :style="gridBarStyle(b, gridDays.length)"
             :class="{ 'nc-draft': b.occ.event.__draft, lifted: isLifted(b.occ) }"
-            :data-testid="tid(b.occ)" @mousedown="startDrag($event, b.occ, 'month')" @touchstart="touchStart($event, b.occ, 'month')" @click.stop="clickEvent(b.occ, $event)" tabindex="0" role="button" :aria-label="ariaLabel(b.occ)" @keydown.enter.prevent="clickEvent(b.occ, $event)" @keydown.space.prevent="clickEvent(b.occ, $event)">
+            :data-testid="tid(b.occ)" @mousedown="startDrag($event, b.occ, 'month')" @touchstart="touchStart($event, b.occ, 'month')" @click.stop="clickEvent(b.occ, $event)" @dblclick.stop="openEvent(b.occ)" tabindex="0" role="button" :aria-label="ariaLabel(b.occ)" @keydown.enter.prevent="clickEvent(b.occ, $event)" @keydown.space.prevent="clickEvent(b.occ, $event)">
             <span v-if="!b.occ.allDay && !b.clippedLeft" class="nc-bar-time">{{ time(b.occ.start) }}</span>
             <span class="nc-bar-title center">{{ b.occ.title }}</span>
             <span v-if="!b.occ.allDay && !b.clippedRight" class="nc-bar-time">{{ time(b.occ.end) }}</span>
@@ -819,7 +824,7 @@ const NativeCalendar = (() => {
             <div v-for="it in gridLayout.timed[i]" :key="it.occ.key" class="nc-timed" :style="timedStyle(it)"
               :class="{ 'nc-draft': it.occ.event.__draft, lifted: isLifted(it.occ) }" :data-testid="tid(it.occ)"
               @mousedown="startDrag($event, it.occ, 'move', { top0: it.top, top: it.top, height: it.height })"
-              @touchstart="touchStart($event, it.occ, 'move', { top0: it.top, top: it.top, height: it.height })" @click.stop="clickEvent(it.occ, $event)" tabindex="0" role="button" :aria-label="ariaLabel(it.occ)" @keydown.enter.prevent="clickEvent(it.occ, $event)" @keydown.space.prevent="clickEvent(it.occ, $event)">
+              @touchstart="touchStart($event, it.occ, 'move', { top0: it.top, top: it.top, height: it.height })" @click.stop="clickEvent(it.occ, $event)" @dblclick.stop="openEvent(it.occ)" tabindex="0" role="button" :aria-label="ariaLabel(it.occ)" @keydown.enter.prevent="clickEvent(it.occ, $event)" @keydown.space.prevent="clickEvent(it.occ, $event)">
               <div class="nc-timed-title">{{ it.occ.title }} <nc-icon v-if="it.occ.recurring" class="nc-recur" name="repeat" :size="11" :stroke-width="2.5"></nc-icon></div>
               <div v-if="it.height > 34" class="nc-timed-time">{{ time(it.occ.start) }} - {{ time(it.occ.end) }}</div>
               <div class="nc-resize" data-testid="resize-bottom" @mousedown.stop="startDrag($event, it.occ, 'resize', { height0: it.height, height: it.height, top: it.top, top0: it.top })"></div>
