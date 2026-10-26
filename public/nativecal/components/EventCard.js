@@ -115,10 +115,14 @@ const EventCard = (() => {
                 // The details box is never touched while it has the focus: a change from another browser waits (the
                 // save then keeps what is typed here, and says so: app.js nativeCardChange).
                 if (!this.detFocus) this.detText = val.description || '';
+                // The rule changed, not from the Custom section (an Undo, another browser, a question answered No): read it.
+                if (this.custom && (val.rule || '') !== (was.rule || '') && (val.rule || '') !== this._customSent) this.readCustom();
                 this.$nextTick(() => { this.grow(); this.fit(); this.measureClamp(); });
             },
             'card.place'() { this.$nextTick(() => this.place(false)); },
             'card.full'(f) { if (f && !this.full) this.expand(); },
+            // A change in the Custom section is saved at once (the same object, changed in place; a new one is a read).
+            custom: { deep: true, handler(now, was) { if (now && now === was) this.applyCustom(); } },
         },
         mounted() {
             this._onKey = (e) => this.onKey(e);
@@ -189,7 +193,7 @@ const EventCard = (() => {
                 this.v = clone(this.card.value); this.full = !!this.card.full;
                 this.titleText = this.card.value.title || ''; this.detText = this.card.value.description || '';
                 this.picker = null; this.menu = false; this.smart = null; this.showAll = false; this.pasteNote = ''; this.keep = null; this.closing = false;
-                this.wide = false; this.detSession = null; clearTimeout(this._detTimer);
+                this.wide = false; this.detSession = null; clearTimeout(this._detTimer); this.custom = null; this.customError = '';
                 this.$nextTick(() => {
                     this.place(open);
                     this.grow(); this.measureClamp();
@@ -250,7 +254,7 @@ const EventCard = (() => {
                 // Layout sizes, not the box on screen: the card may be mid-animation (scaled).
                 const h = c.offsetHeight, top = parseFloat(this.pos.top || 0) - window.scrollY;
                 let room = window.innerHeight - top - M;
-                if (h > room && (room < 320 || this.detFocus)) {   // (writing long details: up as far as it takes)
+                if (h > room && (room < 320 || this.detFocus || this.custom)) {   // (writing long details, or the repeat's settings open: up as far as it takes)
                     const need = Math.min(h, window.innerHeight - 2 * M), up = Math.max(0, Math.min(top - M, need - room));
                     this.pos = { ...this.pos, top: `${parseFloat(this.pos.top || 0) - up}px` };
                     c.style.top = this.pos.top;
@@ -429,9 +433,9 @@ const EventCard = (() => {
                 if (this.picker && this.picker.kind === kind && this.picker.el === el) { this.closePicker(); return; }
                 this.closePicker(false);
                 this.menu = false;
-                this.typed = ''; this.typedBad = false; this.customError = ''; this.labelNames = null; this.custom = null;
-                if (kind === 'sd' || kind === 'ed') {
-                    const d = kind === 'sd' ? this.v.start : this.v.end;
+                this.typed = ''; this.typedBad = false; this.labelNames = null;
+                if (kind === 'sd' || kind === 'ed' || kind === 'until') {
+                    const d = kind === 'sd' ? this.v.start : kind === 'ed' ? this.v.end : this.untilDate();
                     this.month = { y: d.getFullYear(), m: d.getMonth() }; this.focusDay = K.startOfDay(d);
                 }
                 this.picker = { kind, el, at: el.getBoundingClientRect(), align: kind === 'dur' || kind === 'cat' ? 'right' : 'left' };
@@ -504,6 +508,12 @@ const EventCard = (() => {
             // Dates: a new start date moves the whole event (its length kept); a new end date moves only the end.
             pickDate(day) {
                 const v = this.v, kind = this.picker.kind;
+                if (kind === 'until') {
+                    if (day < K.startOfDay(v.start)) { this.typedBad = true; return; }
+                    this.closePicker();
+                    Object.assign(this.custom, { endMode: 'until', until: K.dateStr(day) });
+                    return;
+                }
                 if (kind === 'sd') {
                     const shift = K.dayDiff(v.start, day);
                     const start = K.addDays(v.start, shift), end = K.addDays(v.end, shift);
@@ -532,9 +542,9 @@ const EventCard = (() => {
             stepMonth(n) { const d = new Date(this.month.y, this.month.m + n, 1); this.month = { y: d.getFullYear(), m: d.getMonth() }; this.$nextTick(() => this.mountPicker()); },
             dayClass(d) {
                 const v = this.v, k = this.picker && this.picker.kind;
-                const sel = k === 'sd' ? v.start : v.end;
-                return { cur: sameDate(d, sel), in: d >= K.startOfDay(v.start) && d <= K.startOfDay(v.end) && !sameDate(d, sel), today: sameDate(d, new Date()),
-                    off: k === 'ed' && d < K.startOfDay(v.start) };
+                const sel = k === 'sd' ? v.start : k === 'ed' ? v.end : this.untilDate();
+                return { cur: sameDate(d, sel), in: k !== 'until' && d >= K.startOfDay(v.start) && d <= K.startOfDay(v.end) && !sameDate(d, sel), today: sameDate(d, new Date()),
+                    off: (k === 'ed' || k === 'until') && d < K.startOfDay(v.start) };
             },
             dayKey(e) {
                 const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[e.key];
@@ -555,22 +565,56 @@ const EventCard = (() => {
             editTypes() { this.labelNames = this.colors.map((_, i) => this.labels[i] || `Type ${i + 1}`); this.$nextTick(() => { this.mountPicker(); const i = this.$refs.pick && this.$refs.pick.querySelector('input'); if (i) i.focus(); }); },
             saveTypes() { const names = this.labelNames; this.labelNames = null; this.closePicker(); this.$emit('labels', names); },
             pickRepeat(rule) { this.setAndClose({ rule }, K.describeRule(rule, this.v.start)); },
+            // ---- Custom…: the repeat's own settings, inside the card under the Repeat row ---------------------------
+            // Not a popover with Apply: each change is saved the moment it is made, like every other field (Undo in
+            // its toast, Cancel takes back the card's whole session), and the Repeat row says the rule as it changes.
+            // Number fields save when they are left (or Enter), so typing "12" is one change, not two.
             openCustom() {
+                this.closePicker(false);
+                const had = this.v.rule || '';
+                this.readCustom();
+                this.$nextTick(() => {
+                    this.fit();
+                    const sec = this.$refs.cust;
+                    if (sec && sec.scrollIntoView) sec.scrollIntoView({ block: 'nearest' });
+                    // The unit first (a phone gets no keyboard sliding up over the sheet for it).
+                    const f = sec && !this.phone && sec.querySelector('select');
+                    if (f) f.focus({ preventScroll: true });
+                });
+                if (!had) this.applyCustom();   // no repeat yet: Custom… starts it (every week on this day), as the section shows
+            },
+            /** The section's fields from the stored rule; reading saves nothing. */
+            readCustom() {
                 const s = K.parseRule(this.v.rule || 'FREQ=WEEKLY;INTERVAL=1;', this.v.start);
                 if (!s.freq) s.freq = 'WEEKLY';
                 if (s.endMode === 'until' && !s.until) s.until = K.dateStr(K.addDays(this.v.start, 14));
-                this.custom = s; this.customError = ''; this._customAt = JSON.stringify(s);   // Apply with nothing changed keeps the rule as it was
-                this.$nextTick(() => this.mountPicker());
+                this.custom = s; this.customError = '';
+                // Set back to exactly what it was opened with: the stored rule again, character for character (one
+                // classic wrote may differ in form from the one the section would build).
+                this._customAt = JSON.stringify(s); this._customRule = this.v.rule || null; this._customSent = null;
             },
+            closeCustom() {
+                this.custom = null; this.customError = '';
+                this.$nextTick(() => { this.fit(); const b = this.$refs.rep; if (b) b.focus({ preventScroll: true }); });
+            },
+            toggleRepeat(e) { if (this.custom) this.closeCustom(); else this.openPicker('rep', e); },
             customDay(d) { const s = this.custom; const i = s.byDay.indexOf(d); if (i >= 0) { if (s.byDay.length > 1) s.byDay.splice(i, 1); } else s.byDay.push(d); },
+            untilDate() {
+                const u = this.custom && this.custom.until;
+                if (u) { const [y, m, d] = u.split('-').map(Number); return new Date(y, m - 1, d); }
+                return K.addDays(K.startOfDay(this.v.start), 14);
+            },
             applyCustom() {
                 const s = this.custom;
-                if (s.endMode === 'until' && !s.until) s.until = K.dateStr(K.addDays(this.v.start, 14));
+                if (!s) return;
+                if (s.endMode === 'until' && !s.until) { s.until = K.dateStr(K.addDays(this.v.start, 14)); return; }   // (saved on the next tick)
                 const problem = K.ruleProblem(s, this.v.start, this.v.isAllDay ? K.addDays(this.v.end, 1) : this.v.end, this.v.isAllDay);
-                if (problem) { this.customError = problem; return; }
-                // Nothing changed: the stored rule stays character for character (one classic wrote may differ in form).
-                if (this.v.rule && JSON.stringify(s) === this._customAt) { this.closePicker(); return; }
-                this.pickRepeat(K.buildRule(s, { firstDay: this.firstDayOfWeek }));
+                this.customError = problem;
+                if (problem) return;
+                const rule = this._customRule != null && JSON.stringify(s) === this._customAt ? this._customRule : K.buildRule(s, { firstDay: this.firstDayOfWeek });
+                if (rule === (this.v.rule || '')) return;
+                this._customSent = rule;
+                this.change({ rule }, K.describeRule(rule, this.v.start));
             },
             // ---- the ⋯ menu ----------------------------------------------------------------------------
             toggleMenu(e) {
@@ -678,7 +722,36 @@ const EventCard = (() => {
       <span class="nk-gi"><nc-icon name="globe" :size="18"></nc-icon></span><span>{{ zone }}</span></div>
     <div v-if="full && card.canRepeat" class="nk-row">
       <span class="nk-gi" title="Repeats"><nc-icon name="repeat" :size="18"></nc-icon></span>
-      <button type="button" class="nk-sel" data-testid="card-repeat" aria-expanded="false" :aria-label="'Repeats: ' + repText" @click="openPicker('rep', $event)">{{ repText }}<nc-icon name="chevron-down" :size="14" :stroke-width="2.2"></nc-icon></button>
+      <button ref="rep" type="button" class="nk-sel" :class="{ open: custom }" data-testid="card-repeat" :aria-expanded="String(!!custom)" :aria-controls="custom ? 'nk-cust' : null"
+        :aria-label="'Repeats: ' + repText" :title="custom ? 'Close the repeat settings' : null" @click="toggleRepeat">{{ repText }}<nc-icon :name="custom ? 'chevron-up' : 'chevron-down'" :size="14" :stroke-width="2.2"></nc-icon></button>
+    </div>
+    <div v-if="full && card.canRepeat && custom" id="nk-cust" ref="cust" class="nk-cust" role="group" aria-label="Repeat settings" data-testid="card-custom">
+      <div class="nk-cl">Every <input type="number" min="1" max="999" class="pc-field pc-field--sm nk-num" v-model.lazy.number="custom.interval" aria-label="How often" data-testid="custom-interval">
+        <select class="pc-field pc-field--sm nk-fit" v-model="custom.freq" aria-label="Unit" data-testid="custom-unit">
+          <option value="DAILY">{{ custom.interval > 1 ? 'days' : 'day' }}</option><option value="WEEKLY">{{ custom.interval > 1 ? 'weeks' : 'week' }}</option>
+          <option value="MONTHLY">{{ custom.interval > 1 ? 'months' : 'month' }}</option><option value="YEARLY">{{ custom.interval > 1 ? 'years' : 'year' }}</option></select>
+        <template v-if="custom.freq === 'YEARLY'">in <select class="pc-field pc-field--sm nk-fit" v-model.number="custom.month" aria-label="Month" data-testid="custom-month"><option v-for="(n, i) in monthNames" :key="i" :value="i + 1">{{ n }}</option></select></template>
+      </div>
+      <div v-if="custom.freq === 'WEEKLY'" class="nk-wd" role="group" aria-label="On these days">
+        <button v-for="i in weekOrder" :key="i" type="button" :aria-pressed="String(custom.byDay.includes(i))" :aria-label="dayNames[i]" :data-testid="'custom-day-' + i" @click="customDay(i)">{{ dayNames[i].charAt(0) }}</button>
+      </div>
+      <div v-if="custom.freq === 'MONTHLY' || custom.freq === 'YEARLY'" class="nk-opts" role="radiogroup" aria-label="On">
+        <label class="nk-cl"><input type="radio" value="day" v-model="custom.monthMode" data-testid="custom-by-day"> On day
+          <input type="number" min="1" max="31" class="pc-field pc-field--sm nk-num" v-model.lazy.number="custom.monthDay" aria-label="Day of the month" data-testid="custom-month-day" @focus="custom.monthMode = 'day'"></label>
+        <label class="nk-cl"><input type="radio" value="weekday" v-model="custom.monthMode" data-testid="custom-by-weekday"> On the
+          <select class="pc-field pc-field--sm nk-fit" v-model.number="custom.setPos" aria-label="Which week" data-testid="custom-setpos" @focus="custom.monthMode = 'weekday'"><option :value="1">first</option><option :value="2">second</option><option :value="3">third</option><option :value="4">fourth</option><option :value="-1">last</option></select>
+          <select class="pc-field pc-field--sm nk-fit" v-model.number="custom.posDay" aria-label="Weekday" data-testid="custom-posday" @focus="custom.monthMode = 'weekday'"><option v-for="i in weekOrder" :key="i" :value="i">{{ dayNames[i] }}</option></select></label>
+      </div>
+      <div class="nk-opts" role="radiogroup" aria-labelledby="nk-ends-h"><span id="nk-ends-h" class="nk-ends-h">Ends</span>
+        <label class="nk-cl"><input type="radio" value="never" v-model="custom.endMode" data-testid="custom-end-never"> Never</label>
+        <div class="nk-cl"><label class="nk-cl"><input type="radio" value="until" v-model="custom.endMode" data-testid="custom-end-until"> On</label>
+          <button type="button" class="nk-tp nk-dp nk-until" :class="{ dim: custom.endMode !== 'until' }" aria-expanded="false"
+            :aria-label="'Last date: ' + d(untilDate(), { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })" data-testid="custom-until"
+            @click="openPicker('until', $event)">{{ d(untilDate(), { month: 'short', day: 'numeric', year: 'numeric' }) }}</button></div>
+        <label class="nk-cl"><input type="radio" value="count" v-model="custom.endMode" data-testid="custom-end-count"> After
+          <input type="number" min="1" max="999" class="pc-field pc-field--sm nk-num" v-model.lazy.number="custom.count" aria-label="Times" data-testid="custom-count" @focus="custom.endMode = 'count'"> times</label>
+      </div>
+      <p v-if="customError" class="nk-err" role="alert" data-testid="custom-error">{{ customError }}</p>
     </div>
     <div v-if="full" class="nk-row">
       <span class="nk-gi" title="Details"><nc-icon name="text-align-start" :size="18"></nc-icon></span>
@@ -704,21 +777,21 @@ const EventCard = (() => {
   <button type="button" role="menuitem" class="red" data-testid="card-menu-delete" @click="menuAct('delete')">Delete <kbd>⌫</kbd></button>
 </div>
 
-<div v-if="picker" ref="pick" class="nk-pick" :class="'nk-pick-' + picker.kind" role="dialog" :aria-label="{ s: 'Start time', e: 'End time', sd: 'Start date', ed: 'End date', dur: 'Length', cat: 'Type', rep: 'Repeats' }[picker.kind]"
+<div v-if="picker" ref="pick" class="nk-pick" :class="'nk-pick-' + picker.kind" role="dialog" :aria-label="{ s: 'Start time', e: 'End time', sd: 'Start date', ed: 'End date', dur: 'Length', cat: 'Type', rep: 'Repeats', until: 'Last date' }[picker.kind]"
   :style="pickStyle" :data-kind="picker.kind" data-testid="card-picker" @keydown="pickKey">
   <template v-if="picker.kind === 's' || picker.kind === 'e'">
-    <input v-model="typed" class="nk-typed" :class="{ bad: typedBad }" aria-label="Type a time" placeholder="Type a time" data-testid="picker-input"
+    <input v-model="typed" class="pc-field nk-typed" :class="{ bad: typedBad }" aria-label="Type a time" placeholder="Type a time" data-testid="picker-input"
       @input="typedBad = false" @keydown.enter.prevent="typedTime" @keydown.down.prevent="$refs.tlist && ($refs.tlist.querySelector('.cur') || $refs.tlist.querySelector('button')).focus()">
     <div ref="tlist" class="nk-plist" @keydown="listKey">
       <button v-for="o in timeList" :key="o.m" type="button" :class="{ cur: o.cur }" :data-m="o.m" @click="pickTime(o.m)">{{ o.label }}<small v-if="o.len">{{ o.len }}</small></button>
     </div>
   </template>
-  <template v-else-if="picker.kind === 'sd' || picker.kind === 'ed'">
+  <template v-else-if="picker.kind === 'sd' || picker.kind === 'ed' || picker.kind === 'until'">
     <div v-if="picker.kind === 'ed' && !v.isAllDay" class="nk-plist nk-plist-top">
       <button type="button" :class="{ cur: sameDay }" data-testid="picker-same-day" @click="sameDayEnd">Same day</button>
       <button type="button" data-testid="picker-next-day" @click="pickDate(addDays(v.start, 1))">Next day <small>{{ d(addDays(v.start, 1)) }}</small></button>
     </div>
-    <input v-model="typed" class="nk-typed" :class="{ bad: typedBad }" aria-label="Type a date" placeholder="Type a date: Oct 20, Fri, tomorrow" data-testid="picker-input"
+    <input v-model="typed" class="pc-field nk-typed" :class="{ bad: typedBad }" aria-label="Type a date" placeholder="Type a date: Oct 20, Fri, tomorrow" data-testid="picker-input"
       @input="typedBad = false" @keydown.enter.prevent="typedDate">
     <div class="nk-mhead"><span>{{ monthTitle }}</span>
       <span><button type="button" class="nk-icon nk-sm" aria-label="Previous month" data-testid="picker-prev" @click="stepMonth(-1)"><nc-icon name="chevron-left" :size="16"></nc-icon></button><button type="button" class="nk-icon nk-sm" aria-label="Next month" data-testid="picker-next" @click="stepMonth(1)"><nc-icon name="chevron-right" :size="16"></nc-icon></button></span></div>
@@ -744,41 +817,16 @@ const EventCard = (() => {
     </template>
     <template v-else>
       <div class="nk-labels">
-        <label v-for="(c, i) in colors" :key="i"><i :style="{ background: c }"></i><input v-model="labelNames[i]" maxlength="40" :aria-label="'Name for type ' + (i + 1)" :data-testid="'picker-type-name-' + (i + 1)"></label>
+        <label v-for="(c, i) in colors" :key="i"><i :style="{ background: c }"></i><input v-model="labelNames[i]" class="pc-field pc-field--sm" maxlength="40" :aria-label="'Name for type ' + (i + 1)" :data-testid="'picker-type-name-' + (i + 1)"></label>
       </div>
       <div class="nk-pfoot end"><button type="button" data-testid="picker-types-done" @click="saveTypes">Done</button></div>
     </template>
   </template>
-  <template v-else-if="picker.kind === 'rep'">
-    <div v-if="!custom" class="nk-plist" @keydown="listKey">
-      <button v-for="p in presets" :key="p.id" type="button" :class="{ cur: presetNow === p.id }" :data-r="p.id" @click="pickRepeat(p.rule)">{{ p.text }}</button>
-      <button v-if="presetNow === 'custom'" type="button" class="cur" data-r="current" @click="closePicker()">{{ repText }}</button>
-      <button type="button" data-testid="picker-custom" @click="openCustom">Custom…</button>
-    </div>
-    <div v-else class="nk-cust">
-      <label>Every <input type="number" min="1" max="999" v-model.number="custom.interval" aria-label="How often" data-testid="custom-interval">
-        <select v-model="custom.freq" aria-label="Unit" data-testid="custom-unit">
-          <option value="DAILY">{{ custom.interval > 1 ? 'days' : 'day' }}</option><option value="WEEKLY">{{ custom.interval > 1 ? 'weeks' : 'week' }}</option>
-          <option value="MONTHLY">{{ custom.interval > 1 ? 'months' : 'month' }}</option><option value="YEARLY">{{ custom.interval > 1 ? 'years' : 'year' }}</option></select></label>
-      <div v-if="custom.freq === 'WEEKLY'" class="nk-wd">
-        <button v-for="i in weekOrder" :key="i" type="button" :aria-pressed="String(custom.byDay.includes(i))" :aria-label="dayNames[i]" :data-testid="'custom-day-' + i" @click="customDay(i)">{{ dayNames[i].charAt(0) }}</button>
-      </div>
-      <div v-if="custom.freq === 'MONTHLY' || custom.freq === 'YEARLY'" class="nk-ends">
-        <label v-if="custom.freq === 'YEARLY'">In <select v-model.number="custom.month" aria-label="Month" data-testid="custom-month"><option v-for="(n, i) in monthNames" :key="i" :value="i + 1">{{ n }}</option></select></label>
-        <label><input type="radio" value="day" v-model="custom.monthMode" data-testid="custom-by-day"> On day <input type="number" min="1" max="31" v-model.number="custom.monthDay" aria-label="Day of the month" data-testid="custom-month-day" @focus="custom.monthMode = 'day'"></label>
-        <label><input type="radio" value="weekday" v-model="custom.monthMode" data-testid="custom-by-weekday"> On the
-          <select v-model.number="custom.setPos" aria-label="Which week" data-testid="custom-setpos" @focus="custom.monthMode = 'weekday'"><option :value="1">first</option><option :value="2">second</option><option :value="3">third</option><option :value="4">fourth</option><option :value="-1">last</option></select>
-          <select v-model.number="custom.posDay" aria-label="Weekday" data-testid="custom-posday" @focus="custom.monthMode = 'weekday'"><option v-for="i in weekOrder" :key="i" :value="i">{{ dayNames[i] }}</option></select></label>
-      </div>
-      <div class="nk-ends"><span>Ends</span>
-        <label><input type="radio" value="never" v-model="custom.endMode" data-testid="custom-end-never"> Never</label>
-        <label><input type="radio" value="until" v-model="custom.endMode" data-testid="custom-end-until"> On <input type="date" v-model="custom.until" aria-label="Last date" data-testid="custom-until" @focus="custom.endMode = 'until'"></label>
-        <label><input type="radio" value="count" v-model="custom.endMode" data-testid="custom-end-count"> After <input type="number" min="1" max="999" v-model.number="custom.count" aria-label="Times" data-testid="custom-count" @focus="custom.endMode = 'count'"> times</label>
-      </div>
-      <p v-if="customError" class="nk-err" role="alert" data-testid="custom-error">{{ customError }}</p>
-      <div class="nk-pfoot end"><button type="button" data-testid="custom-apply" @click="applyCustom">Apply</button></div>
-    </div>
-  </template>
+  <div v-else-if="picker.kind === 'rep'" class="nk-plist" @keydown="listKey">
+    <button v-for="p in presets" :key="p.id" type="button" :class="{ cur: presetNow === p.id }" :data-r="p.id" @click="pickRepeat(p.rule)">{{ p.text }}</button>
+    <button v-if="presetNow === 'custom'" type="button" class="cur" data-r="current" @click="closePicker()">{{ repText }}</button>
+    <button type="button" data-testid="picker-custom" @click="openCustom">Custom…</button>
+  </div>
 </div>
 </teleport>`,
     };

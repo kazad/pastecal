@@ -315,19 +315,23 @@ html.nk-sheet-open, html.nk-sheet-open body { overflow: hidden; }
 @keyframes nk-drop { from { opacity: 0; transform: translateY(-4px); } }
 .nk-pick { width: 240px; }
 .nk-pick-dur { width: 200px; }
-.nk-pick-rep:has(.nk-cust) { width: 296px; }
 .nk-menu { width: 200px; }
 .nk-menu button { display: flex; justify-content: space-between; align-items: center; width: 100%; box-sizing: border-box; min-height: 34px; padding: var(--pc-space-2) 10px; border: 0;
     background: none; border-radius: var(--pc-radius-sm); font-size: var(--pc-fs-md); color: var(--pc-text); cursor: pointer; }
 .nk-menu button:hover { background: var(--pc-soft); }
 .nk-menu .red { color: var(--pc-danger); }
 .nk-menu kbd { font: var(--pc-fw-semibold) var(--pc-fs-2xs) var(--pc-font); color: var(--pc-text-muted); }
-.nk-typed { width: 100%; box-sizing: border-box; font: var(--pc-fw-medium) var(--pc-fs-md) var(--pc-font); border: 1px solid var(--pc-field-strong); border-radius: var(--pc-radius-control);
-    padding: 7px 9px; background: var(--pc-bg); color: var(--pc-text); margin-bottom: 6px; }
-.nk-typed.bad { border-color: var(--pc-danger); }
+/* Fields in the card and its pickers are the shared .pc-field (components.css: our chevron, its padding, focus ring),
+   with the card's stronger border, the one its time buttons have, so they can be found at a glance. Only what
+   differs is said here: no second field style (test/unit/native-fields.test.js). */
+.nk-card .pc-field, .nk-pick .pc-field { border-color: var(--pc-field-strong); }
+.nk-card .pc-field:hover:not(:focus), .nk-pick .pc-field:hover:not(:focus) { border-color: var(--pc-primary); }
+.nk-pick .nk-typed { font-weight: var(--pc-fw-medium); margin-bottom: 6px; }
+.nk-pick .nk-typed.bad { border-color: var(--pc-danger); }
 .nk-pick-s .nk-typed, .nk-pick-e .nk-typed { font-weight: var(--pc-fw-semibold); }
 .nk-plist { max-height: 230px; overflow-y: auto; display: flex; flex-direction: column; }
 .nk-plist-top { max-height: none; margin-bottom: var(--pc-space-1); }
+.nk-pick-rep .nk-plist { max-height: none; }   /* every repeat choice and Custom… in view (the picker scrolls if the screen is short) */
 .nk-plist button { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 34px; box-sizing: border-box; padding: 7px 10px; border: 0; background: none;
     border-radius: var(--pc-radius-sm); font-size: var(--pc-fs-md); color: var(--pc-text); cursor: pointer; font-variant-numeric: tabular-nums; text-align: left; }
 .nk-plist button small { font-size: var(--pc-fs-xs); color: var(--pc-text-muted); }
@@ -342,9 +346,7 @@ html.nk-sheet-open, html.nk-sheet-open body { overflow: hidden; }
 .nk-pfoot button:hover { background: var(--pc-soft); }
 .nk-labels { display: flex; flex-direction: column; gap: 6px; padding: var(--pc-space-1); max-height: 260px; overflow-y: auto; }
 .nk-labels label { display: flex; align-items: center; gap: var(--pc-space-2); }
-.nk-labels input, .nk-cust input[type=number], .nk-cust input[type=date], .nk-cust select { min-width: 0; font: var(--pc-fw-medium) var(--pc-fs-md) var(--pc-font); padding: 5px var(--pc-space-2);
-    border: 1px solid var(--pc-field-strong); border-radius: var(--pc-radius-control); background: var(--pc-bg); color: var(--pc-text); }
-.nk-labels input { flex: 1; }
+.nk-labels .pc-field { flex: 1; }
 .nk-mhead { display: flex; justify-content: space-between; align-items: center; font-size: var(--pc-fs-md); font-weight: var(--pc-fw-bold); padding: 2px 2px var(--pc-space-1) 6px; }
 .nk-month { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; font-size: var(--pc-fs-sm); }
 .nk-month b { font-size: var(--pc-fs-2xs); font-weight: var(--pc-fw-semibold); color: var(--pc-text-muted); padding: 3px 0; }
@@ -356,11 +358,21 @@ html.nk-sheet-open, html.nk-sheet-open body { overflow: hidden; }
 .nk-month button.today { box-shadow: inset 0 0 0 1.5px var(--pc-primary); }
 .nk-month button.today:not(.cur) { color: var(--pc-primary); }
 .nk-month button:disabled { opacity: .35; cursor: default; }
-.nk-cust { display: flex; flex-direction: column; gap: var(--pc-space-3); padding: 6px; }
-.nk-cust label { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.nk-cust input[type=number] { width: 56px; }
-.nk-cust input[type=radio] { accent-color: var(--pc-primary); margin: 0; }
-.nk-wd { display: flex; gap: var(--pc-space-1); }
+/* Repeat > Custom…: the repeat's settings inside the card, under the Repeat row, in the same column (EventCard openCustom). */
+.nk-cust { margin: calc(-1 * var(--pc-space-2)) 0 0 60px; display: flex; flex-direction: column; gap: var(--pc-space-3); padding: var(--pc-space-3);
+    border-radius: var(--pc-radius-control); background: var(--pc-soft); scroll-margin-bottom: 72px; }
+.nk-cl { display: flex; align-items: center; gap: var(--pc-space-2); flex-wrap: wrap; color: var(--pc-text); }
+.nk-cust .pc-field { display: inline-block; width: auto; background-color: var(--pc-raised); }
+.nk-cust .nk-num { width: 64px; }
+.nk-cust .nk-fit { max-width: 100%; }
+.nk-cust input[type=radio] { width: 18px; height: 18px; margin: 0; flex: none; accent-color: var(--pc-primary); cursor: pointer; }
+.nk-cust label { cursor: pointer; }
+.nk-opts { display: flex; flex-direction: column; gap: var(--pc-space-2); }
+.nk-ends-h { color: var(--pc-text-muted); font-size: var(--pc-fs-sm); font-weight: var(--pc-fw-semibold); }
+.nk-until { min-height: var(--pc-h-sm); padding: 0 var(--pc-space-3); font-size: var(--pc-fs-md); }
+.nk-until.dim { color: var(--pc-text-muted); }
+.nk-sel.open .nc-lucide { color: var(--pc-text); }
+.nk-wd { display: flex; gap: var(--pc-space-1); flex-wrap: wrap; }
 .nk-wd button { width: var(--pc-h-sm); height: var(--pc-h-sm); border-radius: 50%; border: 1px solid var(--pc-field-strong); background: var(--pc-raised); color: var(--pc-text);
     font-size: var(--pc-fs-sm); font-weight: var(--pc-fw-semibold); cursor: pointer; padding: 0; }
 .nk-wd button[aria-pressed="true"] { background: var(--pc-primary); border-color: var(--pc-primary); color: var(--pc-on-primary); }
@@ -406,12 +418,12 @@ html.nk-sheet-open, html.nk-sheet-open body { overflow: hidden; }
     .nk-card.sheet.writing { max-height: 94vh; }
     .nk-card.sheet::before { content: ""; display: block; width: 36px; height: 5px; border-radius: var(--pc-radius-xs); background: var(--pc-line); margin: var(--pc-space-2) auto 0; }
     .nk-card.sheet::after { box-shadow: inset 0 4px 0 var(--evc); }
-    .nk-typed, .nk-det { font-size: var(--pc-fs-lg); }   /* no zoom on focus */
+    .nk-pick .nk-typed, .nk-det, .nk-card .pc-field { font-size: var(--pc-fs-lg); }   /* no zoom on focus */
 }
 @media (max-width: 480px) {
     .nk-when { grid-template-columns: 42px 104px 86px 1fr; gap: var(--pc-space-2) 6px; }
     .nk-tp { font-size: var(--pc-fs-md); }
-    .nk-row, .nk-foot, .nk-tz { margin-left: 48px; }
+    .nk-row, .nk-foot, .nk-tz, .nk-cust { margin-left: 48px; }
     .nk-row > .nk-gi, .nk-tz > .nk-gi { left: -48px; }
 }
 
