@@ -324,12 +324,27 @@ async function allDayShown(r, page, id) {
   return { seen: Object.fromEntries(Object.entries(seen).map(([k, v]) => [k, [...v].sort()])), visible };
 }
 
+// What both renderers store for the all-day events typed in `zone`: the author's local midnight, end exclusive
+// (as b2 seeds it). The "made" test checks the maker stores exactly these rows (all but the id); the viewer and
+// editor-open tests start from them, so each zone is its own test and they run side by side.
+const zoneOffset = (ms, zone) => {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: zone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit' }).formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
+  return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - ms;
+};
+const zoneMidnight = (ymd, zone) => { const wall = Date.parse(ymd + 'T00:00:00Z'); let t = wall; for (let i = 0; i < 3; i++) t = wall - zoneOffset(t, zone); return new Date(t).toISOString(); };
+const nextDay = (ymd) => { const d = new Date(ymd + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10); };
+const allDayRows = (zone) => ALLDAY.map((a, i) => ({ ...timed(`ad-${i}`, a.title, zoneMidnight(a.from, zone), zoneMidnight(nextDay(a.to), zone)), isAllDay: true }));
+const allDayExpected = Object.fromEntries(ALLDAY.map((a) => [a.title, daysOf(a.from, a.to)]));
+const seedAllDay = (id, zone) => reset(id, allDayRows(zone));
+const withoutId = ({ id, ...rest }) => rest;
+
 for (const zone of ZONES) {
   for (const maker of [classic, native]) {
-    test(`b. all-day events made in ${maker.name} (${zone}) show on the same dates in ${other(maker).name} in every zone; opening the editor changes nothing`, async ({ browser }) => {
-      test.setTimeout(240_000);
-      const viewer = other(maker);
-      const id = `dp-b-${maker.name}-${zone.split('/')[1].toLowerCase()}`;
+    const viewer = other(maker);
+    const tag = `${maker.name}-${zone.split('/')[1].toLowerCase()}`;
+    test(`b. all-day events made in ${maker.name} (${zone}): stored as that zone's midnights, drawn by ${maker.name} on the dates typed`, async ({ browser }) => {
+      const id = `dp-b-${tag}`;
       await reset(id, []);
       const { ctx, page } = await openBrowser(browser, zone);
       for (const a of ALLDAY) {
@@ -347,23 +362,33 @@ for (const zone of ZONES) {
       }
       const made = await stored(id);
       for (const a of ALLDAY) expect(made.find((e) => e.title === a.title).isAllDay, a.title).toBe(true);
+      // exactly what the viewer and editor tests below start from
+      for (const e of allDayRows(zone)) expect(withoutId(made.find((x) => x.title === e.title)), `${e.title} as stored`).toEqual(withoutId(e));
 
       // Where the maker itself draws them.
-      const expected = Object.fromEntries(ALLDAY.map((a) => [a.title, daysOf(a.from, a.to)]));
       const own = await allDayShown(maker, page, id);
-      expect(own.seen, `${maker.name} in ${zone}`).toEqual(expected);
+      expect(own.seen, `${maker.name} in ${zone}`).toEqual(allDayExpected);
       await ctx.close();
+    });
 
-      // The other renderer, in every zone: the same dates.
-      for (const z of ZONES) {
+    // The other renderer, in every zone: the same dates.
+    for (const z of ZONES) {
+      test(`b. all-day events made in ${maker.name} (${zone}) show on the same dates in ${viewer.name} in ${z}`, async ({ browser }) => {
+        const id = `dp-b-${tag}-in-${z.split('/')[1].toLowerCase()}`;
+        await seedAllDay(id, zone);
         const b = await openBrowser(browser, z);
         const got = await allDayShown(viewer, b.page, id);
-        expect(got.seen, `${viewer.name} in ${z}`).toEqual(expected);
+        expect(got.seen, `${viewer.name} in ${z}`).toEqual(allDayExpected);
         await b.ctx.close();
-      }
+      });
+    }
 
-      // A no-op open and close of the viewer's editor (in a zone other than the maker's) stores nothing.
-      const z2 = ZONES[(ZONES.indexOf(zone) + 1) % ZONES.length];
+    // A no-op open and close of the viewer's editor (in a zone other than the maker's) stores nothing.
+    const z2 = ZONES[(ZONES.indexOf(zone) + 1) % ZONES.length];
+    test(`b. all-day events made in ${maker.name} (${zone}): opening and closing ${viewer.name}'s editor in ${z2} changes nothing`, async ({ browser }) => {
+      const id = `dp-b-${tag}-noop`;
+      await seedAllDay(id, zone);
+      const made = await stored(id);
       const b = await openBrowser(browser, z2);
       for (const a of ALLDAY) {
         await viewer.open(b.page, id, `?view=month&date=${a.from}`);
