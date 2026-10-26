@@ -4094,6 +4094,11 @@ const CalendarVueApp = {
             };
             const start = ms(event.start);
             if (isNaN(start)) return true;
+            // A rule too big to expand is shown once (ScheduleAdapter.toView): count it the same way.
+            if (typeof EventStore !== 'undefined' && EventStore.unsafeRecurrence?.(event.recurrencerule)) {
+                const end = ms(event.end);
+                return this.spansRange(start, start + (isNaN(end) ? 0 : Math.max(0, end - start)), range);
+            }
             const rule = String((allDay ? Event.allDayRuleToLocal(event.recurrencerule) : event.recurrencerule) || '');
 
             // The calendar's own expansion (Syncfusion's ej.schedule.generate, or the native grid's rrule), the

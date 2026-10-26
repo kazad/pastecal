@@ -22,6 +22,7 @@
 (function (root) {
     'use strict';
 
+    const warnedRules = new Set();
     const blank = (v) => v === undefined || v === null || v === '';
     const asText = (v) => blank(v) ? v : String(v);
     const toDate = (v) => { if (blank(v)) return null; const d = new Date(v); return isNaN(d.getTime()) ? null : d; };
@@ -172,6 +173,12 @@
                 const shownEnd = allDay && start && (!end || end <= start)
                     ? new Date(start.getFullYear(), start.getMonth(), start.getDate() + 1) : null;
                 if (shownEnd) end = shownEnd;
+                // A stored rule that would freeze the grid (COUNT=10000000 never drew, INTERVAL=0 hung
+                // Agenda): shown once, unrepeated, so the calendar loads and the event can be deleted.
+                const unsafe = typeof EventStore !== 'undefined' && EventStore.unsafeRecurrence
+                    ? EventStore.unsafeRecurrence(e.recurrencerule) : null;
+                if (unsafe && !warnedRules.has(e.id)) { warnedRules.add(e.id); console.warn(`[pastecal] event ${e.id}: ${unsafe}; shown once, not repeated`); }
+                const rule = unsafe ? '' : e.recurrencerule;
                 return {
                     Id: asText(e.id),
                     Subject: e.title,
@@ -181,9 +188,9 @@
                     _storedStart: e.start,
                     _storedEnd: e.end,
                     _allDaySeries: allDaySeries,
-                    ...(allDaySeries ? { _storedRule: e.recurrencerule, _storedException: e.recurrenceException } : {}),
+                    ...(allDaySeries ? { _storedRule: rule, _storedException: e.recurrenceException } : {}),
                     Description: e.description,
-                    RecurrenceRule: allDaySeries ? Event.allDayRuleToLocal(e.recurrencerule) : e.recurrencerule,
+                    RecurrenceRule: allDaySeries ? Event.allDayRuleToLocal(rule) : rule,
                     Type: parseInt(e.type || 1, 10),
                     IsAllDay: !!e.isAllDay,
                     Recurrence: e.repeat,

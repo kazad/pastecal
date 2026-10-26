@@ -108,6 +108,8 @@ const NativeCalendar = (() => {
     // ---- events -> occurrences ---------------------------------------------------------
     function isLong(o) { return o.allDay || (o.end - o.start) >= DAY_MS; }
 
+    const MAX_OCCURRENCES = 2000;
+    const warnedRules = new Set();
     function occurrencesBetween(events, rangeStart, rangeEnd) {
         const out = [];
         const RR = window.rrule || {};
@@ -124,7 +126,12 @@ const NativeCalendar = (() => {
             // An edited occurrence is its own row: recurrenceID points at the series and it
             // CARRIES A COPY of the series' rule (that is how Syncfusion stores it). Expanding
             // it would draw a second series; it is one event, at its own time.
-            if (ev.recurrencerule && !ev.recurrenceID && RR.RRule) {
+            // A rule too big to expand (FREQ=SECONDLY was 3.6 million occurrences in a month: frozen,
+            // then out of memory) is shown once, unrepeated, so the calendar loads and it can be deleted.
+            const unsafe = ev.recurrencerule && window.EventStore && EventStore.unsafeRecurrence
+                ? EventStore.unsafeRecurrence(ev.recurrencerule) : null;
+            if (unsafe && !warnedRules.has(ev.id)) { warnedRules.add(ev.id); console.warn(`[pastecal] event ${ev.id}: ${unsafe}; shown once, not repeated`); }
+            if (ev.recurrencerule && !ev.recurrenceID && RR.RRule && !unsafe) {
                 const stamps = String(ev.recurrenceException || '').split(',').map(s => s.trim()).filter(Boolean);
                 // Timed: the stamp's LOCAL date, as Syncfusion (classic) matches it: it parses each stamp and skips
                 // the occurrence on that local day. To the minute, a date deleted in Los Angeles came back for a
@@ -143,7 +150,8 @@ const NativeCalendar = (() => {
                 } catch (e) { rule = null; }
                 if (rule) {
                     const from = toFloating(new Date(rangeStart.getTime() - duration)), to = toFloating(rangeEnd);
-                    for (const f of rule.between(from, to, true)) {
+                    // At most MAX_OCCURRENCES per event per view (an HOURLY series is 8,760 a year).
+                    for (const f of rule.between(from, to, true, (d, i) => i < MAX_OCCURRENCES)) {
                         const s = fromFloating(f);
                         if (excluded.has(ymdKey(s.getFullYear(), s.getMonth(), s.getDate()))) continue;
                         out.push({ ...base, start: s, end: new Date(s.getTime() + duration), recurring: true, key: `${ev.id}@${s.getTime()}` });
