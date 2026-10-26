@@ -51,70 +51,118 @@
     }
 
     // ---- typing a time or a date ---------------------------------------------------------------
+    // Everything a person may type into the time and date pickers is a row of TIME_FORMS or DATE_FORMS, and nowhere
+    // else: one table per kind, read top to bottom, the first row that matches wins. A form that is not a row is
+    // refused (the field turns red), never guessed at. What a form leaves open -- which year, which Friday, which
+    // day an end time falls on -- is decided by the look-ahead rules below the tables, also in one place.
+    // test/unit/typed-forms.test.js holds the whole table as rows of (input, locale, today, expected).
+
+    /** A clock time's text, lowercased, dots dropped ("5 p.m." -> "5 pm"; "17.30" -> "1730"). */
+    const timeText = (s) => String(s || '').trim().toLowerCase().replace(/\./g, '').replace(/\s+/g, ' ');
+    /** h (0-23) and minutes -> minutes after midnight, or null. */
+    const hm = (h, m) => (h >= 0 && h <= 23 && m >= 0 && m <= 59 ? h * 60 + m : null);
+    /** A 12-hour hour with "a"/"p" -> 0-23, or -1. */
+    const h12 = (h, ap) => (h < 1 || h > 12 ? -1 : (h % 12) + (ap[0] === 'p' ? 12 : 0));
     /**
-     * "5p", "5 pm", "5:30", "530p", "17:30", "noon", "midnight" -> minutes after midnight, or null.
-     * With no AM/PM on a 12-hour clock, 1-7 means the afternoon (events rarely start at 3 in the morning);
-     * on a 24-hour clock the number is the hour.
+     * The clock times people type. read(match, fmt) -> minutes after midnight, or null.
+     * With no AM/PM on a 12-hour clock, 1-7 means the afternoon (events rarely start at 3 in the morning); a leading
+     * zero ("07") or a 24-hour clock keeps the number as the hour.
      */
+    const TIME_FORMS = [
+        { form: 'noon', re: /^noon$/, read: () => 720 },
+        { form: 'midnight', re: /^midnight$/, read: () => 0 },
+        { form: '5p, 5 pm, 5:30 pm, 530p, 11 PM', re: /^(\d{1,2})(?::?(\d{2}))? ?(a|am|p|pm)$/, read: (m) => hm(h12(+m[1], m[3]), +(m[2] || 0)) },
+        { form: '17:30, 5:30, 0730, 17.30 (dots dropped), 9', re: /^(\d{1,2})(?::?(\d{2}))?$/, read: (m, fmt) => {
+            const h = +m[1];
+            return hm(fmt !== '24' && !/^0/.test(m[1]) && h >= 1 && h <= 7 ? h + 12 : h, +(m[2] || 0));
+        } },
+    ];
+    /** "5p", "5 pm", "5:30", "530p", "17:30", "noon", "midnight" -> minutes after midnight, or null. */
     function parseTime(s, fmt = '12') {
-        const t = String(s || '').trim().toLowerCase().replace(/\./g, '');
+        const t = timeText(s);
         if (!t) return null;
-        if (t === 'noon') return 720;
-        if (t === 'midnight') return 0;
-        const m = /^(\d{1,2})(?::?(\d{2}))?\s*(a|am|p|pm)?$/.exec(t);
-        if (!m) return null;
-        let h = +m[1]; const mm = +(m[2] || 0); const ap = m[3];
-        if (mm > 59) return null;
-        if (ap) {
-            if (h < 1 || h > 12) return null;
-            if (ap[0] === 'p' && h < 12) h += 12;
-            if (ap[0] === 'a' && h === 12) h = 0;
-        } else {
-            if (h > 23) return null;
-            if (fmt !== '24' && !/^0/.test(m[1]) && h >= 1 && h <= 7) h += 12;
-        }
-        return h * 60 + mm;
+        for (const f of TIME_FORMS) { const m = f.re.exec(t); if (m) return f.read(m, fmt); }
+        return null;
     }
+
     const WD = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
     const MON = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
     /**
-     * "today", "tomorrow", "fri" (the next Friday after today), "oct 20", "20 oct", "10/20", "10/20/2027",
-     * "2026-10-20", "20" (that day of `ref`'s month) -> a local midnight Date, or null.
-     * A month and day without a year are the coming one ("jan 5" typed in October is next January), or one in the
-     * last few weeks ("oct 20" typed on Oct 24): the first on or after a month before `today` (or before the month
-     * shown, when that is later). A day-first "13/10" is read as day/month when it cannot be month/day.
+     * The order a locale writes a numeric date in: 'dmy' (en-GB, de-DE, fr-FR: 28/10/2026), 'mdy' (en-US) or
+     * 'ymd' (ja-JP, zh-CN: 2026/10/28, whose "10/28" is month first too). From Intl, so no list of countries.
      */
-    function parseDate(s, today = new Date(), ref = today) {
-        const t = String(s || '').trim().toLowerCase().replace(/[.,]/g, ' ').replace(/\s+/g, ' ');
+    function dateOrder(locale) {
+        try {
+            const parts = new Intl.DateTimeFormat(locale || undefined, { year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(2026, 9, 28));
+            const seq = parts.filter((p) => p.type === 'year' || p.type === 'month' || p.type === 'day').map((p) => p.type[0]).join('');
+            return seq === 'dmy' || seq === 'ymd' ? seq : 'mdy';
+        } catch (e) { return 'mdy'; }
+    }
+    const yearOf = (y) => (!y ? 0 : y.length === 2 ? 2000 + +y : +y);
+    /** Two numbers without a year's help: month/day, or day/month when the locale writes day first or only that reads. */
+    function numeric(c, a, b, y) {
+        if (a > 12 && b <= 12) return c.at(y, b - 1, a);         // 13/10: only day-first makes sense, anywhere
+        if (b > 12 && a <= 12) return c.at(y, a - 1, b);         // 10/13: only month-first makes sense, anywhere
+        return c.order === 'dmy' ? c.at(y, b - 1, a) : c.at(y, a - 1, b);   // 5/10: the locale's own order
+    }
+    /**
+     * The dates people type. read(match, c) -> a local midnight Date, or null. `c` carries today (T), the month shown
+     * (R), the locale's order, and at(y, monthIndex, day) -- y 0 when no year was typed (the look-ahead below).
+     * The text is lowercased with commas and runs of spaces made one space; dots are kept (they are a form: "28.10.").
+     */
+    const DATE_FORMS = [
+        { form: 'today', re: /^today$/, read: (m, c) => c.T },
+        { form: 'tomorrow, tmrw', re: /^(tomorrow|tmrw)$/, read: (m, c) => addDays(c.T, 1) },
+        { form: 'yesterday', re: /^yesterday$/, read: (m, c) => addDays(c.T, -1) },
+        { form: 'fri, friday (the next one)', re: /^(sun|mon|tue|wed|thu|fri|sat)[a-z]*$/, read: (m, c) => nextWeekday(c.T, WD[m[1]]) },
+        { form: '2026-10-28 (ISO)', re: /^(\d{4})-(\d{1,2})-(\d{1,2})$/, read: (m, c) => c.at(+m[1], +m[2] - 1, +m[3]) },
+        { form: '28.10., 28.10, 28.10.2026, 28.10.26 (day first, as German, Polish, Russian... write it)', re: /^(\d{1,2})\.(\d{1,2})\.?(?:(\d{2}|\d{4}))?$/,
+            read: (m, c) => c.at(yearOf(m[3]), +m[2] - 1, +m[1]) },
+        { form: '10/28, 28/10, 10/28/2026, 10-28', re: /^(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2}|\d{4}))?$/, read: (m, c) => numeric(c, +m[1], +m[2], yearOf(m[3])) },
+        { form: 'oct 28, october 28 2026', re: /^([a-z]{3})[a-z]* (\d{1,2})(?:st|nd|rd|th)?(?: (\d{4}))?$/, read: (m, c) => (m[1] in MON ? c.at(yearOf(m[3]), MON[m[1]], +m[2]) : null) },
+        { form: '28 oct, 28. oktober (the month in English), 28 october 2026', re: /^(\d{1,2})(?:st|nd|rd|th|\.)? ([a-z]{3})[a-z]*(?: (\d{4}))?$/, read: (m, c) => (m[2] in MON ? c.at(yearOf(m[3]), MON[m[2]], +m[1]) : null) },
+        { form: '28 (that day of the month shown)', re: /^(\d{1,2})$/, read: (m, c) => validDate(c.R.getFullYear(), c.R.getMonth(), +m[1]) },
+    ];
+
+    // ---- look-ahead: what a typed form leaves open -------------------------------------------------
+    /** y, monthIndex, day -> that date, or null when there is no such day (Feb 30). */
+    function validDate(y, mo, d) { const x = new Date(y, mo, d); return x.getMonth() === mo && x.getDate() === d ? x : null; }
+    /** A weekday is the next one after today, never today ("sat" typed on a Saturday is a week on). */
+    function nextWeekday(T, want) { let d = addDays(T, 1); while (d.getDay() !== want) d = addDays(d, 1); return d; }
+    /**
+     * A month and day without a year: the coming one ("jan 5" typed in October is next January), or one in the last
+     * few weeks ("oct 20" typed on Oct 24): the first on or after a month before today (or before the month shown,
+     * when that is later). Feb 29 is the next leap year's.
+     */
+    function nearYear(mo, d, T, R) {
+        const from = addDays(R > T ? R : T, -31), y = from.getFullYear();
+        return [0, 1, 2, 3, 4].map((k) => validDate(y + k, mo, d)).find((x) => x && x >= from) || null;
+    }
+    /**
+     * An end time typed for an event shorter than a day: the first such clock time after the start ("11:30p" for an
+     * 11 PM - midnight event is 11:30 that night, not the next; "1a" for an 11 PM event is 1 AM the next day). A longer
+     * event keeps the day it ends on (Mon 10 AM - Wed 3 PM, "4p" is Wed 4 PM), or, when that would not be after the
+     * start, the first after it. -> a Date, or null when the time is the start's own (a zero-length or a day-long end).
+     */
+    function typedEnd(start, end, minutes) {
+        const at = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate(), Math.floor(minutes / 60), minutes % 60);
+        if (end - start >= 864e5) { const e = at(end); if (e > start) return e; }
+        if (minutes === minutesOf(start)) return null;
+        const e = at(start);
+        return e > start ? e : at(addDays(startOfDay(start), 1));
+    }
+
+    /**
+     * "today", "tomorrow", "fri", "oct 20", "20 oct", "10/20", "28/10", "28.10.", "2026-10-20", "20" -> a local
+     * midnight Date, or null. `today` is today, `ref` the month the picker shows, `locale` the reader's
+     * (navigator.language): it decides only a numeric date both ways could read ("5/10").
+     */
+    function parseDate(s, today = new Date(), ref = today, locale) {
+        const t = String(s || '').trim().toLowerCase().replace(/,/g, ' ').replace(/\s+/g, ' ');
         if (!t) return null;
         const T = startOfDay(today), R = startOfDay(ref);
-        if (t === 'today') return T;
-        if (t === 'tomorrow' || t === 'tmrw') return addDays(T, 1);
-        if (t === 'yesterday') return addDays(T, -1);
-        const w = /^(sun|mon|tue|wed|thu|fri|sat)[a-z]*$/.exec(t);
-        if (w) { const want = WD[w[1]]; let d = addDays(T, 1); while (d.getDay() !== want) d = addDays(d, 1); return d; }
-        const ok = (y, mo, d) => { const x = new Date(y, mo, d); return x.getMonth() === mo && x.getDate() === d ? x : null; };
-        // No year: the first such date from a month back (from today, or from the month shown when that is later).
-        const from = addDays(R > T ? R : T, -31);
-        const near = (mo, d) => {
-            const y = from.getFullYear();
-            return [0, 1, 2, 3, 4].map((k) => ok(y + k, mo, d)).find((x) => x && x >= from) || null;   // (Feb 29: the next leap year)
-        };
-        const at = (y, mo, d) => (y ? ok(y, mo, d) : near(mo, d));
-        let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t);
-        if (m) return ok(+m[1], +m[2] - 1, +m[3]);
-        m = /^(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?$/.exec(t);
-        if (m) {
-            const y = m[3] ? (m[3].length === 2 ? 2000 + +m[3] : +m[3]) : 0;
-            const [a, b] = [+m[1], +m[2]];
-            return a > 12 && b <= 12 ? at(y, b - 1, a) : at(y, a - 1, b);   // (13/10: only day-first makes sense)
-        }
-        m = /^([a-z]{3})[a-z]* (\d{1,2})(?: (\d{4}))?$/.exec(t) || null;
-        if (m && m[1] in MON) return at(m[3] ? +m[3] : 0, MON[m[1]], +m[2]);
-        m = /^(\d{1,2}) ([a-z]{3})[a-z]*(?: (\d{4}))?$/.exec(t);
-        if (m && m[2] in MON) return at(m[3] ? +m[3] : 0, MON[m[2]], +m[1]);
-        m = /^(\d{1,2})$/.exec(t);
-        if (m) return ok(R.getFullYear(), R.getMonth(), +m[1]);
+        const c = { T, R, order: dateOrder(locale), at: (y, mo, d) => (y ? validDate(y, mo, d) : nearYear(mo, d, T, R)) };
+        for (const f of DATE_FORMS) { const m = f.re.exec(t); if (m) return f.read(m, c); }
         return null;
     }
 
@@ -243,7 +291,7 @@
     }
 
     const cardKit = { DAYS, DAY_NAMES, MONTH_NAMES, fmtMinutes, fmtTime, fmtDate, fmtLen, fmtDays, ago, ordinal, minutesOf,
-        parseTime, parseDate, parseRule, buildRule, presets, presetOf, describeRule, ruleProblem, monthCells,
+        parseTime, parseDate, typedEnd, dateOrder, TIME_FORMS, DATE_FORMS, parseRule, buildRule, presets, presetOf, describeRule, ruleProblem, monthCells,
         startOfDay, addDays, dayDiff, dateStr };
     if (typeof module !== 'undefined' && module.exports) module.exports = cardKit;
     else root.cardKit = cardKit;

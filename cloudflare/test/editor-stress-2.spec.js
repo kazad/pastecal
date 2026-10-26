@@ -197,8 +197,7 @@ test('S04 [repeat] data-loss: another browser renames the series while I am aske
   await A.ctx.close(); await B.ctx.close();
 });
 
-test('S05 [card] broken: on an 11 PM - midnight event, typing the end "11:30p" makes it 24h 30m long instead of ending at 11:30 PM', async ({ browser }) => {
-  finding('typedTime reads the end on the end\'s date (the next day) when the event ends at midnight');
+test('S05 [card]: on an 11 PM - midnight event, typing the end "11:30p" ends it at 11:30 PM (it made it 24h 30m long)', async ({ browser }) => {
   const id = await seed([timed('l', 'Late show', '2026-10-27T23:00:00-07:00', '2026-10-28T00:00:00-07:00')]);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-27');
   await openCard(page, ev(page, 'l'));
@@ -248,16 +247,18 @@ test('S07 [grid] ugly: on a 390px phone a crowded hour shows one 20px sliver bes
   await ctx.close();
 });
 
-test('S08 [card] broken (de-DE): a German date typed in the date picker ("28.10.", "28.10.2026") is refused', async ({ browser }) => {
-  finding('cardKit.parseDate reads "." as a space and knows no day.month form');
+test('S08 [card] (de-DE): a German date typed in the date picker ("28.10.", "28.10.2026", "5/11") is read day first (it was refused)', async ({ browser }) => {
   const id = await seed([timed('p', 'Training', '2026-10-22T17:00:00+02:00', '2026-10-22T18:00:00+02:00')]);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-22', { locale: 'de-DE', timezoneId: 'Europe/Berlin', settings: { timeFormat: '24', firstDayOfWeek: '1' } });
   await openCard(page, ev(page, 'p'), true);
   await typeInto(page, 'card-start-date', '28.10.');
   await page.waitForTimeout(500);
   await shot(page, 'S08-de-date-refused');
-  await page.keyboard.press('Escape');
-  expect(await local(page, (await byId(id, 'p')).start)).toBe('2026-10-28 17:00');
+  await soon(async () => local(page, (await byId(id, 'p')).start)).toBe('2026-10-28 17:00');
+  await typeInto(page, 'card-start-date', '29.10.2026');
+  await soon(async () => local(page, (await byId(id, 'p')).start)).toBe('2026-10-29 17:00');
+  await typeInto(page, 'card-start-date', '5/11');   // day first in de-DE: Nov 5
+  await soon(async () => local(page, (await byId(id, 'p')).start)).toBe('2026-11-05 17:00');
   await ctx.close();
 });
 

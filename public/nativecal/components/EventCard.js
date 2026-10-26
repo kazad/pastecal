@@ -592,18 +592,14 @@ const EventCard = (() => {
             typedTime() {
                 const m = K.parseTime(this.typed, this.fmt);
                 if (m == null) { this.typedBad = true; return; }
-                const kind = this.picker.kind, startMin = K.minutesOf(this.v.start);
-                if (kind === 'e' && this.sameDay && m === startMin) { this.typedBad = true; return; }
+                const v = this.v, kind = this.picker.kind;
+                // Which day the time falls on is cardKit's look-ahead (typedEnd), not decided here.
+                const when = kind === 's' ? at(v.start, m) : K.typedEnd(v.start, v.end, m);
                 // A clock time that day does not have (2:30 AM on the spring-forward day) is refused, not moved.
-                const day = kind === 's' ? this.v.start : this.v.end;
-                if (m < 1440 && K.minutesOf(at(day, m)) !== m && !(kind === 'e' && this.sameDay && m < startMin)) { this.typedBad = true; return; }
-                // An end typed before the start ("1a" for an 11 PM event) is after midnight, the next day.
-                if (kind === 'e' && this.sameDay && m < startMin) {
-                    const end = at(K.addDays(K.startOfDay(this.v.start), 1), m);
-                    this.setAndClose({ end }, `Ends ${this.t(end)} the next day`);
-                    return;
-                }
-                this.pickTime(m);
+                if (!when || K.minutesOf(when) !== m) { this.typedBad = true; return; }
+                if (kind === 's') { this.pickTime(m); return; }
+                const nextDay = !sameDate(when, v.start) && v.end - v.start < 864e5;
+                this.setAndClose({ end: when }, `Ends ${this.t(when)}${nextDay ? ' the next day' : ''}`);
             },
             listKey(e) {
                 const items = [...e.currentTarget.querySelectorAll('button')];
@@ -642,7 +638,7 @@ const EventCard = (() => {
             },
             typedDate() {
                 const ref = this.month ? new Date(this.month.y, this.month.m, 1) : new Date();
-                const d = K.parseDate(this.typed, new Date(), ref);
+                const d = K.parseDate(this.typed, new Date(), ref, navigator.language);
                 if (!d) { this.typedBad = true; return; }
                 this.pickDate(d);
             },
