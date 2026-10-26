@@ -26,11 +26,11 @@ for (const width of [1280, 390]) {
     const page = await ctx.newPage();
     await page.goto('/features');
     await expect(page.getByRole('heading', { level: 1 })).toHaveText('How pastecal works');
-    await expect(page.locator('.ft-row h2')).toHaveCount(6);
+    await expect(page.locator('.ft-row h2')).toHaveCount(5);
     await expect(page.locator('.site-header a[href="/features"]')).toHaveCount(1);
     const imgs = page.locator('main img');
-    await expect(imgs).toHaveCount(6);
-    for (let i = 0; i < 6; i++) {
+    await expect(imgs).toHaveCount(5);
+    for (let i = 0; i < 5; i++) {
       const img = imgs.nth(i);
       await img.scrollIntoViewIfNeeded();
       await expect.poll(() => img.evaluate((el) => el.complete && el.naturalWidth)).toBeGreaterThan(0);
