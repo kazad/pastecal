@@ -7,7 +7,7 @@
  * Needs `wrangler dev` on BASE_URL (default http://localhost:8787). Makes one calendar (10/min per IP).
  */
 const { test, expect } = require('@playwright/test');
-const { settled } = require('./settle');
+const { settled } = require('./helpers');
 
 const VM = `document.querySelector('#app')?._vnode?.component?.proxy`;
 

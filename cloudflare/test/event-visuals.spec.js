@@ -4,7 +4,7 @@
  * Syncfusion popups on the app's own surfaces. Needs `wrangler dev` on BASE_URL.
  */
 const { test, expect } = require('@playwright/test');
-const { settled } = require('./settle');
+const { settled } = require('./helpers');
 
 const VM = `document.querySelector('#app')._vnode.component.proxy`;
 const INK = 'rgb(20, 23, 28)', WHITE = 'rgb(255, 255, 255)';

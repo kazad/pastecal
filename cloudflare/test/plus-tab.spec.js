@@ -17,6 +17,7 @@
  * for the anonymous Firebase sign-in that tests block.
  */
 const { test, expect, request: playwrightRequest } = require('@playwright/test');
+const { NOT_LOCAL } = require('./helpers');
 
 const SECRET = process.env.IMPORT_SECRET || 'dev-secret';
 const ALLOW = new Set(['localhost', '127.0.0.1', 'fonts.googleapis.com', 'fonts.gstatic.com', 'www.gstatic.com', 'cdn.jsdelivr.net']);
@@ -64,7 +65,7 @@ async function open(browser, path, { author, session, authorDelay = 0, viewport 
     const ready = Date.now() + delay;
     const t = setInterval(() => { try { if (typeof AuthorSignal !== 'undefined') { AuthorSignal.uid = () => (Date.now() >= ready ? uid : null); clearInterval(t); } } catch (e) { /* not yet */ } }, 5);
   }, [author || null, authorDelay]);
-  await ctx.route('**/*', (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
+  await ctx.route(NOT_LOCAL, (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
   const page = await ctx.newPage();
   page.on('dialog', (d) => d.accept());
   await page.goto('/?backend=cf');

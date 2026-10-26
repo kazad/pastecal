@@ -15,6 +15,12 @@ module.exports = defineConfig({
   reporter: 'list',
   timeout: 90_000,
   expect: { timeout: 10_000 },
-  use: { baseURL, screenshot: 'only-on-failure' },
+  use: {
+    baseURL, screenshot: 'only-on-failure',
+    // Only the local servers and the fonts/script CDNs the pages need resolve; every other host fails at once, as
+    // test/native-audit does. Tests that watch for tracker or Firebase requests still see them (page.route and
+    // the websocket event come before DNS); nothing waits on, or reaches, an analytics beacon or production.
+    launchOptions: { args: ['--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1, EXCLUDE localhost, EXCLUDE fonts.googleapis.com, EXCLUDE fonts.gstatic.com, EXCLUDE unpkg.com, EXCLUDE cdn.jsdelivr.net, EXCLUDE cdn.tailwindcss.com, EXCLUDE www.gstatic.com'] },
+  },
   projects: [{ name: 'desktop-en', use: { ...devices['Desktop Chrome'], locale: 'en-US', timezoneId: 'America/Los_Angeles' } }],
 });

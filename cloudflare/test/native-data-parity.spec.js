@@ -26,7 +26,7 @@
  * reruns don't spend the 10-per-minute create limit.
  */
 const { test, expect } = require('@playwright/test');
-const { settled } = require('./settle');
+const { settled, NOT_LOCAL } = require('./helpers');
 const { sf, nat, localHM, localYMD } = require('../../test/native-audit/harness');
 
 const BASE = process.env.BASE_URL || 'http://localhost:8787';
@@ -205,7 +205,7 @@ const soon = (fn, timeout = 15_000) => expect.poll(fn, { timeout, intervals: [10
 async function openBrowser(browser, timezoneId = 'America/Los_Angeles') {
   const ctx = await browser.newContext({ timezoneId, locale: 'en-US', viewport: { width: 1280, height: 800 }, baseURL: BASE });
   await ctx.addInitScript(() => { window.__TEST__ = true; try { localStorage.setItem('pastecal_backend', 'cf'); } catch (e) { /* blocked */ } });
-  await ctx.route('**/*', (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
+  await ctx.route(NOT_LOCAL, (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
   await ctx.routeWebSocket((u) => !/^wss?:\/\/(127\.0\.0\.1|localhost)(:\d+)?\//.test(u.href), (ws) => ws.close());
   const page = await ctx.newPage();
   await page.clock.install({ time: new Date(NOW) });

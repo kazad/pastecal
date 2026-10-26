@@ -10,6 +10,7 @@
  *   BASE_URL=http://localhost:8827 FAKE_PORT=8832 npx playwright test -c cloudflare/playwright.config.js account
  */
 const { test, expect } = require('@playwright/test');
+const { NOT_LOCAL } = require('./helpers');
 
 const SECRET = process.env.IMPORT_SECRET || 'dev-secret', WHSEC = 'fake-webhook-secret';
 const ALLOW = new Set(['localhost', '127.0.0.1', 'fonts.googleapis.com', 'fonts.gstatic.com', 'www.gstatic.com', 'cdn.jsdelivr.net', 'checkout.stripe.test']);
@@ -33,7 +34,7 @@ const admin = async (request, path, body) => (await request.fetch(path, { method
 async function newPage(browser) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   await ctx.addInitScript(() => { window.__TEST__ = true; });
-  await ctx.route('**/*', (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
+  await ctx.route(NOT_LOCAL, (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
   await ctx.routeWebSocket((url) => !/localhost|127\.0\.0\.1/.test(String(url)), (ws) => ws.close());   // never a live Firebase socket
   return { ctx, page: await ctx.newPage() };
 }
@@ -81,7 +82,7 @@ test('signed out: sign in by email link, land on /account (Free)', async ({ brow
 
 test('Pro from /pricing (fake Stripe), claim @name, create a calendar under it', async ({ browser, request }) => {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, storageState: cookieJar });
-  await ctx.route('**/*', (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
+  await ctx.route(NOT_LOCAL, (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
   await ctx.routeWebSocket((url) => !/localhost|127\.0\.0\.1/.test(String(url)), (ws) => ws.close());   // never a live Firebase socket
   await ctx.route('https://checkout.stripe.test/**', (r) => r.fulfill({ contentType: 'text/html', body: '<h1>Test checkout</h1>' }));
   const page = await ctx.newPage();

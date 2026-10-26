@@ -16,6 +16,7 @@
  * The waitlist rows are read back through the admin export (Bearer IMPORT_SECRET, default dev-secret).
  */
 const { test, expect } = require('@playwright/test');
+const { NOT_LOCAL } = require('./helpers');
 
 const SECRET = process.env.IMPORT_SECRET || 'dev-secret';
 const ALLOW = new Set(['localhost', '127.0.0.1', 'fonts.googleapis.com', 'fonts.gstatic.com', 'www.gstatic.com', 'cdn.jsdelivr.net']);
@@ -49,7 +50,7 @@ async function open(browser, path) {
     };
     document.addEventListener('DOMContentLoaded', hook);
   });
-  await ctx.route('**/*', (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
+  await ctx.route(NOT_LOCAL, (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
   const page = await ctx.newPage();
   if (path.startsWith('/pricing')) { await page.goto(path); return { ctx, page }; }
   await page.goto('/?backend=cf');

@@ -10,6 +10,7 @@
  * Needs `wrangler dev` on BASE_URL with LOCAL_NO_LIMITS (scripts/test-browser.sh).
  */
 const { test, expect } = require('@playwright/test');
+const { NOT_LOCAL } = require('./helpers');
 
 const BASE = process.env.BASE_URL || 'http://localhost:8787';
 const ALLOW = new Set(['localhost', '127.0.0.1', 'fonts.googleapis.com', 'fonts.gstatic.com', 'www.gstatic.com', 'cdn.jsdelivr.net']);
@@ -45,7 +46,7 @@ async function browserFor(browser, { phone = false } = {}) {
     window.__TEST__ = true;
     try { localStorage.setItem('pastecal_backend', 'cf'); } catch (e) { /* blocked */ }
   });
-  await ctx.route('**/*', (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
+  await ctx.route(NOT_LOCAL, (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
   const page = await ctx.newPage();
   const sf = [];
   page.on('request', (r) => { if (SYNCFUSION.test(r.url())) sf.push(r.url()); });

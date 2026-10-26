@@ -11,7 +11,7 @@
  * Needs `wrangler dev` on BASE_URL with LOCAL_NO_LIMITS (scripts/test-browser.sh).
  */
 const { test, expect } = require('@playwright/test');
-const { settled } = require('./settle');
+const { settled, NOT_LOCAL } = require('./helpers');
 
 const BASE = process.env.BASE_URL || 'http://localhost:8787';
 const ALLOW = new Set(['localhost', '127.0.0.1', 'fonts.googleapis.com', 'fonts.gstatic.com', 'www.gstatic.com', 'cdn.jsdelivr.net']);
@@ -36,7 +36,7 @@ const vm = (page, fn, arg) => page.evaluate(`(${fn})(document.querySelector('#ap
 async function open(browser, id, query = '', { timezoneId = 'America/Los_Angeles' } = {}) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, timezoneId, locale: 'en-US' });
   await ctx.addInitScript(() => { window.__TEST__ = true; try { localStorage.setItem('pastecal_backend', 'cf'); } catch (e) { /* blocked */ } });
-  await ctx.route('**/*', (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
+  await ctx.route(NOT_LOCAL, (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
   const page = await ctx.newPage();
   await page.clock.install({ time: new Date(NOW) });
   const errors = [];
@@ -281,7 +281,7 @@ for (const zone of ['America/Phoenix', 'America/New_York', 'Asia/Tokyo', 'Europe
     const shown = async (native, check) => {
       const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 }, timezoneId: zone, locale: 'en-US' });
       await ctx.addInitScript(() => { window.__TEST__ = true; try { localStorage.setItem('pastecal_backend', 'cf'); } catch (e) { /* blocked */ } });
-      await ctx.route('**/*', (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
+      await ctx.route(NOT_LOCAL, (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
       const page = await ctx.newPage();
       await page.goto(`/${id}?backend=cf&view=month&date=2026-11-09${native ? '&cal=native' : ''}`);
       await page.waitForFunction(() => document.querySelector('#app')?._vnode?.component?.proxy?.isLoading === false, null, { timeout: 20_000 });

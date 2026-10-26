@@ -11,6 +11,7 @@
  * Needs `wrangler dev` on BASE_URL (default http://localhost:8787).
  */
 const { test, expect } = require('@playwright/test');
+const { NOT_LOCAL } = require('./helpers');
 
 const VM = `document.querySelector('#app')._vnode.component.proxy`;
 const ALLOW = new Set(['localhost', '127.0.0.1', 'fonts.googleapis.com', 'fonts.gstatic.com', 'www.gstatic.com', 'cdn.jsdelivr.net']);
@@ -61,7 +62,7 @@ async function seed(request, events, title = 'Native view test', fresh = false) 
 async function context(browser, { viewport = { width: 1280, height: 900 }, timezoneId = 'America/Los_Angeles', colorScheme = 'light' } = {}) {
   const ctx = await browser.newContext({ viewport, hasTouch: viewport.width < 600, timezoneId, locale: 'en-US', colorScheme });
   await ctx.addInitScript(() => { window.__TEST__ = true; });
-  await ctx.route('**/*', (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
+  await ctx.route(NOT_LOCAL, (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
   return ctx;
 }
 

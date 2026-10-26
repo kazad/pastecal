@@ -11,7 +11,7 @@
  * one view link (the Worker allows 10 creates a minute per IP, so the tests share them).
  */
 const { test, expect } = require('@playwright/test');
-const { settled } = require('./settle');
+const { settled, NOT_LOCAL } = require('./helpers');
 
 const VM = `document.querySelector('#app')?._vnode?.component?.proxy`;
 // Nothing leaves this machine but fonts and the pinned script CDNs.
@@ -40,7 +40,7 @@ async function seed(request, fresh = false) {
 async function open(browser, path, viewport = { width: 1440, height: 900 }) {
   const ctx = await browser.newContext({ viewport, hasTouch: viewport.width < 600 });
   await ctx.addInitScript(() => { window.__TEST__ = true; });
-  await ctx.route('**/*', (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
+  await ctx.route(NOT_LOCAL, (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
   const page = await ctx.newPage();
   await page.goto('/?backend=cf');
   await page.goto(path);
@@ -258,7 +258,7 @@ test('Stats when the calendar is not counted yet: no number tiles, no "0", one m
 test('draft: Share, Activity and Stats say what they will hold, with one Save & share button', async ({ browser }) => {
   const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
   await ctx.addInitScript(() => { window.__TEST__ = true; });
-  await ctx.route('**/*', (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
+  await ctx.route(NOT_LOCAL, (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
   const page = await ctx.newPage();
   await page.goto('/?backend=cf');
   await page.waitForFunction(() => window.scheduleObj, null, { timeout: 20_000 });

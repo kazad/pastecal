@@ -11,7 +11,7 @@
  * Needs `wrangler dev` on BASE_URL (default http://localhost:8787); seeds its own calendars.
  */
 const { test, expect } = require('@playwright/test');
-const { settled } = require('./settle');
+const { settled } = require('./helpers');
 
 const PHONE = { width: 390, height: 844 };
 
