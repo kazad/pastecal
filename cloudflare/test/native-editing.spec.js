@@ -159,7 +159,7 @@ test('quick add in week view: the card opens on the slot, the live "New event" b
   const e = await byTitle(id, 'Lunch with Sam');
   expect([await local(page, e.start), await local(page, e.end), !!e.isAllDay, e.type]).toEqual(['2026-10-21 14:00', '2026-10-21 15:00', false, 1]);
   expect(e.start).toMatch(ISO);
-  await expect(toast(page)).toContainText('Added Lunch with Sam');
+  await expect(toast(page), 'no toast for a plain add: the event is on screen').toHaveCount(0);
   await expect(page.locator('.nc-timed', { hasText: 'Lunch with Sam' })).toBeVisible();
 
   // Escape is Cancel: the new event is dropped, nothing stored.
@@ -294,25 +294,24 @@ test('the card edits as you go: title, time (clicked and typed), type, details, 
   await openCard(page, ev(page, 'p'));
   await expect(page.getByTestId('card-details-preview')).toHaveText('Lincoln Field');
 
-  // Title: saved when it loses focus (Enter), with a toast and Undo.
+  // Title: saved when it loses focus (Enter); no toast (only deletes, conflicts and errors get one), Cmd/Ctrl+Z undoes.
   await page.getByTestId('card-title').fill('Practice (home)');
   await page.getByTestId('card-title').press('Enter');
   await soon(async () => (await row()).title).toBe('Practice (home)');
-  await expect(toast(page)).toContainText('Renamed Practice (home)');
+  await expect(toast(page)).toHaveCount(0);
   // Start time from the quick line, typed: "5:30p" keeps the length.
   await typeInto(page, 'card-q-s', '5:30p');
   await soon(async () => local(page, (await row()).start)).toBe('2026-10-22 17:30');
   expect(await local(page, (await row()).end)).toBe('2026-10-22 18:30');
-  await expect(toast(page)).toContainText('Starts 5:30 PM');
   // End time clicked in the list.
   await choose(page, 'card-q-e', '[data-m="1140"]');
   await soon(async () => local(page, (await row()).end)).toBe('2026-10-22 19:00');
   // Undo: the end goes back (on the server), the card follows.
-  await toast(page).getByRole('button', { name: 'Undo' }).click();
+  await page.evaluate(() => document.activeElement && document.activeElement.blur());
+  await page.keyboard.press('ControlOrMeta+z');
   await soon(async () => local(page, (await row()).end)).toBe('2026-10-22 18:30');
   await expect(page.getByTestId('card-q-e')).toHaveText('6:30 PM');
-  await expect(toast(page)).toHaveText(/Undone/);
-  await expect(toast(page).getByRole('button', { name: 'Undo' })).toHaveCount(0);
+  await expect(toast(page)).toHaveCount(0);
 
   // The full card: type, length, details.
   await page.getByTestId('card-more').click();
@@ -353,8 +352,7 @@ test('the card edits as you go: title, time (clicked and typed), type, details, 
   await expect(card(page)).toHaveCount(0);
   await soon(async () => { const r = await row(); return [r.title, r.type, r.description, !!r.isAllDay, await local(page, r.start), await local(page, r.end)]; })
     .toEqual(['Practice', 1, 'Lincoln Field', false, '2026-10-22 17:00', '2026-10-22 18:00']);
-  await expect(toast(page)).toContainText('Changes undone');
-  await expect(toast(page).getByRole('button', { name: 'Undo' })).toHaveCount(0);
+  await expect(toast(page)).toHaveCount(0);
   expect(await tracked(page), 'a type change is reported; editing an existing event is never "abandoned"').toEqual(['feature_used:event_type']);
   expect(errors).toEqual([]);
   await ctx.close();
@@ -595,7 +593,6 @@ test('delete and duplicate: no "Are you sure?", Undo restores the saved row; Dup
   await soon(async () => (await stored(id)).length).toBe(3);
   const copy = (await stored(id)).find((e) => !['a', 'b'].includes(e.id));
   expect([copy.title, copy.type, copy.description, await local(page, copy.start), await local(page, copy.end)]).toEqual(['Game', 2, 'Field 3', '2026-10-23 10:00', '2026-10-23 11:00']);
-  await expect(toast(page)).toContainText('Duplicated to Fri 10 AM');
   await expect(page.getByTestId('card-start-date')).toHaveText('Fri, Oct 23');
   // Cmd/Ctrl+D: another copy, the next day again (from the card's event).
   await page.locator('.nk-card .nk-h').click({ position: { x: 300, y: 4 } }).catch(() => {});
@@ -622,10 +619,10 @@ test('keyboard: Tab to an event, Enter opens the card with focus in the title, T
   await expect(card(page)).toHaveCount(0);
   await expect(ev(page, 'd')).toBeFocused();
 
-  // Arrows: Down moves 15 minutes, Right a day, Shift+Down makes it 15 minutes longer; each saved with a toast.
+  // Arrows: Down moves 15 minutes, Right a day, Shift+Down makes it 15 minutes longer; each saved, no toast.
   await page.keyboard.press('ArrowDown');
   await soon(async () => local(page, (await stored(id))[0].start)).toBe('2026-10-22 11:15');
-  await expect(toast(page)).toContainText('Moved to Thu 11:15 AM');
+  await expect(toast(page)).toHaveCount(0);
   await page.keyboard.press('ArrowRight');
   await soon(async () => local(page, (await stored(id))[0].start)).toBe('2026-10-23 11:15');
   await expect(ev(page, 'd')).toBeFocused();
@@ -634,12 +631,13 @@ test('keyboard: Tab to an event, Enter opens the card with focus in the title, T
   await page.keyboard.press('ControlOrMeta+z');
   await soon(async () => local(page, (await stored(id))[0].end)).toBe('2026-10-23 12:15');
 
-  // Drag with the mouse, then Undo in the toast.
+  // Drag with the mouse (no toast), then Cmd/Ctrl+Z.
   const b = await ev(page, 'd').boundingBox();
   await drag(page, { x: b.x + b.width / 2, y: b.y + b.height / 2 }, { x: b.x + b.width / 2, y: b.y + b.height / 2 + HOUR });
   await page.mouse.up();
   await soon(async () => local(page, (await stored(id))[0].start)).toBe('2026-10-23 12:15');
-  await toast(page).getByRole('button', { name: 'Undo' }).click();
+  await expect(toast(page)).toHaveCount(0);
+  await page.keyboard.press('ControlOrMeta+z');
   await soon(async () => local(page, (await stored(id))[0].start)).toBe('2026-10-23 11:15');
 
   // Cmd/Ctrl+E: quick add by typing (the app's own box).
@@ -790,10 +788,11 @@ test('details save while typing (800 ms after the last key) and once more when l
   await expect(toast(page)).toHaveCount(0);
   await page.keyboard.type('. Cleats.', { delay: 10 });
   await soon(desc, 4000).toBe('Lincoln Field, bring water. Cleats.');
-  // Leaving the box: one "Details saved", and its Undo takes the whole session back.
+  // Leaving the box: saved, no toast; one Cmd/Ctrl+Z takes the whole session back.
   await page.getByTestId('card-title').click();
-  await expect(toast(page)).toContainText('Details saved');
-  await toast(page).getByRole('button', { name: 'Undo' }).click();
+  await page.evaluate(() => document.activeElement && document.activeElement.blur());
+  await expect(toast(page)).toHaveCount(0);
+  await page.keyboard.press('ControlOrMeta+z');
   await soon(desc).toBe('Lincoln Field');
   await expect(ta).toHaveValue('Lincoln Field');
   // Typing, then leaving the page a second later: kept.
