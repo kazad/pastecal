@@ -1601,13 +1601,13 @@
                             <button type="button" class="pc-link" aria-pressed="false" data-testid="tpl-blank" @click="template && startBlank()">Start blank</button>
                             <button v-if="!tplMore" type="button" class="pc-link" data-testid="tpl-show-more" @click="tplMore = true">Other templates…</button>
                         </template>
-                        <span v-else>Or start from a template:</span>
-                        <!-- Three to start (the rest one click away), so the panel reads as a sentence, not a menu. -->
+                        <span v-else class="pc-home-tpl-label">Or start from a template</span>
+                        <!-- Three quiet outline pills to start (the rest one click away): choices, not calls to action. -->
                         <template v-for="t in templateChips" :key="t.id">
-                            <button v-show="tplMore ? !(template && template.id === t.id) : (!template && TPL_FEATURED.includes(t.id))" type="button" class="pc-link pc-home-tpl-opt"
+                            <button v-show="tplMore ? !(template && template.id === t.id) : (!template && TPL_FEATURED.includes(t.id))" type="button" class="pc-home-tpl-pill"
                                 :aria-pressed="template && template.id === t.id ? 'true' : 'false'" :data-testid="'tpl-' + t.id" @click="pickTemplate(t.id)">{{ t.label }}</button>
                         </template>
-                        <button v-if="!template && !tplMore" type="button" class="pc-link pc-home-tpl-opt" data-testid="tpl-show-more" @click="tplMore = true">more…</button>
+                        <button v-if="!template && !tplMore" type="button" class="pc-link pc-home-tpl-opt" data-testid="tpl-show-more" @click="tplMore = true">More…</button>
                         <a v-if="tplMore" class="pc-link pc-home-tpl-opt" href="/templates" data-from="tpl-row" data-testid="tpl-more">All templates →</a>
                         <p v-if="template && templateNudge" class="pc-home-tpl-note" data-testid="tpl-nudge"><b>Looks good?</b> Press Save &amp; share, top right, for a link anyone can open. No login required.
                             <button type="button" class="pc-link" data-testid="tpl-nudge-dismiss" @click="dismissTemplateNudge">Dismiss</button></p>
@@ -1619,6 +1619,7 @@
                         <div><dt>Free.</dt><dd>No ads.</dd></div>
                         <div><dt>Private.</dt><dd>Only people with the link can open it.</dd></div>
                         <div><dt>In your phone’s calendar.</dt><dd>Google, Apple or Outlook.</dd></div>
+                        <div><dt>3,000+ calendars</dt><dd>since 2021.</dd></div>
                     </dl>
                 </div>
                 </div>
@@ -1744,20 +1745,17 @@
                     <div><div class="pc-tour-art pc-share-scene" role="img" aria-label="Someone's own calendar app: their own events and the team's events side by side, marked Subscribed."><div class="pc-ss-phone pc-ss-app"><b class="pc-ss-title">My calendar · Today</b><em class="pc-ss-mine">9:00 Work standup</em><em class="c1">5:00 Practice <small>Tigers U10</small></em><em class="pc-ss-mine">7:30 Dinner with Sam</em><em class="c2">Sat 11:00 Game <small>Tigers U10</small></em></div><span class="pc-ss-badge pc-ss-ok"><svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 21v-5h5M21 3v5h-5"/></svg>Subscribed</span></div><h4>Add to phone or desktop</h4><code>pastecal.com/view/ni191jkhnx.ics</code><p>Subscribe once in Google, Apple or Outlook. Events stay up to date.</p></div>
                 </div>
 
-                <div data-tour="uses">
-                <!-- Icons: Lucide (lucide.dev), ISC license. -->
-                <h3 class="pc-tour-label">What people use it for</h3>
-                <div class="pc-tour-uses">
-                    <div><svg class="pc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="8" height="4" x="8" y="2" rx="1" ry="1" /> <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /> <path d="m9 14 2 2 4-4" /></svg><h4>Sign-up sheets</h4><p>Shifts, chores, rides</p></div>
-                    <div><svg class="pc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 4h3a2 2 0 0 1 2 2v14" /> <path d="M2 20h3" /> <path d="M13 20h9" /> <path d="M10 12v.01" /> <path d="M13 4.562v16.157a1 1 0 0 1-1.242.97L5 20V5.562a2 2 0 0 1 1.515-1.94l4-1A2 2 0 0 1 13 4.561Z" /></svg><h4>Shared spaces</h4><p>Rooms, studios, parking</p></div>
-                    <div><svg class="pc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 8c0-2.76-2.46-5-5.5-5S2 5.24 2 8h2l1-1 1 1h4" /> <path d="M13 7.14A5.82 5.82 0 0 1 16.5 6c3.04 0 5.5 2.24 5.5 5h-3l-1-1-1 1h-3" /> <path d="M5.89 9.71c-2.15 2.15-2.3 5.47-.35 7.43l4.24-4.25.7-.7.71-.71 2.12-2.12c-1.95-1.96-5.27-1.8-7.42.35" /> <path d="M11 15.5c.5 2.5-.17 4.5-1 6.5h4c2-5.5-.5-12-1-14" /></svg><h4>Who's away</h4><p>Leave and remote days</p></div>
-                    <div><svg class="pc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /> <circle cx="9" cy="7" r="4" /> <path d="M22 21v-2a4 4 0 0 0-3-3.87" /> <path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg><h4>Clubs and community</h4><p>Members see every event</p></div>
-                    <div><svg class="pc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" /> <path d="M12 5 9.04 7.96a2.17 2.17 0 0 0 0 3.08c.82.82 2.13.85 3 .07l2.07-1.9a2.82 2.82 0 0 1 3.79 0l2.96 2.66" /> <path d="m18 15-2-2" /> <path d="m15 18-2-2" /></svg><h4>Family care</h4><p>Who visits when</p></div>
-                    <div><svg class="pc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z" /> <path d="M22 10v6" /> <path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5" /></svg><h4>School and classes</h4><p>Exams, games, concerts</p></div>
-                    <div><svg class="pc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z" /></svg><h4>Trips and weddings</h4><p>The plan, on every phone</p></div>
-                    <div><svg class="pc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18V5l12-2v13" /> <circle cx="6" cy="18" r="3" /> <circle cx="18" cy="16" r="3" /></svg><h4>Bands and gigs</h4><p>Rehearsals and shows</p></div>
-                    <div><svg class="pc-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m2 7 4.41-4.41A2 2 0 0 1 7.83 2h8.34a2 2 0 0 1 1.42.59L22 7" /> <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" /> <path d="M15 22v-4a2 2 0 0 0-2-2h-2a2 2 0 0 0-2 2v4" /> <path d="M2 7h20" /> <path d="M22 7v3a2 2 0 0 1-2 2a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 16 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 12 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 8 12a2.7 2.7 0 0 1-1.59-.63.7.7 0 0 0-.82 0A2.7 2.7 0 0 1 4 12a2 2 0 0 1-2-2V7" /></svg><h4>Small business</h4><p>Staff, deliveries, promos</p></div>
+                <!-- What it's for, shown as templates you can start from (Oct 26 2026: replaced nine icon tiles that only
+                     described uses; a picture of a real month says more, and one click starts it). -->
+                <div data-tour="uses" data-testid="tour-templates">
+                <h3 class="pc-tour-label">Start from a template</h3>
+                <div class="pc-tour-tpls">
+                    <button v-for="t in tourTemplates" :key="t.id" type="button" class="pc-tour-tpl" :data-testid="'tour-tpl-' + t.id" @click="pickTemplate(t.id); scrollToCalendar()">
+                        <img :src="'/img/templates/' + t.id + '.jpg'" :alt="t.label + ' template: a month on pastecal'" width="818" height="640" loading="lazy">
+                        <span>{{ t.label }}</span>
+                    </button>
                 </div>
+                <p class="pc-tour-tpls-more"><a href="/templates" class="pc-link" data-from="home-tour">Browse all templates →</a></p>
                 </div>
 
                 <div data-tour="pricing">

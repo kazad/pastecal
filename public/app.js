@@ -650,6 +650,8 @@ const CalendarVueApp = {
         // Never on your own calendars, never in an embed (it has its own small credit), never while loading.
         /** A view link inside someone's page (an iframe, or ?embed): the one-line embed header instead of the site's. */
         /** Templates sit as one quiet line in the guide panel when it shows (wide screens); else above the calendar. */
+        /** The four templates pictured under the calendar ("Start from a template" in How pastecal works). */
+        tourTemplates() { return ['team', 'family', 'out', 'club'].map((id) => (this.templateChips || []).find((t) => t.id === id)).filter(Boolean); },
         tplInAside() { return this.isHomepageCalendar && !this.isReadOnly && this.wideHome && !this.homeAsideHidden; },
         embedViewer() { return this.embedded && this.isReadOnly; },
         showMakeOwn() {
@@ -3939,6 +3941,8 @@ const CalendarVueApp = {
             try { sessionStorage.setItem('pc_tpl_open', this.templatesOpen ? '1' : '0'); } catch (e) { /* this page view only */ }
         },
 
+        /** Back up to the calendar (from a template card in the tour below it). */
+        scrollToCalendar() { try { window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); } catch (e) { window.scrollTo(0, 0); } },
         pickTemplate(id) {
             this.tplMore = false;   // the guide panel's line folds back to 'Template: X · Start blank · Other templates…'
             if (this.template && this.template.id === id) return;

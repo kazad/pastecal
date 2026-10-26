@@ -29,7 +29,7 @@ ceiling. Lower them when a page gets quieter. Raise one only with a reason writt
 
 | Page | Filled | Accent links | Chips/badges | Words | Notes |
 |---|---|---|---|---|---|
-| Homepage, desktop 1440 | 1 | 6 | 0 | 114 | was 150 before the guide panel trim (Oct 26 2026) |
+| Homepage, desktop 1440 | 1 | 3 | 0 | 118 | was 150 before the guide panel trim; template choices became quiet outline pills (links 6 to 3); +4 words for "3,000+ calendars since 2021", owner's call (Oct 26 2026) |
 | Homepage, phone 390 | 2 | 2 | 0 | 33 | **over the rule**: + and Save & share are both filled; next to fix |
 | Edit link, desktop | 1 | 1 | 1 | 36 | |
 | View link, desktop | 0 | 3 | 1 | 46 | |

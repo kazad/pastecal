@@ -38,7 +38,7 @@ test('pick a template, switch, keep your own event, then Save & share saves it a
   const { ctx, page } = await open(browser);
   const row = page.getByTestId('templates');
   // Oct 26 2026: one quiet line in the guide panel; "Start blank" appears once a template is on (blank is the default).
-  await expect(row).toContainText('Or start from a template:');
+  await expect(row).toContainText('Or start from a template');
   await expect(row.getByTestId('tpl-blank')).toHaveCount(0);
 
   // 1. a pick fills the month, names the colors, titles the calendar and writes notes
@@ -135,7 +135,7 @@ test('Start blank clears the template; Cmd+Z undoes a pick and a switch', async 
   expect(await titles(page)).toEqual(['Your event here']);
   expect(await draft(page)).toMatchObject({ title: 'New Calendar', notes: '' });
   await expect(page.getByTestId('tpl-nudge')).toHaveCount(0);
-  await expect(page.getByTestId('templates')).toContainText('Or start from a template:');   // back to the quiet line
+  await expect(page.getByTestId('templates')).toContainText('Or start from a template');   // back to the quiet line
 
   // Cmd+Z right after a pick undoes it, title and notes included
   await pickTpl(page, 'shifts');
@@ -199,5 +199,19 @@ test('phone: the chips wait behind "Start from a template", then scroll sideways
   await page.reload();
   await page.waitForFunction(() => window.scheduleObj && document.querySelector('.e-work-cells'), null, { timeout: 20_000 });
   await expect(row).toBeVisible();
+  await ctx.close();
+});
+
+// Oct 26 2026: "How pastecal works" pictures four templates you can start from (it listed nine uses as icons), and links
+// to the gallery. A card applies its template and takes you back up to the calendar.
+test('a template card under the calendar starts that template and scrolls back to the calendar', async ({ browser }) => {
+  const { ctx, page } = await open(browser);
+  const cards = page.getByTestId('tour-templates');
+  await cards.scrollIntoViewIfNeeded();
+  await expect(cards.locator('.pc-tour-tpl')).toHaveCount(4);
+  await expect(cards.getByRole('link', { name: 'Browse all templates →' })).toHaveAttribute('href', '/templates');
+  await page.getByTestId('tour-tpl-family').click();
+  await expect.poll(() => page.evaluate(() => window.scrollY), { timeout: 4000 }).toBeLessThan(10);
+  await expect(page.getByTestId('templates')).toContainText('Family');
   await ctx.close();
 });

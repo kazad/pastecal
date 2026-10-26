@@ -55,7 +55,7 @@ async function seed(request) {
 
 // Budgets: today's counts (Oct 26 2026), to be lowered as the pages get quieter. Never raised without a reason in the doc.
 const PAGES = [
-  { name: 'homepage desktop', path: () => '/?backend=cf', size: { width: 1440, height: 900 }, budget: { filled: 1, accentLinks: 6, chipsBadges: 0, words: 114 } },
+  { name: 'homepage desktop', path: () => '/?backend=cf', size: { width: 1440, height: 900 }, budget: { filled: 1, accentLinks: 3, chipsBadges: 0, words: 118 } },
   // filled 2 on the phone homepage (+ and Save & share) breaks 'one loud action': next to fix (docs/DESIGN-RESTRAINT.md).
   { name: 'homepage phone', path: () => '/?backend=cf', size: { width: 390, height: 844 }, budget: { filled: 2, accentLinks: 2, chipsBadges: 0, words: 33 } },
   { name: 'edit link desktop', path: (s) => `/${s.id}?backend=cf`, size: { width: 1440, height: 900 }, budget: { filled: 1, accentLinks: 1, chipsBadges: 1, words: 36 } },
