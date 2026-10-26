@@ -413,6 +413,25 @@ test('search results: upcoming soonest first, then Past, most recent first', asy
   await ctx.close();
 });
 
+// ---- Search matches an event's details as well as its title, ignoring case ----
+test('search finds words in an event\'s details, not only its title', async ({ browser }) => {
+  const { ctx, page } = await open(browser);
+  await page.evaluate(() => {
+    const vm = document.querySelector('#app')._vnode.component.proxy;
+    const d = new Date();
+    const mk = (id, title, description, dd) => { const s = new Date(d.getFullYear(), d.getMonth(), d.getDate() + dd, 17); return { id, title, description, start: s.toISOString(), end: new Date(+s + 3600e3).toISOString(), type: 1 }; };
+    vm.calendar.events = [mk('a', 'Practice', 'Bring cleats. Field 3', 1), mk('b', 'Game', 'Away at Lincoln', 2), mk('c', 'Lincoln picnic', '', 3)];
+  });
+  await page.getByTestId('search-button-desktop').click();
+  const box = page.getByRole('searchbox', { name: 'Search events' });
+  const titles = page.getByTestId('search-results').locator('.pc-search-result-head > span:first-child');
+  await box.fill('FIELD 3');
+  await expect(titles).toHaveText(['Practice']);
+  await box.fill('lincoln');
+  await expect(titles).toHaveText(['Game', 'Lincoln picnic']);
+  await ctx.close();
+});
+
 // ---- "Your calendars": a calendar you only opened can be removed; one you made cannot ----
 test('your calendars: remove one you opened, never one you made', async ({ browser }) => {
   const { ctx, page } = await open(browser);

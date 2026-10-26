@@ -4561,8 +4561,10 @@ const CalendarVueApp = {
 
         searchEvents() {
             if (this.searchQuery.trim() !== '') {
+                // A title or its details (classic and native alike), ignoring case.
+                const q = this.searchQuery.toLowerCase();
                 this.searchResults = this.calendar.events.filter(event =>
-                    event.title.toLowerCase().includes(this.searchQuery.toLowerCase())
+                    String(event.title || '').toLowerCase().includes(q) || String(event.description || '').toLowerCase().includes(q)
                 );
 
                 // sort results by newest first

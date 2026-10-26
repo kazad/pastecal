@@ -1081,3 +1081,19 @@ for (const [zone, want] of Object.entries(ALLDAY_DRAGS)) {
     await ctx.close();
   });
 }
+
+test('search finds words in an event\'s details as well as its title, ignoring case', async ({ browser }) => {
+  const id = await seed([timed('a', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00', { description: 'Bring cleats. Field 3' }),
+    timed('b', 'Game', '2026-10-23T10:00:00-07:00', '2026-10-23T11:00:00-07:00', { description: 'Away at Lincoln' }),
+    timed('c', 'Lincoln picnic', '2026-10-25T12:00:00-07:00', '2026-10-25T13:00:00-07:00')]);
+  const { ctx, page, errors } = await open(browser, id, '&view=week&date=2026-10-22');
+  await page.getByTestId('search-button-desktop').click();
+  const box = page.getByRole('searchbox', { name: 'Search events' });
+  const titles = page.getByTestId('search-results').locator('.pc-search-result-head > span:first-child');
+  await box.fill('FIELD 3');
+  await expect(titles).toHaveText(['Practice']);
+  await box.fill('lincoln');
+  await expect(titles).toHaveText(['Lincoln picnic', 'Game']);   // upcoming first (Oct 25), then past (Oct 23)
+  expect(errors).toEqual([]);
+  await ctx.close();
+});
