@@ -544,8 +544,10 @@ test('F35 phone: the card is a sheet with a grab bar; swipe down or the scrim cl
   const { ctx, page } = await open(browser, id, { phone: true, query: '&view=day&date=2026-10-24' });
   await ev(page, 'list').tap();
   await expect(card(page)).toBeVisible();
+  // Measured once the sheet has finished rising (its entrance animation), not mid-slide.
+  let c = null;
+  await expect.poll(async () => { const b = await card(page).boundingBox(); const same = c && Math.abs(b.y - c.y) < 0.5 && Math.abs(b.width - c.width) < 0.5; c = b; return same; }, { timeout: 3000, intervals: [100] }).toBe(true);
   await shot(page, 'F35-phone');
-  const c = await card(page).boundingBox();
   expect(c.x <= 16 && c.x + c.width >= 374, `the sheet spans the phone: ${JSON.stringify(c)}`).toBe(true);
   expect(c.y + c.height).toBeGreaterThanOrEqual(840);
   await shot(page, 'F35-phone');

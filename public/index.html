@@ -1846,7 +1846,6 @@
                     <input id="cal-feedback-email" class="pc-field" type="email" autocomplete="email" v-model="calFeedback.email" data-testid="cal-feedback-email">
                     <!-- The contact form's honeypot: people never see it, bots fill it in. -->
                     <input class="pc-cal-feedback-hp" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" v-model="calFeedback.website">
-                    <p class="pc-cal-feedback-note">We get your message, the kind of page (edit or view link), your browser and your screen width. Never your calendar.</p>
                     <p v-if="calFeedback.error" class="pc-cal-feedback-error" role="alert" data-testid="cal-feedback-error">{{ calFeedback.error }}</p>
                     <div class="pc-cal-feedback-actions">
                         <button type="button" class="pc-btn pc-btn--secondary" @click="calFeedback = null">Cancel</button>
