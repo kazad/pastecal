@@ -430,3 +430,10 @@ html.nk-sheet-open, html.nk-sheet-open body { overflow: hidden; }
 .pc-native-cal { min-height: 0; }
 .pc-native-cal:has(.nc-agenda, .nc-grid) { min-height: 70vh; }
 @media print { .pc-native-cal, .np, .nk-card, .nk-scrim, .nk-pick, .nk-menu, .pc-native-ask { display: none !important } }
+/* Option-drag copies: the original stays where it is, drawn as the event, not as an outline. */
+.nc-origin.copy { border-style: solid; background: var(--c); padding: 2px var(--pc-space-1); font-size: var(--pc-fs-xs); overflow: hidden; }
+/* ? : the keyboard shortcuts, two columns of key and what it does. */
+.pc-native-keys dl { display: grid; grid-template-columns: max-content 1fr; gap: var(--pc-space-2) var(--pc-space-4); margin: 0 0 var(--pc-space-4); font-size: var(--pc-fs-md); }
+.pc-native-keys dt { white-space: nowrap; color: var(--pc-text-2); }
+.pc-native-keys dd { margin: 0; }
+.pc-native-keys kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px solid var(--pc-line); border-bottom-width: 2px; border-radius: var(--pc-radius-sm); background: var(--pc-soft); font: var(--pc-fw-semibold) var(--pc-fs-sm) var(--pc-font); text-align: center; }
