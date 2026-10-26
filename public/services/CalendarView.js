@@ -36,7 +36,9 @@
         } : e));
     }
 
-    const occurrence = (o) => ({ event: o.event, start: o.start, end: o.end, allDay: !!o.allDay, title: o.title, type: o.type });
+    // The stored event an occurrence belongs to (the grid may hold a display copy or its own record of it).
+    const stored = (vm, id, recurrenceID) => (vm.calendar.events || []).find((e) => e && String(e.id) === String(id)
+        && String(e.recurrenceID ?? '') === String(recurrenceID ?? '')) || null;
 
     /** pastecal's own calendar. vm: the app; component(): the mounted <native-calendar>, or null before it mounts. */
     function native(vm, component) {
@@ -61,7 +63,9 @@
                 if (view) c.setView(view);
             },
             occurrences(start, end) {
-                return expand((vm.calendar.events || []).filter((e) => vm.isEventVisible(e)), start, end).map(occurrence);
+                return expand((vm.calendar.events || []).filter((e) => vm.isEventVisible(e)), start, end).map((o) => ({
+                    event: stored(vm, o.event.id, o.event.recurrenceID) || o.event, start: o.start, end: o.end, allDay: !!o.allDay, title: o.title, type: o.type,
+                }));
             },
             occursInRange(event, range) { return expand([event], range.start, range.end).length > 0; },
             render() { /* reactive: the grid reads calendar.events and the color filter as props */ },
@@ -94,7 +98,8 @@
             occurrences(start, end) {
                 // getEvents expands repeats from the (color-filtered) dataSource the grid draws.
                 return (sch.getEvents(new Date(start), new Date(end), true) || []).map((e) => ({
-                    event: e, start: new Date(e.StartTime), end: new Date(e.EndTime), allDay: !!e.IsAllDay, title: e.Subject || '(No title)', type: e.Type,
+                    event: stored(vm, e.Id, e.RecurrenceID) || stored(vm, e.Id, null) || stored(vm, e.RecurrenceID, null),
+                    start: new Date(e.StartTime), end: new Date(e.EndTime), allDay: !!e.IsAllDay, title: e.Subject || '(No title)', type: e.Type,
                 }));
             },
             occursInRange(event, range) {

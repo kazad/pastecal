@@ -27,22 +27,31 @@ function plan() {
   const tuesdays = [];
   for (let d = new Date(first); d.getMonth() === m; d.setDate(d.getDate() + 7)) tuesdays.push(ymd(d));
   const at = (day, h) => new Date(y, m, day, h).toISOString();
+  const tokyoMidnight = (day) => new Date(Date.UTC(y, m, day) - 9 * 3600000);
+  const firstMon = [1, 2, 3, 4, 5, 6, 7].find((d) => new Date(Date.UTC(y, m, d)).getUTCDay() === 1);
   const events = [
     { id: 'w', title: 'Weekly practice', start: first.toISOString(), end: new Date(first.getTime() + 3600000).toISOString(), type: 1,
       repeat: 'weekly', recurrencerule: 'FREQ=WEEKLY;INTERVAL=1', recurrenceException: stampOf(skipped) },
     { id: 'g', title: 'Game vs Hawks', start: at(10, 10), end: at(10, 11), type: 2, description: 'Bring water.' },
     { id: 'c', title: 'Camp', start: new Date(y, m, 16).toISOString(), end: new Date(y, m, 19).toISOString(), type: 4, isAllDay: true },
     { id: 'o', title: 'Orange thing', start: at(21, 9), end: at(21, 10), type: 5 },
+    // Written in Tokyo: an all-day series on Mondays, its dates and its skipped 3rd Monday at Tokyo's midnight,
+    // as stored (the stamp-format / local-midnight data path both renderers must read alike).
+    { id: 'a', title: 'All-day Mondays', start: tokyoMidnight(firstMon).toISOString(), end: tokyoMidnight(firstMon + 1).toISOString(), type: 6, isAllDay: true,
+      repeat: 'weekly', recurrencerule: 'FREQ=WEEKLY;BYDAY=MO;INTERVAL=1', recurrenceException: stampOf(tokyoMidnight(firstMon + 14)) },
   ];
   return { y, m, events, tuesdays, skipped: ymd(skipped), campDays: [16, 17, 18].map((d) => ymd(new Date(y, m, d))) };
 }
 
+// One calendar for the whole file (creating calendars is rate limited: 10 a minute).
+let shared;
 async function seed(request, events, title = 'Native view test') {
+  if (shared) return shared;
   const id = `test-native-${Date.now()}-${Math.floor(Math.random() * 1e5)}`;
   expect((await request.post(`/cal/${id}`, { data: { title, options: {}, events } })).status()).toBe(201);
   const view = await (await request.post('/api/create-view', { data: { sourceCalendarId: id } })).json();
   expect(view.ok).toBe(true);
-  return { id, viewId: view.publicViewId };
+  return (shared = { id, viewId: view.publicViewId });
 }
 
 async function context(browser, { viewport = { width: 1280, height: 900 }, timezoneId = 'America/Los_Angeles', colorScheme = 'light' } = {}) {
@@ -169,7 +178,7 @@ test('native view link: an edit on the edit link shows up without a reload', asy
 
 test('native view link: Ctrl+P prints the paper month with the repeat', async ({ browser, request }) => {
   const p = plan();
-  const { viewId } = await seed(request, p.events, 'Native print');
+  const { viewId } = await seed(request, p.events);
   const ctx = await context(browser);
   const { page } = await openNative(ctx, viewId);
   await page.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
@@ -177,7 +186,7 @@ test('native view link: Ctrl+P prints the paper month with the repeat', async ({
   const cal = page.locator('.pc-print-cal');
   await expect(cal).toBeVisible();
   await expect(page.locator('.pc-native-cal')).toBeHidden();
-  await expect(page.locator('.pc-print-title')).toHaveText('Native print');
+  await expect(page.locator('.pc-print-title')).toHaveText('Native view test');
   await expect(page.locator('.pc-print-range')).toHaveText(new Date(p.y, p.m, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }));
   // Every Tuesday this month but the skipped one (the paper month also shows the next month's first days).
   expect(await cal.locator('.pc-pm-day:not(.is-out) .pc-pm-ev', { hasText: 'Weekly practice' }).count()).toBe(p.tuesdays.length - 1);
@@ -239,18 +248,54 @@ test('flag off: the view link stays classic (Syncfusion), and ?cal=classic beats
   await ctx.close();
 });
 
+// A view link's ?view= / ?date= (Share's "This view", printed links) opens the same view on the same dates in both.
+test('native view link: ?view= and ?date= open the same view and dates as classic', async ({ browser, request }) => {
+  const p = plan();
+  const { viewId } = await seed(request, p.events);
+  const ctx = await context(browser);
+  const tenth = `${p.y}-${String(p.m + 1).padStart(2, '0')}-10`;
+  const state = (page) => page.evaluate((vm) => {
+    const v = eval(vm).calView, d = v.selectedDate(), r = v.visibleRange();
+    return { view: v.currentView(), date: `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`, start: r && new Date(r.start).toDateString(), end: r && new Date(r.end).toDateString() };
+  }, VM);
+  for (const q of [`view=week&date=${tenth}`, `v=d&d=${tenth}`, `view=agenda&date=${tenth}`, `view=year`]) {
+    const classic = await ctx.newPage();
+    await classic.goto(`/view/${viewId}?backend=cf&${q}`);
+    await classic.waitForFunction(() => window.scheduleObj && (scheduleObj.eventsData || []).length >= 4, null, { timeout: 20_000 });
+    await classic.waitForTimeout(300);
+    const native = await ctx.newPage();
+    await native.goto(`/view/${viewId}?backend=cf&cal=native&${q}`);
+    await native.waitForFunction((vm) => document.querySelector('.nc') && eval(vm).calendar.events.length >= 4, VM, { timeout: 20_000 });
+    expect(await state(native), q).toEqual(await state(classic));
+    await classic.close(); await native.close();
+  }
+  // The N-weeks / N-months links (q, 12w, custom + dur/unit). Classic opens these as Day (on branch pro too: its
+  // custom view is replaced when the calendar loads); native opens the view the link names.
+  for (const [q, view, start] of [[`view=q&date=${tenth}`, '3 Months', new Date(p.y, p.m, 1)], [`view=12w&date=${tenth}`, '12 Weeks', new Date(p.y, p.m, 10)],
+    [`view=custom&dur=2&unit=weeks&date=${tenth}`, '2 Weeks', new Date(p.y, p.m, 10)]]) {
+    const native = await ctx.newPage();
+    await native.goto(`/view/${viewId}?backend=cf&cal=native&${q}`);
+    await native.waitForFunction((vm) => document.querySelector('.nc') && eval(vm).calendar.events.length >= 4, VM, { timeout: 20_000 });
+    const s = await state(native);
+    expect(s.view, q).toBe(view);
+    const first = new Date(start); first.setDate(first.getDate() - first.getDay());   // the week holding it
+    expect(s.start, q).toBe(first.toDateString());
+    await native.close();
+  }
+  // And it draws that view: the week of the 10th, with the game in it.
+  const { page } = await openNative(ctx, viewId, `&view=week&date=${tenth}`);
+  await expect(page.getByTestId('time-grid')).toBeVisible();
+  await expect(page.locator('.nc-timed[data-testid="event-g"]')).toBeVisible();
+  await ctx.close();
+});
+
 // Same calendar, both renderers: the occurrences listed for this month agree, read in Los Angeles and in Tokyo.
 // The all-day series was written in Tokyo (its dates and skipped date at Tokyo's midnight, as stored), the timed
 // one in Los Angeles; this is the stamp-format / local-midnight data path both renderers must read alike.
 for (const timezoneId of ['America/Los_Angeles', 'Asia/Tokyo']) {
   test(`both renderers list the same occurrences (${timezoneId})`, async ({ browser, request }) => {
     const p = plan();
-    const tokyoMidnight = (day) => new Date(Date.UTC(p.y, p.m, day) - 9 * 3600000);   // Tokyo's midnight of that date
-    const firstMon = [1, 2, 3, 4, 5, 6, 7].find((d) => new Date(Date.UTC(p.y, p.m, d)).getUTCDay() === 1);
-    const events = [...p.events,
-      { id: 'a', title: 'All-day Mondays', start: tokyoMidnight(firstMon).toISOString(), end: tokyoMidnight(firstMon + 1).toISOString(), type: 6, isAllDay: true,
-        repeat: 'weekly', recurrencerule: 'FREQ=WEEKLY;BYDAY=MO;INTERVAL=1', recurrenceException: stampOf(tokyoMidnight(firstMon + 14)) }];
-    const { viewId } = await seed(request, events);
+    const { viewId } = await seed(request, p.events);
     const ctx = await context(browser, { timezoneId });
     const range = { start: new Date(p.y, p.m, 1).getTime(), end: new Date(p.y, p.m + 1, 1).getTime() };
     const list = (page) => page.evaluate(({ vm, range }) => {
@@ -258,7 +303,7 @@ for (const timezoneId of ['America/Los_Angeles', 'Asia/Tokyo']) {
       const day = (d) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
       // In the viewer's zone: rebuild the month from the page's own clock.
       const now = new Date(); const s = new Date(now.getFullYear(), now.getMonth(), 1), e = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-      return app.calView.occurrences(s, e).map((o) => `${o.title}|${day(o.start)}|${o.allDay ? 'all' : o.start.getHours() + ':' + o.start.getMinutes()}`).sort();
+      return app.calView.occurrences(s, e).map((o) => `${o.title}|${day(o.start)}|${day(o.end)}|${o.allDay ? 'all' : o.start.getHours() + ':' + o.start.getMinutes()}|${o.event && o.event.id}`).sort();
     }, { vm: VM, range });
     const classic = await ctx.newPage();
     await classic.goto(`/view/${viewId}?backend=cf`);

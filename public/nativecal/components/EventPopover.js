@@ -35,7 +35,8 @@ const EventPopover = {
             if (e.isAllDay) {
                 const day = (v) => { const r = new Date(new Date(v).getTime() + 43200000); return new Date(r.getUTCFullYear(), r.getUTCMonth(), r.getUTCDate()); };
                 s = this.occurrence ? new Date(this.occurrence.start) : day(e.start);
-                const last = new Date((this.occurrence ? new Date(this.occurrence.end) : day(e.end)).getTime() - 86400000);
+                // The day before the exclusive end, by the calendar (a spring-forward Sunday is 23 hours long).
+                const last = new Date(this.occurrence ? new Date(this.occurrence.end) : day(e.end)); last.setDate(last.getDate() - 1);
                 return last > s ? `${fmtD(s)} - ${fmtD(last)} (All day)` : `${fmtD(s)} (All day)`;
             }
             const sameDay = s.toDateString() === en.toDateString();
