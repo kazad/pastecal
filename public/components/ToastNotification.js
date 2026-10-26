@@ -83,11 +83,13 @@ const ToastNotification = {
             const r = t.getBoundingClientRect(), W = window.innerWidth, H = window.innerHeight, w = r.width, h = r.height, gap = 12;
             // Where the page puts it (centered, or beside the side panel), from the layout: it may be mid-slide.
             if (!this.at || !this.at.left) this._x = wrap.offsetLeft - w / 2;
-            const controls = [...card.querySelectorAll('button, input, textarea, select, a[href], [tabindex]')]
-                .map((e) => e.getBoundingClientRect()).filter((b) => b.width && b.height);
+            const c = card.getBoundingClientRect(), low = H - 16 - h;
+            // The controls as seen: a card that scrolls inside clips them to its own box.
+            const controls = [...card.querySelectorAll('button, input, textarea, select, a[href], [tabindex]')].map((e) => e.getBoundingClientRect())
+                .map((b) => ({ left: Math.max(b.left, c.left), right: Math.min(b.right, c.right), top: Math.max(b.top, c.top), bottom: Math.min(b.bottom, c.bottom) }))
+                .filter((b) => b.right > b.left && b.bottom > b.top);
             const covers = (x, y, ww) => controls.reduce((sum, b) => sum
                 + Math.max(0, Math.min(x + ww, b.right) - Math.max(x, b.left)) * Math.max(0, Math.min(y + h, b.bottom) - Math.max(y, b.top)), 0);
-            const c = card.getBoundingClientRect(), low = H - 16 - h;
             const spots = [{ x: this._x, y: low, w, style: null }, { x: this._x, y: gap, w, style: { top: `${gap}px`, bottom: 'auto' } }];
             // Beside the card (the wrap has 16px of padding each side).
             const right = W - gap - c.right - gap, left = c.left - 2 * gap;
