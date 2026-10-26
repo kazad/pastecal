@@ -219,3 +219,25 @@ test('Undo of an occurrence delete takes back only its own skipped date, not one
   await A.ctx.close(); await B.ctx.close();
 });
 
+// =====================================================================================================
+test('saving an occurrence whose series was deleted meanwhile: the editor closes, nothing is saved, analytics gets no event text', async ({ browser }) => {
+  const id = await seed([timed('s1', 'Standup', '2026-10-19T09:00:00-07:00', '2026-10-19T09:30:00-07:00', { recurrencerule: 'FREQ=DAILY;INTERVAL=1;' })]);
+  const A = await open(browser, id, '&view=week&date=2026-10-21');
+  const B = await open(browser, id, '&view=week&date=2026-10-21');
+  await vm(A.page, (v) => v.openNativeEditor({ mode: 'EditOccurrence', row: v.calendar.events[0],
+    occurrence: { start: new Date('2026-10-21T09:00:00-07:00'), end: new Date('2026-10-21T09:30:00-07:00') } }));
+  await expect(A.page.getByTestId('event-editor')).toBeVisible();
+  await vm(B.page, (v) => v.store().dispatch({ type: 'remove', key: { id: 's1', recurrenceID: null } }, { label: 'remote delete' }));
+  await soon(async () => (await stored(id)).length).toBe(0);
+  await soon(() => vm(A.page, (v) => v.calendar.events.length)).toBe(0);
+  await A.page.getByTestId('editor-title').fill('Dr. Patel - biopsy results for Maria');
+  await A.page.getByTestId('editor-save').click();
+  await expect(A.page.getByTestId('event-editor')).toHaveCount(0);
+  await expect(A.page.getByText("This event's series was deleted.")).toBeVisible();
+  await A.page.waitForTimeout(800);
+  expect(await stored(id)).toEqual([]);
+  const sent = JSON.stringify(await A.page.evaluate(() => window.__tracked));
+  expect(sent).not.toContain('Patel');
+  expect(sent).not.toContain('Standup');
+  await A.ctx.close(); await B.ctx.close();
+});

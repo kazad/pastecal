@@ -50,6 +50,11 @@
         return 0.2126 * r + 0.7152 * g + 0.0722 * b;
     };
 
+    // A change to a series (or one of its occurrences) that is no longer in the calendar. userMessage is what the
+    // person is told; code is what analytics gets.
+    const seriesDeleted = (action) => Object.assign(new Error(`${action}: the series is not in the calendar`),
+        { code: 'series_deleted', userMessage: "This event's series was deleted." });
+
     const ScheduleAdapter = {
         /**
          * Remember an event as the user began to change it. Call from popupOpen (Editor),
@@ -240,6 +245,8 @@
             if (action === 'EditOccurrence' || action === 'DeleteOccurrence') {
                 const r = (args.changedRecords || [])[0];
                 const master = r && store.find({ id: r.RecurrenceID ?? r.Id, recurrenceID: null });
+                // The series was deleted (by someone else) while this occurrence's editor or popup was open.
+                if (r && !master) throw seriesDeleted(action);
                 const when = context.occurrenceStart || (r && r.StartTime);
                 if (master && when && (!store.find(keyOf(r)) || action === 'DeleteOccurrence')) {
                     // The grid shows an all-day occurrence at the viewer's local midnight; the
@@ -272,7 +279,7 @@
             if (action === 'DeleteSeries' || action === 'EditSeries') {
                 const r = (args.changedRecords || [])[0] || (args.deletedRecords || [])[0];
                 const master = r && store.find({ id: r.RecurrenceID ?? r.Id, recurrenceID: null });
-                if (!master) throw new Error(`${action}: the series is not in the calendar`);
+                if (!master) throw seriesDeleted(action);
                 const ownOccurrences = (store.getEvents() || []).filter((e) => e.recurrenceID !== null && e.recurrenceID !== undefined
                     && String(e.recurrenceID) === String(master.id));
                 if (action === 'DeleteSeries') {
@@ -311,7 +318,7 @@
             const recurring = [...(args.changedRecords || []), ...(args.deletedRecords || [])]
                 .some((r) => !blank(r.RecurrenceRule) || !blank(r.RecurrenceID));
             if (recurring && action && !['Save', 'Add', 'Delete', 'EditOccurrence', 'DeleteOccurrence'].includes(action)) {
-                throw new Error(`unsupported action ${action} on a repeating event`);
+                throw Object.assign(new Error(`unsupported action ${action} on a repeating event`), { code: 'unsupported_action' });
             }
 
             for (const r of args.deletedRecords || []) commands.push({ type: 'remove', key: keyOf(r) });

@@ -127,7 +127,7 @@
     }
 
     class CommandError extends Error {
-        constructor(message, command) { super(message); this.name = 'CommandError'; this.command = command; }
+        constructor(message, command, code) { super(message); this.name = 'CommandError'; this.command = command; this.code = code || 'command_error'; }
     }
 
     /**
@@ -154,13 +154,13 @@
                 const e = normalize(c.event);
                 if (blank(e.id) || index.has(keyOf(e))) e.id = uuid();
                 const why = invalid(e);
-                if (why) throw new CommandError(`add: ${why}`, c);
+                if (why) throw new CommandError(`add: ${why}`, c, 'invalid_dates');
                 list.push(e);
                 return { events: list, inverse: { type: 'remove', key: keyOf(e) }, added: [e], changed: [], removed: [] };
             }
             case 'update': {
                 const k = findKey(c.key);
-                if (!k) throw new CommandError(`update: no event ${typeof c.key === 'string' ? c.key : keyOf(c.key)}`, c);
+                if (!k) throw new CommandError(`update: no event ${typeof c.key === 'string' ? c.key : keyOf(c.key)}`, c, 'no_event');
                 const i = index.get(k), prev = list[i];
                 // An edit never changes WHICH row it is: id and recurrenceID come from the
                 // key, not from the changes. (Sep 26: editing a whole series from one of its
@@ -172,7 +172,7 @@
                 if (!Object.keys(changes).length) return { events: list, inverse: null, added: [], changed: [], removed: [] };
                 const next = { ...prev, ...changes };
                 const why = invalid(next);
-                if (why) throw new CommandError(`update: ${why}`, c);
+                if (why) throw new CommandError(`update: ${why}`, c, 'invalid_dates');
                 const before = {}; for (const f of Object.keys(changes)) before[f] = prev[f];
                 list[i] = next;
                 // The inverse remembers what this change wrote, so an undo can take back only that (undoOnly).
@@ -180,7 +180,7 @@
             }
             case 'remove': {
                 const k = findKey(c.key);
-                if (!k) throw new CommandError(`remove: no event ${typeof c.key === 'string' ? c.key : keyOf(c.key)}`, c);
+                if (!k) throw new CommandError(`remove: no event ${typeof c.key === 'string' ? c.key : keyOf(c.key)}`, c, 'no_event');
                 const i = index.get(k), gone = list[i];
                 list.splice(i, 1);
                 return { events: list, inverse: { type: 'add', event: gone, restoreId: true }, added: [], changed: [], removed: [gone] };
@@ -195,7 +195,7 @@
                 return { events: cur, inverse: inverses.length ? { type: 'batch', commands: inverses, label: c.label } : null, added, changed, removed };
             }
             default:
-                throw new CommandError(`unknown command ${c.type}`, c);
+                throw new CommandError(`unknown command ${c.type}`, c, 'unknown_command');
         }
     }
 
@@ -203,7 +203,7 @@
     // it (an occurrence's recurrenceID, a shared link) still does.
     function restore(events, event) {
         const e = normalize(event);
-        if (events.some((x) => keyOf(x) === keyOf(e))) throw new CommandError('restore: already there', { type: 'add', event });
+        if (events.some((x) => keyOf(x) === keyOf(e))) throw new CommandError('restore: already there', { type: 'add', event }, 'already_there');
         return { events: [...events, e], inverse: { type: 'remove', key: keyOf(e) }, added: [e], changed: [], removed: [] };
     }
 
@@ -218,10 +218,23 @@
         const series = new Set(events.filter((e) => blank(e.recurrenceID)).map((e) => String(e.id)));
         for (const e of touched) {
             if (!blank(e.recurrenceID) && !series.has(String(e.recurrenceID))) {
-                return `"${e.title || 'event'}" would point at a repeating series that is not in the calendar`;
+                // No title in the message: it goes to logs and analytics. The toast adds it from err.title.
+                const err = new CommandError('would point at a repeating series that is not in the calendar', null, 'orphan_occurrence');
+                err.title = e.title || '';
+                return err;
             }
         }
         return null;
+    }
+
+    /**
+     * What a failed command may tell analytics: a code and where it came from, never the user's text. A message
+     * can quote an event (a title in a toast, an id in a log); a calendar's contents never leave the page.
+     */
+    function report(err, command) {
+        const code = err && /^[a-z_]+$/.test(String(err.code || '')) ? err.code : 'command_error';
+        const where = command && (command.where || command.type);
+        return { message: code, where: /^[\w/]+$/.test(String(where || '')) ? String(where) : 'command' };
     }
 
     function applyAny(events, command) {
@@ -258,7 +271,7 @@
                 const before = this.getEvents() || [];
                 const result = applyAny(before, command);
                 const broken = structureProblem(result.events, [...result.added, ...result.changed]);
-                if (broken) throw new CommandError(broken, command);
+                if (broken) { broken.command = command; throw broken; }
                 // How many rows the save will be shorter by -- what the write gate must be told.
                 const shrink = Math.max(0, before.length - result.events.length);
                 this.commit(result.events, { shrink, added: result.added, changed: result.changed, removed: result.removed, label });
@@ -306,6 +319,7 @@
     EventStore.keyOf = keyOf;
     EventStore.diff = diff;
     EventStore.CommandError = CommandError;
+    EventStore.report = report;
     EventStore.FIELDS = FIELDS;
 
     if (typeof module !== 'undefined' && module.exports) module.exports = EventStore;

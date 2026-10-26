@@ -1715,7 +1715,13 @@ const CalendarVueApp = {
             const record = { ...ed.record, Subject: data.title, Description: data.description, Type: Number(data.type) || 1,
                 IsAllDay: allDay, StartTime: new Date(data.start), EndTime: nativeEnd(data.end, allDay) };
             if (ed.mode !== 'EditOccurrence') record.RecurrenceRule = data.recurrencerule || '';
-            const finish = (ok) => { if (ok) { this.editorSaved = true; this.closeNativeEditor(); } };
+            const finish = (ok) => {
+                if (ok) { this.editorSaved = true; this.closeNativeEditor(); return; }
+                // The series went (someone else deleted it) while this editor was open: nothing left to edit; the
+                // toast says why.
+                const seriesId = ed.mode === 'EditOccurrence' ? ed.record.RecurrenceID : ed.mode === 'EditSeries' ? ed.record.Id : null;
+                if (seriesId !== null && !this.nativeStored({ id: seriesId })) this.closeNativeEditor();
+            };
             if (ed.mode === 'Add') return finish(this.nativeAction('eventCreate', { addedRecords: [record] }, { action: 'Add' }));
             if (ed.mode === 'Save') return finish(this.nativeAction('eventChange', { changedRecords: [record] }, { action: 'Save' }));
             if (ed.mode === 'EditOccurrence') {
@@ -3054,9 +3060,11 @@ const CalendarVueApp = {
                         this.calendar.setEvents(list);
                     },
                     onError: (err, command) => {
-                        console.warn('[store] command failed:', err.message, command);
-                        track(a => a.jsError('command_failed', err.message, (command && command.label) || (command && command.type) || 'command'));
-                        this.showToast(`Couldn't save that change: ${err.message.replace(/^\w+: /, '')}`, 'error');
+                        console.warn('[store] command failed:', err.code, command && command.type);
+                        // Analytics gets a code, never an event's text (EventStore.report); the title is for the toast only.
+                        const sent = EventStore.report(err, command);
+                        track(a => a.jsError('command_failed', sent.message, sent.where));
+                        this.showToast(err.userMessage || `Couldn't save that change: ${err.title ? `"${err.title}" ` : ''}${err.message.replace(/^\w+: /, '')}`, 'error');
                     },
                 });
             }
@@ -3092,7 +3100,7 @@ const CalendarVueApp = {
             } catch (err) {
                 // An action the adapter cannot map safely: nothing is saved, the person is
                 // told, and it is logged with the action name (command_failed).
-                this.store().onError(err, { type: 'schedule', label: `${args.requestType}/${context && context.action}` });
+                this.store().onError(err, { type: 'schedule', where: `${args.requestType}/${context && context.action}` });
                 return false;
             }
             if (!command.commands.length) return false;
