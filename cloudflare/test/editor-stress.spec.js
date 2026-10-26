@@ -10,6 +10,8 @@
  *     unexpected pass, and the test.fail() line comes out so the test then guards the fix.
  *   - The other tests pin behavior the stress test checked and found right.
  * Areas: [repeat] the repeat Custom… section and form fields, [tz] the per-event time zone, [card] everything else.
+ * Not repeated here (editor-features.spec.js has them): raw controls in Custom… (its F36), the time zone picker (F13) and
+ * the time zone row on all-day events (F10).
  * The pure-helper findings (smart titles, typed dates, rule words) are test/unit/editor-stress.test.js.
  * Screenshots of every finding land in cloudflare/test-results/editor-stress/.
  * Needs `wrangler dev` on BASE_URL with LOCAL_NO_LIMITS (scripts/test-browser.sh); run with scripts/test-on-box.sh editor-stress.
@@ -197,37 +199,6 @@ test('F04 [repeat] broken: Custom… "Ends On" shows an empty mm/dd/yyyy field, 
   await ctx.close();
 });
 
-test('F05 [repeat] ugly: Custom… is built from raw browser controls (system select chevrons, mm/dd/yyyy date box), unlike the card\'s own pickers; "On the [fourth] [Thursday]" wraps', async ({ browser }) => {
-  finding('F05: the Custom panel uses native <select>, <input type=date>, number spinners and radios ("dropdown looks weird")');
-  const id = await seed([timed('p', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00')]);
-  for (const colorScheme of ['light', 'dark']) {
-    const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-22', { colorScheme });
-    await openCard(page, ev(page, 'p'), true);
-    await openCustom(page);
-    await picker(page).getByTestId('custom-unit').selectOption('MONTHLY');
-    await shot(page, `F05-custom-raw-controls-${colorScheme}`);
-    const raw = await page.evaluate(() => [...document.querySelectorAll('.nk-pick select, .nk-pick input[type=date]')]
-      .filter((e) => getComputedStyle(e).appearance !== 'none').map((e) => e.dataset.testid));
-    const [pos, day] = await Promise.all([picker(page).getByTestId('custom-setpos').boundingBox(), picker(page).getByTestId('custom-posday').boundingBox()]);
-    await ctx.close();
-    expect(raw, `${colorScheme}: no system-drawn select or date box in the card`).toEqual([]);
-    expect(Math.abs(pos.y - day.y), `${colorScheme}: "On the [fourth] [Thursday]" on one line`).toBeLessThan(4);
-  }
-});
-
-test('F06 [tz] broken: the time zone line is plain text; there is no way to set an event\'s time zone', async ({ browser }) => {
-  finding('F06: card-tz is a static <div> ("Times are shown in your time zone"); the prototype has a zone picker and "Use mine"');
-  const id = await seed([timed('p', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00')]);
-  const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-22');
-  await openCard(page, ev(page, 'p'), true);
-  await shot(page, 'F06-time-zone-not-a-control');
-  const control = page.getByTestId('card-tz').locator('xpath=self::button | .//button');
-  await expect(control.first(), 'the zone is a button').toBeVisible({ timeout: 2000 });
-  await control.first().click();
-  await expect(picker(page)).toBeVisible();
-  await ctx.close();
-});
-
 test('F07 [card] broken: a new event titled "Black Friday" is saved as "Black" on next Friday', async ({ browser }) => {
   finding('F07: smartParse takes a trailing day name as a date and done() cuts it from the title');
   const id = await seed([]);
@@ -291,11 +262,12 @@ test('F13 [card] broken: on the spring-forward day the time list offers 2:00-2:4
   await ctx.close();
 });
 
-test('F14 [card] ugly: a long title makes the "Added …" toast ten lines tall over the calendar', async ({ browser }) => {
+test('F14 [card] ugly: deleting an event with a long title makes a toast ten lines tall over the calendar', async ({ browser }) => {
   finding('F14: the toast prints the whole title; nothing clamps it');
-  const id = await seed([]);
-  const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-27');
-  await quickAdd(page, '2026-10-27', 11, 'Long title '.repeat(45).trim());
+  const id = await seed([timed('p', 'Long title '.repeat(45).trim(), '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00')]);
+  const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-22');
+  await openCard(page, ev(page, 'p'));
+  await page.getByTestId('card-delete').click();
   await expect(toast(page)).toBeVisible();
   await shot(page, 'F14-long-title-toast');
   expect((await toast(page).first().boundingBox()).height, 'a toast stays a line or two').toBeLessThan(80);
@@ -315,21 +287,6 @@ test('F15 [card] nit: a 2,000-character title is cut to 500 without a word (deta
   const kept = (await page.getByTestId('card-title').inputValue()).length;
   const said = await card(page).getByText(/characters/).count();
   expect(kept === 2000 || said > 0, `kept ${kept} characters and said nothing`).toBe(true);
-  await ctx.close();
-});
-
-test('F16 [tz] ugly: All day hides the time zone line with visibility:hidden, leaving a blank row in the card', async ({ browser }) => {
-  finding('F16: card-tz keeps its height when hidden for an all-day event');
-  const id = await seed([{ ...timed('t', 'Trip', '2026-10-24T00:00:00-07:00', '2026-10-26T00:00:00-07:00'), isAllDay: true }]);
-  const { ctx, page } = await open(browser, id, '&view=month&date=2026-10-22');
-  await openCard(page, ev(page, 't'), true);
-  await shot(page, 'F16-blank-row-all-day');
-  const g = await page.evaluate(() => {
-    const r = (s) => document.querySelector(s).getBoundingClientRect();
-    const when = r('.nk-when'), rep = r('[data-testid="card-repeat"]').top, det = r('[data-testid="card-details"]').top;
-    return { whenToRepeat: rep - when.bottom, repeatToDetails: det - rep };
-  });
-  expect(g.whenToRepeat, 'no more space above Repeat than between Repeat and Details').toBeLessThanOrEqual(g.repeatToDetails + 4);
   await ctx.close();
 });
 
@@ -389,6 +346,115 @@ test('F23 [card] nit: on a phone the date picker\'s hint is cut off ("Type a dat
   await ctx.close();
 });
 
+// ---- what it looks like: nasty data in every size (findings from the visual sweep) -----------------------------
+// 20 events in one hour, 40 all-day events on one day, emoji / CJK / RTL titles, the long-details fixture's board meeting.
+function nastyEvents() {
+  const names = ['Standup', '会議 チーム 打ち合わせ', 'اجتماع الفريق الأسبوعي', '🎉 Party 🎂', 'Very long overlapping meeting title', 'שיעור עברית', '1:1', 'Sync'];
+  const out = [];
+  for (let i = 0; i < 20; i++) out.push(timed(`ov${i}`, `${names[i % names.length]} ${i}`, '2026-10-19T10:00:00-07:00', '2026-10-19T11:00:00-07:00', { type: (i % 8) + 1 }));
+  for (let i = 0; i < 40; i++) out.push({ ...timed(`ad${i}`, `${['Holiday', '休日', 'عطلة', '🏖️ Beach', 'Conference day with a long name'][i % 5]} ${i}`, '2026-10-21T00:00:00-07:00', '2026-10-22T00:00:00-07:00'), isAllDay: true, type: (i % 8) + 1 });
+  out.push(timed('board', 'Board meeting', '2026-10-21T10:00:00-07:00', '2026-10-21T11:30:00-07:00', { description: 'Zoom: https://zoom.us/j/1234567890?pwd=abc123\nAgenda: https://docs.google.com/document/d/1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789/edit' }));
+  out.push(timed('meet', 'Meeting minutes', '2026-10-20T13:00:00-07:00', '2026-10-20T14:00:00-07:00', { type: 5 }));
+  out.push(timed('dent', 'Dentist appointment', '2026-10-22T15:00:00-07:00', '2026-10-22T16:00:00-07:00'));
+  out.push(timed('rtl', 'اجتماع الفريق الأسبوعي مع الإدارة', '2026-10-24T16:00:00-07:00', '2026-10-24T17:00:00-07:00', { type: 3 }));
+  return out;
+}
+const contrast = (page, sel) => page.evaluate((s) => {
+  const lum = (c) => { const [R, G, B] = c.match(/[\d.]+/g).slice(0, 3).map((x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; }); return 0.2126 * R + 0.7152 * G + 0.0722 * B; };
+  const bg = (e) => { for (; e; e = e.parentElement) { const c = getComputedStyle(e).backgroundColor; if (!/rgba\(0, 0, 0, 0\)|transparent/.test(c)) return c; } return 'rgb(255, 255, 255)'; };
+  return [...document.querySelectorAll(s)].filter((e) => e.textContent.trim()).map((e) => { const a = lum(getComputedStyle(e).color), b = lum(bg(e)); return { text: e.textContent.trim().slice(0, 20), ratio: +((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)).toFixed(2) }; });
+}, sel);
+
+test('F24 [grid] ugly: 20 events in the same hour are drawn as 20 unreadable slivers ("1", "1", …) with no "+N more"', async ({ browser }) => {
+  finding('F24: the week grid splits an hour into as many columns as it has events, however thin');
+  const id = await seed(nastyEvents());
+  const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-21');
+  await ev(page, 'ov0').first().scrollIntoViewIfNeeded();
+  await shot(page, 'F24-twenty-overlapping-slivers');
+  const widths = await page.evaluate(() => [...document.querySelectorAll('.nc [data-testid^="event-ov"]')].map((e) => e.getBoundingClientRect().width));
+  const more = await page.locator('.nc').getByText(/^\+\d+/).count();
+  expect(Math.min(...widths) >= 40 || more > 0, `narrowest of ${widths.length} is ${Math.round(Math.min(...widths))}px, no "+N more"`).toBe(true);
+  await ctx.close();
+});
+
+test('F25 [grid] ugly: 40 all-day events on one day stretch the week\'s all-day row over the whole screen (month view says "+40 more")', async ({ browser }) => {
+  finding('F25: the week/day all-day row grows without limit');
+  const id = await seed(nastyEvents());
+  const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-21');
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await shot(page, 'F25-all-day-row-fills-screen');
+  const span = await page.evaluate(() => { const r = [...document.querySelectorAll('.nc [data-testid^="event-ad"]')].map((e) => e.getBoundingClientRect()); return Math.max(...r.map((b) => b.bottom)) - Math.min(...r.map((b) => b.top)); });
+  expect(span, 'the all-day row stays under a third of the window').toBeLessThan(800 / 3);
+  await ctx.close();
+});
+
+test('F26 [grid] ugly: on a phone, week-view event titles are cut mid-word with no ellipsis ("Meetii", "Dentis")', async ({ browser }) => {
+  finding('F26: narrow event chips clip their title text instead of ending it with …');
+  const id = await seed(nastyEvents());
+  const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-21', { phone: true });
+  await ev(page, 'meet').first().scrollIntoViewIfNeeded();
+  await shot(page, 'F26-phone-week-titles-cut');
+  const cut = await page.evaluate(() => [...document.querySelectorAll('.nc-timed *')].filter((e) => e.children.length === 0 && e.textContent.trim() && e.scrollWidth > e.clientWidth + 1
+    && getComputedStyle(e).textOverflow !== 'ellipsis').map((e) => e.textContent.trim().slice(0, 16)));
+  expect(cut, 'titles that do not fit end with …').toEqual([]);
+  await ctx.close();
+});
+
+test('F27 [card] ugly: an Arabic title in the card is cut at its START (shows "تماع الفريق…", the first word clipped); the title box is not dir="auto"', async ({ browser }) => {
+  finding('F27: the title input is always left-to-right, so a long RTL title scrolls its beginning out of view');
+  const id = await seed(nastyEvents());
+  for (const colorScheme of ['light', 'dark']) {
+    const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-21', { colorScheme });
+    await openCard(page, ev(page, 'rtl'), true);
+    await shot(page, `F27-rtl-title-clipped-${colorScheme}`);
+    const dir = await page.getByTestId('card-title').evaluate((i) => getComputedStyle(i).direction);
+    await ctx.close();
+    expect(dir, `${colorScheme}: an RTL title is laid out right to left`).toBe('rtl');
+  }
+});
+
+test('F28 [card] ugly: on a 360x640 phone the length menu and "All day" run to the screen edge, past the card\'s right margin', async ({ browser }) => {
+  finding('F28: the time grid in the card does not shrink below ~375px; its right column overflows the 16px gutter');
+  const id = await seed(nastyEvents());
+  const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-21', { phone: true });
+  await page.setViewportSize({ width: 360, height: 640 });
+  await page.waitForTimeout(300);
+  await tapCard(page, ev(page, 'board'), true);
+  await shot(page, 'F28-p360-length-at-edge');
+  const [len, det] = await Promise.all([box(page, '[data-testid="card-length"]'), box(page, '[data-testid="card-details"]')]);
+  expect(len.right, 'the length menu lines up with the details box').toBeLessThanOrEqual(det.right + 1);
+  await ctx.close();
+});
+
+test('F29 [card] ugly: on a 360x640 phone the end-date picker shows only the first two weeks; the rest of the month is cut off', async ({ browser }) => {
+  finding('F29: "Same day / Next day" and the typing box leave the month grid ~90px on a short screen');
+  const id = await seed(nastyEvents());
+  const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-21', { phone: true });
+  await page.setViewportSize({ width: 360, height: 640 });
+  await page.waitForTimeout(300);
+  await tapCard(page, ev(page, 'board'), true);
+  await page.getByTestId('card-end-date').tap();
+  await expect(picker(page)).toBeVisible();
+  await page.waitForTimeout(250);
+  await shot(page, 'F29-p360-end-date-cut');
+  const [last, pk] = await Promise.all([picker(page).locator('[data-d="2026-10-31"]').boundingBox(), box(page, '.nk-pick')]);
+  expect(last && last.y + last.height, 'Oct 31 is in view').toBeLessThanOrEqual(pk.bottom + 0.5);
+  await ctx.close();
+});
+
+test('F30 [card] nit: in light mode the picked item (blue on pale blue, 4.05:1) and "until 11:30 AM" (3.84:1) are under the 4.5:1 contrast for text', async ({ browser }) => {
+  finding('F30: .cur text and the length list\'s <small> are too faint in light mode');
+  const id = await seed(nastyEvents());
+  const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-21');
+  await openCard(page, ev(page, 'board'), true);
+  await page.getByTestId('card-length').click();
+  await expect(picker(page)).toBeVisible();
+  await shot(page, 'F30-light-contrast-length');
+  const low = (await contrast(page, '.nk-pick .cur, .nk-pick small')).filter((c) => c.ratio < 4.5);
+  expect(low).toEqual([]);
+  await ctx.close();
+});
+
 // =====================================================================================================
 // Checked and found right.
 // =====================================================================================================
@@ -419,7 +485,7 @@ test('look sweep: desktop and phone, light and dark, en-US and de-DE (24-hour, M
         await shot(page, `${tag}-custom`);
         expect(inside(await box(page, '.nk-pick'), W, H), `${tag}: Custom on screen`).toBe(true);
         if (loc === 'de') expect(await picker(page).locator('.nk-wd button').first().getAttribute('aria-label')).toBe('Monday');
-        expect(await page.evaluate(() => getComputedStyle(document.querySelector('.nk-cust select')).colorScheme), `${tag}: form controls follow the theme`).toBe(scheme);
+        expect(await page.evaluate(() => [...document.querySelectorAll('.nk-pick select, .nk-pick input')].map((e) => getComputedStyle(e).colorScheme).filter((c) => !c.includes(document.documentElement.dataset.theme))), `${tag}: form controls follow the theme`).toEqual([]);
       }
       await page.keyboard.press('Escape');
       await expect(picker(page)).toHaveCount(0);
@@ -460,7 +526,7 @@ test('small windows: 1024x600 and 900x500 keep the card, Done and the pickers on
   }
 });
 
-test('offline: a rename made offline shows saved, and reaches the server on reconnect', async ({ browser }) => {
+test('offline: a rename made offline shows on the calendar, and reaches the server on reconnect', async ({ browser }) => {
   const id = await seed([timed('p', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00')]);
   const { ctx, page, errors } = await open(browser, id, '&view=week&date=2026-10-22');
   await openCard(page, ev(page, 'p'));
@@ -468,7 +534,7 @@ test('offline: a rename made offline shows saved, and reaches the server on reco
   await page.getByTestId('card-title').fill('Offline rename');
   await page.getByTestId('card-title').press('Enter');
   await page.getByTestId('card-done').click();
-  await expect(toast(page)).toContainText('Renamed Offline rename');
+  await expect(ev(page, 'p')).toContainText('Offline rename');
   expect((await stored(id))[0].title).toBe('Practice');
   await ctx.setOffline(false);
   await soon(async () => (await stored(id))[0].title, 20_000).toBe('Offline rename');
