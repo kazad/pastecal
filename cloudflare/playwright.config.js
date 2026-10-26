@@ -4,7 +4,10 @@ const { defineConfig, devices } = require('@playwright/test');
 module.exports = defineConfig({
   testDir: './test',
   testMatch: /.*\.spec\.js/,
-  workers: 1,
+  // Each test makes its own calendars, so files run side by side (start wrangler dev with --var LOCAL_NO_LIMITS:1).
+  workers: Number(process.env.PW_WORKERS || 6),
+  // One retry: a test that passes on its second try is reported as flaky, not hidden.
+  retries: Number(process.env.PW_RETRIES ?? 1),
   reporter: 'list',
   timeout: 90_000,
   expect: { timeout: 10_000 },

@@ -187,6 +187,9 @@ export default {
 
     async fetch(request, env, ctx) {
         const url = new URL(request.url);
+        // Local test servers only (wrangler dev --var LOCAL_NO_LIMITS:1): no per-address rate limits, so parallel
+        // browser tests from one machine aren't refused. wrangler.jsonc never sets it (test/unit/local-no-limits.test.js).
+        if (env.LOCAL_NO_LIMITS === '1') env = { ...env, CREATE_LIMITER: null, COLLECT_LIMITER: null };
         if (!noindexEverywhere(env, url.hostname)) return route(request, env, ctx);
         if (url.pathname === '/robots.txt') {
             return withStagingHeaders(new Response(ROBOTS_DISALLOW_ALL, { headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-cache' } }));
