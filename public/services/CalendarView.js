@@ -45,7 +45,8 @@
         const expand = (events, start, end) => {
             const NC = root.NativeCalendar;
             if (!NC || typeof NC.occurrencesBetween !== 'function') return [];
-            return NC.occurrencesBetween(displayEvents(events), new Date(start), new Date(end));
+            const EZ = root.EventZone;
+            return NC.occurrencesBetween(displayEvents(events), new Date(start), new Date(end), EZ && EZ.calendarZone ? EZ.calendarZone(vm.calendar) : null);
         };
         return {
             kind: 'native',

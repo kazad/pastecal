@@ -790,7 +790,7 @@
                 <!-- The calendar: pastecal's own on a native page (app.js nativeCal), else Syncfusion's (#Schedule). On a native
                      edit link (nativeEdit) it edits too: the quick box, drag to create / move / resize, the editor. -->
                 <native-calendar v-if="nativeCal" ref="nativeCal" class="pc-native-cal" data-testid="schedule-container"
-                    :events="nativeEvents" :read-only="isReadOnly || !nativeEdit" :colors="COLORS" :hidden-slots="hiddenColorSlots" :text-on="eventTextOn"
+                    :events="nativeEvents" :calendar-zone="calendarZone" :read-only="isReadOnly || !nativeEdit" :colors="COLORS" :hidden-slots="hiddenColorSlots" :text-on="eventTextOn"
                     :time-format="globalSettings.timeFormat" :first-day-of-week="globalSettings.firstDayOfWeek" :start-hour="nativeStartHour"
                     :initial-view="nativeView" :initial-date="nativeLink.date" :custom-duration="nativeCustomDuration" :custom-unit="nativeCustomUnit"
                     :month-row-height="nativeRowHeight" open-day-on-click app-look :app-edits="nativeEdit" :draft="nativeDraft"

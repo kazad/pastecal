@@ -316,7 +316,8 @@ export class CalendarRoom extends DurableObject {
             const live = (e.recurrencerule && !e.recurrenceID) || Date.parse(e.end || e.start) >= cutoff;
             if (!live || out.length >= 3000) continue;
             out.push({ id: e.id, title: e.title, start: e.start, end: e.end, isAllDay: !!e.isAllDay, type: e.type,
-                recurrencerule: e.recurrencerule || '', recurrenceID: e.recurrenceID ?? null, recurrenceException: e.recurrenceException ?? null });
+                recurrencerule: e.recurrencerule || '', recurrenceID: e.recurrenceID ?? null, recurrenceException: e.recurrenceException ?? null,
+                ...(e.tz ? { tz: e.tz } : {}) });   // (a series in its own zone repeats there: EventZone.seriesZone)
         }
         allDay.sort().reverse();
         const ps = this.proSettings();

@@ -477,6 +477,8 @@ const CalendarVueApp = {
         // ---- The native calendar's props (a native view link). The classic calendar gets the same settings
         // imperatively (mountSyncfusion, applyGlobalSettings); these are reactive, so they need no re-apply.
         nativeEvents() { return this.nativeCal ? CalendarView.displayEvents(this.calendar.events) : []; },
+        // Where a repeating event without its own zone repeats (EventZone.calendarZone), as the calendar feed writes it.
+        calendarZone() { return typeof EventZone !== 'undefined' && EventZone.calendarZone ? EventZone.calendarZone(this.calendar) : null; },
         // The quick box's new event, drawn on the grid as the "New event" block (labelled with the title typed).
         // A new event in the card, drawn on the grid as the "New event" block (its label follows the title typed).
         nativeDraft() {
