@@ -45,7 +45,7 @@ const CAL_BASE = (typeof window !== 'undefined' && window.CAL_BASE) ? window.CAL
 /** A calendar's page INSIDE this app (/beta/<id> or /nativecal/<id>), so creating or renaming
  *  a calendar keeps beta testers in beta. Share links stay pastecal.com/<id>, the page
  *  everyone else uses. */
-const calPath = (id) => (CAL_BASE === '/' ? '' : CAL_BASE.replace(/\/$/, '')) + '/' + (id || '');
+const calPath = (id) => (CAL_BASE === '/' ? '' : CAL_BASE.replace(/\/$/, '')) + (id ? CalendarPath.of(id) : '/');
 const stripBase = (path) => {
     const base = CAL_BASE.endsWith('/') ? CAL_BASE.slice(0, -1) : CAL_BASE;
     if (base && base !== '/' && path.startsWith(base)) {
@@ -152,7 +152,6 @@ const CalendarVueApp = {
             readOnlySlugInput: '',
 
             // Rename
-            newCalendarId: '',
 
             // Creation flow
             showClaimDialog: false,
@@ -345,7 +344,7 @@ const CalendarVueApp = {
                 cal.step(e.key === 'ArrowLeft' ? -1 : 1);
                 return;
             }
-            if (e.key !== 'Escape') return;
+            if (!pcKeys.is(e, 'Escape')) return;
             if (this.confirmDialog) { this.confirmDialog = null; return; }
             if (this.showEditor) { this.closeEditor(); return; }
             if (this.showPopover) { this.closePopover(); return; }
@@ -401,6 +400,8 @@ const CalendarVueApp = {
                 try {
                     console.log('Looking up calendar for /view/ route:', requestedSlug);
                     const result = await CalendarDataService.lookupCalendar(requestedSlug);
+                    // Couldn't ask (offline, a server error): not the same as "not found".
+                    if (result.error) { this.isLoading = false; this.notifyLoadError('Couldn’t load this calendar. Check your connection and reload the page.'); return; }
 
                     if (result.data.found && result.data.isReadOnly) {
                         // Found as read-only - subscribe with the actual slug
@@ -450,7 +451,7 @@ const CalendarVueApp = {
                 CloudCalendarService.onLockState = (s) => {
                     if (!s || !s.locked) return;
                     const hash = /^#k=/.test(location.hash) ? location.hash : '';
-                    location.replace('/' + encodeURIComponent(s.id || this.urlslug) + hash);
+                    location.replace(CalendarPath.of(s.id || this.urlslug) + hash);
                 };
             }
             // default: pastecal.com/ID
@@ -1340,12 +1341,17 @@ const CalendarVueApp = {
             this.calendar.id = slug;
 
             // check for existing
+            const problem = SlugManager.nameProblem(slug);
+            if (problem) { this.showToast(problem, 'error'); return; }
             CalendarDataService.checkExists(slug, () => {
-                // Revert to alert for this validation as per user request
-                alert("This URL is already taken. Please choose another.");
+                this.showToast('That name is already taken. Please choose another.', 'error');
             }, () => {
                 // does not exist, proceed
                 this.isLoading = true;
+                const failed = ({ offline } = {}) => {
+                    this.isLoading = false;
+                    this.showToast(offline ? 'Not saved: you’re offline. Try again when you’re connected.' : 'Not saved. Try again in a moment.', 'error');
+                };
                 CalendarDataService.createWithId(slug, this.calendar, () => {
                     // success - clear localStorage so homepage starts fresh next time
                     this.clearLocalStorage();
@@ -1357,8 +1363,8 @@ const CalendarVueApp = {
                     this.recentCalendars = this.recentManager.getAll();
                     this.showToast('Calendar created!', 'success');
                     window.location.href = calPath(slug);
-                });
-            });
+                }, { onError: failed });
+            }, () => this.showToast('Couldn’t reach pastecal to check that name. Check your connection and try again.', 'error'));
         },
 
         handleSlugInput() {
@@ -1372,52 +1378,6 @@ const CalendarVueApp = {
             // Actually, if they clicked shuffle, they interacted. 
             // But let's err on safe side: if they just shuffled but didn't TYPE, show dialog to confirm.
             this.userHasEditedSlug = false;
-        },
-
-        renameCalendar() {
-            if (!this.newCalendarId || !this.newCalendarId.trim()) return;
-
-            let newId = this.newCalendarId.trim();
-            // basic validation (alphanumeric, hyphens)
-            if (!newId.match(/^[a-zA-Z0-9_\-]+$/)) {
-                alert("Invalid name. Use letters, numbers, dashes, and underscores.");
-                return;
-            }
-
-            // Check if current name is same as new name
-            if (newId.toLowerCase() === this.calendar.id.toLowerCase()) {
-                alert("New name must be different from current name.");
-                return;
-            }
-
-            CalendarDataService.checkExists(newId, () => {
-                alert("That name is already taken.");
-            }, () => {
-                // does not exist, proceed
-                if (confirm(`Move calendar to pastecal.com/${newId}?`)) {
-                    // Create copy with new ID
-                    let newCalendar = JSON.parse(JSON.stringify(this.calendar));
-                    newCalendar.id = newId;
-                    newCalendar.title = newCalendar.title || "New Calendar";
-
-                    const oldId = this.calendar.id;
-
-                    CalendarDataService.createWithId(newId, newCalendar, () => {
-                        // We don't delete the old one (safer, acts as a copy), but the
-                        // recents entry has to move: leaving both would list a stale copy
-                        // alongside the live calendar with no way to tell them apart.
-                        const previous = this.recentManager.getAll()
-                            .find(item => item.id === oldId);
-                        this.recentManager.remove(oldId);
-                        // Renaming your own calendar keeps it yours.
-                        this.recentManager.add(newId, newCalendar.title, !!previous?.mine);
-                        if (previous?.pinned) this.recentManager.togglePin(newId);
-                        this.recentCalendars = this.recentManager.getAll();
-
-                        window.location.href = calPath(newId);
-                    });
-                }
-            });
         },
 
         setTitle(event) {
@@ -1459,12 +1419,12 @@ const CalendarVueApp = {
         // Owner-only — returns null in read-only mode so a forgotten v-if can't leak the edit id.
         getEditableURL() {
             if (this.isReadOnly) return null;
-            return `${window.location.origin}/${this.calendar.id}`;
+            return window.location.origin + CalendarPath.of(this.calendar.id);
         },
 
         getEditableICSURL() {
             if (this.isReadOnly) return null;
-            return `${window.location.origin}/${this.calendar.id}.ics`;
+            return window.location.origin + CalendarPath.feed(CalendarPath.of(this.calendar.id));
         },
 
         getReadOnlyICSURL() {
@@ -1477,16 +1437,18 @@ const CalendarVueApp = {
             return SlugManager.createReadOnlyLink(this.calendar);
         },
 
-        customizeExistingLink() {
-            if (!this.readOnlySlugInput.trim()) return;
-
-            // Use SlugManager for centralized read-only link operations
-            SlugManager.customizeReadOnlyLink(this.calendar, this.readOnlySlugInput.trim())
-                .then(() => {
-                    // Clear the input and hide the form
-                    this.readOnlySlugInput = '';
-                    this.showReadOnlySlug = false;
-                });
+        async customizeExistingLink() {
+            const name = this.readOnlySlugInput.trim();
+            if (!name) return;
+            const problem = SlugManager.viewNameProblem(name, SlugManager.getReadOnlySlug(this.calendar));
+            if (problem) { this.showToast(problem, 'error'); return; }
+            try {
+                await SlugManager.customizeReadOnlyLink(this.calendar, name);
+                this.readOnlySlugInput = '';
+                this.showReadOnlySlug = false;
+            } catch (e) {
+                this.showToast((e && e.userMessage) || SlugManager.linkErrorMessage(e), 'error');
+            }
         },
 
         getReadOnlySlug() {
@@ -1523,9 +1485,9 @@ const CalendarVueApp = {
 
         searchEvents() {
             if (this.searchQuery.trim() !== '') {
-                this.searchResults = this.displayEvents.filter(event =>
-                    event.title.toLowerCase().includes(this.searchQuery.toLowerCase())
-                );
+                // Case and accents folded ("cafe" finds "Café"), as on the main app.
+                const q = Utils.searchFold(this.searchQuery);
+                this.searchResults = this.displayEvents.filter(event => Utils.searchFold(event.title).includes(q));
 
                 // sort results by newest first
                 this.searchResults.sort((a, b) => new Date(b.start) - new Date(a.start));
@@ -2166,6 +2128,7 @@ const CalendarVueApp = {
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>`;
                 buttonElement.innerHTML = `${checkIcon} Copied!`;
+                Utils.announce('Copied to clipboard');   // seen on the button; heard through the page's live region
                 buttonElement.classList.remove('bg-blue-500', 'hover:bg-blue-600');
                 buttonElement.classList.add('bg-green-500');
 

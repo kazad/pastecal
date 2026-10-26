@@ -76,6 +76,15 @@ function parseDate(str) {
     return date.toString() == 'Invalid Date' ? null : date;
 }
 
+// A Date's LOCAL calendar date as 'YYYY-MM-DD' (what parseDate reads back). Never toISOString().slice(0, 10): that is
+// the UTC date, the day before east of UTC at local midnight ("This view" on Sat Oct 24 in Tokyo linked Oct 23, A06).
+function localDay(date) {
+    const d = date instanceof Date ? date : new Date(date);
+    if (isNaN(d.getTime())) return null;
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
 // Expose as a single shared object
 const Utils = window.Utils || {};
 Object.assign(Utils, {
@@ -86,6 +95,7 @@ Object.assign(Utils, {
     beforeUnmount,
     sanitizeUrl,
     parseDate,
+    localDay,
 });
 window.Utils = Utils;
 
@@ -509,7 +519,8 @@ function escapeHtml(text) {
 // addresses become links, found in ONE pass (the old three passes could match inside an href the
 // previous pass had just written, nesting tags into an attribute). Nothing else -- javascript:,
 // data:, ftp: -- is ever made a link. Trailing punctuation stays outside the link.
-const LINKIFY_PATTERN = /\bhttps?:\/\/[^\s<>"'`]+|\bwww\.[^\s<>"'`]+|[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/gi;
+// "mailto:" and "tel:" typed before an address or a number link it, and are not shown (a person reads the address).
+const LINKIFY_PATTERN = /\bhttps?:\/\/[^\s<>"'`]+|\bwww\.[^\s<>"'`]+|\btel:\+?[0-9][0-9 ().-]{4,}[0-9]|(?:\bmailto:)?[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/gi;
 function linkify(inputText, { style = true } = {}) {
     const text = String(inputText ?? '');
     const css = style ? ` style="${LINKIFY_LINK_STYLE}"` : '';
@@ -519,9 +530,13 @@ function linkify(inputText, { style = true } = {}) {
         const trail = /[).,!?;:]+$/.exec(link);
         if (trail) link = link.slice(0, -trail[0].length);
         if (!link) continue;
-        const href = /^www\./i.test(link) ? `http://${link}` : (link.includes('@') && !/^https?:/i.test(link) ? `mailto:${link}` : link);
-        out += escapeHtml(text.slice(last, m.index))
-            + `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer nofollow ugc"${css}>${escapeHtml(link)}</a>`;
+        const tel = /^tel:/i.test(link), shown = link.replace(/^(mailto|tel):/i, '');
+        const href = tel ? `tel:${shown.replace(/[^0-9+]/g, '')}` : /^www\./i.test(link) ? `http://${link}`
+            : (link.includes('@') && !/^https?:/i.test(link) ? `mailto:${shown}` : link);
+        // The prefix stays in the text, hidden: the shown text is still exactly what was typed (a click on it places the caret there).
+        const prefix = link.slice(0, link.length - shown.length);
+        out += escapeHtml(text.slice(last, m.index)) + (prefix ? `<span hidden>${escapeHtml(prefix)}</span>` : '')
+            + `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer nofollow ugc"${css}>${escapeHtml(shown)}</a>`;
         last = m.index + link.length;
     }
     return out + escapeHtml(text.slice(last));
@@ -575,3 +590,41 @@ if (typeof MutationObserver !== 'undefined' && typeof document !== 'undefined') 
 }
 
 Object.assign(Utils, { linkify });
+
+// The page's ONE polite live region: copying a link, the save status (offline, back) and every toast speak through
+// it, so a screen reader hears each change, once. (A second region would say it twice; a region inserted together
+// with its text is often not read at all, so this one is made empty at load and only its text changes.)
+function liveRegion() {
+    if (typeof document === 'undefined' || !document.body) return null;
+    let el = document.getElementById('pc-live');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'pc-live';
+        el.setAttribute('aria-live', 'polite');
+        el.setAttribute('aria-atomic', 'true');
+        el.setAttribute('data-testid', 'live-region');
+        el.style.cssText = 'position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0';
+        document.body.appendChild(el);
+    }
+    return el;
+}
+let announceTimers = [];
+/** Say `text` to screen readers (politely). The same words twice in a row are said twice. */
+function announce(text) {
+    const el = liveRegion();
+    if (!el) return;
+    announceTimers.forEach(clearTimeout);
+    const say = () => { el.textContent = String(text || ''); announceTimers = [setTimeout(() => { el.textContent = ''; }, 7000)]; };
+    if (el.textContent === String(text || '')) { el.textContent = ''; announceTimers = [setTimeout(say, 60)]; } else say();
+}
+if (typeof document !== 'undefined') {
+    if (document.body) liveRegion(); else document.addEventListener('DOMContentLoaded', liveRegion);
+}
+Object.assign(Utils, { announce });
+
+/** Text as search compares it: case and accents folded ("Café" -> "cafe"), so a word typed without its accents still
+ *  matches. NFC again after dropping the marks, so a Hangul syllable stays one character. */
+function searchFold(s) {
+    return String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').normalize('NFC').toLowerCase();
+}
+Object.assign(Utils, { searchFold });

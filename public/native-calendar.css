@@ -109,6 +109,21 @@
 .nc-timed:hover { filter: brightness(1.06); }
 .nc-timed-title { font-weight: var(--pc-fw-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; justify-content: space-between; gap: var(--pc-space-1); }
 .nc-timed-time { font-size: var(--pc-fs-2xs); }
+/* A narrow column (a phone's week, several side by side): the title on two lines ending in …, the start time alone. */
+.nc-timed.narrow { padding-inline: 3px; }
+.nc-timed.narrow .nc-timed-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; line-height: 1.25; }
+.nc-timed.narrow.short .nc-timed-title { -webkit-line-clamp: 1; }
+.nc-timed.narrow .nc-recur { display: none; }
+.nc-timed.narrow .nc-timed-time { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* More overlapping events than fit side by side: "+N" in the last column opens the day (or, in the day view, its list). */
+.nc-more-timed { position: absolute; z-index: 1; box-sizing: border-box; display: flex; align-items: flex-start; justify-content: center; padding: 3px 2px; border: 0;
+    border-radius: var(--pc-radius-sm); background: var(--pc-soft); color: var(--pc-text-2); font: var(--pc-fw-semibold) var(--pc-fs-xs)/1.2 var(--pc-font); cursor: pointer; }
+.nc-more-timed:hover { background: var(--pc-hover); color: var(--pc-text); }
+.nc-allday-cell { position: relative; }
+.nc-allday-scroll.open { max-height: 40vh; overflow-y: auto; overscroll-behavior: contain; }   /* every all-day line, scrolling past 40% */
+.nc-gutter-head { position: relative; }
+.nc-fewer { position: absolute; left: 0; right: 0; bottom: 4px; }
+.nc-allday .nc-more { white-space: nowrap; z-index: 3; }
 .nc-resize { display: none; }   /* view links: nothing to resize */
 .nc-now-line { position: absolute; left: 0; right: 0; height: 0; border-top: 2px solid var(--pc-primary); z-index: 3; pointer-events: none; }
 .nc-now-dotted { position: absolute; left: 0; right: 0; height: 0; border-top: 1px dotted var(--pc-text-muted); z-index: 2; pointer-events: none; }
@@ -204,21 +219,27 @@
    Sizes in em follow the card's --pc-fs-md (14px): the title 22px, times and details 15px, as the prototype has them.
    The editing prototype (docs/native-switch.md, Decisions), on tokens: one content column with icons in a 60px
    gutter, an 8/16 rhythm, regular-weight values, the event's exact color as a stripe down the left edge. */
-.nk-card { position: absolute; z-index: var(--pc-z-popover); width: 416px; max-width: calc(100vw - 24px); box-sizing: border-box; background: var(--pc-raised); color: var(--pc-text);
+.nk-card { position: absolute; z-index: var(--pc-z-popover); width: 560px; max-width: calc(100vw - 24px); box-sizing: border-box; background: var(--pc-raised); color: var(--pc-text);
     border-radius: var(--pc-radius-card); box-shadow: var(--pc-shadow-lg), 0 0 0 1px var(--pc-line); font-family: var(--pc-font); font-size: var(--pc-fs-md);
     transform-origin: var(--from-x, 0) var(--from-y, 0); -webkit-user-select: text; user-select: text; }
 .nk-card::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 5px 0 0 var(--evc); pointer-events: none; transition: box-shadow var(--pc-dur) ease; }
 .nk-card :where(button) { font: inherit; color: inherit; }
 .nk-card :focus-visible, .nk-pick :focus-visible, .nk-menu :focus-visible { outline: var(--pc-focus-outline); outline-offset: 2px; }
 .nk-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.nk-h { padding: var(--pc-space-4) var(--pc-space-4) 0; display: flex; align-items: center; gap: 10px; }
+.nk-h { padding: var(--pc-space-4) var(--pc-space-4) 0; display: flex; align-items: flex-start; gap: 10px; }   /* a title that wraps keeps the type at the top right */
 .nk-title { flex: 1; min-width: 0; min-height: 42px; box-sizing: border-box; border: 0; border-bottom: 1px solid var(--pc-field-strong); background: transparent; color: var(--pc-text);
-    font: var(--pc-fw-semibold) var(--pc-fs-md)/1.3 var(--pc-font); font-size: 1.5715em; letter-spacing: var(--pc-tracking-tight); padding: var(--pc-space-1) 0; border-radius: 0; }
+    font: var(--pc-fw-semibold) var(--pc-fs-md)/1.3 var(--pc-font); font-size: 1.5715em; letter-spacing: var(--pc-tracking-tight); padding: var(--pc-space-1) 0; border-radius: 0;
+    display: block; resize: none; overflow: hidden; overflow-wrap: anywhere; }   /* a textarea of one line that wraps (EventCard growTitle) */
 .nk-title::placeholder { color: var(--pc-text-muted); font-weight: var(--pc-fw-medium); }
 .nk-title:hover { border-bottom-color: var(--pc-text-muted); }
 .nk-card .nk-title:focus, .nk-card .nk-title:focus-visible { outline: none; border-bottom: 2px solid var(--pc-primary); padding-bottom: 3px; }
+/* A title of more than three lines (EventCard growTitle): three lines exactly, no bottom padding for a sliver of the
+   fourth, the third fading out until it is focused and scrolls (the last 2px, the underline, stay solid). */
+.nk-card .nk-title.nk-title-clip { padding-bottom: 0; }
+.nk-card .nk-title.nk-title-clip:not(:focus) { -webkit-mask-image: linear-gradient(to bottom, currentColor calc(100% - 1em), transparent calc(100% - 2px), currentColor calc(100% - 2px));
+    mask-image: linear-gradient(to bottom, currentColor calc(100% - 1em), transparent calc(100% - 2px), currentColor calc(100% - 2px)); }
 .nk-cat { display: inline-flex; align-items: center; gap: 6px; flex: none; max-width: 45%; border: 0; background: var(--pc-soft); border-radius: var(--pc-radius-pill); min-height: var(--pc-h-sm);
-    padding: 0 10px 0 9px; font-size: .9643em; font-weight: var(--pc-fw-semibold); color: var(--pc-text-2); cursor: pointer; }   /* 13.5px */
+    padding: 0 10px 0 9px; margin-top: 5px; font-size: .9643em; font-weight: var(--pc-fw-semibold); color: var(--pc-text-2); cursor: pointer; }   /* 13.5px; centered on the title's first line */
 .nk-cat span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nk-cat:hover, .nk-cat[aria-expanded="true"] { background: var(--pc-hover); }
 .nk-cat i { width: 10px; height: 10px; border-radius: 50%; background: var(--evc); flex: none; transition: background-color var(--pc-dur) ease; }
@@ -237,11 +258,14 @@
 .nk-qline.nk-pulse { animation: nk-pulse .35s ease-out; }
 @keyframes nk-pulse { 40% { transform: scale(1.02); } }
 .nk-qdet-wrap { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; margin-top: calc(-1 * var(--pc-space-2)); }
-.nk-qdet { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; align-self: stretch; color: var(--pc-text-2); font-size: var(--pc-fs-md);
-    line-height: 1.45; padding: var(--pc-space-1) var(--pc-space-2); margin: 0 calc(-1 * var(--pc-space-2)); border-radius: var(--pc-radius-control); cursor: pointer;
-    white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
-.nk-qdet.fade { -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent); mask-image: linear-gradient(to bottom, black 60%, transparent); }
-.nk-qdet.all { display: block; -webkit-line-clamp: unset; max-height: 40vh; overflow-y: auto; }
+/* The box (padding, hover) around the text; the text itself is clamped, so the cut falls between two whole lines and
+   the box's padding never shows a sliver of the fifth one. */
+.nk-qdet { align-self: stretch; color: var(--pc-text-2); font-size: var(--pc-fs-md);
+    line-height: 1.45; padding: var(--pc-space-1) var(--pc-space-2); margin: 0 calc(-1 * var(--pc-space-2)); border-radius: var(--pc-radius-control); cursor: pointer; }
+.nk-qtext { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
+.nk-qdet.fade .nk-qtext { -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent); mask-image: linear-gradient(to bottom, black 60%, transparent); }
+.nk-qdet.all { max-height: 40vh; overflow-y: auto; }
+.nk-qdet.all .nk-qtext { display: block; -webkit-line-clamp: unset; overflow: visible; }
 .nk-qdet:hover { background: var(--pc-soft); }
 .nk-qdet a, .nk-det-link { color: var(--pc-link); text-decoration: underline; }
 .nk-showall, .nk-more { border: 0; background: none; color: var(--pc-link); font-size: var(--pc-fs-md); font-weight: var(--pc-fw-semibold); cursor: pointer;
@@ -266,10 +290,18 @@
 .nk-switch[aria-checked="true"] i { background: var(--pc-primary); }
 .nk-switch[aria-checked="true"] i::after { transform: translateX(16px); }
 .nk-durb { justify-self: end; display: inline-flex; align-items: center; gap: var(--pc-space-1); border: 0; background: transparent; border-radius: var(--pc-radius-control);
-    min-height: var(--pc-h-sm); padding: 0 6px 0 var(--pc-space-2); margin-right: -6px; font-size: var(--pc-fs-md); font-weight: var(--pc-fw-medium); color: var(--pc-text-2); cursor: pointer; white-space: nowrap; }
+    min-height: var(--pc-h-sm); padding: 0 6px 0 var(--pc-space-2); font-size: var(--pc-fs-md); font-weight: var(--pc-fw-medium); color: var(--pc-text-2); cursor: pointer; white-space: nowrap; }
 .nk-durb:hover, .nk-durb[aria-expanded="true"] { background: var(--pc-soft); }
 .nk-tz { margin: -6px 0 0 60px; font-size: var(--pc-fs-sm); font-weight: var(--pc-fw-medium); color: var(--pc-text-muted); display: flex; align-items: center; min-height: var(--pc-h-sm); position: relative; }
 .nk-tz > .nk-gi { position: absolute; left: -60px; }
+/* the time zone: a quiet button (the event's zone, or yours), then its times in yours when the clocks differ */
+.nk-tz { flex-wrap: wrap; column-gap: 6px; }
+.nk-tzb { display: inline-flex; align-items: center; border: 0; background: transparent; border-radius: var(--pc-radius-control); min-height: var(--pc-h-sm); padding: 0 var(--pc-space-2);
+    margin-left: calc(-1 * var(--pc-space-2)); font: inherit; color: inherit; cursor: pointer; text-align: left; }
+.nk-tzb:hover, .nk-tzb[aria-expanded="true"] { background: var(--pc-soft); color: var(--pc-text-2); }
+.nk-tzyou { font-variant-numeric: tabular-nums; }
+.nk-qtz { color: var(--pc-text-muted); }
+@media (pointer: coarse) { .nk-tzb { min-height: var(--pc-h-lg); } }
 .nk-row { display: flex; align-items: flex-start; margin-left: 60px; position: relative; }
 .nk-row > .nk-gi { position: absolute; left: -60px; top: 7px; }
 .nk-sel { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; border-radius: var(--pc-radius-control); min-height: var(--pc-h-sm);
@@ -281,11 +313,14 @@
 .nk-det::placeholder { color: var(--pc-text-muted); }
 .nk-det:hover { border-color: color-mix(in srgb, var(--pc-primary) 45%, var(--pc-field-strong)); }
 .nk-card .nk-det:focus { border-color: var(--pc-primary); outline: none; background: var(--pc-bg); box-shadow: var(--pc-focus-ring); }
+/* The details with live links, until they are clicked (EventCard detView): the box's look, the text as typed. */
+.nk-det-view { white-space: pre-wrap; word-break: break-word; overflow-y: auto; cursor: text; }
+.nk-det-view a { color: var(--pc-link); text-decoration: underline; cursor: pointer; }
 .nk-count { font-size: var(--pc-fs-xs); color: var(--pc-text-muted); text-align: right; }
 .nk-foot { display: flex; align-items: center; gap: var(--pc-space-1); margin-left: 60px; position: sticky; bottom: 0; z-index: 2; background: var(--pc-raised);
     padding-bottom: var(--pc-space-3); margin-bottom: calc(-1 * var(--pc-space-3)); }   /* pinned when the card scrolls inside: Done stays in view */
 /* Writing long details: the card widens to a comfortable line (EventCard widen); it never narrows while open. */
-.nk-card.wide { width: 600px; }
+.nk-card.wide { width: 680px; }
 /* Scrolling inside the card (or its details, or a picker's list) never carries on into the calendar or the page. */
 .nk-card, .nk-card .nk-det, .nk-pick, .nk-pick *, .nk-menu { overscroll-behavior: contain; }
 /* A phone's sheet is open: the page behind it does not scroll (the calendar is inert; app.js watch nativeCard). */
@@ -315,24 +350,32 @@ html.nk-sheet-open, html.nk-sheet-open body { overflow: hidden; }
 @keyframes nk-drop { from { opacity: 0; transform: translateY(-4px); } }
 .nk-pick { width: 240px; }
 .nk-pick-dur { width: 200px; }
-.nk-pick-rep:has(.nk-cust) { width: 296px; }
+.nk-pick-tz { width: 300px; }
+.nk-pick-tz .nk-plist { max-height: 300px; }
+.nk-empty { margin: 0; padding: 7px 10px; font-size: var(--pc-fs-sm); color: var(--pc-text-muted); }
 .nk-menu { width: 200px; }
 .nk-menu button { display: flex; justify-content: space-between; align-items: center; width: 100%; box-sizing: border-box; min-height: 34px; padding: var(--pc-space-2) 10px; border: 0;
     background: none; border-radius: var(--pc-radius-sm); font-size: var(--pc-fs-md); color: var(--pc-text); cursor: pointer; }
 .nk-menu button:hover { background: var(--pc-soft); }
 .nk-menu .red { color: var(--pc-danger); }
 .nk-menu kbd { font: var(--pc-fw-semibold) var(--pc-fs-2xs) var(--pc-font); color: var(--pc-text-muted); }
-.nk-typed { width: 100%; box-sizing: border-box; font: var(--pc-fw-medium) var(--pc-fs-md) var(--pc-font); border: 1px solid var(--pc-field-strong); border-radius: var(--pc-radius-control);
-    padding: 7px 9px; background: var(--pc-bg); color: var(--pc-text); margin-bottom: 6px; }
-.nk-typed.bad { border-color: var(--pc-danger); }
+/* Fields in the card and its pickers are the shared .pc-field (components.css: our chevron, its padding, focus ring),
+   with the card's stronger border, the one its time buttons have, so they can be found at a glance. Only what
+   differs is said here: no second field style (test/unit/native-fields.test.js). */
+.nk-card .pc-field, .nk-pick .pc-field { border-color: var(--pc-field-strong); }
+.nk-card .pc-field:hover:not(:focus), .nk-pick .pc-field:hover:not(:focus) { border-color: var(--pc-primary); }
+.nk-pick .nk-typed { font-weight: var(--pc-fw-medium); margin-bottom: 6px; }
+.nk-pick .nk-typed.bad { border-color: var(--pc-danger); }
 .nk-pick-s .nk-typed, .nk-pick-e .nk-typed { font-weight: var(--pc-fw-semibold); }
 .nk-plist { max-height: 230px; overflow-y: auto; display: flex; flex-direction: column; }
 .nk-plist-top { max-height: none; margin-bottom: var(--pc-space-1); }
+.nk-pick-rep .nk-plist { max-height: none; }   /* every repeat choice and Custom… in view (the picker scrolls if the screen is short) */
 .nk-plist button { display: flex; justify-content: space-between; align-items: center; gap: 10px; min-height: 34px; box-sizing: border-box; padding: 7px 10px; border: 0; background: none;
     border-radius: var(--pc-radius-sm); font-size: var(--pc-fs-md); color: var(--pc-text); cursor: pointer; font-variant-numeric: tabular-nums; text-align: left; }
 .nk-plist button small { font-size: var(--pc-fs-xs); color: var(--pc-text-muted); }
 .nk-plist button:hover, .nk-plist button:focus-visible { background: var(--pc-soft); }
-.nk-plist button.cur { background: var(--pc-primary-soft); color: var(--pc-primary); }
+.nk-plist button.cur { background: var(--pc-selected); color: var(--pc-on-selected); }
+.nk-plist button.cur small { color: inherit; }
 .nk-plist .nk-catopt { justify-content: flex-start; }
 .nk-catopt i, .nk-labels i { width: 10px; height: 10px; border-radius: 50%; flex: none; }
 .nk-pfoot { border-top: 1px solid var(--pc-line); margin-top: 6px; padding: 6px var(--pc-space-1) 0; display: flex; gap: var(--pc-space-2); }
@@ -342,9 +385,7 @@ html.nk-sheet-open, html.nk-sheet-open body { overflow: hidden; }
 .nk-pfoot button:hover { background: var(--pc-soft); }
 .nk-labels { display: flex; flex-direction: column; gap: 6px; padding: var(--pc-space-1); max-height: 260px; overflow-y: auto; }
 .nk-labels label { display: flex; align-items: center; gap: var(--pc-space-2); }
-.nk-labels input, .nk-cust input[type=number], .nk-cust input[type=date], .nk-cust select { min-width: 0; font: var(--pc-fw-medium) var(--pc-fs-md) var(--pc-font); padding: 5px var(--pc-space-2);
-    border: 1px solid var(--pc-field-strong); border-radius: var(--pc-radius-control); background: var(--pc-bg); color: var(--pc-text); }
-.nk-labels input { flex: 1; }
+.nk-labels .pc-field { flex: 1; }
 .nk-mhead { display: flex; justify-content: space-between; align-items: center; font-size: var(--pc-fs-md); font-weight: var(--pc-fw-bold); padding: 2px 2px var(--pc-space-1) 6px; }
 .nk-month { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; font-size: var(--pc-fs-sm); }
 .nk-month b { font-size: var(--pc-fs-2xs); font-weight: var(--pc-fw-semibold); color: var(--pc-text-muted); padding: 3px 0; }
@@ -356,11 +397,21 @@ html.nk-sheet-open, html.nk-sheet-open body { overflow: hidden; }
 .nk-month button.today { box-shadow: inset 0 0 0 1.5px var(--pc-primary); }
 .nk-month button.today:not(.cur) { color: var(--pc-primary); }
 .nk-month button:disabled { opacity: .35; cursor: default; }
-.nk-cust { display: flex; flex-direction: column; gap: var(--pc-space-3); padding: 6px; }
-.nk-cust label { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.nk-cust input[type=number] { width: 56px; }
-.nk-cust input[type=radio] { accent-color: var(--pc-primary); margin: 0; }
-.nk-wd { display: flex; gap: var(--pc-space-1); }
+/* Repeat > Custom…: the repeat's settings inside the card, under the Repeat row, in the same column (EventCard openCustom). */
+.nk-cust { margin: calc(-1 * var(--pc-space-2)) 0 0 60px; display: flex; flex-direction: column; gap: var(--pc-space-3); padding: var(--pc-space-3);
+    border-radius: var(--pc-radius-control); background: var(--pc-soft); scroll-margin-bottom: 72px; }
+.nk-cl { display: flex; align-items: center; gap: var(--pc-space-2); flex-wrap: wrap; color: var(--pc-text); }
+.nk-cust .pc-field { display: inline-block; width: auto; background-color: var(--pc-raised); }
+.nk-cust .nk-num { width: 64px; }
+.nk-cust .nk-fit { max-width: 100%; }
+.nk-cust input[type=radio] { width: 18px; height: 18px; margin: 0; flex: none; accent-color: var(--pc-primary); cursor: pointer; }
+.nk-cust label { cursor: pointer; }
+.nk-opts { display: flex; flex-direction: column; gap: var(--pc-space-2); }
+.nk-ends-h { color: var(--pc-text-muted); font-size: var(--pc-fs-sm); font-weight: var(--pc-fw-semibold); }
+.nk-until { min-height: var(--pc-h-sm); padding: 0 var(--pc-space-3); font-size: var(--pc-fs-md); }
+.nk-until.dim { color: var(--pc-text-muted); }
+.nk-sel.open .nc-lucide { color: var(--pc-text); }
+.nk-wd { display: flex; gap: var(--pc-space-1); flex-wrap: wrap; }
 .nk-wd button { width: var(--pc-h-sm); height: var(--pc-h-sm); border-radius: 50%; border: 1px solid var(--pc-field-strong); background: var(--pc-raised); color: var(--pc-text);
     font-size: var(--pc-fs-sm); font-weight: var(--pc-fw-semibold); cursor: pointer; padding: 0; }
 .nk-wd button[aria-pressed="true"] { background: var(--pc-primary); border-color: var(--pc-primary); color: var(--pc-on-primary); }
@@ -404,29 +455,44 @@ html.nk-sheet-open, html.nk-sheet-open body { overflow: hidden; }
     .nk-card.sheet { position: fixed; left: 0 !important; right: 0; top: auto !important; bottom: 0; width: auto; max-width: none; max-height: 82vh; overflow-y: auto;
         border-radius: var(--pc-radius-dialog) var(--pc-radius-dialog) 0 0; padding-bottom: env(safe-area-inset-bottom, 0px); transition: transform .18s ease; overscroll-behavior: contain; }
     .nk-card.sheet.writing { max-height: 94vh; }
+    /* A short window (a laptop at 200% zoom, 640x400): 82vh leaves the sheet too little for its title, fields and two
+       lines of details together (F22 with S10); a fixed strip of dimmed calendar above it is enough. */
+    @media (max-height: 480px) { .nk-card.sheet { max-height: calc(100vh - 56px); } }
     .nk-card.sheet::before { content: ""; display: block; width: 36px; height: 5px; border-radius: var(--pc-radius-xs); background: var(--pc-line); margin: var(--pc-space-2) auto 0; }
     .nk-card.sheet::after { box-shadow: inset 0 4px 0 var(--evc); }
-    .nk-typed, .nk-det { font-size: var(--pc-fs-lg); }   /* no zoom on focus */
+    .nk-pick .nk-typed, .nk-det, .nk-card .pc-field { font-size: var(--pc-fs-lg); }   /* no zoom on focus */
 }
 @media (max-width: 480px) {
-    .nk-when { grid-template-columns: 42px 104px 86px 1fr; gap: var(--pc-space-2) 6px; }
+    /* the date and time shrink before the switch and the length leave the card's column (a 360px phone) */
+    .nk-when { grid-template-columns: 42px minmax(0, 104px) minmax(0, 86px) 1fr; gap: var(--pc-space-2) 6px; }
     .nk-tp { font-size: var(--pc-fs-md); }
-    .nk-row, .nk-foot, .nk-tz { margin-left: 48px; }
+    .nk-row, .nk-foot, .nk-tz, .nk-cust { margin-left: 48px; }
     .nk-row > .nk-gi, .nk-tz > .nk-gi { left: -48px; }
 }
 
 /* ---- "This event / All events" and classic's other questions ------------------------------ */
 .pc-native-ask { position: fixed; inset: 0; z-index: var(--pc-z-snackbar); background: var(--pc-scrim); display: flex; align-items: center; justify-content: center; padding: var(--pc-space-4); }
 .pc-native-ask-panel { width: 380px; max-width: 100%; box-sizing: border-box; padding: var(--pc-space-5) var(--pc-space-6); background: var(--pc-bg); color: var(--pc-text);
-    border-radius: var(--pc-radius-dialog); box-shadow: var(--pc-shadow-xl); font-family: var(--pc-font); }
+    border-radius: var(--pc-radius-dialog); box-shadow: var(--pc-shadow-xl); font-family: var(--pc-font);
+    max-height: 100%; overflow-y: auto; overscroll-behavior: contain; }   /* never taller than the window (the ? sheet at 640x400 ran off both ends) */
 .pc-native-ask-title { margin: 0 0 var(--pc-space-3); font-size: var(--pc-fs-xl); font-weight: var(--pc-fw-bold); }
 .pc-native-ask-text { margin: 0 0 var(--pc-space-3); font-size: var(--pc-fs-md); line-height: var(--pc-lh-body); color: var(--pc-text-2); }
 .pc-native-ask-options { display: flex; flex-direction: column; gap: var(--pc-space-1); margin-bottom: var(--pc-space-4); }
 .pc-native-ask-option { display: flex; align-items: center; gap: var(--pc-space-3); min-height: var(--pc-h-md); font-size: var(--pc-fs-md); cursor: pointer; }
 .pc-native-ask-option input { width: 18px; height: 18px; margin: 0; accent-color: var(--pc-primary); }
-.pc-native-ask-foot { display: flex; justify-content: flex-end; gap: var(--pc-space-2); flex-wrap: wrap; }
+.pc-native-ask-foot { display: flex; justify-content: flex-end; gap: var(--pc-space-2); flex-wrap: wrap;
+    /* Pinned to the panel's bottom when it scrolls (a short window): the buttons in view with the title, never a
+       scroll away -- focusing Done scrolled the ? sheet's title out of a 640x400 window. */
+    position: sticky; bottom: calc(-1 * var(--pc-space-5)); margin-bottom: calc(-1 * var(--pc-space-5)); padding: var(--pc-space-2) 0 var(--pc-space-5); background: var(--pc-bg); }
 
 /* ---- the page around it ----------------------------------------------------------------- */
 .pc-native-cal { min-height: 0; }
 .pc-native-cal:has(.nc-agenda, .nc-grid) { min-height: 70vh; }
 @media print { .pc-native-cal, .np, .nk-card, .nk-scrim, .nk-pick, .nk-menu, .pc-native-ask { display: none !important } }
+/* Option-drag copies: the original stays where it is, drawn as the event, not as an outline. */
+.nc-origin.copy { border-style: solid; background: var(--c); padding: 2px var(--pc-space-1); font-size: var(--pc-fs-xs); overflow: hidden; }
+/* ? : the keyboard shortcuts, two columns of key and what it does. */
+.pc-native-keys dl { display: grid; grid-template-columns: max-content 1fr; gap: var(--pc-space-2) var(--pc-space-4); margin: 0 0 var(--pc-space-4); font-size: var(--pc-fs-md); }
+.pc-native-keys dt { white-space: nowrap; color: var(--pc-text-2); }
+.pc-native-keys dd { margin: 0; }
+.pc-native-keys kbd { display: inline-block; min-width: 1.6em; padding: 1px 6px; border: 1px solid var(--pc-line); border-bottom-width: 2px; border-radius: var(--pc-radius-sm); background: var(--pc-soft); font: var(--pc-fw-semibold) var(--pc-fs-sm) var(--pc-font); text-align: center; }

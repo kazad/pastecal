@@ -168,7 +168,28 @@ class CalendarDataService {
     // not saved (and is reported); the row just stays as it was.
     static _dropIncompleteEvents(calendar, base = []) {
         if (!calendar) return calendar;
-        const events = this._eventList(calendar.events);
+        const { kept, dropped } = this._completeRows(calendar.events, base);
+        if (!dropped.length) return { ...calendar, events: kept };
+
+        console.warn(
+            `[CalendarDataService] Refusing to save ${dropped.length} event(s) with a ` +
+            `missing/invalid start or end — they would break this calendar's ICS feed.`,
+            dropped);
+
+        if (typeof this.onIncompleteEvents === 'function') {
+            try {
+                this.onIncompleteEvents(dropped);
+            } catch (err) {
+                console.error('[CalendarDataService] onIncompleteEvents handler failed', err);
+            }
+        }
+
+        return { ...calendar, events: kept };
+    }
+
+    /** The rows a save may carry (kept) and the incomplete ones it refuses (dropped), silently: _dropIncompleteEvents. */
+    static _completeRows(list, base = []) {
+        const events = this._eventList(list);
         const baseM = this._byKey(base);
 
         const kept = [], dropped = [];
@@ -187,22 +208,7 @@ class CalendarDataService {
         const held = new Set(events.filter(e => e.id).map(e => this._eventKey(e)));
         for (const [k, e] of baseM) if (!held.has(k) && !Event.isComplete(e)) kept.push(e);
 
-        if (!dropped.length) return { ...calendar, events: kept };
-
-        console.warn(
-            `[CalendarDataService] Refusing to save ${dropped.length} event(s) with a ` +
-            `missing/invalid start or end — they would break this calendar's ICS feed.`,
-            dropped);
-
-        if (typeof this.onIncompleteEvents === 'function') {
-            try {
-                this.onIncompleteEvents(dropped);
-            } catch (err) {
-                console.error('[CalendarDataService] onIncompleteEvents handler failed', err);
-            }
-        }
-
-        return { ...calendar, events: kept };
+        return { kept, dropped };
     }
 
     // subscribe to live updates
@@ -301,7 +307,7 @@ class CalendarDataService {
             if (result.data?.found) {
                 if (result.data.isReadOnly) {
                     // Found as read-only calendar - redirect to view URL
-                    window.location.href = `/view/${result.data.actualSlug}`;
+                    window.location.href = CalendarPath.view(result.data.actualSlug);
                     return; // Don't call callback, we're redirecting
                 } else {
                     // Found as editable calendar - subscribe with correct case
@@ -350,6 +356,10 @@ class CalendarDataService {
     // arrived, silently reverting the other person's work.
     static _previousSeen = {};
 
+    // The same two baselines for the calendar's own fields: { title, options }.
+    static _lastSeenMeta = {};
+    static _previousSeenMeta = {};
+
     // Remember what the server just told us. Called from every subscription callback.
     static _rememberSnapshot(calendar) {
         if (!calendar || !calendar.id) return;
@@ -357,6 +367,40 @@ class CalendarDataService {
             this._previousSeen[calendar.id] = this._lastSeen[calendar.id];
         }
         this._lastSeen[calendar.id] = JSON.parse(JSON.stringify(this._eventList(calendar.events)));
+        // (A snapshot of the events alone leaves the title/options baseline as it was.)
+        if ('title' in calendar || 'options' in calendar) {
+            if (Object.prototype.hasOwnProperty.call(this._lastSeenMeta, calendar.id)) this._previousSeenMeta[calendar.id] = this._lastSeenMeta[calendar.id];
+            this._lastSeenMeta[calendar.id] = JSON.parse(JSON.stringify({ title: calendar.title ?? '', options: calendar.options || {} }));
+        }
+    }
+
+    /**
+     * The calendar's own fields merged three ways, like its events (_mergeEvents): `theirs` (the snapshot just received)
+     * with every field `mine` (this tab) changed since `base` (the snapshot before it). Per field: the title, and each
+     * option on its own (notes, typeLabels, tz, ...); a list (typeLabels, colors) entry by entry. A field this tab
+     * changed and has not yet saved -- the notes being typed -- is never replaced by a snapshot. (import() replaced the
+     * options whole: another person's added event brought back the server's notes over keystrokes still inside the
+     * 500 ms save debounce, stress A01.) A field both changed: this tab's, the newest intent, which it is about to send.
+     * edited(field): whether the person here changed it ('title', or an option's key). A value this tab only filled in
+     * (an option's default, on load) differs from the base too, but never outranks someone's saved one.
+     */
+    static mergeMeta(base, mine, theirs, edited = () => true) {
+        const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+        const pick = (b, m, t, field) => {
+            if (same(m, b) || !edited(field)) return t;
+            if (Array.isArray(b) && Array.isArray(m) && Array.isArray(t)) {
+                return Array.from({ length: Math.max(m.length, t.length) }, (_, i) => (same(m[i], b[i]) ? t[i] : m[i]));
+            }
+            return m;
+        };
+        const B = base || {}, M = mine || {}, T = theirs || {};
+        const bo = B.options || {}, mo = M.options || {}, to = T.options || {};
+        const options = {};
+        for (const k of new Set([...Object.keys(to), ...Object.keys(mo), ...Object.keys(bo)])) {
+            const v = pick(bo[k], mo[k], to[k], k);
+            if (v !== undefined) options[k] = v;
+        }
+        return { title: pick(B.title, M.title, T.title, 'title'), options };
     }
 
     // Firebase returns an array with holes as an object keyed by index ({"0":A,"2":B}),
@@ -382,24 +426,8 @@ class CalendarDataService {
     // event looked "edited by me" and the merge overwrote the server wholesale. That is
     // last-write-wins again, i.e. precisely the bug the merge exists to prevent.
     static _sameEvent(a, b) {
-        if (!a || !b) return a === b;
-        const FIELDS = ['title', 'description', 'start', 'end', 'type', 'isAllDay',
-            'repeat', 'recurrencerule', 'recurrenceID', 'recurrenceException'];
-        const norm = (v) => (v === undefined || v === null || v === '') ? null : v;
-        return FIELDS.every(f => {
-            const x = norm(a[f]), y = norm(b[f]);
-            // type is written as a number locally and can read back as a string.
-            if (f === 'type') return String(x === null ? 1 : x) === String(y === null ? 1 : y);
-            if (f === 'isAllDay') return !!x === !!y;
-            // Same instant, any spelling: nativecal stores epoch numbers and this app
-            // rewrites them as ISO strings, so === made every nativecal event look
-            // edited-by-us and a stale copy overwrote its concurrent edit.
-            if ((f === 'start' || f === 'end') && x !== null && y !== null) {
-                const tx = new Date(x).getTime(), ty = new Date(y).getTime();
-                if (!Number.isNaN(tx) && !Number.isNaN(ty)) return tx === ty;
-            }
-            return x === y;
-        });
+        // (EventStore.same: every field of EventStore.FIELDS, start/end as instants, type as a number.)
+        return EventStore.same(a, b);
     }
 
     // What somebody else changed on the server between our baseline and this write --
@@ -446,7 +474,7 @@ class CalendarDataService {
      */
     static _lastEditedAt(current, next, now) {
         const events = (c) => { const v = c && c.events; return (Array.isArray(v) ? v : Object.values(v || {})).filter(Boolean); };
-        const F = ['title', 'description', 'start', 'end', 'type', 'isAllDay', 'repeat', 'recurrencerule', 'recurrenceID', 'recurrenceException'];
+        const F = EventStore.FIELDS;
         const norm = (v) => (v === undefined || v === null || v === '') ? null : String(v);
         // A date compares by instant: an epoch number and its ISO string are the same value.
         const when = (v) => { const n = norm(v); if (n === null) return null; const t = new Date(v).getTime(); return Number.isNaN(t) ? n : String(t); };
@@ -510,12 +538,14 @@ class CalendarDataService {
         for (const [id, ev] of localM) {
             if (!baseM.has(id)) { merged.set(id, ev); continue; }   // we created it
             if (same(baseM.get(id), ev)) continue;                  // untouched by us
-            // We edited it. A REPLAYED write (see _replayJournal) can be hours or days
-            // old, so if anyone else has changed or deleted this event since, theirs is
-            // the newer intent and it stands. A live write is the newest thing that
-            // happened, so it applies as before.
-            if (yieldOnConflict && !same(remoteM.get(id), baseM.get(id))) continue;
-            merged.set(id, ev);
+            // We edited it: only the FIELDS we changed are ours (EventStore.mergeRow), on top of the server's row. The
+            // whole local row was a copy of every field as this tab last saw it, and someone else's newer change to
+            // another field went back the way it was (stress S15). A REPLAYED write (see _replayJournal) can be hours
+            // or days old, so a field anyone else has changed since is theirs (yieldOnConflict); a live write is the
+            // newest thing that happened. Deleted by someone else meanwhile: a replay lets it go, a live edit keeps it.
+            const remoteEv = remoteM.get(id);
+            if (!remoteEv) { if (!yieldOnConflict) merged.set(id, ev); continue; }
+            merged.set(id, EventStore.mergeRow(baseM.get(id), ev, remoteEv, { yieldOnConflict }));
         }
         // Ours: deleted since the last snapshot -- but only if nobody else has since
         // changed it, in which case their edit is newer information than our delete.
@@ -853,7 +883,7 @@ class CalendarDataService {
      * looking at a blank calendar. lookupCalendar resolves the slug the same way the rest
      * of the app does, so it sees a twin under any casing.
      */
-    static checkExists(id, callback_yes, callback_no) {
+    static checkExists(id, callback_yes, callback_no, callback_failed = null) {   // (callback_failed: see CloudCalendarService)
         // Names the site itself routes (pastecal.com/beta/..., /view/..., /nativecal/...) are
         // "taken": a calendar claimed under one would have an address that opens something else.
         if (['beta', 'nativecal', 'view', 'dev', 'api', 'cal', 'report', 'signin', 'pro', 'pricing', 'explore', 'privacy', 'terms', 'contact', 'account', 'templates', 'features'].includes(String(id || '').toLowerCase()) || String(id || '').startsWith('@')) { callback_yes(); return; }
@@ -875,12 +905,13 @@ class CalendarDataService {
      * `asCreator: false` is for copies (rename): the browser writing a copy did not
      * create the original, so it is recorded as an ordinary editor of the new id.
      */
-    static createWithId(key, value, success, { asCreator = true } = {}) {
+    static createWithId(key, value, success, { asCreator = true, onError = null } = {}) {
         // Born edited: the header's "Edited N ago" reads lastEditedAt (see _lastEditedAt).
         const data = this._sanitizeForFirebase({ ...this._withoutMeta(value), lastEditedAt: this._serverNow(), _writer: this.writerId });
         const plainSet = () => this.db.child(key).set(data, (error) => {
             if (error) {
                 console.log("error creating calendar", error, key, value);
+                if (typeof onError === 'function') { try { onError({ status: 0, code: 'firebase' }); } catch (e) { console.error(e); } }
             } else {
                 if (!asCreator && typeof AuthorSignal !== 'undefined') {
                     AuthorSignal.touch(key);

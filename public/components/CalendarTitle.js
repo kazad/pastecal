@@ -15,7 +15,7 @@ const CalendarTitle = {
                 :value="title === 'New Calendar' ? displayTitle : title"
                 @input="$emit('update:title', $event.target.value)"
                 @blur="$emit('blur')"
-                @keyup.enter="$emit('enter')"
+                @keydown.enter="$emit('enter')"
                 :ref="inputRef"
                 aria-label="Calendar title"
                 :class="inputClass">

@@ -9,6 +9,7 @@
 #   ./scripts/stats.sh returns         # how deep people come back
 #   ./scripts/stats.sh adds            # where events get created
 #   ./scripts/stats.sh shares          # how calendars get shared
+#   ./scripts/stats.sh panels          # side panel tabs opened (and from where), Settings fields changed
 #   ./scripts/stats.sh weekly          # THE Monday read: survivors, retention, creators, owners
 #   ./scripts/stats.sh northstar       # THE number: weekly active shared calendars (2+ people)
 #   ./scripts/stats.sh cohorts         # per birth week: reached a 2nd person? alive 4 weeks on?
@@ -459,6 +460,14 @@ adds)
     emit "$(report "$(mk 'customEvent:add_via' 'eventCount' \
         "$(only_events 'event_added')")")" "source,count"
     dimension_warning source
+    ;;
+
+panels)
+    # Side panel tabs people opened, and from where (feature_used 'panel_<tab>:<via>', since Oct 26 2026), and the
+    # Settings fields people changed ('settings:<field>'; before Oct 26 'settings' also counted the first visit's
+    # automatic import of the browser's locale, so older numbers are inflated).
+    f='{"andGroup":{"expressions":[{"filter":{"fieldName":"eventName","stringFilter":{"value":"feature_used"}}},{"orGroup":{"expressions":[{"filter":{"fieldName":"customEvent:feature","stringFilter":{"matchType":"BEGINS_WITH","value":"panel_"}}},{"filter":{"fieldName":"customEvent:feature","stringFilter":{"matchType":"BEGINS_WITH","value":"settings"}}}]}}]}}'
+    emit "$(report "$(mk 'customEvent:feature' 'eventCount,totalUsers' "$f")")" "tab:where,opens,people"
     ;;
 
 shares)

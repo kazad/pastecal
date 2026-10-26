@@ -139,28 +139,59 @@ class CloudCalendarService extends CalendarDataService {
 
     /**
      * This tab's unsent changes (base -> local), rebuilt against what the server holds NOW
-     * (fresh): drop what the server already has (a write whose ack we lost), drop changes to
-     * rows someone else changed or deleted since base (theirs is newer, as in _mergeEvents'
-     * yieldOnConflict). What is left can be applied to `fresh` without double-applying.
+     * (fresh). See replayable.
      */
     static rebuild(base, local, fresh) {
+        return this.replayable(base, EventStore.changesBetween(base || [], (local || []).filter((e) => e && e.id != null && e.id !== '')), fresh);
+    }
+
+    /**
+     * Unsent commands (made against `base`, as the journal stores them: only the fields this tab changed), as they
+     * may still be applied to what the server holds NOW (fresh). Field by field, as in _mergeEvents' yieldOnConflict:
+     *   - a field the server already has as ours is dropped (a write whose ack we lost);
+     *   - a field someone else changed since base is theirs: dropped (their change is newer);
+     *   - every other field we changed is still ours, so one person's offline type change and another's rename
+     *     of the same event both stand (stress S15). A row someone else deleted stays deleted.
+     * A remove goes only if nobody changed the row since; an add only if the row is not there yet.
+     */
+    static replayable(base, commands, fresh) {
         const key = EventStore.keyOf;
-        const freshM = new Map((fresh || []).map((e) => [key(e), e]));
-        const baseM = new Map((base || []).map((e) => [key(e), e]));
-        const untouchedByOthers = (k) => {
-            const b = baseM.get(k), f = freshM.get(k);
-            return !!b && !!f && Object.keys(EventStore.diff(b, EventStore.normalize(f))).length === 0;
-        };
+        const freshM = new Map((fresh || []).map((e) => [key(e), EventStore.normalize(e)]));
+        const baseM = new Map((base || []).map((e) => [key(e), EventStore.normalize(e)]));
         const out = [];
-        for (const c of EventStore.changesBetween(base || [], (local || []).filter((e) => e && e.id != null && e.id !== ''))) {
+        for (const c of commands || []) {
             if (c.type === 'add') { if (!freshM.has(key(c.event))) out.push(c); continue; }
-            if (!freshM.has(c.key)) continue;                         // gone already (ours applied, or theirs)
-            if (!untouchedByOthers(c.key)) continue;                  // someone changed it since: theirs stands
-            if (c.type === 'update') {
-                if (Object.keys(EventStore.diff(freshM.get(c.key), EventStore.normalize(c.changes))).length) out.push(c);
-            } else out.push(c);
+            const f = freshM.get(c.key), b = baseM.get(c.key);
+            if (!f || !b) continue;                                    // gone already (ours applied, or theirs)
+            if (c.type === 'remove') { if (!Object.keys(EventStore.diff(b, f)).length) out.push(c); continue; }
+            if (c.type !== 'update') continue;
+            const theirs = EventStore.diff(b, f);                      // what others changed since base
+            const changes = {};
+            for (const [field, v] of Object.entries(c.changes || {})) {
+                if (field in theirs) continue;                         // theirs is newer
+                if (Object.keys(EventStore.diff(f, EventStore.normalize({ ...f, [field]: v }))).length) changes[field] = v;
+            }
+            if (Object.keys(changes).length) out.push({ type: 'update', key: c.key, changes });
         }
         return out;
+    }
+
+    /**
+     * The journal entry for an unsent save: the base it was made against, the calendar (the Firebase path replays
+     * that), and `changes`: only the fields this tab changed (EventStore.changesBetween), which is what a replay sends.
+     */
+    static _journalWrite(calendar) {
+        const t = super._journalWrite(calendar);
+        if (t == null) return t;
+        try {
+            const entry = this._journalRead(calendar.id);
+            if (entry && entry.t === t && Array.isArray(entry.base)) {
+                const local = this._sanitizeForFirebase(this._completeRows(calendar.events, entry.base).kept).filter((e) => e && e.id != null && e.id !== '');
+                entry.changes = EventStore.changesBetween(entry.base, local);
+                localStorage.setItem(this.JOURNAL_PREFIX + calendar.id, JSON.stringify(entry));
+            }
+        } catch (e) { /* the entry without changes replays from base + calendar, as before */ }
+        return t;
     }
 
     static errorKind(code) {
@@ -186,7 +217,7 @@ class CloudCalendarService extends CalendarDataService {
                 if (lookup.data?.found) {
                     if (lookup.data.isReadOnly) {
                         if (typeof window !== 'undefined' && window.location) {
-                            window.location.href = `/view/${lookup.data.actualSlug}`;
+                            window.location.href = CalendarPath.view(lookup.data.actualSlug);
                             return;
                         }
                     }
@@ -232,8 +263,27 @@ class CloudCalendarService extends CalendarDataService {
         ws.onerror = () => { /* onclose follows */ };
     }
 
+    /** Connection news for the app: onConnection({ id, online }) when this tab's socket to a calendar drops (its edits
+     *  wait in the journal) or a snapshot arrives again (they are replayed now). Once per change. */
+    static onConnection = null;
+    static _notifyConnection(room, online) {
+        if (room.online === online) return;
+        room.online = online;
+        if (typeof this.onConnection === 'function') { try { this.onConnection({ id: room.id, online }); } catch (e) { /* never rethrow */ } }
+    }
+
+    /** The browser says it is online again: try every waiting socket now instead of at the end of its backoff (up to 30 s). */
+    static reconnectNow() {
+        for (const room of Object.values(this._rooms)) {
+            if (room.closed || room.ws || !room.timer) continue;
+            clearTimeout(room.timer); room.timer = null; room.retries = 0;
+            this._open(room);
+        }
+    }
+
     static _onClose(room) {
         room.ws = null;
+        this._notifyConnection(room, false);
         room.authPending = false; clearTimeout(room.authTimer); room.heldSnapshot = null;
         if (room.inflight) { room.inflight = null; room.unsent = true; }   // may or may not have landed; rebuild decides
         this._scheduleReconnect(room);
@@ -370,13 +420,15 @@ class CloudCalendarService extends CalendarDataService {
         room.v = m.v;
         room.server = { title: m.calendar.title ?? '', options: m.calendar.options || {}, lastEditedAt: m.calendar.lastEditedAt ?? null, events: m.calendar.events || [] };
         room.inflight = null;
+        this._notifyConnection(room, true);
         // Replay what never reached the server, rebuilt against this snapshot, before the app sees it,
         // so the app's first view already includes the replay's result.
         const entry = this._journalRead(room.id);
         const stale = entry && entry.calendar && (Date.now() - entry.t > this.JOURNAL_MAX_AGE_MS);
         if (stale) this._journalClear(room.id, entry.t);
         const commands = entry && entry.calendar && !stale
-            ? this.rebuild(entry.base || [], this._sanitizeForFirebase(entry.calendar.events || []), room.server.events) : [];
+            ? (Array.isArray(entry.changes) ? this.replayable(entry.base || [], entry.changes, room.server.events)
+                : this.rebuild(entry.base || [], this._sanitizeForFirebase(entry.calendar.events || []), room.server.events)) : [];
         if (entry && !stale && !commands.length) this._journalClear(room.id, entry.t);
         if (commands.length && !this._replayed[room.id + ':' + entry.t]) {
             this._replayed[room.id + ':' + entry.t] = true;
@@ -533,23 +585,28 @@ class CloudCalendarService extends CalendarDataService {
 
     // ---- creating and checking --------------------------------------------------------------
 
-    /** Is this name taken? First check directory, then HEAD /cal/<id>: 404 = free. */
-    static async checkExists(id, callback_yes, callback_no) {
+    /**
+     * Is this name taken? First check directory, then HEAD /cal/<id>: 404 = free. `callback_failed` (optional): the
+     * server could not be asked (offline, a 5xx); without it that counts as taken, never as free.
+     */
+    static async checkExists(id, callback_yes, callback_no, callback_failed = null) {
         if (['beta', 'nativecal', 'view', 'dev', 'api', 'cal', 'report', 'signin', 'pro', 'pricing', 'explore', 'privacy', 'terms', 'contact', 'account', 'templates', 'features'].includes(String(id || '').toLowerCase()) || String(id || '').startsWith('@')) { callback_yes(); return; }
         try {
             const lookup = await this.lookupCalendar(id);
             if (lookup.data?.found) { callback_yes(); return; }
         } catch (e) {}
-        fetch(this._url(id), { method: 'HEAD' }).then((r) => (r.status === 404 ? callback_no() : callback_yes()), (err) => {
-            // Unreachable is not "free": claiming on a failed check could overwrite nothing (the server
-            // refuses a non-empty room) but would tell the user a lie. Say taken-or-unknown as taken.
-            console.warn('[CloudCalendarService] existence check failed', err);
-            callback_yes();
-        });
+        // Unreachable is neither "free" nor "taken": the caller says it could not check (a claim on a failed check
+        // would be refused anyway, and "is taken" for a name nobody has is a lie).
+        const unknown = (why) => { console.warn('[CloudCalendarService] existence check failed', why); (callback_failed || callback_yes)(); };
+        fetch(this._url(id), { method: 'HEAD' }).then((r) => (r.status === 404 ? callback_no() : r.status >= 500 ? unknown(r.status) : callback_yes()), unknown);
     }
 
-    /** First save of a new calendar: POST /cal/<id>, accepted only into an empty room. */
-    static createWithId(key, value, success) {
+    /**
+     * First save of a new calendar: POST /cal/<id>, accepted only into an empty room. onError({ status, code, offline }):
+     * it was not saved (refused, a server error, offline), so the page can say so instead of waiting forever.
+     */
+    static createWithId(key, value, success, { onError = null } = {}) {
+        const fail = (why) => { if (typeof onError === 'function') { try { onError(why); } catch (e) { console.error(e); } } };
         const body = this._sanitizeForFirebase({ title: value.title, options: value.options, events: value.events });
         // The calendar's time zone, from the browser that makes it (never replacing one it already has).
         const tz = this._browserTz();
@@ -563,9 +620,9 @@ class CloudCalendarService extends CalendarDataService {
         return fetch(this._url(key), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
             .then(async (r) => {
                 const out = await r.json().catch(() => ({}));
-                if (!r.ok || !out.ok) { console.log('error creating calendar', r.status, out, key); return; }
+                if (!r.ok || !out.ok) { console.log('error creating calendar', r.status, out, key); return fail({ status: r.status, code: out.error || null }); }
                 success();
-            }, (err) => console.log('error creating calendar', err, key));
+            }, (err) => { console.log('error creating calendar', err, key); fail({ status: 0, code: 'offline', offline: true }); });
     }
 
     // ---- read-only views --------------------------------------------------------------------
@@ -661,16 +718,18 @@ class CloudCalendarService extends CalendarDataService {
 
     // ---- directory & history APIs -----------------------------------------------------------
 
+    /** { data: { found, ... } }. When the lookup itself failed (offline, a server error) `error` says so: that is not
+     *  "no such calendar", and a caller that shows anything must tell the two apart. */
     static async lookupCalendar(slug) {
         if (!slug) return { data: { found: false } };
         try {
             const res = await fetch(`${this._base()}/api/lookup?slug=${encodeURIComponent(slug)}`);
-            if (!res.ok) return { data: { found: false } };
+            if (!res.ok) return { data: { found: false }, error: `http_${res.status}` };
             const data = await res.json();
             return { data };
         } catch (e) {
             console.warn('[CloudCalendarService] lookupCalendar failed', e);
-            return { data: { found: false } };
+            return { data: { found: false }, error: 'offline' };
         }
     }
 
@@ -694,16 +753,13 @@ class CloudCalendarService extends CalendarDataService {
         return { data: { publicViewId: out.publicViewId } };
     }
 
+    /** The calendar's recent changes. Rejects when they could not be read (offline, a server error): an empty list
+     *  would say "nothing has changed", which nobody knows. */
     static async loadUndoEntries(calendarId) {
         if (!calendarId) return [];
-        try {
-            const res = await fetch(this._url(calendarId, '/history'));
-            if (!res.ok) return [];
-            return await res.json();
-        } catch (e) {
-            console.warn('[CloudCalendarService] loadUndoEntries failed', e);
-            return [];
-        }
+        const res = await fetch(this._url(calendarId, '/history'));
+        if (!res.ok) throw new Error(`history: HTTP ${res.status}`);
+        return await res.json();
     }
 }
 

@@ -96,10 +96,11 @@ export class CalendarDirectory extends DurableObject {
         if (request.method === 'POST' && path === '/register') {
             const body = await request.json().catch(() => null);
             if (!body || !body.actualSlug) return Response.json({ ok: false, error: 'bad body' }, { status: 400 });
-            const actualSlug = String(body.actualSlug).trim();
+            // Names are exact: never trimmed (a calendar may be called "royal city ", stress A19).
+            const actualSlug = String(body.actualSlug);
             const norm = SlugService.normalizeSlug(actualSlug);
             const isReadOnly = body.isReadOnly ? 1 : 0;
-            const targetId = body.targetId ? String(body.targetId).trim() : actualSlug;
+            const targetId = body.targetId ? String(body.targetId) : actualSlug;
             const now = Date.now();
 
             // Check if existing mapping exists
@@ -132,7 +133,7 @@ export class CalendarDirectory extends DurableObject {
                 return Response.json({ ok: false, error: 'already-exists', message: 'Slug is already taken' }, { status: 409 });
             }
             const isReadOnly = body.isReadOnly ? 1 : 0;
-            const targetId = String(body.targetId).trim();
+            const targetId = String(body.targetId);   // a calendar's name: exact
             const now = Date.now();
 
             this.sql.exec(`INSERT INTO directory (normalized, actual_slug, is_readonly, target_id, created_at) VALUES (?, ?, ?, ?, ?)`,
@@ -145,7 +146,7 @@ export class CalendarDirectory extends DurableObject {
             const body = await request.json().catch(() => null);
             if (!body || !body.slug || !body.targetId) return Response.json({ ok: false }, { status: 400 });
             const norm = SlugService.normalizeSlug(body.slug);
-            this.sql.exec(`UPDATE directory SET target_id = ? WHERE normalized = ? AND is_readonly = 1 AND ended_at IS NULL`, String(body.targetId).trim(), norm);
+            this.sql.exec(`UPDATE directory SET target_id = ? WHERE normalized = ? AND is_readonly = 1 AND ended_at IS NULL`, String(body.targetId), norm);
             return Response.json({ ok: true });
         }
 
@@ -163,7 +164,7 @@ export class CalendarDirectory extends DurableObject {
             const body = await request.json().catch(() => null);
             if (!body || !body.slug) return Response.json({ ok: false }, { status: 400 });
             const norm = SlugService.normalizeSlug(body.slug);
-            const actualSlug = body.actualSlug ? String(body.actualSlug).trim() : null;
+            const actualSlug = body.actualSlug ? String(body.actualSlug) : null;
             if (actualSlug) {
                 this.sql.exec(`DELETE FROM directory WHERE normalized = ? AND actual_slug = ?`, norm, actualSlug);
             } else {
@@ -179,10 +180,10 @@ export class CalendarDirectory extends DurableObject {
             const now = Date.now();
             for (const item of items) {
                 if (!item || !item.actualSlug) continue;
-                const actualSlug = String(item.actualSlug).trim();
+                const actualSlug = String(item.actualSlug);
                 const norm = SlugService.normalizeSlug(actualSlug);
                 const isReadOnly = item.isReadOnly ? 1 : 0;
-                const targetId = item.targetId ? String(item.targetId).trim() : actualSlug;
+                const targetId = item.targetId ? String(item.targetId) : actualSlug;
                 if (this.sql.exec(`SELECT 1 FROM directory WHERE normalized = ? AND ended_at IS NOT NULL`, norm).toArray().length) continue;   // a tombstone stays
                 this.sql.exec(`INSERT OR REPLACE INTO directory (normalized, actual_slug, is_readonly, target_id, created_at) VALUES (?, ?, ?, ?, ?)`,
                     norm, actualSlug, isReadOnly, targetId, now);

@@ -159,7 +159,7 @@ test('quick add in week view: the card opens on the slot, the live "New event" b
   const e = await byTitle(id, 'Lunch with Sam');
   expect([await local(page, e.start), await local(page, e.end), !!e.isAllDay, e.type]).toEqual(['2026-10-21 14:00', '2026-10-21 15:00', false, 1]);
   expect(e.start).toMatch(ISO);
-  await expect(toast(page)).toContainText('Added Lunch with Sam');
+  await expect(toast(page), 'no toast for a plain add: the event is on screen').toHaveCount(0);
   await expect(page.locator('.nc-timed', { hasText: 'Lunch with Sam' })).toBeVisible();
 
   // Escape is Cancel: the new event is dropped, nothing stored.
@@ -185,7 +185,8 @@ test('quick add in week view: the card opens on the slot, the live "New event" b
   await ctx.close();
 });
 
-test('a time typed in a new title moves the event live; the words go on save; Undo puts back the title and time; "Room 5" is a title', async ({ browser }) => {
+test('a new title is saved exactly as typed: a time in it ("Practice Thu 5-6") does not move the event; no toast for a plain add', async ({ browser }) => {
+  // (Times typed as words are the quick add's, Cmd/Ctrl+E; the card's event is where it was clicked or dragged.)
   const id = await seed([]);
   const { ctx, page, errors } = await open(browser, id, '&view=week&date=2026-10-27');
   const at = await slot(page, '2026-10-27', 9);
@@ -193,29 +194,20 @@ test('a time typed in a new title moves the event live; the words go on save; Un
   await expect(page.getByTestId('card-title')).toBeFocused();
   const line = page.getByTestId('card-time-line');
   await page.keyboard.type('Practice Thu 5-6');
-  await expect(line).toHaveText(/Thu, Oct 29\s*·\s*5 PM\s*–\s*6 PM/);
-  await expect(line).toHaveClass(/hit/);
-  await expect(page.locator('#nk-said')).toHaveText(/Time set: Thu, Oct 29 · 5 PM – 6 PM/);
-  const thu = await page.evaluate(() => new Date(2026, 9, 29).getTime());
-  await expect(page.locator(`.nc-col[data-day="${thu}"] [data-testid="draft-block"]`)).toBeVisible();
-  // Deleting the words puts the time back.
-  for (let i = 0; i < ' Thu 5-6'.length; i++) await page.keyboard.press('Backspace');
+  await page.waitForTimeout(300);
   await expect(line).toHaveText(/Tue, Oct 27\s*·\s*9 AM\s*–\s*10 AM/);
   await expect(line).not.toHaveClass(/hit/);
-  await page.keyboard.type(' Thu 5-6');
+  const tue = await page.evaluate(() => new Date(2026, 9, 27).getTime());
+  await expect(page.locator(`.nc-col[data-day="${tue}"] [data-testid="draft-block"]`)).toBeVisible();
   await page.getByTestId('card-done').click();
   await soon(async () => (await stored(id)).length).toBe(1);
-  let [e] = await stored(id);
-  expect([e.title, await local(page, e.start), await local(page, e.end)]).toEqual(['Practice', '2026-10-29 17:00', '2026-10-29 18:00']);
-  await expect(toast(page)).toContainText('Added Practice · Thu 5 – 6 PM');
-  await toast(page).getByRole('button', { name: 'Undo' }).click();
-  await soon(async () => (await stored(id))[0].title).toBe('Practice Thu 5-6');
-  [e] = await stored(id);
-  expect([await local(page, e.start), await local(page, e.end)]).toEqual(['2026-10-27 09:00', '2026-10-27 10:00']);
-  await expect(toast(page)).toContainText('Undone');
+  const [e] = await stored(id);
+  expect([e.title, await local(page, e.start), await local(page, e.end)]).toEqual(['Practice Thu 5-6', '2026-10-27 09:00', '2026-10-27 10:00']);
+  await page.waitForTimeout(500);
+  await expect(toast(page)).toHaveCount(0);
 
-  // Titles that only look like times stay titles.
-  for (const t of ['Room 5', 'Grades 3-5', 'Monica']) {
+  // Titles that look like times stay where they were made too.
+  for (const t of ['Room 5', 'Grades 3-5', 'Monica', 'Lunch at noon']) {
     const noon = await slot(page, "2026-10-27", 12);
     await page.mouse.click(noon.x, noon.y + 6);
     await expect(page.getByTestId('card-title')).toBeFocused();
@@ -294,25 +286,24 @@ test('the card edits as you go: title, time (clicked and typed), type, details, 
   await openCard(page, ev(page, 'p'));
   await expect(page.getByTestId('card-details-preview')).toHaveText('Lincoln Field');
 
-  // Title: saved when it loses focus (Enter), with a toast and Undo.
+  // Title: saved when it loses focus (Enter); no toast (only deletes, conflicts and errors get one), Cmd/Ctrl+Z undoes.
   await page.getByTestId('card-title').fill('Practice (home)');
   await page.getByTestId('card-title').press('Enter');
   await soon(async () => (await row()).title).toBe('Practice (home)');
-  await expect(toast(page)).toContainText('Renamed Practice (home)');
+  await expect(toast(page)).toHaveCount(0);
   // Start time from the quick line, typed: "5:30p" keeps the length.
   await typeInto(page, 'card-q-s', '5:30p');
   await soon(async () => local(page, (await row()).start)).toBe('2026-10-22 17:30');
   expect(await local(page, (await row()).end)).toBe('2026-10-22 18:30');
-  await expect(toast(page)).toContainText('Starts 5:30 PM');
   // End time clicked in the list.
   await choose(page, 'card-q-e', '[data-m="1140"]');
   await soon(async () => local(page, (await row()).end)).toBe('2026-10-22 19:00');
   // Undo: the end goes back (on the server), the card follows.
-  await toast(page).getByRole('button', { name: 'Undo' }).click();
+  await page.evaluate(() => document.activeElement && document.activeElement.blur());
+  await page.keyboard.press('ControlOrMeta+z');
   await soon(async () => local(page, (await row()).end)).toBe('2026-10-22 18:30');
   await expect(page.getByTestId('card-q-e')).toHaveText('6:30 PM');
-  await expect(toast(page)).toHaveText(/Undone/);
-  await expect(toast(page).getByRole('button', { name: 'Undo' })).toHaveCount(0);
+  await expect(toast(page)).toHaveCount(0);
 
   // The full card: type, length, details.
   await page.getByTestId('card-more').click();
@@ -353,8 +344,7 @@ test('the card edits as you go: title, time (clicked and typed), type, details, 
   await expect(card(page)).toHaveCount(0);
   await soon(async () => { const r = await row(); return [r.title, r.type, r.description, !!r.isAllDay, await local(page, r.start), await local(page, r.end)]; })
     .toEqual(['Practice', 1, 'Lincoln Field', false, '2026-10-22 17:00', '2026-10-22 18:00']);
-  await expect(toast(page)).toContainText('Changes undone');
-  await expect(toast(page).getByRole('button', { name: 'Undo' })).toHaveCount(0);
+  await expect(toast(page)).toHaveCount(0);
   expect(await tracked(page), 'a type change is reported; editing an existing event is never "abandoned"').toEqual(['feature_used:event_type']);
   expect(errors).toEqual([]);
   await ctx.close();
@@ -372,27 +362,43 @@ test('repeat: the one-tap choices and Custom… store classic\'s rule form; a si
   await choose(page, 'card-repeat', '[data-r="month"]');
   await soon(rule).toBe('FREQ=MONTHLY;BYMONTHDAY=13;INTERVAL=1;');
   await expect(page.getByTestId('card-repeat')).toHaveText(/Monthly on the 13th/);
-  // Custom: the 2nd Tuesday of each month until Mar 31 2027.
+  // Custom…: the section opens inside the card under the Repeat row (no popover over the details or Done), and each
+  // change is saved as it is made, the Repeat row saying it: the 2nd Tuesday of each month until Mar 31 2027.
   await page.getByTestId('card-repeat').click();
   await picker(page).getByTestId('picker-custom').click();
-  await picker(page).getByTestId('custom-unit').selectOption('MONTHLY');
-  await picker(page).getByTestId('custom-by-weekday').check();
-  await expect(picker(page).getByTestId('custom-setpos')).toHaveValue('2');
-  await picker(page).getByTestId('custom-end-until').check();
-  await picker(page).getByTestId('custom-until').fill('2027-03-31');
-  await picker(page).getByTestId('custom-apply').click();
+  await expect(picker(page)).toHaveCount(0);
+  const C = () => card(page).getByTestId('card-custom');
+  await expect(C()).toBeVisible();
+  await expect(page.getByTestId('card-repeat')).toHaveAttribute('aria-expanded', 'true');
+  await C().getByTestId('custom-unit').selectOption('MONTHLY');
+  await soon(rule).toBe('FREQ=MONTHLY;BYMONTHDAY=13;INTERVAL=1;');
+  await C().getByTestId('custom-by-weekday').check();
+  await expect(C().getByTestId('custom-setpos')).toHaveValue('2');
+  await soon(rule).toBe('FREQ=MONTHLY;BYDAY=TU;BYSETPOS=2;INTERVAL=1;');
+  await expect(page.getByTestId('card-repeat')).toHaveText(/Monthly on the second Tuesday/);
+  await C().getByTestId('custom-end-until').check();
+  await typeInto(page, 'custom-until', '2027-03-31');   // the card's own date picker, not a raw mm/dd/yyyy field
+  await expect(C().getByTestId('custom-until')).toHaveText('Mar 31, 2027');
+  for (const box of [page.getByTestId('card-details'), page.getByTestId('card-done')]) {   // nothing covers the details or Done
+    const a = await box.boundingBox(), b = await C().boundingBox();
+    expect(a.y >= b.y + b.height || a.y + a.height <= b.y, 'the section sits above the details and Done, never over them').toBe(true);
+  }
   const until = await page.evaluate(() => new Date(2027, 2, 31).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, ''));   // classic's form: the date's local midnight
   await soon(rule).toBe(`FREQ=MONTHLY;BYDAY=TU;BYSETPOS=2;INTERVAL=1;UNTIL=${until};`);
   await expect(page.getByTestId('card-repeat')).toHaveText(/Monthly on the second Tuesday, until Mar 31/);
-  // A daily repeat with a count, then none. Each change asks nothing (the card is the whole series).
-  await page.getByTestId('card-repeat').click();
-  await picker(page).getByTestId('picker-custom').click();
-  await picker(page).getByTestId('custom-unit').selectOption('DAILY');
-  await picker(page).getByTestId('custom-interval').fill('2');
-  await picker(page).getByTestId('custom-end-count').check();
-  await picker(page).getByTestId('custom-count').fill('5');
-  await picker(page).getByTestId('custom-apply').click();
+  // A daily repeat with a count, then none. Each change asks nothing (the card is the whole series). A number is saved
+  // when its field is left, so "2" is one change.
+  await C().getByTestId('custom-unit').selectOption('DAILY');
+  await C().getByTestId('custom-interval').fill('2');
+  await C().getByTestId('custom-end-count').check();
+  await C().getByTestId('custom-count').fill('5');
+  await C().getByTestId('custom-count').press('Tab');
   await soon(rule).toBe('FREQ=DAILY;INTERVAL=2;COUNT=5;');
+  await expect(page.getByTestId('card-repeat')).toHaveText(/Every 2 days, 5 times/);
+  // The chevron on the Repeat row closes the section.
+  await page.getByTestId('card-repeat').click();
+  await expect(C()).toHaveCount(0);
+  await expect(picker(page)).toHaveCount(0);
   await page.getByTestId('card-done').click();
   // One occurrence (Oct 15), its own row after "this event": no repeat control.
   await openCard(page, page.locator('.nc-bar', { hasText: 'Board meeting' }).nth(1), true);
@@ -426,8 +432,12 @@ test('repeat parity with classic: yearly on the last Monday of October, weekly o
   ]);
   const { ctx, page, errors } = await open(browser, id, '&view=month&date=2026-10-15', { settings: { firstDayOfWeek: '1' } });   // weeks start on Monday
   const rule = async (eid) => (await stored(id)).find((e) => e.id === eid).recurrencerule || '';
-  const custom = async () => { await page.getByTestId('card-repeat').click(); await picker(page).getByTestId('picker-custom').click(); await expect(picker(page).getByTestId('custom-apply')).toBeVisible(); };
-  const P = () => picker(page);
+  // Custom…: from the Repeat menu (closing the section first when it is open, with the chevron on the Repeat row).
+  const custom = async () => {
+    if (await card(page).getByTestId('card-custom').count()) { await page.getByTestId('card-repeat').click(); await expect(card(page).getByTestId('card-custom')).toHaveCount(0); }
+    await page.getByTestId('card-repeat').click(); await picker(page).getByTestId('picker-custom').click(); await expect(card(page).getByTestId('custom-unit')).toBeVisible();
+  };
+  const P = () => card(page).getByTestId('card-custom');
   await openCard(page, page.locator('.nc-bar', { hasText: 'Fall party' }).first(), true);
   // Yearly on the last Monday of October.
   await custom();
@@ -436,7 +446,6 @@ test('repeat parity with classic: yearly on the last Monday of October, weekly o
   await P().getByTestId('custom-setpos').selectOption('-1');
   await P().getByTestId('custom-posday').selectOption('1');
   await P().getByTestId('custom-month').selectOption('10');
-  await P().getByTestId('custom-apply').click();
   await soon(() => rule('p')).toBe('FREQ=YEARLY;BYDAY=MO;BYSETPOS=-1;BYMONTH=10;INTERVAL=1;');
   await expect(page.getByTestId('card-repeat')).toHaveText(/Yearly on the last Monday of October/);
   const next = await page.evaluate((r) => rrule.rrulestr(r, { dtstart: new Date(Date.UTC(2026, 9, 15, 17)) }).all((d, i) => i < 3).map((d) => d.toISOString().slice(0, 10)), (await rule('p')).replace(/;$/, ''));
@@ -448,8 +457,7 @@ test('repeat parity with classic: yearly on the last Monday of October, weekly o
   await P().getByTestId('custom-interval').fill('2');
   for (const d of [1, 3, 0]) await P().getByTestId(`custom-day-${d}`).click();   // Thursday (the event's day) is on already
   await P().getByTestId('custom-end-until').check();
-  await P().getByTestId('custom-until').fill('2026-12-24');
-  await P().getByTestId('custom-apply').click();
+  await typeInto(page, 'custom-until', 'Dec 24');
   const dec24 = await page.evaluate(() => new Date(2026, 11, 24).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, ''));
   expect(dec24).toBe('20261224T080000Z');
   await soon(() => rule('p')).toBe(`FREQ=WEEKLY;BYDAY=MO,WE,TH,SU;INTERVAL=2;UNTIL=${dec24};`);
@@ -471,7 +479,7 @@ test('repeat parity with classic: yearly on the last Monday of October, weekly o
   await P().getByTestId('custom-month-day').fill('15');
   await P().getByTestId('custom-end-count').check();
   await P().getByTestId('custom-count').fill('3');
-  await P().getByTestId('custom-apply').click();
+  await P().getByTestId('custom-count').press('Tab');
   await soon(() => rule('p')).toBe('FREQ=MONTHLY;BYMONTHDAY=15;INTERVAL=1;COUNT=3;');
   await expect(page.getByTestId('card-repeat')).toHaveText(/Monthly on the 15th, 3 times/);
   await custom();
@@ -479,13 +487,12 @@ test('repeat parity with classic: yearly on the last Monday of October, weekly o
   await P().getByTestId('custom-month').selectOption('10');
   await P().getByTestId('custom-by-day').check();
   await P().getByTestId('custom-end-never').check();
-  await P().getByTestId('custom-apply').click();
   await soon(() => rule('p')).toBe('FREQ=YEARLY;BYMONTHDAY=15;BYMONTH=10;INTERVAL=1;');
   await expect(page.getByTestId('card-repeat')).toHaveText(/Yearly on October 15/);
   await page.getByTestId('card-done').click();
   await expect(card(page)).toHaveCount(0);
 
-  // Classic's rules: read right, shown in the panel, and Apply with nothing changed (or Done) stores nothing new.
+  // Classic's rules: read right, shown in the section, and opening it, closing it or Done stores nothing new.
   await openCard(page, page.locator('.nc-bar', { hasText: 'Harvest' }).first(), true);
   await expect(page.getByTestId('card-repeat')).toHaveText(/Every 2 weeks on Sun, Mon, Wed, Thu, Fri, until Dec 31/);
   await custom();
@@ -493,8 +500,8 @@ test('repeat parity with classic: yearly on the last Monday of October, weekly o
   await expect(P().getByTestId('custom-interval')).toHaveValue('2');
   for (const [d, on] of [[0, true], [1, true], [2, false], [3, true], [4, true], [5, true], [6, false]]) await expect(P().getByTestId(`custom-day-${d}`)).toHaveAttribute('aria-pressed', String(on));
   await expect(P().getByTestId('custom-end-until')).toBeChecked();
-  await expect(P().getByTestId('custom-until')).toHaveValue('2026-12-31');
-  await P().getByTestId('custom-apply').click();
+  await expect(P().getByTestId('custom-until')).toHaveText('Dec 31, 2026');
+  await page.getByTestId('card-repeat').click();
   await expect(P()).toHaveCount(0);
   await page.getByTestId('card-done').click();
   await expect(card(page)).toHaveCount(0);
@@ -506,7 +513,6 @@ test('repeat parity with classic: yearly on the last Monday of October, weekly o
   await expect(P().getByTestId('custom-setpos')).toHaveValue('-1');
   await expect(P().getByTestId('custom-posday')).toHaveValue('1');
   await expect(P().getByTestId('custom-month')).toHaveValue('10');
-  await P().getByTestId('custom-apply').click();
   await page.getByTestId('card-done').click();
   await expect(card(page)).toHaveCount(0);
   await page.waitForTimeout(800);
@@ -582,7 +588,7 @@ test('delete and duplicate: no "Are you sure?", Undo restores the saved row; Dup
   await expect(card(page)).toHaveCount(0);
   await expect(page.getByTestId('confirm-dialog')).toHaveCount(0);
   await soon(async () => (await stored(id)).map((e) => e.id)).toEqual(['b']);
-  await expect(page.getByText('Deleted "Game"')).toBeVisible();
+  await expect(page.locator('.pc-toast').getByText('Deleted "Game"')).toBeVisible();
   await toast(page).getByRole('button', { name: 'Undo' }).click();
   await soon(async () => (await stored(id)).map((e) => e.id).sort()).toEqual(['a', 'b']);
   expect((await stored(id)).find((e) => e.id === 'a')).toEqual(before);
@@ -595,7 +601,6 @@ test('delete and duplicate: no "Are you sure?", Undo restores the saved row; Dup
   await soon(async () => (await stored(id)).length).toBe(3);
   const copy = (await stored(id)).find((e) => !['a', 'b'].includes(e.id));
   expect([copy.title, copy.type, copy.description, await local(page, copy.start), await local(page, copy.end)]).toEqual(['Game', 2, 'Field 3', '2026-10-23 10:00', '2026-10-23 11:00']);
-  await expect(toast(page)).toContainText('Duplicated to Fri 10 AM');
   await expect(page.getByTestId('card-start-date')).toHaveText('Fri, Oct 23');
   // Cmd/Ctrl+D: another copy, the next day again (from the card's event).
   await page.locator('.nk-card .nk-h').click({ position: { x: 300, y: 4 } }).catch(() => {});
@@ -622,10 +627,10 @@ test('keyboard: Tab to an event, Enter opens the card with focus in the title, T
   await expect(card(page)).toHaveCount(0);
   await expect(ev(page, 'd')).toBeFocused();
 
-  // Arrows: Down moves 15 minutes, Right a day, Shift+Down makes it 15 minutes longer; each saved with a toast.
+  // Arrows: Down moves 15 minutes, Right a day, Shift+Down makes it 15 minutes longer; each saved, no toast.
   await page.keyboard.press('ArrowDown');
   await soon(async () => local(page, (await stored(id))[0].start)).toBe('2026-10-22 11:15');
-  await expect(toast(page)).toContainText('Moved to Thu 11:15 AM');
+  await expect(toast(page)).toHaveCount(0);
   await page.keyboard.press('ArrowRight');
   await soon(async () => local(page, (await stored(id))[0].start)).toBe('2026-10-23 11:15');
   await expect(ev(page, 'd')).toBeFocused();
@@ -634,12 +639,13 @@ test('keyboard: Tab to an event, Enter opens the card with focus in the title, T
   await page.keyboard.press('ControlOrMeta+z');
   await soon(async () => local(page, (await stored(id))[0].end)).toBe('2026-10-23 12:15');
 
-  // Drag with the mouse, then Undo in the toast.
+  // Drag with the mouse (no toast), then Cmd/Ctrl+Z.
   const b = await ev(page, 'd').boundingBox();
   await drag(page, { x: b.x + b.width / 2, y: b.y + b.height / 2 }, { x: b.x + b.width / 2, y: b.y + b.height / 2 + HOUR });
   await page.mouse.up();
   await soon(async () => local(page, (await stored(id))[0].start)).toBe('2026-10-23 12:15');
-  await toast(page).getByRole('button', { name: 'Undo' }).click();
+  await expect(toast(page)).toHaveCount(0);
+  await page.keyboard.press('ControlOrMeta+z');
   await soon(async () => local(page, (await stored(id))[0].start)).toBe('2026-10-23 11:15');
 
   // Cmd/Ctrl+E: quick add by typing (the app's own box).
@@ -756,9 +762,14 @@ test('long details: the quick card shows four lines and Show all, links open saf
     expect((await card(page).boundingBox()).width, 'long links never widen the card').toBeLessThanOrEqual(w0 + 0.5);
     expect(within(await card(page).boundingBox(), phone ? 390 : 1280, phone ? 844 : 900, phone ? 0 : 12)).toBe(true);
     await page.getByTestId('card-more').click();
-    const ta = page.getByTestId('card-details');
-    const tb = await ta.boundingBox();
+    // The full card shows the details with live links until they are clicked (then the box, to edit).
+    const view = page.getByTestId('card-details-view');
+    const tb = await view.boundingBox();
     expect(tb.height).toBeLessThanOrEqual((phone ? 844 : 900) * (phone ? 0.4 : 0.6) + 2);   // 60% once the card is wide
+    expect((await card(page).boundingBox()).width, 'long links never widen the full card past its wide width').toBeLessThanOrEqual(phone ? 390 : 680);
+    await view.click({ position: { x: 20, y: 10 } });
+    const ta = page.getByTestId('card-details');
+    await expect(ta).toBeFocused();
     {
       // Up to the limit: the counter shows past 90%; a paste over the limit is trimmed with a note.
       await ta.evaluate((el, n) => { el.focus(); el.value = 'y'.repeat(n); el.dispatchEvent(new Event('input', { bubbles: true })); }, 18900);
@@ -790,10 +801,11 @@ test('details save while typing (800 ms after the last key) and once more when l
   await expect(toast(page)).toHaveCount(0);
   await page.keyboard.type('. Cleats.', { delay: 10 });
   await soon(desc, 4000).toBe('Lincoln Field, bring water. Cleats.');
-  // Leaving the box: one "Details saved", and its Undo takes the whole session back.
+  // Leaving the box: saved, no toast; one Cmd/Ctrl+Z takes the whole session back.
   await page.getByTestId('card-title').click();
-  await expect(toast(page)).toContainText('Details saved');
-  await toast(page).getByRole('button', { name: 'Undo' }).click();
+  await page.evaluate(() => document.activeElement && document.activeElement.blur());
+  await expect(toast(page)).toHaveCount(0);
+  await page.keyboard.press('ControlOrMeta+z');
   await soon(desc).toBe('Lincoln Field');
   await expect(ta).toHaveValue('Lincoln Field');
   // Typing, then leaving the page a second later: kept.
@@ -838,24 +850,24 @@ test('two people: details typed here are not overwritten by a change from anothe
   await A.ctx.close(); await B.ctx.close();
 });
 
-test('long details: the card widens to 600px past five lines (never narrows while open, back to 416 when reopened), stays on screen, Done stays visible; a 1 MB paste is trimmed fast', async ({ browser }) => {
+test('long details: the card widens to 680px past five lines (never narrows while open, back to 560 when reopened), stays on screen, Done stays visible; a 1 MB paste is trimmed fast', async ({ browser }) => {
   const id = await seed([timed('r', 'Right edge', '2026-10-23T10:00:00-07:00', '2026-10-23T11:00:00-07:00')]);
   const { ctx, page, errors } = await open(browser, id, '&view=week&date=2026-10-22');
   await openCard(page, ev(page, 'r'), true);
-  expect(Math.round((await card(page).boundingBox()).width)).toBe(416);
+  expect(Math.round((await card(page).boundingBox()).width)).toBe(560);
   const ta = page.getByTestId('card-details');
   await ta.click();
   for (let i = 0; i < 7; i++) await page.keyboard.type(`Line ${i + 1}: who brings what, where we meet, and when.\n`);
   await page.waitForTimeout(300);
   let b = await card(page).boundingBox();
-  expect(Math.round(b.width)).toBe(600);
+  expect(Math.round(b.width)).toBe(680);
   expect(within(b, 1280, 900)).toBe(true);
   await expect(page.getByTestId('card-done')).toBeInViewport();
   // Deleting most of it does not narrow it again.
   await ta.fill('Short.');
   await ta.dispatchEvent('input');
   await page.waitForTimeout(250);
-  expect(Math.round((await card(page).boundingBox()).width)).toBe(600);
+  expect(Math.round((await card(page).boundingBox()).width)).toBe(680);
   // A 1 MB paste: trimmed to the limit in well under 100 ms, with the note.
   const ms = await ta.evaluate((el) => {
     el.focus(); el.selectionStart = el.selectionEnd = el.value.length;
@@ -871,7 +883,7 @@ test('long details: the card widens to 600px past five lines (never narrows whil
   await soon(async () => (await stored(id))[0].description.length).toBe(20000);
   // Reopened: the normal width again.
   await openCard(page, ev(page, 'r'));
-  expect(Math.round((await card(page).boundingBox()).width)).toBe(416);
+  expect(Math.round((await card(page).boundingBox()).width)).toBe(560);
   expect(errors).toEqual([]);
   await ctx.close();
 });
@@ -1283,3 +1295,115 @@ test('phone (390px): scrolling over the sheet never scrolls the calendar or the 
   expect(errors).toEqual([]);
   await ctx.close();
 });
+
+// Owner, Oct 26 2026: "when I drag between days it doesn't show the location it's going to drop into". The lifted
+// event stayed in the column it started in (only its height followed the pointer) until the drop.
+test('week view: dragging to another day draws the event in that day\'s column, at its new time, before the drop', async ({ browser }) => {
+  const id = await seed([timed('d', 'Dentist', '2026-10-21T10:00:00-07:00', '2026-10-21T11:00:00-07:00')]);
+  const { ctx, page, errors } = await open(browser, id, '&view=week&date=2026-10-21');
+  const b = await ev(page, 'd').boundingBox();
+  const to = await slot(page, '2026-10-23', 12);
+  await drag(page, { x: b.x + b.width / 2, y: b.y + 10 }, { x: to.x, y: to.y + 10 });
+  // Mid-drag: inside Friday's column, showing Friday's new time; a dashed outline stays where it came from.
+  const fri = await page.locator(`.nc-col[data-day="${new Date(await localMidnight(page, '2026-10-23')).getTime()}"]`).boundingBox();
+  const now = await ev(page, 'd').boundingBox();
+  expect(now.x).toBeGreaterThanOrEqual(fri.x - 1);
+  expect(now.x + now.width).toBeLessThanOrEqual(fri.x + fri.width + 1);
+  await expect(ev(page, 'd')).toContainText('12:00 PM - 1:00 PM');
+  await expect(page.locator('.nc-origin')).toHaveCount(1);
+  await page.screenshot({ path: 'snapshots/native-drag-across-days.png' });
+  await page.mouse.up();
+  await soon(async () => local(page, (await stored(id))[0].start)).toBe('2026-10-23 12:00');
+  expect(errors).toEqual([]);
+  await ctx.close();
+});
+
+// The owner: "make sure links show up". The full card's details show live links whenever the box is not being edited
+// (the quick card's linkify: http/https/mailto only, text escaped); a click on a link opens it in a new tab and never
+// starts editing; a click on text edits right there. Long URLs wrap inside the card. test/fixtures/long-descriptions.json.
+test('details: links are live in the full card until it is edited; a link opens in a new tab, a click on text edits there', async ({ browser }) => {
+  const fx = require('../../test/fixtures/long-descriptions.json').events.find((e) => e.id === 'links');
+  const id = await seed([timed('l', fx.title, `${fx.when[0]}:00-07:00`, `${fx.when[1]}:00-07:00`, { description: fx.description })]);
+  const { ctx, page, errors } = await open(browser, id, '&view=month&date=2026-10-15');
+  await openCard(page, page.locator('.nc-bar', { hasText: fx.title }).first(), true);
+  const view = page.getByTestId('card-details-view');
+  await expect(view).toBeVisible();
+  await expect(page.getByTestId('card-details')).toBeHidden();
+  expect(await view.evaluate((el) => el.textContent), 'the text exactly as stored').toBe(fx.description);
+  const hrefs = await view.locator('a').evaluateAll((as) => as.map((a) => [a.getAttribute('href'), a.target, a.rel]));
+  expect(hrefs.length).toBeGreaterThanOrEqual(4);
+  for (const [href, target, rel] of hrefs) { expect(href).toMatch(/^(https?:|mailto:|tel:)/); expect(target).toBe('_blank'); expect(rel).toContain('noopener'); }
+  expect(await view.evaluate((el) => el.scrollWidth <= el.clientWidth + 1), 'a long URL wraps').toBe(true);
+  expect((await card(page).boundingBox()).width).toBeLessThanOrEqual(680);
+  // A link: a new tab at that address, and the box stays as it is (no editing).
+  const [tab, req] = await Promise.all([ctx.waitForEvent('page'), ctx.waitForEvent('request', (r) => r.url().startsWith('https://zoom.us/j/1234567890')),
+    view.locator('a[href^="https://zoom.us/"]').click()]);
+  expect(req.url()).toBe('https://zoom.us/j/1234567890?pwd=abc123');
+  expect(tab, 'opened in a new tab').not.toBe(page);
+  await page.bringToFront();
+  await expect(view).toBeVisible();
+  // Text: the second line ("Agenda:") -> editing, the caret where it was clicked.
+  const lh = await view.evaluate((el) => parseFloat(getComputedStyle(el).lineHeight));
+  await view.click({ position: { x: 14, y: 8 + lh * 1.5 } });
+  const box = page.getByTestId('card-details');
+  await expect(box).toBeFocused();
+  const at = await box.evaluate((ta) => ta.selectionStart), agenda = fx.description.indexOf('Agenda');
+  expect(at, `caret at "Agenda" (${agenda}), got ${at}`).toBeGreaterThanOrEqual(agenda);
+  expect(at).toBeLessThanOrEqual(agenda + 3);
+  // Leaving the box: the links again.
+  await page.getByTestId('card-title').click();
+  await expect(view).toBeVisible();
+  expect(errors).toEqual([]);
+  await ctx.close();
+});
+
+// The owner: long titles were cut off in a one-line field. The title wraps (up to three lines, then scrolls), beside
+// the type button, never under it; Enter saves; a pasted newline is a space.
+test('a long title wraps beside the type button; Enter saves it; newlines become spaces', async ({ browser }) => {
+  const fx = require('../../test/fixtures/long-descriptions.json').events.find((e) => e.id === 'longtitle');
+  const id = await seed([timed('t', fx.title, `${fx.when[0]}:00-07:00`, `${fx.when[1]}:00-07:00`, { description: fx.description })]);
+  const { ctx, page, errors } = await open(browser, id, '&view=month&date=2026-10-15');
+  await openCard(page, page.locator('.nc-bar', { hasText: 'Quarterly planning' }).first());
+  const title = page.getByTestId('card-title'), type = page.getByTestId('card-type');
+  await expect(title).toHaveValue(fx.title);
+  const t = await title.boundingBox(), b = await type.boundingBox();
+  expect(t.height, 'more than one line').toBeGreaterThan(60);
+  expect(t.x + t.width <= b.x, 'the title stays left of the type button').toBe(true);
+  expect(b.y - t.y, 'the type button at the top').toBeLessThan(12);
+  expect(await title.evaluate((ta) => ta.scrollHeight <= ta.clientHeight + 1), 'the whole title shows').toBe(true);
+  await title.click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.insertText(' (moved\nto Friday)');
+  await expect(title).toHaveValue(`${fx.title} (moved to Friday)`);
+  await page.keyboard.press('Enter');
+  await soon(async () => (await stored(id))[0].title).toBe(`${fx.title} (moved to Friday)`);
+  expect(errors).toEqual([]);
+  await ctx.close();
+});
+
+// The card: 560px on a desktop (the details box about 60 characters a line, four lines before it grows), 680px once
+// the details pass five lines, always 12px inside the window, on 1280x800 and on 1024x600.
+for (const [w, h] of [[1280, 800], [1024, 600]]) {
+  test(`card width and placement at ${w}x${h}: 560px, 680px for long details, 12px inside the window`, async ({ browser }) => {
+    const fxs = require('../../test/fixtures/long-descriptions.json').events;
+    const id = await seed(fxs.map((e) => timed(e.id, e.title, `${e.when[0]}:00-07:00`, `${e.when[1]}:00-07:00`, { description: e.description, type: e.type || 1 })));
+    const { ctx, page, errors } = await open(browser, id, '&view=month&date=2026-10-15');
+    await page.setViewportSize({ width: w, height: h });
+    for (const [title, width] of [['Dentist', 560], ['Saturday tournament', 680], ['Meeting minutes', 680]]) {
+      await openCard(page, page.locator('.nc-bar', { hasText: title }).first(), true);
+      await page.waitForTimeout(300);
+      const r = await card(page).boundingBox();
+      expect(Math.round(r.width), title).toBe(width);
+      expect(r.x, `${title}: left edge`).toBeGreaterThanOrEqual(12 - 0.5);
+      expect(r.y, `${title}: top edge`).toBeGreaterThanOrEqual(12 - 0.5);
+      expect(r.x + r.width, `${title}: right edge`).toBeLessThanOrEqual(w - 12 + 0.5);
+      expect(r.y + r.height, `${title}: bottom edge`).toBeLessThanOrEqual(h - 12 + 0.5);
+      await expect(page.getByTestId('card-done')).toBeInViewport();
+      if (width === 560) expect((await page.getByTestId('card-details').boundingBox()).height, 'four lines before it grows').toBeGreaterThanOrEqual(100);
+      await page.keyboard.press('Escape');
+      await expect(card(page)).toHaveCount(0);
+    }
+    expect(errors).toEqual([]);
+    await ctx.close();
+  });
+}

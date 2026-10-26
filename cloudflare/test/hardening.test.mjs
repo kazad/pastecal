@@ -248,5 +248,70 @@ function tab(id) {
     step('a calendar named with !, a space, & or Korean gets a read-only link that shows its events');
 }
 
+// Stress A19 (Oct 26 2026): a calendar's name is exact, everywhere it identifies the calendar. The directory trimmed
+// names on the way in ("royal city " registered, and was looked up, as "royal city"), so the app re-opened the trimmed
+// name: a blank draft, and the view link pointed at it too. Every name a calendar may have goes through create, the
+// directory (lookup by name and by its lowercase, and by its view id), the view link and both feeds, and comes back
+// exactly. And (A11) the feed's ETag changes when the calendar is renamed.
+{
+    const n = Date.now().toString(36);
+    const names = [`${n} royal city `, ` ${n} lead`, `${n} 50% off`, `${n} a?b`, `${n} TEAM NUÑEZ`, `${n} sp!x`, `${n} d&d8`, `강아지봉사 ${n}`];
+    const lookup = async (slug) => (await (await fetch(`${BASE}/api/lookup?slug=${encodeURIComponent(slug)}`)).json());
+    const soon = async (fn, ms = 5000) => { const t0 = Date.now(); let v; while (Date.now() - t0 < ms) { v = await fn(); if (v) return v; await new Promise((r) => setTimeout(r, 100)); } return v; };
+    let i = 0;
+    for (const name of names) {
+        const h = { 'Content-Type': 'application/json', 'CF-Connecting-IP': `10.71.19.${++i}` };
+        assert.equal((await fetch(url(name), { method: 'POST', headers: h, body: JSON.stringify({ title: `Cal ${i}`, events: [ev('e1', 'Bake sale')] }) })).status, 201, JSON.stringify(name));
+        assert.equal((await get(name)).id, name, `${JSON.stringify(name)}: stored under its exact name`);
+        const byName = await soon(async () => { const r = await lookup(name); return r.found ? r : null; });
+        assert.deepEqual(byName && { actualSlug: byName.actualSlug, isReadOnly: byName.isReadOnly }, { actualSlug: name, isReadOnly: false }, `${JSON.stringify(name)}: looked up as itself`);
+        if (name !== name.toLowerCase()) assert.equal((await lookup(name.toLowerCase())).actualSlug, name, `${JSON.stringify(name)}: its lowercase finds it`);
+        if (name !== name.trim()) assert.notEqual((await lookup(name.trim())).actualSlug, name, `${JSON.stringify(name)}: the trimmed name is another name`);
+        const out = await (await fetch(`${BASE}/api/create-view`, { method: 'POST', headers: h, body: JSON.stringify({ sourceCalendarId: name }) })).json();
+        assert.ok(out.publicViewId, JSON.stringify(out));
+        const byView = await soon(async () => { const r = await lookup(out.publicViewId); return r.found ? r : null; });
+        assert.equal(byView && byView.targetId, undefined, 'a public lookup never reveals the edit name');
+        const view = await (await fetch(`${BASE}/cal/view/${encodeURIComponent(out.publicViewId)}`)).json();
+        assert.ok(JSON.stringify(view).includes('Bake sale'), `${JSON.stringify(name)}: the view link shows its events`);
+        for (const feedPath of [`/${encodeURIComponent(name)}.ics`, `/view/${encodeURIComponent(out.publicViewId)}.ics`]) {
+            const r = await fetch(`${BASE}${feedPath}`);
+            const text = await r.text();
+            assert.equal(r.status, 200, `${feedPath}: ${text.slice(0, 80)}`);
+            assert.ok(text.includes('SUMMARY:Bake sale') && text.includes(`X-WR-CALNAME:Cal ${i}`), `${JSON.stringify(name)}: ${feedPath} is this calendar's feed`);
+        }
+    }
+    step('names with a leading or trailing space, %, ?, NUÑEZ, !, & or Korean come back exactly from create, lookup, the view link and both feeds');
+
+    // ...and one registered before the fix (its view id stored as leading to the trimmed name) is healed by its next save.
+    {
+        const legacy = `${n} healed `, hh = { 'Content-Type': 'application/json', 'CF-Connecting-IP': '10.71.19.99' };
+        assert.equal((await fetch(url(legacy), { method: 'POST', headers: hh, body: JSON.stringify({ title: 'Healed', events: [ev('e1', 'Bake sale')] }) })).status, 201);
+        const out = await (await fetch(`${BASE}/api/create-view`, { method: 'POST', headers: hh, body: JSON.stringify({ sourceCalendarId: legacy }) })).json();
+        const back = await fetch(`${BASE}/api/directory/backfill`, { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify([{ actualSlug: out.publicViewId, isReadOnly: true, targetId: legacy.trim() }]) });
+        assert.equal(back.status, 200, 'the row as the old directory stored it');
+        const shows = async () => JSON.stringify(await (await fetch(`${BASE}/cal/view/${encodeURIComponent(out.publicViewId)}`)).json()).includes('Bake sale');
+        assert.equal(await shows(), false, 'the old row leads to the trimmed name: an empty view');
+        const t = tab(legacy); await t.ready;
+        assert.equal((await t.send({ t: 'save', id: 's1', v: t.got.find((m) => m.t === 'snapshot').v, commands: [{ type: 'add', event: ev('e2', 'Car wash', 3) }] })).t, 'ack');
+        t.close();
+        assert.equal(await soon(shows), true, 'after a save, the view link leads to the calendar again');
+    }
+    step('a name with a space registered trimmed before the fix heals on its next save (its view link works again)');
+
+    // A11: a rename is a change the feed's ETag sees.
+    const name = names[0], feed = async (etag) => fetch(`${BASE}/${encodeURIComponent(name)}.ics`, etag ? { headers: { 'If-None-Match': etag } } : {});
+    const etag = (await feed()).headers.get('etag');
+    assert.equal((await feed(etag)).status, 304, 'unchanged: 304');
+    const t = tab(name); await t.ready;
+    const snap = t.got.find((m) => m.t === 'snapshot');
+    assert.equal((await t.send({ t: 'meta', id: 'm1', v: snap.v, title: 'Renamed' })).t, 'ack');
+    t.close();
+    const again = await feed(etag);
+    assert.equal(again.status, 200, 'renamed: the feed is sent again');
+    assert.ok((await again.text()).includes('X-WR-CALNAME:Renamed'));
+    step('the feed\'s ETag changes when the calendar is renamed (a calendar app is sent the new name)');
+}
+
 console.log('hardening tests passed');
 process.exit(0);

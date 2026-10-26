@@ -39,6 +39,8 @@
     --pc-primary-hover: #1d4ed8;
     --pc-on-primary: #ffffff;
     --pc-primary-soft: color-mix(in srgb, var(--pc-primary) 12%, transparent);   /* selected tab or view, the Info pill */
+    --pc-selected: #e5ecfd;      /* the picked row of a list: primary-soft on white, solid */
+    --pc-on-selected: #1d4ed8;   /* its text: 5.7:1 */
     --pc-link: var(--pc-primary);          /* text links only; fills use --pc-primary */
     --pc-link-hover: var(--pc-primary-hover);
     --pc-focus-ring: 0 0 0 3px color-mix(in srgb, var(--pc-primary) 25%, transparent);
@@ -143,6 +145,8 @@
     --pc-on-primary: #1c1c1e;
     /* Re-derived here so a dark subtree (/dev/design's dark pane) gets the dark blue, not :root's. */
     --pc-primary-soft: color-mix(in srgb, var(--pc-primary) 12%, transparent);
+    --pc-selected: #293541;      /* primary-soft on surface, solid */
+    --pc-on-selected: #6ec2ff;   /* 6.4:1 */
     --pc-link: var(--pc-primary);
     --pc-link-hover: var(--pc-primary-hover);
     --pc-focus-ring: 0 0 0 3px color-mix(in srgb, var(--pc-primary) 25%, transparent);

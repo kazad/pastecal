@@ -3,6 +3,7 @@
  * Ported from functions/index.js to run in Cloudflare Workers and Node.js.
  */
 import EventStore from '../../public/services/EventStore.js';
+import EventZone from '../../public/services/EventZone.js';
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -119,14 +120,43 @@ export const ICSService = {
             .map(s => (s.endsWith('Z') ? s : `${s}Z`));
     },
 
-    seriesShape(event) {
-        return { allDay: !!event.isAllDay, anchorMs: this.toMs(event.start) };
+    // The zone a timed event's times are written in (services/EventZone.js seriesZone): its own, else the calendar's
+    // (EventZone.calendarZone: options.tz, else a confident guess from its all-day events), or null. Written in that
+    // zone's wall clock with TZID (DTSTART;TZID=America/Los_Angeles:20261006T170000) and defined in a VTIMEZONE, so a
+    // subscriber's app repeats a series where it was planned: Tuesdays at 5 PM in Los Angeles, across DST, as both
+    // calendars draw it. (In UTC, "BYDAY=TU" repeated on UTC Tuesdays -- Monday evenings in Los Angeles -- an hour off
+    // after Nov 1: stress A02.) With no zone at all, UTC, as before: nothing says where the calendar is.
+    zoneOf(event, calZone = null) {
+        return EventZone.seriesZone(event, calZone);
+    },
+
+    // YYYYMMDDTHHMMSS: an instant's wall clock in tz (for a TZID= value).
+    formatLocal(ms, tz) {
+        if (isNaN(ms)) return null;
+        const w = EventZone.wall(ms, tz), p = (n, l = 2) => String(n).padStart(l, '0');
+        return `${p(w.y, 4)}${p(w.m + 1)}${p(w.d)}T${p(w.h)}${p(w.min)}${p(w.s)}`;
+    },
+
+    seriesShape(event, calZone = null) {
+        return { allDay: !!event.isAllDay, anchorMs: this.toMs(event.start), tz: this.zoneOf(event, calZone) };
     },
 
     seriesSlot(stamp, shape) {
         let ms = this.toMs(stamp);
         if (isNaN(ms)) return null;
         if (shape.allDay) return this.formatDate(ms);
+        // A series in its own zone: the slot is that zone's wall clock, at the series' time of day there (a stamp
+        // off by DST elsewhere still names its day's occurrence).
+        if (shape.tz) {
+            const w = EventZone.wall(ms, shape.tz);
+            if (!isNaN(shape.anchorMs)) {
+                const a = EventZone.wall(shape.anchorMs, shape.tz);
+                const here = Date.UTC(w.y, w.m, w.d, w.h, w.min, w.s), day = Date.UTC(w.y, w.m, w.d, a.h, a.min, a.s);
+                const nearest = [day - DAY_MS, day, day + DAY_MS].reduce((x, y) => (Math.abs(y - here) < Math.abs(x - here) ? y : x));
+                if (Math.abs(nearest - here) < 12 * HOUR_MS) return this.formatDateTime(new Date(nearest)).slice(0, 15);
+            }
+            return this.formatLocal(ms, shape.tz);
+        }
         if (!isNaN(shape.anchorMs)) {
             const timeOfDay = ((shape.anchorMs % DAY_MS) + DAY_MS) % DAY_MS;
             const sameDay = Math.floor(ms / DAY_MS) * DAY_MS + timeOfDay;
@@ -137,8 +167,18 @@ export const ICSService = {
         return this.formatDateTime(new Date(ms));
     },
 
-    seriesRule(rule, allDay) {
-        if (!allDay) return rule;
+    // UNTIL: an all-day series' as a DATE; a series written with TZID, as the UTC instant its last day ends in the zone
+    // (RFC 5545: with a TZID start, UNTIL is UTC), the day both calendars read it as (EventZone.untilDay).
+    seriesRule(rule, allDay, zone = null, own = false) {
+        if (!allDay) {
+            if (!zone) return rule;
+            return rule.replace(/(^|;)UNTIL=(\d{8}(?:T\d{6}Z?)?)/i, (match, sep, value) => {
+                const day = EventZone.untilDay(value, zone, own);
+                if (!day) return match;
+                const end = EventZone.fromWall(+day.slice(0, 4), +day.slice(4, 6) - 1, +day.slice(6, 8), 23, 59, 59, zone);
+                return `${sep}UNTIL=${this.formatDateTime(new Date(end))}`;
+            });
+        }
         return rule.replace(/(^|;)UNTIL=(\d{8}T\d{6}Z?)/i, (match, sep, value) => {
             const date = this.allDayStampDate(value);
             return date ? `${sep}UNTIL=${date}` : match;
@@ -168,7 +208,7 @@ export const ICSService = {
         return best;
     },
 
-    assignOccurrences(events) {
+    assignOccurrences(events, calZone = null) {
         const seriesById = new Map();
         const childrenOf = new Map();
         for (const event of events) {
@@ -183,7 +223,7 @@ export const ICSService = {
         const assigned = new Map();
         for (const [seriesId, children] of childrenOf) {
             const parent = seriesById.get(seriesId);
-            const parentShape = parent ? this.seriesShape(parent) : null;
+            const parentShape = parent ? this.seriesShape(parent, calZone) : null;
 
             const pairs = [];
             children.forEach((child, index) => {
@@ -193,8 +233,8 @@ export const ICSService = {
                     .filter(Boolean))];
                 const startMs = this.toMs(child.start);
                 for (const slot of slots) {
-                    const distance = Math.abs(this.toMs(slot) - startMs);
-                    pairs.push({ child, index, slot, allDay: shape.allDay,
+                    const distance = Math.abs((shape.tz ? this.toMs(`${slot}Z`) - EventZone.offsetMin(shape.tz, startMs) * 60000 : this.toMs(slot)) - startMs);
+                    pairs.push({ child, index, slot, allDay: shape.allDay, tz: shape.tz || null,
                         ambiguous: slots.length > 1 ? 1 : 0,
                         distance: isNaN(distance) ? Infinity : distance });
                 }
@@ -205,14 +245,14 @@ export const ICSService = {
             const usedSlots = new Set();
             for (const pair of pairs) {
                 if (assigned.has(pair.child) || usedSlots.has(pair.slot)) continue;
-                assigned.set(pair.child, { slot: pair.slot, allDay: pair.allDay });
+                assigned.set(pair.child, { slot: pair.slot, allDay: pair.allDay, tz: pair.tz });
                 usedSlots.add(pair.slot);
             }
         }
         return assigned;
     },
 
-    createEventBlock(event, dtstamp, overriddenSlots, occurrence, viewUrl = '') {
+    createEventBlock(event, dtstamp, overriddenSlots, occurrence, viewUrl = '', calZone = null) {
         if (occurrence === undefined && event.recurrenceID) {
             const stamp = this.occurrenceOriginal(event);
             const shape = { allDay: !!event.isAllDay, anchorMs: NaN };
@@ -222,13 +262,13 @@ export const ICSService = {
         const isOccurrence = !!event.recurrenceID && !!occurrence;
         // A rule too big to expand (a stored legacy one: the server refuses new ones) is published once, unrepeated, as
         // the calendar shows it (EventStore.unsafeRecurrence): a subscriber's app would freeze on it too.
-        const rule = event.recurrencerule && !event.recurrenceID && !EventStore.unsafeRecurrence(event.recurrencerule)
-            ? this.safeRule(this.seriesRule(String(event.recurrencerule).trim(), !!event.isAllDay)) : null;
-
         const allDay = !!event.isAllDay;
+        const tz = this.zoneOf(event, calZone);
+        const rule = event.recurrencerule && !event.recurrenceID && !EventStore.unsafeRecurrence(event.recurrencerule)
+            ? this.safeRule(this.seriesRule(String(event.recurrencerule).trim(), allDay, tz, !!EventStore.validZone(event.tz))) : null;
         const start = allDay ? this.formatDate(event.start) : this.formatDateTime(event.start);
         let end = allDay ? this.formatDate(event.end) : this.formatDateTime(event.end);
-        const dateParam = allDay ? ';VALUE=DATE' : '';
+        const dateParam = allDay ? ';VALUE=DATE' : tz ? `;TZID=${tz}` : '';
 
         if (allDay && (!end || end <= start)) {
             end = this.formatDate(this.toMs(start) + DAY_MS);
@@ -244,8 +284,8 @@ export const ICSService = {
             'BEGIN:VEVENT',
             `UID:${this.safeUid(uid)}`,
             `DTSTAMP:${dtstamp}`,
-            `DTSTART${dateParam}:${start}`,
-            `DTEND${dateParam}:${end}`,
+            `DTSTART${dateParam}:${tz ? this.formatLocal(this.toMs(start), tz) : start}`,
+            `DTEND${dateParam}:${tz ? this.formatLocal(this.toMs(end), tz) : end}`,
             `SUMMARY:${this.escapeText(event.title)}`,
             // The calendar's VIEW link (never the edit link: a calendar app shows notes to anyone who sees
             // the event): the bare link on the notes' last line (Google shows only notes), and URL: (Apple's
@@ -255,11 +295,11 @@ export const ICSService = {
         if (viewUrl) eventLines.push(`URL:${viewUrl}`);
 
         if (isOccurrence) {
-            eventLines.push(`RECURRENCE-ID${occurrence.allDay ? ';VALUE=DATE' : ''}:${occurrence.slot}`);
+            eventLines.push(`RECURRENCE-ID${occurrence.allDay ? ';VALUE=DATE' : occurrence.tz ? `;TZID=${occurrence.tz}` : ''}:${occurrence.slot}`);
         } else if (rule) {
             eventLines.push(`RRULE:${rule}`);
 
-            const shape = this.seriesShape(event);
+            const shape = this.seriesShape(event, calZone);
             const exdates = [...new Set(this.exceptionDates(event)
                 .map(stamp => this.seriesSlot(stamp, shape))
                 .filter(slot => slot && !(overriddenSlots && overriddenSlots.has(slot))))];
@@ -270,6 +310,12 @@ export const ICSService = {
         return eventLines.map(line => this.foldLine(line)).join('\r\n');
     },
 
+    // What a feed's ETag hashes (index.js serveFeed): the whole feed but its DTSTAMP lines (a calendar never edited
+    // since lastEditedAt was kept has none, and is stamped "now").
+    etagSource(ics) {
+        return String(ics).split('\r\n').filter((line) => !line.startsWith('DTSTAMP:')).join('\r\n');
+    },
+
     // opts.viewUrl: the calendar's view-only link, added to every event (createEventBlock).
     generateICS(calendarData, id, opts = {}) {
         const raw = calendarData?.events;
@@ -278,9 +324,12 @@ export const ICSService = {
             : (raw && typeof raw === 'object' ? Object.values(raw) : []);
 
         const renderable = allEvents.filter(event => this.isRenderable(event));
-        const dtstamp = this.formatDateTime(new Date());
+        // When the calendar last changed (the same on every request, so the feed's ETag can hash all of it), else now.
+        const dtstamp = this.formatDateTime(calendarData?.lastEditedAt) || this.formatDateTime(new Date());
+        // Where a series without its own zone repeats: the calendar's zone (EventZone.calendarZone), or null (UTC).
+        const calZone = EventZone.calendarZone({ options: calendarData?.options, events: allEvents });
 
-        const occurrences = this.assignOccurrences(renderable);
+        const occurrences = this.assignOccurrences(renderable, calZone);
         const overridden = new Map();
         for (const [event, { slot }] of occurrences) {
             if (!overridden.has(event.recurrenceID)) overridden.set(event.recurrenceID, new Set());
@@ -289,7 +338,8 @@ export const ICSService = {
 
         const events = renderable.map(event => this.createEventBlock(event, dtstamp,
             event.recurrenceID ? null : overridden.get(event.id),
-            event.recurrenceID ? (occurrences.get(event) || null) : undefined, opts.viewUrl || ''));
+            event.recurrenceID ? (occurrences.get(event) || null) : undefined, opts.viewUrl || '', calZone));
+        const timezones = this.timezones(renderable, calZone);
 
         const name = this.escapeText(calendarData?.title || id);
 
@@ -301,11 +351,31 @@ export const ICSService = {
             'METHOD:PUBLISH',
             `X-WR-CALNAME:${name}`,
             `NAME:${name}`,
+            ...(calZone ? [`X-WR-TIMEZONE:${calZone}`] : []),
             'REFRESH-INTERVAL;VALUE=DURATION:PT1H',
             'X-PUBLISHED-TTL:PT1H'
         ].map(line => this.foldLine(line));
 
-        return [...header, ...events, 'END:VCALENDAR'].join('\r\n');
+        return [...header, ...timezones, ...events, 'END:VCALENDAR'].join('\r\n');
+    },
+
+    // A VTIMEZONE for every zone a TZID names (EventZone.vtimezone): ical.js and Outlook resolve a TZID only from the
+    // feed itself, and read one it does not define as the reader's own zone. From the first year an event in the zone
+    // starts through next year (or its last event's), then the zone's yearly rule.
+    timezones(events, calZone) {
+        const years = new Map();
+        const thisYear = new Date().getUTCFullYear();
+        for (const event of events) {
+            const tz = this.zoneOf(event, calZone);
+            if (!tz) continue;
+            const y = new Date(this.toMs(event.start)).getUTCFullYear();
+            if (isNaN(y)) continue;
+            const r = years.get(tz) || { from: y, through: thisYear };
+            years.set(tz, { from: Math.min(r.from, y - 1), through: Math.max(r.through, y) });
+        }
+        const out = [];
+        for (const [tz, r] of [...years].sort((a, b) => (a[0] < b[0] ? -1 : 1))) out.push(...EventZone.vtimezone(tz, r.from, r.through + 1));
+        return out;
     }
 };
 

@@ -83,6 +83,22 @@ await sleep(3000);
 assert.equal(A.got.length, idleA); assert.equal(B.got.length, idleB);
 step('idle tabs: no traffic for 3 s');
 
+// 5b. An event's own time zone (event.tz, services/EventZone.js): stored, kept through other edits, taken away
+// with null, an unknown name never stored; the feed writes it with TZID.
+let vz = (await (await fetch(`${BASE}/cal/${id}`)).json()).v;
+const zsave = async (sid, commands) => { A.send({ t: 'save', id: sid, v: vz, commands }); const a = await A.waitFor((m) => m.id === sid); assert.equal(a.t, 'ack', JSON.stringify(a)); vz = a.v; return (await (await fetch(`${BASE}/cal/${id}`)).json()).calendar.events; };
+let zev = (await zsave('z1', [{ type: 'add', event: { id: 'tokyo-1', title: 'Tokyo standup', start: '2026-11-03T05:00:00.000Z', end: '2026-11-03T05:30:00.000Z', type: 1, tz: 'Asia/Tokyo', recurrencerule: 'FREQ=WEEKLY;BYDAY=TU;INTERVAL=1;' } }])).find((e) => e.id === 'tokyo-1');
+assert.equal(zev.tz, 'Asia/Tokyo');
+zev = (await zsave('z2', [{ type: 'update', key: zev, changes: { title: 'Tokyo standup (renamed)' } }])).find((e) => e.id === 'tokyo-1');
+assert.equal(zev.tz, 'Asia/Tokyo');
+const ics = await (await fetch(`${BASE}/${id}.ics`)).text();
+assert.ok(/DTSTART;TZID=Asia\/Tokyo:20261103T140000\r\n/.test(ics.replace(/\r\n[ \t]/g, '')), ics.slice(0, 2000));
+zev = (await zsave('z3', [{ type: 'update', key: zev, changes: { tz: null } }])).find((e) => e.id === 'tokyo-1');
+assert.ok(!('tz' in zev), JSON.stringify(zev));
+zev = (await zsave('z4', [{ type: 'add', event: { id: 'mars-1', title: 'Mars', start: at(21, 9), end: at(21, 10), tz: 'Mars/Olympus' } }])).find((e) => e.id === 'mars-1');
+assert.ok(!('tz' in zev), JSON.stringify(zev));
+step('an event time zone is stored, kept through a rename, written to the feed with TZID, removed with null; an unknown zone is never stored');
+
 // 6. A save loop is refused by the server, not just discouraged in the browser.
 const loopStart = Date.now();
 for (let i = 0; i < 100; i++) A.send({ t: 'save', id: `loop${i}`, v: 0, commands: [{ type: 'update', key: soccer, changes: { description: `loop ${i}` } }] });

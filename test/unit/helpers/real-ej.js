@@ -28,9 +28,9 @@ function installedCopy(version) {
 }
 
 function locate() {
+  if (process.env.PASTECAL_EJ2_PATH) return { file: process.env.PASTECAL_EJ2_PATH };
   const version = (/cdn\.syncfusion\.com\/ej2\/([\d.]+)\/dist\/ej2\.min\.js/.exec(INDEX) || [])[1];
   if (!version) return { reason: 'index.html no longer pins an ej2.min.js version' };
-  if (process.env.PASTECAL_EJ2_PATH) return { file: process.env.PASTECAL_EJ2_PATH };
   const cached = path.join(os.tmpdir(), `pastecal-ej2-${version}.min.js`);
   if (fs.existsSync(cached)) return { file: cached };
   const installed = installedCopy(version);

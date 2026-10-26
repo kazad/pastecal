@@ -214,7 +214,10 @@ button.pc-card:focus-visible { outline: var(--pc-focus-outline); outline-offset:
 .pc-modal-panel--wide { max-width: 44rem }
 /* The close button stays reachable once the panel scrolls: sticky at the top, in a zero-height row. */
 .pc-scrim { background: var(--pc-scrim) }
-.pc-modal-panel > button[aria-label="Close"] { position: sticky; top: 0; float: right; margin: -0.5rem -0.5rem 0 0; z-index: 2 }
+/* Top-right in ANY panel layout: float in a block panel; align-self + a negative bottom margin in a flex or grid
+   panel, where floats are ignored (the beta feedback form is a flex column: its close sat top-left on its own row). */
+.pc-modal-panel > button[aria-label="Close"] { position: sticky; top: 0; float: right; align-self: flex-end; justify-self: end;
+    margin: -0.5rem -0.5rem calc(0.5rem - var(--pc-h-sm)) 0; z-index: 2 }
 
 /* ---- Menu: a floating list of actions (the phone header's menu) -------------------------- */
 .pc-menu { padding: var(--pc-space-1); border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); background: var(--pc-bg); box-shadow: var(--pc-shadow-md); color: var(--pc-text-2) }

@@ -18,6 +18,7 @@
  */
 import rrulePkg from '../vendor/rrule-2.8.1.esm.js';
 import EventStore from '../../../public/services/EventStore.js';
+import EventZone from '../../../public/services/EventZone.js';
 const { RRule } = rrulePkg;
 
 export const DAY_MS = 86400000;
@@ -66,61 +67,9 @@ export function zoneLabel(tz, ms) {
     } catch { return tz; }
 }
 
-// Zones tried when guessing from all-day events: the common ones, so the guess is a real place with real DST.
-const CANDIDATE_ZONES = ['America/Los_Angeles', 'America/Denver', 'America/Phoenix', 'America/Chicago', 'America/New_York',
-    'America/Halifax', 'America/St_Johns', 'America/Anchorage', 'Pacific/Honolulu', 'America/Sao_Paulo', 'America/Argentina/Buenos_Aires',
-    'America/Mexico_City', 'America/Bogota', 'Europe/London', 'Europe/Paris', 'Europe/Athens', 'Europe/Moscow', 'Africa/Lagos',
-    'Africa/Johannesburg', 'Asia/Dubai', 'Asia/Karachi', 'Asia/Kolkata', 'Asia/Dhaka', 'Asia/Bangkok', 'Asia/Singapore', 'Asia/Shanghai',
-    'Asia/Seoul', 'Asia/Tokyo', 'Australia/Brisbane', 'Australia/Adelaide', 'Australia/Sydney', 'Australia/Perth', 'Pacific/Auckland', 'UTC'];
-
-/**
- * The zone a calendar's authors work in, from its all-day events (see the header), or null.
- * Uses up to 40 all-day events, most recent first; needs at least one whose time is not UTC midnight
- * (UTC midnight is also what an all-day event from a UTC author or an unreleased build looks like).
- */
-export function inferZone(events) {
-    const samples = [];
-    for (const e of events || []) {
-        if (!e || !e.isAllDay || !e.start) continue;
-        const ms = Date.parse(e.start);
-        if (isNaN(ms)) continue;
-        samples.push(ms);
-    }
-    if (!samples.length) return null;
-    samples.sort((a, b) => b - a);
-    const use = samples.slice(0, 40);
-    // The author's local midnight at instant ms means offset = -(ms mod day) (or +day - that, east of UTC).
-    const offs = use.map((ms) => {
-        let o = -Math.round(((ms % DAY_MS) + DAY_MS) % DAY_MS / 60000);   // minutes, in (-1440, 0]
-        if (o < -12 * 60) o += 1440;                                          // east of UTC
-        return o;
-    });
-    if (offs.every((o) => o === 0)) return null;
-    let best = null, bestScore = 0;
-    for (const tz of CANDIDATE_ZONES) {
-        let score = 0;
-        for (let i = 0; i < use.length; i++) if (offsetMin(tz, use[i]) === offs[i]) score++;
-        if (score > bestScore) { best = tz; bestScore = score; }
-    }
-    return bestScore >= Math.ceil(use.length / 2) ? best : null;
-}
-/**
- * The same guess, only when it can be trusted for clock times: at least 3 all-day samples and 80% of
- * them agreeing on one zone. A wrong time on a link card is worse than no time, so anything weaker is null.
- */
-export function confidentZone(events) {
-    const all = (events || []).filter((e) => e && e.isAllDay && e.start && !isNaN(Date.parse(e.start)));
-    const use = all.map((e) => Date.parse(e.start)).sort((a, b) => b - a).slice(0, 40);
-    if (use.length < 3) return null;
-    const tz = inferZone(all);
-    if (!tz) return null;
-    const agree = use.filter((ms) => {
-        let o = -Math.round(((ms % DAY_MS) + DAY_MS) % DAY_MS / 60000);
-        if (o < -12 * 60) o += 1440;
-        return offsetMin(tz, ms) === o;
-    }).length;
-    return agree >= Math.ceil(use.length * 0.8) ? tz : null;
-}
+// The guess from all-day events is the one the feed and both calendars use (EventZone.calendarZone).
+export const inferZone = (events) => EventZone.inferZone(events);
+export const confidentZone = (events) => EventZone.confidentZone(events);
 
 // ---- dates as day numbers (UTC-midnight ms of a calendar date) ---------------------------------
 export const dayKey = (y, m, d) => Date.UTC(y, m, d);
@@ -160,7 +109,7 @@ export function occurrences(events, fromMs, toMs, tz, { perSeries = 400 } = {}) 
 
         // A rule too big to expand (FREQ=SECONDLY walks millions of steps from its start) shows once, as in the app.
         if (ev.recurrencerule && !ev.recurrenceID && !EventStore.unsafeRecurrence(ev.recurrencerule)) {
-            const occ = expand(ev, start, end, allDay, rFrom, rTo, tz, perSeries);
+            const occ = expand(ev, start, end, allDay, rFrom, rTo, allDay ? tz : (EventZone.seriesZone(ev, tz) || tz), perSeries);
             if (occ) { for (const o of occ) out.push({ ...base, ...o }); continue; }
         }
         if (end > rFrom && start < rTo || (start === end && start >= rFrom && start < rTo)) {

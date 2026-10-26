@@ -316,7 +316,8 @@ export class CalendarRoom extends DurableObject {
             const live = (e.recurrencerule && !e.recurrenceID) || Date.parse(e.end || e.start) >= cutoff;
             if (!live || out.length >= 3000) continue;
             out.push({ id: e.id, title: e.title, start: e.start, end: e.end, isAllDay: !!e.isAllDay, type: e.type,
-                recurrencerule: e.recurrencerule || '', recurrenceID: e.recurrenceID ?? null, recurrenceException: e.recurrenceException ?? null });
+                recurrencerule: e.recurrencerule || '', recurrenceID: e.recurrenceID ?? null, recurrenceException: e.recurrenceException ?? null,
+                ...(e.tz ? { tz: e.tz } : {}) });   // (a series in its own zone repeats there: EventZone.seriesZone)
         }
         allDay.sort().reverse();
         const ps = this.proSettings();
@@ -599,6 +600,19 @@ export class CalendarRoom extends DurableObject {
         return Response.json({ ok: true, editorKey: k.key });
     }
 
+    // A calendar whose name starts or ends with a space was registered under its TRIMMED name until Oct 26 2026 (the
+    // directory trimmed names, stress A19): its lookups and its view link led to the trimmed name, a calendar that
+    // does not exist. On its first change after that, it registers its exact name and view id again (once per wake-up;
+    // registerInDirectory re-points a name only away from a calendar that is gone).
+    healTrimmedName() {
+        const id = this.state.id;
+        if (this.nameHealed || typeof id !== 'string' || id === id.trim()) return;
+        this.nameHealed = true;
+        this.ctx.waitUntil(this.registerInDirectory(id));
+        const viewId = this.state.options && this.state.options.publicViewId;
+        if (viewId) this.ctx.waitUntil(this.registerInDirectory(viewId, true, id));
+    }
+
     async registerInDirectory(actualSlug, isReadOnly = false, targetId = null, force = false) {
         if (!this.env.DIRECTORY || !actualSlug) return;
         try {
@@ -665,15 +679,7 @@ export class CalendarRoom extends DurableObject {
 
     static sameEvent(a, b) {
         if (!a || !b) return false;
-        const norm = (v) => (v === undefined || v === null || v === '') ? null : v;
-        const FIELDS = ['title', 'description', 'start', 'end', 'type', 'isAllDay',
-            'repeat', 'recurrencerule', 'recurrenceID', 'recurrenceException'];
-        return FIELDS.every((f) => {
-            const x = norm(a[f]), y = norm(b[f]);
-            if (f === 'type') return String(x === null ? 1 : x) === String(y === null ? 1 : y);
-            if (f === 'isAllDay') return !!x === !!y;
-            return x === y;
-        });
+        return EventStore.same(a, b);   // every field of the one list (EventStore.FIELDS), on meaning
     }
 
     // Store a new event list: only the rows that changed are written.
@@ -791,6 +797,12 @@ export class CalendarRoom extends DurableObject {
                 const v = e[f];
                 if (v !== undefined && v !== null && typeof v !== 'string' && typeof v !== 'number') return `an event ${f} is not text`;
                 if (String(v ?? '').length > LIMITS.maxId) return `an event ${f} is too long`;
+            }
+            // The event's own time zone (services/EventZone.js): an IANA name, or nothing.
+            const z = e.tz;
+            if (z !== undefined && z !== null && z !== '') {
+                if (typeof z !== 'string' || z.length > 64) return 'an event time zone is not a zone name';
+                if (rules && !validZone(z)) return 'an event time zone is not a zone name';
             }
             const t = e.type;
             if (t !== undefined && t !== null && typeof t !== 'number' && typeof t !== 'string') return 'an event type is not a number';
@@ -1319,6 +1331,7 @@ export class CalendarRoom extends DurableObject {
                 this.setMeta('options', this.state.options);
             }
             this.bump('save', m.commands, { beforeEvents, beforeTitle, beforeOptions, writer: m.writer || null });   // never the author uid: history is public, the uid proves who made it
+            this.healTrimmedName();
             ws.send(json({ t: 'ack', id: m.id, v: this.state.v }));
             this.broadcast({ t: 'change', v: this.state.v, commands: m.commands }, ws);
             await this.scheduleCopyBack();
@@ -1345,6 +1358,7 @@ export class CalendarRoom extends DurableObject {
             if (nextTitle !== s.title) { s.title = nextTitle; this.setMeta('title', s.title); }
             if (nextOptions !== s.options) { s.options = nextOptions; this.setMeta('options', s.options); }
             this.bump('meta', [{ type: 'meta', title: m.title, options: m.options }], { beforeEvents, beforeTitle, beforeOptions, writer: m.writer || null });   // never the author uid: history is public, the uid proves who made it
+            this.healTrimmedName();
             ws.send(json({ t: 'ack', id: m.id, v: s.v }));
             this.broadcast({ t: 'meta', v: s.v, title: s.title, options: s.options }, ws);
             await this.scheduleCopyBack();

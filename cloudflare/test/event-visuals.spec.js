@@ -14,6 +14,8 @@ async function open(page, theme = 'light') {
   await page.goto('/?backend=cf');
   await page.waitForFunction(() => window.scheduleObj && document.querySelector('.e-work-cells'));
   await page.evaluate(`${VM}.globalSettings.darkMode = '${theme}'`);
+  // The page turns with the calendar's stylesheet, once it has loaded (app.js applyTheme): wait for both.
+  await page.waitForFunction((t) => document.documentElement.dataset.theme === t, theme);
   await page.evaluate((VM) => {
     const vm = eval(VM);
     const add = (event) => vm.store().dispatch({ type: 'add', event });

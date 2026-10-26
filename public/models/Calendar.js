@@ -20,8 +20,10 @@ class Calendar {
 
     // What Syncfusion draws. The mapping (and every Syncfusion quirk it absorbs) lives in
     // ScheduleAdapter, the one boundary between Syncfusion and our events.
+    // A series without its own zone repeats in the calendar's (EventZone.calendarZone), as the feed writes it.
     getSyncFusionEvents() {
-        return ScheduleAdapter.toView(this.events);
+        const zone = typeof EventZone !== 'undefined' && EventZone.calendarZone ? EventZone.calendarZone(this) : null;
+        return ScheduleAdapter.toView(this.events, { grid: true, zone });
     }
 
     defaultEvent(title) {

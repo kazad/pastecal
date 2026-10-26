@@ -33,6 +33,35 @@ class SlugManager {
         return name;
     }
 
+    // Why a calendar can't be saved under this name, in words, or null. The server's rule (cloudflare/src validId):
+    // 1 to 200 characters, none of . # $ [ ] / or control characters.
+    static nameProblem(name) {
+        const s = String(name ?? '');
+        if (!s.trim()) return 'Type a name for the calendar.';
+        if (s.length > 200) return 'That name is too long.';
+        if (/[.#$\[\]\/\u0000-\u001f\u007f]/.test(s)) return 'A calendar name can’t contain . # $ [ ] or /';
+        return null;
+    }
+
+    // Why a view-only link can't be renamed to this, in words, or null. The server's rule (SlugService.validateSlug):
+    // 3 to 50 letters, numbers, dashes or underscores.
+    static viewNameProblem(name, current) {
+        const s = String(name ?? '').trim();
+        if (current && s.toLowerCase() === String(current).toLowerCase()) return 'That’s already this link’s name.';
+        if (!/^[a-zA-Z0-9_-]{3,50}$/.test(s)) return 'Use 3 to 50 letters, numbers, dashes or underscores.';
+        return null;
+    }
+
+    // What a failed view-link request says to a person (createPublicLink's error: .code from the server).
+    static linkErrorMessage(error) {
+        const code = error && error.code;
+        if (code === 'already-exists') return 'That name is taken. Try another.';
+        if (code === 'invalid-argument') return 'That name won’t work. Use 3 to 50 letters, numbers, dashes or underscores.';
+        if (code === 'resource-exhausted') return 'Too many tries. Wait a minute and try again.';
+        if (code === 'locked' || code === 'paused') return (error && error.message) || 'This calendar is locked.';
+        return 'Couldn’t reach pastecal. Check your connection and try again.';
+    }
+
     // Alternatives to offer when a chosen name is taken, best first. Pure: the caller checks
     // which are actually free. A trailing number counts up ("team-2" -> "team-3"); otherwise
     // the usual ways people disambiguate (-2, -<year>, -team, -calendar).
@@ -95,9 +124,8 @@ class SlugManager {
                 where: 'readonly_link',
                 reason: error?.code || 'unknown',
             }), customSlug);
-            if (!autoCreate) {
-                alert('Failed to create read-only link: ' + (error.message || 'Please try again.'));
-            }
+            // The caller says it where the person asked (never a browser alert): userMessage is the wording.
+            if (error && typeof error === 'object') error.userMessage = this.linkErrorMessage(error);
             throw error;
         }
     }
@@ -135,12 +163,12 @@ class SlugManager {
 
     static getReadOnlyURL(calendar) {
         const slug = this.getReadOnlySlug(calendar);
-        return slug ? `${window.location.origin}/view/${slug}` : null;
+        return slug ? window.location.origin + CalendarPath.view(slug) : null;
     }
 
     static getReadOnlyICSURL(calendar) {
         const slug = this.getReadOnlySlug(calendar);
-        return slug ? `${window.location.origin}/view/${slug}.ics` : null;
+        return slug ? window.location.origin + CalendarPath.feed(CalendarPath.view(slug)) : null;
     }
 
     // Viewer-context-aware URL construction.
@@ -160,9 +188,9 @@ class SlugManager {
             // Refuse to fall back to /${calendar.id} in read-only mode — that would leak
             // the editable id. Caller treats null as "no shareable base path"; UI should
             // fall back to window.location.href (which the viewer already sees).
-            return slug ? `/view/${slug}` : null;
+            return slug ? CalendarPath.view(slug) : null;
         }
-        return `/${calendar.id}`;
+        return CalendarPath.of(calendar.id);   // encoded: "50% off", "a?b", "trail " (A03)
     }
 
     static getViewerBaseURL(calendar, isReadOnly) {
@@ -174,6 +202,7 @@ class SlugManager {
     // doesn't carry one yet (race window between createPublicLink and syncPublicView).
     static _slugFromLocation() {
         const match = window.location.pathname.match(/\/view\/([^/?#]+)/);
-        return match ? match[1] : null;
+        if (!match) return null;
+        try { return decodeURIComponent(match[1]); } catch { return match[1]; }   // (CalendarPath.view encodes it again)
     }
 }

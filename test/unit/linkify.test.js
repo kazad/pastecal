@@ -155,3 +155,14 @@ test('the popup observer linkifies text nodes, not innerHTML', () => {
   const src = fs.readFileSync(path.join(__dirname, '../../public/utils/utils.js'), 'utf8');
   assert.ok(!/innerHTML = linkify\(/.test(src), 'innerHTML must not be fed back through linkify');
 });
+
+test('linkify: "mailto:" and "tel:" link the address or number and are not shown (Oct 26 2026: the card read "mailto:board@…")', () => {
+  const out = Utils.linkify('Questions? mailto:board@example.org or call tel:+1 (555) 555-0123.', { style: false });
+  assert.match(out, /<a href="mailto:board@example\.org"[^>]*>board@example\.org<\/a>/);
+  assert.match(out, /<a href="tel:\+15555550123"[^>]*>\+1 \(555\) 555-0123<\/a>\./);
+  // Hidden, not removed: the text is still what was typed.
+  assert.ok(out.includes('<span hidden>mailto:</span><a href="mailto:board@example.org"'), out);
+  assert.ok(!/<a [^>]*>(mailto|tel):/.test(out), out);
+  // Never a scheme it was not asked for.
+  assert.ok(!/href="javascript:/i.test(Utils.linkify('tel:javascript:alert(1) mailto:javascript:1')));
+});

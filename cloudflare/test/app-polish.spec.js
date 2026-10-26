@@ -1,7 +1,7 @@
 // @ts-check
 /**
  * Small app polish, driven like a person:
- *   1. The header's "+ Add event" shows its keyboard shortcut ("⌘E" on a Mac, "Ctrl E" elsewhere);
+ *   1. The header's "+ Add event" shows its keyboard shortcut ("⌘E" on a Mac, "Ctrl+E" elsewhere, spelled by utils/keys.js like every shortcut);
  *      not on a phone, which has no keyboard shortcut to show.
  *   2. Quick add's Color row shows a calendar's named colors ("Practice") as labeled chips, so you
  *      pick a type, not a hue; unnamed colors stay swatches. The event saves with that type.
@@ -47,7 +47,7 @@ async function openQuickAdd(page) {
 
 // ---- 1. The shortcut lives in the tooltip; the button stays plain ----
 
-for (const [platform, want] of [['MacIntel', '⌘E'], ['Win32', 'Ctrl E']]) {
+for (const [platform, want] of [['MacIntel', '⌘E'], ['Win32', 'Ctrl+E']]) {
   test(`"+ Add event" names ${want} in its tooltip on ${platform}`, async ({ browser }) => {
     const { ctx, page } = await open(browser, { platform });
     const btn = page.getByTestId('desktop-add-event-button');
@@ -253,7 +253,7 @@ for (const viewport of [DESKTOP, PHONE]) {
       const c = JSON.parse(localStorage.getItem('calendar') || '{}');
       return { title: c.title, notes: (c.options || {}).notes || '', events: (c.events || []).map(e => e.title) };
     })).toEqual({ title: 'New Calendar', notes: '', events: ['Your event here'] });
-    await expect(page.getByText('Started over with a blank calendar')).toBeVisible();
+    await expect(page.locator('.pc-toast').getByText('Started over with a blank calendar')).toBeVisible();
 
     // one Cmd+Z: all of it back
     await page.evaluate(() => document.activeElement && document.activeElement.blur());

@@ -99,7 +99,7 @@ const readJSON = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ||
 const writeJSON = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage blocked: no hint */ } };
 
 const AddToCalendar = {
-    props: { href: String, nudgeKey: String },
+    props: { href: String, nudgeKey: String, target: { type: String, default: '_top' } },
     emits: ['pick'],
     data() { return { nudge: false }; },
     mounted() {
@@ -126,7 +126,7 @@ const AddToCalendar = {
     },
     template: `
         <div class="pc-addcal">
-            <a class="pc-btn pc-btn--sm pc-btn--pill pc-addcal-btn" data-testid="view-add-to-cal" :href="href" target="_top" @click="pick">
+            <a class="pc-btn pc-btn--sm pc-btn--pill pc-addcal-btn" data-testid="view-add-to-cal" aria-label="Add to my calendar" :href="href" :target="target" :rel="target === '_blank' ? 'noopener' : null" @click="pick">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M12 14v5M9.5 16.5h5"/></svg>
                 <span class="pc-addcal-label">Add to my calendar</span>
             </a>
@@ -150,11 +150,11 @@ const CalSwitch = {
     template: `
         <button v-if="!native" type="button" class="pc-link pc-cal-try" data-testid="try-new-cal" @click="$emit('switch', 'native')">Try the new calendar (beta)</button>
         <span v-else class="pc-cal-pill" role="group" aria-label="New calendar (beta)" data-testid="new-cal-pill">
-            <span class="pc-cal-pill-name">New calendar (beta)</span>
+            <span class="pc-cal-pill-name" title="You're trying the new calendar">Beta</span>
             <span class="pc-cal-pill-dot" aria-hidden="true">·</span>
-            <button type="button" class="pc-link" data-testid="new-cal-feedback" @click="$emit('feedback')">Send feedback</button>
+            <button type="button" class="pc-link" data-testid="new-cal-feedback" aria-label="Send feedback on the new calendar" @click="$emit('feedback')">Feedback</button>
             <span class="pc-cal-pill-dot" aria-hidden="true">·</span>
-            <button type="button" class="pc-link" data-testid="back-to-classic" @click="$emit('switch', 'classic')">Back to classic</button>
+            <button type="button" class="pc-link" data-testid="back-to-classic" aria-label="Back to the classic calendar" @click="$emit('switch', 'classic')">Classic</button>
             <button type="button" class="pc-btn pc-btn--ghost pc-btn--icon pc-btn--xs pc-cal-pill-x" aria-label="Hide until next visit" title="Hide until next visit" data-testid="new-cal-pill-hide" @click="$emit('hide')">&times;</button>
         </span>`,
 };
@@ -324,6 +324,7 @@ const CalendarVueApp = {
             nativeEdit: !!window.pcNativeEdit,
             nativeQuick: null,        // { start, end, isAllDay, title, top, left }: the new event in the quick box
             nativeEditor: null,       // { event (what the form shows, frozen at open), mode, series, occurrence }
+            nativeKeys: false,        // the ? keyboard shortcuts sheet (native edit links)
             nativeAsk: null,          // { title, message, options: [{ label, testid, action }], choice, ok, buttons }
             nativeCard: null,         // the event card (nativecal/components/EventCard.js): see openNativeCard
             isLoading: true, // set to false when calendar status is determined
@@ -345,10 +346,15 @@ const CalendarVueApp = {
             showWelcome: false,
             showHelp: false,
             showNotes: false,
+            embedNotes: false,        // an embed's Notes panel (index.html embed-bar)
             showShare: false,
             showSearch: false,
             showSettings: false,
             undoEntries: [],   // changes this calendar can undo (read from /history)
+            undoLoadFailed: false,   // the last read of /history failed: Activity says so instead of "Nothing has changed"
+            // Offline (offlineNotice): the browser says so, or this tab's connection to the calendar has been down 2 s.
+            browserOffline: typeof navigator !== 'undefined' && navigator.onLine === false,
+            connectionDown: false,
             showProStats: false,        // Pro owner dialogs (ProInsight.js)
             showProHistory: false,
             insightWhere: 'share_panel',    // which surface opened them, for analytics
@@ -426,6 +432,11 @@ const CalendarVueApp = {
             // The events array as the last remote snapshot left it, so the watcher can tell
             // an untouched echo from an echo plus a real local edit.
             remoteAppliedSignature: null,
+            // The calendar's own fields as the last snapshot left them (with the defaults this tab fills in on load), and
+            // which of them the person here has changed since ('title', 'notes', 'typeLabels'...): only those are kept
+            // over a snapshot (CalendarDataService.mergeMeta). A filled-in default is not a change.
+            appliedMeta: null,
+            metaDirty: {},
             // The event the Syncfusion editor dialog is currently showing. The dialog's DOM
             // and its type dropdown are reused across opens, so handlers built on the first
             // open read this rather than their own stale closure.
@@ -441,13 +452,15 @@ const CalendarVueApp = {
             showViewHelp: false,        // Share's "This view" explainer is open
             creatingReadOnly: false,    // Share's "Create read-only link" is waiting on the server
             readOnlySlugInput: '',
-
-            // Rename
-            newCalendarId: '',
+            viewRenameError: '',        // why renaming the view-only link didn't work, said beside its name box
+            // A /view/ link that can't be shown: 'missing' (no such link), 'no-view' (a calendar with no view link yet),
+            // 'offline' (it couldn't be looked up). Said in the page, over the empty grid.
+            viewProblem: null,
 
             // Creation flow
             showClaimDialog: false,
             slugTaken: null,   // { slug, options: [free alternatives] } after a claim hits a taken name
+            slugProblem: '',   // a claim that didn't work for another reason (a name the server refuses, offline), in words
             userHasEditedSlug: false,
             // Homepage flow: a tip on the grid until the first event of your own, then Share pulses once.
             userAddedEvent: false,
@@ -461,6 +474,9 @@ const CalendarVueApp = {
             // Phones fold the template chips behind one "Start from a template" toggle; opened stays opened this visit.
             templatesOpen: (() => { try { return sessionStorage.getItem('pc_tpl_open') === '1'; } catch (e) { return false; } })(),
             tourVariant: 'a',
+            tplMore: false,           // the guide panel's template line: all templates shown
+            TPL_FEATURED: ['family', 'team', 'out'],   // the three it starts with
+            wideHome: (() => { try { return window.matchMedia('(min-width: 1100px)').matches; } catch (e) { return false; } })(),   // the homepage's guide panel shows (style.css)
             homeAsideHidden: (() => { try { return localStorage.getItem('pc_home_aside') === 'hidden'; } catch (e) { return false; } })(),
 
             // Mobile Menu
@@ -472,13 +488,15 @@ const CalendarVueApp = {
         // ---- The native calendar's props (a native view link). The classic calendar gets the same settings
         // imperatively (mountSyncfusion, applyGlobalSettings); these are reactive, so they need no re-apply.
         nativeEvents() { return this.nativeCal ? CalendarView.displayEvents(this.calendar.events) : []; },
+        // Where a repeating event without its own zone repeats (EventZone.calendarZone), as the calendar feed writes it.
+        calendarZone() { return typeof EventZone !== 'undefined' && EventZone.calendarZone ? EventZone.calendarZone(this.calendar) : null; },
         // The quick box's new event, drawn on the grid as the "New event" block (labelled with the title typed).
         // A new event in the card, drawn on the grid as the "New event" block (its label follows the title typed).
         nativeDraft() {
             const c = this.nativeCard;
             if (!c || !c.isNew) return null;
-            const v = c.value, end = v.isAllDay ? new Date(v.end.getFullYear(), v.end.getMonth(), v.end.getDate(), 23, 59, 59, 999) : v.end;
-            return { start: new Date(v.start).toISOString(), end: new Date(end).toISOString(), isAllDay: !!v.isAllDay, title: v.title, type: v.type };
+            const v = c.value, real = this.nativeCardInstants(v), end = v.isAllDay ? new Date(v.end.getFullYear(), v.end.getMonth(), v.end.getDate(), 23, 59, 59, 999) : real.end;
+            return { start: new Date(real.start).toISOString(), end: new Date(end).toISOString(), isAllDay: !!v.isAllDay, title: v.title, type: v.type };
         },
         nativeView() { return this.nativeLink.view || this.calendar?.options?.defaultView || this.globalSettings.defaultView || 'Month'; },
         nativeCustomDuration() { return this.nativeLink.dur || this.calendar?.options?.customViewDuration || this.globalSettings.customViewDuration || 3; },
@@ -560,7 +578,13 @@ const CalendarVueApp = {
             return !this.isLoading && this.isReadOnly && !!(this.calendar?.options?.notes || '').trim();
         },
         // Shown wherever the title is: the stored default "New Calendar" in sentence case.
+        /** "Offline: changes will save when you reconnect", for someone who can edit a saved calendar, until it is back. */
+        offlineNotice() {
+            return !!(this.isExisting && this.canEdit && !this.isLoading && (this.browserOffline || this.connectionDown));
+        },
+
         displayCalendarTitle() {
+            if (this.viewProblem) return '';   // there is no calendar here: never "New calendar"
             return Calendar.displayTitle(this.calendar.title);
         },
 
@@ -643,6 +667,12 @@ const CalendarVueApp = {
         /** This browser created the calendar (it's under "Your calendars"). */
         // "Make one like this" under a calendar this browser didn't make (an invitation, a view link).
         // Never on your own calendars, never in an embed (it has its own small credit), never while loading.
+        /** A view link inside someone's page (an iframe, or ?embed): the one-line embed header instead of the site's. */
+        /** Templates sit as one quiet line in the guide panel when it shows (wide screens); else above the calendar. */
+        /** The four templates pictured under the calendar ("Start from a template" in How pastecal works). */
+        tourTemplates() { return ['team', 'family', 'out', 'club'].map((id) => (this.templateChips || []).find((t) => t.id === id)).filter(Boolean); },
+        tplInAside() { return this.isHomepageCalendar && !this.isReadOnly && this.wideHome && !this.homeAsideHidden; },
+        embedViewer() { return this.embedded && this.isReadOnly; },
         showMakeOwn() {
             return !this.isLoading && !this.embedded && !this.isMineCalendar && !this.isHomepageCalendar
                 && (this.pageFooter === 'viewer' || this.pageFooter === 'editor');
@@ -722,7 +752,11 @@ const CalendarVueApp = {
             const base = q ? this.searchResults : (this.isColorFilterActive ? (this.calendar?.events || []) : []);
             const now = Date.now();
             const shown = base.filter(e => e && this.colorFilters[this.filterSlotFor(e)] !== false);
+            // A repeating event is listed as its next occurrence (else its last), never as the stored first row: a weekly
+            // practice that began Sep 1 is "Tue, Oct 27" in late October. `when` holds that occurrence, by event id.
+            const when = this.seriesOccurrences(shown.filter(e => e.recurrencerule && !e.recurrenceID), now);
             const endOf = (e) => {
+                if (when[e.id]) return when[e.id].end.getTime();
                 const rule = e.recurrencerule || e.RecurrenceRule || '';
                 if (rule) {
                     const m = /UNTIL=(\d{4})(\d{2})(\d{2})/.exec(rule);
@@ -730,9 +764,10 @@ const CalendarVueApp = {
                 }
                 return Date.parse(e.end || e.start) || 0;
             };
-            const upcoming = shown.filter(e => endOf(e) >= now).sort((a, b) => Date.parse(a.start) - Date.parse(b.start));
-            const past = shown.filter(e => endOf(e) < now).sort((a, b) => Date.parse(b.start) - Date.parse(a.start));
-            return { upcoming, past, count: upcoming.length + past.length };
+            const startOf = (e) => (when[e.id] ? when[e.id].start.getTime() : Date.parse(e.start));
+            const upcoming = shown.filter(e => endOf(e) >= now).sort((a, b) => startOf(a) - startOf(b));
+            const past = shown.filter(e => endOf(e) < now).sort((a, b) => startOf(b) - startOf(a));
+            return { upcoming, past, count: upcoming.length + past.length, when };
         },
 
         isColorFilterActive() {
@@ -824,7 +859,7 @@ const CalendarVueApp = {
         // 'pro' (trimmed to "Made with pastecal"), 'embed' (a tiny corner credit inside someone's
         // page), 'editor' (quiet links on an edit link), or '' (homepage draft, still loading).
         pageFooter() {
-            if (this.isLoading) return '';
+            if (this.isLoading || this.viewProblem) return '';   // a view link that isn't a calendar: its notice says it all
             // The paused calendar's owner isn't a visitor: no "make your own" pitch, just the hosted note.
             if (this.isReadOnly) return this.hideBranding || this.pausedOwner ? 'pro' : (this.embedded ? 'embed' : 'viewer');
             return this.isExisting ? 'editor' : '';
@@ -868,6 +903,7 @@ const CalendarVueApp = {
     },
 
     mounted() {
+        try { window.matchMedia('(min-width: 1100px)').addEventListener('change', (e) => { this.wideHome = e.matches; }); } catch (e) { /* old browser: stays as loaded */ }
         // Load globalSettings from localStorage FIRST, before scheduleObj is constructed.
         // Syncfusion bakes some properties (e.g. timeFormat, firstDayOfWeek) into the initial
         // DOM render and doesn't reactively update them when set later — so settings must be
@@ -879,7 +915,7 @@ const CalendarVueApp = {
             track(a => a.printed((this.printFrom || 'browser') + (this.isReadOnly ? '_view' : '_edit')));
             this.printFrom = null;
         });
-        setTimeout(() => { try { if (typeof qrcode !== 'function') { const sc = document.createElement('script'); sc.src = '/vendor/qrcode-generator-1.4.4/qrcode.js'; sc.async = true; document.head.appendChild(sc); } } catch (e) { /* no QR, still prints */ } }, 4000);
+        setTimeout(() => this.loadQr(), 4000);
         this.$nextTick(() => this.fitSlugBox());   // after the title font is in: see fitSlugBox
         if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => this.fitSlugBox());
         // Can Pro be bought yet? Decides between the trial/checkout and "Join the beta" everywhere Pro is offered.
@@ -926,6 +962,8 @@ const CalendarVueApp = {
                 try {
                     console.log('Looking up calendar for /view/ route:', requestedSlug);
                     const result = await CalendarDataService.lookupCalendar(requestedSlug);
+                    // Couldn't ask (offline, a server error): not the same as "no such link".
+                    if (result.error) { this.isLoading = false; this.viewProblem = 'offline'; return; }
 
                     // A Pro short name whose account was deleted: a neutral "This link has ended" page (the Worker's).
                     if (result.data.ended) { location.replace('/link-ended/' + encodeURIComponent(requestedSlug)); return; }
@@ -942,6 +980,7 @@ const CalendarVueApp = {
                             this.updateCustomViewInSchedule();
                             // Re-initialize local settings to load custom colors and labels
                             this.initializeLocalSettings();
+                            this.noteRemoteApplied();   // (after the defaults: they are the snapshot's, not edits)
                             // Add to recents when calendar loads, but mark as read-only
                             // The tab says which calendar this is (a short link's page is static: the server can't).
                             if (c.title) document.title = `${String(c.title).slice(0, 120)} · pastecal`;
@@ -958,19 +997,15 @@ const CalendarVueApp = {
                             }
                             this.isLoading = false;
                         });
-                    } else if (result.data.found && !result.data.isReadOnly) {
-                        // Found as editable calendar - show message
-                        this.isLoading = false;
-                        alert('This calendar has no view-only link yet. Ask the owner to make one in Share.');
                     } else {
-                        // Calendar doesn't exist at all
+                        // An edit link's name with no view link, or nothing at all: said in the page (viewProblem).
                         this.isLoading = false;
-                        alert('Calendar not found. Check the link and try again.');
+                        this.viewProblem = result.data.found ? 'no-view' : 'missing';
                     }
                 } catch (error) {
                     console.error('Calendar lookup failed:', error);
                     this.isLoading = false;
-                    alert('Couldn’t load this calendar. Check your connection and reload the page.');
+                    this.viewProblem = 'offline';
                 }
             })();
         } else if (this.urlslug) {
@@ -992,6 +1027,7 @@ const CalendarVueApp = {
                     this.updateCustomViewInSchedule();
                     // Re-initialize local settings to load custom colors and labels
                     this.initializeLocalSettings();
+                    this.noteRemoteApplied();   // (after the defaults: they are the snapshot's, not edits)
                     // Add to recents when calendar loads.
                     //
                     // This callback is a live subscription: it re-fires on every
@@ -1170,6 +1206,20 @@ const CalendarVueApp = {
         // Pro lock: who may change this calendar. Fired on every snapshot and editor-key answer.
         CalendarDataService.onLockState = (s) => this.applyLockState(s);
 
+        // Offline: edits wait in the journal and are sent on reconnect. Said by one small line (offlineNotice) from
+        // the moment the browser says it is offline, or the socket has been down 2 s (a quick reconnect doesn't
+        // flash it), until the calendar is back (a snapshot: the waiting edits are sent then).
+        CalendarDataService.onConnection = ({ online }) => {
+            clearTimeout(this._downTimer);
+            if (online) { this.connectionDown = false; return; }
+            this._downTimer = setTimeout(() => { this.connectionDown = true; }, 2000);
+        };
+        window.addEventListener('offline', () => { this.browserOffline = true; });
+        window.addEventListener('online', () => {
+            this.browserOffline = false;
+            if (typeof CalendarDataService.reconnectNow === 'function') CalendarDataService.reconnectNow();
+        });
+
         CalendarDataService.onSyncRefused = ({ before, removing, recovered, events, code }) => {
             if (code === 'locked' || code === 'paused') {
                 // The calendar is locked or paused (or the editor link stopped working): undo the edit, say why.
@@ -1287,7 +1337,7 @@ const CalendarVueApp = {
         // reader's attention is. Closes the innermost thing first, so one key backs out
         // in the order the user entered.
         this._escapeHandler = (e) => {
-            if (e.key !== 'Escape') return;
+            if (!pcKeys.is(e, 'Escape')) return;
             // The native calendar's own boxes first: the question, the editor, the quick box (innermost first).
             if (this.nativeAsk) { this.nativeAnswer(null); return; }
             if (this.nativeEditor) { this.closeNativeEditor(); return; }
@@ -1322,6 +1372,8 @@ const CalendarVueApp = {
         // The event card follows changes made in other browsers (nativeCardRefresh).
         'calendar.events'() { if (this.nativeCard) this.$nextTick(() => this.nativeCardRefresh()); },
         'calendar.id'() { this.$nextTick(() => this.fitSlugBox()); },
+        // The save status, heard as well as seen (the page's one live region).
+        offlineNotice(on, was) { if (on) Utils.announce('Offline. Changes will save when you reconnect.'); else if (was) Utils.announce('Back online.'); },   // (not "saved": the waiting edits are sent now, and a failed save says so itself)
         // The footer line appears once loading ends (or changes with Pro): give the month grid its room.
         pageFooter() { this.$nextTick(() => { if (this._refitMonthRows) this._refitMonthRows(); }); },
         // The homepage pitch is an experiment: pick (or recall) this browser's variant
@@ -1364,6 +1416,12 @@ const CalendarVueApp = {
         // page renders mixed light/dark (e.g. tooltip on /view/<slug> looks transparent
         // because bg-2 is light while the calendar grid is dark). This watcher makes
         // darkMode the single source of truth: any mutation re-applies both outputs.
+        sideTab(tab, was) {
+            if (!tab || tab === was || !this._panelVia) return;
+            const via = this._panelVia;
+            this._panelVia = null;
+            track(a => a.panelOpened(tab, via));
+        },
         'globalSettings.darkMode': {
             handler() {
                 this.applyTheme();
@@ -1477,10 +1535,11 @@ const CalendarVueApp = {
                 // edit is real and must be published -- suppressing it would trade the
                 // echo bug for a silent lost edit.
                 if (this.isApplyingRemote
-                    && JSON.stringify(this.calendar.events || []) === this.remoteAppliedSignature) {
+                    && this.calendarSignature() === this.remoteAppliedSignature) {
                     this.updateCalendarView();
                     return;
                 }
+                this.noteMetaEdits();
 
                 if (!this.isExisting) {
                     this.saveLocalStorage();
@@ -1615,7 +1674,7 @@ const CalendarVueApp = {
                 this._nativeCardClosedAt = false;
                 closedAtPress = false;
             }, true);
-            document.addEventListener('keydown', (e) => { if (e.key === 'Escape') this.nativePopover = null; });
+            document.addEventListener('keydown', (e) => { if (pcKeys.is(e, 'Escape')) this.nativePopover = null; });
             if (this.nativeEdit) document.addEventListener('keydown', (e) => this.onNativeKey(e));
             // A locked calendar ignores a double-click on a day: say why (as classic does).
             document.addEventListener('dblclick', (e) => {
@@ -1765,6 +1824,7 @@ const CalendarVueApp = {
             if (button === null) { if (ask.cancel) ask.cancel(); this._nativeMoveToast = null; }
             else (button || ask.options[ask.choice]).action();
             if (this._nativeMoveToast) this.nativeMoveToast();   // a drop that asked first: its toast now
+            if (this.nativeCard) this.$nextTick(() => this.nativeCardRefresh());   // (what changed elsewhere while it asked)
             if (c && c.closeAfterAsk && this.nativeCard === c && !this.nativeAsk) this.closeNativeCard();
         },
 
@@ -1885,9 +1945,11 @@ const CalendarVueApp = {
             const rec = this.nativeRecord(series);
             rec.RecurrenceID = rec.Id;
             ScheduleAdapter.noteStart(rec);
-            const shift = nativeShift(from.start, to.start), stretch = nativeShift(from.end, to.end);
+            // A series in its own zone moves by that zone's days and minutes (its repeat days are that zone's).
+            const z = this.nativeCardZone({ tz: rec.Tz, isAllDay: rec.IsAllDay });
+            const shift = nativeShift(from.start, to.start, z), stretch = nativeShift(from.end, to.end, z);
             return { ...rec, StartTime: shift(rec.StartTime), EndTime: stretch(rec.EndTime),
-                RecurrenceRule: nativeShiftRule(rec.RecurrenceRule, from.start, to.start) };
+                RecurrenceRule: nativeShiftRule(rec.RecurrenceRule, from.start, to.start, z) };
         },
         /**
          * Save an "all events" change (record: the series' record as it should be). A series with skipped dates or
@@ -2038,24 +2100,35 @@ const CalendarVueApp = {
         //   kind 'row': a single event or an edited occurrence (its own row); 'occ': one occurrence of a series, not yet
         //   asked "this event / all events"; 'series': the whole series (asked, or opened from a search result).
 
-        /** A stored row (or one occurrence of it) as the card's value. All day: the first and the LAST day, at local midnight. */
+        /** A stored row (or one occurrence of it) as the card's value. All day: the first and the LAST day, at midnight here. */
         nativeCardValue(row, occurrence) {
             const rec = this.nativeRecord(row);
-            const allDay = !!rec.IsAllDay;
+            const value = { title: rec.Subject || '', type: Number(rec.Type) || 1, description: rec.Description || '', isAllDay: !!rec.IsAllDay, rule: rec.RecurrenceRule || '', tz: rec.Tz || '' };
             let start = new Date(occurrence ? occurrence.start : rec.StartTime), end = new Date(occurrence ? occurrence.end : rec.EndTime);
-            if (allDay) {
-                start = new Date(start.getFullYear(), start.getMonth(), start.getDate());
-                const exclusive = !end.getHours() && !end.getMinutes() && !end.getSeconds() && !end.getMilliseconds();
-                end = new Date(end.getFullYear(), end.getMonth(), end.getDate() - (exclusive ? 1 : 0));
+            if (value.isAllDay) {
+                // (Dates: read and made in this browser's wall clock, cardKit, never a local Date built from parts.)
+                const here = EventZone.localZone(), s = cardKit.wallOf(start, here), e = cardKit.wallOf(end, here);
+                const exclusive = !cardKit.minutesOf(e) && !e.getUTCSeconds() && !e.getUTCMilliseconds();
+                start = cardKit.instantOf(cardKit.startOfDay(s), here);
+                end = cardKit.instantOf(cardKit.addDays(cardKit.startOfDay(e), exclusive ? -1 : 0), here);
                 if (end < start) end = new Date(start);
             }
-            return { title: rec.Subject || '', type: Number(rec.Type) || 1, description: rec.Description || '', isAllDay: allDay, start, end, rule: rec.RecurrenceRule || '' };
+            return { ...value, start, end };
         },
-        /** The card's start / end in the shapes classic's records carry (an all-day end: the next local midnight). */
+        // ---- The card's start and end are instants. It shows and edits them as wall clock values in the event's own zone
+        // (services/EventZone.js), or this browser's (EventCard wv, cardKit): "2:00 PM" typed with Tokyo picked means
+        // 2 PM in Tokyo, and 2:30 AM in Tokyo exists on the day Los Angeles springs forward (stress S01).
+        /** The event's own zone for a card value's times, or null (none, or all day: dates are dates). */
+        nativeCardZone(v) { return v && v.tz && !v.isAllDay && typeof EventZone !== 'undefined' ? EventZone.validZone(v.tz) : null; },
+        /** The instants a card value stands for (all day: the first and the last day's midnights, here). */
+        nativeCardInstants(v) { return { start: new Date(v.start), end: new Date(v.end) }; },
+        /** The same instants, shown in zone `tz` ('' = this browser's own). */
+        nativeCardRezone(v, tz) { return { ...v, tz: tz || '' }; },
+        /** The card's start / end in the shapes classic's records carry (an all-day end: the next midnight here). */
         nativeCardTimes(v) {
             if (!v.isAllDay) return { StartTime: new Date(v.start), EndTime: new Date(v.end) };
-            const s = new Date(v.start), e = new Date(v.end);
-            return { StartTime: new Date(s.getFullYear(), s.getMonth(), s.getDate()), EndTime: nativeEnd(new Date(e.getFullYear(), e.getMonth(), e.getDate(), 23, 59, 59, 999), true) };
+            const here = EventZone.localZone(), day = (x, n) => cardKit.instantOf(cardKit.addDays(cardKit.startOfDay(cardKit.wallOf(x, here)), n), here);
+            return { StartTime: day(v.start, 0), EndTime: day(v.end, 1) };
         },
         /** The fields a change touched, as record fields. */
         nativeCardFields(before, after) {
@@ -2065,7 +2138,10 @@ const CalendarVueApp = {
             if (!same(before.type, after.type)) out.Type = Number(after.type) || 1;
             if (!same(before.description, after.description)) out.Description = after.description;
             if (!same(before.rule, after.rule)) out.RecurrenceRule = after.rule || '';
-            if (!same(before.start, after.start) || !same(before.end, after.end) || before.isAllDay !== after.isAllDay) Object.assign(out, { IsAllDay: !!after.isAllDay }, this.nativeCardTimes(after));
+            if ((before.tz || '') !== (after.tz || '')) out.Tz = after.tz || '';
+            // (Compared as instants: the same time shown in another zone is not a change of time.)
+            const a = this.nativeCardInstants(before), b = this.nativeCardInstants(after);
+            if (!same(a.start, b.start) || !same(a.end, b.end) || before.isAllDay !== after.isAllDay) Object.assign(out, { IsAllDay: !!after.isAllDay }, this.nativeCardTimes(after));
             return out;
         },
         nativeCardClone(v) { return { ...v, start: new Date(v.start), end: new Date(v.end) }; },
@@ -2085,12 +2161,12 @@ const CalendarVueApp = {
             const kind = this.nativeKind(row), series = this.nativeSeriesOf(row);
             let target, value;
             if (kind === 'series' && series && occurrence && occurrence.start) {
-                target = { kind: 'occ', id: series.id, recurrenceID: null, seriesId: series.id, occurrence: { start: new Date(occurrence.start), end: new Date(occurrence.end) } };
+                target = { kind: 'occ', id: series.id, recurrenceID: null, seriesId: series.id, occurrence: { start: new Date(occurrence.start), end: new Date(occurrence.end) }, series: this.nativeSeriesTimes(series) };
                 value = { ...this.nativeCardValue(series, occurrence), rule: series.recurrencerule || '' };
             } else if (kind === 'series') {
-                target = { kind: 'series', id: row.id, recurrenceID: null, seriesId: row.id, occurrence: null };
+                target = { kind: 'series', id: row.id, recurrenceID: null, seriesId: row.id, occurrence: null, series: this.nativeSeriesTimes(row) };
                 value = this.nativeCardValue(row);
-                target.occurrence = { start: new Date(value.start), end: new Date(value.end) };
+                target.occurrence = this.nativeCardInstants(value);
             } else {
                 target = { kind: 'row', id: row.id, recurrenceID: row.recurrenceID ?? null, seriesId: kind === 'edited' && series ? series.id : null, occurrence: null };
                 value = this.nativeCardValue(row);
@@ -2102,10 +2178,10 @@ const CalendarVueApp = {
         },
         /** A new event from a click or drag on the grid (or N): a draft until Done. */
         openNativeNewCard({ start, end, isAllDay, jsEvent, full = false }) {
-            const s = new Date(start), e = new Date(end);
-            const value = { title: '', type: 1, description: '', isAllDay: !!isAllDay, rule: '',
-                start: isAllDay ? new Date(s.getFullYear(), s.getMonth(), s.getDate()) : s,
-                end: isAllDay ? (() => { const x = new Date(e.getTime() - 1); return new Date(x.getFullYear(), x.getMonth(), x.getDate()); })() : e };
+            // (All day: the first and the last day's midnights here, read in this browser's wall clock.)
+            const here = EventZone.localZone(), day = (x) => cardKit.instantOf(cardKit.startOfDay(cardKit.wallOf(x, here)), here);
+            const value = { title: '', type: 1, description: '', isAllDay: !!isAllDay, rule: '', tz: '',
+                start: isAllDay ? day(start) : new Date(start), end: isAllDay ? day(new Date(end).getTime() - 1) : new Date(end) };
             if (value.isAllDay && value.end < value.start) value.end = new Date(value.start);
             const r = jsEvent && jsEvent.clientX != null ? { left: jsEvent.clientX, top: jsEvent.clientY, width: 1, height: 1, right: jsEvent.clientX + 1, bottom: jsEvent.clientY + 1 } : null;
             this.showNativeCard({ isNew: true, full, target: { kind: 'new' }, value, canRepeat: true, anchor: { testid: 'draft-block', rect: r }, returnTo: null });
@@ -2132,6 +2208,9 @@ const CalendarVueApp = {
             const c = this.nativeCard;
             if (!c) return;
             if (meta && meta.details && !c.isNew) return this.nativeCardDetails(patch, meta.details);
+            // Another time zone keeps the date and clock time shown and means them in that zone (as Google Calendar
+            // does): Wed 9 AM with Tokyo picked is Wed 9 AM in Tokyo. The card sends the new tz with the start and end
+            // that now mean (EventCard change).
             const before = this.nativeCardClone(c.value), after = { ...before, ...patch };
             // Whether people categorize events at all (classic sends it too).
             if ('type' in patch && Number(patch.type) !== Number(before.type)) this.onNativeColor();
@@ -2139,7 +2218,7 @@ const CalendarVueApp = {
             if (!Object.keys(this.nativeCardFields(before, after)).length) { c.value = after; return; }
             if (c.target.kind === 'occ') {
                 // A repeat belongs to the whole series; anything else asks first, once ("this event" is the default).
-                if ('rule' in patch) return this.nativeCardWrite('all', before, after, message);
+                if ('rule' in patch || 'tz' in patch) return this.nativeCardWrite('all', before, after, message);
                 this.nativeAskScope('Edit recurring event', () => this.nativeCardWrite('this', before, after, message),
                     () => this.nativeCardWrite('all', before, after, message), 'OK', () => { if (this.nativeCard === c) c.value = before; });
                 return;
@@ -2193,7 +2272,7 @@ const CalendarVueApp = {
                         if (this.nativeAction('eventChange', { changedRecords: [{ ...rec, Description: theirs }] }, { action: 'Save' })) this.showToast('Their details are back', 'success');
                     }
                 } });
-            } else this.showToast('Details saved', 'success', { actionLabel: 'Undo', action: () => this.nativeUndo() });
+            }
         },
         /**
          * A details session's first undo entry takes on what each later save in it wrote: an undo takes back only what
@@ -2208,6 +2287,11 @@ const CalendarVueApp = {
                 if (k) Object.assign(k.wrote, u.wrote);
             }
         },
+        /** A series' own start and end (ms), as the card last saw them: how far another browser moved it since. */
+        nativeSeriesTimes(series) {
+            const r = this.nativeCardInstants(this.nativeCardValue(series));
+            return { start: r.start.getTime(), end: r.end.getTime() };
+        },
         /** The event changed in another browser while the card is open: the card shows it (the box being typed in waits). */
         nativeCardRefresh() {
             const c = this.nativeCard;
@@ -2216,12 +2300,32 @@ const CalendarVueApp = {
             const row = this.nativeStored(t.kind === 'row' ? { id: t.id, recurrenceID: t.recurrenceID } : { id: t.seriesId });
             if (!row) return this.nativeCardGone(t.kind !== 'row' || (t.seriesId != null && !this.nativeStored({ id: t.seriesId })));
             const v = this.nativeCardValue(row), cur = c.value;
-            const next = t.kind === 'row' ? v : { ...cur, title: v.title, type: v.type, description: v.description, rule: v.rule };
+            let next = t.kind === 'row' ? v : { ...this.nativeCardRezone(cur, v.tz), title: v.title, type: v.type, description: v.description, rule: v.rule };
+            if (t.kind !== 'row' && this.nativeCardFollow(t, row)) next = { ...this.nativeCardValue(row, t.occurrence), rule: v.rule };
             if (Object.keys(this.nativeCardFields(cur, next)).length) c.value = next;
+        },
+        /**
+         * An occurrence (or series) card whose series was moved elsewhere since the card last saw it ("all events" in
+         * another browser): the occurrence on the card moves with it, by as much on the clock (as nativeSeriesMoved
+         * moves it), so a save lands on its slot as it is now (stress F02). Returns a function that moves a card value's
+         * times the same way, or null when the series has not moved.
+         */
+        nativeCardFollow(t, series) {
+            const was = t.series, now = this.nativeSeriesTimes(series);
+            t.series = now;
+            if (!was || !t.occurrence || (was.start === now.start && was.end === now.end)) return null;
+            const z = this.nativeCardZone(this.nativeCardValue(series));
+            const s = nativeShift(was.start, now.start, z), e = nativeShift(was.end, now.end, z);
+            t.occurrence = { start: s(t.occurrence.start), end: e(t.occurrence.end) };
+            return (v) => ({ ...v, start: s(v.start), end: e(v.end) });
         },
         nativeCardWrite(scope, before, after, message) {
             const c = this.nativeCard;
             if (!c || !this.nativeCanEdit()) return;
+            // The series moved while a question was open (the card does not follow it then): this change moves with it.
+            const now = scope !== 'row' && c.target.kind !== 'row' ? this.nativeStored({ id: c.target.seriesId }) : null;
+            const move = now ? this.nativeCardFollow(c.target, now) : null;
+            if (move) { before = move(before); after = move(after); }
             const snapshot = { target: { ...c.target }, value: before, canRepeat: c.canRepeat };
             const ids = new Set((this.calendar.events || []).map((e) => e && String(e.id)));
             const fields = this.nativeCardFields(before, after);
@@ -2238,10 +2342,12 @@ const CalendarVueApp = {
                 if (!series) return this.nativeCardGone();
                 let rec = this.nativeRecord(series);
                 delete fields.RecurrenceRule;
-                const seriesId = rec.Id;
-                rec = this.nativeCardApply(rec, { Subject: after.title, Type: Number(after.type) || 1, Description: after.description, IsAllDay: !!after.isAllDay,
-                    ...this.nativeCardTimes(after), ...fields });
-                Object.assign(rec, { Id: NATIVE_OCCURRENCE_ID, RecurrenceID: seriesId });
+                // The occurrence as this change began: the series as it is NOW (renamed elsewhere meanwhile, say) at
+                // this slot's times, noted; then only the fields this change changed. The card's whole value carried
+                // what it showed when it opened, and a stale title went into the new row (stress S04).
+                Object.assign(rec, { Id: NATIVE_OCCURRENCE_ID, RecurrenceID: rec.Id, ...this.nativeCardTimes(before) });
+                ScheduleAdapter.noteStart(rec);
+                rec = this.nativeCardApply(rec, fields);
                 ok = this.nativeAction('eventChange', { changedRecords: [rec] }, { action: 'EditOccurrence', occurrenceStart: c.target.occurrence.start });
                 if (ok) {
                     // Its new row, or (someone else saved "This event" on this slot first) the slot's row it updated.
@@ -2261,11 +2367,16 @@ const CalendarVueApp = {
                 let moved = this.nativeRecord(series);
                 moved.RecurrenceID = moved.Id;
                 ScheduleAdapter.noteStart(moved);
-                if (timed) {
+                if (timed && 'Tz' in fields && !!before.isAllDay === !!after.isAllDay) {
+                    // Another zone: the series' own dates and clock times, meant in the new zone (its repeat days too).
+                    const oz = this.nativeCardZone(before) || EventZone.localZone(), nz = this.nativeCardZone(after) || EventZone.localZone();
+                    const re = (d) => EventZone.unfloating(EventZone.floating(new Date(d).getTime(), oz), nz);
+                    moved = { ...moved, StartTime: re(moved.StartTime), EndTime: re(moved.EndTime) };
+                } else if (timed) {
                     moved = this.nativeCardApply(this.nativeSeriesMoved(series, { start: from.StartTime, end: from.EndTime }, { start: to.StartTime, end: to.EndTime }),
                         { IsAllDay: !!after.isAllDay });
                 }
-                for (const f of ['Subject', 'Type', 'Description', 'RecurrenceRule']) if (f in fields) moved[f] = fields[f];
+                for (const f of ['Subject', 'Type', 'Description', 'RecurrenceRule', 'Tz']) if (f in fields) moved[f] = fields[f];
                 this.nativeSaveSeries(series, moved, {
                     timing: timed || 'RecurrenceRule' in fields,
                     // (Switching All day changes what a stamp names: kept stamps stay as they are.)
@@ -2276,7 +2387,8 @@ const CalendarVueApp = {
                     if (this.nativeCard !== c) return;
                     if (asked) c.keepOccurrences = keepOccurrences;   // asked once per card
                     if (done) {
-                        c.target = { kind: 'series', id: series.id, recurrenceID: null, seriesId: series.id, occurrence: { start: new Date(after.start), end: new Date(after.end) } };
+                        const saved = this.nativeStored({ id: series.id }) || series;
+                        c.target = { kind: 'series', id: series.id, recurrenceID: null, seriesId: series.id, occurrence: this.nativeCardInstants(after), series: this.nativeSeriesTimes(saved) };
                         this.nativeCardSaved(c, snapshot, after, message);
                     } else c.value = before;
                 });
@@ -2293,7 +2405,8 @@ const CalendarVueApp = {
             c.value = this.nativeCardClone(after);
             c.edited = 'Edited just now';
             this._nativeGlow = `event-${c.target.id}`;
-            if (!this._nativeDetailsQuiet) this.showToast(message, 'success', { actionLabel: 'Undo', action: () => this.nativeUndo() });
+            // No toast: the change is on screen and the event glows once; ⌘Z undoes. Toasts are for what you can't see
+            // happen (a delete, someone else's edit, an error).
         },
         /** The event (or its whole series) went away under the card (deleted in another browser): close it. */
         nativeCardGone(series = false) {
@@ -2320,7 +2433,7 @@ const CalendarVueApp = {
             }
         },
         /** Done (or a click outside): a new event is added; an existing one keeps what was saved. */
-        nativeCardDone({ title, description, smart } = {}) {
+        nativeCardDone({ title, description } = {}) {
             const c = this.nativeCard;
             if (!c) return;
             // The last change (a title saved as the card closes) is still asking "this event / all events": close
@@ -2329,32 +2442,17 @@ const CalendarVueApp = {
             if (!c.isNew) return this.closeNativeCard();
             const v = c.value;
             const name = (title != null ? title : v.title || '').trim();
-            if (!name && !smart) { track(a => a.editorAbandoned()); return this.closeNativeCard(); }   // no title: nothing was meant
+            const details = description != null ? description : v.description || '';
+            // Nothing entered at all: nothing was meant. Anything entered (details, a type, a repeat) is kept, untitled
+            // as "(No title)", as the editor and quick add save it (stress F03).
+            if (!name && !details.trim() && !v.rule && (Number(v.type) || 1) === 1) { track(a => a.editorAbandoned()); return this.closeNativeCard(); }
             const ids = new Set((this.calendar.events || []).map((e) => e && String(e.id)));
             const ok = this.nativeAction('eventCreate', { addedRecords: [{ Subject: name || '(No title)', ...this.nativeCardTimes(v), IsAllDay: !!v.isAllDay,
-                Type: Number(v.type) || 1, Description: description != null ? description : v.description || '', RecurrenceRule: v.rule || '' }] }, { action: 'Add' });
+                Type: Number(v.type) || 1, Description: details, RecurrenceRule: v.rule || '', ...(v.tz ? { Tz: v.tz } : {}) }] }, { action: 'Add' });
             this.closeNativeCard();
             if (!ok) return;
             const row = (this.calendar.events || []).find((e) => e && !ids.has(String(e.id)));
             this._nativeGlow = row ? `event-${row.id}` : null;
-            if (smart && row) {
-                // The time came from the title: say so, and Undo puts back the title as typed and the time it had.
-                const when = v.isAllDay ? '' : ` · ${cardKit.fmtDate(v.start, { weekday: 'short' })} ${this.nativeRange(v.start, v.end)}`;
-                this.showToast(`Added ${name}${when}`, 'success', { actionLabel: 'Undo', action: () => {
-                    const now = this.nativeStored({ id: row.id, recurrenceID: row.recurrenceID });
-                    if (!now) return;
-                    const rec = this.nativeRecord(now);
-                    ScheduleAdapter.noteStart(rec);
-                    if (this.nativeAction('eventChange', { changedRecords: [{ ...rec, Subject: smart.raw.trim(), StartTime: new Date(smart.base.start), EndTime: new Date(smart.base.end) }] }, { action: 'Save' })) this.showToast('Undone', 'success');
-                } });
-            } else this.showToast(`Added ${name || '(No title)'}`, 'success', { actionLabel: 'Undo', action: () => this.nativeUndo() });
-        },
-        /** "5 – 6 PM", "11 AM – 1 PM", "17:00 – 18:00". */
-        nativeRange(a, b) {
-            const f = this.globalSettings.timeFormat === '24' ? '24' : '12';
-            const s = cardKit.fmtTime(a, f, true), e = cardKit.fmtTime(b, f, true);
-            if (f === '12' && s.slice(-2) === e.slice(-2)) return `${s.slice(0, -3)} – ${e}`;
-            return `${s} – ${e}`;
         },
         /** Cancel (or Escape): every change since the card opened is taken back; a new event is dropped. No Undo for that. */
         nativeCardCancel() {
@@ -2370,7 +2468,6 @@ const CalendarVueApp = {
                 undid++;
             }
             this.closeNativeCard();
-            if (undid) this.showToast('Changes undone', 'info');
         },
         closeNativeCard() {
             const c = this.nativeCard;
@@ -2409,17 +2506,21 @@ const CalendarVueApp = {
             const c = this.nativeCard;
             if (!c || c.isNew) return;
             const v = this.nativeCardClone(c.value);
-            const next = { ...v, start: cardKit.addDays(v.start, 1), end: cardKit.addDays(v.end, 1), rule: '' };
+            // The next day on the event's own wall clock (its zone, or this browser's).
+            const W = cardKit.zoneOf(v), nextDay = (x) => cardKit.instantOf(cardKit.addDays(cardKit.wallOf(x, W), 1), W);
+            const next = { ...v, start: nextDay(v.start), end: nextDay(v.end), rule: '' };
             const ids = new Set((this.calendar.events || []).map((e) => e && String(e.id)));
             const snapshot = { target: { ...c.target }, value: v, canRepeat: c.canRepeat };
-            const ok = this.nativeAction('eventCreate', { addedRecords: [{ Subject: v.title || '(No title)', ...this.nativeCardTimes(next), IsAllDay: !!v.isAllDay,
-                Type: Number(v.type) || 1, Description: v.description || '', RecurrenceRule: '' }] }, { action: 'Add' });
+            const t = c.target, src = this.nativeStored(t.kind === 'row' ? { id: t.id, recurrenceID: t.recurrenceID } : { id: t.seriesId });
+            if (!src) return this.nativeCardGone(t.kind !== 'row');
+            const ok = this.nativeAction('eventCreate', { addedRecords: [this.nativeCopyRecord(src, { ...this.nativeCardTimes(next), IsAllDay: !!v.isAllDay })] }, { action: 'Add' });
             const row = ok && (this.calendar.events || []).find((e) => e && !ids.has(String(e.id)));
             if (!row) return;
             c.target = { kind: 'row', id: row.id, recurrenceID: null, seriesId: null, occurrence: null };
             c.canRepeat = true;
             c.anchor = { testid: `event-${row.id}`, rect: null };
-            const when = v.isAllDay ? cardKit.fmtDate(next.start) : `${cardKit.fmtDate(next.start, { weekday: 'short' })} ${cardKit.fmtTime(next.start, this.globalSettings.timeFormat === '24' ? '24' : '12', true)}`;
+            const ns = cardKit.wallOf(next.start, W);
+            const when = v.isAllDay ? cardKit.fmtDate(ns) : `${cardKit.fmtDate(ns, { weekday: 'short' })} ${cardKit.fmtTime(ns, this.globalSettings.timeFormat === '24' ? '24' : '12', true)}`;
             this.nativeCardSaved(c, snapshot, next, `Duplicated to ${when}`);
             this.$nextTick(() => { c.place++; });
         },
@@ -2435,10 +2536,39 @@ const CalendarVueApp = {
             this.openNativePopover(payload);
         },
         /** A drop, a resize or an arrow key: saved as before (onNativeMove), then said in a toast with Undo, and the event settles. */
+        /** Right-click on an event: its card opens, and the card's menu (Duplicate, Delete) at the pointer. */
+        onNativeEventMenu(payload) {
+            if (!(this.nativeEdit && this.canEdit && !this.isReadOnly)) return;
+            this.openNativeCard(payload);
+            this.$nextTick(() => this.$refs.eventCard && this.$refs.eventCard.menuAt(payload.x, payload.y));
+        },
+        /** Option/Alt-drag: a copy where it was dropped, as one event (a repeating event's copy doesn't repeat); the original stays. */
+        nativeDropCopy(payload) {
+            const row = this.nativeStored({ id: payload.event.id, recurrenceID: payload.event.recurrenceID });
+            if (!row) return;
+            const ids = new Set((this.calendar.events || []).map((e) => e && String(e.id)));
+            const ok = this.nativeAction('eventCreate', { addedRecords: [this.nativeCopyRecord(row, { StartTime: new Date(payload.start), EndTime: new Date(payload.end) })] }, { action: 'Add' });
+            const copy = ok && (this.calendar.events || []).find((e) => e && !ids.has(String(e.id)));
+            if (copy) this._nativeGlow = `event-${copy.id}`;
+        },
+        /**
+         * A new event's record copying a stored row: every field (EventStore.copy) but its id and its repeat (a repeating
+         * event's copy is one event), at `times` ({ StartTime, EndTime }, maybe IsAllDay). Duplicate and an Option-drag
+         * both copy through here, so a field the event has is never left behind (stress S03: the drag copy lost its zone).
+         */
+        nativeCopyRecord(row, times) {
+            const copy = EventStore.copy(row);
+            if (!String(copy.title || '').trim()) copy.title = '(No title)';
+            const rec = ScheduleAdapter.toView([copy])[0];
+            for (const k of ['Id', '_storedStart', '_storedEnd', '_shownEnd', '_storedRule', '_storedException', '_gridRule']) delete rec[k];
+            return { ...rec, ...times };
+        },
         onNativeMoveSaved(payload) {
+            if (payload.copy) return this.nativeDropCopy(payload);
             const len = this.store().undoStack.length;
             const f = this.globalSettings.timeFormat === '24' ? '24' : '12';
-            const s = new Date(payload.start), e = new Date(payload.end);
+            // (Said in this browser's wall clock, as the grid shows it.)
+            const here = EventZone.localZone(), s = cardKit.wallOf(payload.start, here), e = cardKit.wallOf(payload.end, here);
             const msg = payload.mode === 'resize' ? (payload.allDay ? `Ends ${cardKit.fmtDate(new Date(e.getTime() - 1))}` : `Ends ${cardKit.fmtTime(e, f, true)}`)
                 : payload.mode === 'resize-top' ? `Starts ${cardKit.fmtTime(s, f, true)}`
                     : `Moved to ${cardKit.fmtDate(s, { weekday: 'short' })}${payload.allDay ? '' : ' ' + cardKit.fmtTime(s, f, true)}`;
@@ -2453,7 +2583,6 @@ const CalendarVueApp = {
             this._nativeMoveToast = null;
             if (this.store().undoStack.length <= p.len) return;
             this._nativeGlow = `event-${p.id}`;
-            this.showToast(p.msg, 'success', { actionLabel: 'Undo', action: () => this.nativeUndo() });
             this.$nextTick(() => {
                 const els = document.querySelectorAll(`.nc [data-testid="event-${p.id}"]`);
                 if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) els.forEach((el) => { el.classList.remove('nc-settle'); void el.offsetWidth; el.classList.add('nc-settle'); });
@@ -2473,6 +2602,7 @@ const CalendarVueApp = {
             if ((e.metaKey || e.ctrlKey) && k === 'd' && c && !c.isNew) { e.preventDefault(); this.nativeCardDuplicate(); return; }
             if (e.metaKey || e.ctrlKey || e.altKey) return;
             if ((e.key === 'Delete' || e.key === 'Backspace') && c && !c.isNew) { e.preventDefault(); this.nativeCardDelete(); return; }
+            if (e.key === '?') { e.preventDefault(); this.nativeKeys = true; this.$nextTick(() => document.querySelector('[data-testid="shortcuts-close"]')?.focus()); return; }
             if (c || !cal) return;
             if (k === 'n') {
                 e.preventDefault();
@@ -2490,7 +2620,7 @@ const CalendarVueApp = {
         },
         /** Tab stays inside the open question. */
         nativeAskTrap(e) {
-            if (e.key !== 'Tab') return;
+            if (!pcKeys.is(e, 'Tab')) return;
             const items = [...e.currentTarget.querySelectorAll('button, input')].filter((x) => x.offsetParent !== null);
             if (!items.length) return;
             const i = items.indexOf(document.activeElement);
@@ -3401,8 +3531,12 @@ const CalendarVueApp = {
         // Apply theme based on user preference and system settings
         applyTheme() {
             let isDark = false;
+            // ?theme=light|dark (an embed matching its host page) wins, as in index.html's first-paint script.
+            const forced = (() => { try { return new URLSearchParams(location.search).get('theme'); } catch (e) { return null; } })();
 
-            if (this.globalSettings.darkMode === 'auto') {
+            if (forced === 'light' || forced === 'dark') {
+                isDark = forced === 'dark';
+            } else if (this.globalSettings.darkMode === 'auto') {
                 // Use system preference
                 isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
             } else {
@@ -3410,10 +3544,14 @@ const CalendarVueApp = {
                 isDark = this.globalSettings.darkMode === 'dark';
             }
 
-            document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
-            this.swapSyncfusionTheme(isDark);
+            // The page's colors and the calendar's stylesheet change together: while the other theme's sheet is
+            // loading (seconds on a slow first fetch) the page keeps the theme the calendar is drawn in. Setting
+            // data-theme first painted the dark page around Syncfusion's light buttons -- white pills in the classic
+            // toolbar -- until the sheet arrived.
+            const setPage = () => document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+            this.swapSyncfusionTheme(isDark, setPage);
         },
-        swapSyncfusionTheme(dark) {
+        swapSyncfusionTheme(dark, done = () => {}) {
             // One self-hosted stylesheet per theme (scripts/build-vendor.sh), pinned to the
             // same Syncfusion version as the JS. index.html already loaded the right one
             // before first paint, so this is normally a no-op; it only works when the user
@@ -3421,15 +3559,16 @@ const CalendarVueApp = {
             // loaded: pointing the existing <link> at a new href drops the old rules first,
             // leaving the page unstyled (and Syncfusion measuring a collapsed grid) until
             // the new file arrives.
+            // `done` sets the page's own theme (data-theme), once this sheet is the one in force.
             const link = document.getElementById('syncfusion-theme');
-            if (!link) return;
             // A switch whose sheet is still loading is stale once the setting changes again
             // (light -> dark -> light before the dark file arrives): drop it, or its late onload
             // swaps in the wrong theme and leaves two sheets claiming the id.
-            if (this._themeLoading) { this._themeLoading.onload = null; this._themeLoading.remove(); this._themeLoading = null; }
+            if (this._themeLoading) { this._themeLoading.onload = this._themeLoading.onerror = null; this._themeLoading.remove(); this._themeLoading = null; }
+            if (!link) { done(); return; }   // (the native calendar: no Syncfusion sheet)
             const file = dark ? 'material-dark.css' : 'material.css';
             const url = new URL(link.href, location.href);
-            if (url.pathname.endsWith('/' + file)) return;
+            if (url.pathname.endsWith('/' + file)) { done(); return; }
             url.pathname = url.pathname.replace(/[^/]+$/, file);
             const next = link.cloneNode();
             next.removeAttribute('id');
@@ -3440,8 +3579,11 @@ const CalendarVueApp = {
                 this._themeLoading = null;
                 link.remove();
                 next.id = 'syncfusion-theme';
+                done();
                 if (window.scheduleObj) window.scheduleObj.refreshLayout();
             };
+            // The sheet never came (offline): the page follows the setting anyway, on the calendar's old colors.
+            next.onerror = () => { if (this._themeLoading !== next) return; this._themeLoading = null; next.remove(); done(); };
             link.after(next);
         },
 
@@ -3840,7 +3982,10 @@ const CalendarVueApp = {
             try { sessionStorage.setItem('pc_tpl_open', this.templatesOpen ? '1' : '0'); } catch (e) { /* this page view only */ }
         },
 
+        /** Back up to the calendar (from a template card in the tour below it). */
+        scrollToCalendar() { try { window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); } catch (e) { window.scrollTo(0, 0); } },
         pickTemplate(id) {
+            this.tplMore = false;   // the guide panel's line folds back to 'Template: X · Start blank · Other templates…'
             if (this.template && this.template.id === id) return;
             this.applyTemplate(id);
         },
@@ -3988,9 +4133,16 @@ const CalendarVueApp = {
                 this.calendar.id = slug;
             }
 
-            // normalize
+            // normalize. A name typed here is trimmed (once, now: from then on the name is exact everywhere); one that
+            // came from the address ("/royal%20city%20", a draft saved where it was opened) is kept as it is.
+            if (this.userHasEditedSlug && slug.trim()) slug = slug.trim();
             slug = SlugManager.normalizeSlug(slug);
             this.calendar.id = slug;
+            this.slugTaken = null;
+            this.slugProblem = '';
+            // A name the server would refuse: said now, beside the name, not after a request that can't work.
+            const problem = SlugManager.nameProblem(slug);
+            if (problem) { this.slugProblem = problem; return; }
 
             // Whether the name was chosen or just accepted is the whole naming
             // question -- a claim of an untouched generated id is not evidence
@@ -4009,6 +4161,15 @@ const CalendarVueApp = {
             }, () => {
                 // does not exist, proceed
                 this.isLoading = true;
+                // Not saved (refused, a server error, offline): the page is usable again and says so where Save was.
+                const failed = ({ status, code, offline } = {}) => {
+                    this.isLoading = false;
+                    if (status === 409) { this.offerSlugAlternatives(slug); return; }   // claimed by someone else just now
+                    this.slugProblem = offline ? 'Not saved: you’re offline. Try again when you’re connected.'
+                        : status === 400 ? 'That name won’t work. Try another.'
+                            : 'Not saved: pastecal had a problem. Try again in a moment.';
+                    track(a => a.track('slug_claim_failed', { where: 'calendar_url', reason: code || String(status || 'unknown') }));
+                };
                 // Template ids ("tpl-team-3") mean something only on the draft. Saved, each event gets an id
                 // of its own, or two calendars made from one template would share iCal UIDs in a subscriber's app.
                 if (this.calendar.events.some(e => CalendarTemplates.templateOf(e))) {
@@ -4046,9 +4207,9 @@ const CalendarVueApp = {
                     this.recentCalendars = this.recentManager.getAll();
                     this.showToast('Calendar saved', 'success');
                     try { sessionStorage.setItem('pastecal_open_share', slug); } catch (e) { /* the links are still under Share */ }
-                    window.location.href = "/" + slug;
-                });
-            });
+                    window.location.href = CalendarPath.of(slug);   // encoded: "a?b" is not "/a" + a query (A04)
+                }, { onError: failed });
+            }, () => { this.slugProblem = 'Couldn’t reach pastecal to check that name. Check your connection and try again.'; });
         },
 
         // The desktop name box is as wide as the name, so its dashed underline ends where the name does
@@ -4080,8 +4241,20 @@ const CalendarVueApp = {
                 this.printQr = '';
                 // The QR opens the subscribe page (this phone's calendar app, one tap); the printed text is the view link.
                 const scan = this.subscribePageURL() || view;
+                // The QR library loads late (loadQr). Printed before it has, the page has no code and no "Scan" line
+                // (index.html: both on printQr); asking now means the next print has it.
                 if (scan && typeof qrcode === 'function') { const q = qrcode(0, 'M'); q.addData(scan.replace(/\?.*$/, '')); q.make(); this.printQr = q.createSvgTag({ cellSize: 3, margin: 0, scalable: true }); }
+                else this.loadQr();
             } catch (e) { /* print without the footer extras */ }
+        },
+        /** The small QR library for the printed page: loaded once the page is idle (mounted), or at a print before then. */
+        loadQr() {
+            try {
+                if (typeof qrcode === 'function' || document.getElementById('pc-qr-lib')) return;
+                const sc = document.createElement('script');
+                sc.id = 'pc-qr-lib'; sc.src = '/vendor/qrcode-generator-1.4.4/qrcode.js'; sc.async = true;
+                document.head.appendChild(sc);
+            } catch (e) { /* no QR, still prints */ }
         },
 
         // The month being looked at, as weeks of days with their events (repeats expanded), for the printed page.
@@ -4161,6 +4334,7 @@ const CalendarVueApp = {
         handleSlugInput() {
             this.userHasEditedSlug = true;
             this.slugTaken = null;
+            this.slugProblem = '';
         },
 
         // Show "taken" and up to 3 alternatives that are actually free. The message is up
@@ -4201,57 +4375,6 @@ const CalendarVueApp = {
             this.userHasEditedSlug = false;
         },
 
-        renameCalendar() {
-            if (!this.newCalendarId || !this.newCalendarId.trim()) return;
-
-            let newId = this.newCalendarId.trim();
-            // basic validation (alphanumeric, hyphens)
-            if (!newId.match(/^[a-zA-Z0-9_\-]+$/)) {
-                alert("That name won’t work. Use letters, numbers, dashes and underscores.");
-                return;
-            }
-
-            // Check if current name is same as new name
-            if (newId.toLowerCase() === this.calendar.id.toLowerCase()) {
-                alert("That’s already this calendar’s name.");
-                return;
-            }
-
-            CalendarDataService.checkExists(newId, () => {
-                alert("That name is already taken.");
-            }, () => {
-                // Does not exist, proceed
-                if (confirm(`Move calendar to pastecal.com/${newId}?`)) {
-                    // Create copy with new ID
-                    let newCalendar = JSON.parse(JSON.stringify(this.calendar));
-                    newCalendar.id = newId;
-                    newCalendar.title = newCalendar.title || "New Calendar";
-
-                    const oldId = this.calendar.id;
-                    // Lets the server move the read-only view to the new id (see
-                    // PublicViewService.followRename); without it the view stays bound to
-                    // the old copy and its link and ICS feed stop updating.
-                    newCalendar.options = { ...(newCalendar.options || {}), renamedFrom: oldId };
-
-                    // A copy: this browser did not create the original.
-                    CalendarDataService.createWithId(newId, newCalendar, () => {
-                        // We don't delete the old one (safer, acts as a copy), but the
-                        // recents entry has to move: leaving both would list a stale copy
-                        // alongside the live calendar with no way to tell them apart.
-                        const previous = this.recentManager.getAll()
-                            .find(item => item.id === oldId);
-                        this.recentManager.remove(oldId);
-                        // Renaming your own calendar keeps it yours.
-                        this.recentManager.add(newId, newCalendar.title, !!previous?.mine);
-                        if (previous?.pinned) this.recentManager.togglePin(newId);
-                        this.recentCalendars = this.recentManager.getAll();
-
-                        window.location = "/" + newId;
-                    }, { asCreator: false });
-                }
-            });
-        },
-
         setTitle(event) {
             if (event.target.value.trim()) {
                 this.editTitle = false;
@@ -4275,6 +4398,31 @@ const CalendarVueApp = {
         // would let the echo through anyway.
         // `replace` skips the merge: used when local is known to be wrong (a refused
         // write's recovery), where merging would keep exactly the damage being undone.
+        // What the calendar watcher compares to tell a remote apply from a local edit in the same batch: the events AND the
+        // calendar's own fields (a keystroke in the notes landing with a snapshot is an edit too).
+        calendarSignature() {
+            return JSON.stringify([this.calendar.events || [], this.calendar.title ?? '', this.calendar.options || {}]);
+        },
+        // The calendar as a snapshot left it: called after applyRemoteCalendar AND again once the subscription callback
+        // has filled in this tab's defaults (ensureCalendarOptionsDefaults, initializeLocalSettings), so neither the
+        // watcher (an idle tab writes nothing) nor the merge (a default never outranks someone's saved value) takes
+        // those defaults for the person's edits.
+        noteRemoteApplied() {
+            this.remoteAppliedSignature = this.calendarSignature();
+            this.appliedMeta = JSON.parse(JSON.stringify({ title: this.calendar.title ?? '', options: this.calendar.options || {} }));
+        },
+        // A local change to the calendar: which of its own fields the person changed (metaDirty), for the next merge.
+        noteMetaEdits() {
+            const was = this.appliedMeta;
+            if (!was) return;
+            const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+            const now = { title: this.calendar.title ?? '', options: this.calendar.options || {} };
+            if (!same(now.title, was.title)) this.metaDirty.title = true;
+            for (const k of new Set([...Object.keys(now.options), ...Object.keys(was.options || {})])) {
+                if (!same(now.options[k], (was.options || {})[k])) this.metaDirty[k] = true;
+            }
+            this.appliedMeta = JSON.parse(JSON.stringify(now));
+        },
         applyRemoteCalendar(c, { replace = false } = {}) {
             this.isApplyingRemote = true;
             try {
@@ -4298,6 +4446,21 @@ const CalendarVueApp = {
                     c = { ...c, events: CalendarDataService._mergeEvents(
                         base, this.calendar.events, incoming) };
                 }
+                // The title and every option the same way, field by field: the notes being typed (unsaved, inside the
+                // save debounce) are never replaced by another person's snapshot (stress A01).
+                const baseMeta = CalendarDataService._previousSeenMeta && CalendarDataService._previousSeenMeta[this.calendar.id];
+                if (!replace && baseMeta && typeof CalendarDataService.mergeMeta === 'function') {
+                    const dirty = this.metaDirty || {};
+                    const merged = CalendarDataService.mergeMeta(baseMeta, { title: this.calendar.title, options: this.calendar.options },
+                        { title: c.title, options: c.options }, (field) => !!dirty[field]);
+                    // A field the server now holds as this tab has it is saved: no longer this tab's to keep.
+                    const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
+                    if (same(merged.title, c.title)) delete dirty.title;
+                    for (const k of Object.keys(dirty)) if (k !== 'title' && same((merged.options || {})[k], (c.options || {})[k])) delete dirty[k];
+                    c = { ...c, title: merged.title, options: merged.options };
+                } else if (replace) {
+                    this.metaDirty = {};
+                }
                 this.calendar.import(c);
             } finally {
                 // Record what the calendar looks like immediately after the import. The
@@ -4305,7 +4468,7 @@ const CalendarVueApp = {
                 // local edit landing in the same batch as a remote snapshot would
                 // otherwise be skipped along with it and never reach the server -- a new
                 // data-loss bug in the fix for the old one.
-                this.remoteAppliedSignature = JSON.stringify(this.calendar.events || []);
+                this.noteRemoteApplied();
                 this.$nextTick(() => { this.isApplyingRemote = false; });
             }
         },
@@ -4330,13 +4493,18 @@ const CalendarVueApp = {
             return `Type ${index + 1}`;   // not the color's name: "Sky" told people nothing
         },
 
+        /** A time of day as this person reads clocks (Settings > Time format): "5:00 AM", or "05:00" in 24-hour time. */
+        clockTime(h, m = 0) {
+            const mm = String(m).padStart(2, '0');
+            return this.globalSettings.timeFormat === '24' ? `${String(h).padStart(2, '0')}:${mm}` : `${h % 12 || 12}:${mm} ${h < 12 ? 'AM' : 'PM'}`;
+        },
+
         // The Week/Day corner toggle for the hours before the start hour (see renderCell).
         earlyHoursLabel() {
             const start = this.globalSettings.startHour || '05:00';
             const hour = parseInt(start, 10) || 0;
             if (!hour) return { text: '', title: '' };   // nothing is hidden
-            const at = this.globalSettings.timeFormat === '24'
-                ? start : `${hour % 12 || 12} ${hour < 12 ? 'AM' : 'PM'}`;
+            const at = this.globalSettings.timeFormat === '24' ? this.clockTime(hour) : `${hour % 12 || 12} ${hour < 12 ? 'AM' : 'PM'}`;
             return this.calendar?.options?.extended
                 ? { text: 'Hide early', title: `Hide the hours before ${at}` }
                 : { text: 'Earlier', title: `Show the hours before ${at}` };
@@ -4346,7 +4514,7 @@ const CalendarVueApp = {
         updateCurrentViewURL() {
             if (!this.calView) return;
             const currentView = this.calView.currentView();
-            const currentDate = this.calView.selectedDate().toISOString().slice(0, 10);
+            const currentDate = Utils.localDay(this.calView.selectedDate());   // the day on screen, not its UTC date (A06)
 
             // Map display name to URL parameter
             let viewParam;
@@ -4380,12 +4548,12 @@ const CalendarVueApp = {
         // Owner-only — returns null in read-only mode so a forgotten v-if can't leak the edit id.
         getEditableURL() {
             if (this.isReadOnly) return null;
-            return `${window.location.origin}/${this.calendar.id}`;
+            return window.location.origin + CalendarPath.of(this.calendar.id);
         },
 
         getEditableICSURL() {
             if (this.isReadOnly) return null;
-            return `${window.location.origin}/${this.calendar.id}.ics`;
+            return window.location.origin + CalendarPath.feed(CalendarPath.of(this.calendar.id));
         },
 
         getReadOnlyICSURL() {
@@ -4399,6 +4567,7 @@ const CalendarVueApp = {
          * editable feed would spread write access further than anyone intended.
          */
         getSubscribeICSURL() {
+            if (this.viewProblem) return null;   // a view link that isn't a calendar: nothing to add
             // No fallback to the editable feed: these URLs go to Google, Microsoft and the OS,
             // so without a read-only link the subscribe buttons hide (their v-if) instead.
             const own = this.getReadOnlyICSURL();
@@ -4407,8 +4576,9 @@ const CalendarVueApp = {
             // feed is the address being viewed, plus .ics.
             if (!this.viewRoute) return null;
             const parts = stripBase(window.location.pathname).split('/').filter(Boolean);
-            if (atViewSlug() && parts.length === 2) return `${window.location.origin}/${parts.map(encodeURIComponent).join('/').replace(/^%40/, '@')}.ics`;
-            return parts[0] === 'view' && parts[1] ? `${window.location.origin}/view/${encodeURIComponent(parts[1])}.ics` : null;
+            const name = (p) => { try { return decodeURIComponent(p); } catch (e) { return p; } };
+            if (atViewSlug() && parts.length === 2) return window.location.origin + CalendarPath.feed(CalendarPath.at(name(parts[0]).replace(/^@/, ''), name(parts[1])));
+            return parts[0] === 'view' && parts[1] ? window.location.origin + CalendarPath.feed(CalendarPath.view(name(parts[1]))) : null;
         },
 
         /**
@@ -4474,20 +4644,23 @@ const CalendarVueApp = {
             if (this.creatingReadOnly) return;
             this.creatingReadOnly = true;
             try { await SlugManager.createReadOnlyLink(this.calendar, { autoCreate: true }); }
-            catch (e) { this.showToast('Couldn’t create the link. Try again in a moment.', 'error'); }
+            catch (e) { this.showToast(`Couldn’t create the link. ${(e && e.userMessage) || 'Try again in a moment.'}`, 'error'); }
             finally { this.creatingReadOnly = false; }
         },
 
-        customizeExistingLink() {
-            if (!this.readOnlySlugInput.trim()) return;
-
-            // Use SlugManager for centralized read-only link operations
-            SlugManager.customizeReadOnlyLink(this.calendar, this.readOnlySlugInput.trim())
-                .then(() => {
-                    // Clear the input and hide the form
-                    this.readOnlySlugInput = '';
-                    this.showReadOnlySlug = false;
-                });
+        /** Share's Rename for the view-only link. Anything that stops it is said beside the name box (viewRenameError). */
+        async customizeExistingLink() {
+            const name = this.readOnlySlugInput.trim();
+            if (!name) return;
+            this.viewRenameError = SlugManager.viewNameProblem(name, SlugManager.getReadOnlySlug(this.calendar)) || '';
+            if (this.viewRenameError) return;
+            try {
+                await SlugManager.customizeReadOnlyLink(this.calendar, name);
+                this.readOnlySlugInput = '';
+                this.showReadOnlySlug = false;
+            } catch (e) {
+                this.viewRenameError = (e && e.userMessage) || SlugManager.linkErrorMessage(e);
+            }
         },
 
         getReadOnlySlug() {
@@ -4532,16 +4705,16 @@ const CalendarVueApp = {
          *  All three open the view-only calendar. */
         shareViewURL() {
             const n = this.shareNames, origin = window.location.origin;
-            if (n && n.handle && n.atName) return `${origin}/@${n.handle}/${encodeURIComponent(n.atName)}`;
-            if (n && n.shortNames.length) return `${origin}/${encodeURIComponent(n.shortNames[0])}`;
+            if (n && n.handle && n.atName) return origin + CalendarPath.at(n.handle, n.atName);
+            if (n && n.shortNames.length) return origin + CalendarPath.of(n.shortNames[0]);
             return this.getReadOnlyURL();
         },
         /** Share's "Other links": the calendar's other view-only addresses, listed compactly under the main one. */
         otherViewLinks() {
             const n = this.shareNames, origin = window.location.origin, main = this.shareViewURL();
             const all = [];
-            if (n && n.handle && n.atName) all.push(`${origin}/@${n.handle}/${encodeURIComponent(n.atName)}`);
-            if (n) for (const s of n.shortNames) all.push(`${origin}/${encodeURIComponent(s)}`);
+            if (n && n.handle && n.atName) all.push(origin + CalendarPath.at(n.handle, n.atName));
+            if (n) for (const s of n.shortNames) all.push(origin + CalendarPath.of(s));
             const view = this.getReadOnlyURL();
             if (view) all.push(view);
             return all.filter((u) => u !== main);
@@ -4562,21 +4735,16 @@ const CalendarVueApp = {
             clearInterval(this.updateLinkTimer);
         },
 
-        copyToClipboard(target) {
-            target.select();
-            document.execCommand('copy');
-        },
-
         // ============================================================
         // REGION: Events & Search Management
         // ============================================================
 
         searchEvents() {
             if (this.searchQuery.trim() !== '') {
-                // A title or its details (classic and native alike), ignoring case.
-                const q = this.searchQuery.toLowerCase();
+                // A title or its details (classic and native alike), ignoring case and accents ("cafe" finds "Café").
+                const q = Utils.searchFold(this.searchQuery);
                 this.searchResults = this.calendar.events.filter(event =>
-                    String(event.title || '').toLowerCase().includes(q) || String(event.description || '').toLowerCase().includes(q)
+                    Utils.searchFold(event.title).includes(q) || Utils.searchFold(event.description).includes(q)
                 );
 
                 // sort results by newest first
@@ -4722,7 +4890,44 @@ const CalendarVueApp = {
         },
 
         jumpToEvent(event) {
-            if (this.calView) this.calView.goTo({ date: new Date(event.start), view: 'Week' });
+            // A repeating event: the occurrence the result shows (searchList.when), not the week the series began.
+            const o = this.searchList.when && this.searchList.when[event.id];
+            if (this.calView) this.calView.goTo({ date: o ? o.start : new Date(event.start), view: 'Week' });
+        },
+
+        /**
+         * Each repeating event's next occurrence after `now` (else its latest before it), as the calendar draws it
+         * (CalendarView.occurrences: skipped and moved dates applied, a rule too big to expand shown once), within a
+         * year either side: { [id]: { start, end, allDay } }. {} before the calendar is up.
+         */
+        seriesOccurrences(series, now) {
+            const out = {};
+            if (!series.length || !this.calView) return out;
+            this.viewTick;   // dependency: recompute when the grid re-renders
+            const ids = new Set(series.map(e => String(e.id)));
+            let occ = [];
+            try { occ = this.calView.occurrences(now - 366 * 864e5, now + 366 * 864e5) || []; } catch (e) { return out; }
+            const next = {}, last = {};
+            for (const o of occ) {
+                const ev = o.event;
+                if (!ev || ev.recurrenceID || !ids.has(String(ev.id))) continue;
+                const id = ev.id, e = new Date(o.end).getTime(), s = new Date(o.start).getTime();
+                if (e > now) { if (!next[id] || s < next[id].start.getTime()) next[id] = { start: new Date(s), end: new Date(e), allDay: o.allDay }; }
+                else if (!last[id] || s > last[id].start.getTime()) last[id] = { start: new Date(s), end: new Date(e), allDay: o.allDay };
+            }
+            for (const id of Object.keys({ ...last, ...next })) out[id] = next[id] || last[id];
+            return out;
+        },
+
+        /** A search result's "when": a repeating event's occurrence from searchList.when, else its stored dates. */
+        searchWhen(event) {
+            const o = this.searchList.when && this.searchList.when[event.id];
+            if (!o) return this.formatEventRange(event);
+            if (!o.allDay) return this.formatEventRange({ ...event, start: o.start.toISOString(), end: o.end.toISOString() });
+            // An all-day occurrence comes as local days (its end inclusive or exclusive): as stored all-day dates.
+            const utcDay = (d) => new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())).toISOString();
+            const lastDay = new Date(o.end.getTime() - 1);
+            return this.formatEventRange({ ...event, start: utcDay(o.start), end: utcDay(new Date(lastDay.getFullYear(), lastDay.getMonth(), lastDay.getDate() + 1)) });
         },
 
         toggleRecents() {
@@ -4830,6 +5035,13 @@ const CalendarVueApp = {
             return !!this.sideTab;
         },
 
+        /** A person's click that may open a side panel tab: where it came from (header, menu, tabs, share, paused,
+         *  logo_menu). The sideTab watcher counts the open once (panel_opened); opens nobody clicked (a pinned panel, a
+         *  restored tab) are never counted. Cleared after the click either way. */
+        viaPanel(via) {
+            this._panelVia = via;
+            setTimeout(() => { this._panelVia = null; }, 0);
+        },
         /** A tab in the side panel's row. Picking the open tab leaves it open. */
         openSideTab(id) {
             if (this.sideTab === id) return;
@@ -5099,7 +5311,7 @@ const CalendarVueApp = {
                 day: 'numeric',
                 hour: 'numeric',
                 minute: 'numeric',
-                hour12: true
+                hour12: this.globalSettings.timeFormat !== '24'   // the chosen time format, as everywhere else
             };
             return new Date(dateString).toLocaleString(undefined, options);
         },
@@ -5202,6 +5414,7 @@ const CalendarVueApp = {
             const calendarId = this.calendar.id;
             if (!this.isExisting || !calendarId) {
                 this.undoEntries = [];
+                this.undoLoadFailed = false;
                 return this.undoEntries;
             }
             try {
@@ -5344,6 +5557,7 @@ const CalendarVueApp = {
                 });
 
                 this.undoEntries = this.collapseSessions(detailed.filter(Boolean)).slice(0, 10);
+                this.undoLoadFailed = false;
                 // An old calendar may predate the lastEditedAt stamp; the log still knows.
                 const newest = this.undoEntries[0];
                 if (newest && newest.savedAt > (this.lastEditedAt || 0)) {
@@ -5351,8 +5565,10 @@ const CalendarVueApp = {
                     this.refreshRelativeTimes();
                 }
             } catch (err) {
-                // Never let a failed read break the settings panel.
+                // Never let a failed read break the settings panel. It is said (Activity: "Couldn't load the changes";
+                // Cmd+Z: a toast), never shown as "nothing has changed".
                 console.warn('[app] could not load undo history', err);
+                if (seq === this._undoLoadSeq) this.undoLoadFailed = true;
             }
             return this.undoEntries;
         },
@@ -5502,15 +5718,7 @@ const CalendarVueApp = {
          */
         sameEvent(a, b) {
             if (!a || !b) return false;
-            const norm = (v) => (v === undefined || v === null || v === '') ? null : v;
-            const when = (v) => Event.toISOStringOrNull(v);
-            return norm(a.title) === norm(b.title)
-                && when(a.start) === when(b.start) && when(a.end) === when(b.end)
-                && norm(a.description) === norm(b.description)
-                && String(a.type ?? 1) === String(b.type ?? 1)
-                && !!a.isAllDay === !!b.isAllDay
-                && norm(a.recurrencerule) === norm(b.recurrencerule)
-                && norm(a.recurrenceException) === norm(b.recurrenceException);
+            return EventStore.same(a, b);   // every field of the one list, on meaning
         },
 
         /** What turned `before` into `after`, in the same shape the server records. */
@@ -5789,19 +5997,8 @@ const CalendarVueApp = {
          * meaningful differs. Firebase drops empty values, so compare normalized.
          */
         describeEventDiff(from, to) {
-            const norm = (v) => (v === undefined || v === null || v === '') ? null : v;
-            const parts = [];
-            if (norm(from.title) !== norm(to.title)) {
-                parts.push(to.title && to.title.trim() ? `renamed to "${to.title}"` : 'title cleared');
-            }
-            if (norm(from.start) !== norm(to.start) || norm(from.end) !== norm(to.end)) {
-                parts.push(`moved to ${this.describeEventTime(to)}`);
-            }
-            if (norm(from.description) !== norm(to.description)) parts.push('notes changed');
-            if (String(from.type ?? 1) !== String(to.type ?? 1)) parts.push('color changed');
-            if (!!from.isAllDay !== !!to.isAllDay) parts.push(to.isAllDay ? 'made all-day' : 'given a time');
-            if (norm(from.recurrencerule) !== norm(to.recurrencerule)) parts.push('repeat changed');
-            return parts.length ? parts.join(', ') : null;
+            // Every field of the one list (EventStore.RECORD) has its words there (EventStore.CHANGE_WORDS).
+            return EventStore.describeChange(from, to, (e) => this.describeEventTime(e));
         },
 
         /**
@@ -6058,10 +6255,13 @@ const CalendarVueApp = {
             }
         },
 
-        saveGlobalSettings() {
+        /** e: the change event of a Settings field (a person's change, counted as settings:<field>); none for the
+         *  first visit's automatic import, which used to count every new visitor as a Settings use. */
+        saveGlobalSettings(e) {
             try {
                 localStorage.setItem('pastecal_global_settings', JSON.stringify(this.globalSettings));
-                track(a => a.featureUsed('settings'));
+                const field = e && e.target && String(e.target.id || e.target.getAttribute('aria-label') || '').replace(/^set-/, '').replace(/\W+/g, '_').toLowerCase();
+                if (field) track(a => a.featureUsed(`settings:${field}`));
                 console.log('Global settings saved to localStorage');
             } catch (error) {
                 console.warn('Failed to save settings to localStorage:', error);
@@ -6457,6 +6657,7 @@ const CalendarVueApp = {
             if (method) track(a => a.calendarShared(method));
             const done = () => {
                 this.copiedKey = key;
+                Utils.announce('Copied to clipboard');   // the button's "Copied" is seen; this is heard
                 clearTimeout(this._copiedTimer);
                 this._copiedTimer = setTimeout(() => { this.copiedKey = null; }, 1600);
             };
@@ -6476,33 +6677,6 @@ const CalendarVueApp = {
             };
             const p = navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(text) : Promise.reject(new Error('no clipboard'));
             p.then(done).catch(() => (legacy() ? done() : fail()));
-        },
-
-        copyToClipboard(textToCopy, buttonElement, method) {
-            if (!textToCopy) {
-                this.showToast('Nothing to copy', 'error');
-                return;
-            }
-
-            if (method) track(a => a.calendarShared(method));
-
-            navigator.clipboard.writeText(textToCopy).then(() => {
-                const originalContent = buttonElement.innerHTML;
-                const checkIcon = `<svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>`;
-                buttonElement.innerHTML = `${checkIcon} Copied`;
-                buttonElement.classList.add('bg-theme-success');
-
-                setTimeout(() => {
-                    buttonElement.innerHTML = originalContent;
-                    buttonElement.classList.remove('bg-theme-success');
-                                    }, 1500); // Revert after 1.5 seconds
-
-            }).catch(err => {
-                console.error('Failed to copy: ', err);
-                this.showToast('Couldn’t copy the link', 'error');
-            });
         },
 
         // Normalize boolean-ish values coming from external sources
@@ -6575,7 +6749,7 @@ const CalendarVueApp = {
                 return;
             }
             ProInsightIntent.set(id, 'stats');
-            window.location.href = '/' + encodeURIComponent(id);
+            window.location.href = CalendarPath.of(id);
         },
         /** Has this calendar had its one free trial? Only so the Go Pro card doesn't offer one it can't have. */
         async refreshProTrial() {
@@ -6689,6 +6863,8 @@ const CalendarVueApp = {
             this.$refs.toast.display(message, type, options);
         },
 
+        reloadPage() { location.reload(); },
+
         /** Open the change history, refreshing it first so the list is never stale. */
         async openRecentChanges() {
             if (this.isExisting) await this.loadUndoEntries();   // a draft has no history yet
@@ -6738,7 +6914,7 @@ const CalendarVueApp = {
             this._handledUndo.push({ at: this.serverNow(), delta: this.deltaBetween(before, this.calendar.events) });
             // The native edit link's card follows the event back (EventCard), and says only "Undone" (no button).
             if (this.nativeEdit) this.nativeAfterUndo();
-            if (!quiet) this.showToast(this.nativeEdit ? 'Undone' : `Undid: ${undone}`, 'success');
+            if (!quiet && !this.nativeEdit) this.showToast(`Undid: ${undone}`, 'success');
             return undone;
         },
 
@@ -6767,6 +6943,7 @@ const CalendarVueApp = {
                     return;
                 }
                 const rows = await this.loadUndoEntries();
+                if (this.undoLoadFailed) { this.showToast('Couldn’t load the changes to undo. Check your connection.', 'error'); return; }
                 const me = CalendarDataService.writerId;
                 for (const row of rows) {
                     const parts = row.parts.filter(p => p.writer && p.writer === me
@@ -6796,6 +6973,8 @@ vueApp.config.errorHandler = (err, instance, info) => {
 };
 // The native calendar's icons, used inside its own templates (a native view link only).
 if (typeof NcIcon !== 'undefined') vueApp.component('nc-icon', NcIcon);
+// Shortcut labels in any template: pcKeys.mod('D') is "⌘D" on a Mac, "Ctrl+D" elsewhere (utils/keys.js).
+vueApp.config.globalProperties.pcKeys = window.pcKeys;
 const app = vueApp
     .component('quick-add-button', QuickAddButton)
     .component('quick-add-dialog', QuickAddDialog)

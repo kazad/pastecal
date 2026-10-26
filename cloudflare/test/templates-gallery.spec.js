@@ -22,8 +22,9 @@ test('"Use this template" starts a draft with it, and a reload keeps it without 
   await page.waitForFunction(() => window.__appMounted && document.querySelector('#app')._vnode.component.proxy.template?.id === 'carpool', null, { timeout: 20_000 });
   expect(new URL(page.url()).search).not.toContain('template=');   // dropped from the address
   expect(await page.evaluate(() => document.querySelector('#app')._vnode.component.proxy.calendar.title)).toBe('School carpool');
-  // the homepage chips stay at seven; gallery-only templates are not chips
-  await expect(page.locator('.pc-tpl-chip')).toHaveCount(T.list().length + 1);   // + Blank
+  // the homepage's template choices stay at seven; gallery-only templates are not among them
+  // (Oct 26 2026: a quiet line in the guide panel on wide screens instead of a chip row above the calendar)
+  await expect(page.getByTestId('templates').locator('[data-testid^="tpl-"]:not([data-testid="tpl-more"]):not([data-testid="tpl-blank"]):not([data-testid="tpl-undo"]):not([data-testid^="tpl-nudge"]):not([data-testid="tpl-toggle"]):not([data-testid="tpl-show-more"])')).toHaveCount(T.list().length);
 });
 
 test('the pages are indexable and listed in the sitemap', async ({ request }) => {

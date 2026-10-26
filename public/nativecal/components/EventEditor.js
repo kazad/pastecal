@@ -265,7 +265,7 @@ const EventEditor = (() => {
     <div class="ne-body">
       <div class="ne-row ne-title-row">
         <label class="ne-field ne-grow"><span>Title</span>
-          <input ref="title" v-model="title" data-testid="editor-title" :placeholder="appLook ? 'Add title' : null" @keydown.enter.prevent="save"></label>
+          <input ref="title" class="pc-field" v-model="title" data-testid="editor-title" :placeholder="appLook ? 'Add title' : null" @keydown.enter.prevent="save"></label>
         <div v-if="!plain" class="ne-color">
           <button class="ne-color-btn" :style="{ background: currentColor }" aria-label="Color" data-testid="editor-color" @click="colorMenu = !colorMenu"><nc-icon name="chevron-down" :size="16" :stroke-width="2.5"></nc-icon></button>
           <div v-if="colorMenu" class="ne-color-menu">
@@ -294,41 +294,41 @@ const EventEditor = (() => {
       </div>
       <div class="ne-row ne-when">
         <label class="ne-field ne-grow"><span>Start</span>
-          <div class="ne-dt"><input type="date" v-model="startDate" data-testid="editor-start-date"><input v-if="!isAllDay" type="time" v-model="startTime" data-testid="editor-start-time"></div></label>
+          <div class="ne-dt"><input type="date" class="pc-field" v-model="startDate" data-testid="editor-start-date"><input v-if="!isAllDay" type="time" class="pc-field" v-model="startTime" data-testid="editor-start-time"></div></label>
         <label class="ne-field ne-grow"><span>End</span>
-          <div class="ne-dt"><input type="date" v-model="endDate" data-testid="editor-end-date"><input v-if="!isAllDay" type="time" v-model="endTime" data-testid="editor-end-time"></div></label>
+          <div class="ne-dt"><input type="date" class="pc-field" v-model="endDate" data-testid="editor-end-date"><input v-if="!isAllDay" type="time" class="pc-field" v-model="endTime" data-testid="editor-end-time"></div></label>
       </div>
       <label class="ne-check"><input type="checkbox" v-model="isAllDay" data-testid="editor-allday"> All day</label>
       <!-- v1: Syncfusion's two columns -- Repeat | Repeat every, then Repeat On | End.
            v2 and the main app: the options stacked under Repeat. Same fields. -->
       <div v-if="!isOccurrence" class="ne-rep">
         <label class="ne-field ne-rep-freq"><span>Repeat</span>
-          <span class="ne-select"><select v-model="freq" data-testid="editor-repeat">
+          <select class="pc-field" v-model="freq" data-testid="editor-repeat">
             <option value="">Never</option><option value="DAILY">Daily</option><option value="WEEKLY">Weekly</option>
-            <option value="MONTHLY">Monthly</option><option value="YEARLY">Yearly</option></select></span></label>
+            <option value="MONTHLY">Monthly</option><option value="YEARLY">Yearly</option></select></label>
         <div v-if="freq" class="ne-repeat" data-testid="editor-repeat-options">
           <label class="ne-field ne-rep-every"><span>Repeat every</span>
-            <div class="ne-inline"><input type="number" min="1" v-model="interval" class="ne-num" data-testid="editor-interval"> {{ unit }}</div></label>
+            <div class="ne-inline"><input type="number" min="1" v-model="interval" class="pc-field ne-num" data-testid="editor-interval"> {{ unit }}</div></label>
           <div v-if="freq === 'WEEKLY'" class="ne-field ne-rep-on"><span>{{ plain ? 'Repeat on' : 'Repeat On' }}</span>
             <div class="ne-days">
               <button v-for="(n, d) in ['S','M','T','W','T','F','S']" :key="d" type="button" :class="{ on: byDay.includes(d) }" :aria-pressed="byDay.includes(d)"
                 :aria-label="dayNames[d]" :data-testid="'editor-day-' + d" @click="toggleDay(d)">{{ n }}</button></div></div>
           <div v-if="freq === 'MONTHLY' || freq === 'YEARLY'" class="ne-field ne-rep-month" data-testid="editor-month-options"><span>{{ freq === 'YEARLY' ? 'On' : (plain ? 'Repeat on' : 'Repeat On') }}</span>
-            <label v-if="freq === 'YEARLY'" class="ne-inline ne-month-pick"><span class="ne-select"><select v-model.number="month" data-testid="editor-month" aria-label="Month">
-              <option v-for="(n, i) in monthNames" :key="i" :value="i + 1">{{ n }}</option></select></span></label>
+            <label v-if="freq === 'YEARLY'" class="ne-inline ne-month-pick"><select class="pc-field" v-model.number="month" data-testid="editor-month" aria-label="Month">
+              <option v-for="(n, i) in monthNames" :key="i" :value="i + 1">{{ n }}</option></select></label>
             <label class="ne-radio"><input type="radio" value="day" v-model="monthMode" data-testid="editor-month-by-day"> Day
-              <input type="number" min="1" max="31" v-model.number="monthDay" class="ne-num" data-testid="editor-month-day" aria-label="Day of the month" @focus="monthMode = 'day'"></label>
+              <input type="number" min="1" max="31" v-model.number="monthDay" class="pc-field ne-num" data-testid="editor-month-day" aria-label="Day of the month" @focus="monthMode = 'day'"></label>
             <label class="ne-radio"><input type="radio" value="weekday" v-model="monthMode" data-testid="editor-month-by-weekday">
-              <span class="ne-select"><select v-model.number="setPos" data-testid="editor-setpos" aria-label="Which week" @focus="monthMode = 'weekday'">
-                <option v-for="p in positions" :key="p[0]" :value="p[0]">{{ p[1] }}</option></select></span>
-              <span class="ne-select"><select v-model.number="posDay" data-testid="editor-posday" aria-label="Weekday" @focus="monthMode = 'weekday'">
-                <option v-for="(n, i) in dayNames" :key="i" :value="i">{{ n }}</option></select></span></label>
+              <select class="pc-field" v-model.number="setPos" data-testid="editor-setpos" aria-label="Which week" @focus="monthMode = 'weekday'">
+                <option v-for="p in positions" :key="p[0]" :value="p[0]">{{ p[1] }}</option></select>
+              <select class="pc-field" v-model.number="posDay" data-testid="editor-posday" aria-label="Weekday" @focus="monthMode = 'weekday'">
+                <option v-for="(n, i) in dayNames" :key="i" :value="i">{{ n }}</option></select></label>
           </div>
           <div class="ne-rep-end">
             <label class="ne-field"><span>End</span>
-              <span class="ne-select"><select v-model="endMode" data-testid="editor-end-mode"><option value="never">Never</option><option value="until">Until</option><option value="count">Count</option></select></span></label>
-            <label v-if="endMode === 'until'" class="ne-field"><span>Until</span><input type="date" v-model="until" data-testid="editor-until"></label>
-            <label v-if="endMode === 'count'" class="ne-field"><span>Occurrences</span><input type="number" min="1" v-model="count" class="ne-num" data-testid="editor-count"></label>
+              <select class="pc-field" v-model="endMode" data-testid="editor-end-mode"><option value="never">Never</option><option value="until">Until</option><option value="count">Count</option></select></label>
+            <label v-if="endMode === 'until'" class="ne-field"><span>Until</span><input type="date" class="pc-field" v-model="until" data-testid="editor-until"></label>
+            <label v-if="endMode === 'count'" class="ne-field"><span>Occurrences</span><input type="number" min="1" v-model="count" class="pc-field ne-num" data-testid="editor-count"></label>
           </div>
         </div>
       </div>

@@ -109,24 +109,61 @@ test('phone: the view link shows the badge and Add to my calendar in its header,
   await ctx.close();
 });
 
-test('embed: a tiny corner credit instead of the footer line', async ({ browser, request }) => {
+// Owner, Oct 26 2026: "make the iframe look better… a single line header… I don't like the floating bottom right
+// pastecal… make it something someone would be proud to embed". An embedded view link gets ONE quiet line: the
+// calendar's name, Add to my calendar (a new tab, never the host page), and pastecal's small mark as the credit.
+// No View only badge, no Make your own, no ⋮ menu, nothing floating over the events. ?theme=light|dark matches the host.
+for (const [w, h] of [[720, 640], [400, 600]]) {
+  for (const scheme of ['light', 'dark']) {
+    test(`embed ${w}px ${scheme}: one header line, the credit in it, nothing floating, nothing leaves the host page`, async ({ browser, request }) => {
+      const { viewId } = await seed(request);
+      const { ctx, page } = await open(browser, `/view/${viewId}?backend=cf&embed`, { width: w, height: h });
+      await page.emulateMedia({ colorScheme: scheme });
+      const bar = page.getByTestId('embed-bar');
+      await expect(bar).toBeVisible();
+      await expect(bar.locator('h1')).toHaveText('Viewer chrome test');
+      const kids = await bar.evaluate((el) => [...el.children].filter((c) => c.getClientRects().length).map((c) => { const r = c.getBoundingClientRect(); return [Math.round(r.top + r.height / 2), Math.round(r.right)]; }));
+      expect(new Set(kids.map(([y]) => Math.round(y / 6))).size, 'everything on one line').toBe(1);
+      expect(Math.max(...kids.map(([, r]) => r)), 'nothing past the right edge').toBeLessThanOrEqual(w);
+      await expect(bar.getByTestId('embed-credit')).toHaveText('pastecal');
+      await expect(bar.getByTestId('embed-credit')).toHaveAttribute('target', '_blank');
+      await expect(bar.getByTestId('view-add-to-cal')).toHaveAttribute('target', '_blank');
+      for (const t of ['view-only-badge', 'view-only-badge-mobile', 'make-own', 'make-own-mobile', 'view-footer', 'mobile-header']) await expect(page.getByTestId(t)).toBeHidden();
+      // Nothing fixed-position over the calendar (the old corner credit sat on the last row's events).
+      expect(await page.evaluate(() => [...document.querySelectorAll('body *')].filter((e) => getComputedStyle(e).position === 'fixed' && e.getClientRects().length && e.getBoundingClientRect().height > 0 && !e.closest('[role=dialog], .pc-toast')).map((e) => e.className))).toEqual([]);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), 'no sideways scroll').toBe(true);
+      await page.screenshot({ path: `snapshots/embed-${w}-${scheme}.png` });
+      await ctx.close();
+    });
+  }
+}
+
+test('embed ?theme=dark and ?theme=light win over the visitor\'s setting', async ({ browser, request }) => {
   const { viewId } = await seed(request);
-  const { ctx, page } = await open(browser, `/view/${viewId}?backend=cf&embed`);
-  await expect(page.getByTestId('embed-credit')).toHaveText('pastecal');
-  await expect(page.getByTestId('view-footer')).toHaveCount(0);
-  await ctx.close();
+  for (const [theme, scheme] of [['dark', 'light'], ['light', 'dark']]) {
+    const { ctx, page } = await open(browser, `/view/${viewId}?backend=cf&embed&theme=${theme}`, { width: 720, height: 640 });
+    await page.emulateMedia({ colorScheme: scheme });
+    await expect(page.getByTestId('embed-bar')).toBeVisible();
+    await page.waitForTimeout(500);
+    expect(await page.evaluate(() => document.documentElement.getAttribute('data-theme'))).toBe(theme);
+    await ctx.close();
+  }
 });
 
-// Was "no pitch on an edit link". Since Oct 25 2026, an edit link someone sent you gets the same one line
-// ("Make one like this"), above the quiet links; a calendar this browser made never does (app-polish.spec.js).
-test('edit link someone sent you: one "Make one like this" line above the quiet links', async ({ browser, request }) => {
+// Was "no pitch on an edit link", then a pitch line above the quiet links. Since Oct 26 2026 (owner: "I don't like
+// the 2 line footer") it is ONE line: the logo, "Make one like this" (a calendar this browser didn't make), Pricing,
+// Privacy, Terms. Help is in the logo menu.
+test('edit link someone sent you: one footer line with "Make one like this" and the quiet links', async ({ browser, request }) => {
   const { id } = await seed(request);
   const { ctx, page } = await open(browser, `/${id}?backend=cf`);
   const footer = page.getByTestId('edit-footer');
   await expect(footer).toBeVisible();
-  await expect(footer.getByRole('link')).toHaveText(['pastecal · Simple shared calendars', 'Pricing', 'Help', 'Privacy', 'Terms']);
+  await expect(footer.getByRole('link')).toHaveText(['pastecal', 'Pricing', 'Privacy', 'Terms']);
   await expect(page.getByText('Make your own')).toHaveCount(0);
-  await expect(page.getByTestId('view-footer-cta')).toHaveText('Make one like this →');
+  await expect(footer.getByTestId('view-footer-cta')).toHaveText('Make one like this →');
+  await expect(page.getByTestId('view-footer')).toHaveCount(0);
+  const rows = await footer.evaluate((el) => new Set([...el.children].filter((c) => c.getClientRects().length).map((c) => Math.round(c.getBoundingClientRect().top / 8))).size);
+  expect(rows, 'the footer is one line on desktop').toBe(1);
   await expect(page.getByTestId('view-only-badge')).toHaveCount(0);
   await ctx.close();
 });
@@ -193,3 +230,63 @@ test('share: Add to calendar app is the view link\'s add page, never the edit li
   expect(await res.text()).toContain('data-testid="subscribe-main"');
   await ctx.close();
 });
+
+// Owner, Oct 26 2026: "the share button changes shape when the side bar is opened for it". The open state
+// (.pc-hdr-on) set square corners on every header button, so the Share pill turned into a rounded rectangle.
+test('Share keeps its pill shape and size while its panel is open; it says it is expanded', async ({ browser, request }) => {
+  const { id } = await seed(request);
+  const { ctx, page } = await open(browser, `/${id}?backend=cf`);
+  await page.emulateMedia({ colorScheme: 'dark' });
+  const share = page.getByTestId('share-pill-more');
+  await expect(share).toBeVisible();
+  const look = () => share.evaluate((el) => { const cs = getComputedStyle(el), r = el.getBoundingClientRect(); return { radius: cs.borderTopLeftRadius, w: Math.round(r.width), h: Math.round(r.height) }; });
+  const closed = await look();
+  await expect(share).toHaveAttribute('aria-expanded', 'false');
+  await page.screenshot({ path: 'snapshots/footer-share-closed-dark.png' });
+  await share.click();
+  await expect(share).toHaveAttribute('aria-expanded', 'true');
+  expect(await look()).toEqual(closed);
+  await page.screenshot({ path: 'snapshots/footer-share-open-dark.png' });
+  await ctx.close();
+});
+
+test('phone: the edit link footer and beta pill wrap cleanly, no sideways scroll', async ({ browser, request }) => {
+  const { id } = await seed(request);
+  const { ctx, page } = await open(browser, `/${id}?backend=cf`, { width: 390, height: 844 });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(page.getByTestId('edit-footer')).toBeVisible();
+  await page.getByTestId('edit-footer').scrollIntoViewIfNeeded();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: 'snapshots/footer-phone-dark.png' });
+  await ctx.close();
+});
+
+// Owner, Oct 26 2026: an embed shows the calendar's notes when it has any: a Notes button in its one line, opening a
+// small panel inside the embed (links open in a new tab); Esc or a click outside closes it.
+for (const [w, h] of [[720, 640], [400, 600]]) {
+  test(`embed ${w}px: Notes opens the calendar's notes in a panel inside the embed; Esc and a click outside close it`, async ({ browser, request }) => {
+    const { viewId } = await seed(request);
+    const { ctx, page } = await open(browser, `/view/${viewId}?backend=cf&embed`, { width: w, height: h });
+    await page.emulateMedia({ colorScheme: 'dark' });
+    const btn = page.getByTestId('embed-notes-btn');
+    await expect(btn).toBeVisible();
+    await expect(btn).toHaveAttribute('aria-expanded', 'false');
+    await btn.click();
+    const panel = page.getByTestId('embed-notes');
+    await expect(panel).toHaveText('Bring water.');
+    await expect(btn).toHaveAttribute('aria-expanded', 'true');
+    const b = await panel.boundingBox();
+    expect(b.x >= 0 && b.x + b.width <= w && b.y + b.height <= h, `the panel stays inside the embed: ${JSON.stringify(b)}`).toBe(true);
+    await page.screenshot({ path: `snapshots/embed-notes-${w}.png` });
+    await page.keyboard.press('Escape');
+    await expect(panel).toHaveCount(0);
+    await btn.click();
+    await expect(panel).toBeVisible();
+    await page.mouse.click(w / 2, h - 40);
+    await expect(panel).toHaveCount(0);
+    // One line still, with the Notes button in it.
+    const tops = await page.getByTestId('embed-bar').evaluate((el) => new Set([...el.children].filter((c) => c.getClientRects().length).map((c) => Math.round((c.getBoundingClientRect().top + c.getBoundingClientRect().height / 2) / 6))).size);
+    expect(tops).toBe(1);
+    await ctx.close();
+  });
+}

@@ -7,8 +7,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const K = require('../../public/nativecal/components/cardKit.js');
 
-const SAT = new Date(2026, 9, 24);   // Saturday Oct 24 2026
-const ymd = (d) => d && `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const SAT = K.wallDate(2026, 9, 24);   // Saturday Oct 24 2026
+// (The card's dates are wall-clock values: Dates whose UTC fields read them, cardKit.wallDate.)
+const ymd = (d) => d && `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
 const hm = (m) => m == null ? null : `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 
 test('parseTime: 12-hour shorthands, 24-hour, noon, bad input', () => {
@@ -31,21 +32,8 @@ test('parseDate: words, weekdays after today, month names, numbers, the referenc
   assert.equal(ymd(K.parseDate('10/20', SAT)), '2026-10-20');
   assert.equal(ymd(K.parseDate('2/3/27', SAT)), '2027-02-03');
   assert.equal(ymd(K.parseDate('2026-12-01', SAT)), '2026-12-01');
-  assert.equal(ymd(K.parseDate('5', SAT, new Date(2026, 11, 9))), '2026-12-05', 'a lone day is in the month shown');
-  for (const bad of ['', 'feb 30', 'someday', '13/1']) assert.equal(K.parseDate(bad, SAT), null, bad);
-});
-
-test('smartParse: times typed into a new title move the event; titles that only look like times do not', () => {
-  const p = (t) => { const r = K.smartParse(t, SAT); return r && { title: t.slice(0, r.at).trim(), day: ymd(r.day), start: hm(r.start), end: hm(r.end) }; };
-  assert.deepEqual(p('Practice Thu 5-6'), { title: 'Practice', day: '2026-10-29', start: '17:00', end: '18:00' });
-  assert.deepEqual(p('Snack run tomorrow 3:30pm'), { title: 'Snack run', day: '2026-10-25', start: '15:30', end: null });
-  assert.deepEqual(p('Game fri 10-11:30'), { title: 'Game', day: '2026-10-30', start: '10:00', end: '11:30' });
-  assert.deepEqual(p('Call 7-9pm'), { title: 'Call', day: null, start: '19:00', end: '21:00' });
-  assert.deepEqual(p('Brunch 11-1pm'), { title: 'Brunch', day: null, start: '11:00', end: '13:00' });
-  assert.deepEqual(p('Lunch at noon'), { title: 'Lunch', day: null, start: '12:00', end: null });
-  assert.deepEqual(p('Practice Thu'), { title: 'Practice', day: '2026-10-29', start: null, end: null });
-  assert.deepEqual(p('Pickup tue 9-1'), { title: 'Pickup', day: '2026-10-27', start: '09:00', end: '13:00' }, 'a day word and no AM/PM: an end before the start is 12 hours on');
-  for (const plain of ['Room 5', 'Grades 3-5', 'Game 7-9', 'Monica', 'Saturn trip', 'Meet Monica', 'Thu', '5pm']) assert.equal(p(plain), null, plain);
+  assert.equal(ymd(K.parseDate('5', SAT, K.wallDate(2026, 11, 9))), '2026-12-05', 'a lone day is in the month shown');
+  for (const bad of ['', 'feb 30', 'someday', '13/13']) assert.equal(K.parseDate(bad, SAT), null, bad);
 });
 
 test('words: times, lengths, ages, ordinals', () => {
@@ -66,8 +54,11 @@ test('words: times, lengths, ages, ordinals', () => {
 });
 
 test('repeat rules: presets in classic\'s form, descriptions, a round trip that keeps every part', () => {
-  const wed = new Date(2026, 9, 21);
-  assert.deepEqual(K.presets(wed).map((p) => p.rule), ['', 'FREQ=WEEKLY;BYDAY=WE;INTERVAL=1;', 'FREQ=WEEKLY;BYDAY=WE;INTERVAL=2;', 'FREQ=MONTHLY;BYMONTHDAY=21;INTERVAL=1;', 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;INTERVAL=1;']);
+  const wed = K.wallDate(2026, 9, 21);
+  assert.deepEqual(K.presets(wed).map((p) => p.rule), ['', 'FREQ=DAILY;INTERVAL=1;', 'FREQ=WEEKLY;BYDAY=WE;INTERVAL=1;', 'FREQ=WEEKLY;BYDAY=WE;INTERVAL=2;',
+    'FREQ=MONTHLY;BYMONTHDAY=21;INTERVAL=1;', 'FREQ=YEARLY;BYMONTHDAY=21;BYMONTH=10;INTERVAL=1;', 'FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;INTERVAL=1;']);
+  // Each one-tap choice is written exactly as the Custom panel (classic's form) would write it.
+  for (const p of K.presets(wed).slice(1)) assert.equal(K.buildRule(K.parseRule(p.rule, wed)), p.rule, p.id);
   assert.equal(K.presetOf('FREQ=WEEKLY;BYDAY=WE;INTERVAL=1', wed), 'week');
   assert.equal(K.presetOf('FREQ=WEEKLY;BYDAY=WE;INTERVAL=1;COUNT=4;', wed), 'custom');
   const d = (r) => K.describeRule(r, wed);
@@ -84,13 +75,13 @@ test('repeat rules: presets in classic\'s form, descriptions, a round trip that 
   const s = K.parseRule('FREQ=DAILY;INTERVAL=1;', wed); s.endMode = 'until'; s.until = '2026-11-01';
   assert.equal(K.buildRule(s), `FREQ=DAILY;INTERVAL=1;UNTIL=${new Date(2026, 10, 1).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "")};`, "UNTIL: that date's local midnight as a UTC stamp, as classic's date picker writes it");
   assert.equal(K.ruleProblem({ ...s, until: '2026-10-01' }, wed, wed, false), 'The repeat ends before the event starts.');
-  assert.match(K.ruleProblem(K.parseRule('FREQ=DAILY;INTERVAL=1;', wed), wed, new Date(2026, 9, 23), false), /longer than the time between/);
+  assert.match(K.ruleProblem(K.parseRule('FREQ=DAILY;INTERVAL=1;', wed), wed, K.wallDate(2026, 9, 23), false), /longer than the time between/);
 });
 
 // Rules classic's repeat editor wrote (Syncfusion 23.2.6 RecurrenceEditor.getRecurrenceRule, read from the running app
 // in Los Angeles, Oct 2026): the Custom panel reads each and, unchanged, writes the same characters back.
 test('classic\'s rules: read into the Custom panel and written back character for character; weekdays in the week\'s order', () => {
-  const thu = new Date(2026, 9, 15, 17, 0);   // Thursday Oct 15 2026, 5 PM
+  const thu = K.wallDate(2026, 9, 15, 17, 0);   // Thursday Oct 15 2026, 5 PM
   const until = new Date(2026, 11, 31).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');   // 20261231T080000Z in LA
   const classic = [
     ['FREQ=YEARLY;BYDAY=MO;BYSETPOS=-1;BYMONTH=10;INTERVAL=1;', 0, 'Yearly on the last Monday of October'],

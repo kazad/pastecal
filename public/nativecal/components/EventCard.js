@@ -10,20 +10,29 @@
  * with a toast and Undo. A new event is not saved until Done (or Enter, or a click outside with a title).
  *
  *   props.card   { key, value, isNew, full, canRepeat, anchor: { testid, rect }, edited, place }
- *                value: { title, type, description, isAllDay, start: Date, end: Date, rule }
- *                (all day: start = local midnight of the first day, end = local midnight of the LAST day)
- *   emits        'change' (patch, message)   'done' ({ title, smart })   'cancel'   'delete'   'duplicate'
+ *                value: { title, type, description, isAllDay, start: Date, end: Date, rule, tz }
+ *                (start, end: instants; all day: the midnights, here, of the first and the LAST day)
+ *                tz: the event's own time zone ('' = each person's own). The card shows and edits the times as WALL
+ *                CLOCK values in that zone (wv: cardKit's Dates whose UTC fields read the date and time), and asks the
+ *                zone whether a time exists (K.exists). It never reads or builds a local Date: the viewer's zone has
+ *                its own DST gaps (stress S01, S02). change() turns wall values back into instants.
+ *   props.calendarZone  the calendar's zone (offered in the time zone list when it is not yours)
+ *   emits        'change' (patch, message)   'done' ({ title, description })   'cancel'   'delete'   'duplicate'
  *                'labels' (names)            'expand'
  */
 const EventCard = (() => {
     const K = (typeof cardKit !== 'undefined' && cardKit) || (typeof window !== 'undefined' && window.cardKit);
+    // (Read when used: services/EventZone.js loads after this file.)
+    const Zf = () => (typeof window !== 'undefined' && window.EventZone) || (typeof EventZone !== 'undefined' && EventZone) || null;
     const MAX = 20000;   // the server's per-field limit (cloudflare/src/CalendarRoom.js LIMITS.maxField)
     const M = 12;        // the gap kept from every edge of the screen
     const PHONE = 760;
     const clone = (v) => ({ ...v, start: new Date(v.start), end: new Date(v.end) });
-    const sameDate = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-    const at = (day, minutes) => new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, minutes);
+    const sameDate = (a, b) => K.sameDate(a, b);
+    const at = (day, minutes) => K.at(day, minutes);
     const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // The card moved, grew or closed: a toast showing keeps clear of it (components/ToastNotification.js place).
+    const moved = () => { if (typeof window !== 'undefined') window.dispatchEvent(new Event('nk-card-moved')); };
     const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), textarea, select, a[href], [tabindex]:not([tabindex="-1"])';
 
     return {
@@ -33,6 +42,7 @@ const EventCard = (() => {
             labels: { type: Array, default: () => [] },
             timeFormat: { type: String, default: '12' },
             firstDayOfWeek: { type: [Number, String], default: 0 },
+            calendarZone: { type: String, default: '' },
             blocked: { type: Boolean, default: false },   // a question is open over the card: keys are its
         },
         emits: ['change', 'done', 'cancel', 'delete', 'duplicate', 'labels', 'expand'],
@@ -40,10 +50,13 @@ const EventCard = (() => {
             return {
                 v: clone(this.card.value), full: !!this.card.full,
                 titleText: this.card.value.title || '', detText: this.card.value.description || '',
-                titleFocus: false, detFocus: false,
+                titleFocus: false, detFocus: false, detEditing: false,
+                // Typed in this card since it opened (or last saved): only these are ever written. An untouched field
+                // follows the event as it changes elsewhere, even with the focus in it (stress F01).
+                titleDirty: false, detDirty: false, titleNote: '',
                 picker: null, pickStyle: {}, menu: false, menuStyle: {},
                 month: null, focusDay: null, custom: null, customError: '', labelNames: null, typed: '', typedBad: false,
-                smart: null, smartSaid: '', showAll: false, clamped: false, pasteNote: '',
+                said: '', showAll: false, clamped: false, pasteNote: '',
                 pos: {}, entering: false, expanding: false, phone: typeof window !== 'undefined' && window.innerWidth <= PHONE,
                 sheetDy: 0, keep: null, closing: false, wide: false, detSession: null, vv: null,
             };
@@ -52,19 +65,58 @@ const EventCard = (() => {
             color() { const p = this.colors.length ? this.colors : ['#3f51b5']; return p[((Number(this.v.type) || 1) - 1) % p.length] || p[0]; },
             typeName() { return this.labels[(Number(this.v.type) || 1) - 1] || `Type ${Number(this.v.type) || 1}`; },
             isNew() { return !!this.card.isNew; },
-            sameDay() { return !this.v.isAllDay && sameDate(this.v.start, this.v.end); },
+            sameDay() { return !this.v.isAllDay && sameDate(this.wv.start, this.wv.end); },
+            /** The end is on the start's day: the same date, or the midnight that ends it (11 PM - 12 AM). */
+            endsSameDay() { return !this.v.isAllDay && K.endsOnStartDay(this.wv.start, this.wv.end); },
+            /** The day an end's clock time is on (K.endDayOf). */
+            endDay() { return K.endDayOf(this.wv.start, this.wv.end); },
             fmt() { return this.timeFormat === '24' ? '24' : '12'; },
+            /** The zone the card's times are in (the event's own, or this browser's). */
+            wz() { return K.zoneOf(this.v); },
+            /**
+             * The value with its start and end as WALL CLOCK values in that zone (cardKit: Dates whose UTC fields read
+             * the date and time). v itself holds the instants. Every date and time choice is made on these; change()
+             * turns them back into instants in the event's zone.
+             */
+            wv() { return { ...this.v, start: K.wallOf(this.v.start, this.wz), end: K.wallOf(this.v.end, this.wz) }; },
+            /** How long the event really is (the instants: across a DST change in its zone, the hours that pass). */
             minutes() { return Math.round((this.v.end - this.v.start) / 60000); },
-            lengthText() { return this.v.isAllDay ? K.fmtDays(K.dayDiff(this.v.start, this.v.end) + 1) : K.fmtLen(this.minutes); },
-            repText() { return K.describeRule(this.v.rule, this.v.start); },
-            zone() {
-                try {
-                    const id = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
-                    const name = new Intl.DateTimeFormat('en-US', { timeZoneName: 'longGeneric' }).formatToParts(new Date()).find((p) => p.type === 'timeZoneName');
-                    return (name && name.value) || id.replace(/_/g, ' ');
-                } catch (e) { return 'Your time zone'; }
+            lengthText() { return this.v.isAllDay ? K.fmtDays(K.dayDiff(this.wv.start, this.wv.end) + 1) : K.fmtLen(this.minutes); },
+            repText() { return K.describeRule(this.v.rule, this.wv.start); },
+            // ---- the time zone line (services/EventZone.js) ----
+            myZone() { return Zf() ? Zf().localZone() : ''; },
+            evZone() { return Zf() && this.v.tz ? Zf().validZone(this.v.tz) || '' : ''; },
+            /** The zone the times are shown in: the event's own, or yours ("Pacific Time", "Japan Time"). */
+            zone() { return (Zf() && Zf().zoneName(this.evZone || this.myZone)) || 'Your time zone'; },
+            /** "10:00 PM – 10:30 PM your time" when the event's zone shows other clock times than yours ("Tue 10:00 PM..." on another day). */
+            yourTime() {
+                const z = this.evZone;
+                if (!z || this.v.isAllDay) return '';
+                const mine = Zf().localZone();
+                const s = K.wallOf(this.v.start, mine), e = K.wallOf(this.v.end, mine);
+                if (s.getTime() === this.wv.start.getTime() && e.getTime() === this.wv.end.getTime()) return '';
+                const day = sameDate(s, this.wv.start) ? '' : `${K.DAY_NAMES[K.weekday(s)].slice(0, 3)} `;
+                const endDay = sameDate(s, e) ? '' : `${K.DAY_NAMES[K.weekday(e)].slice(0, 3)} `;
+                return `${day}${this.t(s, false)} – ${endDay}${this.t(e, false)} your time`;
+            },
+            /** The zone picker's rows: yours first, the calendar's, the event's, the common ones; or what was typed. */
+            zoneOptions() {
+                if (!Zf() || !this.picker || this.picker.kind !== 'tz') return [];
+                const cur = this.evZone;
+                const row = (id, label, sub = '') => ({ id, label, sub, cur: id === cur });
+                const q = this.typed.trim();
+                if (q) return Zf().searchZones(q).map((z) => row(z.id, z.label));
+                const out = [row('', `Use mine (${Zf().zoneName(this.myZone)})`)];
+                const seen = new Set(['', this.myZone]);
+                const cal = Zf().validZone(this.calendarZone);
+                if (cal && !seen.has(cal)) { out.push(row(cal, Zf().zoneLabel(cal), 'Calendar')); seen.add(cal); }
+                if (cur && !seen.has(cur)) { out.push(row(cur, Zf().zoneLabel(cur))); seen.add(cur); }
+                for (const id of Zf().COMMON) if (!seen.has(id)) { out.push(row(id, Zf().zoneLabel(id))); seen.add(id); }
+                return out;
             },
             linked() { return typeof Utils !== 'undefined' && Utils.linkify ? Utils.linkify(this.detText || '', { style: false }) : ''; },
+            /** The full card's details show their links (live) whenever the box is not being edited (no links: the box). */
+            detView() { return this.full && !this.detEditing && !this.detFocus && /<a /.test(this.linked); },
             detCount() { return this.detText.length >= MAX * 0.9 ? `${this.detText.length.toLocaleString('en-US')} / ${MAX.toLocaleString('en-US')}` : ''; },
             max() { return MAX; },
             cls() {
@@ -80,26 +132,27 @@ const EventCard = (() => {
                 }
                 return { ...s, ...this.pos };
             },
-            presets() { return K.presets(this.v.start).map((p) => ({ ...p, text: K.describeRule(p.rule, this.v.start) })); },
-            presetNow() { return K.presetOf(this.v.rule, this.v.start); },
+            presets() { return K.presets(this.wv.start).map((p) => ({ ...p, text: K.describeRule(p.rule, this.wv.start) })); },
+            presetNow() { return K.presetOf(this.v.rule, this.wv.start); },
             timeList() {
                 const kind = this.picker && this.picker.kind;
                 if (kind !== 's' && kind !== 'e') return [];
-                const out = [];
-                for (let m = 0; m < 1440; m += 15) out.push(m);
-                if (kind === 'e') out.push(1440);
-                const startMin = K.minutesOf(this.v.start);
-                const endMin = K.minutesOf(this.v.end);
-                return out.filter((m) => kind === 's' || !this.sameDay || m > startMin).map((m) => {
-                    const cur = kind === 's' ? m === startMin : m === endMin && m !== 1440;
+                const startMin = K.minutesOf(this.wv.start);
+                const endMin = this.endsSameDay && !this.sameDay ? 1440 : K.minutesOf(this.wv.end);
+                // Only clock times that happen that day in the EVENT's zone (its spring-forward day has no 2:00-2:59 AM);
+                // an end on the start's day, after the start (and the midnight that ends the day).
+                const list = kind === 's' ? K.dayTimes(this.wv.start, this.wz)
+                    : [...K.dayTimes(this.endDay, this.wz).filter((m) => !this.endsSameDay || m > startMin), 1440];
+                return list.map((m) => {
+                    const cur = kind === 's' ? m === startMin : m === endMin && (m !== 1440 || this.endsSameDay);
                     // The end on its own date (midnight at the end of a same-day event is the next day's 0:00).
-                    const len = kind === 'e' ? Math.round((at(this.v.end, m) - this.v.start) / 60000) : 0;
+                    const len = kind === 'e' ? Math.round((K.instantOf(at(this.endDay, m), this.wz) - this.v.start) / 60000) : 0;
                     return { m, cur, label: m === 1440 ? `${K.fmtMinutes(0, this.fmt)} (midnight)` : K.fmtMinutes(m, this.fmt), len: len > 0 ? K.fmtLen(len) : '' };
                 });
             },
             lengths() {
-                if (this.v.isAllDay) return [1, 2, 3, 7].map((n) => ({ n, label: K.fmtDays(n), sub: '', cur: n === K.dayDiff(this.v.start, this.v.end) + 1 }));
-                return [15, 30, 45, 60, 90, 120, 180, 240].map((n) => ({ n, label: K.fmtLen(n), sub: `until ${K.fmtTime(new Date(this.v.start.getTime() + n * 60000), this.fmt, true)}`, cur: n === this.minutes }));
+                if (this.v.isAllDay) return [1, 2, 3, 7].map((n) => ({ n, label: K.fmtDays(n), sub: '', cur: n === K.dayDiff(this.wv.start, this.wv.end) + 1 }));
+                return [15, 30, 45, 60, 90, 120, 180, 240].map((n) => ({ n, label: K.fmtLen(n), sub: `until ${K.fmtTime(this.later(n), this.fmt, true)}`, cur: n === this.minutes }));
             },
             cells() { return this.month ? K.monthCells(this.month.y, this.month.m, Number(this.firstDayOfWeek) || 0) : []; },
             weekHeads() { const f = Number(this.firstDayOfWeek) || 0; return [0, 1, 2, 3, 4, 5, 6].map((i) => K.DAY_NAMES[(i + f) % 7]); },
@@ -110,15 +163,20 @@ const EventCard = (() => {
             'card.value'(val, old) {
                 const was = old || {};
                 this.v = clone(val);
-                // What is being typed stays, unless the value itself changed underneath it (an undo, another save).
-                if (!this.titleFocus) this.titleText = val.title || '';   // (nor the title while it is being typed)
-                // The details box is never touched while it has the focus: a change from another browser waits (the
-                // save then keeps what is typed here, and says so: app.js nativeCardChange).
-                if (!this.detFocus) this.detText = val.description || '';
+                // What is being typed stays; a title not typed in follows the event (an undo, another browser's rename).
+                if (!this.titleDirty) this.titleText = val.title || '';
+                this.$nextTick(() => this.growTitle());
+                // The details box is never touched while it is being typed in: a change from another browser waits (the
+                // save then keeps what is typed here, and says so: app.js nativeCardDetails). Untouched, it follows.
+                if (!this.detFocus || !this.detDirty) this.detText = val.description || '';
+                // The rule changed, not from the Custom section (an Undo, another browser, a question answered No): read it.
+                if (this.custom && (val.rule || '') !== (was.rule || '') && (val.rule || '') !== this._customSent) this.readCustom();
                 this.$nextTick(() => { this.grow(); this.fit(); this.measureClamp(); });
             },
             'card.place'() { this.$nextTick(() => this.place(false)); },
             'card.full'(f) { if (f && !this.full) this.expand(); },
+            // A change in the Custom section is saved at once (the same object, changed in place; a new one is a read).
+            custom: { deep: true, handler(now, was) { if (now && now === was) this.applyCustom(); } },
         },
         mounted() {
             this._onKey = (e) => this.onKey(e);
@@ -164,7 +222,7 @@ const EventCard = (() => {
                 if (!v || !this.phone) { this.vv = null; return; }
                 const bottom = Math.max(0, window.innerHeight - (v.offsetTop + v.height));
                 this.vv = bottom > 1 || v.height < window.innerHeight - 1 ? { bottom, height: Math.max(160, v.height - 12) } : null;
-                this.$nextTick(() => { const ta = this.$refs.det; if (ta && document.activeElement === ta) this.keepCaret(ta); });
+                this.$nextTick(() => { this.reveal(document.activeElement); moved(); });
             };
             if (window.visualViewport) { window.visualViewport.addEventListener('resize', this._onVV); window.visualViewport.addEventListener('scroll', this._onVV); }
             this.reset(true);
@@ -183,14 +241,17 @@ const EventCard = (() => {
             const el = this.$refs.card;
             if (el && el.contains(document.activeElement)) document.activeElement.blur();
         },
+        unmounted() { moved(); },
         methods: {
             reset(open) {
                 this._anchorEl = null;
                 this.v = clone(this.card.value); this.full = !!this.card.full;
                 this.titleText = this.card.value.title || ''; this.detText = this.card.value.description || '';
-                this.picker = null; this.menu = false; this.smart = null; this.showAll = false; this.pasteNote = ''; this.keep = null; this.closing = false;
-                this.wide = false; this.detSession = null; clearTimeout(this._detTimer);
+                this.titleDirty = false; this.detDirty = false; this.titleNote = '';
+                this.picker = null; this.menu = false; this.showAll = false; this.pasteNote = ''; this.keep = null; this.closing = false;
+                this.wide = false; this.detSession = null; this.detEditing = false; clearTimeout(this._detTimer); this.custom = null; this.customError = '';
                 this.$nextTick(() => {
+                    this.growTitle();
                     this.place(open);
                     this.grow(); this.measureClamp();
                     // A new event: type the title right away. An existing one: the title too, but not on a phone,
@@ -220,7 +281,7 @@ const EventCard = (() => {
             place(animate) {
                 const c = this.$refs.card;
                 if (!c) return;
-                if (this.phone) { this.pos = {}; this.fit(); if (animate) this.pop(); return; }
+                if (this.phone) { this.pos = {}; this.fit(); if (animate) this.pop(); this.$nextTick(moved); return; }
                 const w = c.offsetWidth, r = this.anchorRect(), sx = window.scrollX, sy = window.scrollY;
                 this.pos = { maxHeight: '', overflowY: '' };
                 c.style.maxHeight = ''; c.style.overflowY = '';
@@ -250,20 +311,32 @@ const EventCard = (() => {
                 // Layout sizes, not the box on screen: the card may be mid-animation (scaled).
                 const h = c.offsetHeight, top = parseFloat(this.pos.top || 0) - window.scrollY;
                 let room = window.innerHeight - top - M;
-                if (h > room && (room < 320 || this.detFocus)) {   // (writing long details: up as far as it takes)
+                if (h > room) {   // (the whole card in view when the window has room for it: details and Done never hidden below the edge)
                     const need = Math.min(h, window.innerHeight - 2 * M), up = Math.max(0, Math.min(top - M, need - room));
                     this.pos = { ...this.pos, top: `${parseFloat(this.pos.top || 0) - up}px` };
                     c.style.top = this.pos.top;
                     room += up;
                 }
                 if (h > room) { c.style.maxHeight = `${room}px`; c.style.overflowY = 'auto'; }
+                moved();
             },
             expand(focus) {
                 if (this.full) return;
                 this.full = true;
                 this.$emit('expand');
                 if (!reduced()) { this.expanding = true; setTimeout(() => { this.expanding = false; }, 260); }
-                this.$nextTick(() => { this.grow(); this.fit(); if (focus && this.$refs[focus]) this.$refs[focus].focus(); });
+                this.$nextTick(() => {
+                    this.grow(); this.fit();
+                    const c = this.$refs.card;
+                    if (focus === 'det' && this.detView) this.editDetails(null);
+                    else if (focus && this.$refs[focus]) this.$refs[focus].focus();
+                    // "More details" pressed (it is gone now): focus goes on to the first field, not to the page.
+                    else if (c && !c.contains(document.activeElement)) { const f = c.querySelector('[data-testid="card-start-date"]'); if (f) f.focus({ preventScroll: true }); }
+                    // A short window: the details in view too, above the footer -- but never at the cost of the event's
+                    // own title, which stays in the sheet (a 360x640 phone scrolled it away, S10); the focused field,
+                    // under the title, stays in view with it. The rest is a scroll away.
+                    this.$nextTick(() => this.reveal(this.detBox(), this.$refs.title || document.activeElement));
+                });
             },
             measureClamp() {
                 const d = this.$refs.qdet;
@@ -272,23 +345,46 @@ const EventCard = (() => {
             // ---- words ---------------------------------------------------------------------------------
             t(d, short = true) { return K.fmtTime(d, this.fmt, short); },
             d(d, o) { return K.fmtDate(d, o); },
-            summary(v = this.v) {
+            summary(v = this.wv) {
                 if (v.isAllDay) return sameDate(v.start, v.end) ? `${K.fmtDate(v.start)} · All day` : `${K.fmtDate(v.start)} – ${K.fmtDate(v.end)} · All day`;
                 if (sameDate(v.start, v.end)) return `${K.fmtDate(v.start)} · ${this.t(v.start)} – ${this.t(v.end)}`;
                 return `${K.fmtDate(v.start)}, ${this.t(v.start)} – ${K.fmtDate(v.end)}, ${this.t(v.end)}`;
             },
             // ---- changes -----------------------------------------------------------------------------
+            /** The wall clock n real minutes after the start (in the event's zone). */
+            later(n) { return K.wallOf(this.v.start.getTime() + n * 60000, this.wz); },
+            /**
+             * A change. Its start and end are wall clock values (from wv): they become instants here, in the zone the
+             * event has after the change. Another time zone alone keeps the date and clock time shown and means them in
+             * that zone (as Google Calendar does): Wed 9 AM with Tokyo picked is Wed 9 AM in Tokyo.
+             */
             change(patch, msg) {
+                patch = { ...patch };
+                if ('tz' in patch && !('start' in patch) && !this.v.isAllDay) Object.assign(patch, { start: this.wv.start, end: this.wv.end });
+                const zone = K.zoneOf({ ...this.v, ...patch });
+                for (const f of ['start', 'end']) if (f in patch) patch[f] = K.instantOf(patch[f], zone);
                 Object.assign(this.v, patch);
                 this.$emit('change', { ...patch }, msg || this.summary());
                 this.$nextTick(() => { this.grow(); this.fit(); });
             },
-            onTitleInput() {
-                if (this.isNew) this.smartApply();
+            onTitleInput(e) {
+                this.titleDirty = true;
+                // The server keeps far more, but a title is a line or three: past 500 characters the rest is left out, and said.
+                if (this.titleText.length > 500) this.titleText = this.titleText.slice(0, 500);
+                this.titleNote = this.titleText.length >= 500 ? 'Titles are limited to 500 characters; the rest was left out.' : '';
+                // One line of text that wraps: a newline (pasted, or dropped in) is a space.
+                if (/[\r\n]/.test(this.titleText)) {
+                    const ta = e && e.target, at = ta ? ta.selectionEnd : null;
+                    this.titleText = this.titleText.replace(/\r\n?|\n/g, ' ');
+                    if (ta && at != null) this.$nextTick(() => { ta.selectionStart = ta.selectionEnd = Math.min(at, this.titleText.length); });
+                }
+                this.$nextTick(() => this.growTitle());
                 if (this.isNew) this.$emit('change', { title: this.titleText }, '');
             },
             commitTitle() {
-                if (this.closing || this.isNew || this.titleText === (this.card.value.title || '')) return;
+                if (this.closing || this.isNew || !this.titleDirty) return;
+                this.titleDirty = false;
+                if (this.titleText === (this.card.value.title || '')) return;
                 this.change({ title: this.titleText }, `Renamed ${this.titleText.trim() || '(No title)'}`);
             },
             titleEnter() {
@@ -297,6 +393,7 @@ const EventCard = (() => {
                 if (this.$refs.title) this.$refs.title.blur();
             },
             onDetInput() {
+                this.detDirty = true;
                 this.grow();
                 this.fit();
                 if (this.isNew) { this.$emit('change', { description: this.detText }, ''); return; }
@@ -313,11 +410,38 @@ const EventCard = (() => {
                 clearTimeout(this._detTimer);
                 const sess = this.detSession;
                 if (this.isNew || !sess) return;
-                const changed = this.detText !== (this.card.value.description || '');
+                const changed = this.detDirty && this.detText !== (this.card.value.description || '');
                 if (changed || final) this.$emit('change', changed ? { description: this.detText } : {}, final ? 'Details saved' : '', { details: { id: sess.id, base: sess.base, final } });
-                if (final) this.detSession = null;
+                if (final) { this.detSession = null; this.detDirty = false; }
             },
             commitDetails() { if (!this.closing) this.saveDetails(true); },
+            /**
+             * The details with live links -> the box, to edit: a click on text puts the caret there, focus (Tab) at the
+             * end. A click on a link only opens it (a new tab; the link's own target and rel).
+             */
+            detDown(e) { if (!(e.target.closest && e.target.closest('a'))) e.preventDefault(); },
+            editDetails(e) {
+                if (e && e.target.closest && e.target.closest('a')) return;
+                const view = this.$refs.detView;
+                let at = null;
+                if (e && view) {
+                    let node = null, off = 0;
+                    if (document.caretPositionFromPoint) { const p = document.caretPositionFromPoint(e.clientX, e.clientY); if (p) { node = p.offsetNode; off = p.offset; } }
+                    else if (document.caretRangeFromPoint) { const r = document.caretRangeFromPoint(e.clientX, e.clientY); if (r) { node = r.startContainer; off = r.startOffset; } }
+                    if (node && view.contains(node)) { const r = document.createRange(); r.setStart(view, 0); r.setEnd(node, off); at = r.toString().length; }
+                }
+                const scroll = view ? view.scrollTop : 0;
+                this.detEditing = true;
+                this.$nextTick(() => {
+                    const ta = this.$refs.det;
+                    if (!ta) return;
+                    this.grow();
+                    ta.focus({ preventScroll: true });
+                    const i = at == null ? ta.value.length : Math.min(at, ta.value.length);
+                    ta.setSelectionRange(i, i);
+                    ta.scrollTop = scroll;
+                });
+            },
             onPaste(e) {
                 const text = e.clipboardData && e.clipboardData.getData('text');
                 const ta = e.target;
@@ -330,88 +454,106 @@ const EventCard = (() => {
                 this.pasteNote = `Details are limited to ${MAX.toLocaleString('en-US')} characters; the end of the paste was left out.`;
                 this.$nextTick(() => { ta.selectionStart = ta.selectionEnd = before.length + fit.length; this.onDetInput(); });
             },
-            // Long details: past about five lines the card widens to a comfortable line (416 -> 600px, ~75 characters),
+            // Long details: past about five lines the card widens to a comfortable line (560 -> 680px, ~75 characters),
             // moving left only as far as it must to stay on screen. It never narrows again while open.
             widen() {
-                const ta = this.$refs.det, c = this.$refs.card;
+                const ta = this.detBox(), c = this.$refs.card;
                 if (!ta || !c || this.wide || this.phone || window.innerWidth < 720) return;
                 const lh = parseFloat(getComputedStyle(ta).lineHeight) || 21;
                 if (ta.scrollHeight < lh * 5 + 20) return;
                 this.wide = true;
-                const left = parseFloat(this.pos.left || 0) - window.scrollX, over = left + Math.min(600, window.innerWidth - 2 * M) - (window.innerWidth - M);
+                const left = parseFloat(this.pos.left || 0) - window.scrollX, over = left + Math.min(680, window.innerWidth - 2 * M) - (window.innerWidth - M);
                 if (over > 0) this.pos = { ...this.pos, left: `${left - over + window.scrollX}px` };
                 this.$nextTick(() => this.fit());
             },
+            /**
+             * The title shows all of itself, up to three lines, then scrolls (a long title never hides its end). Past
+             * three: exactly three lines in view -- no bottom padding, where a scrolling textarea draws a sliver of the
+             * fourth (S11) -- and the third fades out (.nk-title-clip), the sign that it goes on.
+             */
+            growTitle() {
+                const ta = this.$refs.title;
+                if (!ta) return;
+                ta.classList.remove('nk-title-clip');
+                ta.style.height = 'auto';
+                const cs = getComputedStyle(ta), lh = parseFloat(cs.lineHeight) || 28, border = ta.offsetHeight - ta.clientHeight;
+                const pt = parseFloat(cs.paddingTop) || 0, pb = parseFloat(cs.paddingBottom) || 0;
+                const want = ta.scrollHeight + border;
+                if (want <= lh * 3 + pt + pb + border + 1) { ta.style.height = `${want}px`; ta.style.overflowY = 'hidden'; return; }
+                ta.classList.add('nk-title-clip');
+                ta.style.height = `${lh * 3 + pt + border}px`;
+                ta.style.overflowY = 'auto';
+            },
             // The box fits its text, up to 40% of the screen's height (60% once wide), then scrolls inside with the
             // caret in view. Growing never resets the height first, so the browser keeps the caret where it was.
+            /** The details as they are shown: the box being edited, or its text with live links. */
+            detBox() { return this.detView ? this.$refs.detView : this.$refs.det; },
             grow() {
                 this.widen();
-                const ta = this.$refs.det;
+                const ta = this.detBox();
                 if (!ta) return;
                 const c = this.$refs.card, top = c ? c.scrollTop : 0;
                 // Never taller than the screen leaves for it beside the rest of the card (so the card itself need not scroll).
                 const rest = c && !this.phone ? c.scrollHeight - ta.offsetHeight : 0;
                 const cap = Math.max(120, Math.min(Math.round(window.innerHeight * (this.wide ? 0.6 : 0.4)), this.phone ? Infinity : window.innerHeight - 2 * M - rest));
-                if (ta.scrollHeight > ta.clientHeight + 2) ta.style.height = `${Math.min(cap, Math.max(72, ta.scrollHeight + 2))}px`;
+                // At least four lines on a desktop before it grows (a phone's sheet keeps its 72px).
+                const lh = parseFloat(getComputedStyle(ta).lineHeight) || 21, base = this.phone ? 72 : Math.round(lh * 4 + 18);
+                if (ta === this.$refs.detView) {
+                    ta.style.minHeight = `${Math.min(cap, base)}px`; ta.style.maxHeight = `${cap}px`;
+                    if (c) c.scrollTop = top;
+                    return;
+                }
+                if (ta.scrollHeight > ta.clientHeight + 2) ta.style.height = `${Math.min(cap, Math.max(base, ta.scrollHeight + 2))}px`;
                 else {
                     ta.style.height = 'auto';
-                    ta.style.height = `${Math.min(cap, Math.max(72, ta.scrollHeight + 2))}px`;
+                    ta.style.height = `${Math.min(cap, Math.max(base, ta.scrollHeight + 2))}px`;
                     if (ta.scrollHeight > cap && document.activeElement === ta) ta.scrollTop = ta.scrollHeight * (ta.selectionEnd / Math.max(1, ta.value.length)) - ta.clientHeight / 2;
                 }
                 ta.style.overflowY = ta.scrollHeight > cap + 2 ? 'auto' : 'hidden';
                 if (c) c.scrollTop = top;
             },
-            // A time typed into a new event's title ("Practice Thu 5-6") moves it as you type; deleting the words
-            // puts it back; Done keeps the time and drops the words.
-            smartApply() {
-                if (this.v.isAllDay) { this.smart = null; return; }
-                if (!this.smart) this.smart = { base: { start: new Date(this.v.start), end: new Date(this.v.end) }, hit: null, key: '' };
-                const hit = K.smartParse(this.titleText, new Date(), this.fmt);
-                const b = this.smart.base, L = b.end - b.start;
-                let start = new Date(b.start), end = new Date(b.end);
-                if (hit) {
-                    const day = hit.day || b.start;
-                    if (hit.start != null) {
-                        start = at(day, hit.start);
-                        end = hit.end != null ? at(day, hit.end) : new Date(start.getTime() + L);
-                    } else { start = at(day, K.minutesOf(b.start)); end = new Date(start.getTime() + L); }
-                }
-                this.smart.hit = hit;
-                const key = hit ? `${start.getTime()}/${end.getTime()}` : '';
-                Object.assign(this.v, { start, end });
-                this.$emit('change', { start, end }, '');
-                if (key && key !== this.smart.key) {
-                    this.smartSaid = `Time set: ${this.summary()}`;
-                    const q = this.$refs.qline;
-                    if (q && !reduced()) { q.classList.remove('nk-pulse'); void q.offsetWidth; q.classList.add('nk-pulse'); }
-                }
-                this.smart.key = key;
-            },
             done() {
                 if (this.picker) this.closePicker(false);
                 this.commitTitle();
                 this.saveDetails(true);
-                const hit = this.isNew && this.smart && this.smart.hit;
-                const title = hit ? this.titleText.slice(0, hit.at).trim() : this.titleText;
                 this.closing = true;   // the blur as it closes saves nothing more
-                this.$emit('done', { title, description: this.detText, smart: hit ? { raw: this.titleText, base: this.smart.base } : null });
+                this.$emit('done', { title: this.titleText, description: this.detText });
             },
             cancel() { this.closing = true; this.$emit('cancel'); },
             // Focus moving to Done, Cancel, Delete or the menu saves when that button acts: a question opening on
             // the blur would cover the button mid-click.
             blurSave(e, save) { const to = e.relatedTarget; if (to && this.$refs.card && this.$refs.card.contains(to) && to.matches('.nk-done, .nk-cancel, .nk-del, .nk-ovf')) return; save(); },
-            /** The caret's line in view inside the sheet (above the keyboard). */
-            keepCaret(ta) {
-                const c = this.$refs.card;
-                if (!c) return;
-                const lh = parseFloat(getComputedStyle(ta).lineHeight) || 21;
-                const line = ta.value.slice(0, ta.selectionEnd).split('\n').length;
-                const y = ta.getBoundingClientRect().top + Math.min(ta.clientHeight, line * lh - ta.scrollTop), r = c.getBoundingClientRect();
-                if (y > r.bottom - 60) c.scrollTop += y - (r.bottom - 60);
+            /**
+             * A field in view inside the card when the card scrolls (a short window, the keyboard up): between the
+             * card's top and its pinned footer, the whole field when it fits, else the caret's line of a tall details
+             * box. `keep` (the focused field) never scrolls out of view for it.
+             */
+            reveal(el, keep) {
+                const c = this.$refs.card, ft = this.$refs.foot;
+                if (!c || !el || el === c || !c.contains(el) || c.scrollHeight <= c.clientHeight + 1) return;
+                const cr = c.getBoundingClientRect(), top = cr.top + 8, bottom = (ft ? ft.getBoundingClientRect().top : cr.bottom) - 8;
+                const r = el.getBoundingClientRect();
+                let dy = 0;
+                if (r.height <= bottom - top) dy = r.bottom > bottom ? r.bottom - bottom : Math.min(0, r.top - top);
+                else if (el.tagName === 'TEXTAREA') {
+                    const lh = parseFloat(getComputedStyle(el).lineHeight) || 21;
+                    const line = el.value.slice(0, el.selectionEnd).split('\n').length;
+                    const y = r.top + Math.min(el.clientHeight, line * lh - el.scrollTop) + 4;
+                    dy = y > bottom ? y - bottom : Math.min(0, y - lh - top);
+                } else dy = r.top - top;
+                // (keep may reach the card's very top: the margin above it scrolls away, the field or title stays whole --
+                // on a 640x400 sheet those 8px are what let two lines of details show under the title, F22 with S10.)
+                if (dy > 0 && keep && keep !== el && c.contains(keep)) dy = Math.min(dy, Math.max(0, keep.getBoundingClientRect().top - cr.top));
+                if (dy) c.scrollTop += dy;
             },
+            // A field focused inside the card is scrolled into its view -- not the pinned footer (always in view) or the
+            // menu and pickers floating over the card. Revealing the ⋯ button as it was clicked scrolled a phone's sheet
+            // (reveal measures the footer as the bottom of the view), and a scroll under an open menu closes it: on a
+            // phone the ⋯ menu shut the moment it opened.
+            onFocusIn(e) { const t = e.target; if (t.closest && t.closest('.nk-foot, .nk-menu, .nk-pick')) return; this.$nextTick(() => { if (document.activeElement === t) this.reveal(t); }); },
             blurInside() { const el = this.$refs.card; if (el && el.contains(document.activeElement)) document.activeElement.blur(); },
             toggleAllDay() {
-                const v = this.v;
+                const v = this.wv;
                 if (!v.isAllDay) {
                     this.keep = { s: K.minutesOf(v.start), e: K.minutesOf(v.end) };
                     const end = K.minutesOf(v.end) === 0 && !sameDate(v.start, v.end) ? K.addDays(K.startOfDay(v.end), -1) : K.startOfDay(v.end);
@@ -419,7 +561,7 @@ const EventCard = (() => {
                 } else {
                     const s = this.keep ? this.keep.s : 9 * 60, e = this.keep ? this.keep.e : 10 * 60;
                     let start = at(v.start, s), end = at(v.end, e);
-                    if (end <= start) end = new Date(start.getTime() + 60 * 60000);
+                    if (end <= start) end = at(start, K.minutesOf(start) + 60);
                     this.change({ isAllDay: false, start, end });
                 }
             },
@@ -429,10 +571,10 @@ const EventCard = (() => {
                 if (this.picker && this.picker.kind === kind && this.picker.el === el) { this.closePicker(); return; }
                 this.closePicker(false);
                 this.menu = false;
-                this.typed = ''; this.typedBad = false; this.customError = ''; this.labelNames = null; this.custom = null;
-                if (kind === 'sd' || kind === 'ed') {
-                    const d = kind === 'sd' ? this.v.start : this.v.end;
-                    this.month = { y: d.getFullYear(), m: d.getMonth() }; this.focusDay = K.startOfDay(d);
+                this.typed = ''; this.typedBad = false; this.labelNames = null;
+                if (kind === 'sd' || kind === 'ed' || kind === 'until') {
+                    const d = kind === 'sd' ? this.wv.start : kind === 'ed' ? this.wv.end : this.untilDate();
+                    this.month = { y: d.getUTCFullYear(), m: d.getUTCMonth() }; this.focusDay = K.startOfDay(d);
                 }
                 this.picker = { kind, el, at: el.getBoundingClientRect(), align: kind === 'dur' || kind === 'cat' ? 'right' : 'left' };
                 el.setAttribute('aria-expanded', 'true');
@@ -456,8 +598,10 @@ const EventCard = (() => {
                 const left = pk.align === 'right' ? ar.right - w : ar.left;
                 const below = window.innerHeight - ar.bottom - M, above = ar.top - M;
                 const s = { left: `${Math.max(M, Math.min(left, window.innerWidth - w - M))}px` };
-                if (h <= below || below >= above) Object.assign(s, { top: `${ar.bottom + 6}px`, maxHeight: `${below - 6}px` });
-                else Object.assign(s, { top: `${Math.max(M, ar.top - 6 - Math.min(h, above))}px`, maxHeight: `${above - 6}px` });
+                if (h <= below) Object.assign(s, { top: `${ar.bottom + 6}px`, maxHeight: `${below - 6}px` });
+                else if (h <= above) Object.assign(s, { top: `${ar.top - 6 - h}px`, maxHeight: `${above - 6}px` });
+                // Room on neither side (a short phone): the whole picker in the window, over its own field if it must.
+                else { const room = window.innerHeight - 2 * M; Object.assign(s, { top: `${Math.max(M, Math.min(ar.bottom + 6, window.innerHeight - M - h))}px`, maxHeight: `${room}px` }); }
                 this.pickStyle = s;
             },
             closePicker(refocus = true) {
@@ -468,7 +612,7 @@ const EventCard = (() => {
             },
             pickKey(e) {
                 // Inside a picker: Tab stays in it; Escape is handled by onKey.
-                if (e.key !== 'Tab') return;
+                if (!pcKeys.is(e, 'Tab')) return;
                 const items = [...this.$refs.pick.querySelectorAll(FOCUSABLE)].filter((x) => x.offsetParent !== null);
                 if (!items.length) return;
                 const i = items.indexOf(document.activeElement);
@@ -477,21 +621,25 @@ const EventCard = (() => {
             },
             setAndClose(patch, msg) { this.closePicker(); this.change(patch, msg); },
             pickTime(m) {
-                const v = this.v, kind = this.picker && this.picker.kind;
+                const v = this.wv, kind = this.picker && this.picker.kind;
                 if (kind === 's') {
-                    const L = v.end - v.start, start = at(v.start, m);
-                    this.setAndClose({ start, end: new Date(start.getTime() + L) }, `Starts ${this.t(start)}`);
+                    // A new start keeps the event's length (the time that really passes, in its zone).
+                    const L = this.minutes, start = at(v.start, m);
+                    this.setAndClose({ start, end: K.wallOf(K.instantOf(start, this.wz).getTime() + L * 60000, this.wz) }, `Starts ${this.t(start)}`);
                 } else {
-                    const end = at(v.end, m);
-                    if (end <= v.start) { this.typedBad = true; return; }
-                    this.setAndClose({ end }, `Ends ${this.t(end)}`);
+                    // (Read against the start, never the old end: K.endAt.)
+                    const end = K.endAt(v.start, v.end, m, this.wz);
+                    if (!end) { this.typedBad = true; return; }
+                    const next = this.endsSameDay && m < K.minutesOf(v.start);   // "1a" for an 11 PM event
+                    this.setAndClose({ end }, `Ends ${this.t(end)}${next ? ' the next day' : ''}`);
                 }
             },
             typedTime() {
                 const m = K.parseTime(this.typed, this.fmt);
                 if (m == null) { this.typedBad = true; return; }
-                const kind = this.picker.kind;
-                if (kind === 'e' && this.sameDay && m <= K.minutesOf(this.v.start)) { this.typedBad = true; return; }
+                // A clock time that day does not have in the EVENT's zone (2:30 AM on its spring-forward day) is refused,
+                // not moved (stress S02: the viewer's zone was asked). An end: K.endAt, in pickTime.
+                if (this.picker.kind === 's' && !K.exists(at(this.wv.start, m), this.wz)) { this.typedBad = true; return; }
                 this.pickTime(m);
             },
             listKey(e) {
@@ -503,7 +651,13 @@ const EventCard = (() => {
             },
             // Dates: a new start date moves the whole event (its length kept); a new end date moves only the end.
             pickDate(day) {
-                const v = this.v, kind = this.picker.kind;
+                const v = this.wv, kind = this.picker.kind;
+                if (kind === 'until') {
+                    if (day < K.startOfDay(v.start)) { this.typedBad = true; this.customError = 'The repeat ends before the event starts.'; return; }
+                    this.closePicker();
+                    Object.assign(this.custom, { endMode: 'until', until: K.dateStr(day) });
+                    return;
+                }
                 if (kind === 'sd') {
                     const shift = K.dayDiff(v.start, day);
                     const start = K.addDays(v.start, shift), end = K.addDays(v.end, shift);
@@ -512,29 +666,30 @@ const EventCard = (() => {
                 } else {
                     if (day < K.startOfDay(v.start)) { this.typedBad = true; return; }
                     let end = v.isAllDay ? K.startOfDay(day) : at(day, K.minutesOf(v.end));
-                    if (!v.isAllDay && end <= v.start) end = new Date(v.start.getTime() + 60 * 60000);
+                    if (!v.isAllDay && end <= v.start) end = this.later(60);
                     this.say(`Ends ${K.fmtDate(end, { weekday: 'long', month: 'long', day: 'numeric' })}`);
                     this.setAndClose({ end });
                 }
             },
             sameDayEnd() {
-                const v = this.v;
+                const v = this.wv;
                 let end = at(v.start, K.minutesOf(v.end));
-                if (end <= v.start) end = new Date(Math.min(at(K.addDays(K.startOfDay(v.start), 1), 0), v.start.getTime() + 60 * 60000));
+                if (end <= v.start) { const midnight = at(K.addDays(K.startOfDay(v.start), 1), 0), hour = this.later(60); end = hour < midnight ? hour : midnight; }
                 this.setAndClose({ end });
             },
             typedDate() {
-                const ref = this.month ? new Date(this.month.y, this.month.m, 1) : new Date();
-                const d = K.parseDate(this.typed, new Date(), ref);
+                const today = K.today(this.wz);
+                const ref = this.month ? K.wallDate(this.month.y, this.month.m, 1) : today;
+                const d = K.parseDate(this.typed, today, ref, navigator.language);   // (the reader's locale: "5/10" day first in de-DE)
                 if (!d) { this.typedBad = true; return; }
                 this.pickDate(d);
             },
-            stepMonth(n) { const d = new Date(this.month.y, this.month.m + n, 1); this.month = { y: d.getFullYear(), m: d.getMonth() }; this.$nextTick(() => this.mountPicker()); },
+            stepMonth(n) { const d = K.wallDate(this.month.y, this.month.m + n, 1); this.month = { y: d.getUTCFullYear(), m: d.getUTCMonth() }; this.$nextTick(() => this.mountPicker()); },
             dayClass(d) {
-                const v = this.v, k = this.picker && this.picker.kind;
-                const sel = k === 'sd' ? v.start : v.end;
-                return { cur: sameDate(d, sel), in: d >= K.startOfDay(v.start) && d <= K.startOfDay(v.end) && !sameDate(d, sel), today: sameDate(d, new Date()),
-                    off: k === 'ed' && d < K.startOfDay(v.start) };
+                const v = this.wv, k = this.picker && this.picker.kind;
+                const sel = k === 'sd' ? v.start : k === 'ed' ? v.end : this.untilDate();
+                return { cur: sameDate(d, sel), in: k !== 'until' && d >= K.startOfDay(v.start) && d <= K.startOfDay(v.end) && !sameDate(d, sel), today: sameDate(d, K.today(this.wz)),
+                    off: (k === 'ed' || k === 'until') && d < K.startOfDay(v.start) };
             },
             dayKey(e) {
                 const step = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[e.key];
@@ -542,35 +697,72 @@ const EventCard = (() => {
                 e.preventDefault();
                 const n = K.addDays(this.focusDay, step);
                 this.focusDay = n;
-                if (n.getMonth() !== this.month.m || n.getFullYear() !== this.month.y) this.month = { y: n.getFullYear(), m: n.getMonth() };
+                if (n.getUTCMonth() !== this.month.m || n.getUTCFullYear() !== this.month.y) this.month = { y: n.getUTCFullYear(), m: n.getUTCMonth() };
                 this.$nextTick(() => { const b = this.$refs.pick && this.$refs.pick.querySelector('.nk-month [tabindex="0"]'); if (b) b.focus(); });
             },
-            dayLabel(d) { return `${K.fmtDate(d, { weekday: 'long', month: 'long', day: 'numeric' })}${sameDate(d, new Date()) ? ', today' : ''}`; },
+            dayLabel(d) { return `${K.fmtDate(d, { weekday: 'long', month: 'long', day: 'numeric' })}${sameDate(d, K.today(this.wz)) ? ', today' : ''}`; },
             pickLength(n) {
-                const v = this.v;
+                const v = this.wv;
                 if (v.isAllDay) this.setAndClose({ end: K.addDays(K.startOfDay(v.start), n - 1) }, K.fmtDays(n));
-                else { const end = new Date(v.start.getTime() + n * 60000); this.setAndClose({ end }, `${K.fmtLen(n)}, until ${this.t(end)}`); }
+                else { const end = this.later(n); this.setAndClose({ end }, `${K.fmtLen(n)}, until ${this.t(end)}`); }
             },
             pickType(i) { this.setAndClose({ type: i + 1 }, this.labels[i] || `Type ${i + 1}`); },
             editTypes() { this.labelNames = this.colors.map((_, i) => this.labels[i] || `Type ${i + 1}`); this.$nextTick(() => { this.mountPicker(); const i = this.$refs.pick && this.$refs.pick.querySelector('input'); if (i) i.focus(); }); },
             saveTypes() { const names = this.labelNames; this.labelNames = null; this.closePicker(); this.$emit('labels', names); },
-            pickRepeat(rule) { this.setAndClose({ rule }, K.describeRule(rule, this.v.start)); },
+            pickRepeat(rule) { this.setAndClose({ rule }, K.describeRule(rule, this.wv.start)); },
+            /** A time zone: the date and clock time shown, meant in it from now on (change). */
+            pickZone(id) { this.setAndClose({ tz: id || '' }, id ? `Times in ${Zf().zoneName(id)}` : 'Times in your time zone'); },
+            zoneEnter() { const first = this.zoneOptions[0]; if (first) this.pickZone(first.id); else this.typedBad = true; },
+            // ---- Custom…: the repeat's own settings, inside the card under the Repeat row ---------------------------
+            // Not a popover with Apply: each change is saved the moment it is made, like every other field (Undo in
+            // its toast, Cancel takes back the card's whole session), and the Repeat row says the rule as it changes.
+            // Number fields save when they are left (or Enter), so typing "12" is one change, not two.
             openCustom() {
-                const s = K.parseRule(this.v.rule || 'FREQ=WEEKLY;INTERVAL=1;', this.v.start);
-                if (!s.freq) s.freq = 'WEEKLY';
-                if (s.endMode === 'until' && !s.until) s.until = K.dateStr(K.addDays(this.v.start, 14));
-                this.custom = s; this.customError = ''; this._customAt = JSON.stringify(s);   // Apply with nothing changed keeps the rule as it was
-                this.$nextTick(() => this.mountPicker());
+                this.closePicker(false);
+                const had = this.v.rule || '';
+                this.readCustom();
+                this.$nextTick(() => {
+                    this.fit();
+                    const sec = this.$refs.cust;
+                    if (sec) this.reveal(sec, this.$refs.title);   // (as much of it as fits under the title: S10)
+                    // The unit first (a phone gets no keyboard sliding up over the sheet for it).
+                    const f = sec && !this.phone && sec.querySelector('select');
+                    if (f) f.focus({ preventScroll: true });
+                });
+                if (!had) this.applyCustom();   // no repeat yet: Custom… starts it (every week on this day), as the section shows
             },
+            /** The section's fields from the stored rule; reading saves nothing. */
+            readCustom() {
+                const s = K.parseRule(this.v.rule || 'FREQ=WEEKLY;INTERVAL=1;', this.wv.start);
+                if (!s.freq) s.freq = 'WEEKLY';
+                if (s.endMode === 'until' && !s.until) s.until = K.dateStr(K.addDays(this.wv.start, 14));
+                this.custom = s; this.customError = '';
+                // Set back to exactly what it was opened with: the stored rule again, character for character (one
+                // classic wrote may differ in form from the one the section would build).
+                this._customAt = JSON.stringify(s); this._customRule = this.v.rule || null; this._customSent = null;
+            },
+            closeCustom() {
+                this.custom = null; this.customError = '';
+                this.$nextTick(() => { this.fit(); const b = this.$refs.rep; if (b) b.focus({ preventScroll: true }); });
+            },
+            toggleRepeat(e) { if (this.custom) this.closeCustom(); else this.openPicker('rep', e); },
             customDay(d) { const s = this.custom; const i = s.byDay.indexOf(d); if (i >= 0) { if (s.byDay.length > 1) s.byDay.splice(i, 1); } else s.byDay.push(d); },
+            untilDate() {
+                const u = this.custom && this.custom.until;
+                if (u) { const [y, m, d] = u.split('-').map(Number); return K.wallDate(y, m - 1, d); }
+                return K.addDays(K.startOfDay(this.wv.start), 14);
+            },
             applyCustom() {
                 const s = this.custom;
-                if (s.endMode === 'until' && !s.until) s.until = K.dateStr(K.addDays(this.v.start, 14));
-                const problem = K.ruleProblem(s, this.v.start, this.v.isAllDay ? K.addDays(this.v.end, 1) : this.v.end, this.v.isAllDay);
-                if (problem) { this.customError = problem; return; }
-                // Nothing changed: the stored rule stays character for character (one classic wrote may differ in form).
-                if (this.v.rule && JSON.stringify(s) === this._customAt) { this.closePicker(); return; }
-                this.pickRepeat(K.buildRule(s, { firstDay: this.firstDayOfWeek }));
+                if (!s) return;
+                if (s.endMode === 'until' && !s.until) { s.until = K.dateStr(K.addDays(this.wv.start, 14)); return; }   // (saved on the next tick)
+                const problem = K.ruleProblem(s, this.wv.start, this.v.isAllDay ? K.addDays(this.wv.end, 1) : this.wv.end, this.v.isAllDay);
+                this.customError = problem;
+                if (problem) return;
+                const rule = this._customRule != null && JSON.stringify(s) === this._customAt ? this._customRule : K.buildRule(s, { firstDay: this.firstDayOfWeek });
+                if (rule === (this.v.rule || '')) return;
+                this._customSent = rule;
+                this.change({ rule }, K.describeRule(rule, this.wv.start));
             },
             // ---- the ⋯ menu ----------------------------------------------------------------------------
             toggleMenu(e) {
@@ -582,19 +774,27 @@ const EventCard = (() => {
                 this.menu = true;
                 this.$nextTick(() => { const b = this.$refs.menu && this.$refs.menu.querySelector('button'); if (b) b.focus(); });
             },
+            /** The same menu at a point: a right-click on the event in the grid. */
+            menuAt(x, y) {
+                this.closePicker(false);
+                this.menuStyle = { left: `${Math.max(M, Math.min(x, window.innerWidth - 210 - M))}px`, top: `${Math.max(M, Math.min(y, window.innerHeight - 96 - M))}px` };
+                this.menu = true;
+                this.$nextTick(() => { const b = this.$refs.menu && this.$refs.menu.querySelector('button'); if (b) b.focus(); });
+            },
             menuAct(what) { this.menu = false; if (what === 'delete') this.closing = true; this.$emit(what); },
-            say(t) { this.smartSaid = t; },
+            say(t) { this.said = t; },
             // ---- keys: Escape closes one layer, Tab stays inside -------------------------------------------
             onKey(e) {
                 if (this.blocked) return;
-                if (e.key === 'Escape') {
+                if (pcKeys.is(e, 'Escape')) {
                     if (this.menu) { this.menu = false; e.stopImmediatePropagation(); e.preventDefault(); return; }
                     if (this.picker) { this.closePicker(); e.stopImmediatePropagation(); e.preventDefault(); return; }
+                    if (this.custom) { this.closeCustom(); e.stopImmediatePropagation(); e.preventDefault(); return; }   // (the repeat settings, then the card)
                     e.stopImmediatePropagation(); e.preventDefault();
                     this.cancel();
                     return;
                 }
-                if (e.key === 'Tab' && !this.picker && !this.menu) {
+                if (pcKeys.is(e, 'Tab') && !this.picker && !this.menu) {
                     const c = this.$refs.card;
                     if (!c) return;
                     const items = [...c.querySelectorAll(FOCUSABLE)].filter((x) => x.offsetParent !== null || x === document.activeElement);
@@ -608,7 +808,7 @@ const EventCard = (() => {
             // ---- phone: drag the sheet down from its top to close it (keeps the changes) --------------------
             sheetStart(e) {
                 const c = this.$refs.card;
-                if (!this.phone || !c || c.scrollTop > 0 || !e.touches || e.touches.length !== 1 || e.target.closest('input, textarea, button, select, a')) return;
+                if (!this.phone || !c || c.scrollTop > 0 || !e.touches || e.touches.length !== 1 || e.target.closest('input, textarea, button, select, a, .nk-det-view')) return;   // (the details, links or not, scroll themselves)
                 this._sheet = { y0: e.touches[0].clientY };
             },
             sheetMove(e) {
@@ -631,64 +831,101 @@ const EventCard = (() => {
 <teleport to="body">
 <div v-if="phone" class="nk-scrim" data-testid="card-scrim" aria-hidden="true"></div>
 <div ref="card" class="nk-card" :class="cls" :style="cardStyle" role="dialog" :aria-label="isNew ? 'New event' : 'Event'" data-testid="event-card"
-  @touchstart="sheetStart" @touchmove="sheetMove" @touchend="sheetEnd" @touchcancel="sheetEnd">
+  @touchstart="sheetStart" @touchmove="sheetMove" @touchend="sheetEnd" @touchcancel="sheetEnd" @focusin="onFocusIn">
   <div class="nk-h">
-    <input ref="title" v-model="titleText" class="nk-title" placeholder="Add a title" aria-label="Title" autocomplete="off" maxlength="500" data-testid="card-title"
-      aria-describedby="nk-said" @input="onTitleInput" @focus="titleFocus = true" @blur="titleFocus = false; blurSave($event, commitTitle)" @keydown.enter.prevent="titleEnter">
+    <textarea ref="title" v-model="titleText" class="nk-title" rows="1" dir="auto" placeholder="Add a title" aria-label="Title" autocomplete="off" maxlength="500" data-testid="card-title"
+      aria-describedby="nk-said" @input="onTitleInput" @focus="titleFocus = true" @blur="titleFocus = false; blurSave($event, commitTitle)" @keydown.enter.prevent="titleEnter"></textarea>
     <button type="button" class="nk-cat" aria-haspopup="listbox" :aria-expanded="String(!!picker && picker.kind === 'cat')" :aria-label="'Type: ' + typeName"
       data-testid="card-type" @click="openPicker('cat', $event)"><i></i><span>{{ typeName }}</span><nc-icon name="chevron-down" :size="13" :stroke-width="2.2"></nc-icon></button>
   </div>
-  <div id="nk-said" class="nk-sr" aria-live="polite">{{ smartSaid }}</div>
+  <div id="nk-said" class="nk-sr" aria-live="polite">{{ said }}</div>
   <div class="nk-b">
-    <div v-if="!full" ref="qline" class="nk-qline" :class="{ hit: smart && smart.hit }" data-testid="card-time-line">
+    <div v-if="titleNote" class="nk-count" data-testid="card-title-note" aria-live="polite">{{ titleNote }}</div>
+    <div v-if="!full" class="nk-qline" data-testid="card-time-line">
       <template v-if="v.isAllDay">
-        <button type="button" class="nk-qs" data-testid="card-q-sd" aria-expanded="false" :aria-label="'Start date: ' + d(v.start)" @click="openPicker('sd', $event)">{{ d(v.start) }}</button>
-        <template v-if="!sameDayAllDay"> – <button type="button" class="nk-qs" data-testid="card-q-ed" aria-expanded="false" :aria-label="'End date: ' + d(v.end)" @click="openPicker('ed', $event)">{{ d(v.end) }}</button></template>
+        <button type="button" class="nk-qs" data-testid="card-q-sd" aria-expanded="false" :aria-label="'Start date: ' + d(wv.start)" @click="openPicker('sd', $event)">{{ d(wv.start) }}</button>
+        <template v-if="!sameDayAllDay"> – <button type="button" class="nk-qs" data-testid="card-q-ed" aria-expanded="false" :aria-label="'End date: ' + d(wv.end)" @click="openPicker('ed', $event)">{{ d(wv.end) }}</button></template>
         <span> · All day</span>
       </template>
       <template v-else>
-        <button type="button" class="nk-qs" data-testid="card-q-sd" aria-expanded="false" :aria-label="'Start date: ' + d(v.start)" @click="openPicker('sd', $event)">{{ d(v.start) }}</button><span> · </span>
-        <button type="button" class="nk-qs" data-testid="card-q-s" aria-expanded="false" :aria-label="'Start time: ' + t(v.start)" @click="openPicker('s', $event)">{{ t(v.start) }}</button><span> – </span>
-        <button v-if="!sameDay" type="button" class="nk-qs" data-testid="card-q-ed" aria-expanded="false" :aria-label="'End date: ' + d(v.end)" @click="openPicker('ed', $event)">{{ d(v.end, { weekday: 'short' }) }}</button>
-        <button type="button" class="nk-qs" data-testid="card-q-e" aria-expanded="false" :aria-label="'End time: ' + t(v.end)" @click="openPicker('e', $event)">{{ t(v.end) }}</button>
+        <button type="button" class="nk-qs" data-testid="card-q-sd" aria-expanded="false" :aria-label="'Start date: ' + d(wv.start)" @click="openPicker('sd', $event)">{{ d(wv.start) }}</button><span> · </span>
+        <button type="button" class="nk-qs" data-testid="card-q-s" aria-expanded="false" :aria-label="'Start time: ' + t(wv.start)" @click="openPicker('s', $event)">{{ t(wv.start) }}</button><span> – </span>
+        <button v-if="!sameDay" type="button" class="nk-qs" data-testid="card-q-ed" aria-expanded="false" :aria-label="'End date: ' + d(wv.end)" @click="openPicker('ed', $event)">{{ d(wv.end, { weekday: 'short' }) }}</button>
+        <button type="button" class="nk-qs" data-testid="card-q-e" aria-expanded="false" :aria-label="'End time: ' + t(wv.end)" @click="openPicker('e', $event)">{{ t(wv.end) }}</button>
       </template>
       <span v-if="v.rule" class="nk-qrep"> · {{ repText }}</span>
+      <span v-if="yourTime" class="nk-qtz" data-testid="card-q-tz"> · {{ zone }}</span>
     </div>
     <div v-if="!full && detText.trim()" class="nk-qdet-wrap">
-      <div ref="qdet" class="nk-qdet" :class="{ all: showAll, fade: clamped }" data-testid="card-details-preview" v-html="linked"
-        @click="!$event.target.closest('a') && expand('det')"></div>
+      <div class="nk-qdet" :class="{ all: showAll, fade: clamped }" data-testid="card-details-preview"
+        @click="!$event.target.closest('a') && expand('det')"><div ref="qdet" class="nk-qtext" v-html="linked"></div></div>
       <button v-if="clamped || showAll" type="button" class="nk-showall" data-testid="card-show-all" @click="showAll = !showAll; $nextTick(() => { measureClamp(); fit(); })">{{ showAll ? 'Show less' : 'Show all' }}</button>
     </div>
     <div v-if="!full && !isNew" class="nk-meta" data-testid="card-edited">{{ card.edited || '\u00a0' }}</div>
 
-    <div v-if="full" class="nk-when" :class="{ hit: smart && smart.hit }">
+    <div v-if="full" class="nk-when">
       <span class="nk-gi" title="Time"><nc-icon name="clock" :size="18"></nc-icon></span>
-      <button type="button" class="nk-tp nk-dp" data-testid="card-start-date" aria-expanded="false" :aria-label="'Start date: ' + d(v.start)" @click="openPicker('sd', $event)">{{ d(v.start) }}</button>
+      <button type="button" class="nk-tp nk-dp" data-testid="card-start-date" aria-expanded="false" :aria-label="'Start date: ' + d(wv.start)" @click="openPicker('sd', $event)">{{ d(wv.start) }}</button>
       <span v-if="v.isAllDay" class="nk-tp off" aria-hidden="true">–</span>
-      <button v-else type="button" class="nk-tp" data-testid="card-start-time" aria-expanded="false" :aria-label="'Start time: ' + t(v.start)" @click="openPicker('s', $event)">{{ t(v.start, false) }}</button>
+      <button v-else type="button" class="nk-tp" data-testid="card-start-time" aria-expanded="false" :aria-label="'Start time: ' + t(wv.start)" @click="openPicker('s', $event)">{{ t(wv.start, false) }}</button>
       <button type="button" class="nk-switch" role="switch" :aria-checked="String(!!v.isAllDay)" data-testid="card-allday" @click="toggleAllDay"><i></i>All day</button>
       <span></span>
       <button type="button" class="nk-tp nk-dp" :class="{ same: sameDay }" data-testid="card-end-date" aria-expanded="false"
-        :aria-label="'End date: ' + (sameDay ? 'same day, ' : '') + d(v.end)" @click="openPicker('ed', $event)">{{ d(v.end) }}</button>
+        :aria-label="'End date: ' + (sameDay ? 'same day, ' : '') + d(wv.end)" @click="openPicker('ed', $event)">{{ d(wv.end) }}</button>
       <span v-if="v.isAllDay" class="nk-tp off" aria-hidden="true">–</span>
-      <button v-else type="button" class="nk-tp" data-testid="card-end-time" aria-expanded="false" :aria-label="'End time: ' + t(v.end)" @click="openPicker('e', $event)">{{ t(v.end, false) }}</button>
+      <button v-else type="button" class="nk-tp" data-testid="card-end-time" aria-expanded="false" :aria-label="'End time: ' + t(wv.end)" @click="openPicker('e', $event)">{{ t(wv.end, false) }}</button>
       <button type="button" class="nk-durb" data-testid="card-length" aria-expanded="false" :aria-label="'Length: ' + lengthText" @click="openPicker('dur', $event)">{{ lengthText }}<nc-icon name="chevron-down" :size="13" :stroke-width="2.2"></nc-icon></button>
     </div>
-    <div v-if="full" class="nk-tz" :style="{ visibility: v.isAllDay ? 'hidden' : 'visible' }" data-testid="card-tz" :aria-label="'Time zone: ' + zone" title="Times are shown in your time zone">
-      <span class="nk-gi"><nc-icon name="globe" :size="18"></nc-icon></span><span>{{ zone }}</span></div>
+    <div v-if="full" v-show="!v.isAllDay" class="nk-tz" data-testid="card-tz" @click="!$event.target.closest('.nk-tzb') && $refs.tzb && $refs.tzb.click()">
+      <span class="nk-gi" title="Time zone"><nc-icon name="globe" :size="18"></nc-icon></span>
+      <button ref="tzb" type="button" class="nk-tzb" data-testid="card-tz-button" aria-haspopup="dialog" aria-expanded="false" :aria-label="'Time zone: ' + zone"
+        :title="evZone ? 'Times in ' + zone : 'Times in your time zone'" @click="openPicker('tz', $event)">{{ zone }}</button>
+      <span v-if="yourTime" class="nk-tzyou" data-testid="card-tz-yours">· {{ yourTime }}</span>
+    </div>
     <div v-if="full && card.canRepeat" class="nk-row">
       <span class="nk-gi" title="Repeats"><nc-icon name="repeat" :size="18"></nc-icon></span>
-      <button type="button" class="nk-sel" data-testid="card-repeat" aria-expanded="false" :aria-label="'Repeats: ' + repText" @click="openPicker('rep', $event)">{{ repText }}<nc-icon name="chevron-down" :size="14" :stroke-width="2.2"></nc-icon></button>
+      <button ref="rep" type="button" class="nk-sel" :class="{ open: custom }" data-testid="card-repeat" :aria-expanded="String(!!custom)" :aria-controls="custom ? 'nk-cust' : null"
+        :aria-label="'Repeats: ' + repText" :title="custom ? 'Close the repeat settings' : null" @click="toggleRepeat">{{ repText }}<nc-icon :name="custom ? 'chevron-up' : 'chevron-down'" :size="14" :stroke-width="2.2"></nc-icon></button>
+    </div>
+    <div v-if="full && card.canRepeat && custom" id="nk-cust" ref="cust" class="nk-cust" role="group" aria-label="Repeat settings" data-testid="card-custom">
+      <div class="nk-cl">Every <input type="number" min="1" max="999" class="pc-field pc-field--sm nk-num" v-model.lazy.number="custom.interval" aria-label="How often" data-testid="custom-interval">
+        <select class="pc-field pc-field--sm nk-fit" v-model="custom.freq" aria-label="Unit" data-testid="custom-unit">
+          <option value="DAILY">{{ custom.interval > 1 ? 'days' : 'day' }}</option><option value="WEEKLY">{{ custom.interval > 1 ? 'weeks' : 'week' }}</option>
+          <option value="MONTHLY">{{ custom.interval > 1 ? 'months' : 'month' }}</option><option value="YEARLY">{{ custom.interval > 1 ? 'years' : 'year' }}</option></select>
+        <template v-if="custom.freq === 'YEARLY'">in <select class="pc-field pc-field--sm nk-fit" v-model.number="custom.month" aria-label="Month" data-testid="custom-month"><option v-for="(n, i) in monthNames" :key="i" :value="i + 1">{{ n }}</option></select></template>
+      </div>
+      <div v-if="custom.freq === 'WEEKLY'" class="nk-wd" role="group" aria-label="On these days">
+        <button v-for="i in weekOrder" :key="i" type="button" :aria-pressed="String(custom.byDay.includes(i))" :aria-label="dayNames[i]" :data-testid="'custom-day-' + i" @click="customDay(i)">{{ dayNames[i].charAt(0) }}</button>
+      </div>
+      <div v-if="custom.freq === 'MONTHLY' || custom.freq === 'YEARLY'" class="nk-opts" role="radiogroup" aria-label="On">
+        <label class="nk-cl"><input type="radio" value="day" v-model="custom.monthMode" data-testid="custom-by-day"> On day
+          <input type="number" min="1" max="31" class="pc-field pc-field--sm nk-num" v-model.lazy.number="custom.monthDay" aria-label="Day of the month" data-testid="custom-month-day" @focus="custom.monthMode = 'day'"></label>
+        <label class="nk-cl"><input type="radio" value="weekday" v-model="custom.monthMode" data-testid="custom-by-weekday"> On the
+          <select class="pc-field pc-field--sm nk-fit" v-model.number="custom.setPos" aria-label="Which week" data-testid="custom-setpos" @focus="custom.monthMode = 'weekday'"><option :value="1">first</option><option :value="2">second</option><option :value="3">third</option><option :value="4">fourth</option><option :value="-1">last</option></select>
+          <select class="pc-field pc-field--sm nk-fit" v-model.number="custom.posDay" aria-label="Weekday" data-testid="custom-posday" @focus="custom.monthMode = 'weekday'"><option v-for="i in weekOrder" :key="i" :value="i">{{ dayNames[i] }}</option></select></label>
+      </div>
+      <div class="nk-opts" role="radiogroup" aria-labelledby="nk-ends-h"><span id="nk-ends-h" class="nk-ends-h">Ends</span>
+        <label class="nk-cl"><input type="radio" value="never" v-model="custom.endMode" data-testid="custom-end-never"> Never</label>
+        <div class="nk-cl"><label class="nk-cl"><input type="radio" value="until" v-model="custom.endMode" data-testid="custom-end-until"> On</label>
+          <button type="button" class="nk-tp nk-dp nk-until" :class="{ dim: custom.endMode !== 'until' }" aria-expanded="false"
+            :aria-label="'Last date: ' + d(untilDate(), { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })" data-testid="custom-until"
+            @click="openPicker('until', $event)">{{ d(untilDate(), { month: 'short', day: 'numeric', year: 'numeric' }) }}</button></div>
+        <label class="nk-cl"><input type="radio" value="count" v-model="custom.endMode" data-testid="custom-end-count"> After
+          <input type="number" min="1" max="999" class="pc-field pc-field--sm nk-num" v-model.lazy.number="custom.count" aria-label="Times" data-testid="custom-count" @focus="custom.endMode = 'count'"> {{ custom.count === 1 ? 'time' : 'times' }}</label>
+      </div>
+      <p v-if="customError" class="nk-err" role="alert" data-testid="custom-error">{{ customError }}</p>
     </div>
     <div v-if="full" class="nk-row">
       <span class="nk-gi" title="Details"><nc-icon name="text-align-start" :size="18"></nc-icon></span>
       <div class="nk-detwrap">
-        <textarea ref="det" v-model="detText" class="nk-det" rows="1" placeholder="Place, notes, links" aria-label="Details" :maxlength="max" data-testid="card-details"
-          @input="onDetInput" @paste="onPaste" @focus="onDetFocus" @blur="detFocus = false; blurSave($event, commitDetails)"></textarea>
+        <div v-if="detView" ref="detView" class="nk-det nk-det-view" dir="auto" tabindex="0" role="textbox" aria-multiline="true" aria-label="Details" data-testid="card-details-view"
+          v-html="linked" @mousedown="detDown" @click="editDetails" @focus="editDetails(null)"></div>
+        <textarea v-show="!detView" ref="det" v-model="detText" class="nk-det" rows="1" dir="auto" placeholder="Place, notes, links" aria-label="Details" :maxlength="max" data-testid="card-details"
+          @input="onDetInput" @paste="onPaste" @focus="onDetFocus" @blur="detFocus = false; detEditing = false; blurSave($event, commitDetails)"></textarea>
         <div v-if="detCount || pasteNote" class="nk-count" data-testid="card-details-count" aria-live="polite">{{ pasteNote ? pasteNote + ' ' : '' }}{{ detCount }}</div>
       </div>
     </div>
-    <div class="nk-foot">
+    <div ref="foot" class="nk-foot">
       <button v-if="!isNew" type="button" class="nk-icon nk-del" aria-label="Delete" title="Delete" data-testid="card-delete" @click="closing = true; $emit('delete')"><nc-icon name="trash" :size="18"></nc-icon></button>
       <button v-if="full && !isNew" type="button" class="nk-icon nk-ovf" aria-label="More actions" title="More actions" aria-haspopup="menu" :aria-expanded="String(menu)" data-testid="card-more-actions" @click="toggleMenu"><nc-icon name="ellipsis" :size="18"></nc-icon></button>
       <button v-if="!full" type="button" class="nk-more" data-testid="card-more" @click="expand()">More details</button>
@@ -700,25 +937,25 @@ const EventCard = (() => {
 </div>
 
 <div v-if="menu" ref="menu" class="nk-menu" role="menu" :style="menuStyle" data-testid="card-menu" @keydown="pickKey">
-  <button type="button" role="menuitem" data-testid="card-duplicate" @click="menuAct('duplicate')">Duplicate <kbd>⌘D</kbd></button>
-  <button type="button" role="menuitem" class="red" data-testid="card-menu-delete" @click="menuAct('delete')">Delete <kbd>⌫</kbd></button>
+  <button type="button" role="menuitem" data-testid="card-duplicate" @click="menuAct('duplicate')">Duplicate <kbd>{{ pcKeys.mod('D') }}</kbd></button>
+  <button type="button" role="menuitem" class="red" data-testid="card-menu-delete" @click="menuAct('delete')">Delete <kbd>{{ pcKeys.del }}</kbd></button>
 </div>
 
-<div v-if="picker" ref="pick" class="nk-pick" :class="'nk-pick-' + picker.kind" role="dialog" :aria-label="{ s: 'Start time', e: 'End time', sd: 'Start date', ed: 'End date', dur: 'Length', cat: 'Type', rep: 'Repeats' }[picker.kind]"
+<div v-if="picker" ref="pick" class="nk-pick" :class="'nk-pick-' + picker.kind" role="dialog" :aria-label="{ s: 'Start time', e: 'End time', sd: 'Start date', ed: 'End date', dur: 'Length', cat: 'Type', rep: 'Repeats', until: 'Last date', tz: 'Time zone' }[picker.kind]"
   :style="pickStyle" :data-kind="picker.kind" data-testid="card-picker" @keydown="pickKey">
   <template v-if="picker.kind === 's' || picker.kind === 'e'">
-    <input v-model="typed" class="nk-typed" :class="{ bad: typedBad }" aria-label="Type a time" placeholder="Type a time" data-testid="picker-input"
+    <input v-model="typed" class="pc-field nk-typed" :class="{ bad: typedBad }" aria-label="Type a time" placeholder="Type a time" data-testid="picker-input"
       @input="typedBad = false" @keydown.enter.prevent="typedTime" @keydown.down.prevent="$refs.tlist && ($refs.tlist.querySelector('.cur') || $refs.tlist.querySelector('button')).focus()">
     <div ref="tlist" class="nk-plist" @keydown="listKey">
-      <button v-for="o in timeList" :key="o.m" type="button" :class="{ cur: o.cur }" :data-m="o.m" @click="pickTime(o.m)">{{ o.label }}<small v-if="o.len">{{ o.len }}</small></button>
+      <button v-for="o in timeList" :key="o.m" type="button" :class="{ cur: o.cur }" :aria-current="o.cur ? 'true' : null" :data-m="o.m" @click="pickTime(o.m)">{{ o.label }}<small v-if="o.len">{{ o.len }}</small></button>
     </div>
   </template>
-  <template v-else-if="picker.kind === 'sd' || picker.kind === 'ed'">
+  <template v-else-if="picker.kind === 'sd' || picker.kind === 'ed' || picker.kind === 'until'">
     <div v-if="picker.kind === 'ed' && !v.isAllDay" class="nk-plist nk-plist-top">
-      <button type="button" :class="{ cur: sameDay }" data-testid="picker-same-day" @click="sameDayEnd">Same day</button>
-      <button type="button" data-testid="picker-next-day" @click="pickDate(addDays(v.start, 1))">Next day <small>{{ d(addDays(v.start, 1)) }}</small></button>
+      <button type="button" :class="{ cur: sameDay }" :aria-current="sameDay ? 'true' : null" data-testid="picker-same-day" @click="sameDayEnd">Same day</button>
+      <button type="button" data-testid="picker-next-day" @click="pickDate(addDays(wv.start, 1))">Next day <small>{{ d(addDays(wv.start, 1)) }}</small></button>
     </div>
-    <input v-model="typed" class="nk-typed" :class="{ bad: typedBad }" aria-label="Type a date" placeholder="Type a date: Oct 20, Fri, tomorrow" data-testid="picker-input"
+    <input v-model="typed" class="pc-field nk-typed" :class="{ bad: typedBad }" aria-label="Type a date" placeholder="Oct 20, Fri, tomorrow" data-testid="picker-input"
       @input="typedBad = false" @keydown.enter.prevent="typedDate">
     <div class="nk-mhead"><span>{{ monthTitle }}</span>
       <span><button type="button" class="nk-icon nk-sm" aria-label="Previous month" data-testid="picker-prev" @click="stepMonth(-1)"><nc-icon name="chevron-left" :size="16"></nc-icon></button><button type="button" class="nk-icon nk-sm" aria-label="Next month" data-testid="picker-next" @click="stepMonth(1)"><nc-icon name="chevron-right" :size="16"></nc-icon></button></span></div>
@@ -727,12 +964,20 @@ const EventCard = (() => {
       <template v-for="(c, i) in cells" :key="i">
         <span v-if="!c"></span>
         <button v-else type="button" role="gridcell" :class="dayClass(c)" :disabled="dayClass(c).off" :data-d="dateStr(c)" :aria-label="dayLabel(c)"
-          :aria-selected="String(dayClass(c).cur)" :tabindex="focusDay && sameDateFn(c, focusDay) ? 0 : -1" @click="pickDate(c)">{{ c.getDate() }}</button>
+          :aria-selected="String(dayClass(c).cur)" :tabindex="focusDay && sameDateFn(c, focusDay) ? 0 : -1" @click="pickDate(c)">{{ c.getUTCDate() }}</button>
       </template>
     </div>
   </template>
+  <template v-else-if="picker.kind === 'tz'">
+    <input v-model="typed" class="pc-field nk-typed" :class="{ bad: typedBad }" aria-label="Search time zones" placeholder="Search: Tokyo, London, Eastern" data-testid="picker-input"
+      @input="typedBad = false" @keydown.enter.prevent="zoneEnter" @keydown.down.prevent="$refs.zlist && ($refs.zlist.querySelector('.cur') || $refs.zlist.querySelector('button')) && ($refs.zlist.querySelector('.cur') || $refs.zlist.querySelector('button')).focus()">
+    <div ref="zlist" class="nk-plist" role="listbox" aria-label="Time zones" @keydown="listKey">
+      <button v-for="z in zoneOptions" :key="z.id" type="button" role="option" :class="{ cur: z.cur }" :aria-selected="String(z.cur)" :data-tz="z.id" @click="pickZone(z.id)">{{ z.label }}<small v-if="z.sub">{{ z.sub }}</small></button>
+      <p v-if="!zoneOptions.length" class="nk-empty" data-testid="picker-tz-none">No time zone matches “{{ typed.trim() }}”</p>
+    </div>
+  </template>
   <div v-else-if="picker.kind === 'dur'" class="nk-plist" @keydown="listKey">
-    <button v-for="o in lengths" :key="o.n" type="button" :class="{ cur: o.cur }" :data-len="o.n" @click="pickLength(o.n)">{{ o.label }}<small v-if="o.sub">{{ o.sub }}</small></button>
+    <button v-for="o in lengths" :key="o.n" type="button" :class="{ cur: o.cur }" :aria-current="o.cur ? 'true' : null" :data-len="o.n" @click="pickLength(o.n)">{{ o.label }}<small v-if="o.sub">{{ o.sub }}</small></button>
   </div>
   <template v-else-if="picker.kind === 'cat'">
     <template v-if="!labelNames">
@@ -744,52 +989,27 @@ const EventCard = (() => {
     </template>
     <template v-else>
       <div class="nk-labels">
-        <label v-for="(c, i) in colors" :key="i"><i :style="{ background: c }"></i><input v-model="labelNames[i]" maxlength="40" :aria-label="'Name for type ' + (i + 1)" :data-testid="'picker-type-name-' + (i + 1)"></label>
+        <label v-for="(c, i) in colors" :key="i"><i :style="{ background: c }"></i><input v-model="labelNames[i]" class="pc-field pc-field--sm" maxlength="40" :aria-label="'Name for type ' + (i + 1)" :data-testid="'picker-type-name-' + (i + 1)"></label>
       </div>
       <div class="nk-pfoot end"><button type="button" data-testid="picker-types-done" @click="saveTypes">Done</button></div>
     </template>
   </template>
-  <template v-else-if="picker.kind === 'rep'">
-    <div v-if="!custom" class="nk-plist" @keydown="listKey">
-      <button v-for="p in presets" :key="p.id" type="button" :class="{ cur: presetNow === p.id }" :data-r="p.id" @click="pickRepeat(p.rule)">{{ p.text }}</button>
-      <button v-if="presetNow === 'custom'" type="button" class="cur" data-r="current" @click="closePicker()">{{ repText }}</button>
-      <button type="button" data-testid="picker-custom" @click="openCustom">Custom…</button>
-    </div>
-    <div v-else class="nk-cust">
-      <label>Every <input type="number" min="1" max="999" v-model.number="custom.interval" aria-label="How often" data-testid="custom-interval">
-        <select v-model="custom.freq" aria-label="Unit" data-testid="custom-unit">
-          <option value="DAILY">{{ custom.interval > 1 ? 'days' : 'day' }}</option><option value="WEEKLY">{{ custom.interval > 1 ? 'weeks' : 'week' }}</option>
-          <option value="MONTHLY">{{ custom.interval > 1 ? 'months' : 'month' }}</option><option value="YEARLY">{{ custom.interval > 1 ? 'years' : 'year' }}</option></select></label>
-      <div v-if="custom.freq === 'WEEKLY'" class="nk-wd">
-        <button v-for="i in weekOrder" :key="i" type="button" :aria-pressed="String(custom.byDay.includes(i))" :aria-label="dayNames[i]" :data-testid="'custom-day-' + i" @click="customDay(i)">{{ dayNames[i].charAt(0) }}</button>
-      </div>
-      <div v-if="custom.freq === 'MONTHLY' || custom.freq === 'YEARLY'" class="nk-ends">
-        <label v-if="custom.freq === 'YEARLY'">In <select v-model.number="custom.month" aria-label="Month" data-testid="custom-month"><option v-for="(n, i) in monthNames" :key="i" :value="i + 1">{{ n }}</option></select></label>
-        <label><input type="radio" value="day" v-model="custom.monthMode" data-testid="custom-by-day"> On day <input type="number" min="1" max="31" v-model.number="custom.monthDay" aria-label="Day of the month" data-testid="custom-month-day" @focus="custom.monthMode = 'day'"></label>
-        <label><input type="radio" value="weekday" v-model="custom.monthMode" data-testid="custom-by-weekday"> On the
-          <select v-model.number="custom.setPos" aria-label="Which week" data-testid="custom-setpos" @focus="custom.monthMode = 'weekday'"><option :value="1">first</option><option :value="2">second</option><option :value="3">third</option><option :value="4">fourth</option><option :value="-1">last</option></select>
-          <select v-model.number="custom.posDay" aria-label="Weekday" data-testid="custom-posday" @focus="custom.monthMode = 'weekday'"><option v-for="i in weekOrder" :key="i" :value="i">{{ dayNames[i] }}</option></select></label>
-      </div>
-      <div class="nk-ends"><span>Ends</span>
-        <label><input type="radio" value="never" v-model="custom.endMode" data-testid="custom-end-never"> Never</label>
-        <label><input type="radio" value="until" v-model="custom.endMode" data-testid="custom-end-until"> On <input type="date" v-model="custom.until" aria-label="Last date" data-testid="custom-until" @focus="custom.endMode = 'until'"></label>
-        <label><input type="radio" value="count" v-model="custom.endMode" data-testid="custom-end-count"> After <input type="number" min="1" max="999" v-model.number="custom.count" aria-label="Times" data-testid="custom-count" @focus="custom.endMode = 'count'"> times</label>
-      </div>
-      <p v-if="customError" class="nk-err" role="alert" data-testid="custom-error">{{ customError }}</p>
-      <div class="nk-pfoot end"><button type="button" data-testid="custom-apply" @click="applyCustom">Apply</button></div>
-    </div>
-  </template>
+  <div v-else-if="picker.kind === 'rep'" class="nk-plist" @keydown="listKey">
+    <button v-for="p in presets" :key="p.id" type="button" :class="{ cur: presetNow === p.id }" :aria-current="presetNow === p.id ? 'true' : null" :data-r="p.id" @click="pickRepeat(p.rule)">{{ p.text }}</button>
+    <button v-if="presetNow === 'custom'" type="button" class="cur" aria-current="true" data-r="current" @click="closePicker()">{{ repText }}</button>
+    <button type="button" data-testid="picker-custom" @click="openCustom">Custom…</button>
+  </div>
 </div>
 </teleport>`,
     };
 })();
 // Template helpers that read cardKit directly.
-EventCard.computed.sameDayAllDay = function () { return this.v.isAllDay && this.v.start.toDateString() === this.v.end.toDateString(); };
+EventCard.computed.sameDayAllDay = function () { return this.v.isAllDay && cardKit.sameDate(this.wv.start, this.wv.end); };
 EventCard.computed.dayNames = function () { return cardKit.DAY_NAMES; };
 /** The days 0-6 from the calendar's first day of the week (classic's weekday buttons and its weekday list). */
 EventCard.computed.weekOrder = function () { const f = Number(this.firstDayOfWeek) || 0; return [0, 1, 2, 3, 4, 5, 6].map((i) => (i + f) % 7); };
 EventCard.computed.monthNames = function () { return cardKit.MONTH_NAMES; };
 EventCard.methods.addDays = function (d, n) { return cardKit.addDays(cardKit.startOfDay(d), n); };
 EventCard.methods.dateStr = function (d) { return cardKit.dateStr(d); };
-EventCard.methods.sameDateFn = function (a, b) { return a.toDateString() === b.toDateString(); };
+EventCard.methods.sameDateFn = function (a, b) { return cardKit.sameDate(a, b); };
 if (typeof window !== 'undefined') window.EventCard = EventCard;

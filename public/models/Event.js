@@ -29,6 +29,9 @@ class Event {
         this.recurrenceID = options.RecurrenceID || options.recurrenceID || null;
         this.recurrenceException = options.RecurrenceException || options.recurrenceException || null;
         this.isAllDay = options.IsAllDay || options.isAllDay || false;
+        // The event's own time zone (services/EventZone.js), only when it has one: other rows stay as they were.
+        const tz = options.Tz || options.tz;
+        if (tz) this.tz = tz;
 
         // for SyncFusion Internal Object. StartTime and EndTime are converted
         // independently: a bad StartTime must not throw away a good EndTime (Syncfusion
@@ -74,6 +77,17 @@ class Event {
             const untouched = '_storedStart' in options && '_storedEnd' in options
                 && this.start === options._storedStart && this.end === options._storedEnd;
             if (!untouched) this.end = Event.repairedEnd(this.start, this.end, this.isAllDay);
+        }
+
+        // Any other field of the one list (services/EventStore.js RECORD) rides along as given, under either name: a
+        // field added there is carried by every copy made here without a change to this class.
+        const store = typeof EventStore !== 'undefined' ? EventStore : null;
+        if (store && store.RECORD) {
+            for (const [f, R] of Object.entries(store.RECORD)) {
+                if (f in this) continue;
+                const v = options[R] !== undefined ? options[R] : options[f];
+                if (v !== undefined) this[f] = v;
+            }
         }
 
         // Firebase saves fail with undefined properties, ensure they are null instead

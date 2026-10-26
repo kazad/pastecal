@@ -31,8 +31,20 @@
 (function (root) {
     'use strict';
 
-    const FIELDS = ['title', 'description', 'start', 'end', 'type', 'isAllDay',
-        'repeat', 'recurrencerule', 'recurrenceID', 'recurrenceException'];
+    /**
+     * THE list of an event's fields, and each one's name in a Syncfusion record (ScheduleAdapter, models/Event.js).
+     * Every path that creates, copies, compares or merges events iterates this table rather than naming fields
+     * itself: when a field was added by hand (the time zone, Oct 2026), eight lists had to be found, and the ones
+     * that were missed dropped it (an Option-drag copy lost its zone, stress S03). test/unit/event-fields.test.js
+     * fails for a field added here that some path does not carry.
+     */
+    const RECORD = {
+        title: 'Subject', description: 'Description', start: 'StartTime', end: 'EndTime', type: 'Type', isAllDay: 'IsAllDay',
+        repeat: 'Recurrence', recurrencerule: 'RecurrenceRule', recurrenceID: 'RecurrenceID', recurrenceException: 'RecurrenceException', tz: 'Tz',
+    };
+    const FIELDS = Object.keys(RECORD);
+    // A copy is a new event (Duplicate, an Option-drag): its own id, and one event, not a series or a series' occurrence.
+    const COPY_RESETS = { recurrencerule: '', recurrenceID: null, recurrenceException: null, repeat: '' };
 
     const blank = (v) => v === undefined || v === null || v === '';
     const uuid = () => (root.Utils && root.Utils.uuidv4) ? root.Utils.uuidv4()
@@ -46,11 +58,32 @@
         return isNaN(d.getTime()) ? null : d.toISOString();
     }
 
+    /**
+     * An event's own time zone (services/EventZone.js): a canonical IANA name, or null. Most events have none --
+     * each viewer sees them in their own zone -- and their rows never carry the key.
+     */
+    function validZone(tz) {
+        if (typeof tz !== 'string' || !tz || tz.length > 64 || !/^[A-Za-z0-9_+\-/]+$/.test(tz)) return null;
+        try { return new Intl.DateTimeFormat('en-US', { timeZone: tz }).resolvedOptions().timeZone; } catch (e) { return null; }
+    }
+
     /** Identity of a row. Ids compare as TEXT: stored ids are numbers (old grid events) or uuids. */
     function keyOf(e) {
         if (!e) return '';
         return `${blank(e.id) ? '' : String(e.id)}|${blank(e.recurrenceID) ? '' : String(e.recurrenceID)}`;
     }
+
+    // How each field is read (normalize); a field not named here is text.
+    const COERCE = {
+        text: (v) => String(v ?? ''),
+        title: (v) => String(v ?? '').trim(),
+        start: (v) => iso(v),
+        end: (v) => iso(v),
+        type: (v) => { const n = parseInt(v, 10); return n >= 1 ? n : 1; },
+        isAllDay: (v) => !!v,
+        recurrenceID: (v) => (blank(v) ? null : v),
+        recurrenceException: (v) => (blank(v) ? null : String(v)),
+    };
 
     /**
      * The one schema. Accepts every shape that has ever been stored (title/Subject,
@@ -59,21 +92,15 @@
      */
     function normalize(raw) {
         const r = raw || {};
-        const pick = (a, b) => (!blank(r[a]) ? r[a] : r[b]);
-        const typeN = parseInt(pick('type', 'Type'), 10);
-        const out = {
-            id: !blank(r.id) ? r.id : (!blank(r.Id) ? r.Id : null),
-            title: String(pick('title', 'Subject') ?? '').trim(),
-            description: String(pick('description', 'Description') ?? ''),
-            start: iso(pick('start', 'StartTime')),
-            end: iso(pick('end', 'EndTime')),
-            type: typeN >= 1 ? typeN : 1,
-            isAllDay: !!(r.isAllDay ?? r.IsAllDay),
-            repeat: String(pick('repeat', 'Recurrence') ?? ''),
-            recurrencerule: String(pick('recurrencerule', 'RecurrenceRule') ?? ''),
-            recurrenceID: blank(pick('recurrenceID', 'RecurrenceID')) ? null : pick('recurrenceID', 'RecurrenceID'),
-            recurrenceException: blank(pick('recurrenceException', 'RecurrenceException')) ? null : String(pick('recurrenceException', 'RecurrenceException')),
-        };
+        const out = { id: !blank(r.id) ? r.id : (!blank(r.Id) ? r.Id : null) };
+        for (const f of FIELDS) {
+            const has = f in r || RECORD[f] in r;
+            const v = !blank(r[f]) ? r[f] : r[RECORD[f]];
+            // The event's own zone: kept when it names one; a key present but blank or not a zone is null (a change
+            // that takes the zone away), and a row that never had one gets no key (it stays as it always was).
+            if (f === 'tz') { if (has) out.tz = validZone(v); continue; }
+            out[f] = (COERCE[f] || COERCE.text)(v);
+        }
         return out;
     }
 
@@ -103,6 +130,12 @@
         return null;
     }
 
+    /** A row as stored: no zone is no key at all (a row without one is byte-for-byte as before zones existed). */
+    function stored(e) {
+        if ('tz' in e && !e.tz) delete e.tz;
+        return e;
+    }
+
     /** Why this event cannot be stored, or null. */
     function invalid(e) {
         if (!e.start) return 'start is not a date';
@@ -116,13 +149,34 @@
         if (f === 'type') return (parseInt(a, 10) || 1) === (parseInt(b, 10) || 1);
         if (f === 'isAllDay') return !!a === !!b;
         if (f === 'start' || f === 'end') return iso(a) === iso(b);
+        if (f === 'tz') return (validZone(a) || null) === (validZone(b) || null);
         return (blank(a) ? null : String(a)) === (blank(b) ? null : String(b));
+    }
+
+    /** Same event, field by field, on meaning (FIELDS; the id is identity, not a field). */
+    function same(a, b) {
+        if (!a || !b) return a === b;
+        return FIELDS.every((f) => sameField(f, a[f], b[f]));
+    }
+
+    /**
+     * A new event with every field of `e` (normalized) but those a copy resets (COPY_RESETS), then `overrides`.
+     * No id: the store gives it one.
+     */
+    function copy(e, overrides = {}) {
+        const n = normalize(e), out = { id: null };
+        for (const f of FIELDS) {
+            if (f in COPY_RESETS) out[f] = COPY_RESETS[f];
+            else if (f in n) out[f] = n[f];
+        }
+        return stored({ ...out, ...overrides });
     }
 
     /** The fields of `next` that differ from `prev` -- what a change actually changes. */
     function diff(prev, next) {
         const out = {};
-        for (const f of FIELDS) if (f in next && !sameField(f, prev[f], next[f])) out[f] = next[f];
+        // (The zone is compared even when `next` has no key: a full row without one has no zone.)
+        for (const f of FIELDS) if ((f in next || f === 'tz') && !sameField(f, prev[f], next[f])) out[f] = f === 'tz' ? (validZone(next[f]) || null) : next[f];
         return out;
     }
 
@@ -177,7 +231,7 @@
 
         switch (c.type) {
             case 'add': {
-                const e = normalize(c.event);
+                const e = stored(normalize(c.event));
                 if (blank(e.id) || index.has(keyOf(e))) e.id = uuid();
                 const why = invalid(e);
                 if (why) throw new CommandError(`add: ${why}`, c, 'invalid_dates');
@@ -196,10 +250,12 @@
                 if (c.wrote) undoOnly(prev, fieldChanges, c.wrote);
                 const changes = diff(prev, normalize({ ...prev, ...fieldChanges }));
                 if (!Object.keys(changes).length) return { events: list, inverse: null, added: [], changed: [], removed: [] };
-                const next = { ...prev, ...changes };
+                const next = stored({ ...prev, ...changes });
                 const why = invalid(next);
                 if (why) throw new CommandError(`update: ${why}`, c, 'invalid_dates');
-                const before = {}; for (const f of Object.keys(changes)) before[f] = prev[f];
+                // (A zone taken away is undone by putting it back, one put on by taking it away: null, never
+                // undefined, which a save would drop.)
+                const before = {}; for (const f of Object.keys(changes)) before[f] = f === 'tz' ? (prev.tz || null) : prev[f];
                 list[i] = next;
                 // The inverse remembers what this change wrote, so an undo can take back only that (undoOnly).
                 return { events: list, inverse: { type: 'update', key: keyOf(next), changes: before, wrote: changes }, added: [], changed: [next], removed: [] };
@@ -228,7 +284,7 @@
     // Undo of a remove puts the row back with its ORIGINAL id, so anything that pointed at
     // it (an occurrence's recurrenceID, a shared link) still does.
     function restore(events, event) {
-        const e = normalize(event);
+        const e = stored(normalize(event));
         if (events.some((x) => keyOf(x) === keyOf(e))) throw new CommandError('restore: already there', { type: 'add', event }, 'already_there');
         return { events: [...events, e], inverse: { type: 'remove', key: keyOf(e) }, added: [e], changed: [], removed: [] };
     }
@@ -327,6 +383,9 @@
      * whole-list restore (Recent changes, undo of a bulk change) becomes an ordinary,
      * counted, undoable batch instead of a blind overwrite.
      */
+    // An update carries ONLY the fields that differ, never the whole row. A whole row is a copy of every field as
+    // this tab last saw it, and applied on top of a newer row (the server's, after someone else's save) it put
+    // their changes back the way they were (stress S15: an offline type change undid someone's rename).
     function changesBetween(current, target) {
         const cur = new Map((current || []).map((e) => [keyOf(e), e]));
         const tgt = new Map((target || []).map((e) => [keyOf(normalize(e)), normalize(e)]));
@@ -334,12 +393,76 @@
         for (const [k] of cur) if (!tgt.has(k)) commands.push({ type: 'remove', key: k });
         for (const [k, e] of tgt) {
             if (!cur.has(k)) commands.push({ type: 'add', event: e, restoreId: true });
-            else if (Object.keys(diff(cur.get(k), e)).length) commands.push({ type: 'update', key: k, changes: e });
+            else {
+                const d = diff(normalize(cur.get(k)), e);
+                if (Object.keys(d).length) commands.push({ type: 'update', key: k, changes: d });
+            }
         }
         return commands;
     }
 
+    /**
+     * One row merged three ways: `theirs` (the newest row) with the fields `mine` changed since `base` (what this tab
+     * started from). Untouched fields are theirs, whatever this tab's copy says. A field both changed: mine, unless
+     * yieldOnConflict (a replay hours old: theirs is the newer intent). Returns a row in `theirs`' shape.
+     */
+    function mergeRow(base, mine, theirs, { yieldOnConflict = false } = {}) {
+        const ours = diff(normalize(base), normalize(mine));
+        const out = { ...theirs };
+        for (const f of Object.keys(ours)) {
+            if (yieldOnConflict && !sameField(f, base[f], theirs[f])) continue;
+            if (f === 'tz' && !ours.tz) delete out.tz;
+            else out[f] = f in mine ? mine[f] : ours[f];
+        }
+        return out;
+    }
+
+    /**
+     * What changed between two versions of an event, in the words a person uses ("renamed to "Game"", "one date
+     * skipped"), or null if nothing they would see differs. One entry per field of THE list (RECORD): a field added
+     * there without words here fails at load (and test/unit/event-fields.test.js), so Activity can never again list a
+     * change it has no words for as a nameless "1 event edited" (a deleted occurrence and a zone change were, stress
+     * A16: Activity kept its own field list, which had neither). `when(event)` says when an event is ("Thu, Sep 17").
+     */
+    const zoneWords = (tz) => (root.EventZone && root.EventZone.zoneCity ? root.EventZone.zoneCity(tz) : String(tz).split('/').pop().replace(/_/g, ' '));
+    const CHANGE_WORDS = {
+        title: (a, b) => (b.title && String(b.title).trim() ? `renamed to "${b.title}"` : 'title cleared'),
+        description: () => 'notes changed',
+        start: (a, b, when) => `moved to ${when(b)}`,
+        end: (a, b, when) => `moved to ${when(b)}`,
+        type: () => 'color changed',
+        isAllDay: (a, b) => (b.isAllDay ? 'made all-day' : 'given a time'),
+        repeat: () => 'repeat changed',
+        recurrencerule: () => 'repeat changed',
+        recurrenceID: (a, b) => (blank(b.recurrenceID) ? 'made its own event' : 'made part of a series'),
+        recurrenceException: (a, b) => {
+            const was = new Set(stampsOf(a.recurrenceException)), now = new Set(stampsOf(b.recurrenceException));
+            const skipped = [...now].filter((x) => !was.has(x)).length, back = [...was].filter((x) => !now.has(x)).length;
+            const out = [];
+            if (skipped) out.push(skipped === 1 ? 'one date skipped' : `${skipped} dates skipped`);
+            if (back) out.push(back === 1 ? 'a skipped date back' : `${back} skipped dates back`);
+            return out.join(', ') || 'skipped dates changed';
+        },
+        tz: (a, b) => (validZone(b.tz) ? `time zone set to ${zoneWords(validZone(b.tz))}` : 'time zone removed'),
+    };
+    for (const f of FIELDS) if (typeof CHANGE_WORDS[f] !== 'function') throw new Error(`EventStore: no words for a change of "${f}" (CHANGE_WORDS)`);
+    function describeChange(from, to, when = () => '') {
+        if (!from || !to) return null;
+        const a = normalize(from), b = normalize(to);
+        if (!('tz' in a)) a.tz = null;
+        if (!('tz' in b)) b.tz = null;
+        const words = [];
+        for (const f of FIELDS) {
+            if (sameField(f, a[f], b[f])) continue;
+            const w = CHANGE_WORDS[f](a, b, when);
+            if (w && !words.includes(w)) words.push(w);
+        }
+        return words.length ? words.join(', ') : null;
+    }
+
     EventStore.apply = applyAny;
+    EventStore.CHANGE_WORDS = CHANGE_WORDS;
+    EventStore.describeChange = describeChange;
     EventStore.changesBetween = changesBetween;
     EventStore.normalize = normalize;
     EventStore.keyOf = keyOf;
@@ -347,7 +470,13 @@
     EventStore.CommandError = CommandError;
     EventStore.report = report;
     EventStore.FIELDS = FIELDS;
+    EventStore.RECORD = RECORD;
+    EventStore.COPY_RESETS = COPY_RESETS;
+    EventStore.same = same;
+    EventStore.copy = copy;
+    EventStore.mergeRow = mergeRow;
     EventStore.unsafeRecurrence = unsafeRecurrence;
+    EventStore.validZone = validZone;
 
     if (typeof module !== 'undefined' && module.exports) module.exports = EventStore;
     else root.EventStore = EventStore;
