@@ -4082,7 +4082,9 @@ const CalendarVueApp = {
                 this.calendar.id = slug;
             }
 
-            // normalize
+            // normalize. A name typed here is trimmed (once, now: from then on the name is exact everywhere); one that
+            // came from the address ("/royal%20city%20", a draft saved where it was opened) is kept as it is.
+            if (this.userHasEditedSlug && slug.trim()) slug = slug.trim();
             slug = SlugManager.normalizeSlug(slug);
             this.calendar.id = slug;
 
