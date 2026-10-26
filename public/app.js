@@ -2297,10 +2297,12 @@ const CalendarVueApp = {
                 if (!series) return this.nativeCardGone();
                 let rec = this.nativeRecord(series);
                 delete fields.RecurrenceRule;
-                const seriesId = rec.Id;
-                rec = this.nativeCardApply(rec, { Subject: after.title, Type: Number(after.type) || 1, Description: after.description, IsAllDay: !!after.isAllDay,
-                    ...this.nativeCardTimes(after), ...fields });
-                Object.assign(rec, { Id: NATIVE_OCCURRENCE_ID, RecurrenceID: seriesId });
+                // The occurrence as this change began: the series as it is NOW (renamed elsewhere meanwhile, say) at
+                // this slot's times, noted; then only the fields this change changed. The card's whole value carried
+                // what it showed when it opened, and a stale title went into the new row (stress S04).
+                Object.assign(rec, { Id: NATIVE_OCCURRENCE_ID, RecurrenceID: rec.Id, ...this.nativeCardTimes(before) });
+                ScheduleAdapter.noteStart(rec);
+                rec = this.nativeCardApply(rec, fields);
                 ok = this.nativeAction('eventChange', { changedRecords: [rec] }, { action: 'EditOccurrence', occurrenceStart: c.target.occurrence.start });
                 if (ok) {
                     // Its new row, or (someone else saved "This event" on this slot first) the slot's row it updated.
@@ -2462,8 +2464,9 @@ const CalendarVueApp = {
             const next = { ...v, start: cardKit.addDays(v.start, 1), end: cardKit.addDays(v.end, 1), rule: '' };
             const ids = new Set((this.calendar.events || []).map((e) => e && String(e.id)));
             const snapshot = { target: { ...c.target }, value: v, canRepeat: c.canRepeat };
-            const ok = this.nativeAction('eventCreate', { addedRecords: [{ Subject: v.title || '(No title)', ...this.nativeCardTimes(next), IsAllDay: !!v.isAllDay,
-                Type: Number(v.type) || 1, Description: v.description || '', RecurrenceRule: '', ...(v.tz ? { Tz: v.tz } : {}) }] }, { action: 'Add' });
+            const t = c.target, row = this.nativeStored(t.kind === 'row' ? { id: t.id, recurrenceID: t.recurrenceID } : { id: t.seriesId });
+            if (!row) return this.nativeCardGone(t.kind !== 'row');
+            const ok = this.nativeAction('eventCreate', { addedRecords: [this.nativeCopyRecord(row, { ...this.nativeCardTimes(next), IsAllDay: !!v.isAllDay })] }, { action: 'Add' });
             const row = ok && (this.calendar.events || []).find((e) => e && !ids.has(String(e.id)));
             if (!row) return;
             c.target = { kind: 'row', id: row.id, recurrenceID: null, seriesId: null, occurrence: null };
@@ -2496,11 +2499,21 @@ const CalendarVueApp = {
             const row = this.nativeStored({ id: payload.event.id, recurrenceID: payload.event.recurrenceID });
             if (!row) return;
             const ids = new Set((this.calendar.events || []).map((e) => e && String(e.id)));
-            const rec = this.nativeRecord(row);
-            const ok = this.nativeAction('eventCreate', { addedRecords: [{ Subject: rec.Subject || '(No title)', StartTime: new Date(payload.start), EndTime: new Date(payload.end),
-                IsAllDay: !!rec.IsAllDay, Type: Number(rec.Type) || 1, Description: rec.Description || '', RecurrenceRule: '' }] }, { action: 'Add' });
+            const ok = this.nativeAction('eventCreate', { addedRecords: [this.nativeCopyRecord(row, { StartTime: new Date(payload.start), EndTime: new Date(payload.end) })] }, { action: 'Add' });
             const copy = ok && (this.calendar.events || []).find((e) => e && !ids.has(String(e.id)));
             if (copy) this._nativeGlow = `event-${copy.id}`;
+        },
+        /**
+         * A new event's record copying a stored row: every field (EventStore.copy) but its id and its repeat (a repeating
+         * event's copy is one event), at `times` ({ StartTime, EndTime }, maybe IsAllDay). Duplicate and an Option-drag
+         * both copy through here, so a field the event has is never left behind (stress S03: the drag copy lost its zone).
+         */
+        nativeCopyRecord(row, times) {
+            const copy = EventStore.copy(row);
+            if (!String(copy.title || '').trim()) copy.title = '(No title)';
+            const rec = ScheduleAdapter.toView([copy])[0];
+            for (const k of ['Id', '_storedStart', '_storedEnd', '_shownEnd', '_storedRule', '_storedException', '_gridRule']) delete rec[k];
+            return { ...rec, ...times };
         },
         onNativeMoveSaved(payload) {
             if (payload.copy) return this.nativeDropCopy(payload);
@@ -5574,16 +5587,7 @@ const CalendarVueApp = {
          */
         sameEvent(a, b) {
             if (!a || !b) return false;
-            const norm = (v) => (v === undefined || v === null || v === '') ? null : v;
-            const when = (v) => Event.toISOStringOrNull(v);
-            return norm(a.title) === norm(b.title)
-                && when(a.start) === when(b.start) && when(a.end) === when(b.end)
-                && norm(a.description) === norm(b.description)
-                && String(a.type ?? 1) === String(b.type ?? 1)
-                && !!a.isAllDay === !!b.isAllDay
-                && norm(a.recurrencerule) === norm(b.recurrencerule)
-                && norm(a.recurrenceException) === norm(b.recurrenceException)
-                && norm(a.tz) === norm(b.tz);
+            return EventStore.same(a, b);   // every field of the one list, on meaning
         },
 
         /** What turned `before` into `after`, in the same shape the server records. */

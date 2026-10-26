@@ -665,15 +665,7 @@ export class CalendarRoom extends DurableObject {
 
     static sameEvent(a, b) {
         if (!a || !b) return false;
-        const norm = (v) => (v === undefined || v === null || v === '') ? null : v;
-        const FIELDS = ['title', 'description', 'start', 'end', 'type', 'isAllDay',
-            'repeat', 'recurrencerule', 'recurrenceID', 'recurrenceException', 'tz'];
-        return FIELDS.every((f) => {
-            const x = norm(a[f]), y = norm(b[f]);
-            if (f === 'type') return String(x === null ? 1 : x) === String(y === null ? 1 : y);
-            if (f === 'isAllDay') return !!x === !!y;
-            return x === y;
-        });
+        return EventStore.same(a, b);   // every field of the one list (EventStore.FIELDS), on meaning
     }
 
     // Store a new event list: only the rows that changed are written.

@@ -139,28 +139,59 @@ class CloudCalendarService extends CalendarDataService {
 
     /**
      * This tab's unsent changes (base -> local), rebuilt against what the server holds NOW
-     * (fresh): drop what the server already has (a write whose ack we lost), drop changes to
-     * rows someone else changed or deleted since base (theirs is newer, as in _mergeEvents'
-     * yieldOnConflict). What is left can be applied to `fresh` without double-applying.
+     * (fresh). See replayable.
      */
     static rebuild(base, local, fresh) {
+        return this.replayable(base, EventStore.changesBetween(base || [], (local || []).filter((e) => e && e.id != null && e.id !== '')), fresh);
+    }
+
+    /**
+     * Unsent commands (made against `base`, as the journal stores them: only the fields this tab changed), as they
+     * may still be applied to what the server holds NOW (fresh). Field by field, as in _mergeEvents' yieldOnConflict:
+     *   - a field the server already has as ours is dropped (a write whose ack we lost);
+     *   - a field someone else changed since base is theirs: dropped (their change is newer);
+     *   - every other field we changed is still ours, so one person's offline type change and another's rename
+     *     of the same event both stand (stress S15). A row someone else deleted stays deleted.
+     * A remove goes only if nobody changed the row since; an add only if the row is not there yet.
+     */
+    static replayable(base, commands, fresh) {
         const key = EventStore.keyOf;
-        const freshM = new Map((fresh || []).map((e) => [key(e), e]));
-        const baseM = new Map((base || []).map((e) => [key(e), e]));
-        const untouchedByOthers = (k) => {
-            const b = baseM.get(k), f = freshM.get(k);
-            return !!b && !!f && Object.keys(EventStore.diff(b, EventStore.normalize(f))).length === 0;
-        };
+        const freshM = new Map((fresh || []).map((e) => [key(e), EventStore.normalize(e)]));
+        const baseM = new Map((base || []).map((e) => [key(e), EventStore.normalize(e)]));
         const out = [];
-        for (const c of EventStore.changesBetween(base || [], (local || []).filter((e) => e && e.id != null && e.id !== ''))) {
+        for (const c of commands || []) {
             if (c.type === 'add') { if (!freshM.has(key(c.event))) out.push(c); continue; }
-            if (!freshM.has(c.key)) continue;                         // gone already (ours applied, or theirs)
-            if (!untouchedByOthers(c.key)) continue;                  // someone changed it since: theirs stands
-            if (c.type === 'update') {
-                if (Object.keys(EventStore.diff(freshM.get(c.key), EventStore.normalize(c.changes))).length) out.push(c);
-            } else out.push(c);
+            const f = freshM.get(c.key), b = baseM.get(c.key);
+            if (!f || !b) continue;                                    // gone already (ours applied, or theirs)
+            if (c.type === 'remove') { if (!Object.keys(EventStore.diff(b, f)).length) out.push(c); continue; }
+            if (c.type !== 'update') continue;
+            const theirs = EventStore.diff(b, f);                      // what others changed since base
+            const changes = {};
+            for (const [field, v] of Object.entries(c.changes || {})) {
+                if (field in theirs) continue;                         // theirs is newer
+                if (Object.keys(EventStore.diff(f, EventStore.normalize({ ...f, [field]: v }))).length) changes[field] = v;
+            }
+            if (Object.keys(changes).length) out.push({ type: 'update', key: c.key, changes });
         }
         return out;
+    }
+
+    /**
+     * The journal entry for an unsent save: the base it was made against, the calendar (the Firebase path replays
+     * that), and `changes`: only the fields this tab changed (EventStore.changesBetween), which is what a replay sends.
+     */
+    static _journalWrite(calendar) {
+        const t = super._journalWrite(calendar);
+        if (t == null) return t;
+        try {
+            const entry = this._journalRead(calendar.id);
+            if (entry && entry.t === t && Array.isArray(entry.base)) {
+                const local = this._sanitizeForFirebase(this._completeRows(calendar.events, entry.base).kept).filter((e) => e && e.id != null && e.id !== '');
+                entry.changes = EventStore.changesBetween(entry.base, local);
+                localStorage.setItem(this.JOURNAL_PREFIX + calendar.id, JSON.stringify(entry));
+            }
+        } catch (e) { /* the entry without changes replays from base + calendar, as before */ }
+        return t;
     }
 
     static errorKind(code) {
@@ -376,7 +407,8 @@ class CloudCalendarService extends CalendarDataService {
         const stale = entry && entry.calendar && (Date.now() - entry.t > this.JOURNAL_MAX_AGE_MS);
         if (stale) this._journalClear(room.id, entry.t);
         const commands = entry && entry.calendar && !stale
-            ? this.rebuild(entry.base || [], this._sanitizeForFirebase(entry.calendar.events || []), room.server.events) : [];
+            ? (Array.isArray(entry.changes) ? this.replayable(entry.base || [], entry.changes, room.server.events)
+                : this.rebuild(entry.base || [], this._sanitizeForFirebase(entry.calendar.events || []), room.server.events)) : [];
         if (entry && !stale && !commands.length) this._journalClear(room.id, entry.t);
         if (commands.length && !this._replayed[room.id + ':' + entry.t]) {
             this._replayed[room.id + ':' + entry.t] = true;

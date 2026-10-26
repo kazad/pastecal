@@ -22,6 +22,9 @@
 (function (root) {
     'use strict';
 
+    // The one list of event fields (services/EventStore.js: a page global, or required in node).
+    const Store = () => (typeof EventStore !== 'undefined' && EventStore) || root.EventStore
+        || (typeof require === 'function' ? require('./EventStore.js') : null);
     const warnedRules = new Set();
     const blank = (v) => v === undefined || v === null || v === '';
     const asText = (v) => blank(v) ? v : String(v);
@@ -68,6 +71,16 @@
         out.push(['BYMONTH', String(grid.month)], ['INTERVAL', String(interval / 12)]);
         return out.map((p) => p.join('=')).join(';') + ';';
     };
+    // How a record's field is read back into the event (fromRecord); any other field is taken as it is.
+    const READ = {
+        title: (v) => unescape(v || ''),
+        description: (v) => unescape(v || ''),
+        isAllDay: (v) => !!v,
+        recurrencerule: (v) => v || '',
+        recurrenceException: (v) => v || null,
+        repeat: (v) => v || '',
+        tz: (v) => v || null,
+    };
     const recKey = (r) => `${blank(r.Id) ? '' : String(r.Id)}|${blank(r.RecurrenceID) ? '' : String(r.RecurrenceID)}`;
 
     // Text on an event chip: one of these two, by contrast with the event's color.
@@ -100,12 +113,21 @@
             if (record && !blank(record.Id)) opened.set(recKey(record), ScheduleAdapter.fromRecord(record));
         },
 
-        /** The fields the user changed: record vs the event as it was when they started. */
-        changesFrom(record) {
+        /**
+         * The fields the user changed: record vs the event as it was when they started (noteStart), or vs `fallback`
+         * (a record of what they started from, when no snapshot could be noted). Never the whole record: a whole record
+         * is a copy of every field as this tab last saw it, and stale fields in it overwrite someone else's newer ones.
+         */
+        changesFrom(record, fallback = null) {
             const now = ScheduleAdapter.fromRecord(record);
-            const start = opened.get(recKey(record));
+            const start = opened.get(recKey(record)) || (fallback ? ScheduleAdapter.fromRecord(fallback) : null);
             opened.delete(recKey(record));
-            if (!start) return now;                      // no snapshot: the whole record
+            if (!start) {
+                // A write path that did not note where the change began. The store still writes only what differs
+                // from the stored row, but a stale field would count as a change: tests hear about it.
+                if (root.__TEST__) setTimeout(() => { throw new Error(`ScheduleAdapter.changesFrom: no noteStart for ${recKey(record)}`); });
+                return now;
+            }
             const out = { id: now.id, recurrenceID: now.recurrenceID };
             const same = (a, b) => (a instanceof Date || b instanceof Date)
                 ? new Date(a).getTime() === new Date(b).getTime()
@@ -214,9 +236,12 @@
                 const rule = unsafe ? '' : e.recurrencerule;
                 const shownRule = allDaySeries ? Event.allDayRuleToLocal(rule) : rule;
                 const gridRule = yearlyByPosToGrid(shownRule, start);
-                return {
-                    Id: asText(e.id),
-                    Subject: e.title,
+                // Every field of the one list (EventStore.RECORD) under its record name, as stored; then the ones
+                // the grid is shown differently. A field added to the list rides along with no change here. (The
+                // event's own zone too: classic neither shows nor edits it, and fromRecord hands it back.)
+                const rec = { Id: asText(e.id) };
+                for (const [f, R] of Object.entries(Store().RECORD)) if (f !== 'tz' || e.tz) rec[R] = e[f];
+                return Object.assign(rec, {
                     StartTime: start,
                     EndTime: end,
                     ...(shownEnd ? { _shownEnd: shownEnd } : {}),
@@ -224,19 +249,14 @@
                     _storedEnd: e.end,
                     _allDaySeries: allDaySeries,
                     ...(allDaySeries ? { _storedRule: rule, _storedException: e.recurrenceException } : {}),
-                    Description: e.description,
                     RecurrenceRule: gridRule || shownRule,
                     ...(gridRule ? { _gridRule: { shown: gridRule, rule: shownRule, month: start.getMonth() + 1 } } : {}),
                     Type: parseInt(e.type || 1, 10),
                     IsAllDay: !!e.isAllDay,
-                    Recurrence: e.repeat,
                     RecurrenceID: asText(e.recurrenceID),
                     RecurrenceException: allDaySeries
                         ? Event.allDayExceptionsToLocal(e.recurrenceException) : e.recurrenceException,
-                    // The event's own zone (services/EventZone.js) rides along untouched: classic neither shows nor
-                    // edits it, and fromRecord hands it back, so an edit in classic keeps it.
-                    ...(e.tz ? { Tz: e.tz } : {}),
-                };
+                });
             });
         },
 
@@ -252,17 +272,11 @@
                 id: blank(r.Id) ? null : r.Id,
                 recurrenceID: blank(r.RecurrenceID) ? null : r.RecurrenceID,
             };
-            if ('Subject' in r) out.title = unescape(r.Subject || '');
-            if ('Description' in r) out.description = unescape(r.Description || '');
-            if ('StartTime' in r) out.start = r.StartTime;
-            if ('EndTime' in r) out.end = r.EndTime;
-            if ('Type' in r) out.type = r.Type;
-            if ('IsAllDay' in r) out.isAllDay = !!r.IsAllDay;
-            if ('RecurrenceRule' in r) out.recurrencerule = r.RecurrenceRule || '';
-            if ('RecurrenceException' in r) out.recurrenceException = r.RecurrenceException || null;
-            if ('Recurrence' in r) out.repeat = r.Recurrence || '';
-            // Only when the record carries it: a record without it (an editor that rebuilt the record) changes nothing.
-            if ('Tz' in r) out.tz = r.Tz || null;
+            // Every field the record carries (EventStore.RECORD), read back; a field it does not carry (an editor that
+            // rebuilt the record without the zone) changes nothing.
+            for (const [f, R] of Object.entries(Store().RECORD)) {
+                if (f !== 'recurrenceID' && R in r) out[f] = (READ[f] || ((v) => v))(r[R]);
+            }
             // The way back from toView's all-day display (and an inverted range's repair) is
             // the Event model's: dates become the legacy stored form, and a value whose
             // meaning is unchanged keeps its stored text.
@@ -316,9 +330,14 @@
                     const edited = action === 'EditOccurrence' && (store.getEvents() || []).find((e) => e && !blank(e.recurrenceID)
                         && String(e.recurrenceID) === String(master.id) && String(e.recurrenceException || '').trim() === stamp);
                     if (edited) {
-                        const { id: _i, recurrenceID: _r, recurrencerule: _rule, recurrenceException: _ex, ...fields } = ScheduleAdapter.changesFrom(r);
+                        // Only what this change changed, measured from where it began (noteStart) or else from the
+                        // occurrence as the series draws it at this slot: the edited row's own fields stay.
+                        const dur = new Date(master.end) - new Date(master.start);
+                        const slot = { ...ScheduleAdapter.toView([master])[0], StartTime: new Date(when), EndTime: new Date(new Date(when).getTime() + dur) };
+                        const { id: _i, recurrenceID: _r, recurrencerule: _rule, recurrenceException: _ex, ...fields } = ScheduleAdapter.changesFrom(r, slot);
                         commands.push({ type: 'update', key: edited, changes: fields });
                     } else if (action === 'EditOccurrence') {
+                        opened.delete(recKey(r));   // (a new row: all of it is this change)
                         // (An edited occurrence keeps its series' zone.)
                         commands.push({ type: 'add', event: { ...(master.tz ? { tz: master.tz } : {}), ...ScheduleAdapter.fromRecord(r), id: null, recurrenceID: master.id,
                             recurrencerule: master.recurrencerule, recurrenceException: stamp } });

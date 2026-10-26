@@ -16,6 +16,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+// ScheduleAdapter reads the one list of event fields from EventStore (a page global).
+globalThis.EventStore = require('../../public/services/EventStore.js');
 
 function loadCalendarClass() {
   const src = fs.readFileSync(
