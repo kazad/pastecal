@@ -3,7 +3,7 @@
 // VERSION is part of every URL, so a browser can reuse what it already has; bump it
 // whenever any file below changes (it used to be Date.now(), which defeated all caching).
 (function() {
-    const VERSION = '20261024';
+    const VERSION = '20261026';
     const files = [
         '/nativecal/components/ncUx.js',
         '/nativecal/components/NcIcon.js',

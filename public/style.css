@@ -26,7 +26,8 @@
 [data-theme="dark"] { color-scheme: dark; }
 
 /* ---- Base ---------------------------------------------------------------------------------- */
-body { min-width: 320px; background: var(--bg); color: var(--fg) }
+/* No min-width: the page fits whatever holds it, down to a 300px sidebar embed (a 320px floor scrolled it sideways). */
+body { background: var(--bg); color: var(--fg) }
 .border-color-default { border-color: var(--border-color) !important }   /* beats Tailwind's border colors */
 .text-color-1 { color: var(--text-color-1) }
 .text-color-2 { color: var(--text-color-2) }
@@ -384,6 +385,17 @@ td.e-header-cells.e-disable-dates:hover { background-color: var(--pc-hover) !imp
   background: var(--pc-bg); color: var(--pc-text-2); font-size: var(--pc-fs-sm); box-shadow: var(--pc-shadow-md) }
 .pc-slug-taken-close { font-size: var(--pc-fs-xl) }   /* + .pc-btn--ghost.pc-btn--icon */
 @media (max-width: 767px) { .pc-slug-taken { top: 122px } }   /* below the claim row: they need to see the name they typed */
+
+/* The one way the app says "that didn't work" where it happened: a short line in the danger color, beside the control
+   (Share's Rename, Activity). Never a browser alert, never an empty state that reads as success. */
+.pc-say-err { margin: 6px 0 0; font-size: var(--pc-fs-sm); line-height: 1.45; color: var(--pc-danger) }
+.pc-say-err .pc-link { font-size: inherit }
+
+/* A view link that isn't a calendar (none, not shared to view, or couldn't be looked up): over the empty grid. */
+.pc-view-problem { position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: var(--pc-space-2); padding: var(--pc-space-4); text-align: center; background: var(--pc-bg) }
+.pc-view-problem-h { margin: 0; font: var(--pc-fw-semibold) var(--pc-fs-lg)/1.3 var(--pc-font); color: var(--pc-text) }
+.pc-view-problem-p { margin: 0 0 var(--pc-space-2); font-size: var(--pc-fs-md); color: var(--pc-text-muted) }
 
 /* =========================================================================================
    Homepage: the guide beside the calendar (1100px+) or the one line above it, then the tour
@@ -1228,6 +1240,8 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
 .pc-m-add::after { content: ""; position: absolute; inset: -6px; border-radius: var(--pc-radius-pill) }
 .pc-m-add svg { width: 20px; height: 20px }
 .pc-m-notes-item { display: none }
+.pc-m-viewer-notes { gap: 4px; padding: 0 8px; color: var(--pc-text-2) }
+.pc-m-viewer-notes svg { width: 18px; height: 18px }
 /* Phones: Notes moves into the menu so the title has room; +, share and menu are 44px targets (the
    + still draws a 36px circle inside its box). */
 @media (max-width: 640px) {
@@ -1414,6 +1428,13 @@ div.pc-qa-dialog { max-height: calc(100dvh - 24px); overflow-y: auto; overscroll
   border: 1px solid var(--pc-line); border-radius: var(--pc-radius-pill); background: var(--pc-bg); box-shadow: var(--pc-shadow-md);
   font-size: var(--pc-fs-sm); color: var(--pc-text-2); white-space: nowrap }
 .pc-hidden-pill .pc-link { font-weight: var(--pc-fw-semibold); padding: 2px 6px }
+/* "Offline: changes will save when you reconnect": the same quiet bar, above the filter's when both show. */
+.pc-offline { position: fixed; z-index: 30; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+  display: flex; align-items: center; gap: 8px; max-width: calc(100% - 32px); padding: 6px 14px;
+  border: 1px solid var(--pc-line); border-radius: var(--pc-radius-pill); background: var(--pc-bg); box-shadow: var(--pc-shadow-md);
+  font-size: var(--pc-fs-sm); line-height: 1.35; color: var(--pc-text-2) }
+.pc-hidden-pill ~ .pc-offline { bottom: calc(60px + env(safe-area-inset-bottom)) }
+.pc-offline-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--pc-text-muted) }
 
 .pc-search-results { display: flex; flex-direction: column; gap: 4px; max-height: 60vh; overflow: auto }
 .pc-search-result { border-left: 3px solid var(--dot); border-radius: 0 var(--pc-radius-sm) var(--pc-radius-sm) 0 }
@@ -1469,7 +1490,7 @@ div.pc-qa-dialog { max-height: calc(100dvh - 24px); overflow-y: auto; overscroll
   html, body, #app { background: var(--pc-paper) !important; color: var(--pc-ink) !important }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact }
   topbar, .pc-m-header, .pc-viewer-row, .pc-tpl, .pc-home-line, .pc-draft-note, .pc-home-aside, aside, .pc-side, .pc-side-scrim,
-  .pc-view-footer, .pc-edit-footer, .pc-hosted-note, .pc-embed-credit, .site-footer, .pc-tour, .pc-hidden-pill, .pc-grid-tip,
+  .pc-view-footer, .pc-edit-footer, .pc-hosted-note, .pc-embed-credit, .site-footer, .pc-tour, .pc-hidden-pill, .pc-offline, .pc-grid-tip,
   .pc-toast-wrap, .pc-upsell, #pc-beta-banner, .pc-beta-banner, [data-testid=homepage-tour], footer, #Schedule { display: none !important }
   #app topbar, #app .pc-m-header, #app .pc-viewer-row { display: none !important }   /* outranks Tailwind's md:flex */
   .pc-print-only { display: flex !important }

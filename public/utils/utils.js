@@ -580,3 +580,41 @@ if (typeof MutationObserver !== 'undefined' && typeof document !== 'undefined') 
 }
 
 Object.assign(Utils, { linkify });
+
+// The page's ONE polite live region: copying a link, the save status (offline, back) and every toast speak through
+// it, so a screen reader hears each change, once. (A second region would say it twice; a region inserted together
+// with its text is often not read at all, so this one is made empty at load and only its text changes.)
+function liveRegion() {
+    if (typeof document === 'undefined' || !document.body) return null;
+    let el = document.getElementById('pc-live');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'pc-live';
+        el.setAttribute('aria-live', 'polite');
+        el.setAttribute('aria-atomic', 'true');
+        el.setAttribute('data-testid', 'live-region');
+        el.style.cssText = 'position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0';
+        document.body.appendChild(el);
+    }
+    return el;
+}
+let announceTimers = [];
+/** Say `text` to screen readers (politely). The same words twice in a row are said twice. */
+function announce(text) {
+    const el = liveRegion();
+    if (!el) return;
+    announceTimers.forEach(clearTimeout);
+    const say = () => { el.textContent = String(text || ''); announceTimers = [setTimeout(() => { el.textContent = ''; }, 7000)]; };
+    if (el.textContent === String(text || '')) { el.textContent = ''; announceTimers = [setTimeout(say, 60)]; } else say();
+}
+if (typeof document !== 'undefined') {
+    if (document.body) liveRegion(); else document.addEventListener('DOMContentLoaded', liveRegion);
+}
+Object.assign(Utils, { announce });
+
+/** Text as search compares it: case and accents folded ("Café" -> "cafe"), so a word typed without its accents still
+ *  matches. NFC again after dropping the marks, so a Hangul syllable stays one character. */
+function searchFold(s) {
+    return String(s ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').normalize('NFC').toLowerCase();
+}
+Object.assign(Utils, { searchFold });

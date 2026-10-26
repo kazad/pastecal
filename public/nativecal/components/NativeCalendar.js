@@ -550,6 +550,13 @@ const NativeCalendar = (() => {
             // v2 drops the leading zero ("9:00 AM", and "5 AM" on the hour gutter).
             time(d) { const t = fmtTime(d, this.timeFormat); return (this.v2 || this.appLook) && this.timeFormat !== '24' ? t.replace(/^0/, '') : t; },
             nowLabel() { const t = this.time(this.now); return this.appLook && this.isPhone && this.timeFormat !== '24' ? t.replace(/ ([AP])M$/, (m, x) => x.toLowerCase()) : t; },
+            // The hour label the current-time label lands on (or just beside) gives way to it, as Google's does: "12:00 PM"
+            // twice, 12px apart, read as a glitch. Row i's label is drawn 4-18px below its top; "now" is centered on nowTop.
+            nowHidesHour(i) {
+                if (!(this.gridDays.some(this.isToday) && this.nowTop >= 0)) return false;
+                const d = this.nowTop - i * HOUR_PX;
+                return d > -10 && d < 28;
+            },
             hourLabel(h) {
                 // The main app on a phone: compact labels ("5a", "12p", or "17"), as its classic grid draws them there.
                 if (this.appLook && this.isPhone) return this.timeFormat === '24' ? String(h) : `${h % 12 || 12}${h < 12 ? 'a' : 'p'}`;
@@ -957,7 +964,7 @@ const NativeCalendar = (() => {
     <div class="nc-grid-scroll" ref="timeScroll">
       <div class="nc-grid-body" :style="{ height: hours.length * 48 + 'px' }">
         <div class="nc-gutter">
-          <div v-for="h in hours" :key="h" class="nc-hour-label">{{ hourLabel(h) }}</div>
+          <div v-for="(h, i) in hours" :key="h" class="nc-hour-label" :style="nowHidesHour(i) ? { visibility: 'hidden' } : null">{{ hourLabel(h) }}</div>
           <div v-if="gridDays.some(isToday) && nowTop >= 0" class="nc-now-label" :style="{ top: nowTop + 'px' }">{{ nowLabel() }}</div>
         </div>
         <div class="nc-grid-cols">

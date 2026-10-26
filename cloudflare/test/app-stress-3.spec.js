@@ -210,7 +210,6 @@ test('A04 [homepage] data-loss: claiming "a?b" or "50% fun" saves the calendar, 
 });
 
 test('A05 [homepage] broken: Save & share that fails (a name with "#", or a server error) shows "Loading…" forever and says nothing', async ({ browser }) => {
-  finding('create(): createWithId has no failure path; isLoading stays true and nothing is shown');
   const out = {};
   for (const why of ['name', '500']) {
     const { ctx, page, dialogs } = await open(browser, '/?backend=cf');
@@ -239,7 +238,6 @@ test('A06 [share] broken: in Tokyo (or anywhere east of UTC), "This view" on Sat
 });
 
 test('A07 [share] ugly: renaming the view link to a taken name (or its own) is a browser alert about a "Slug", plus an uncaught error', async ({ browser }) => {
-  finding('SlugManager.createReadOnlyLink alert()s and rethrows; customizeExistingLink has no catch');
   const other = await seed([]);
   const { id, viewId } = await seed([timed('e1', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00')]);
   const out = {};
@@ -260,7 +258,6 @@ test('A07 [share] ugly: renaming the view link to a taken name (or its own) is a
 });
 
 test('A08 [view] ugly: a view link that does not exist is a browser alert, then an empty calendar called "New calendar" with "Add to my calendar"', async ({ browser }) => {
-  finding('the /view/ lookup alert()s "Calendar not found" and leaves the empty draft calendar rendered as a view');
   const { ctx, page, dialogs } = await browserFor(browser);
   await page.goto(`/view/nothing-here-${rand()}?backend=cf`);
   await page.waitForTimeout(4000);
@@ -271,7 +268,6 @@ test('A08 [view] ugly: a view link that does not exist is a browser alert, then 
 });
 
 test('A09 [activity] broken: when the changes cannot be loaded, Activity says "Nothing has changed in the last 30 days"', async ({ browser }) => {
-  finding('CloudCalendarService.loadUndoEntries returns [] on any failure (HTTP error, offline): the panel cannot tell "none" from "could not load"');
   const { id } = await seed([timed('e1', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00')]);
   const A = await open(browser, `/${id}?backend=cf`);
   await quickAdd(A.page, 'Snack duty tomorrow 3pm');
@@ -294,7 +290,6 @@ test('A09 [activity] broken: when the changes cannot be loaded, Activity says "N
 });
 
 test('A10 [embed] ugly: embedded 300px wide, the page scrolls sideways: the credit and Saturday are cut off, and the Notes panel runs past the edge', async ({ browser }) => {
-  finding('the embed bar and the month grid assume at least ~324px (their min widths), wider than a 300px sidebar widget');
   const evs = [timed('e1', 'Game', '2026-10-03T10:00:00-07:00', '2026-10-03T11:00:00-07:00')];
   const { viewId } = await seed(evs, { title: 'Riverside Rockets U10 Fall', options: { notes: 'Home field: Riverside Park https://maps.example.com/riverside-park-field-3\nBring water.' } });
   const { ctx, page } = await browserFor(browser, { now: NOW });
@@ -331,7 +326,6 @@ test('A11 [feed] nit: after a rename, a calendar app asking "changed?" (If-None-
 });
 
 test('A12 [sync] ugly: offline, an added event looks saved: nothing says it has not reached anyone', async ({ browser }) => {
-  finding('no part of the app shows the connection state; edits wait in the local journal silently');
   const { id } = await seed([timed('e1', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:30:00-07:00')]);
   const { ctx, page } = await open(browser, `/${id}?backend=cf`, { now: NOW });
   await ctx.setOffline(true);
@@ -348,7 +342,6 @@ test('A12 [sync] ugly: offline, an added event looks saved: nothing says it has 
 });
 
 test('A13 [print] nit: Ctrl+P in the first seconds prints "Scan to add it to your phone calendar." with no code to scan', async ({ browser }) => {
-  finding('the QR library loads 4 s after the page; preparePrint leaves printQr empty but the footer keeps its "Scan" line');
   const { id } = await seed([timed('e1', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:30:00-07:00')]);
   const { ctx, page } = await open(browser, `/${id}?backend=cf`);
   await page.evaluate(() => window.dispatchEvent(new Event('beforeprint')));
@@ -361,7 +354,6 @@ test('A13 [print] nit: Ctrl+P in the first seconds prints "Scan to add it to you
 });
 
 test('A14 [settings] nit: with 24-hour time chosen, Settings still offers "Start hour: 5:00 AM"', async ({ browser }) => {
-  finding('index.html hard-codes the start hour options as 12-hour text');
   const { id } = await seed([]);
   const { ctx, page } = await open(browser, `/${id}?backend=cf`, { settings: { timeFormat: '24' }, locale: 'de-DE' });
   await page.locator('[data-testid=settings-button-desktop]').click();
@@ -372,7 +364,6 @@ test('A14 [settings] nit: with 24-hour time chosen, Settings still offers "Start
 });
 
 test('A15 [grid] nit (new calendar): the current-time label sits on top of the same hour\'s label ("12:00 PM" twice, 12px apart)', async ({ browser }) => {
-  finding('NativeCalendar draws .nc-now-label without hiding the hour label it lands on (classic hides it)');
   const { id } = await seed([]);
   const { ctx, page } = await open(browser, `/${id}?backend=cf&view=week&date=2026-10-24`, { now: NOW, cal: 'native' });
   await expect(page.locator('.nc-now-label')).toBeVisible();
@@ -420,7 +411,6 @@ test('A16 [activity] ugly: deleting one occurrence of a series, or changing only
 });
 
 test('A17 [search] ugly: a weekly practice that started Sep 1 is found as "Tue, Sep 1, 5:00 PM", not its next date, and nothing says it repeats', async ({ browser }) => {
-  finding('searchEvents lists the stored series row (its first start) instead of the series\' next occurrence');
   const { id } = await seed([timed('w', 'Weekly practice', '2026-09-01T17:00:00-07:00', '2026-09-01T18:00:00-07:00', { recurrencerule: WEEKLY })]);
   for (const cal of [null, 'native']) {
     const { ctx, page } = await open(browser, `/${id}?backend=cf`, { now: NOW, cal });
@@ -435,7 +425,6 @@ test('A17 [search] ugly: a weekly practice that started Sep 1 is found as "Tue, 
 });
 
 test('A18 [search] nit: "cafe" does not find "Café meetup" (accents must be typed exactly)', async ({ browser }) => {
-  finding('searchEvents compares lowercase strings only, without folding accents');
   const { id } = await seed([timed('c', 'Café meetup', '2026-11-02T09:00:00-08:00', '2026-11-02T10:00:00-08:00')]);
   const { ctx, page } = await open(browser, `/${id}?backend=cf`, { now: NOW });
   await page.getByTestId('search-button-desktop').click();
@@ -463,7 +452,6 @@ test('A19 [open] data-loss: a calendar whose name ends in a space ("royal city "
 });
 
 test('A20 [view] ugly: on a phone, a view link\'s notes are hidden in the ⋮ menu: nothing on screen says the calendar has notes (desktop pins them open)', async ({ browser }) => {
-  finding('the phone header moves Notes into the ⋮ menu for everyone; a view link with notes shows no sign of them');
   const { viewId } = await seed([timed('e1', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00')], { options: { notes: 'Rainouts decided by 7am on game day.' } });
   const { ctx, page } = await open(browser, `/view/${viewId}?backend=cf`, { now: NOW, device: 'phone' });
   await shot(page, 'A20-phone-view-notes-hidden');
@@ -474,7 +462,6 @@ test('A20 [view] ugly: on a phone, a view link\'s notes are hidden in the ⋮ me
 });
 
 test('A21 [share] nit (a11y): copying a link in Share says "Copied" only by renaming the button; nothing is announced to a screen reader', async ({ browser }) => {
-  finding('copyLink swaps the button text (copiedKey) with no live region; the page\'s live regions are only Syncfusion\'s (the date range, its editor\'s time zone labels)');
   const { id } = await seed([timed('e1', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00')]);
   const { ctx, page } = await open(browser, `/${id}?backend=cf`, { now: NOW });
   await page.getByTestId('share-pill-more').click();

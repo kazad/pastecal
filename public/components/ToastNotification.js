@@ -2,11 +2,10 @@
 // Displays toast messages with success/error/info types
 
 const ToastNotification = {
-    // The live region is always in the DOM, so screen readers are already watching it
-    // when a message appears -- a region inserted together with its text is often not
-    // announced at all.
+    // Screen readers hear a toast through the page's one live region (Utils.announce, in display()): a region of its
+    // own here would say every message twice, and copy and the save status use the same one.
     template: /* html */ `
-        <div aria-live="polite" aria-atomic="true">
+        <div>
         <transition 
             enter-active-class="transform ease-out duration-300 transition"
             enter-from-class="translate-y-2 opacity-0 sm:translate-y-0 sm:translate-x-2"
@@ -19,7 +18,7 @@ const ToastNotification = {
                 @focusin="focused = true" @focusout="onFocusOut">
                 <!-- One row, like Gmail's snackbar: the message, the action beside it, close. An icon only
                      for errors, where it carries meaning. -->
-                <div class="pc-toast" :class="'pc-toast--' + type" role="status">
+                <div class="pc-toast" :class="'pc-toast--' + type">
                     <svg v-if="type === 'error'" class="pc-toast-ico" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
@@ -115,6 +114,7 @@ const ToastNotification = {
          */
         display(message, type = 'info', options = {}) {
             this.message = message;
+            try { if (window.Utils && typeof Utils.announce === 'function') Utils.announce(message); } catch (e) { /* never in the way of the toast */ }
             this.type = type;
             this.actionLabel = options.actionLabel || '';
             this.action = options.action || null;
