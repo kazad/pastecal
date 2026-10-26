@@ -455,6 +455,24 @@ test('F30 [card] nit: in light mode the picked item (blue on pale blue, 4.05:1) 
   await ctx.close();
 });
 
+test('F31 [card] broken: the Undo toast from a delete sits on top of the next card\'s Done (desktop) and "More details" (phone)', async ({ browser }) => {
+  finding('F31: the toast is pinned bottom-center above everything; the card does not move out of its way, nor the toast');
+  for (const phone of [false, true]) {
+    const id = await seed([timed('c', 'Charlie', '2026-10-22T09:00:00-07:00', '2026-10-22T10:00:00-07:00'), timed('d', 'Delta', '2026-10-22T14:00:00-07:00', '2026-10-22T15:00:00-07:00')]);
+    const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-22', { phone });
+    if (phone) await tapCard(page, ev(page, 'c')); else await openCard(page, ev(page, 'c'));
+    await page.getByTestId('card-delete').click();
+    await expect(toast(page)).toBeVisible();
+    if (phone) await tapCard(page, ev(page, 'd')); else await openCard(page, ev(page, 'd'));
+    await expect(toast(page)).toBeVisible();
+    await shot(page, `F31-toast-over-done-${phone ? 'phone' : 'desktop'}`);
+    const hit = await page.evaluate(() => { const t = document.querySelector('.pc-toast').getBoundingClientRect();
+      return [...document.querySelectorAll('.nk-foot button')].filter((b) => { const r = b.getBoundingClientRect(); return r.width && r.left < t.right && r.right > t.left && r.top < t.bottom && r.bottom > t.top; }).map((b) => b.textContent.trim() || b.getAttribute('aria-label')); });
+    await ctx.close();
+    expect(hit, `${phone ? 'phone' : 'desktop'}: nothing in the card's footer is under the toast`).toEqual([]);
+  }
+});
+
 // =====================================================================================================
 // Checked and found right.
 // =====================================================================================================
