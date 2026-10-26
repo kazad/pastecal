@@ -29,6 +29,8 @@ const EventCard = (() => {
     const sameDate = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
     const at = (day, minutes) => new Date(day.getFullYear(), day.getMonth(), day.getDate(), 0, minutes);
     const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // The card moved, grew or closed: a toast showing keeps clear of it (components/ToastNotification.js place).
+    const moved = () => { if (typeof window !== 'undefined') window.dispatchEvent(new Event('nk-card-moved')); };
     const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), textarea, select, a[href], [tabindex]:not([tabindex="-1"])';
 
     return {
@@ -200,7 +202,7 @@ const EventCard = (() => {
                 if (!v || !this.phone) { this.vv = null; return; }
                 const bottom = Math.max(0, window.innerHeight - (v.offsetTop + v.height));
                 this.vv = bottom > 1 || v.height < window.innerHeight - 1 ? { bottom, height: Math.max(160, v.height - 12) } : null;
-                this.$nextTick(() => { const ta = this.$refs.det; if (ta && document.activeElement === ta) this.keepCaret(ta); });
+                this.$nextTick(() => { this.reveal(document.activeElement); moved(); });
             };
             if (window.visualViewport) { window.visualViewport.addEventListener('resize', this._onVV); window.visualViewport.addEventListener('scroll', this._onVV); }
             this.reset(true);
@@ -219,6 +221,7 @@ const EventCard = (() => {
             const el = this.$refs.card;
             if (el && el.contains(document.activeElement)) document.activeElement.blur();
         },
+        unmounted() { moved(); },
         methods: {
             reset(open) {
                 this._anchorEl = null;
@@ -257,7 +260,7 @@ const EventCard = (() => {
             place(animate) {
                 const c = this.$refs.card;
                 if (!c) return;
-                if (this.phone) { this.pos = {}; this.fit(); if (animate) this.pop(); return; }
+                if (this.phone) { this.pos = {}; this.fit(); if (animate) this.pop(); this.$nextTick(moved); return; }
                 const w = c.offsetWidth, r = this.anchorRect(), sx = window.scrollX, sy = window.scrollY;
                 this.pos = { maxHeight: '', overflowY: '' };
                 c.style.maxHeight = ''; c.style.overflowY = '';
@@ -294,13 +297,23 @@ const EventCard = (() => {
                     room += up;
                 }
                 if (h > room) { c.style.maxHeight = `${room}px`; c.style.overflowY = 'auto'; }
+                moved();
             },
             expand(focus) {
                 if (this.full) return;
                 this.full = true;
                 this.$emit('expand');
                 if (!reduced()) { this.expanding = true; setTimeout(() => { this.expanding = false; }, 260); }
-                this.$nextTick(() => { this.grow(); this.fit(); if (focus === 'det' && this.detView) this.editDetails(null); else if (focus && this.$refs[focus]) this.$refs[focus].focus(); });
+                this.$nextTick(() => {
+                    this.grow(); this.fit();
+                    const c = this.$refs.card;
+                    if (focus === 'det' && this.detView) this.editDetails(null);
+                    else if (focus && this.$refs[focus]) this.$refs[focus].focus();
+                    // "More details" pressed (it is gone now): focus goes on to the first field, not to the page.
+                    else if (c && !c.contains(document.activeElement)) { const f = c.querySelector('[data-testid="card-start-date"]'); if (f) f.focus({ preventScroll: true }); }
+                    // A short window: the details in view too, above the footer (the focused field stays in view).
+                    this.$nextTick(() => this.reveal(this.detBox(), document.activeElement));
+                });
             },
             measureClamp() {
                 const d = this.$refs.qdet;
@@ -490,15 +503,28 @@ const EventCard = (() => {
             // Focus moving to Done, Cancel, Delete or the menu saves when that button acts: a question opening on
             // the blur would cover the button mid-click.
             blurSave(e, save) { const to = e.relatedTarget; if (to && this.$refs.card && this.$refs.card.contains(to) && to.matches('.nk-done, .nk-cancel, .nk-del, .nk-ovf')) return; save(); },
-            /** The caret's line in view inside the sheet (above the keyboard). */
-            keepCaret(ta) {
-                const c = this.$refs.card;
-                if (!c) return;
-                const lh = parseFloat(getComputedStyle(ta).lineHeight) || 21;
-                const line = ta.value.slice(0, ta.selectionEnd).split('\n').length;
-                const y = ta.getBoundingClientRect().top + Math.min(ta.clientHeight, line * lh - ta.scrollTop), r = c.getBoundingClientRect();
-                if (y > r.bottom - 60) c.scrollTop += y - (r.bottom - 60);
+            /**
+             * A field in view inside the card when the card scrolls (a short window, the keyboard up): between the
+             * card's top and its pinned footer, the whole field when it fits, else the caret's line of a tall details
+             * box. `keep` (the focused field) never scrolls out of view for it.
+             */
+            reveal(el, keep) {
+                const c = this.$refs.card, ft = this.$refs.foot;
+                if (!c || !el || el === c || !c.contains(el) || c.scrollHeight <= c.clientHeight + 1) return;
+                const cr = c.getBoundingClientRect(), top = cr.top + 8, bottom = (ft ? ft.getBoundingClientRect().top : cr.bottom) - 8;
+                const r = el.getBoundingClientRect();
+                let dy = 0;
+                if (r.height <= bottom - top) dy = r.bottom > bottom ? r.bottom - bottom : Math.min(0, r.top - top);
+                else if (el.tagName === 'TEXTAREA') {
+                    const lh = parseFloat(getComputedStyle(el).lineHeight) || 21;
+                    const line = el.value.slice(0, el.selectionEnd).split('\n').length;
+                    const y = r.top + Math.min(el.clientHeight, line * lh - el.scrollTop) + 4;
+                    dy = y > bottom ? y - bottom : Math.min(0, y - lh - top);
+                } else dy = r.top - top;
+                if (dy > 0 && keep && keep !== el && c.contains(keep)) dy = Math.min(dy, Math.max(0, keep.getBoundingClientRect().top - top));
+                if (dy) c.scrollTop += dy;
             },
+            onFocusIn(e) { const t = e.target; this.$nextTick(() => { if (document.activeElement === t) this.reveal(t); }); },
             blurInside() { const el = this.$refs.card; if (el && el.contains(document.activeElement)) document.activeElement.blur(); },
             toggleAllDay() {
                 const v = this.v;
@@ -546,8 +572,10 @@ const EventCard = (() => {
                 const left = pk.align === 'right' ? ar.right - w : ar.left;
                 const below = window.innerHeight - ar.bottom - M, above = ar.top - M;
                 const s = { left: `${Math.max(M, Math.min(left, window.innerWidth - w - M))}px` };
-                if (h <= below || below >= above) Object.assign(s, { top: `${ar.bottom + 6}px`, maxHeight: `${below - 6}px` });
-                else Object.assign(s, { top: `${Math.max(M, ar.top - 6 - Math.min(h, above))}px`, maxHeight: `${above - 6}px` });
+                if (h <= below) Object.assign(s, { top: `${ar.bottom + 6}px`, maxHeight: `${below - 6}px` });
+                else if (h <= above) Object.assign(s, { top: `${ar.top - 6 - h}px`, maxHeight: `${above - 6}px` });
+                // Room on neither side (a short phone): the whole picker in the window, over its own field if it must.
+                else { const room = window.innerHeight - 2 * M; Object.assign(s, { top: `${Math.max(M, Math.min(ar.bottom + 6, window.innerHeight - M - h))}px`, maxHeight: `${room}px` }); }
                 this.pickStyle = s;
             },
             closePicker(refocus = true) {
@@ -771,9 +799,9 @@ const EventCard = (() => {
 <teleport to="body">
 <div v-if="phone" class="nk-scrim" data-testid="card-scrim" aria-hidden="true"></div>
 <div ref="card" class="nk-card" :class="cls" :style="cardStyle" role="dialog" :aria-label="isNew ? 'New event' : 'Event'" data-testid="event-card"
-  @touchstart="sheetStart" @touchmove="sheetMove" @touchend="sheetEnd" @touchcancel="sheetEnd">
+  @touchstart="sheetStart" @touchmove="sheetMove" @touchend="sheetEnd" @touchcancel="sheetEnd" @focusin="onFocusIn">
   <div class="nk-h">
-    <textarea ref="title" v-model="titleText" class="nk-title" rows="1" placeholder="Add a title" aria-label="Title" autocomplete="off" maxlength="500" data-testid="card-title"
+    <textarea ref="title" v-model="titleText" class="nk-title" rows="1" dir="auto" placeholder="Add a title" aria-label="Title" autocomplete="off" maxlength="500" data-testid="card-title"
       aria-describedby="nk-said" @input="onTitleInput" @focus="titleFocus = true" @blur="titleFocus = false; blurSave($event, commitTitle)" @keydown.enter.prevent="titleEnter"></textarea>
     <button type="button" class="nk-cat" aria-haspopup="listbox" :aria-expanded="String(!!picker && picker.kind === 'cat')" :aria-label="'Type: ' + typeName"
       data-testid="card-type" @click="openPicker('cat', $event)"><i></i><span>{{ typeName }}</span><nc-icon name="chevron-down" :size="13" :stroke-width="2.2"></nc-icon></button>
@@ -857,14 +885,14 @@ const EventCard = (() => {
     <div v-if="full" class="nk-row">
       <span class="nk-gi" title="Details"><nc-icon name="text-align-start" :size="18"></nc-icon></span>
       <div class="nk-detwrap">
-        <div v-if="detView" ref="detView" class="nk-det nk-det-view" tabindex="0" role="textbox" aria-multiline="true" aria-label="Details" data-testid="card-details-view"
+        <div v-if="detView" ref="detView" class="nk-det nk-det-view" dir="auto" tabindex="0" role="textbox" aria-multiline="true" aria-label="Details" data-testid="card-details-view"
           v-html="linked" @mousedown="detDown" @click="editDetails" @focus="editDetails(null)"></div>
-        <textarea v-show="!detView" ref="det" v-model="detText" class="nk-det" rows="1" placeholder="Place, notes, links" aria-label="Details" :maxlength="max" data-testid="card-details"
+        <textarea v-show="!detView" ref="det" v-model="detText" class="nk-det" rows="1" dir="auto" placeholder="Place, notes, links" aria-label="Details" :maxlength="max" data-testid="card-details"
           @input="onDetInput" @paste="onPaste" @focus="onDetFocus" @blur="detFocus = false; detEditing = false; blurSave($event, commitDetails)"></textarea>
         <div v-if="detCount || pasteNote" class="nk-count" data-testid="card-details-count" aria-live="polite">{{ pasteNote ? pasteNote + ' ' : '' }}{{ detCount }}</div>
       </div>
     </div>
-    <div class="nk-foot">
+    <div ref="foot" class="nk-foot">
       <button v-if="!isNew" type="button" class="nk-icon nk-del" aria-label="Delete" title="Delete" data-testid="card-delete" @click="closing = true; $emit('delete')"><nc-icon name="trash" :size="18"></nc-icon></button>
       <button v-if="full && !isNew" type="button" class="nk-icon nk-ovf" aria-label="More actions" title="More actions" aria-haspopup="menu" :aria-expanded="String(menu)" data-testid="card-more-actions" @click="toggleMenu"><nc-icon name="ellipsis" :size="18"></nc-icon></button>
       <button v-if="!full" type="button" class="nk-more" data-testid="card-more" @click="expand()">More details</button>
@@ -894,7 +922,7 @@ const EventCard = (() => {
       <button type="button" :class="{ cur: sameDay }" data-testid="picker-same-day" @click="sameDayEnd">Same day</button>
       <button type="button" data-testid="picker-next-day" @click="pickDate(addDays(v.start, 1))">Next day <small>{{ d(addDays(v.start, 1)) }}</small></button>
     </div>
-    <input v-model="typed" class="pc-field nk-typed" :class="{ bad: typedBad }" aria-label="Type a date" placeholder="Type a date: Oct 20, Fri, tomorrow" data-testid="picker-input"
+    <input v-model="typed" class="pc-field nk-typed" :class="{ bad: typedBad }" aria-label="Type a date" placeholder="Oct 20, Fri, tomorrow" data-testid="picker-input"
       @input="typedBad = false" @keydown.enter.prevent="typedDate">
     <div class="nk-mhead"><span>{{ monthTitle }}</span>
       <span><button type="button" class="nk-icon nk-sm" aria-label="Previous month" data-testid="picker-prev" @click="stepMonth(-1)"><nc-icon name="chevron-left" :size="16"></nc-icon></button><button type="button" class="nk-icon nk-sm" aria-label="Next month" data-testid="picker-next" @click="stepMonth(1)"><nc-icon name="chevron-right" :size="16"></nc-icon></button></span></div>

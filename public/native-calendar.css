@@ -109,6 +109,21 @@
 .nc-timed:hover { filter: brightness(1.06); }
 .nc-timed-title { font-weight: var(--pc-fw-semibold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; justify-content: space-between; gap: var(--pc-space-1); }
 .nc-timed-time { font-size: var(--pc-fs-2xs); }
+/* A narrow column (a phone's week, several side by side): the title on two lines ending in …, the start time alone. */
+.nc-timed.narrow { padding-inline: 3px; }
+.nc-timed.narrow .nc-timed-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; line-height: 1.25; }
+.nc-timed.narrow.short .nc-timed-title { -webkit-line-clamp: 1; }
+.nc-timed.narrow .nc-recur { display: none; }
+.nc-timed.narrow .nc-timed-time { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* More overlapping events than fit side by side: "+N" in the last column opens the day (or, in the day view, its list). */
+.nc-more-timed { position: absolute; z-index: 1; box-sizing: border-box; display: flex; align-items: flex-start; justify-content: center; padding: 3px 2px; border: 0;
+    border-radius: var(--pc-radius-sm); background: var(--pc-soft); color: var(--pc-text-2); font: var(--pc-fw-semibold) var(--pc-fs-xs)/1.2 var(--pc-font); cursor: pointer; }
+.nc-more-timed:hover { background: var(--pc-hover); color: var(--pc-text); }
+.nc-allday-cell { position: relative; }
+.nc-allday-scroll.open { max-height: 40vh; overflow-y: auto; overscroll-behavior: contain; }   /* every all-day line, scrolling past 40% */
+.nc-gutter-head { position: relative; }
+.nc-fewer { position: absolute; left: 0; right: 0; bottom: 4px; }
+.nc-allday .nc-more { white-space: nowrap; z-index: 3; }
 .nc-resize { display: none; }   /* view links: nothing to resize */
 .nc-now-line { position: absolute; left: 0; right: 0; height: 0; border-top: 2px solid var(--pc-primary); z-index: 3; pointer-events: none; }
 .nc-now-dotted { position: absolute; left: 0; right: 0; height: 0; border-top: 1px dotted var(--pc-text-muted); z-index: 2; pointer-events: none; }
@@ -354,7 +369,8 @@ html.nk-sheet-open, html.nk-sheet-open body { overflow: hidden; }
     border-radius: var(--pc-radius-sm); font-size: var(--pc-fs-md); color: var(--pc-text); cursor: pointer; font-variant-numeric: tabular-nums; text-align: left; }
 .nk-plist button small { font-size: var(--pc-fs-xs); color: var(--pc-text-muted); }
 .nk-plist button:hover, .nk-plist button:focus-visible { background: var(--pc-soft); }
-.nk-plist button.cur { background: var(--pc-primary-soft); color: var(--pc-primary); }
+.nk-plist button.cur { background: var(--pc-selected); color: var(--pc-on-selected); }
+.nk-plist button.cur small { color: inherit; }
 .nk-plist .nk-catopt { justify-content: flex-start; }
 .nk-catopt i, .nk-labels i { width: 10px; height: 10px; border-radius: 50%; flex: none; }
 .nk-pfoot { border-top: 1px solid var(--pc-line); margin-top: 6px; padding: 6px var(--pc-space-1) 0; display: flex; gap: var(--pc-space-2); }
@@ -439,7 +455,8 @@ html.nk-sheet-open, html.nk-sheet-open body { overflow: hidden; }
     .nk-pick .nk-typed, .nk-det, .nk-card .pc-field { font-size: var(--pc-fs-lg); }   /* no zoom on focus */
 }
 @media (max-width: 480px) {
-    .nk-when { grid-template-columns: 42px 104px 86px 1fr; gap: var(--pc-space-2) 6px; }
+    /* the date and time shrink before the switch and the length leave the card's column (a 360px phone) */
+    .nk-when { grid-template-columns: 42px minmax(0, 104px) minmax(0, 86px) 1fr; gap: var(--pc-space-2) 6px; }
     .nk-tp { font-size: var(--pc-fs-md); }
     .nk-row, .nk-foot, .nk-tz, .nk-cust { margin-left: 48px; }
     .nk-row > .nk-gi, .nk-tz > .nk-gi { left: -48px; }

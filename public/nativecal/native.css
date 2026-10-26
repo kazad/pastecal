@@ -124,6 +124,18 @@
 .nc-timed:hover { filter: brightness(1.08); }
 .nc-timed-title { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; justify-content: space-between; gap: 4px; }
 .nc-timed-time { font-size: 11px; opacity: .9; }
+/* Narrow columns, "+N" past the columns that fit, the folded all-day row (NativeCalendar gridLayout). */
+.nc-timed.narrow { padding-inline: 3px; }
+.nc-timed.narrow .nc-timed-title { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; white-space: normal; line-height: 1.25; }
+.nc-timed.narrow.short .nc-timed-title { -webkit-line-clamp: 1; }
+.nc-timed.narrow .nc-recur { display: none; }
+.nc-timed.narrow .nc-timed-time { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nc-more-timed { position: absolute; z-index: 1; box-sizing: border-box; padding: 3px 2px; border: 0; border-radius: 4px; background: var(--nc-select); color: var(--nc-text);
+    font-size: 12px; font-weight: 600; text-align: center; cursor: pointer; }
+.nc-allday-cell { position: relative; }
+.nc-allday-scroll.open { max-height: 40vh; overflow-y: auto; overscroll-behavior: contain; }
+.nc-gutter-head { position: relative; }
+.nc-fewer { position: absolute; left: 0; right: 0; bottom: 4px; }
 .nc-resize { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; cursor: ns-resize; }
 .nc-now-line { position: absolute; left: 0; right: 0; height: 0; border-top: 1px solid var(--nc-now); z-index: 3; pointer-events: none; }
 .nc-now-dotted { position: absolute; left: 0; right: 0; height: 0; border-top: 1px dotted #666; z-index: 2; pointer-events: none; }

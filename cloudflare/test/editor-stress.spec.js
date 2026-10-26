@@ -263,7 +263,6 @@ test('F13 [card] broken: on the spring-forward day the time list offers 2:00-2:4
 });
 
 test('F14 [card] ugly: deleting an event with a long title makes a toast ten lines tall over the calendar', async ({ browser }) => {
-  finding('F14: the toast prints the whole title; nothing clamps it');
   const id = await seed([timed('p', 'Long title '.repeat(45).trim(), '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00')]);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-22');
   await openCard(page, ev(page, 'p'));
@@ -291,7 +290,6 @@ test('F15 [card] nit: a 2,000-character title is cut to 500 without a word (deta
 });
 
 test('F17 [card] ugly: on a phone with the keyboard up, the focused details box runs under the footer and the keyboard', async ({ browser }) => {
-  finding('F17: with visualViewport 508px tall, the 12-line details box ends ~100px below the sheet; keepCaret only scrolls the card');
   const id = await seed([timed('p', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00', { description: 'line\n'.repeat(12).trim() })]);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-22', { phone: true });
   await tapCard(page, ev(page, 'p'), true);
@@ -311,7 +309,6 @@ test('F17 [card] ugly: on a phone with the keyboard up, the focused details box 
 });
 
 test('F19 [card] nit (a11y): "More details" drops keyboard focus to <body>', async ({ browser }) => {
-  finding('F19: expand() removes the focused "More details" button and focuses nothing');
   const id = await seed([timed('p', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00')]);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-22');
   await openCard(page, ev(page, 'p'));
@@ -323,7 +320,6 @@ test('F19 [card] nit (a11y): "More details" drops keyboard focus to <body>', asy
 });
 
 test('F22 [card] ugly: at 200% zoom (640x400) the full card hides the details box under its footer', async ({ browser }) => {
-  finding('F22: the sheet is 328px tall; the footer covers the details box, which only shows its top border');
   const id = await seed([timed('p', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00', { description: 'Bring water' })]);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-22', { viewport: { width: 640, height: 400 } });
   await openCard(page, ev(page, 'p'), true);
@@ -334,7 +330,6 @@ test('F22 [card] ugly: at 200% zoom (640x400) the full card hides the details bo
 });
 
 test('F23 [card] nit: on a phone the date picker\'s hint is cut off ("Type a date: Oct 20, Fri, tom")', async ({ browser }) => {
-  finding('F23: the placeholder is wider than the 240px picker');
   const id = await seed([timed('p', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00')]);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-22', { phone: true });
   await tapCard(page, ev(page, 'p'), true);
@@ -366,7 +361,6 @@ const contrast = (page, sel) => page.evaluate((s) => {
 }, sel);
 
 test('F24 [grid] ugly: 20 events in the same hour are drawn as 20 unreadable slivers ("1", "1", …) with no "+N more"', async ({ browser }) => {
-  finding('F24: the week grid splits an hour into as many columns as it has events, however thin');
   const id = await seed(nastyEvents());
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-21');
   await ev(page, 'ov0').first().scrollIntoViewIfNeeded();
@@ -378,7 +372,6 @@ test('F24 [grid] ugly: 20 events in the same hour are drawn as 20 unreadable sli
 });
 
 test('F25 [grid] ugly: 40 all-day events on one day stretch the week\'s all-day row over the whole screen (month view says "+40 more")', async ({ browser }) => {
-  finding('F25: the week/day all-day row grows without limit');
   const id = await seed(nastyEvents());
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-21');
   await page.evaluate(() => window.scrollTo(0, 0));
@@ -389,7 +382,6 @@ test('F25 [grid] ugly: 40 all-day events on one day stretch the week\'s all-day 
 });
 
 test('F26 [grid] ugly: on a phone, week-view event titles are cut mid-word with no ellipsis ("Meetii", "Dentis")', async ({ browser }) => {
-  finding('F26: narrow event chips clip their title text instead of ending it with …');
   const id = await seed(nastyEvents());
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-21', { phone: true });
   await ev(page, 'meet').first().scrollIntoViewIfNeeded();
@@ -401,7 +393,6 @@ test('F26 [grid] ugly: on a phone, week-view event titles are cut mid-word with 
 });
 
 test('F27 [card] ugly: an Arabic title in the card is cut at its START (shows "تماع الفريق…", the first word clipped); the title box is not dir="auto"', async ({ browser }) => {
-  finding('F27: the title input is always left-to-right, so a long RTL title scrolls its beginning out of view');
   const id = await seed(nastyEvents());
   for (const colorScheme of ['light', 'dark']) {
     const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-21', { colorScheme });
@@ -414,20 +405,19 @@ test('F27 [card] ugly: an Arabic title in the card is cut at its START (shows "�
 });
 
 test('F28 [card] ugly: on a 360x640 phone the length menu and "All day" run to the screen edge, past the card\'s right margin', async ({ browser }) => {
-  finding('F28: the time grid in the card does not shrink below ~375px; its right column overflows the 16px gutter');
   const id = await seed(nastyEvents());
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-21', { phone: true });
   await page.setViewportSize({ width: 360, height: 640 });
   await page.waitForTimeout(300);
   await tapCard(page, ev(page, 'board'), true);
   await shot(page, 'F28-p360-length-at-edge');
-  const [len, det] = await Promise.all([box(page, '[data-testid="card-length"]'), box(page, '[data-testid="card-details"]')]);
+  // The details box as shown: with links in them (this event's) it is the live-link view, and the textarea is hidden (0 wide).
+  const [len, det] = await Promise.all([box(page, '[data-testid="card-length"]'), box(page, '[data-testid="card-details-view"], [data-testid="card-details"]')]);
   expect(len.right, 'the length menu lines up with the details box').toBeLessThanOrEqual(det.right + 1);
   await ctx.close();
 });
 
 test('F29 [card] ugly: on a 360x640 phone the end-date picker shows only the first two weeks; the rest of the month is cut off', async ({ browser }) => {
-  finding('F29: "Same day / Next day" and the typing box leave the month grid ~90px on a short screen');
   const id = await seed(nastyEvents());
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-21', { phone: true });
   await page.setViewportSize({ width: 360, height: 640 });
@@ -443,7 +433,6 @@ test('F29 [card] ugly: on a 360x640 phone the end-date picker shows only the fir
 });
 
 test('F30 [card] nit: in light mode the picked item (blue on pale blue, 4.05:1) and "until 11:30 AM" (3.84:1) are under the 4.5:1 contrast for text', async ({ browser }) => {
-  finding('F30: .cur text and the length list\'s <small> are too faint in light mode');
   const id = await seed(nastyEvents());
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-21');
   await openCard(page, ev(page, 'board'), true);
@@ -456,7 +445,6 @@ test('F30 [card] nit: in light mode the picked item (blue on pale blue, 4.05:1) 
 });
 
 test('F31 [card] broken: the Undo toast from a delete sits on top of the next card\'s Done (desktop) and "More details" (phone)', async ({ browser }) => {
-  finding('F31: the toast is pinned bottom-center above everything; the card does not move out of its way, nor the toast');
   for (const phone of [false, true]) {
     const id = await seed([timed('c', 'Charlie', '2026-10-22T09:00:00-07:00', '2026-10-22T10:00:00-07:00'), timed('d', 'Delta', '2026-10-22T14:00:00-07:00', '2026-10-22T15:00:00-07:00')]);
     const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-22', { phone });
