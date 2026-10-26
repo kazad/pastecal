@@ -1417,7 +1417,9 @@ const CalendarVueApp = {
         nativeCard(c) {
             const cal = document.querySelector('.pc-native-cal');
             if (!cal) return;
-            if (c && window.innerWidth <= 760) cal.setAttribute('inert', ''); else cal.removeAttribute('inert');
+            const sheet = !!c && window.innerWidth <= 760;
+            if (sheet) cal.setAttribute('inert', ''); else cal.removeAttribute('inert');
+            document.documentElement.classList.toggle('nk-sheet-open', sheet);
         },
         nativeAsk(ask) {
             if (ask) this.$nextTick(() => { const b = document.querySelector('.pc-native-ask .pc-btn--primary'); if (b) b.focus(); });

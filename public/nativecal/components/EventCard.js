@@ -134,6 +134,28 @@ const EventCard = (() => {
                 this.closePicker(); this.menu = false;
             };
             window.addEventListener('scroll', this._onScroll, true);
+            // The calendar (or the page) scrolled under the card: it stays beside its event, still 12px inside the
+            // window (place), never left floating where the event used to be. Its own scrolling is its own.
+            this._onFollow = (e) => {
+                const t = e.target;
+                if (this.phone || (t && t.closest && t.closest('.nk-card, .nk-pick, .nk-menu'))) return;
+                if (this._followRaf) return;
+                this._followRaf = requestAnimationFrame(() => { this._followRaf = 0; this.place(false); });
+            };
+            window.addEventListener('scroll', this._onFollow, true);
+            // A wheel or trackpad over the card scrolls only what in it can scroll that way (the card, the details,
+            // a picker's list), and never the page or the calendar behind it.
+            this._onWheel = (e) => {
+                const root = e.target && e.target.closest ? e.target.closest('.nk-card, .nk-pick, .nk-menu') : null;
+                if (!root || e.ctrlKey) return;   // (ctrl+wheel is a pinch-zoom)
+                for (let el = e.target; el && el !== root.parentNode; el = el.parentElement) {
+                    const oy = getComputedStyle(el).overflowY;
+                    if (!/(auto|scroll)/.test(oy) || el.scrollHeight <= el.clientHeight + 1) continue;
+                    if (e.deltaY < 0 ? el.scrollTop > 0 : el.scrollTop + el.clientHeight < el.scrollHeight - 1) return;
+                }
+                if (e.cancelable) e.preventDefault();
+            };
+            window.addEventListener('wheel', this._onWheel, { capture: true, passive: false });
             // Leaving the page (closing the tab, going elsewhere) saves what is being typed.
             this._onHide = () => { if (!this.isNew) { this.commitTitle(); this.saveDetails(true); } };
             window.addEventListener('pagehide', this._onHide);
@@ -151,6 +173,9 @@ const EventCard = (() => {
             window.removeEventListener('keydown', this._onKey, true);
             window.removeEventListener('resize', this._onResize);
             window.removeEventListener('scroll', this._onScroll, true);
+            window.removeEventListener('scroll', this._onFollow, true);
+            window.removeEventListener('wheel', this._onWheel, { capture: true });
+            if (this._followRaf) cancelAnimationFrame(this._followRaf);
             window.removeEventListener('pagehide', this._onHide);
             if (window.visualViewport) { window.visualViewport.removeEventListener('resize', this._onVV); window.visualViewport.removeEventListener('scroll', this._onVV); }
             clearTimeout(this._detTimer);
@@ -160,6 +185,7 @@ const EventCard = (() => {
         },
         methods: {
             reset(open) {
+                this._anchorEl = null;
                 this.v = clone(this.card.value); this.full = !!this.card.full;
                 this.titleText = this.card.value.title || ''; this.detText = this.card.value.description || '';
                 this.picker = null; this.menu = false; this.smart = null; this.showAll = false; this.pasteNote = ''; this.keep = null; this.closing = false;
@@ -177,10 +203,17 @@ const EventCard = (() => {
                 const a = this.card.anchor || {};
                 const els = a.testid ? [...document.querySelectorAll(`.nc [data-testid="${a.testid}"]`)].filter((e) => e.getClientRects().length) : [];
                 const want = a.rect;
+                // The element it opened beside, while it is still drawn (a scroll moves it; a nearest match could jump).
+                const kept = this._anchorEl;
+                if (kept && kept.isConnected && els.includes(kept)) return kept.getBoundingClientRect();
                 if (els.length) {
-                    if (!want || els.length === 1) return els[0].getBoundingClientRect();
-                    const cx = want.left + want.width / 2, cy = want.top + want.height / 2;
-                    return els.map((e) => e.getBoundingClientRect()).sort((p, q) => Math.hypot(p.left + p.width / 2 - cx, p.top + p.height / 2 - cy) - Math.hypot(q.left + q.width / 2 - cx, q.top + q.height / 2 - cy))[0];
+                    let el = els[0];
+                    if (want && els.length > 1) {
+                        const cx = want.left + want.width / 2, cy = want.top + want.height / 2, dist = (e) => { const p = e.getBoundingClientRect(); return Math.hypot(p.left + p.width / 2 - cx, p.top + p.height / 2 - cy); };
+                        el = els.slice().sort((p, q) => dist(p) - dist(q))[0];
+                    }
+                    this._anchorEl = el;
+                    return el.getBoundingClientRect();
                 }
                 return want || null;
             },

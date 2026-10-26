@@ -286,6 +286,10 @@
     padding-bottom: var(--pc-space-3); margin-bottom: calc(-1 * var(--pc-space-3)); }   /* pinned when the card scrolls inside: Done stays in view */
 /* Writing long details: the card widens to a comfortable line (EventCard widen); it never narrows while open. */
 .nk-card.wide { width: 600px; }
+/* Scrolling inside the card (or its details, or a picker's list) never carries on into the calendar or the page. */
+.nk-card, .nk-card .nk-det, .nk-pick, .nk-pick *, .nk-menu { overscroll-behavior: contain; }
+/* A phone's sheet is open: the page behind it does not scroll (the calendar is inert; app.js watch nativeCard). */
+html.nk-sheet-open, html.nk-sheet-open body { overflow: hidden; }
 .nk-card { transition: width .18s ease; }
 .nk-card.quick .nk-foot { margin-left: 0; }
 .nk-sp { flex: 1; }

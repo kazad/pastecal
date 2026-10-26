@@ -1097,3 +1097,77 @@ test('search finds words in an event\'s details as well as its title, ignoring c
   expect(errors).toEqual([]);
   await ctx.close();
 });
+
+/** The page's scroll, the time grid's scroll, and where the card and an event are on screen. */
+const scrolls = (page, eventId) => page.evaluate((id) => {
+  const g = document.querySelector('.nc-grid-scroll'), c = document.querySelector('.nk-card'), e = document.querySelector(`.nc [data-testid="event-${id}"]`);
+  const box = (x) => { if (!x) return null; const r = x.getBoundingClientRect(); return { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.width), h: Math.round(r.height) }; };
+  return { page: Math.round(window.scrollY), grid: g ? Math.round(g.scrollTop) : null, card: box(c), event: box(e), w: window.innerWidth, h: window.innerHeight };
+}, eventId);
+
+test('scrolling with the card open: a wheel over the card moves nothing behind it; the grid scrolled behind it carries the card along, 12px inside the window; opening scrolls nothing', async ({ browser }) => {
+  const id = await seed([timed('g', 'Game', '2026-10-22T13:00:00-07:00', '2026-10-22T14:00:00-07:00', { type: 2, description: 'Field 3' })]);
+  const { ctx, page, errors } = await open(browser, id, '&view=week&date=2026-10-22');
+  const before = await scrolls(page, 'g');
+  await openCard(page, ev(page, 'g'));
+  const opened = await scrolls(page, 'g');
+  expect([opened.page, opened.grid], 'opening the card scrolls neither the page nor the grid').toEqual([before.page, before.grid]);
+
+  // A wheel over the card (it has nothing to scroll): the page, the grid and the card stay where they are.
+  await page.mouse.move(opened.card.x + opened.card.w / 2, opened.card.y + 20);
+  await page.mouse.wheel(0, 400);
+  await page.waitForTimeout(300);
+  let now = await scrolls(page, 'g');
+  expect([now.page, now.grid, now.card]).toEqual([opened.page, opened.grid, opened.card]);
+  await page.mouse.wheel(0, -400);
+  await page.waitForTimeout(300);
+  now = await scrolls(page, 'g');
+  expect([now.page, now.grid, now.card]).toEqual([opened.page, opened.grid, opened.card]);
+
+  // A wheel over the grid behind it: the grid scrolls, the card moves with its event (same gap), inside the window.
+  const g = await page.locator('.nc-grid-scroll').boundingBox();
+  await page.mouse.move(g.x + 80, g.y + g.height / 2);
+  await page.mouse.wheel(0, 100);
+  await page.waitForTimeout(300);
+  now = await scrolls(page, 'g');
+  expect(now.grid, 'the grid scrolled').toBeGreaterThan(opened.grid);
+  expect(now.page).toBe(opened.page);
+  expect(now.card.y - now.event.y, 'the card keeps its place beside the event').toBe(opened.card.y - opened.event.y);
+  expect(now.card.x).toBe(opened.card.x);
+  // Scrolled until the event is far off the top: the card stops 12px inside the window, never off it.
+  await page.mouse.wheel(0, 2000);
+  await page.waitForTimeout(300);
+  now = await scrolls(page, 'g');
+  expect(now.card.y).toBeGreaterThanOrEqual(12);
+  expect(now.card.y + now.card.h).toBeLessThanOrEqual(now.h - 12);
+  await expect(card(page)).toBeVisible();
+  expect(errors).toEqual([]);
+  await ctx.close();
+});
+
+test('phone (390px): scrolling over the sheet never scrolls the calendar or the page behind it', async ({ browser }) => {
+  const id = await seed([timed('g', 'Game', '2026-10-22T13:00:00-07:00', '2026-10-22T14:00:00-07:00', { type: 2, description: 'Field 3\n'.repeat(40) })]);
+  const { ctx, page, errors } = await open(browser, id, '&view=week&date=2026-10-22', { phone: true });
+  const before = await scrolls(page, 'g');
+  await ev(page, 'g').first().tap();
+  await expect(card(page)).toBeVisible();
+  await page.waitForTimeout(300);
+  const opened = await scrolls(page, 'g');
+  expect([opened.page, opened.grid], 'opening the sheet scrolls nothing').toEqual([before.page, before.grid]);
+  for (const dy of [600, -600, 600]) {
+    await page.mouse.move(195, opened.card.y + 30);
+    await page.mouse.wheel(0, dy);
+    await page.waitForTimeout(250);
+    const now = await scrolls(page, 'g');
+    expect([now.page, now.grid, now.card.y]).toEqual([opened.page, opened.grid, opened.card.y]);
+  }
+  // Swiping on the sheet (it may scroll its own long details): the grid and the page behind stay put.
+  const s = await card(page).boundingBox();
+  const cdp = await ctx.newCDPSession(page);
+  await cdp.send('Input.synthesizeScrollGesture', { x: 195, y: Math.round(s.y + s.height - 60), yDistance: -300, speed: 1200, gestureSourceType: 'touch' });
+  await page.waitForTimeout(300);
+  const after = await scrolls(page, 'g');
+  expect([after.page, after.grid]).toEqual([opened.page, opened.grid]);
+  expect(errors).toEqual([]);
+  await ctx.close();
+});
