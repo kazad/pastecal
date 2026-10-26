@@ -256,7 +256,7 @@ test('an occurrence whose series was deleted meanwhile: the card closes and says
   await soon(async () => (await stored(id)).length).toBe(0);
   await soon(() => vm(A.page, (v) => v.calendar.events.length)).toBe(0);
   await expect(A.page.getByTestId('event-card')).toHaveCount(0);
-  await expect(A.page.getByText("This event's series was deleted.")).toBeVisible();
+  await expect(A.page.locator('.pc-toast').getByText("This event's series was deleted.")).toBeVisible();
   // "This event" saved just as the series went (the write path's own check): refused with a code, nothing saved.
   await vm(A.page, (v) => v.nativeAction('eventChange', { changedRecords: [{ ...window.__rec, Subject: 'Dr. Patel - biopsy results for Maria',
     Id: '__native_occurrence__', RecurrenceID: 's1' }] }, { action: 'EditOccurrence', occurrenceStart: new Date('2026-10-21T09:00:00-07:00') }));

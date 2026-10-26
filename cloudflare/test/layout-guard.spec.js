@@ -328,3 +328,70 @@ async function sharedPanels(page, found, tag, phone) {
     await page.mouse.click(5, 300);
   }
 }
+
+
+// =====================================================================================================
+// The PAGE fits its container too (app-stress-3 A10: the body had a 320px floor, so a 300px sidebar embed scrolled
+// sideways with Saturday, the credit and the open Notes panel past its edge). Embeds at 300/360/400px and phones at
+// 360/390px, classic and the new calendar, edit and view links, light and dark: no sideways scroll, and nothing that
+// should be seen ends past the right edge (inside a box that scrolls or clips at the edge is fine).
+// =====================================================================================================
+
+/** In `frame`: the page's width, its scroll width, and what visible ends past the right edge. */
+const pageOverflow = (frame) => frame.evaluate(() => {
+  const W = document.documentElement.clientWidth;
+  const clipped = (e) => { for (let a = e.parentElement; a && a !== document.body; a = a.parentElement) { if (getComputedStyle(a).overflowX !== 'visible') return a.getBoundingClientRect().right <= W + 1; } return false; };
+  const past = [...document.querySelectorAll('body *')].filter((e) => {
+    if (!e.getClientRects().length || getComputedStyle(e).visibility === 'hidden') return false;
+    const r = e.getBoundingClientRect();
+    return r.width > 0 && r.right > W + 1 && !clipped(e);
+  }).map((e) => `${e.tagName.toLowerCase()}.${String(e.className).split(' ')[0]} ${Math.round(e.getBoundingClientRect().right)}`);
+  return { W, sw: document.documentElement.scrollWidth, past: past.slice(0, 8) };
+});
+async function fitContext(browser, o = {}) {
+  const ctx = await browser.newContext({ ...(o.phone ? { viewport: { width: o.width, height: 760 }, hasTouch: true, isMobile: true } : { viewport: { width: o.width, height: 600 } }),
+    colorScheme: o.scheme || 'light', timezoneId: 'America/Los_Angeles', locale: 'en-US' });
+  await ctx.addInitScript((cal) => { window.__TEST__ = true; try { localStorage.setItem('pastecal_backend', 'cf'); if (cal) localStorage.setItem('pc_cal', cal); } catch (e) { /* blocked */ } }, o.cal || null);
+  await ctx.route(NOT_LOCAL, (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
+  const page = await ctx.newPage();
+  await page.clock.install({ time: new Date(NOW) });
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  return { ctx, page, errors };
+}
+
+for (const cal of [null, 'native']) {
+  test(`page fit, embeds at 300, 360 and 400px (${cal || 'classic'}): no sideways scroll; the bar, credit, Saturday and the open Notes inside`, async ({ browser }) => {
+    const { viewId } = await seed();
+    const out = {};
+    for (const w of [300, 360, 400]) {
+      const { ctx, page } = await fitContext(browser, { width: w + 60, cal });
+      await page.goto(`${BASE}/about.html`);
+      await page.setContent(`<body style="margin:20px"><iframe id="f" src="${BASE}/view/${viewId}?backend=cf" title="cal" width="${w}" height="480" style="border:0"></iframe></body>`);
+      await expect(page.frameLocator('#f').getByTestId('embed-bar')).toBeVisible({ timeout: 20_000 });
+      await page.waitForTimeout(800);
+      await page.frameLocator('#f').getByTestId('embed-notes-btn').click();
+      await page.waitForTimeout(300);
+      if (w === 300) await page.screenshot({ path: path.join(SHOTS, `fit-embed-300-${cal || 'classic'}.png`) });
+      const r = await pageOverflow(page.frame({ url: /\/view\// }));
+      out[w] = { sideways: r.sw > r.W, past: r.past };
+      await ctx.close();
+    }
+    expect(out).toEqual({ 300: { sideways: false, past: [] }, 360: { sideways: false, past: [] }, 400: { sideways: false, past: [] } });
+  });
+
+  test(`page fit, phones at 360 and 390 (${cal || 'classic'}), light and dark: edit and view links (with notes) fit`, async ({ browser }) => {
+    const { id, viewId } = await seed();
+    const out = {};
+    for (const width of [360, 390]) for (const scheme of ['light', 'dark']) for (const p of [`/${id}?backend=cf`, `/view/${viewId}?backend=cf`]) {
+      const { ctx, page, errors } = await fitContext(browser, { width, phone: true, scheme, cal });
+      await page.goto(p);
+      await page.waitForFunction(() => { const v = document.querySelector('#app')?._vnode?.component?.proxy; return v && v.isLoading === false; }, null, { timeout: 30_000 });
+      await page.waitForTimeout(500);
+      const r = await pageOverflow(page.mainFrame());
+      out[`${width} ${scheme} ${p.slice(0, 5)}`] = { sideways: r.sw > r.W, past: r.past, errors };
+      await ctx.close();
+    }
+    for (const [k, v] of Object.entries(out)) expect(v, k).toEqual({ sideways: false, past: [], errors: [] });
+  });
+}

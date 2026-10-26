@@ -33,6 +33,35 @@ class SlugManager {
         return name;
     }
 
+    // Why a calendar can't be saved under this name, in words, or null. The server's rule (cloudflare/src validId):
+    // 1 to 200 characters, none of . # $ [ ] / or control characters.
+    static nameProblem(name) {
+        const s = String(name ?? '');
+        if (!s.trim()) return 'Type a name for the calendar.';
+        if (s.length > 200) return 'That name is too long.';
+        if (/[.#$\[\]\/\u0000-\u001f\u007f]/.test(s)) return 'A calendar name can’t contain . # $ [ ] or /';
+        return null;
+    }
+
+    // Why a view-only link can't be renamed to this, in words, or null. The server's rule (SlugService.validateSlug):
+    // 3 to 50 letters, numbers, dashes or underscores.
+    static viewNameProblem(name, current) {
+        const s = String(name ?? '').trim();
+        if (current && s.toLowerCase() === String(current).toLowerCase()) return 'That’s already this link’s name.';
+        if (!/^[a-zA-Z0-9_-]{3,50}$/.test(s)) return 'Use 3 to 50 letters, numbers, dashes or underscores.';
+        return null;
+    }
+
+    // What a failed view-link request says to a person (createPublicLink's error: .code from the server).
+    static linkErrorMessage(error) {
+        const code = error && error.code;
+        if (code === 'already-exists') return 'That name is taken. Try another.';
+        if (code === 'invalid-argument') return 'That name won’t work. Use 3 to 50 letters, numbers, dashes or underscores.';
+        if (code === 'resource-exhausted') return 'Too many tries. Wait a minute and try again.';
+        if (code === 'locked' || code === 'paused') return (error && error.message) || 'This calendar is locked.';
+        return 'Couldn’t reach pastecal. Check your connection and try again.';
+    }
+
     // Alternatives to offer when a chosen name is taken, best first. Pure: the caller checks
     // which are actually free. A trailing number counts up ("team-2" -> "team-3"); otherwise
     // the usual ways people disambiguate (-2, -<year>, -team, -calendar).
@@ -95,9 +124,8 @@ class SlugManager {
                 where: 'readonly_link',
                 reason: error?.code || 'unknown',
             }), customSlug);
-            if (!autoCreate) {
-                alert('Failed to create read-only link: ' + (error.message || 'Please try again.'));
-            }
+            // The caller says it where the person asked (never a browser alert): userMessage is the wording.
+            if (error && typeof error === 'object') error.userMessage = this.linkErrorMessage(error);
             throw error;
         }
     }

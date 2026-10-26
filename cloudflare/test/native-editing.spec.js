@@ -588,7 +588,7 @@ test('delete and duplicate: no "Are you sure?", Undo restores the saved row; Dup
   await expect(card(page)).toHaveCount(0);
   await expect(page.getByTestId('confirm-dialog')).toHaveCount(0);
   await soon(async () => (await stored(id)).map((e) => e.id)).toEqual(['b']);
-  await expect(page.getByText('Deleted "Game"')).toBeVisible();
+  await expect(page.locator('.pc-toast').getByText('Deleted "Game"')).toBeVisible();
   await toast(page).getByRole('button', { name: 'Undo' }).click();
   await soon(async () => (await stored(id)).map((e) => e.id).sort()).toEqual(['a', 'b']);
   expect((await stored(id)).find((e) => e.id === 'a')).toEqual(before);

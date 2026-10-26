@@ -845,7 +845,7 @@ class CalendarDataService {
      * looking at a blank calendar. lookupCalendar resolves the slug the same way the rest
      * of the app does, so it sees a twin under any casing.
      */
-    static checkExists(id, callback_yes, callback_no) {
+    static checkExists(id, callback_yes, callback_no, callback_failed = null) {   // (callback_failed: see CloudCalendarService)
         // Names the site itself routes (pastecal.com/beta/..., /view/..., /nativecal/...) are
         // "taken": a calendar claimed under one would have an address that opens something else.
         if (['beta', 'nativecal', 'view', 'dev', 'api', 'cal', 'report', 'signin', 'pro', 'pricing', 'explore', 'privacy', 'terms', 'contact', 'account', 'templates', 'features'].includes(String(id || '').toLowerCase()) || String(id || '').startsWith('@')) { callback_yes(); return; }
@@ -867,12 +867,13 @@ class CalendarDataService {
      * `asCreator: false` is for copies (rename): the browser writing a copy did not
      * create the original, so it is recorded as an ordinary editor of the new id.
      */
-    static createWithId(key, value, success, { asCreator = true } = {}) {
+    static createWithId(key, value, success, { asCreator = true, onError = null } = {}) {
         // Born edited: the header's "Edited N ago" reads lastEditedAt (see _lastEditedAt).
         const data = this._sanitizeForFirebase({ ...this._withoutMeta(value), lastEditedAt: this._serverNow(), _writer: this.writerId });
         const plainSet = () => this.db.child(key).set(data, (error) => {
             if (error) {
                 console.log("error creating calendar", error, key, value);
+                if (typeof onError === 'function') { try { onError({ status: 0, code: 'firebase' }); } catch (e) { console.error(e); } }
             } else {
                 if (!asCreator && typeof AuthorSignal !== 'undefined') {
                     AuthorSignal.touch(key);

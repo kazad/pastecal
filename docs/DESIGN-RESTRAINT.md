@@ -33,7 +33,7 @@ ceiling. Lower them when a page gets quieter. Raise one only with a reason writt
 | Homepage, phone 390 | 2 | 2 | 0 | 33 | **over the rule**: + and Save & share are both filled; next to fix |
 | Edit link, desktop | 1 | 1 | 1 | 36 | |
 | View link, desktop | 0 | 3 | 1 | 46 | |
-| View link, phone | 0 | 2 | 1 | 31 | |
+| View link, phone | 0 | 2 | 1 | 32 | +1 word: "Notes" in the header when the calendar has notes (app-stress-3 A20: they were hidden in the ⋮ menu with no sign they exist; desktop pins them open) |
 | Embed, 720 | 0 | 0 | 0 | 18 | one quiet header line |
 
 ## Next, in order
