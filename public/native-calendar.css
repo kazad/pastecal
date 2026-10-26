@@ -236,8 +236,8 @@
 /* A title of more than three lines (EventCard growTitle): three lines exactly, no bottom padding for a sliver of the
    fourth, the third fading out until it is focused and scrolls (the last 2px, the underline, stay solid). */
 .nk-card .nk-title.nk-title-clip { padding-bottom: 0; }
-.nk-card .nk-title.nk-title-clip:not(:focus) { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 1em), transparent calc(100% - 2px), #000 calc(100% - 2px));
-    mask-image: linear-gradient(to bottom, #000 calc(100% - 1em), transparent calc(100% - 2px), #000 calc(100% - 2px)); }
+.nk-card .nk-title.nk-title-clip:not(:focus) { -webkit-mask-image: linear-gradient(to bottom, currentColor calc(100% - 1em), transparent calc(100% - 2px), currentColor calc(100% - 2px));
+    mask-image: linear-gradient(to bottom, currentColor calc(100% - 1em), transparent calc(100% - 2px), currentColor calc(100% - 2px)); }
 .nk-cat { display: inline-flex; align-items: center; gap: 6px; flex: none; max-width: 45%; border: 0; background: var(--pc-soft); border-radius: var(--pc-radius-pill); min-height: var(--pc-h-sm);
     padding: 0 10px 0 9px; margin-top: 5px; font-size: .9643em; font-weight: var(--pc-fw-semibold); color: var(--pc-text-2); cursor: pointer; }   /* 13.5px; centered on the title's first line */
 .nk-cat span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

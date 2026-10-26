@@ -168,7 +168,28 @@ class CalendarDataService {
     // not saved (and is reported); the row just stays as it was.
     static _dropIncompleteEvents(calendar, base = []) {
         if (!calendar) return calendar;
-        const events = this._eventList(calendar.events);
+        const { kept, dropped } = this._completeRows(calendar.events, base);
+        if (!dropped.length) return { ...calendar, events: kept };
+
+        console.warn(
+            `[CalendarDataService] Refusing to save ${dropped.length} event(s) with a ` +
+            `missing/invalid start or end — they would break this calendar's ICS feed.`,
+            dropped);
+
+        if (typeof this.onIncompleteEvents === 'function') {
+            try {
+                this.onIncompleteEvents(dropped);
+            } catch (err) {
+                console.error('[CalendarDataService] onIncompleteEvents handler failed', err);
+            }
+        }
+
+        return { ...calendar, events: kept };
+    }
+
+    /** The rows a save may carry (kept) and the incomplete ones it refuses (dropped), silently: _dropIncompleteEvents. */
+    static _completeRows(list, base = []) {
+        const events = this._eventList(list);
         const baseM = this._byKey(base);
 
         const kept = [], dropped = [];
@@ -187,22 +208,7 @@ class CalendarDataService {
         const held = new Set(events.filter(e => e.id).map(e => this._eventKey(e)));
         for (const [k, e] of baseM) if (!held.has(k) && !Event.isComplete(e)) kept.push(e);
 
-        if (!dropped.length) return { ...calendar, events: kept };
-
-        console.warn(
-            `[CalendarDataService] Refusing to save ${dropped.length} event(s) with a ` +
-            `missing/invalid start or end — they would break this calendar's ICS feed.`,
-            dropped);
-
-        if (typeof this.onIncompleteEvents === 'function') {
-            try {
-                this.onIncompleteEvents(dropped);
-            } catch (err) {
-                console.error('[CalendarDataService] onIncompleteEvents handler failed', err);
-            }
-        }
-
-        return { ...calendar, events: kept };
+        return { kept, dropped };
     }
 
     // subscribe to live updates
@@ -382,24 +388,8 @@ class CalendarDataService {
     // event looked "edited by me" and the merge overwrote the server wholesale. That is
     // last-write-wins again, i.e. precisely the bug the merge exists to prevent.
     static _sameEvent(a, b) {
-        if (!a || !b) return a === b;
-        const FIELDS = ['title', 'description', 'start', 'end', 'type', 'isAllDay',
-            'repeat', 'recurrencerule', 'recurrenceID', 'recurrenceException', 'tz'];
-        const norm = (v) => (v === undefined || v === null || v === '') ? null : v;
-        return FIELDS.every(f => {
-            const x = norm(a[f]), y = norm(b[f]);
-            // type is written as a number locally and can read back as a string.
-            if (f === 'type') return String(x === null ? 1 : x) === String(y === null ? 1 : y);
-            if (f === 'isAllDay') return !!x === !!y;
-            // Same instant, any spelling: nativecal stores epoch numbers and this app
-            // rewrites them as ISO strings, so === made every nativecal event look
-            // edited-by-us and a stale copy overwrote its concurrent edit.
-            if ((f === 'start' || f === 'end') && x !== null && y !== null) {
-                const tx = new Date(x).getTime(), ty = new Date(y).getTime();
-                if (!Number.isNaN(tx) && !Number.isNaN(ty)) return tx === ty;
-            }
-            return x === y;
-        });
+        // (EventStore.same: every field of EventStore.FIELDS, start/end as instants, type as a number.)
+        return EventStore.same(a, b);
     }
 
     // What somebody else changed on the server between our baseline and this write --
@@ -446,7 +436,7 @@ class CalendarDataService {
      */
     static _lastEditedAt(current, next, now) {
         const events = (c) => { const v = c && c.events; return (Array.isArray(v) ? v : Object.values(v || {})).filter(Boolean); };
-        const F = ['title', 'description', 'start', 'end', 'type', 'isAllDay', 'repeat', 'recurrencerule', 'recurrenceID', 'recurrenceException', 'tz'];
+        const F = EventStore.FIELDS;
         const norm = (v) => (v === undefined || v === null || v === '') ? null : String(v);
         // A date compares by instant: an epoch number and its ISO string are the same value.
         const when = (v) => { const n = norm(v); if (n === null) return null; const t = new Date(v).getTime(); return Number.isNaN(t) ? n : String(t); };
@@ -510,12 +500,14 @@ class CalendarDataService {
         for (const [id, ev] of localM) {
             if (!baseM.has(id)) { merged.set(id, ev); continue; }   // we created it
             if (same(baseM.get(id), ev)) continue;                  // untouched by us
-            // We edited it. A REPLAYED write (see _replayJournal) can be hours or days
-            // old, so if anyone else has changed or deleted this event since, theirs is
-            // the newer intent and it stands. A live write is the newest thing that
-            // happened, so it applies as before.
-            if (yieldOnConflict && !same(remoteM.get(id), baseM.get(id))) continue;
-            merged.set(id, ev);
+            // We edited it: only the FIELDS we changed are ours (EventStore.mergeRow), on top of the server's row. The
+            // whole local row was a copy of every field as this tab last saw it, and someone else's newer change to
+            // another field went back the way it was (stress S15). A REPLAYED write (see _replayJournal) can be hours
+            // or days old, so a field anyone else has changed since is theirs (yieldOnConflict); a live write is the
+            // newest thing that happened. Deleted by someone else meanwhile: a replay lets it go, a live edit keeps it.
+            const remoteEv = remoteM.get(id);
+            if (!remoteEv) { if (!yieldOnConflict) merged.set(id, ev); continue; }
+            merged.set(id, EventStore.mergeRow(baseM.get(id), ev, remoteEv, { yieldOnConflict }));
         }
         // Ours: deleted since the last snapshot -- but only if nobody else has since
         // changed it, in which case their edit is newer information than our delete.

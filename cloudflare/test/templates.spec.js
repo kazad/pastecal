@@ -27,14 +27,22 @@ const titles = (page) => page.evaluate(`${VM}.calendar.events.map(e => e.title)`
 const draft = (page) => page.evaluate(`({ title: ${VM}.calendar.title, notes: ${VM}.calendar.options.notes || '', labels: [...(${VM}.calendar.options.typeLabels || [])] })`);
 const appt = (page, text) => page.locator('.e-appointment', { hasText: text });
 
+/** A template choice, as a person reaches it: the guide panel shows three and "more…" (Oct 26 2026). */
+async function pickTpl(page, id) {
+  const b = page.getByTestId(`tpl-${id}`);
+  if (!(await b.isVisible())) { const more = page.getByTestId('tpl-show-more'); if (await more.isVisible()) await more.click(); }
+  await b.click();
+}
+
 test('pick a template, switch, keep your own event, then Save & share saves it all', async ({ browser }) => {
   const { ctx, page } = await open(browser);
   const row = page.getByTestId('templates');
-  await expect(row).toContainText('Start from:');
-  await expect(row).toContainText('Blank');
+  // Oct 26 2026: one quiet line in the guide panel; "Start blank" appears once a template is on (blank is the default).
+  await expect(row).toContainText('Or start from a template:');
+  await expect(row.getByTestId('tpl-blank')).toHaveCount(0);
 
   // 1. a pick fills the month, names the colors, titles the calendar and writes notes
-  await page.getByTestId('tpl-team').click();
+  await pickTpl(page, 'team');
   await expect(appt(page, 'Practice').first()).toBeVisible();
   await expect(page.getByTestId('tpl-team')).toHaveAttribute('aria-pressed', 'true');
   expect(await titles(page)).not.toContain('Your event here');
@@ -46,7 +54,7 @@ test('pick a template, switch, keep your own event, then Save & share saves it a
   await expect(page.getByTestId('grid-tip')).toHaveCount(0);
 
   // 2. another chip replaces the template's events (nothing of yours yet, so no question)
-  await page.getByTestId('tpl-family').click();
+  await pickTpl(page, 'family');
   await expect(page.getByTestId('tpl-undo')).toHaveCount(0);            // nothing changed by you: nothing to undo
   await expect(page.locator('.pc-toast')).toHaveCount(0);
   await expect(appt(page, 'Piano: Maya').first()).toBeVisible();
@@ -72,7 +80,7 @@ test('pick a template, switch, keep your own event, then Save & share saves it a
 
   // 4. switching never asks: it swaps the template's events at once, yours stay, and the toast's Undo
   //    puts the last template back exactly
-  await page.getByTestId('tpl-team').click();
+  await pickTpl(page, 'team');
   await expect(appt(page, 'Practice').first()).toBeVisible();
   let now = await titles(page);
   expect(now).toContain('Bake sale');
@@ -85,7 +93,7 @@ test('pick a template, switch, keep your own event, then Save & share saves it a
   expect(now).toContain('Bake sale');
   expect(now.filter((t) => t === 'Practice')).toEqual([]);
   // ...and again, so the rest of the test continues from Sports team
-  await page.getByTestId('tpl-team').click();
+  await pickTpl(page, 'team');
   await expect(appt(page, 'Practice').first()).toBeVisible();
 
   // 5. Save & share from the nudge: the name is the visitor's, never one made from the template
@@ -120,17 +128,17 @@ test('Start blank clears the template; Cmd+Z undoes a pick and a switch', async 
   const isTpl = (t) => /^(Meeting|Start:|Read |Author|Shift|Open shift|Practice|Game|Swim|Piano)/.test(t);
 
   // Start blank: back to a fresh draft, example event and all
-  await page.getByTestId('tpl-club').click();
+  await pickTpl(page, 'club');
   await expect(appt(page, 'Meeting').first()).toBeVisible();
   await page.getByTestId('tpl-blank').click();
   await expect.poll(async () => (await titles(page)).filter(isTpl)).toEqual([]);
   expect(await titles(page)).toEqual(['Your event here']);
   expect(await draft(page)).toMatchObject({ title: 'New Calendar', notes: '' });
   await expect(page.getByTestId('tpl-nudge')).toHaveCount(0);
-  await expect(page.getByTestId('templates')).toContainText('Blank');
+  await expect(page.getByTestId('templates')).toContainText('Or start from a template:');   // back to the quiet line
 
   // Cmd+Z right after a pick undoes it, title and notes included
-  await page.getByTestId('tpl-shifts').click();
+  await pickTpl(page, 'shifts');
   await expect(appt(page, 'Open shift').first()).toBeVisible();
   await page.evaluate(() => document.activeElement && document.activeElement.blur());
   await page.keyboard.press('ControlOrMeta+z');
@@ -140,8 +148,8 @@ test('Start blank clears the template; Cmd+Z undoes a pick and a switch', async 
   await expect(page.getByTestId('tpl-shifts')).toHaveAttribute('aria-pressed', 'false');
 
   // and after a switch, puts the template before it back
-  await page.getByTestId('tpl-team').click();
-  await page.getByTestId('tpl-family').click();
+  await pickTpl(page, 'team');
+  await pickTpl(page, 'family');
   await expect(appt(page, 'Piano: Maya').first()).toBeVisible();
   await page.evaluate(() => document.activeElement && document.activeElement.blur());
   await page.keyboard.press('ControlOrMeta+z');
@@ -154,7 +162,7 @@ test('Start blank clears the template; Cmd+Z undoes a pick and a switch', async 
   await page.reload();
   await page.waitForFunction(() => window.scheduleObj && document.querySelector('.e-work-cells'), null, { timeout: 20_000 });
   await expect(page.getByTestId('tpl-team')).toHaveAttribute('aria-pressed', 'true');
-  await page.getByTestId('tpl-out').click();
+  await pickTpl(page, 'out');
   await expect(appt(page, 'Sam: WFH').first()).toBeVisible();
   await ctx.close();
 });
@@ -175,7 +183,7 @@ test('phone: the chips wait behind "Start from a template", then scroll sideways
   const header = await page.getByTestId('share-new-mobile').boundingBox();
   expect(box.y).toBeGreaterThan(header.y + header.height);
   await row.evaluate((el) => { el.scrollLeft = el.scrollWidth; });
-  await page.getByTestId('tpl-club').click();
+  await pickTpl(page, 'club');
   await expect.poll(() => titles(page)).toContain('Meeting: ch. 1-12');
   await expect(page.getByTestId('tpl-nudge')).toBeVisible();
   await expect(toggle).toContainText('Club or class');                    // the toggle names the template in use

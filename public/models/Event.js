@@ -79,6 +79,17 @@ class Event {
             if (!untouched) this.end = Event.repairedEnd(this.start, this.end, this.isAllDay);
         }
 
+        // Any other field of the one list (services/EventStore.js RECORD) rides along as given, under either name: a
+        // field added there is carried by every copy made here without a change to this class.
+        const store = typeof EventStore !== 'undefined' ? EventStore : null;
+        if (store && store.RECORD) {
+            for (const [f, R] of Object.entries(store.RECORD)) {
+                if (f in this) continue;
+                const v = options[R] !== undefined ? options[R] : options[f];
+                if (v !== undefined) this[f] = v;
+            }
+        }
+
         // Firebase saves fail with undefined properties, ensure they are null instead
         for (let prop in this) {
             if (this[prop] === undefined) {

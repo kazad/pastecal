@@ -1,7 +1,7 @@
 /**
  * GUARD (root 5, Oct 26 2026): every date and time a person may type into the native card's pickers, as one table of
- * (input, locale, today, expected). The parser (public/nativecal/components/cardKit.js TIME_FORMS, DATE_FORMS and the
- * look-ahead rules under them) is one table too; each of its rows must be exercised here, so a new form comes with
+ * (input, locale, today, expected). The parser (public/nativecal/components/cardKit.js TIME_FORMS, DATE_FORMS, the
+ * look-ahead rules under them, and endAt for an end time's day) is one table too; each of its rows must be exercised here, so a new form comes with
  * its cases.
  *
  * Why: the forms were added one bug at a time -- F11 (an end before the start), F12 ("jan 5" in October), F20
@@ -15,8 +15,8 @@ const assert = require('node:assert/strict');
 const K = require('../../public/nativecal/components/cardKit.js');
 
 const SAT = '2026-10-24';   // Saturday Oct 24 2026
-const day = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
-const ymd = (d) => d && `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const day = (s) => { const [y, m, d] = s.split('-').map(Number); return K.wallDate(y, m - 1, d); };   // (the card's dates are wall values)
+const ymd = (d) => d && `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
 const hm = (m) => m == null ? null : `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 
 // [input, locale, today, expected date (or null: refused), the month shown when not today's]
@@ -98,20 +98,21 @@ const TIMES = [
   ['', '12', null], ['25', '12', null], ['13pm', '12', null], ['0p', '12', null], ['5:75', '12', null], ['24:00', '24', null], ['soon', '12', null],
 ];
 
-// The end time look-ahead: [start, end, typed, expected end (local) or null]
+// The end time look-ahead (cardKit.endAt, read against the start): [start, end, typed, expected end (wall time) or null]
 const ENDS = [
   ['2026-10-27 23:00', '2026-10-28 00:00', '11:30p', '2026-10-27 23:30'],   // S05: 11 PM - midnight, not 24h 30m
   ['2026-10-27 23:00', '2026-10-27 23:30', '1a', '2026-10-28 01:00'],       // F11: before the start = after midnight
   ['2026-10-27 23:00', '2026-10-28 00:00', 'midnight', '2026-10-28 00:00'],
-  ['2026-10-27 22:00', '2026-10-28 02:00', '11p', '2026-10-27 23:00'],      // across midnight: still the first after the start
+  ['2026-10-27 22:00', '2026-10-28 02:00', '11p', '2026-10-28 23:00'],      // an end past midnight keeps its own date
   ['2026-10-27 22:00', '2026-10-28 02:00', '3a', '2026-10-28 03:00'],
   ['2026-10-27 17:00', '2026-10-27 18:00', '7p', '2026-10-27 19:00'],
   ['2026-10-27 17:00', '2026-10-27 18:00', '5p', null],                     // the start itself
   ['2026-10-26 10:00', '2026-10-28 15:00', '4p', '2026-10-28 16:00'],       // a longer event keeps the day it ends
   ['2026-10-26 10:00', '2026-10-28 15:00', '9a', '2026-10-28 09:00'],
+  ['2026-03-08 00:30', '2026-03-08 01:00', '2:30a', null],                // a time Los Angeles skips that day
 ];
-const at = (s) => { const [d, t] = s.split(' '); const x = day(d); const [h, m] = t.split(':').map(Number); x.setHours(h, m); return x; };
-const local = (d) => d && `${ymd(d)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+const at = (s) => { const [d, t] = s.split(' '); const [h, m] = t.split(':').map(Number); return K.at(day(d), h * 60 + m); };
+const local = (d) => d && `${ymd(d)} ${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
 
 test('every typed date: (input, locale, today) -> date', () => {
   const got = DATES.map(([s, loc, today, , ref]) => ymd(K.parseDate(s, day(today), ref ? day(ref) : day(today), loc)));
@@ -123,7 +124,7 @@ test('every typed time: (input, clock) -> minutes', () => {
 });
 
 test('an end time typed: the look-ahead decides its day', () => {
-  assert.deepEqual(ENDS.map(([s, e, typed]) => `${s}-${e} "${typed}" -> ${local(K.typedEnd(at(s), at(e), K.parseTime(typed)))}`),
+  assert.deepEqual(ENDS.map(([s, e, typed]) => `${s}-${e} "${typed}" -> ${local(K.endAt(at(s), at(e), K.parseTime(typed), 'America/Los_Angeles'))}`),
     ENDS.map(([s, e, typed, want]) => `${s}-${e} "${typed}" -> ${want}`));
 });
 

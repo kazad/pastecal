@@ -56,14 +56,20 @@ test('wall clock <-> instant: Tokyo, and the DST gap and repeat in Los Angeles a
     assert.deepEqual(EventZone.wall(Date.parse('2026-10-25T01:30:00Z'), 'Europe/London'), { y: 2026, m: 9, d: 25, h: 1, min: 30, s: 0 }, 'GMT after the change');
 });
 
-test('a card value: Dates whose local fields read the zone, and back, in Los Angeles, Tokyo and London', () => {
+test('a card value: a wall clock whose UTC fields read the zone, and back, in Los Angeles, Tokyo and London', () => {
+    // (Was toWallDate: a Date whose LOCAL fields read the zone. The viewer's zone bent it -- stress S01 -- so it is gone.)
+    assert.equal(EventZone.toWallDate, undefined);
     for (const viewer of ['America/Los_Angeles', 'Asia/Tokyo', 'Europe/London']) inZone(viewer, () => {
         const real = new Date('2026-11-03T05:00:00Z');   // Tue 2 PM in Tokyo
-        const w = EventZone.toWallDate(real, 'Asia/Tokyo');
-        assert.deepEqual([w.getDate(), w.getHours(), w.getMinutes()], [3, 14, 0], viewer);
-        assert.equal(EventZone.fromWallDate(w, 'Asia/Tokyo').toISOString(), real.toISOString(), viewer);
-        // Typing 2:00 PM with Tokyo picked: the picker builds local 14:00, which is 05:00Z (Japan has no DST).
-        assert.equal(EventZone.fromWallDate(new Date(2027, 0, 12, 14, 0), 'Asia/Tokyo').toISOString(), '2027-01-12T05:00:00.000Z', viewer);
+        const w = EventZone.floating(real.getTime(), 'Asia/Tokyo');
+        assert.deepEqual([w.getUTCDate(), w.getUTCHours(), w.getUTCMinutes()], [3, 14, 0], viewer);
+        assert.equal(EventZone.unfloating(w, 'Asia/Tokyo').toISOString(), real.toISOString(), viewer);
+        // Typing 2:00 PM with Tokyo picked: the wall clock 14:00, which is 05:00Z (Japan has no DST).
+        assert.equal(EventZone.unfloating(new Date(Date.UTC(2027, 0, 12, 14, 0)), 'Asia/Tokyo').toISOString(), '2027-01-12T05:00:00.000Z', viewer);
+        // 2:30 AM in Tokyo on the day Los Angeles springs forward (S01): it exists, whatever the viewer's zone.
+        const jp = EventZone.floating(Date.parse('2026-03-07T17:30:00Z'), 'Asia/Tokyo');
+        assert.deepEqual([jp.getUTCDate(), jp.getUTCHours(), jp.getUTCMinutes()], [8, 2, 30], viewer);
+        assert.equal(EventZone.unfloating(jp, 'Asia/Tokyo').toISOString(), '2026-03-07T17:30:00.000Z', viewer);
     });
 });
 

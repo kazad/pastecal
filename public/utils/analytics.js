@@ -527,6 +527,12 @@ const Analytics = {
         } catch (e) { /* never block the switch */ }
     },
 
+    /** A side panel tab a person opened, and how: feature_used 'panel_<tab>:<via>' (one value, so GA4's registered
+     *  'feature' dimension and the first-party collector both carry it; stats.sh panels splits it). */
+    panelOpened(tab, via) {
+        this.featureUsed(`panel_${tab}:${via}`);
+    },
+
     featureUsed(feature, detail) {
         this.track('feature_used', {
             feature,               // 'notes' | 'colors' | 'settings' | 'event_type'

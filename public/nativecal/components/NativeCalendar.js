@@ -137,30 +137,10 @@ const NativeCalendar = (() => {
             const EZ = window.EventZone;
             const zone = !allDay && EZ && ev.tz ? EZ.validZone(ev.tz) : null;
             if (zone && ev.recurrencerule && !ev.recurrenceID && RR.RRule && !unsafe) {
-                const stamps = String(ev.recurrenceException || '').split(',').map(s => s.trim()).filter(Boolean);
-                const zoneDay = (ms) => { const w = EZ.wall(ms, zone); return ymdKey(w.y, w.m, w.d); };
-                // A skipped date is the zone's day of the stamp (a floating stamp or a bare date: as written).
-                const excluded = new Set(stamps.map((x) => {
-                    const m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z?))?$/i.exec(x);
-                    if (!m) return null;
-                    return !m[4] || !m[7] ? m[1] + m[2] + m[3] : zoneDay(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]));
-                }).filter(Boolean));
-                let rule;
-                try {
-                    const clean = String(ev.recurrencerule).replace(/^RRULE:/i, '').split(';').filter(p => p.includes('=')).join(';');
-                    const opts = RR.RRule.parseString(clean);
-                    // UNTIL names a day (its writer's local midnight: read as all-day dates are), through its end in the zone.
-                    if (opts.until) { const k = allDayStampKey(opts.until.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')); if (k) opts.until = new Date(Date.UTC(+k.slice(0, 4), +k.slice(4, 6) - 1, +k.slice(6, 8), 23, 59, 59)); }
-                    rule = new RR.RRule({ ...opts, dtstart: EZ.floating(start.getTime(), zone) });
-                } catch (e) { rule = null; }
-                if (rule) {
-                    const from = EZ.floating(rangeStart.getTime() - duration - DAY_MS, zone), to = EZ.floating(rangeEnd.getTime() + DAY_MS, zone);
-                    for (const f of rule.between(from, to, true, (d, i) => i < MAX_OCCURRENCES)) {
-                        if (excluded.has(ymdKey(f.getUTCFullYear(), f.getUTCMonth(), f.getUTCDate()))) continue;
-                        const s = EZ.unfloating(f, zone), e = new Date(s.getTime() + duration);
-                        if (e <= rangeStart || s >= rangeEnd) continue;
-                        out.push({ ...base, start: s, end: e, recurring: true, key: `${ev.id}@${s.getTime()}` });
-                    }
+                // (EventZone.occurrences: the same expansion classic's grid draws, ScheduleAdapter.toView.)
+                const occs = EZ.occurrences(ev, rangeStart, rangeEnd, RR.RRule, MAX_OCCURRENCES);
+                if (occs) {
+                    for (const o of occs) out.push({ ...base, start: o.start, end: o.end, recurring: true, key: `${ev.id}@${o.start.getTime()}` });
                     continue;
                 }
             }

@@ -23,6 +23,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+// CalendarDataService compares and merges rows through EventStore (a page global).
+globalThis.EventStore = require('../../public/services/EventStore.js');
 
 const SRC = fs.readFileSync(
   path.join(__dirname, '../../public/services/CalendarDataService.js'), 'utf8');

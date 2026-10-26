@@ -25,6 +25,8 @@ function loadDataService() {
     var Utils = { debounce: (f) => f, uuidv4: () => Math.random().toString(36).slice(2) };`, ctx);
   vm.runInContext(fs.readFileSync(path.join(PUBLIC, 'models/Event.js'), 'utf8') +
     ';this.Event = Event;', ctx);
+  // (CalendarDataService compares and merges rows through EventStore, as the page loads it.)
+  vm.runInContext(fs.readFileSync(path.join(PUBLIC, 'services/EventStore.js'), 'utf8'), ctx);
   vm.runInContext(fs.readFileSync(path.join(PUBLIC, 'services/CalendarDataService.js'), 'utf8') +
     ';this.CalendarDataService = CalendarDataService;', ctx);
   const S = ctx.CalendarDataService;
