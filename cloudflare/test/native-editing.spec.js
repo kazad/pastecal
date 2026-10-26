@@ -366,8 +366,8 @@ test('a repeating event from its popup: edit and delete "this event" / "all even
   await undo.click();
   await soon(async () => (await stored(id)).find((e) => e.id === 'w').recurrenceException).toBe('20261013T170000Z');
 
-  // Edit all events (from Oct 20): the series' own start and rule in the form; classic asks whether its edited
-  // occurrence matches the series again. "No": renamed, the skipped date and the edited copy stay.
+  // Edit all events (from Oct 20): the series' own start and rule in the form. A rename leaves the dates alone, so
+  // nothing is asked: renamed, the skipped date and the edited copy stay.
   await popup('Weekly sync');
   await page.getByTestId('popover-edit').click();
   await pickScope(page, 'all');
@@ -375,8 +375,7 @@ test('a repeating event from its popup: edit and delete "this event" / "all even
   await expect(page.getByTestId('editor-repeat')).toHaveValue('WEEKLY');
   await page.getByTestId('editor-title').fill('Team sync');
   await page.getByTestId('editor-save').click();
-  await expect(page.getByTestId('confirm-dialog')).toContainText('match it to the whole series again?');
-  await page.getByTestId('confirm-no').click();
+  await expect(page.getByTestId('confirm-dialog')).toHaveCount(0);
   await expect(page.getByTestId('event-editor')).toHaveCount(0);
   await soon(async () => (await stored(id)).find((e) => e.id === 'w').title).toBe('Team sync');
   let rows = await stored(id);
@@ -392,16 +391,20 @@ test('a repeating event from its popup: edit and delete "this event" / "all even
   await page.getByRole('button', { name: 'Undo' }).click();
   await soon(async () => (await stored(id)).length).toBe(2);
 
-  // "Yes" to matching the series again: the skipped date and the edited copy are cleared (classic's own rule).
+  // A time change asks classic's question; "Yes" to matching the series again: the skipped date and the edited copy
+  // are cleared (classic's own rule).
   await popup('Team sync');
   await page.getByTestId('popover-edit').click();
   await pickScope(page, 'all');
   await page.getByTestId('editor-description').fill('Room 5');
+  await page.getByTestId('editor-start-time').fill('10:30');
   await page.getByTestId('editor-save').click();
+  await expect(page.getByTestId('confirm-dialog')).toContainText('match it to the whole series again?');
   await page.getByTestId('confirm-yes').click();
   await soon(async () => (await stored(id)).length).toBe(1);
   [master] = await stored(id);
-  expect([master.recurrenceException ?? null, master.description, master.title]).toEqual([null, 'Room 5', 'Team sync']);
+  expect([master.recurrenceException ?? null, master.description, master.title, master.start])
+    .toEqual([null, 'Room 5', 'Team sync', iso('2026-10-06T10:30:00-07:00')]);
   expect(errors).toEqual([]);
   await ctx.close();
 });

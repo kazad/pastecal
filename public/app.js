@@ -1726,10 +1726,21 @@ const CalendarVueApp = {
             const series = this.nativeSeriesOf(this.nativeStored({ id: ed.record.Id }));
             const save = (keepOccurrences) => finish(this.nativeAction('eventChange', { changedRecords: [record] }, { action: 'EditSeries', keepOccurrences }));
             if (!this.nativeHasOwn(series)) return save(false);
+            // A change that leaves the dates alone (a rename, a color, the details) cannot make the skipped dates or
+            // edited occurrences wrong: keep them without asking. (Asking let "rename, Enter, Enter" wipe them.)
+            const time = (v) => new Date(v).getTime();
+            const timing = time(record.StartTime) !== time(ed.record.StartTime) || time(record.EndTime) !== time(ed.record.EndTime)
+                || !!record.IsAllDay !== !!ed.record.IsAllDay || String(record.RecurrenceRule || '') !== String(ed.record.RecurrenceRule || '');
+            if (!timing) return save(true);
+            this.nativeAskSeriesChange(save);
+        },
+        // Classic's "match every occurrence to the series again?". Keeping them ("No") is the primary, focused
+        // answer, so Enter never deletes anyone's edits; clearing them takes a deliberate click.
+        nativeAskSeriesChange(save) {
             this.nativeAsk = { title: 'Edit event', message: NATIVE_SERIES_CHANGE,
                 buttons: [
-                    { label: 'No', testid: 'confirm-no', action: () => save(true) },
-                    { label: 'Yes', testid: 'confirm-yes', primary: true, action: () => save(false) },
+                    { label: 'Yes', testid: 'confirm-yes', action: () => save(false) },
+                    { label: 'No', testid: 'confirm-no', primary: true, action: () => save(true) },
                 ] };
         },
 
@@ -1834,10 +1845,7 @@ const CalendarVueApp = {
                     RecurrenceRule: nativeShiftRule(rec.RecurrenceRule, occurrence.start, start) };
                 const save = (keepOccurrences) => this.nativeAction('eventChange', { changedRecords: [moved] }, { action: 'EditSeries', keepOccurrences });
                 if (!this.nativeHasOwn(series)) return save(false);
-                this.nativeAsk = { title: 'Edit event', message: NATIVE_SERIES_CHANGE, buttons: [
-                    { label: 'No', testid: 'confirm-no', action: () => save(true) },
-                    { label: 'Yes', testid: 'confirm-yes', primary: true, action: () => save(false) },
-                ] };
+                this.nativeAskSeriesChange(save);
             };
             this.nativeAskScope('Edit recurring event', kind === 'edited' ? moveRow : moveOne, moveAll);
         },
