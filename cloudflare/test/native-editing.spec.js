@@ -39,11 +39,11 @@ const byTitle = async (id, title) => (await stored(id)).find((e) => e.title === 
 const soon = (fn, timeout = 10_000) => expect.poll(fn, { timeout, intervals: [100] });
 
 /** A browser in Los Angeles at a fixed time; every page error and Syncfusion request is recorded. */
-async function open(browser, id, query = '', { phone = false, timezoneId = 'America/Los_Angeles' } = {}) {
+async function open(browser, id, query = '', { phone = false, timezoneId = 'America/Los_Angeles', settings = null } = {}) {
   const ctx = await browser.newContext(phone
     ? { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, timezoneId, locale: 'en-US' }
     : { viewport: { width: 1280, height: 900 }, timezoneId, locale: 'en-US' });
-  await ctx.addInitScript(() => { window.__TEST__ = true; try { localStorage.setItem('pastecal_backend', 'cf'); } catch (e) { /* blocked */ } });
+  await ctx.addInitScript((g) => { window.__TEST__ = true; try { localStorage.setItem('pastecal_backend', 'cf'); if (g) localStorage.setItem('pastecal_global_settings', JSON.stringify(g)); } catch (e) { /* blocked */ } }, settings);
   await ctx.route(NOT_LOCAL, (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
   const page = await ctx.newPage();
   await page.clock.install({ time: new Date(NOW) });
@@ -381,7 +381,7 @@ test('repeat: the one-tap choices and Custom… store classic\'s rule form; a si
   await picker(page).getByTestId('custom-end-until').check();
   await picker(page).getByTestId('custom-until').fill('2027-03-31');
   await picker(page).getByTestId('custom-apply').click();
-  const until = await page.evaluate(() => new Date(2027, 2, 31, 23, 59, 59).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, ''));
+  const until = await page.evaluate(() => new Date(2027, 2, 31).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, ''));   // classic's form: the date's local midnight
   await soon(rule).toBe(`FREQ=MONTHLY;BYDAY=TU;BYSETPOS=2;INTERVAL=1;UNTIL=${until};`);
   await expect(page.getByTestId('card-repeat')).toHaveText(/Monthly on the second Tuesday, until Mar 31/);
   // A daily repeat with a count, then none. Each change asks nothing (the card is the whole series).
@@ -410,6 +410,100 @@ test('repeat: the one-tap choices and Custom… store classic\'s rule form; a si
   await page.getByTestId('confirm-yes').click();
   await soon(rule).toBe('');
   expect((await stored(id)).length, '"Yes" clears the edited occurrence, as classic does').toBe(1);
+  expect(errors).toEqual([]);
+  await ctx.close();
+});
+
+// Everything classic's repeat editor (Syncfusion 23.2.6) offers, from the card's Custom…, stored in the characters classic
+// writes (read from classic itself: test/unit/native-card-kit.test.js); and rules classic wrote open in the card, read
+// right, and stay exactly as they were when nothing about the repeat changes. rrule.js (what the native calendar draws
+// with) says when they happen.
+test('repeat parity with classic: yearly on the last Monday of October, weekly on chosen days in the week\'s order until a date, monthly on a day N times, yearly on a date; classic\'s rules open and keep their characters', async ({ browser }) => {
+  const id = await seed([
+    timed('p', 'Fall party', '2026-10-15T17:00:00-07:00', '2026-10-15T18:00:00-07:00'),
+    timed('h', 'Harvest', '2026-10-12T09:00:00-07:00', '2026-10-12T10:00:00-07:00', { recurrencerule: 'FREQ=WEEKLY;BYDAY=MO,WE,TH,FR,SU;INTERVAL=2;UNTIL=20261231T080000Z;' }),
+    timed('k', 'Pumpkins', '2026-10-26T12:00:00-07:00', '2026-10-26T13:00:00-07:00', { recurrencerule: 'FREQ=YEARLY;BYDAY=MO;BYSETPOS=-1;BYMONTH=10;INTERVAL=1;' }),
+  ]);
+  const { ctx, page, errors } = await open(browser, id, '&view=month&date=2026-10-15', { settings: { firstDayOfWeek: '1' } });   // weeks start on Monday
+  const rule = async (eid) => (await stored(id)).find((e) => e.id === eid).recurrencerule || '';
+  const custom = async () => { await page.getByTestId('card-repeat').click(); await picker(page).getByTestId('picker-custom').click(); await expect(picker(page).getByTestId('custom-apply')).toBeVisible(); };
+  const P = () => picker(page);
+  await openCard(page, page.locator('.nc-bar', { hasText: 'Fall party' }).first(), true);
+  // Yearly on the last Monday of October.
+  await custom();
+  await P().getByTestId('custom-unit').selectOption('YEARLY');
+  await P().getByTestId('custom-by-weekday').check();
+  await P().getByTestId('custom-setpos').selectOption('-1');
+  await P().getByTestId('custom-posday').selectOption('1');
+  await P().getByTestId('custom-month').selectOption('10');
+  await P().getByTestId('custom-apply').click();
+  await soon(() => rule('p')).toBe('FREQ=YEARLY;BYDAY=MO;BYSETPOS=-1;BYMONTH=10;INTERVAL=1;');
+  await expect(page.getByTestId('card-repeat')).toHaveText(/Yearly on the last Monday of October/);
+  const next = await page.evaluate((r) => rrule.rrulestr(r, { dtstart: new Date(Date.UTC(2026, 9, 15, 17)) }).all((d, i) => i < 3).map((d) => d.toISOString().slice(0, 10)), (await rule('p')).replace(/;$/, ''));
+  expect(next, 'rrule.js: the last Monday of each October').toEqual(['2026-10-26', '2027-10-25', '2028-10-30']);
+  // Weekly every 2 weeks on Mon, Wed, Thu, Sun until Dec 31: the day buttons start on Monday and BYDAY follows them.
+  await custom();
+  await P().getByTestId('custom-unit').selectOption('WEEKLY');
+  expect(await P().locator('.nk-wd button').allInnerTexts()).toEqual(['M', 'T', 'W', 'T', 'F', 'S', 'S']);
+  await P().getByTestId('custom-interval').fill('2');
+  for (const d of [1, 3, 0]) await P().getByTestId(`custom-day-${d}`).click();   // Thursday (the event's day) is on already
+  await P().getByTestId('custom-end-until').check();
+  await P().getByTestId('custom-until').fill('2026-12-31');
+  await P().getByTestId('custom-apply').click();
+  const dec31 = await page.evaluate(() => new Date(2026, 11, 31).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, ''));
+  expect(dec31).toBe('20261231T080000Z');
+  await soon(() => rule('p')).toBe(`FREQ=WEEKLY;BYDAY=MO,WE,TH,SU;INTERVAL=2;UNTIL=${dec31};`);
+  await expect(page.getByTestId('card-repeat')).toHaveText(/Every 2 weeks on Sun, Mon, Wed, Thu, until Dec 31/);
+  // Monthly on day 15, 3 times; then yearly on October 15.
+  await custom();
+  await P().getByTestId('custom-unit').selectOption('MONTHLY');
+  await P().getByTestId('custom-interval').fill('1');
+  await P().getByTestId('custom-by-day').check();
+  await P().getByTestId('custom-month-day').fill('15');
+  await P().getByTestId('custom-end-count').check();
+  await P().getByTestId('custom-count').fill('3');
+  await P().getByTestId('custom-apply').click();
+  await soon(() => rule('p')).toBe('FREQ=MONTHLY;BYMONTHDAY=15;INTERVAL=1;COUNT=3;');
+  await expect(page.getByTestId('card-repeat')).toHaveText(/Monthly on the 15th, 3 times/);
+  await custom();
+  await P().getByTestId('custom-unit').selectOption('YEARLY');
+  await P().getByTestId('custom-month').selectOption('10');
+  await P().getByTestId('custom-by-day').check();
+  await P().getByTestId('custom-end-never').check();
+  await P().getByTestId('custom-apply').click();
+  await soon(() => rule('p')).toBe('FREQ=YEARLY;BYMONTHDAY=15;BYMONTH=10;INTERVAL=1;');
+  await expect(page.getByTestId('card-repeat')).toHaveText(/Yearly on October 15/);
+  await page.getByTestId('card-done').click();
+  await expect(card(page)).toHaveCount(0);
+
+  // Classic's rules: read right, shown in the panel, and Apply with nothing changed (or Done) stores nothing new.
+  await openCard(page, page.locator('.nc-bar', { hasText: 'Harvest' }).first(), true);
+  await expect(page.getByTestId('card-repeat')).toHaveText(/Every 2 weeks on Sun, Mon, Wed, Thu, Fri, until Dec 31/);
+  await custom();
+  await expect(P().getByTestId('custom-unit')).toHaveValue('WEEKLY');
+  await expect(P().getByTestId('custom-interval')).toHaveValue('2');
+  for (const [d, on] of [[0, true], [1, true], [2, false], [3, true], [4, true], [5, true], [6, false]]) await expect(P().getByTestId(`custom-day-${d}`)).toHaveAttribute('aria-pressed', String(on));
+  await expect(P().getByTestId('custom-end-until')).toBeChecked();
+  await expect(P().getByTestId('custom-until')).toHaveValue('2026-12-31');
+  await P().getByTestId('custom-apply').click();
+  await expect(P()).toHaveCount(0);
+  await page.getByTestId('card-done').click();
+  await expect(card(page)).toHaveCount(0);
+  await openCard(page, page.locator('.nc-bar', { hasText: 'Pumpkins' }).first(), true);
+  await expect(page.getByTestId('card-repeat')).toHaveText(/Yearly on the last Monday of October/);
+  await custom();
+  await expect(P().getByTestId('custom-unit')).toHaveValue('YEARLY');
+  await expect(P().getByTestId('custom-by-weekday')).toBeChecked();
+  await expect(P().getByTestId('custom-setpos')).toHaveValue('-1');
+  await expect(P().getByTestId('custom-posday')).toHaveValue('1');
+  await expect(P().getByTestId('custom-month')).toHaveValue('10');
+  await P().getByTestId('custom-apply').click();
+  await page.getByTestId('card-done').click();
+  await expect(card(page)).toHaveCount(0);
+  await page.waitForTimeout(800);
+  expect(await rule('h'), 'classic\'s weekly rule, untouched').toBe('FREQ=WEEKLY;BYDAY=MO,WE,TH,FR,SU;INTERVAL=2;UNTIL=20261231T080000Z;');
+  expect(await rule('k'), 'classic\'s yearly rule, untouched').toBe('FREQ=YEARLY;BYDAY=MO;BYSETPOS=-1;BYMONTH=10;INTERVAL=1;');
+  await expect(page.locator('.nc-bar', { hasText: 'Pumpkins' })).toHaveCount(1);   // Oct 26 only, in October
   expect(errors).toEqual([]);
   await ctx.close();
 });

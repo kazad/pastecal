@@ -559,7 +559,7 @@ const EventCard = (() => {
                 const s = K.parseRule(this.v.rule || 'FREQ=WEEKLY;INTERVAL=1;', this.v.start);
                 if (!s.freq) s.freq = 'WEEKLY';
                 if (s.endMode === 'until' && !s.until) s.until = K.dateStr(K.addDays(this.v.start, 14));
-                this.custom = s; this.customError = '';
+                this.custom = s; this.customError = ''; this._customAt = JSON.stringify(s);   // Apply with nothing changed keeps the rule as it was
                 this.$nextTick(() => this.mountPicker());
             },
             customDay(d) { const s = this.custom; const i = s.byDay.indexOf(d); if (i >= 0) { if (s.byDay.length > 1) s.byDay.splice(i, 1); } else s.byDay.push(d); },
@@ -568,8 +568,9 @@ const EventCard = (() => {
                 if (s.endMode === 'until' && !s.until) s.until = K.dateStr(K.addDays(this.v.start, 14));
                 const problem = K.ruleProblem(s, this.v.start, this.v.isAllDay ? K.addDays(this.v.end, 1) : this.v.end, this.v.isAllDay);
                 if (problem) { this.customError = problem; return; }
-                const untilStamp = typeof Event !== 'undefined' && typeof Event.ruleUntilStamp === 'function' ? Event.ruleUntilStamp : null;
-                this.pickRepeat(K.buildRule(s, { isAllDay: this.v.isAllDay, untilStamp }));
+                // Nothing changed: the stored rule stays character for character (one classic wrote may differ in form).
+                if (this.v.rule && JSON.stringify(s) === this._customAt) { this.closePicker(); return; }
+                this.pickRepeat(K.buildRule(s, { firstDay: this.firstDayOfWeek }));
             },
             // ---- the ⋯ menu ----------------------------------------------------------------------------
             toggleMenu(e) {
@@ -755,19 +756,19 @@ const EventCard = (() => {
       <button type="button" data-testid="picker-custom" @click="openCustom">Custom…</button>
     </div>
     <div v-else class="nk-cust">
-      <label>Every <input type="number" min="1" max="99" v-model.number="custom.interval" aria-label="How often" data-testid="custom-interval">
+      <label>Every <input type="number" min="1" max="999" v-model.number="custom.interval" aria-label="How often" data-testid="custom-interval">
         <select v-model="custom.freq" aria-label="Unit" data-testid="custom-unit">
           <option value="DAILY">{{ custom.interval > 1 ? 'days' : 'day' }}</option><option value="WEEKLY">{{ custom.interval > 1 ? 'weeks' : 'week' }}</option>
           <option value="MONTHLY">{{ custom.interval > 1 ? 'months' : 'month' }}</option><option value="YEARLY">{{ custom.interval > 1 ? 'years' : 'year' }}</option></select></label>
       <div v-if="custom.freq === 'WEEKLY'" class="nk-wd">
-        <button v-for="(n, i) in ['S','M','T','W','T','F','S']" :key="i" type="button" :aria-pressed="String(custom.byDay.includes(i))" :aria-label="dayNames[i]" :data-testid="'custom-day-' + i" @click="customDay(i)">{{ n }}</button>
+        <button v-for="i in weekOrder" :key="i" type="button" :aria-pressed="String(custom.byDay.includes(i))" :aria-label="dayNames[i]" :data-testid="'custom-day-' + i" @click="customDay(i)">{{ dayNames[i].charAt(0) }}</button>
       </div>
       <div v-if="custom.freq === 'MONTHLY' || custom.freq === 'YEARLY'" class="nk-ends">
         <label v-if="custom.freq === 'YEARLY'">In <select v-model.number="custom.month" aria-label="Month" data-testid="custom-month"><option v-for="(n, i) in monthNames" :key="i" :value="i + 1">{{ n }}</option></select></label>
         <label><input type="radio" value="day" v-model="custom.monthMode" data-testid="custom-by-day"> On day <input type="number" min="1" max="31" v-model.number="custom.monthDay" aria-label="Day of the month" data-testid="custom-month-day" @focus="custom.monthMode = 'day'"></label>
         <label><input type="radio" value="weekday" v-model="custom.monthMode" data-testid="custom-by-weekday"> On the
           <select v-model.number="custom.setPos" aria-label="Which week" data-testid="custom-setpos" @focus="custom.monthMode = 'weekday'"><option :value="1">first</option><option :value="2">second</option><option :value="3">third</option><option :value="4">fourth</option><option :value="-1">last</option></select>
-          <select v-model.number="custom.posDay" aria-label="Weekday" data-testid="custom-posday" @focus="custom.monthMode = 'weekday'"><option v-for="(n, i) in dayNames" :key="i" :value="i">{{ n }}</option></select></label>
+          <select v-model.number="custom.posDay" aria-label="Weekday" data-testid="custom-posday" @focus="custom.monthMode = 'weekday'"><option v-for="i in weekOrder" :key="i" :value="i">{{ dayNames[i] }}</option></select></label>
       </div>
       <div class="nk-ends"><span>Ends</span>
         <label><input type="radio" value="never" v-model="custom.endMode" data-testid="custom-end-never"> Never</label>
@@ -785,6 +786,8 @@ const EventCard = (() => {
 // Template helpers that read cardKit directly.
 EventCard.computed.sameDayAllDay = function () { return this.v.isAllDay && this.v.start.toDateString() === this.v.end.toDateString(); };
 EventCard.computed.dayNames = function () { return cardKit.DAY_NAMES; };
+/** The days 0-6 from the calendar's first day of the week (classic's weekday buttons and its weekday list). */
+EventCard.computed.weekOrder = function () { const f = Number(this.firstDayOfWeek) || 0; return [0, 1, 2, 3, 4, 5, 6].map((i) => (i + f) % 7); };
 EventCard.computed.monthNames = function () { return cardKit.MONTH_NAMES; };
 EventCard.methods.addDays = function (d, n) { return cardKit.addDays(cardKit.startOfDay(d), n); };
 EventCard.methods.dateStr = function (d) { return cardKit.dateStr(d); };

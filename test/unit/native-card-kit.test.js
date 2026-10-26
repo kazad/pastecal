@@ -82,9 +82,40 @@ test('repeat rules: presets in classic\'s form, descriptions, a round trip that 
   for (const r of ['FREQ=WEEKLY;BYDAY=TU,TH;INTERVAL=2;COUNT=6;', 'FREQ=MONTHLY;BYDAY=FR;BYSETPOS=-1;INTERVAL=1;', 'FREQ=YEARLY;BYDAY=MO;BYSETPOS=2;BYMONTH=5;INTERVAL=1;',
     'FREQ=WEEKLY;BYDAY=WE;INTERVAL=1;WKST=MO;']) assert.equal(K.buildRule(K.parseRule(r, wed)), r, r);
   const s = K.parseRule('FREQ=DAILY;INTERVAL=1;', wed); s.endMode = 'until'; s.until = '2026-11-01';
-  assert.equal(K.buildRule(s), `FREQ=DAILY;INTERVAL=1;UNTIL=${new Date(2026, 10, 1, 23, 59, 59).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "")};`, "UNTIL: the end of that local day, as a UTC stamp (EventEditor's form)");
+  assert.equal(K.buildRule(s), `FREQ=DAILY;INTERVAL=1;UNTIL=${new Date(2026, 10, 1).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "")};`, "UNTIL: that date's local midnight as a UTC stamp, as classic's date picker writes it");
   assert.equal(K.ruleProblem({ ...s, until: '2026-10-01' }, wed, wed, false), 'The repeat ends before the event starts.');
   assert.match(K.ruleProblem(K.parseRule('FREQ=DAILY;INTERVAL=1;', wed), wed, new Date(2026, 9, 23), false), /longer than the time between/);
+});
+
+// Rules classic's repeat editor wrote (Syncfusion 23.2.6 RecurrenceEditor.getRecurrenceRule, read from the running app
+// in Los Angeles, Oct 2026): the Custom panel reads each and, unchanged, writes the same characters back.
+test('classic\'s rules: read into the Custom panel and written back character for character; weekdays in the week\'s order', () => {
+  const thu = new Date(2026, 9, 15, 17, 0);   // Thursday Oct 15 2026, 5 PM
+  const until = new Date(2026, 11, 31).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');   // 20261231T080000Z in LA
+  const classic = [
+    ['FREQ=YEARLY;BYDAY=MO;BYSETPOS=-1;BYMONTH=10;INTERVAL=1;', 0, 'Yearly on the last Monday of October'],
+    ['FREQ=YEARLY;BYMONTHDAY=15;BYMONTH=10;INTERVAL=1;', 0, 'Yearly on October 15'],
+    ['FREQ=MONTHLY;BYDAY=TH;BYSETPOS=2;INTERVAL=2;COUNT=5;', 0, 'Every 2 months on the second Thursday, 5 times'],
+    ['FREQ=MONTHLY;BYMONTHDAY=15;INTERVAL=1;', 0, 'Monthly on the 15th'],
+    ['FREQ=WEEKLY;BYDAY=SU,MO,WE,TH,FR;INTERVAL=2;COUNT=5;', 0, 'Every 2 weeks on Sun, Mon, Wed, Thu, Fri, 5 times'],
+    ['FREQ=WEEKLY;BYDAY=MO,WE,TH,FR,SU;INTERVAL=2;COUNT=5;', 1, 'Every 2 weeks on Sun, Mon, Wed, Thu, Fri, 5 times'],
+    [`FREQ=WEEKLY;BYDAY=MO,WE,TH,FR,SU;INTERVAL=2;UNTIL=${until};`, 1, 'Every 2 weeks on Sun, Mon, Wed, Thu, Fri, until Dec 31'],
+    [`FREQ=DAILY;INTERVAL=2;UNTIL=${until};`, 0, 'Every 2 days, until Dec 31'],
+    ['FREQ=DAILY;INTERVAL=3;', 0, 'Every 3 days'],
+  ];
+  for (const [rule, firstDay, words] of classic) {
+    assert.equal(K.buildRule(K.parseRule(rule, thu), { firstDay }), rule, rule);
+    assert.equal(K.describeRule(rule, thu), words, rule);
+  }
+  const p = K.parseRule('FREQ=YEARLY;BYDAY=MO;BYSETPOS=-1;BYMONTH=10;INTERVAL=1;', thu);
+  assert.deepEqual([p.freq, p.monthMode, p.setPos, p.posDay, p.month], ['YEARLY', 'weekday', -1, 1, 10]);
+  // Built from the panel's fields as a person sets them: the last Monday of October, yearly.
+  const s = K.parseRule('', thu); Object.assign(s, { freq: 'YEARLY', monthMode: 'weekday', setPos: -1, posDay: 1, month: 10 });
+  assert.equal(K.buildRule(s), 'FREQ=YEARLY;BYDAY=MO;BYSETPOS=-1;BYMONTH=10;INTERVAL=1;');
+  const w = K.parseRule('', thu); Object.assign(w, { freq: 'WEEKLY', byDay: [0, 1, 3] });
+  assert.equal(K.buildRule(w), 'FREQ=WEEKLY;BYDAY=SU,MO,WE;INTERVAL=1;', 'Sunday first');
+  assert.equal(K.buildRule(w, { firstDay: 1 }), 'FREQ=WEEKLY;BYDAY=MO,WE,SU;INTERVAL=1;', 'Monday first: Sunday last, as classic\'s buttons');
+  assert.equal(K.buildRule({ ...w, interval: 1500, endMode: 'count', count: 5000 }), 'FREQ=WEEKLY;BYDAY=SU,MO,WE;INTERVAL=999;COUNT=999;', 'classic\'s limits: 999');
 });
 
 test('monthCells: leading blanks follow the first day of the week', () => {
