@@ -1749,7 +1749,7 @@
                 <h3 class="pc-tour-label">Start from a template</h3>
                 <div class="pc-tour-tpls">
                     <button v-for="t in tourTemplates" :key="t.id" type="button" class="pc-tour-tpl" :data-testid="'tour-tpl-' + t.id" @click="pickTemplate(t.id); scrollToCalendar()">
-                        <img :src="'/img/templates/' + t.id + '.jpg'" :alt="t.label + ' template: a month on pastecal'" width="818" height="640" loading="lazy">
+                        <img :src="'/img/templates/' + encodeURIComponent(t.id) + '.jpg'" :alt="t.label + ' template: a month on pastecal'" width="818" height="640" loading="lazy">
                         <span>{{ t.label }}</span>
                     </button>
                 </div>
