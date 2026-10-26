@@ -390,7 +390,7 @@ const QuickAddDialog = {
             }
 
             // Close the dialog when Escape is pressed
-            if (event.key === 'Escape' && this.dialogVisible) {
+            if (pcKeys.is(event, 'Escape') && this.dialogVisible) {
                 this.hideDialog();
             }
         }

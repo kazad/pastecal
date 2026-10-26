@@ -195,7 +195,7 @@ const NativeCalendar = (() => {
     }
 
     // Side-by-side columns for overlapping timed events in one day, at most `cap` across: past that, cap - 1 columns
-    // and a "+N" in the last one (Google's week view). -> { shown: items, more: [{ top, height, col, cols, n }] }
+    // and a "+N" in the last one (Google's week view); with room for one column only, the "+N" alone. -> { shown: items, more: [{ top, height, col, cols, n }] }
     function layoutDayColumns(items, cap = Infinity) {
         const groups = []; let group = [], groupEnd = -Infinity;
         for (const it of items.sort((a, b) => a.top - b.top || b.height - a.height)) {
@@ -354,9 +354,10 @@ const NativeCalendar = (() => {
                 const s = days[0], e = addDays(days[days.length - 1], 1);
                 const occs = occurrencesBetween(this.shownEvents, s, e);
                 const allDayBars = layoutWeekBars(occs.filter(isLong), s, days.length);
-                // Overlapping events never narrower than 40px: the columns that fit (at least two), then "+N".
+                // Overlapping events never narrower than 40px: the columns that fit, then "+N". A day too narrow for
+                // two (a phone's week: 49px) shows overlapping events as one "+N" across it, never a sliver beside it.
                 const colPx = ((this.gridW || 1000) - (this.isPhone ? 48 : 72)) / days.length;
-                const cap = Math.max(2, Math.floor(colPx / 40));
+                const cap = Math.max(1, Math.floor(colPx / 43));   // (40px each, and the 3px between: timedStyle's "- 3px")
                 const more = [];
                 const timed = days.map((day, i) => {
                     const dayEnd = addDays(day, 1); const items = [];
@@ -466,7 +467,7 @@ const NativeCalendar = (() => {
             };
             this._touchOn(this.appEdits && !this.readOnly);
             // Escape drops a drag where it started (and the click that ends it does nothing).
-            this._onKey = (e) => { if (e.key === 'Escape' && this.drag) { e.stopPropagation(); e.preventDefault(); this.cancelDrag(); } };
+            this._onKey = (e) => { if (pcKeys.is(e, 'Escape') && this.drag) { e.stopPropagation(); e.preventDefault(); this.cancelDrag(); } };
             window.addEventListener('keydown', this._onKey, true);
             this._onDocClick = (e) => { if (this.pickerOpen && !e.target.closest('.nc-picker, .nc-title')) this.pickerOpen = false; };
             document.addEventListener('mousedown', this._onDocClick);
@@ -980,7 +981,7 @@ const NativeCalendar = (() => {
             </div>
             <button v-for="m in gridLayout.more[i]" :key="'more' + m.top" type="button" class="nc-more-timed" data-testid="more-timed"
               :style="{ top: m.top + 'px', height: m.height + 'px', left: 'calc(' + (m.col * 100 / m.cols) + '% + 1px)', width: 'calc(' + (100 / m.cols) + '% - 3px)' }"
-              :aria-label="m.n + ' more events'" :title="m.n + ' more'" @mousedown.stop @touchstart.stop @click.stop="moreTimed(d)" @dblclick.stop>+{{ m.n }}</button>
+              :aria-label="m.n + (m.cols > 1 ? ' more events' : ' events at this time')" :title="m.n + (m.cols > 1 ? ' more' : ' events')" @mousedown.stop @touchstart.stop @click.stop="moreTimed(d)" @dblclick.stop>+{{ m.n }}</button>
             <div v-if="isToday(d) && nowTop >= 0" class="nc-now-line" :style="{ top: nowTop + 'px' }"></div>
           </div>
           <div v-if="gridDays.length > 1 && gridDays.some(isToday) && nowTop >= 0" class="nc-now-dotted" :style="{ top: nowTop + 'px' }"></div>

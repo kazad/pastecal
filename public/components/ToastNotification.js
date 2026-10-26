@@ -70,13 +70,16 @@ const ToastNotification = {
     beforeUnmount() { clearInterval(this.placeTimer); window.removeEventListener('nk-card-moved', this._onCard); },
     methods: {
         /**
-         * Never over the event card's controls (nativecal EventCard: a sheet along a phone's bottom, or a card beside
-         * its event): at the bottom as usual, else at the top, else beside the card, else where it covers the least.
-         * Checked when the card says it moved (EventCard 'nk-card-moved') and every 150 ms while it shows.
+         * Never over the controls of what is open: the event card (nativecal EventCard: a sheet along a phone's bottom,
+         * or a card beside its event) or any dialog (the ? sheet's Done sat under it in a short window; it used to look
+         * for the card alone). At the bottom as usual, else at the top, else beside the card or dialog, else where it
+         * covers the least. Checked when the card says it moved (EventCard 'nk-card-moved') and every 150 ms while it shows.
          */
         place() {
             const wrap = this.$el && this.$el.querySelector ? this.$el.querySelector('.pc-toast-wrap') : null;
-            const card = document.querySelector('.nk-card');
+            // What it must not cover: the event card, and any dialog (pastecal's, quick add, Syncfusion's editor and popup).
+            const open = [...document.querySelectorAll('.nk-card, [aria-modal="true"], .pc-modal-panel, .pc-qa-dialog, .e-schedule-dialog.e-popup-open, .e-quick-popup-wrapper.e-popup-open')].filter((e) => e.getClientRects().length && !e.contains(wrap));
+            const card = open[open.length - 1];
             if (!wrap || !card) { if (this.at) this.at = null; return; }
             const t = wrap.querySelector('.pc-toast');
             if (!t) return;
@@ -84,9 +87,9 @@ const ToastNotification = {
             // Where the page puts it (centered, or beside the side panel), from the layout: it may be mid-slide.
             if (!this.at || !this.at.left) this._x = wrap.offsetLeft - w / 2;
             const c = card.getBoundingClientRect(), low = H - 16 - h;
-            // The controls as seen: a card that scrolls inside clips them to its own box.
-            const controls = [...card.querySelectorAll('button, input, textarea, select, a[href], [tabindex]')].map((e) => e.getBoundingClientRect())
-                .map((b) => ({ left: Math.max(b.left, c.left), right: Math.min(b.right, c.right), top: Math.max(b.top, c.top), bottom: Math.min(b.bottom, c.bottom) }))
+            // The controls as seen: a card or dialog that scrolls inside clips them to its own box.
+            const controls = open.flatMap((o) => { const oc = o.getBoundingClientRect(); return [...o.querySelectorAll('button, input, textarea, select, a[href], [tabindex]')].map((e) => e.getBoundingClientRect())
+                .map((b) => ({ left: Math.max(b.left, oc.left), right: Math.min(b.right, oc.right), top: Math.max(b.top, oc.top), bottom: Math.min(b.bottom, oc.bottom) })); })
                 .filter((b) => b.right > b.left && b.bottom > b.top);
             const covers = (x, y, ww) => controls.reduce((sum, b) => sum
                 + Math.max(0, Math.min(x + ww, b.right) - Math.max(x, b.left)) * Math.max(0, Math.min(y + h, b.bottom) - Math.max(y, b.top)), 0);

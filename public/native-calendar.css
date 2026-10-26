@@ -233,6 +233,11 @@
 .nk-title::placeholder { color: var(--pc-text-muted); font-weight: var(--pc-fw-medium); }
 .nk-title:hover { border-bottom-color: var(--pc-text-muted); }
 .nk-card .nk-title:focus, .nk-card .nk-title:focus-visible { outline: none; border-bottom: 2px solid var(--pc-primary); padding-bottom: 3px; }
+/* A title of more than three lines (EventCard growTitle): three lines exactly, no bottom padding for a sliver of the
+   fourth, the third fading out until it is focused and scrolls (the last 2px, the underline, stay solid). */
+.nk-card .nk-title.nk-title-clip { padding-bottom: 0; }
+.nk-card .nk-title.nk-title-clip:not(:focus) { -webkit-mask-image: linear-gradient(to bottom, currentColor calc(100% - 1em), transparent calc(100% - 2px), currentColor calc(100% - 2px));
+    mask-image: linear-gradient(to bottom, currentColor calc(100% - 1em), transparent calc(100% - 2px), currentColor calc(100% - 2px)); }
 .nk-cat { display: inline-flex; align-items: center; gap: 6px; flex: none; max-width: 45%; border: 0; background: var(--pc-soft); border-radius: var(--pc-radius-pill); min-height: var(--pc-h-sm);
     padding: 0 10px 0 9px; margin-top: 5px; font-size: .9643em; font-weight: var(--pc-fw-semibold); color: var(--pc-text-2); cursor: pointer; }   /* 13.5px; centered on the title's first line */
 .nk-cat span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -450,6 +455,9 @@ html.nk-sheet-open, html.nk-sheet-open body { overflow: hidden; }
     .nk-card.sheet { position: fixed; left: 0 !important; right: 0; top: auto !important; bottom: 0; width: auto; max-width: none; max-height: 82vh; overflow-y: auto;
         border-radius: var(--pc-radius-dialog) var(--pc-radius-dialog) 0 0; padding-bottom: env(safe-area-inset-bottom, 0px); transition: transform .18s ease; overscroll-behavior: contain; }
     .nk-card.sheet.writing { max-height: 94vh; }
+    /* A short window (a laptop at 200% zoom, 640x400): 82vh leaves the sheet too little for its title, fields and two
+       lines of details together (F22 with S10); a fixed strip of dimmed calendar above it is enough. */
+    @media (max-height: 480px) { .nk-card.sheet { max-height: calc(100vh - 56px); } }
     .nk-card.sheet::before { content: ""; display: block; width: 36px; height: 5px; border-radius: var(--pc-radius-xs); background: var(--pc-line); margin: var(--pc-space-2) auto 0; }
     .nk-card.sheet::after { box-shadow: inset 0 4px 0 var(--evc); }
     .nk-pick .nk-typed, .nk-det, .nk-card .pc-field { font-size: var(--pc-fs-lg); }   /* no zoom on focus */
@@ -465,13 +473,17 @@ html.nk-sheet-open, html.nk-sheet-open body { overflow: hidden; }
 /* ---- "This event / All events" and classic's other questions ------------------------------ */
 .pc-native-ask { position: fixed; inset: 0; z-index: var(--pc-z-snackbar); background: var(--pc-scrim); display: flex; align-items: center; justify-content: center; padding: var(--pc-space-4); }
 .pc-native-ask-panel { width: 380px; max-width: 100%; box-sizing: border-box; padding: var(--pc-space-5) var(--pc-space-6); background: var(--pc-bg); color: var(--pc-text);
-    border-radius: var(--pc-radius-dialog); box-shadow: var(--pc-shadow-xl); font-family: var(--pc-font); }
+    border-radius: var(--pc-radius-dialog); box-shadow: var(--pc-shadow-xl); font-family: var(--pc-font);
+    max-height: 100%; overflow-y: auto; overscroll-behavior: contain; }   /* never taller than the window (the ? sheet at 640x400 ran off both ends) */
 .pc-native-ask-title { margin: 0 0 var(--pc-space-3); font-size: var(--pc-fs-xl); font-weight: var(--pc-fw-bold); }
 .pc-native-ask-text { margin: 0 0 var(--pc-space-3); font-size: var(--pc-fs-md); line-height: var(--pc-lh-body); color: var(--pc-text-2); }
 .pc-native-ask-options { display: flex; flex-direction: column; gap: var(--pc-space-1); margin-bottom: var(--pc-space-4); }
 .pc-native-ask-option { display: flex; align-items: center; gap: var(--pc-space-3); min-height: var(--pc-h-md); font-size: var(--pc-fs-md); cursor: pointer; }
 .pc-native-ask-option input { width: 18px; height: 18px; margin: 0; accent-color: var(--pc-primary); }
-.pc-native-ask-foot { display: flex; justify-content: flex-end; gap: var(--pc-space-2); flex-wrap: wrap; }
+.pc-native-ask-foot { display: flex; justify-content: flex-end; gap: var(--pc-space-2); flex-wrap: wrap;
+    /* Pinned to the panel's bottom when it scrolls (a short window): the buttons in view with the title, never a
+       scroll away -- focusing Done scrolled the ? sheet's title out of a 640x400 window. */
+    position: sticky; bottom: calc(-1 * var(--pc-space-5)); margin-bottom: calc(-1 * var(--pc-space-5)); padding: var(--pc-space-2) 0 var(--pc-space-5); background: var(--pc-bg); }
 
 /* ---- the page around it ----------------------------------------------------------------- */
 .pc-native-cal { min-height: 0; }

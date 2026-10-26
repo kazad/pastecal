@@ -16,10 +16,6 @@ const QuickAddButton = {
     computed: {
         // The Cmd/Ctrl+E shortcut (QuickAddDialog.handleKeydown), spelled for this keyboard.
         // Shown in the button's tooltip only: the button itself stays plain.
-        shortcut() {
-            const nav = typeof navigator !== 'undefined' ? navigator : {};
-            const platform = (nav.userAgentData && nav.userAgentData.platform) || nav.platform || '';
-            return /mac|iphone|ipad|ipod/i.test(platform) ? '⌘E' : 'Ctrl E';
-        }
+        shortcut() { return window.pcKeys.mod('E'); }
     }
 };

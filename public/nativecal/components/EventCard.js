@@ -332,8 +332,10 @@ const EventCard = (() => {
                     else if (focus && this.$refs[focus]) this.$refs[focus].focus();
                     // "More details" pressed (it is gone now): focus goes on to the first field, not to the page.
                     else if (c && !c.contains(document.activeElement)) { const f = c.querySelector('[data-testid="card-start-date"]'); if (f) f.focus({ preventScroll: true }); }
-                    // A short window: the details in view too, above the footer (the focused field stays in view).
-                    this.$nextTick(() => this.reveal(this.detBox(), document.activeElement));
+                    // A short window: the details in view too, above the footer -- but never at the cost of the event's
+                    // own title, which stays in the sheet (a 360x640 phone scrolled it away, S10); the focused field,
+                    // under the title, stays in view with it. The rest is a scroll away.
+                    this.$nextTick(() => this.reveal(this.detBox(), this.$refs.title || document.activeElement));
                 });
             },
             measureClamp() {
@@ -464,15 +466,23 @@ const EventCard = (() => {
                 if (over > 0) this.pos = { ...this.pos, left: `${left - over + window.scrollX}px` };
                 this.$nextTick(() => this.fit());
             },
-            /** The title shows all of itself, up to three lines, then scrolls (a long title never hides its end). */
+            /**
+             * The title shows all of itself, up to three lines, then scrolls (a long title never hides its end). Past
+             * three: exactly three lines in view -- no bottom padding, where a scrolling textarea draws a sliver of the
+             * fourth (S11) -- and the third fades out (.nk-title-clip), the sign that it goes on.
+             */
             growTitle() {
                 const ta = this.$refs.title;
                 if (!ta) return;
-                const lh = parseFloat(getComputedStyle(ta).lineHeight) || 28, pad = ta.offsetHeight - ta.clientHeight + parseFloat(getComputedStyle(ta).paddingTop) + parseFloat(getComputedStyle(ta).paddingBottom);
+                ta.classList.remove('nk-title-clip');
                 ta.style.height = 'auto';
-                const want = ta.scrollHeight + (ta.offsetHeight - ta.clientHeight), cap = Math.round(lh * 3 + pad);
-                ta.style.height = `${Math.min(want, cap)}px`;
-                ta.style.overflowY = want > cap + 1 ? 'auto' : 'hidden';
+                const cs = getComputedStyle(ta), lh = parseFloat(cs.lineHeight) || 28, border = ta.offsetHeight - ta.clientHeight;
+                const pt = parseFloat(cs.paddingTop) || 0, pb = parseFloat(cs.paddingBottom) || 0;
+                const want = ta.scrollHeight + border;
+                if (want <= lh * 3 + pt + pb + border + 1) { ta.style.height = `${want}px`; ta.style.overflowY = 'hidden'; return; }
+                ta.classList.add('nk-title-clip');
+                ta.style.height = `${lh * 3 + pt + border}px`;
+                ta.style.overflowY = 'auto';
             },
             // The box fits its text, up to 40% of the screen's height (60% once wide), then scrolls inside with the
             // caret in view. Growing never resets the height first, so the browser keeps the caret where it was.
@@ -531,10 +541,16 @@ const EventCard = (() => {
                     const y = r.top + Math.min(el.clientHeight, line * lh - el.scrollTop) + 4;
                     dy = y > bottom ? y - bottom : Math.min(0, y - lh - top);
                 } else dy = r.top - top;
-                if (dy > 0 && keep && keep !== el && c.contains(keep)) dy = Math.min(dy, Math.max(0, keep.getBoundingClientRect().top - top));
+                // (keep may reach the card's very top: the margin above it scrolls away, the field or title stays whole --
+                // on a 640x400 sheet those 8px are what let two lines of details show under the title, F22 with S10.)
+                if (dy > 0 && keep && keep !== el && c.contains(keep)) dy = Math.min(dy, Math.max(0, keep.getBoundingClientRect().top - cr.top));
                 if (dy) c.scrollTop += dy;
             },
-            onFocusIn(e) { const t = e.target; this.$nextTick(() => { if (document.activeElement === t) this.reveal(t); }); },
+            // A field focused inside the card is scrolled into its view -- not the pinned footer (always in view) or the
+            // menu and pickers floating over the card. Revealing the ⋯ button as it was clicked scrolled a phone's sheet
+            // (reveal measures the footer as the bottom of the view), and a scroll under an open menu closes it: on a
+            // phone the ⋯ menu shut the moment it opened.
+            onFocusIn(e) { const t = e.target; if (t.closest && t.closest('.nk-foot, .nk-menu, .nk-pick')) return; this.$nextTick(() => { if (document.activeElement === t) this.reveal(t); }); },
             blurInside() { const el = this.$refs.card; if (el && el.contains(document.activeElement)) document.activeElement.blur(); },
             toggleAllDay() {
                 const v = this.wv;
@@ -596,7 +612,7 @@ const EventCard = (() => {
             },
             pickKey(e) {
                 // Inside a picker: Tab stays in it; Escape is handled by onKey.
-                if (e.key !== 'Tab') return;
+                if (!pcKeys.is(e, 'Tab')) return;
                 const items = [...this.$refs.pick.querySelectorAll(FOCUSABLE)].filter((x) => x.offsetParent !== null);
                 if (!items.length) return;
                 const i = items.indexOf(document.activeElement);
@@ -664,7 +680,7 @@ const EventCard = (() => {
             typedDate() {
                 const today = K.today(this.wz);
                 const ref = this.month ? K.wallDate(this.month.y, this.month.m, 1) : today;
-                const d = K.parseDate(this.typed, today, ref);
+                const d = K.parseDate(this.typed, today, ref, navigator.language);   // (the reader's locale: "5/10" day first in de-DE)
                 if (!d) { this.typedBad = true; return; }
                 this.pickDate(d);
             },
@@ -708,7 +724,7 @@ const EventCard = (() => {
                 this.$nextTick(() => {
                     this.fit();
                     const sec = this.$refs.cust;
-                    if (sec && sec.scrollIntoView) sec.scrollIntoView({ block: 'nearest' });
+                    if (sec) this.reveal(sec, this.$refs.title);   // (as much of it as fits under the title: S10)
                     // The unit first (a phone gets no keyboard sliding up over the sheet for it).
                     const f = sec && !this.phone && sec.querySelector('select');
                     if (f) f.focus({ preventScroll: true });
@@ -770,7 +786,7 @@ const EventCard = (() => {
             // ---- keys: Escape closes one layer, Tab stays inside -------------------------------------------
             onKey(e) {
                 if (this.blocked) return;
-                if (e.key === 'Escape') {
+                if (pcKeys.is(e, 'Escape')) {
                     if (this.menu) { this.menu = false; e.stopImmediatePropagation(); e.preventDefault(); return; }
                     if (this.picker) { this.closePicker(); e.stopImmediatePropagation(); e.preventDefault(); return; }
                     if (this.custom) { this.closeCustom(); e.stopImmediatePropagation(); e.preventDefault(); return; }   // (the repeat settings, then the card)
@@ -778,7 +794,7 @@ const EventCard = (() => {
                     this.cancel();
                     return;
                 }
-                if (e.key === 'Tab' && !this.picker && !this.menu) {
+                if (pcKeys.is(e, 'Tab') && !this.picker && !this.menu) {
                     const c = this.$refs.card;
                     if (!c) return;
                     const items = [...c.querySelectorAll(FOCUSABLE)].filter((x) => x.offsetParent !== null || x === document.activeElement);
@@ -921,8 +937,8 @@ const EventCard = (() => {
 </div>
 
 <div v-if="menu" ref="menu" class="nk-menu" role="menu" :style="menuStyle" data-testid="card-menu" @keydown="pickKey">
-  <button type="button" role="menuitem" data-testid="card-duplicate" @click="menuAct('duplicate')">Duplicate <kbd>⌘D</kbd></button>
-  <button type="button" role="menuitem" class="red" data-testid="card-menu-delete" @click="menuAct('delete')">Delete <kbd>⌫</kbd></button>
+  <button type="button" role="menuitem" data-testid="card-duplicate" @click="menuAct('duplicate')">Duplicate <kbd>{{ pcKeys.mod('D') }}</kbd></button>
+  <button type="button" role="menuitem" class="red" data-testid="card-menu-delete" @click="menuAct('delete')">Delete <kbd>{{ pcKeys.del }}</kbd></button>
 </div>
 
 <div v-if="picker" ref="pick" class="nk-pick" :class="'nk-pick-' + picker.kind" role="dialog" :aria-label="{ s: 'Start time', e: 'End time', sd: 'Start date', ed: 'End date', dur: 'Length', cat: 'Type', rep: 'Repeats', until: 'Last date', tz: 'Time zone' }[picker.kind]"
@@ -931,12 +947,12 @@ const EventCard = (() => {
     <input v-model="typed" class="pc-field nk-typed" :class="{ bad: typedBad }" aria-label="Type a time" placeholder="Type a time" data-testid="picker-input"
       @input="typedBad = false" @keydown.enter.prevent="typedTime" @keydown.down.prevent="$refs.tlist && ($refs.tlist.querySelector('.cur') || $refs.tlist.querySelector('button')).focus()">
     <div ref="tlist" class="nk-plist" @keydown="listKey">
-      <button v-for="o in timeList" :key="o.m" type="button" :class="{ cur: o.cur }" :data-m="o.m" @click="pickTime(o.m)">{{ o.label }}<small v-if="o.len">{{ o.len }}</small></button>
+      <button v-for="o in timeList" :key="o.m" type="button" :class="{ cur: o.cur }" :aria-current="o.cur ? 'true' : null" :data-m="o.m" @click="pickTime(o.m)">{{ o.label }}<small v-if="o.len">{{ o.len }}</small></button>
     </div>
   </template>
   <template v-else-if="picker.kind === 'sd' || picker.kind === 'ed' || picker.kind === 'until'">
     <div v-if="picker.kind === 'ed' && !v.isAllDay" class="nk-plist nk-plist-top">
-      <button type="button" :class="{ cur: sameDay }" data-testid="picker-same-day" @click="sameDayEnd">Same day</button>
+      <button type="button" :class="{ cur: sameDay }" :aria-current="sameDay ? 'true' : null" data-testid="picker-same-day" @click="sameDayEnd">Same day</button>
       <button type="button" data-testid="picker-next-day" @click="pickDate(addDays(wv.start, 1))">Next day <small>{{ d(addDays(wv.start, 1)) }}</small></button>
     </div>
     <input v-model="typed" class="pc-field nk-typed" :class="{ bad: typedBad }" aria-label="Type a date" placeholder="Oct 20, Fri, tomorrow" data-testid="picker-input"
@@ -961,7 +977,7 @@ const EventCard = (() => {
     </div>
   </template>
   <div v-else-if="picker.kind === 'dur'" class="nk-plist" @keydown="listKey">
-    <button v-for="o in lengths" :key="o.n" type="button" :class="{ cur: o.cur }" :data-len="o.n" @click="pickLength(o.n)">{{ o.label }}<small v-if="o.sub">{{ o.sub }}</small></button>
+    <button v-for="o in lengths" :key="o.n" type="button" :class="{ cur: o.cur }" :aria-current="o.cur ? 'true' : null" :data-len="o.n" @click="pickLength(o.n)">{{ o.label }}<small v-if="o.sub">{{ o.sub }}</small></button>
   </div>
   <template v-else-if="picker.kind === 'cat'">
     <template v-if="!labelNames">
@@ -979,8 +995,8 @@ const EventCard = (() => {
     </template>
   </template>
   <div v-else-if="picker.kind === 'rep'" class="nk-plist" @keydown="listKey">
-    <button v-for="p in presets" :key="p.id" type="button" :class="{ cur: presetNow === p.id }" :data-r="p.id" @click="pickRepeat(p.rule)">{{ p.text }}</button>
-    <button v-if="presetNow === 'custom'" type="button" class="cur" data-r="current" @click="closePicker()">{{ repText }}</button>
+    <button v-for="p in presets" :key="p.id" type="button" :class="{ cur: presetNow === p.id }" :aria-current="presetNow === p.id ? 'true' : null" :data-r="p.id" @click="pickRepeat(p.rule)">{{ p.text }}</button>
+    <button v-if="presetNow === 'custom'" type="button" class="cur" aria-current="true" data-r="current" @click="closePicker()">{{ repText }}</button>
     <button type="button" data-testid="picker-custom" @click="openCustom">Custom…</button>
   </div>
 </div>

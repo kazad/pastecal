@@ -1254,9 +1254,12 @@ logo a, logo a:hover, [data-testid="mobile-header"] a:hover { text-decoration: n
 .pc-qa-try { margin-right: 2px; font-size: var(--pc-fs-xs); font-weight: var(--pc-fw-semibold); color: var(--pc-text-muted) }
 /* All day is a switch (.pc-toggle); while on, the times stay (blank, dimmed) so the height holds. */
 .pc-qa-dialog .pc-qa-time:disabled { opacity: .45; cursor: not-allowed }
+/* Never taller than the window, at any width: a short window (a laptop zoomed in, 640x400) is not always a phone. It
+   was only capped below 640px wide, so at 640x400 its title and Add sat off the top and bottom, out of reach. */
+div.pc-qa-dialog { max-height: calc(100dvh - 24px); overflow-y: auto; overscroll-behavior: contain }
 /* Phones: the dialog fits the screen, so no sideways scroll. Date stretches, time keeps its width. */
 @media (max-width: 639px) {
-  div.pc-qa-dialog { width: auto; flex: 1 1 auto; min-width: 0; margin: 0 12px; padding: 16px; max-height: calc(100dvh - 24px); overflow-y: auto; overflow-x: hidden }
+  div.pc-qa-dialog { width: auto; flex: 1 1 auto; min-width: 0; margin: 0 12px; padding: 16px; overflow-x: hidden }
   .pc-qa-dialog .pc-qa-fields { padding-left: 0 }
   .pc-qa-dialog .pc-qa-date { width: auto; flex: 1 1 0; min-width: 0 }
   .pc-qa-dialog .pc-qa-time { width: 7.75rem; min-width: 0; padding-right: 6px }   /* "05:00 PM" and its clock icon fit */

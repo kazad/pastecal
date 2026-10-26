@@ -345,7 +345,7 @@ const CalendarVueApp = {
                 cal.step(e.key === 'ArrowLeft' ? -1 : 1);
                 return;
             }
-            if (e.key !== 'Escape') return;
+            if (!pcKeys.is(e, 'Escape')) return;
             if (this.confirmDialog) { this.confirmDialog = null; return; }
             if (this.showEditor) { this.closeEditor(); return; }
             if (this.showPopover) { this.closePopover(); return; }

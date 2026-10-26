@@ -54,11 +54,15 @@ const DEVICES = {
   phone: { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true },
   p360: { viewport: { width: 360, height: 640 }, hasTouch: true, isMobile: true },
 };
-/** A browser at a fixed time. o: device (DEVICES key), colorScheme, locale, timezoneId, settings (pastecal_global_settings), classic. */
+/** A browser at a fixed time. o: device (DEVICES key), colorScheme, locale, timezoneId, settings (pastecal_global_settings), classic, platform. */
 async function open(browser, id, query = '', o = {}) {
   const { device = 'desk', timezoneId = 'America/Los_Angeles', settings = null, colorScheme = 'light', locale = 'en-US', classic = false } = o;
   const ctx = await browser.newContext({ ...DEVICES[device], timezoneId, locale, colorScheme });
   await ctx.addInitScript((g) => { window.__TEST__ = true; try { localStorage.setItem('pastecal_backend', 'cf'); if (g) localStorage.setItem('pastecal_global_settings', JSON.stringify(g)); } catch (e) { /* blocked */ } }, settings);
+  if (o.platform) await ctx.addInitScript((p) => {   // (a Windows or Mac keyboard: navigator.platform, no userAgentData)
+    Object.defineProperty(Navigator.prototype, 'platform', { get: () => p, configurable: true });
+    Object.defineProperty(Navigator.prototype, 'userAgentData', { get: () => undefined, configurable: true });
+  }, o.platform);
   await ctx.route(NOT_LOCAL, (r) => (ALLOW.has(new URL(r.request().url()).hostname) ? r.continue() : r.abort()));
   const page = await ctx.newPage();
   await page.clock.install({ time: new Date(o.now || NOW) });
@@ -193,7 +197,7 @@ test('S04 [repeat] data-loss: another browser renames the series while I am aske
   await A.ctx.close(); await B.ctx.close();
 });
 
-test('S05 [card] broken: on an 11 PM - midnight event, typing the end "11:30p" makes it 24h 30m long instead of ending at 11:30 PM', async ({ browser }) => {
+test('S05 [card]: on an 11 PM - midnight event, typing the end "11:30p" ends it at 11:30 PM (it made it 24h 30m long)', async ({ browser }) => {
   const id = await seed([timed('l', 'Late show', '2026-10-27T23:00:00-07:00', '2026-10-28T00:00:00-07:00')]);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-27');
   await openCard(page, ev(page, 'l'));
@@ -204,8 +208,7 @@ test('S05 [card] broken: on an 11 PM - midnight event, typing the end "11:30p" m
   await ctx.close();
 });
 
-test('S06 [card] broken (CJK): Enter that confirms an IME conversion saves and closes a new event mid-word; Escape that cancels a conversion throws the event away', async ({ browser }) => {
-  finding('EventCard: @keydown.enter and the window Escape handler ignore event.isComposing (keyCode 229)');
+test('S06 [card] (CJK): the Enter that confirms an IME conversion and the Escape that cancels one leave a new event open and unsaved (they saved it mid-word, and threw it away)', async ({ browser }) => {
   const id = await seed([]);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-27', { locale: 'ja-JP' });
   const at = await slot(page, '2026-10-27', 10);
@@ -229,30 +232,37 @@ test('S06 [card] broken (CJK): Enter that confirms an IME conversion saves and c
   await ctx.close();
 });
 
-test('S07 [grid] ugly: on a 390px phone a crowded hour shows one 20px sliver beside "+19" (the grid promises events never narrower than 40px)', async ({ browser }) => {
-  finding('layoutDayColumns cap is at least 2 even when a column fits one 40px event');
+test('S07 [grid]: on a 390px phone a crowded hour is one "+20" across the day, never a 20px sliver beside "+19" (the grid promises events never narrower than 40px)', async ({ browser }) => {
   const evs = [];
   for (let i = 0; i < 20; i++) evs.push(timed(`ov${i}`, `Standup ${i}`, '2026-10-21T10:00:00-07:00', '2026-10-21T11:00:00-07:00', { type: (i % 8) + 1 }));
   const id = await seed(evs);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-21', { device: 'phone' });
-  await ev(page, 'ov0').first().scrollIntoViewIfNeeded();
+  await page.getByTestId('more-timed').first().scrollIntoViewIfNeeded();
   await page.waitForTimeout(300);
   await shot(page, 'S07-phone-sliver-beside-plus19');
   const widths = await page.evaluate(() => [...document.querySelectorAll('.nc .nc-timed[data-testid^="event-ov"]')].filter((e) => e.getClientRects().length).map((e) => Math.round(e.getBoundingClientRect().width)));
+  const more = await page.evaluate(() => [...document.querySelectorAll('.nc [data-testid="more-timed"]')].filter((e) => e.getClientRects().length).map((e) => ({ n: e.textContent.trim(), w: Math.round(e.getBoundingClientRect().width) })));
   expect(Math.min(...widths), `shown: ${widths.join(', ')}px`).toBeGreaterThanOrEqual(40);
+  // Every one of the 20 is accounted for: drawn, or counted in a "+N" at least 40px wide.
+  expect({ all: widths.length + more.reduce((t, m) => t + Number(m.n.replace('+', '')), 0), narrowMore: more.filter((m) => m.w < 40) }).toEqual({ all: 20, narrowMore: [] });
+  // A tap on it opens the day, wide enough to draw them side by side (then "+N" for the rest).
+  await page.getByTestId('more-timed').first().tap();
+  await expect(page.locator('.nc .nc-timed[data-testid^="event-ov"]:visible').first()).toBeVisible();
   await ctx.close();
 });
 
-test('S08 [card] broken (de-DE): a German date typed in the date picker ("28.10.", "28.10.2026") is refused', async ({ browser }) => {
-  finding('cardKit.parseDate reads "." as a space and knows no day.month form');
+test('S08 [card] (de-DE): a German date typed in the date picker ("28.10.", "28.10.2026", "5/11") is read day first (it was refused)', async ({ browser }) => {
   const id = await seed([timed('p', 'Training', '2026-10-22T17:00:00+02:00', '2026-10-22T18:00:00+02:00')]);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-22', { locale: 'de-DE', timezoneId: 'Europe/Berlin', settings: { timeFormat: '24', firstDayOfWeek: '1' } });
   await openCard(page, ev(page, 'p'), true);
   await typeInto(page, 'card-start-date', '28.10.');
   await page.waitForTimeout(500);
   await shot(page, 'S08-de-date-refused');
-  await page.keyboard.press('Escape');
-  expect(await local(page, (await byId(id, 'p')).start)).toBe('2026-10-28 17:00');
+  await soon(async () => local(page, (await byId(id, 'p')).start)).toBe('2026-10-28 17:00');
+  await typeInto(page, 'card-start-date', '29.10.2026');
+  await soon(async () => local(page, (await byId(id, 'p')).start)).toBe('2026-10-29 17:00');
+  await typeInto(page, 'card-start-date', '5/11');   // day first in de-DE: Nov 5
+  await soon(async () => local(page, (await byId(id, 'p')).start)).toBe('2026-11-05 17:00');
   await ctx.close();
 });
 
@@ -270,8 +280,7 @@ test('S09 [tz] broken: classic and native show a Tokyo-zoned weekly series on di
   await C.ctx.close();
 });
 
-test('S10 [card] nit: on a 360x640 phone, "More details" on an event with long linked details scrolls the event\'s own title out of the sheet', async ({ browser }) => {
-  finding('expand() reveals the details box and the first field; the sheet stops 113px below the top and scrolls its title away');
+test('S10 [card]: on a 360x640 phone, "More details" on an event with long linked details keeps the event\'s own title in the sheet (it scrolled it away)', async ({ browser }) => {
   const links = FIXTURE.events.find((e) => e.id === 'links');
   const id = await seed([timed('p', 'Practice at Lincoln Field', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00', { description: links.description })]);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-22', { device: 'p360' });
@@ -282,8 +291,7 @@ test('S10 [card] nit: on a 360x640 phone, "More details" on an event with long l
   await ctx.close();
 });
 
-test('S11 [card] nit: a title of more than three lines (emoji, CJK) shows a sliver of its fourth line under the third', async ({ browser }) => {
-  finding('growTitle caps the box at three lines plus padding; a scrolling textarea draws content into its bottom padding (and nothing says the title goes on)');
+test('S11 [card]: a title of more than three lines (emoji, CJK) shows exactly three, the third fading (it showed a sliver of the fourth)', async ({ browser }) => {
   const id = await seed([timed('p', '🎉 会議 チーム 打ち合わせ — اجتماع الفريق الأسبوعي — a very long planning session title that keeps going and going past three lines of the card 🎉 会議 チーム 打ち合わせ — and more', '2026-10-22T13:00:00-07:00', '2026-10-22T14:00:00-07:00')]);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-22');
   await openCard(page, ev(page, 'p'));
@@ -291,11 +299,13 @@ test('S11 [card] nit: a title of more than three lines (emoji, CJK) shows a sliv
   await page.locator('.nk-h').screenshot({ path: path.join(SHOTS, 'S11-title-fourth-line-sliver.png') });
   const lines = await page.getByTestId('card-title').evaluate((ta) => { const cs = getComputedStyle(ta); return (ta.clientHeight - parseFloat(cs.paddingTop)) / parseFloat(cs.lineHeight); });
   expect(Math.abs(lines - Math.round(lines)), `${lines.toFixed(2)} lines in view`).toBeLessThan(0.1);
+  expect(Math.round(lines), 'three lines').toBe(3);
+  // A sign that it goes on: the third line fades (and the whole title scrolls into view once focused).
+  expect(await page.getByTestId('card-title').evaluate((ta) => { const cs = getComputedStyle(ta); return (cs.maskImage || cs.webkitMaskImage || 'none') !== 'none'; })).toBe(true);
   await ctx.close();
 });
 
-test('S12 [card] nit (a11y): the time, length and repeat lists show the current choice by color only (the type list says aria-selected)', async ({ browser }) => {
-  finding('EventCard: .nk-plist buttons for s/e/dur/rep carry class "cur" and no aria-selected / aria-current');
+test('S12 [card] (a11y): the time, length and repeat lists say which is the current choice (aria-current; it was by color only), as the type list does', async ({ browser }) => {
   const id = await seed([timed('p', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00')]);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-22');
   await openCard(page, ev(page, 'p'), true);
@@ -310,23 +320,27 @@ test('S12 [card] nit (a11y): the time, length and repeat lists show the current 
   await ctx.close();
 });
 
-test('S14 [card] nit: on Windows and Linux the shortcuts sheet and the event menu say ⌘D and ⌘Z (the keys there are Ctrl+D and Ctrl+Z)', async ({ browser }) => {
-  finding('the shortcuts dialog and the card menu print ⌘ whatever the platform');
-  const id = await seed([timed('p', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00')]);
-  const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-22');
-  expect(await page.evaluate(() => /Mac|iPhone|iPad/.test(navigator.platform))).toBe(false);
-  await page.keyboard.press('?');
-  await expect(page.getByTestId('shortcuts-close')).toBeVisible();
-  await shot(page, 'S14-shortcuts-cmd-on-linux');
-  const sheet = await page.getByTestId('shortcuts').innerText();
-  expect(sheet).toContain('Duplicate');
-  await page.keyboard.press('Escape');
-  await openCard(page, ev(page, 'p'), true);
-  await page.getByTestId('card-more-actions').click();
-  const menu = await page.getByTestId('card-menu').innerText();
-  expect({ sheet: /⌘/.test(sheet), menu: /⌘/.test(menu) }, 'Ctrl, not ⌘, off a Mac').toEqual({ sheet: false, menu: false });
-  await ctx.close();
-});
+// S14 (root 7): shortcuts are spelled by utils/keys.js for the keyboard in front of the reader.
+for (const [platform, want] of [['Win32', { d: 'Ctrl+D', z: 'Ctrl+Z', alt: 'Alt' }], ['Linux x86_64', { d: 'Ctrl+D', z: 'Ctrl+Z', alt: 'Alt' }], ['MacIntel', { d: '⌘D', z: '⌘Z', alt: '⌥' }]]) {
+  test(`S14 [card] on ${platform} the shortcuts sheet and the event menu say ${want.d} and ${want.z} (they said ⌘D and ⌘Z everywhere)`, async ({ browser }) => {
+    const id = await seed([timed('p', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00')]);
+    const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-22', { platform });
+    expect(await page.evaluate(() => navigator.platform)).toBe(platform);
+    await page.keyboard.press('?');
+    await expect(page.getByTestId('shortcuts-close')).toBeVisible();
+    await shot(page, `S14-shortcuts-${platform.split(' ')[0]}`);
+    const sheet = await page.getByTestId('shortcuts').innerText();
+    expect(sheet).toContain('Duplicate');
+    await page.keyboard.press('Escape');
+    await openCard(page, ev(page, 'p'), true);
+    await page.getByTestId('card-more-actions').click();
+    const menu = await page.getByTestId('card-menu').innerText();
+    const mac = platform === 'MacIntel';
+    expect({ sheetD: sheet.includes(want.d), sheetZ: sheet.includes(want.z), sheetAlt: sheet.includes(`${want.alt} drag`), menuD: menu.includes(want.d),
+      macSigns: /[⌘⌥]/.test(sheet + menu) }, sheet + '\n' + menu).toEqual({ sheetD: true, sheetZ: true, sheetAlt: true, menuD: true, macSigns: mac });
+    await ctx.close();
+  });
+}
 
 // =====================================================================================================
 // Checked and found right.
@@ -511,7 +525,8 @@ for (const [device, scheme, loc] of [['ipad', 'light', 'us'], ['ipad', 'dark', '
     const { width: W, height: H } = DEVICES[device].viewport;
     const tag = `probe-${device}-${scheme}-${loc}`;
     if (await page.getByTestId('early-hours').isVisible().catch(() => false)) await page.getByTestId('early-hours').click();
-    await ev(page, 'ov0').first().scrollIntoViewIfNeeded();
+    // The crowded hour: its first event, or on a phone's week (too narrow for two side by side) its "+9".
+    await page.locator('.nc [data-testid="event-ov0"], .nc [data-testid="more-timed"]').first().scrollIntoViewIfNeeded();
     await shot(page, `${tag}-grid`);
     for (const k of ['long', 'board', 'jp']) {
       await ev(page, k).first().scrollIntoViewIfNeeded();
