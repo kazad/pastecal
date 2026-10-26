@@ -463,6 +463,9 @@ const CalendarVueApp = {
             // Phones fold the template chips behind one "Start from a template" toggle; opened stays opened this visit.
             templatesOpen: (() => { try { return sessionStorage.getItem('pc_tpl_open') === '1'; } catch (e) { return false; } })(),
             tourVariant: 'a',
+            tplMore: false,           // the guide panel's template line: all templates shown
+            TPL_FEATURED: ['family', 'team', 'out'],   // the three it starts with
+            wideHome: (() => { try { return window.matchMedia('(min-width: 1100px)').matches; } catch (e) { return false; } })(),   // the homepage's guide panel shows (style.css)
             homeAsideHidden: (() => { try { return localStorage.getItem('pc_home_aside') === 'hidden'; } catch (e) { return false; } })(),
 
             // Mobile Menu
@@ -646,6 +649,8 @@ const CalendarVueApp = {
         // "Make one like this" under a calendar this browser didn't make (an invitation, a view link).
         // Never on your own calendars, never in an embed (it has its own small credit), never while loading.
         /** A view link inside someone's page (an iframe, or ?embed): the one-line embed header instead of the site's. */
+        /** Templates sit as one quiet line in the guide panel when it shows (wide screens); else above the calendar. */
+        tplInAside() { return this.isHomepageCalendar && !this.isReadOnly && this.wideHome && !this.homeAsideHidden; },
         embedViewer() { return this.embedded && this.isReadOnly; },
         showMakeOwn() {
             return !this.isLoading && !this.embedded && !this.isMineCalendar && !this.isHomepageCalendar
@@ -872,6 +877,7 @@ const CalendarVueApp = {
     },
 
     mounted() {
+        try { window.matchMedia('(min-width: 1100px)').addEventListener('change', (e) => { this.wideHome = e.matches; }); } catch (e) { /* old browser: stays as loaded */ }
         // Load globalSettings from localStorage FIRST, before scheduleObj is constructed.
         // Syncfusion bakes some properties (e.g. timeFormat, firstDayOfWeek) into the initial
         // DOM render and doesn't reactively update them when set later — so settings must be
@@ -3919,6 +3925,7 @@ const CalendarVueApp = {
         },
 
         pickTemplate(id) {
+            this.tplMore = false;   // the guide panel's line folds back to 'Template: X · Start blank · Other templates…'
             if (this.template && this.template.id === id) return;
             this.applyTemplate(id);
         },

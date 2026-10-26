@@ -739,7 +739,7 @@
 
         <!-- Homepage draft only: start from a template (utils/templates.js, applyTemplate in app.js), then a
              quiet nudge toward Save & share. In the page flow, so it never covers the calendar. -->
-        <div v-if="isHomepageCalendar && !isReadOnly" class="pc-tpl" data-testid="templates" v-cloak>
+        <div v-if="isHomepageCalendar && !isReadOnly && !tplInAside" class="pc-tpl" data-testid="templates" v-cloak>
             <!-- Phones: one quiet toggle, so the first screen is the calendar and Save & share. -->
             <button type="button" class="pc-link pc-tpl-toggle" :aria-expanded="templatesOpen ? 'true' : 'false'" aria-controls="pc-tpl-row" data-testid="tpl-toggle" @click="toggleTemplates">
                 <template v-if="templateLabel">Template: <b>{{ templateLabel }}</b></template><template v-else>Start from a template</template>
@@ -1588,6 +1588,26 @@
                         <li><b>2</b><span>Press <strong>Save &amp; share</strong>.</span></li>
                         <li><b>3</b><span>Keep the link, or send it to your group.</span></li>
                     </ol>
+                    <!-- Templates, quietly (Oct 26 2026: the chip row above the calendar was loud, and used by 1 person in 60
+                         days). One line of text links under the steps; the same ids and states as the row it replaces. -->
+                    <div v-if="tplInAside" class="pc-home-tpl" data-testid="templates" role="group" aria-label="Start from a template">
+                        <template v-if="template">
+                            <span>Template: <b>{{ templateLabel }}</b></span>
+                            <button v-if="templateUndo" type="button" class="pc-link" data-testid="tpl-undo" @click="templateUndo = false; undoLastLocal()">Undo</button>
+                            <button type="button" class="pc-link" aria-pressed="false" data-testid="tpl-blank" @click="template && startBlank()">Start blank</button>
+                            <button v-if="!tplMore" type="button" class="pc-link" data-testid="tpl-show-more" @click="tplMore = true">Other templates…</button>
+                        </template>
+                        <span v-else>Or start from a template:</span>
+                        <!-- Three to start (the rest one click away), so the panel reads as a sentence, not a menu. -->
+                        <template v-for="t in templateChips" :key="t.id">
+                            <button v-show="tplMore ? !(template && template.id === t.id) : (!template && TPL_FEATURED.includes(t.id))" type="button" class="pc-link pc-home-tpl-opt"
+                                :aria-pressed="template && template.id === t.id ? 'true' : 'false'" :data-testid="'tpl-' + t.id" @click="pickTemplate(t.id)">{{ t.label }}</button>
+                        </template>
+                        <button v-if="!template && !tplMore" type="button" class="pc-link pc-home-tpl-opt" data-testid="tpl-show-more" @click="tplMore = true">more…</button>
+                        <a v-if="tplMore" class="pc-link pc-home-tpl-opt" href="/templates" data-from="tpl-row" data-testid="tpl-more">All templates →</a>
+                        <p v-if="template && templateNudge" class="pc-home-tpl-note" data-testid="tpl-nudge"><b>Looks good?</b> Press Save &amp; share, top right, for a link anyone can open. No login required.
+                            <button type="button" class="pc-link" data-testid="tpl-nudge-dismiss" @click="dismissTemplateNudge">Dismiss</button></p>
+                    </div>
                     <p class="pc-home-links"><a v-if="!template" class="pc-home-more" href="/view/demo" data-from="home-panel">See a demo calendar →</a><a class="pc-home-more" href="#how">How pastecal works ↓</a></p>
                     <!-- The questions people decide on without asking (Oct 25 2026): one line each. -->
                     <dl class="pc-home-know" data-testid="home-know">
