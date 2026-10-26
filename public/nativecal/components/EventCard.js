@@ -566,6 +566,9 @@ const EventCard = (() => {
                 if (m == null) { this.typedBad = true; return; }
                 const kind = this.picker.kind, startMin = K.minutesOf(this.v.start);
                 if (kind === 'e' && this.sameDay && m === startMin) { this.typedBad = true; return; }
+                // A clock time that day does not have (2:30 AM on the spring-forward day) is refused, not moved.
+                const day = kind === 's' ? this.v.start : this.v.end;
+                if (m < 1440 && K.minutesOf(at(day, m)) !== m && !(kind === 'e' && this.sameDay && m < startMin)) { this.typedBad = true; return; }
                 // An end typed before the start ("1a" for an 11 PM event) is after midnight, the next day.
                 if (kind === 'e' && this.sameDay && m < startMin) {
                     const end = at(K.addDays(K.startOfDay(this.v.start), 1), m);

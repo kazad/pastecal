@@ -1766,6 +1766,7 @@ const CalendarVueApp = {
             if (button === null) { if (ask.cancel) ask.cancel(); this._nativeMoveToast = null; }
             else (button || ask.options[ask.choice]).action();
             if (this._nativeMoveToast) this.nativeMoveToast();   // a drop that asked first: its toast now
+            if (this.nativeCard) this.$nextTick(() => this.nativeCardRefresh());   // (what changed elsewhere while it asked)
             if (c && c.closeAfterAsk && this.nativeCard === c && !this.nativeAsk) this.closeNativeCard();
         },
 
@@ -2250,21 +2251,33 @@ const CalendarVueApp = {
             if (!row) return this.nativeCardGone(t.kind !== 'row' || (t.seriesId != null && !this.nativeStored({ id: t.seriesId })));
             const v = this.nativeCardValue(row), cur = c.value;
             let next = t.kind === 'row' ? v : { ...this.nativeCardRezone(cur, v.tz), title: v.title, type: v.type, description: v.description, rule: v.rule };
-            const was = t.series, now = t.kind === 'row' ? null : this.nativeSeriesTimes(row);
-            if (now && was && t.occurrence && (was.start !== now.start || was.end !== now.end)) {
-                // The whole series was moved elsewhere ("all events"): the occurrence on the card moves with it, by as
-                // much on the clock (as nativeSeriesMoved moves it), so a save lands on its slot as it is now (stress F02).
-                const z = this.nativeCardZone(v);
-                const W = (d) => (z ? EventZone.toWallDate(new Date(d), z) : new Date(d)), U = (d) => (z ? EventZone.fromWallDate(d, z) : d);
-                t.occurrence = { start: U(nativeShift(W(was.start), W(now.start))(W(t.occurrence.start))), end: U(nativeShift(W(was.end), W(now.end))(W(t.occurrence.end))) };
-                next = { ...this.nativeCardValue(row, t.occurrence), rule: v.rule };
-            }
-            if (now) t.series = now;
+            if (t.kind !== 'row' && this.nativeCardFollow(t, row)) next = { ...this.nativeCardValue(row, t.occurrence), rule: v.rule };
             if (Object.keys(this.nativeCardFields(cur, next)).length) c.value = next;
+        },
+        /**
+         * An occurrence (or series) card whose series was moved elsewhere since the card last saw it ("all events" in
+         * another browser): the occurrence on the card moves with it, by as much on the clock (as nativeSeriesMoved
+         * moves it), so a save lands on its slot as it is now (stress F02). Returns a function that moves a card value's
+         * times the same way, or null when the series has not moved.
+         */
+        nativeCardFollow(t, series) {
+            const was = t.series, now = this.nativeSeriesTimes(series);
+            t.series = now;
+            if (!was || !t.occurrence || (was.start === now.start && was.end === now.end)) return null;
+            const z = this.nativeCardZone(this.nativeCardValue(series));
+            const W = (d) => (z ? EventZone.toWallDate(new Date(d), z) : new Date(d)), U = (d) => (z ? EventZone.fromWallDate(d, z) : d);
+            const s = nativeShift(W(was.start), W(now.start)), e = nativeShift(W(was.end), W(now.end));
+            t.occurrence = { start: U(s(W(t.occurrence.start))), end: U(e(W(t.occurrence.end))) };
+            // (A card value's times are already the zone's wall clock.)
+            return (v) => ({ ...v, start: s(v.start), end: e(v.end) });
         },
         nativeCardWrite(scope, before, after, message) {
             const c = this.nativeCard;
             if (!c || !this.nativeCanEdit()) return;
+            // The series moved while a question was open (the card does not follow it then): this change moves with it.
+            const now = scope !== 'row' && c.target.kind !== 'row' ? this.nativeStored({ id: c.target.seriesId }) : null;
+            const move = now ? this.nativeCardFollow(c.target, now) : null;
+            if (move) { before = move(before); after = move(after); }
             const snapshot = { target: { ...c.target }, value: before, canRepeat: c.canRepeat };
             const ids = new Set((this.calendar.events || []).map((e) => e && String(e.id)));
             const fields = this.nativeCardFields(before, after);

@@ -80,9 +80,9 @@
     /**
      * "today", "tomorrow", "fri" (the next Friday after today), "oct 20", "20 oct", "10/20", "10/20/2027",
      * "2026-10-20", "20" (that day of `ref`'s month) -> a local midnight Date, or null.
-     * A month and day without a year are the nearest such date to `ref` (the month shown): "jan 5" typed in October
-     * is the coming January, "oct 20" typed on Oct 24 is four days ago. A day-first "13/10" is read as day/month
-     * when it cannot be month/day.
+     * A month and day without a year are the coming one ("jan 5" typed in October is next January), or one in the
+     * last few weeks ("oct 20" typed on Oct 24): the first on or after a month before `today` (or before the month
+     * shown, when that is later). A day-first "13/10" is read as day/month when it cannot be month/day.
      */
     function parseDate(s, today = new Date(), ref = today) {
         const t = String(s || '').trim().toLowerCase().replace(/[.,]/g, ' ').replace(/\s+/g, ' ');
@@ -94,10 +94,11 @@
         const w = /^(sun|mon|tue|wed|thu|fri|sat)[a-z]*$/.exec(t);
         if (w) { const want = WD[w[1]]; let d = addDays(T, 1); while (d.getDay() !== want) d = addDays(d, 1); return d; }
         const ok = (y, mo, d) => { const x = new Date(y, mo, d); return x.getMonth() === mo && x.getDate() === d ? x : null; };
-        // No year: the nearest of last year's, this year's and next year's to the month shown.
+        // No year: the first such date from a month back (from today, or from the month shown when that is later).
+        const from = addDays(R > T ? R : T, -31);
         const near = (mo, d) => {
-            const all = [-1, 0, 1].map((k) => ok(R.getFullYear() + k, mo, d)).filter(Boolean);
-            return all.length ? all.sort((a, b) => Math.abs(a - R) - Math.abs(b - R))[0] : null;
+            const y = from.getFullYear();
+            return [0, 1, 2, 3, 4].map((k) => ok(y + k, mo, d)).find((x) => x && x >= from) || null;   // (Feb 29: the next leap year)
         };
         const at = (y, mo, d) => (y ? ok(y, mo, d) : near(mo, d));
         let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t);

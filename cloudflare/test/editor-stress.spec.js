@@ -174,6 +174,47 @@ test('F02 [card] data-loss: an occurrence card left open while another browser m
   await C.ctx.close(); await D.ctx.close();
 });
 
+test('F02 [card] data-loss: the series moved while "this event / all events" was being asked; "this event" still lands on its slot as it is now', async ({ browser }) => {
+  const id = await seed([timed('w', 'Weekly sync', '2026-10-06T10:00:00-07:00', '2026-10-06T11:00:00-07:00', { recurrencerule: WEEKLY })]);
+  const C = await open(browser, id, '&view=week&date=2026-10-20');
+  const D = await open(browser, id, '&view=week&date=2026-10-20');
+  await openCard(C.page, C.page.locator('.nc-timed', { hasText: 'Weekly sync' }));
+  await C.page.getByTestId('card-title').fill('Weekly sync (room 4)');
+  await C.page.getByTestId('card-title').press('Enter');
+  await expect(C.page.getByTestId('scope-this')).toBeVisible();   // C is asked; D moves the series meanwhile
+  await openCard(D.page, D.page.locator('.nc-timed', { hasText: 'Weekly sync' }));
+  await typeInto(D.page, 'card-q-s', '12p');
+  await pickScope(D.page, 'all');
+  await soon(async () => local(D.page, (await stored(id)).find((e) => e.id === 'w').start)).toBe('2026-10-06 12:00');
+  await C.page.waitForTimeout(1000);
+  await pickScope(C.page, 'this');
+  await soon(async () => (await stored(id)).length).toBe(2);
+  await C.page.getByTestId('card-done').click();
+  const rows = await stored(id), child = rows.find((e) => e.recurrenceID === 'w'), series = rows.find((e) => e.id === 'w');
+  expect([child.title, await local(C.page, child.start), await local(C.page, child.end)]).toEqual(['Weekly sync (room 4)', '2026-10-20 12:00', '2026-10-20 13:00']);
+  expect(series.recurrenceException, 'the series skips Oct 20 at 12 PM, where the occurrence now is').toBe('20261020T190000Z');
+  expect(rows.length).toBe(2);
+  await C.ctx.close(); await D.ctx.close();
+});
+
+test('F01 [card] data-loss: details someone else edits while my card has the (untouched) details box focused are kept on my Done, and shown', async ({ browser }) => {
+  const id = await seed([timed('p', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00', { description: 'Field 2' })]);
+  const A = await open(browser, id, '&view=week&date=2026-10-22');
+  const B = await open(browser, id, '&view=week&date=2026-10-22');
+  await openCard(A.page, ev(A.page, 'p'), true);
+  await A.page.getByTestId('card-details').focus();
+  await expect(A.page.getByTestId('card-details')).toBeFocused();
+  await openCard(B.page, ev(B.page, 'p'), true);
+  await B.page.getByTestId('card-details').fill('Field 2 is closed: gym instead');
+  await B.page.getByTestId('card-done').click();
+  await soon(async () => (await stored(id))[0].description).toBe('Field 2 is closed: gym instead');
+  await expect(A.page.getByTestId('card-details'), "A's untouched details follow B's").toHaveValue('Field 2 is closed: gym instead');
+  await A.page.getByTestId('card-done').click();
+  await A.page.waitForTimeout(1500);
+  expect((await stored(id))[0].description).toBe('Field 2 is closed: gym instead');
+  await A.ctx.close(); await B.ctx.close();
+});
+
 test('F03 [card] data-loss: a new event with details but no title is kept on Done, as "(No title)"', async ({ browser }) => {
   const id = await seed([]);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-27');
@@ -223,7 +264,7 @@ test('F07-F10 [card] titles stay exactly as typed and the event stays where it w
     const e = rows.find((r) => r.title === t);
     expect(e, `"${t}" is stored as typed`).toBeTruthy();
     expect(await local(page, e.start), t).toBe(`${at[i][0]} ${String(at[i][1]).padStart(2, '0')}:00`);
-    expect(new Date(e.end) - new Date(e.start), `${t}: the length it was made with`).toBe(new Date(rows[0].end) - new Date(rows[0].start));
+    expect(new Date(e.end) - new Date(e.start), `${t}: the hour it was made with`).toBe(3600e3);
   }
   await ctx.close();
 });
@@ -261,6 +302,13 @@ test('F13 [card] on the spring-forward day the time list does not offer 2:00-2:4
   await shot(page, 'F13-dst-missing-hour-offered');
   const labels = await picker(page).locator('.nk-plist button').allInnerTexts();
   expect(labels.filter((t) => /^2:\d\d AM/.test(t)), 'no 2:xx AM on Mar 8 in Los Angeles').toEqual([]);
+  // Typed, it is refused (not quietly stored as 3:30 AM).
+  await picker(page).getByTestId('picker-input').fill('2:30a');
+  await picker(page).getByTestId('picker-input').press('Enter');
+  await expect(picker(page).getByTestId('picker-input')).toHaveClass(/bad/);
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(500);
+  expect(await local(page, (await stored(id))[0].start)).toBe('2026-03-08 01:00');
   await ctx.close();
 });
 

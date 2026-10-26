@@ -19,7 +19,11 @@ const ymd = (d) => d && `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
 test('F12 "jan 5" typed in late October means the coming January', () => {
   assert.equal(ymd(K.parseDate('jan 5', SAT, new Date(2026, 9, 1))), '2027-01-05');
   assert.equal(ymd(K.parseDate('1/5', SAT, new Date(2026, 9, 1))), '2027-01-05');
+  assert.equal(ymd(K.parseDate('apr 5', SAT, new Date(2026, 9, 1))), '2027-04-05', 'six months back is next year too');
   assert.equal(ymd(K.parseDate('oct 20', SAT)), '2026-10-20', 'a date just past stays this year');
+  assert.equal(ymd(K.parseDate('oct 30', SAT, new Date(2026, 10, 1))), '2026-10-30', 'from November shown, late October is this year');
+  assert.equal(ymd(K.parseDate('mar 3', SAT, new Date(2028, 2, 1))), '2028-03-03', 'a month shown far ahead is the year meant');
+  assert.equal(ymd(K.parseDate('dec 30', new Date(2027, 0, 5))), '2026-12-30', 'last week, across New Year');
 });
 
 // F20: a day-first date ("13/10", what a Monday-first, 24-hour, European user types) is read when it can only be day-first.
