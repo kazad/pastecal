@@ -305,3 +305,19 @@ test('ROOT2 classic: a Tokyo weekly series is on Tokyo\'s days for an LA viewer,
   await expect(N2.page.locator('.nc-timed', { hasText: 'Tokyo standup' })).toHaveCount(0);
   await N2.ctx.close();
 });
+
+test('ROOT2 classic: an occurrence of a zoned series edited on its own is drawn at its own time, its slot empty', async ({ browser }) => {
+  // Tokyo Tuesdays 10 AM (Mondays 6 PM in LA); the Nov 3 Tokyo one moved to 1 PM Tokyo (Mon Nov 2, 8 PM LA) and renamed.
+  const id = await seed([
+    timed('jp', 'Tokyo standup', '2026-10-20T01:00:00Z', '2026-10-20T01:30:00Z', { tz: 'Asia/Tokyo', recurrencerule: WEEKLY, recurrenceException: '20261103T010000Z' }),
+    timed('jp-1', 'Standup (moved)', '2026-11-03T04:00:00Z', '2026-11-03T04:30:00Z', { tz: 'Asia/Tokyo', recurrenceID: 'jp', recurrencerule: WEEKLY, recurrenceException: '20261103T010000Z' }),
+  ]);
+  const C = await open(browser, id, '&view=week&date=2026-11-02', { classic: true });
+  await C.page.waitForFunction(() => window.scheduleObj && document.querySelector('.e-appointment'), null, { timeout: 30_000 });
+  const shown = await C.page.evaluate(() => window.scheduleObj.getEvents(new Date(2026, 10, 1), new Date(2026, 10, 15), true)
+    .map((e) => [e.Subject, new Date(e.StartTime).toISOString()]).sort((a, b) => a[1].localeCompare(b[1])));
+  expect(shown).toEqual([['Standup (moved)', '2026-11-03T04:00:00.000Z'], ['Tokyo standup', '2026-11-10T01:00:00.000Z']]);
+  await expect(C.page.locator('.e-appointment', { hasText: 'Standup (moved)' })).toHaveCount(1);
+  expect(C.errors).toEqual([]);
+  await C.ctx.close();
+});
