@@ -600,6 +600,19 @@ export class CalendarRoom extends DurableObject {
         return Response.json({ ok: true, editorKey: k.key });
     }
 
+    // A calendar whose name starts or ends with a space was registered under its TRIMMED name until Oct 26 2026 (the
+    // directory trimmed names, stress A19): its lookups and its view link led to the trimmed name, a calendar that
+    // does not exist. On its first change after that, it registers its exact name and view id again (once per wake-up;
+    // registerInDirectory re-points a name only away from a calendar that is gone).
+    healTrimmedName() {
+        const id = this.state.id;
+        if (this.nameHealed || typeof id !== 'string' || id === id.trim()) return;
+        this.nameHealed = true;
+        this.ctx.waitUntil(this.registerInDirectory(id));
+        const viewId = this.state.options && this.state.options.publicViewId;
+        if (viewId) this.ctx.waitUntil(this.registerInDirectory(viewId, true, id));
+    }
+
     async registerInDirectory(actualSlug, isReadOnly = false, targetId = null, force = false) {
         if (!this.env.DIRECTORY || !actualSlug) return;
         try {
@@ -1318,6 +1331,7 @@ export class CalendarRoom extends DurableObject {
                 this.setMeta('options', this.state.options);
             }
             this.bump('save', m.commands, { beforeEvents, beforeTitle, beforeOptions, writer: m.writer || null });   // never the author uid: history is public, the uid proves who made it
+            this.healTrimmedName();
             ws.send(json({ t: 'ack', id: m.id, v: this.state.v }));
             this.broadcast({ t: 'change', v: this.state.v, commands: m.commands }, ws);
             await this.scheduleCopyBack();
@@ -1344,6 +1358,7 @@ export class CalendarRoom extends DurableObject {
             if (nextTitle !== s.title) { s.title = nextTitle; this.setMeta('title', s.title); }
             if (nextOptions !== s.options) { s.options = nextOptions; this.setMeta('options', s.options); }
             this.bump('meta', [{ type: 'meta', title: m.title, options: m.options }], { beforeEvents, beforeTitle, beforeOptions, writer: m.writer || null });   // never the author uid: history is public, the uid proves who made it
+            this.healTrimmedName();
             ws.send(json({ t: 'ack', id: m.id, v: s.v }));
             this.broadcast({ t: 'meta', v: s.v, title: s.title, options: s.options }, ws);
             await this.scheduleCopyBack();

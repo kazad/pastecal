@@ -282,6 +282,23 @@ function tab(id) {
     }
     step('names with a leading or trailing space, %, ?, NUÑEZ, !, & or Korean come back exactly from create, lookup, the view link and both feeds');
 
+    // ...and one registered before the fix (its view id stored as leading to the trimmed name) is healed by its next save.
+    {
+        const legacy = `${n} healed `, hh = { 'Content-Type': 'application/json', 'CF-Connecting-IP': '10.71.19.99' };
+        assert.equal((await fetch(url(legacy), { method: 'POST', headers: hh, body: JSON.stringify({ title: 'Healed', events: [ev('e1', 'Bake sale')] }) })).status, 201);
+        const out = await (await fetch(`${BASE}/api/create-view`, { method: 'POST', headers: hh, body: JSON.stringify({ sourceCalendarId: legacy }) })).json();
+        const back = await fetch(`${BASE}/api/directory/backfill`, { method: 'POST', headers: { Authorization: `Bearer ${SECRET}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify([{ actualSlug: out.publicViewId, isReadOnly: true, targetId: legacy.trim() }]) });
+        assert.equal(back.status, 200, 'the row as the old directory stored it');
+        const shows = async () => JSON.stringify(await (await fetch(`${BASE}/cal/view/${encodeURIComponent(out.publicViewId)}`)).json()).includes('Bake sale');
+        assert.equal(await shows(), false, 'the old row leads to the trimmed name: an empty view');
+        const t = tab(legacy); await t.ready;
+        assert.equal((await t.send({ t: 'save', id: 's1', v: t.got.find((m) => m.t === 'snapshot').v, commands: [{ type: 'add', event: ev('e2', 'Car wash', 3) }] })).t, 'ack');
+        t.close();
+        assert.equal(await soon(shows), true, 'after a save, the view link leads to the calendar again');
+    }
+    step('a name with a space registered trimmed before the fix heals on its next save (its view link works again)');
+
     // A11: a rename is a change the feed's ETag sees.
     const name = names[0], feed = async (etag) => fetch(`${BASE}/${encodeURIComponent(name)}.ics`, etag ? { headers: { 'If-None-Match': etag } } : {});
     const etag = (await feed()).headers.get('etag');
