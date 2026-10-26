@@ -1805,7 +1805,13 @@ const CalendarVueApp = {
             const record = { ...ed.record, Subject: data.title, Description: data.description, Type: Number(data.type) || 1,
                 IsAllDay: allDay, StartTime: new Date(data.start), EndTime: nativeEnd(data.end, allDay) };
             if (ed.mode !== 'EditOccurrence') record.RecurrenceRule = data.recurrencerule || '';
-            const finish = (ok) => { if (ok) { this.editorSaved = true; this.closeNativeEditor(); } };
+            const finish = (ok) => {
+                if (ok) { this.editorSaved = true; this.closeNativeEditor(); return; }
+                // The series went (someone else deleted it) while this editor was open: nothing left to edit; the
+                // toast says why.
+                const seriesId = ed.mode === 'EditOccurrence' ? ed.record.RecurrenceID : ed.mode === 'EditSeries' ? ed.record.Id : null;
+                if (seriesId !== null && !this.nativeStored({ id: seriesId })) this.closeNativeEditor();
+            };
             if (ed.mode === 'Add') return finish(this.nativeAction('eventCreate', { addedRecords: [record] }, { action: 'Add' }));
             if (ed.mode === 'Save') return finish(this.nativeAction('eventChange', { changedRecords: [record] }, { action: 'Save' }));
             if (ed.mode === 'EditOccurrence') {
@@ -1816,10 +1822,21 @@ const CalendarVueApp = {
             const series = this.nativeSeriesOf(this.nativeStored({ id: ed.record.Id }));
             const save = (keepOccurrences) => finish(this.nativeAction('eventChange', { changedRecords: [record] }, { action: 'EditSeries', keepOccurrences }));
             if (!this.nativeHasOwn(series)) return save(false);
+            // A change that leaves the dates alone (a rename, a color, the details) cannot make the skipped dates or
+            // edited occurrences wrong: keep them without asking. (Asking let "rename, Enter, Enter" wipe them.)
+            const time = (v) => new Date(v).getTime();
+            const timing = time(record.StartTime) !== time(ed.record.StartTime) || time(record.EndTime) !== time(ed.record.EndTime)
+                || !!record.IsAllDay !== !!ed.record.IsAllDay || String(record.RecurrenceRule || '') !== String(ed.record.RecurrenceRule || '');
+            if (!timing) return save(true);
+            this.nativeAskSeriesChange(save);
+        },
+        // Classic's "match every occurrence to the series again?". Keeping them ("No") is the primary, focused
+        // answer, so Enter never deletes anyone's edits; clearing them takes a deliberate click.
+        nativeAskSeriesChange(save) {
             this.nativeAsk = { title: 'Edit event', message: NATIVE_SERIES_CHANGE,
                 buttons: [
-                    { label: 'No', testid: 'confirm-no', action: () => save(true) },
-                    { label: 'Yes', testid: 'confirm-yes', primary: true, action: () => save(false) },
+                    { label: 'Yes', testid: 'confirm-yes', action: () => save(false) },
+                    { label: 'No', testid: 'confirm-no', primary: true, action: () => save(true) },
                 ] };
         },
 
@@ -1919,15 +1936,19 @@ const CalendarVueApp = {
                 const rec = this.nativeRecord(series);
                 rec.RecurrenceID = rec.Id;
                 ScheduleAdapter.noteStart(rec);
-                const shift = nativeShift(occurrence.start, start), stretch = nativeShift(occurrence.end, end);
+                // An edited occurrence is drawn at its edited time; the series moves from the slot it stands for (its
+                // exception stamp, read in the grid's frame as toView reads it).
+                const slot = kind === 'edited' ? ScheduleAdapter.stampDate(series.isAllDay
+                    ? Event.allDayExceptionsToLocal(row.recurrenceException) : row.recurrenceException) : null;
+                const fromStart = slot || new Date(occurrence.start);
+                const fromEnd = slot ? new Date(slot.getTime() + (new Date(occurrence.end) - new Date(occurrence.start))) : occurrence.end;
+                const shift = nativeShift(fromStart, start), stretch = nativeShift(fromEnd, end);
                 const moved = { ...rec, StartTime: shift(rec.StartTime), EndTime: stretch(rec.EndTime),
-                    RecurrenceRule: nativeShiftRule(rec.RecurrenceRule, occurrence.start, start) };
-                const save = (keepOccurrences) => this.nativeAction('eventChange', { changedRecords: [moved] }, { action: 'EditSeries', keepOccurrences });
+                    RecurrenceRule: nativeShiftRule(rec.RecurrenceRule, fromStart, start) };
+                const save = (keepOccurrences) => this.nativeAction('eventChange', { changedRecords: [moved] },
+                    { action: 'EditSeries', keepOccurrences, shift: { from: fromStart, to: start } });
                 if (!this.nativeHasOwn(series)) return save(false);
-                this.nativeAsk = { title: 'Edit event', message: NATIVE_SERIES_CHANGE, buttons: [
-                    { label: 'No', testid: 'confirm-no', action: () => save(true) },
-                    { label: 'Yes', testid: 'confirm-yes', primary: true, action: () => save(false) },
-                ] };
+                this.nativeAskSeriesChange(save);
             };
             this.nativeAskScope('Edit recurring event', kind === 'edited' ? moveRow : moveOne, moveAll);
         },
@@ -3129,9 +3150,11 @@ const CalendarVueApp = {
                         this.calendar.setEvents(list);
                     },
                     onError: (err, command) => {
-                        console.warn('[store] command failed:', err.message, command);
-                        track(a => a.jsError('command_failed', err.message, (command && command.label) || (command && command.type) || 'command'));
-                        this.showToast(`Couldn't save that change: ${err.message.replace(/^\w+: /, '')}`, 'error');
+                        console.warn('[store] command failed:', err.code, command && command.type);
+                        // Analytics gets a code, never an event's text (EventStore.report); the title is for the toast only.
+                        const sent = EventStore.report(err, command);
+                        track(a => a.jsError('command_failed', sent.message, sent.where));
+                        this.showToast(err.userMessage || `Couldn't save that change: ${err.title ? `"${err.title}" ` : ''}${err.message.replace(/^\w+: /, '')}`, 'error');
                     },
                 });
             }
@@ -3167,7 +3190,7 @@ const CalendarVueApp = {
             } catch (err) {
                 // An action the adapter cannot map safely: nothing is saved, the person is
                 // told, and it is logged with the action name (command_failed).
-                this.store().onError(err, { type: 'schedule', label: `${args.requestType}/${context && context.action}` });
+                this.store().onError(err, { type: 'schedule', where: `${args.requestType}/${context && context.action}` });
                 return false;
             }
             if (!command.commands.length) return false;

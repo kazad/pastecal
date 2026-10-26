@@ -50,6 +50,11 @@
         return 0.2126 * r + 0.7152 * g + 0.0722 * b;
     };
 
+    // A change to a series (or one of its occurrences) that is no longer in the calendar. userMessage is what the
+    // person is told; code is what analytics gets.
+    const seriesDeleted = (action) => Object.assign(new Error(`${action}: the series is not in the calendar`),
+        { code: 'series_deleted', userMessage: "This event's series was deleted." });
+
     const ScheduleAdapter = {
         /**
          * Remember an event as the user began to change it. Call from popupOpen (Editor),
@@ -114,6 +119,29 @@
         /** Syncfusion's exception stamp for an occurrence start: UTC, YYYYMMDDTHHMMSSZ. */
         stamp(when) {
             return new Date(when).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+        },
+
+        /** The instant an exception stamp names (stamp's inverse), or null. */
+        stampDate(s) {
+            const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z?$/i.exec(String(s || '').trim());
+            return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6])) : null;
+        },
+
+        /**
+         * Exception stamps moved as a series moved from `from` to `to` (a drag of "all events"): the same wall-clock
+         * days and minutes (CalendarView.edits.shiftBy), so each stamp still names its slot in the moved series.
+         * A stamp that can't be read is kept as it is.
+         */
+        shiftStamps(list, from, to) {
+            const a = new Date(from), b = new Date(to);
+            const days = Math.round((new Date(b.getFullYear(), b.getMonth(), b.getDate()) - new Date(a.getFullYear(), a.getMonth(), a.getDate())) / 864e5);
+            const minutes = (b.getHours() * 60 + b.getMinutes()) - (a.getHours() * 60 + a.getMinutes());
+            return String(list || '').split(',').map((x) => x.trim()).filter(Boolean).map((s) => {
+                const d = ScheduleAdapter.stampDate(s);
+                if (!d) return s;
+                d.setDate(d.getDate() + days); d.setMinutes(d.getMinutes() + minutes);
+                return ScheduleAdapter.stamp(d);
+            }).join(',');
         },
 
         /**
@@ -217,6 +245,8 @@
             if (action === 'EditOccurrence' || action === 'DeleteOccurrence') {
                 const r = (args.changedRecords || [])[0];
                 const master = r && store.find({ id: r.RecurrenceID ?? r.Id, recurrenceID: null });
+                // The series was deleted (by someone else) while this occurrence's editor or popup was open.
+                if (r && !master) throw seriesDeleted(action);
                 const when = context.occurrenceStart || (r && r.StartTime);
                 if (master && when && (!store.find(keyOf(r)) || action === 'DeleteOccurrence')) {
                     // The grid shows an all-day occurrence at the viewer's local midnight; the
@@ -227,7 +257,14 @@
                     const list = String(master.recurrenceException || '').split(',').map((x) => x.trim()).filter(Boolean);
                     if (!list.includes(stamp)) list.push(stamp);
                     commands.push({ type: 'update', key: master, changes: { recurrenceException: list.join(',') } });
-                    if (action === 'EditOccurrence') {
+                    // One slot, one row: if this occurrence already has its edited row (someone else saved "This
+                    // event" on it while this editor was open), change that row instead of adding a second.
+                    const edited = action === 'EditOccurrence' && (store.getEvents() || []).find((e) => e && !blank(e.recurrenceID)
+                        && String(e.recurrenceID) === String(master.id) && String(e.recurrenceException || '').trim() === stamp);
+                    if (edited) {
+                        const { id: _i, recurrenceID: _r, recurrencerule: _rule, recurrenceException: _ex, ...fields } = ScheduleAdapter.changesFrom(r);
+                        commands.push({ type: 'update', key: edited, changes: fields });
+                    } else if (action === 'EditOccurrence') {
                         commands.push({ type: 'add', event: { ...ScheduleAdapter.fromRecord(r), id: null, recurrenceID: master.id,
                             recurrencerule: master.recurrencerule, recurrenceException: stamp } });
                     }
@@ -242,7 +279,7 @@
             if (action === 'DeleteSeries' || action === 'EditSeries') {
                 const r = (args.changedRecords || [])[0] || (args.deletedRecords || [])[0];
                 const master = r && store.find({ id: r.RecurrenceID ?? r.Id, recurrenceID: null });
-                if (!master) throw new Error(`${action}: the series is not in the calendar`);
+                if (!master) throw seriesDeleted(action);
                 const ownOccurrences = (store.getEvents() || []).filter((e) => e.recurrenceID !== null && e.recurrenceID !== undefined
                     && String(e.recurrenceID) === String(master.id));
                 if (action === 'DeleteSeries') {
@@ -257,6 +294,17 @@
                     const changes = ScheduleAdapter.changesFrom(r);
                     if (context.keepOccurrences && !blank(master.recurrenceException)) {
                         delete changes.recurrenceException;
+                        // The series was moved (context.shift: { from, to }, a drag of "all events"): its skipped
+                        // dates and its edited occurrences' slots move with it, or a deleted date comes back and an
+                        // edited one shows twice.
+                        const shift = context.shift;
+                        if (shift) {
+                            changes.recurrenceException = ScheduleAdapter.shiftStamps(master.recurrenceException, shift.from, shift.to);
+                            for (const e of ownOccurrences) {
+                                if (!blank(e.recurrenceException)) commands.push({ type: 'update', key: e,
+                                    changes: { recurrenceException: ScheduleAdapter.shiftStamps(e.recurrenceException, shift.from, shift.to) } });
+                            }
+                        }
                     } else {
                         changes.recurrenceException = null;
                         for (const e of ownOccurrences) commands.push({ type: 'remove', key: e });
@@ -270,7 +318,7 @@
             const recurring = [...(args.changedRecords || []), ...(args.deletedRecords || [])]
                 .some((r) => !blank(r.RecurrenceRule) || !blank(r.RecurrenceID));
             if (recurring && action && !['Save', 'Add', 'Delete', 'EditOccurrence', 'DeleteOccurrence'].includes(action)) {
-                throw new Error(`unsupported action ${action} on a repeating event`);
+                throw Object.assign(new Error(`unsupported action ${action} on a repeating event`), { code: 'unsupported_action' });
             }
 
             for (const r of args.deletedRecords || []) commands.push({ type: 'remove', key: keyOf(r) });

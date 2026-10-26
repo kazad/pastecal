@@ -110,6 +110,21 @@ test('moving a whole series with one occurrence: its repeat days, day of the mon
     assert.equal(shiftRule('FREQ=YEARLY;BYMONTHDAY=27;BYMONTH=10;INTERVAL=1;', tue, new Date(2026, 10, 3)), 'FREQ=YEARLY;BYMONTHDAY=3;BYMONTH=11;INTERVAL=1;');
     assert.equal(shiftRule('FREQ=WEEKLY;BYDAY=TU;INTERVAL=1;COUNT=5;', tue, new Date(2026, 9, 27, 15)), 'FREQ=WEEKLY;BYDAY=TU;INTERVAL=1;COUNT=5;', 'same day: unchanged');
     assert.equal(shiftRule('FREQ=DAILY;INTERVAL=2;', tue, new Date(2026, 9, 29)), 'FREQ=DAILY;INTERVAL=2;');
+    // UNTIL moves by the same days, in each form it is written in; a same-day move keeps it.
+    inZone('America/Los_Angeles', () => {
+        assert.equal(shiftRule('FREQ=WEEKLY;BYDAY=TU;INTERVAL=1;UNTIL=20261027T170000Z;', tue, new Date(2026, 9, 29, 9)), 'FREQ=WEEKLY;BYDAY=TH;INTERVAL=1;UNTIL=20261029T170000Z;');
+        assert.equal(shiftRule('FREQ=WEEKLY;BYDAY=TU;UNTIL=20261031', tue, new Date(2026, 10, 1)), 'FREQ=WEEKLY;BYDAY=SU;UNTIL=20261105');
+        assert.equal(shiftRule('FREQ=DAILY;UNTIL=20261027T235959', tue, new Date(2026, 9, 26, 10)), 'FREQ=DAILY;UNTIL=20261026T235959');
+        assert.equal(shiftRule('FREQ=DAILY;UNTIL=20261027T170000Z', tue, new Date(2026, 9, 27, 18)), 'FREQ=DAILY;UNTIL=20261027T170000Z');
+    });
+    // Exception stamps move by the same wall-clock days and minutes (a series dragged "all events", exceptions kept).
+    inZone('America/Los_Angeles', () => {
+        assert.equal(ScheduleAdapter.shiftStamps('20261012T160000Z,20261019T160000Z', new Date(2026, 9, 26, 9), new Date(2026, 9, 26, 10)),
+            '20261012T170000Z,20261019T170000Z');
+        // Oct 26 PDT -> Nov 2 PST: one week later at the same clock time, so the UTC stamp gains an hour.
+        assert.equal(ScheduleAdapter.shiftStamps('20261026T160000Z', new Date(2026, 9, 26, 9), new Date(2026, 10, 2, 9)), '20261102T170000Z');
+        assert.equal(ScheduleAdapter.shiftStamps('bogus,20261019T160000Z', new Date(2026, 9, 19, 9), new Date(2026, 9, 22, 14)), 'bogus,20261022T210000Z');
+    });
     // Wall-clock: across the US DST change (Nov 1) an hour later stays an hour later on the clock.
     inZone('America/Los_Angeles', () => {
         const by = shiftBy(new Date(2026, 9, 27, 10), new Date(2026, 10, 3, 11));

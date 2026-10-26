@@ -1054,9 +1054,10 @@ const CalendarVueApp = {
                         this.calendar.setEvents(next);
                     },
                     onError: (err, command) => {
-                        console.warn('[nativecal] undo failed:', err.message, command);
-                        track(a => a.jsError('command_failed', err.message, (command && command.label) || 'undo'));
-                        this.showToast(`Couldn't undo that: ${err.message.replace(/^\w+: /, '')}`, 'error');
+                        console.warn('[nativecal] undo failed:', err.code, command && command.type);
+                        const sent = EventStore.report(err, command);   // a code, never an event's text
+                        track(a => a.jsError('command_failed', sent.message, sent.where));
+                        this.showToast(`Couldn't undo that: ${err.title ? `"${err.title}" ` : ''}${err.message.replace(/^\w+: /, '')}`, 'error');
                     },
                 });
             }

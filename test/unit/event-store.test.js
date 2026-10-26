@@ -168,6 +168,24 @@ test('edit one occurrence: series gets the stamp, the edited copy is a new row (
     assert.equal(s.commits[0].shrink, 0);
 });
 
+test('edit one occurrence that someone else already edited: the same row changes, no second row for the slot', () => {
+    const s = storeOf([ev(9, 'Weekly', 5, { recurrencerule: 'FREQ=WEEKLY;BYDAY=MO;INTERVAL=1;' })]);
+    const record = () => ({ Id: 'occ', Subject: 'Weekly', RecurrenceID: '9', StartTime: new Date('2026-10-12T21:00:00Z'), EndTime: new Date('2026-10-12T22:00:00Z'),
+        RecurrenceRule: 'FREQ=WEEKLY;BYDAY=MO;INTERVAL=1;', Type: 1 });
+    const edit = (title) => {
+        const r = record();
+        ScheduleAdapter.noteStart(r);   // both editors opened on the untouched occurrence
+        return { requestType: 'eventChange', changedRecords: [{ ...r, Subject: title }] };
+    };
+    const ctx = { action: 'EditOccurrence', occurrenceStart: new Date('2026-10-12T21:00:00Z') };
+    assert.ok(s.store.dispatch(ScheduleAdapter.toCommand(edit('Weekly (B)'), s.store, ctx)).ok);
+    assert.ok(s.store.dispatch(ScheduleAdapter.toCommand(edit('Weekly (A)'), s.store, ctx)).ok);
+    assert.equal(s.events.length, 2);
+    const copy = s.events.find((e) => e.recurrenceID === 9);
+    assert.deepEqual([copy.title, copy.recurrenceException, copy.recurrencerule], ['Weekly (A)', '20261012T210000Z', 'FREQ=WEEKLY;BYDAY=MO;INTERVAL=1;']);
+    assert.equal(s.events.find((e) => e.id === 9).recurrenceException, '20261012T210000Z');
+});
+
 test('delete one occurrence: only the series stamp changes; nothing is removed', () => {
     const s = storeOf([ev(9, 'Weekly', 5, { recurrencerule: 'FREQ=WEEKLY;', recurrenceException: '20261012T210000Z' })]);
     const args = { requestType: 'eventRemove', changedRecords: [{ Id: '9', Subject: 'Weekly', RecurrenceID: '9', StartTime: new Date('2026-10-26T21:00:00Z'), RecurrenceRule: 'FREQ=WEEKLY;' }] };
@@ -177,6 +195,33 @@ test('delete one occurrence: only the series stamp changes; nothing is removed',
     assert.equal(s.commits[0].shrink, 0);
     s.store.undo();
     assert.equal(s.events[0].recurrenceException, '20261012T210000Z', 'undo takes the stamp back off');
+});
+
+test('undo of an occurrence delete takes back only its own stamp: a date someone else skipped since stays skipped', () => {
+    const s = storeOf([ev(9, 'Weekly', 5, { recurrencerule: 'FREQ=DAILY;' })]);
+    const del = (iso) => ScheduleAdapter.toCommand({ requestType: 'eventRemove', changedRecords: [{ Id: '9', Subject: 'Weekly', RecurrenceID: '9',
+        StartTime: new Date(iso), RecurrenceRule: 'FREQ=DAILY;' }] }, s.store, { action: 'DeleteOccurrence', occurrenceStart: new Date(iso) });
+    s.store.dispatch(del('2026-10-20T16:00:00Z'));
+    // Another browser skips Oct 22; this tab receives it.
+    s.events = s.events.map((e) => ({ ...e, recurrenceException: e.recurrenceException + ',20261022T160000Z' }));
+    s.store.undo();
+    assert.equal(s.events[0].recurrenceException, '20261022T160000Z');
+});
+
+test('undo of "match the series again" puts back the cleared stamps beside any added since', () => {
+    const s = storeOf([ev(9, 'Weekly', 5, { recurrencerule: 'FREQ=DAILY;', recurrenceException: '20261012T210000Z' })]);
+    s.store.dispatch({ type: 'update', key: { id: 9 }, changes: { recurrenceException: null } });
+    s.events = s.events.map((e) => ({ ...e, recurrenceException: '20261030T210000Z' }));
+    s.store.undo();
+    assert.equal(s.events[0].recurrenceException, '20261030T210000Z,20261012T210000Z');
+});
+
+test('undo leaves a field alone once someone else has changed it; undoes the fields still as this tab wrote them', () => {
+    const s = storeOf([ev('a', 'Lunch', 5, { description: 'Room 1' })]);
+    s.store.dispatch({ type: 'update', key: { id: 'a' }, changes: { title: 'Team lunch', description: 'Room 2' } });
+    s.events = s.events.map((e) => ({ ...e, description: 'Room 3 (from B)' }));
+    s.store.undo();
+    assert.deepEqual([s.events[0].title, s.events[0].description], ['Lunch', 'Room 3 (from B)']);
 });
 
 // Sep 26, live: editing a WHOLE series from one of its occurrences. Syncfusion's record at

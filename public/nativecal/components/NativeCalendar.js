@@ -78,7 +78,6 @@ const NativeCalendar = (() => {
     };
     const toFloating = (d) => new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds()));
     const fromFloating = (u) => new Date(u.getUTCFullYear(), u.getUTCMonth(), u.getUTCDate(), u.getUTCHours(), u.getUTCMinutes(), u.getUTCSeconds());
-    const utcStamp = (d) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
     const ymdKey = (y, m, d) => `${y}${pad(m + 1)}${pad(d)}`;
     // The DATE an all-day series' skipped-date stamp names, as 'YYYYMMDD' (or null): the same reading as
     // Event.allDayStampDate and Syncfusion's (ScheduleAdapter.toView). Stamps are written as the WRITER's local
@@ -94,6 +93,16 @@ const NativeCalendar = (() => {
         // floor((ms + 13h + 1s) / day): a writer's local midnight, from just east of UTC-11 to UTC+13 (models/Event.js)
         const d = new Date(Math.floor((ms + 13 * 3600000 + 1000) / DAY_MS) * DAY_MS);
         return ymdKey(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    };
+
+    // The local day ('YYYYMMDD') a timed series' skipped-date stamp names in this browser: a UTC stamp at its local
+    // instant, a floating one (no Z) or a bare date as written.
+    const localStampDay = (s) => {
+        const m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z?))?$/i.exec(String(s).trim());
+        if (!m) return null;
+        if (!m[4] || !m[7]) return m[1] + m[2] + m[3];
+        const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]));
+        return ymdKey(d.getFullYear(), d.getMonth(), d.getDate());
     };
 
     // ---- events -> occurrences ---------------------------------------------------------
@@ -117,9 +126,11 @@ const NativeCalendar = (() => {
             // it would draw a second series; it is one event, at its own time.
             if (ev.recurrencerule && !ev.recurrenceID && RR.RRule) {
                 const stamps = String(ev.recurrenceException || '').split(',').map(s => s.trim()).filter(Boolean);
-                // Timed: the occurrence's UTC start, compared to the minute. All-day: the date (see allDayStampKey).
-                const excluded = new Set(allDay ? stamps.map(allDayStampKey).filter(Boolean)
-                    : stamps.map(s => s.replace(/(\d{8}T\d{4})\d{2}Z?$/, '$1')));
+                // Timed: the stamp's LOCAL date, as Syncfusion (classic) matches it: it parses each stamp and skips
+                // the occurrence on that local day. To the minute, a date deleted in Los Angeles came back for a
+                // viewer whose clocks don't change with it (Phoenix: an hour apart after Nov 1). All-day: the date
+                // (see allDayStampKey).
+                const excluded = new Set(allDay ? stamps.map(allDayStampKey).filter(Boolean) : stamps.map(localStampDay).filter(Boolean));
                 let rule;
                 try {
                     const clean = String(ev.recurrencerule).replace(/^RRULE:/i, '').split(';').filter(p => p.includes('=')).join(';');
@@ -134,8 +145,7 @@ const NativeCalendar = (() => {
                     const from = toFloating(new Date(rangeStart.getTime() - duration)), to = toFloating(rangeEnd);
                     for (const f of rule.between(from, to, true)) {
                         const s = fromFloating(f);
-                        const key = allDay ? ymdKey(s.getFullYear(), s.getMonth(), s.getDate()) : utcStamp(s).replace(/(\d{8}T\d{4})\d{2}Z$/, '$1');
-                        if (excluded.has(key) || excluded.has(key.slice(0, 8))) continue;
+                        if (excluded.has(ymdKey(s.getFullYear(), s.getMonth(), s.getDate()))) continue;
                         out.push({ ...base, start: s, end: new Date(s.getTime() + duration), recurring: true, key: `${ev.id}@${s.getTime()}` });
                     }
                     continue;

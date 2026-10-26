@@ -182,6 +182,24 @@
         }
         if (get('BYMONTHDAY') && (freq === 'MONTHLY' || freq === 'YEARLY')) set('BYMONTHDAY', b.getDate());
         if (get('BYMONTH') && freq === 'YEARLY') set('BYMONTH', b.getMonth() + 1);
+        // The end date moves with it (Tuesdays until Oct 27 dragged to Thursdays run until Oct 29), by whole days:
+        // UNTIL is read as a day (through its end), so moving it by the minutes too could add an occurrence.
+        const until = get('UNTIL');
+        const m = until && /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z?))?$/i.exec(until);
+        if (m) {
+            const p = (k) => String(k).padStart(2, '0');
+            if (!m[4]) {
+                const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3] + days));
+                set('UNTIL', `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}`);
+            } else if (m[7]) {
+                const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]));
+                d.setDate(d.getDate() + days);
+                set('UNTIL', d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, ''));
+            } else {
+                const d = new Date(+m[1], +m[2] - 1, +m[3] + days, +m[4], +m[5], +m[6]);
+                set('UNTIL', `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}T${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`);
+            }
+        }
         return parts.join(';');
     }
     // An end as classic's grid records carry it: an all-day end is the next local midnight (exclusive). The native grid
