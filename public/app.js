@@ -1734,7 +1734,10 @@ const CalendarVueApp = {
         /** A stored row as classic's grid record (an edited occurrence is read beside its series, whose grid its slot is in). */
         nativeRecord(row) {
             const series = this.nativeKind(row) === 'edited' ? this.nativeSeriesOf(row) : null;
-            return { ...ScheduleAdapter.toView(series ? [row, series] : [row])[0] };
+            const rec = { ...ScheduleAdapter.toView(series ? [row, series] : [row])[0] };
+            // Native reads the rule itself (rrule.js), not Syncfusion's every-12-months stand-in for a yearly one (#48).
+            if (rec._gridRule) { rec.RecurrenceRule = rec._gridRule.rule; delete rec._gridRule; }
+            return rec;
         },
         /** One native action -> the shared write path. */
         nativeAction(requestType, records, context) {
