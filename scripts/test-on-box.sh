@@ -3,7 +3,7 @@
 # what changed, runs scripts/test-browser.sh, prints the summary.
 #   bash scripts/test-on-box.sh [spec names...]        e.g.  bash scripts/test-on-box.sh series-data native-editing
 # Each checkout gets its own folder and ports on the box, so parallel agents don't collide. BOX_WORKERS Playwright
-# workers (default 12) share BOX_SERVERS local servers (default 4).
+# workers (default 16, one per core) share BOX_SERVERS local servers (default 4).
 set -u
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 NAME=$(basename "$ROOT")
@@ -11,7 +11,7 @@ DEST="Projects/pastecal-ci-$NAME"
 PORT=$((8900 + $(printf '%s' "$NAME" | cksum | cut -d' ' -f1) % 80))
 rsync -az --delete --exclude node_modules --exclude .wrangler --exclude cloudflare/test-results --exclude test/native-audit/out \
   --exclude .cloudflare --exclude snapshots "$ROOT/" "omarchy:$DEST/" || { echo "rsync to omarchy failed"; exit 2; }
-ssh -o BatchMode=yes omarchy bash -s -- "$DEST" "$PORT" "${BOX_WORKERS:-12}" "${BOX_SERVERS:-4}" "$@" <<'EOF'
+ssh -o BatchMode=yes omarchy bash -s -- "$DEST" "$PORT" "${BOX_WORKERS:-16}" "${BOX_SERVERS:-4}" "$@" <<'EOF'
 set -u
 DEST=$1 PORT=$2 WORKERS=$3 SERVERS=$4; shift 4
 cd ~/"$DEST" || exit 2
