@@ -2773,6 +2773,13 @@ const CalendarVueApp = {
                 if (args.type === 'Editor') {
                     this.editorSaved = false;
                     ScheduleAdapter.noteStart(args.data);
+                    // A yearly "last Monday of October" is drawn as every 12 months (ScheduleAdapter, #48); the
+                    // repeat editor shows and saves the yearly rule it stands for.
+                    if (args.data && args.data._gridRule) {
+                        const re = args.element.querySelector('.e-recurrenceeditor');
+                        const inst = re && re.ej2_instances && re.ej2_instances[0];
+                        if (inst) inst.setRecurrenceRule(ScheduleAdapter.editorRule(args.data), args.data.StartTime);
+                    }
 
                     // Configure datetime pickers with strictMode and the user's chosen date format.
                     // Syncfusion's default is en-US (M/d/yy) which is ambiguous internationally

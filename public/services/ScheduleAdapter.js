@@ -35,6 +35,39 @@
     // or resize began), keyed by Id|RecurrenceID. The user's change is the difference from
     // THIS, not from the current data -- see changesFrom.
     const opened = new Map();
+
+    // Syncfusion 23.2.6 draws a yearly "Nth weekday of a month" rule (FREQ=YEARLY;BYDAY=MO;BYSETPOS=-1;BYMONTH=10,
+    // its own editor's "every year on Oct Last Mon") on the wrong years: it skipped Oct 2027 (issue #48), and 148
+    // of 675 such rules checked against rrule.js came out wrong. The same rule written as every 12 months
+    // (FREQ=MONTHLY;INTERVAL=12;BYDAY=MO;BYSETPOS=-1) it draws right in all 675. So the grid is shown that form
+    // and the stored rule never changes: fromRecord turns it back. Only when BYMONTH is the start's month, where
+    // the two rules mean exactly the same dates.
+    const ruleParts = (rule) => String(rule || '').split(';').filter(Boolean).map((p) => p.split('='));
+    const yearlyByPosToGrid = (rule, start) => {
+        if (!rule || !start) return null;
+        const parts = ruleParts(rule), get = (k) => (parts.find(([key]) => key.toUpperCase() === k) || [])[1];
+        if (String(get('FREQ')).toUpperCase() !== 'YEARLY' || !/^-?[1-9]\d*$/.test(get('BYSETPOS') || '')
+            || !/^(MO|TU|WE|TH|FR|SA|SU)$/i.test(get('BYDAY') || '') || get('BYMONTH') !== String(start.getMonth() + 1)
+            || get('BYMONTHDAY') || get('BYWEEKNO') || get('BYYEARDAY')) return null;
+        const interval = parseInt(get('INTERVAL') || '1', 10);
+        if (!(interval >= 1)) return null;
+        const out = parts.filter(([k]) => k.toUpperCase() !== 'BYMONTH' && k.toUpperCase() !== 'INTERVAL')
+            .map(([k, v]) => k.toUpperCase() === 'FREQ' ? [k, 'MONTHLY'] : [k, v]);
+        out.push(['INTERVAL', String(12 * interval)]);
+        return out.map((p) => p.join('=')).join(';') + ';';
+    };
+    // The way back, also for a shown rule Syncfusion changed (e.g. "this and following" adds an UNTIL).
+    const yearlyByPosFromGrid = (rule, grid) => {
+        if (!grid || !rule) return rule;
+        if (rule === grid.shown) return grid.rule;
+        const parts = ruleParts(rule), get = (k) => (parts.find(([key]) => key.toUpperCase() === k) || [])[1];
+        const interval = parseInt(get('INTERVAL') || '0', 10);
+        if (String(get('FREQ')).toUpperCase() !== 'MONTHLY' || !get('BYSETPOS') || get('BYMONTH') || !(interval > 0) || interval % 12) return rule;
+        const out = parts.filter(([k]) => k.toUpperCase() !== 'INTERVAL')
+            .map(([k, v]) => k.toUpperCase() === 'FREQ' ? [k, 'YEARLY'] : [k, v]);
+        out.push(['BYMONTH', String(grid.month)], ['INTERVAL', String(interval / 12)]);
+        return out.map((p) => p.join('=')).join(';') + ';';
+    };
     const recKey = (r) => `${blank(r.Id) ? '' : String(r.Id)}|${blank(r.RecurrenceID) ? '' : String(r.RecurrenceID)}`;
 
     // Text on an event chip: one of these two, by contrast with the event's color.
@@ -179,6 +212,8 @@
                     ? EventStore.unsafeRecurrence(e.recurrencerule) : null;
                 if (unsafe && !warnedRules.has(e.id)) { warnedRules.add(e.id); console.warn(`[pastecal] event ${e.id}: ${unsafe}; shown once, not repeated`); }
                 const rule = unsafe ? '' : e.recurrencerule;
+                const shownRule = allDaySeries ? Event.allDayRuleToLocal(rule) : rule;
+                const gridRule = yearlyByPosToGrid(shownRule, start);
                 return {
                     Id: asText(e.id),
                     Subject: e.title,
@@ -190,7 +225,8 @@
                     _allDaySeries: allDaySeries,
                     ...(allDaySeries ? { _storedRule: rule, _storedException: e.recurrenceException } : {}),
                     Description: e.description,
-                    RecurrenceRule: allDaySeries ? Event.allDayRuleToLocal(rule) : rule,
+                    RecurrenceRule: gridRule || shownRule,
+                    ...(gridRule ? { _gridRule: { shown: gridRule, rule: shownRule, month: start.getMonth() + 1 } } : {}),
                     Type: parseInt(e.type || 1, 10),
                     IsAllDay: !!e.isAllDay,
                     Recurrence: e.repeat,
@@ -201,8 +237,14 @@
             });
         },
 
+        /** The rule a record stands for, as Syncfusion's editor should show it (see yearlyByPosToGrid). */
+        editorRule(r) {
+            return r && r._gridRule ? yearlyByPosFromGrid(r.RecurrenceRule, r._gridRule) : r && r.RecurrenceRule;
+        },
+
         /** One Syncfusion record -> the fields of our event it describes. */
         fromRecord(r) {
+            if (r && r._gridRule && 'RecurrenceRule' in r) r = { ...r, RecurrenceRule: yearlyByPosFromGrid(r.RecurrenceRule, r._gridRule) };
             const out = {
                 id: blank(r.Id) ? null : r.Id,
                 recurrenceID: blank(r.RecurrenceID) ? null : r.RecurrenceID,
