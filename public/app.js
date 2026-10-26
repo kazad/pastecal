@@ -1284,6 +1284,8 @@ const CalendarVueApp = {
     },
 
     watch: {
+        // The event card follows changes made in other browsers (nativeCardRefresh).
+        'calendar.events'() { if (this.nativeCard) this.$nextTick(() => this.nativeCardRefresh()); },
         'calendar.id'() { this.$nextTick(() => this.fitSlugBox()); },
         // The footer line appears once loading ends (or changes with Pro): give the month grid its room.
         pageFooter() { this.$nextTick(() => { if (this._refitMonthRows) this._refitMonthRows(); }); },
@@ -1540,6 +1542,14 @@ const CalendarVueApp = {
             const left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8));
             const top = r.bottom + h + 8 < window.innerHeight ? r.bottom + 6 : Math.max(8, r.top - h - 6);
             this.nativePopover = { event, occurrence, top, left };
+            this.$nextTick(() => this.fitNativePopover());
+        },
+        /** The popup kept inside the window, whatever its details' length (Show all can make it taller). */
+        fitNativePopover() {
+            const p = this.nativePopover, el = document.querySelector('.np');
+            if (!p || !el) return;
+            const h = el.offsetHeight;
+            if (p.top + h > window.innerHeight - 8) p.top = Math.max(8, window.innerHeight - 8 - h);
         },
         // The native calendar's page wiring. A press outside the open popup closes it and does nothing else (as on
         // the classic calendar), unless it lands on another event; Escape closes it too. The month fills the window.
@@ -1980,9 +1990,10 @@ const CalendarVueApp = {
             if (this.isExisting && Date.now() - (this._nativeHistoryAt || 0) > 60000) { this._nativeHistoryAt = Date.now(); this.loadUndoEntries().then(label).catch(() => {}); }
         },
         /** One change from the card (patch: the fields it changed; message: what the toast says). */
-        nativeCardChange(patch, message) {
+        nativeCardChange(patch, message, meta = null) {
             const c = this.nativeCard;
             if (!c) return;
+            if (meta && meta.details && !c.isNew) return this.nativeCardDetails(patch, meta.details);
             const before = this.nativeCardClone(c.value), after = { ...before, ...patch };
             // Whether people categorize events at all (classic sends it too).
             if ('type' in patch && Number(patch.type) !== Number(before.type)) this.onNativeColor();
@@ -1996,6 +2007,65 @@ const CalendarVueApp = {
                 return;
             }
             this.nativeCardWrite(c.target.kind === 'series' ? 'all' : 'row', before, after, message);
+        },
+        /**
+         * The details box, saved while typing and when it is left (EventCard saveDetails). One session of the box is one
+         * Undo step: each later save in it folds into the first (its own undo entry is dropped, so Undo puts back what was
+         * there before the session). Only the last save says "Details saved". If someone else changed the details while
+         * they were being typed, these win, and a toast says so with an Undo that puts theirs back.
+         */
+        nativeCardDetails(patch, d) {
+            const c = this.nativeCard;
+            const row = c.target.kind === 'occ' ? null : this.nativeStored({ id: c.target.kind === 'series' ? c.target.seriesId : c.target.id, recurrenceID: c.target.kind === 'series' ? null : c.target.recurrenceID });
+            // One occurrence of a series not yet asked "this event / all events": ask once, when the box is left.
+            if (c.target.kind === 'occ') { if (d.final && 'description' in patch) this.nativeCardChange(patch, 'Details saved'); return; }
+            // Kept off the reactive card (a store undo entry must stay the very object in the store's stack).
+            const prev = this._nativeDetSession;
+            const sess = prev && prev.card === c.key && prev.id === d.id ? prev : (this._nativeDetSession = { card: c.key, id: d.id, entry: null, mine: d.base, theirs: null });
+            if ('description' in patch && row) {
+                const now = row.description || '';
+                if (now !== sess.mine && now !== patch.description) sess.theirs = now;   // changed elsewhere meanwhile
+                const stack = this.store().undoStack, len = stack.length;
+                this._nativeDetailsQuiet = true;
+                this.nativeCardWrite(c.target.kind === 'series' ? 'all' : 'row', this.nativeCardClone(c.value), { ...this.nativeCardClone(c.value), description: patch.description }, 'Details saved');
+                this._nativeDetailsQuiet = false;
+                if (stack.length > len) {
+                    if (sess.entry && stack.includes(sess.entry)) {
+                        // Fold into the session's first save: drop this undo entry (and the card's record of it).
+                        const mineEntry = stack.pop();
+                        const i = c.entries.findIndex((e) => e.entry === mineEntry);
+                        if (i >= 0) c.entries.splice(i, 1);
+                    } else sess.entry = stack[stack.length - 1];
+                }
+                sess.mine = patch.description;
+            }
+            if (!d.final) return;
+            this._nativeDetSession = null;
+            if (!sess.entry) return;
+            if (sess.theirs !== null) {
+                const theirs = sess.theirs;
+                this.showToast('Someone else edited these details too', 'info', { actionLabel: 'Undo', action: () => {
+                    if (this.nativeCard === c) this.nativeCardWrite(c.target.kind === 'series' ? 'all' : 'row', this.nativeCardClone(c.value), { ...this.nativeCardClone(c.value), description: theirs }, 'Their details are back');
+                    else {
+                        const r = this.nativeStored({ id: row.id, recurrenceID: row.recurrenceID });
+                        if (!r) return;
+                        const rec = this.nativeRecord(r);
+                        ScheduleAdapter.noteStart(rec);
+                        if (this.nativeAction('eventChange', { changedRecords: [{ ...rec, Description: theirs }] }, { action: 'Save' })) this.showToast('Their details are back', 'success');
+                    }
+                } });
+            } else this.showToast('Details saved', 'success', { actionLabel: 'Undo', action: () => this.nativeUndo() });
+        },
+        /** The event changed in another browser while the card is open: the card shows it (the box being typed in waits). */
+        nativeCardRefresh() {
+            const c = this.nativeCard;
+            if (!c || c.isNew || this.nativeAsk) return;
+            const t = c.target;
+            const row = this.nativeStored(t.kind === 'row' ? { id: t.id, recurrenceID: t.recurrenceID } : { id: t.seriesId });
+            if (!row) return;
+            const v = this.nativeCardValue(row), cur = c.value;
+            const next = t.kind === 'row' ? v : { ...cur, title: v.title, type: v.type, description: v.description, rule: v.rule };
+            if (Object.keys(this.nativeCardFields(cur, next)).length) c.value = next;
         },
         nativeCardWrite(scope, before, after, message) {
             const c = this.nativeCard;
@@ -2069,7 +2139,7 @@ const CalendarVueApp = {
             c.value = this.nativeCardClone(after);
             c.edited = 'Edited just now';
             this._nativeGlow = `event-${c.target.id}`;
-            this.showToast(message, 'success', { actionLabel: 'Undo', action: () => this.nativeUndo() });
+            if (!this._nativeDetailsQuiet) this.showToast(message, 'success', { actionLabel: 'Undo', action: () => this.nativeUndo() });
         },
         /** The event went away under the card (deleted in another browser): close it. */
         nativeCardGone() {
@@ -3435,6 +3505,7 @@ const CalendarVueApp = {
 
         updateCalendarView() {
             if (!this.calView) return;   // before mounted() built the calendar: it draws the events when it mounts
+            if (this.nativeCard) this.$nextTick(() => this.nativeCardRefresh());   // the open card follows a change from elsewhere
             // Syncfusion is handed display records (ScheduleAdapter.toView); the native calendar reads
             // calendar.events itself. Either way the color filter is one predicate, isEventVisible (#41):
             // a second definition of "visible" (Syncfusion's ej.data.Query allow-list) is how every round

@@ -45,7 +45,7 @@ const EventCard = (() => {
                 month: null, focusDay: null, custom: null, customError: '', labelNames: null, typed: '', typedBad: false,
                 smart: null, smartSaid: '', showAll: false, clamped: false, pasteNote: '',
                 pos: {}, entering: false, expanding: false, phone: typeof window !== 'undefined' && window.innerWidth <= PHONE,
-                sheetDy: 0, keep: null, closing: false,
+                sheetDy: 0, keep: null, closing: false, wide: false, detSession: null, vv: null,
             };
         },
         computed: {
@@ -68,11 +68,16 @@ const EventCard = (() => {
             detCount() { return this.detText.length >= MAX * 0.9 ? `${this.detText.length.toLocaleString('en-US')} / ${MAX.toLocaleString('en-US')}` : ''; },
             max() { return MAX; },
             cls() {
-                return { quick: !this.full, new: this.isNew, entering: this.entering, expanding: this.expanding, sheet: this.phone };
+                return { quick: !this.full, new: this.isNew, entering: this.entering, expanding: this.expanding, sheet: this.phone, wide: this.wide, writing: this.detFocus };
             },
             cardStyle() {
                 const s = { '--evc': this.color };
-                if (this.phone) { if (this.sheetDy) { s.transform = `translateY(${this.sheetDy}px)`; s.transition = 'none'; } return s; }
+                if (this.phone) {
+                    if (this.sheetDy) { s.transform = `translateY(${this.sheetDy}px)`; s.transition = 'none'; }
+                    // The on-screen keyboard: the sheet sits on top of it and fits what is left (window.visualViewport).
+                    if (this.vv) { s.bottom = `${this.vv.bottom}px`; s.maxHeight = `${this.vv.height}px`; }
+                    return s;
+                }
                 return { ...s, ...this.pos };
             },
             presets() { return K.presets(this.v.start).map((p) => ({ ...p, text: K.describeRule(p.rule, this.v.start) })); },
@@ -107,7 +112,9 @@ const EventCard = (() => {
                 this.v = clone(val);
                 // What is being typed stays, unless the value itself changed underneath it (an undo, another save).
                 if (!this.titleFocus || val.title !== was.title) this.titleText = val.title || '';
-                if (!this.detFocus || val.description !== was.description) this.detText = val.description || '';
+                // The details box is never touched while it has the focus: a change from another browser waits (the
+                // save then keeps what is typed here, and says so: app.js nativeCardChange).
+                if (!this.detFocus) this.detText = val.description || '';
                 this.$nextTick(() => { this.grow(); this.fit(); this.measureClamp(); });
             },
             'card.place'() { this.$nextTick(() => this.place(false)); },
@@ -127,12 +134,27 @@ const EventCard = (() => {
                 this.closePicker(); this.menu = false;
             };
             window.addEventListener('scroll', this._onScroll, true);
+            // Leaving the page (closing the tab, going elsewhere) saves what is being typed.
+            this._onHide = () => { if (!this.isNew) { this.commitTitle(); this.saveDetails(true); } };
+            window.addEventListener('pagehide', this._onHide);
+            this._onVV = () => {
+                const v = window.visualViewport;
+                if (!v || !this.phone) { this.vv = null; return; }
+                const bottom = Math.max(0, window.innerHeight - (v.offsetTop + v.height));
+                this.vv = bottom > 1 || v.height < window.innerHeight - 1 ? { bottom, height: Math.max(160, v.height - 12) } : null;
+                this.$nextTick(() => { const ta = this.$refs.det; if (ta && document.activeElement === ta) this.keepCaret(ta); });
+            };
+            if (window.visualViewport) { window.visualViewport.addEventListener('resize', this._onVV); window.visualViewport.addEventListener('scroll', this._onVV); }
             this.reset(true);
         },
         beforeUnmount() {
             window.removeEventListener('keydown', this._onKey, true);
             window.removeEventListener('resize', this._onResize);
             window.removeEventListener('scroll', this._onScroll, true);
+            window.removeEventListener('pagehide', this._onHide);
+            if (window.visualViewport) { window.visualViewport.removeEventListener('resize', this._onVV); window.visualViewport.removeEventListener('scroll', this._onVV); }
+            clearTimeout(this._detTimer);
+            if (this.detSession && !this.closing && !this.isNew) this.saveDetails(true);
             const el = this.$refs.card;
             if (el && el.contains(document.activeElement)) document.activeElement.blur();
         },
@@ -141,6 +163,7 @@ const EventCard = (() => {
                 this.v = clone(this.card.value); this.full = !!this.card.full;
                 this.titleText = this.card.value.title || ''; this.detText = this.card.value.description || '';
                 this.picker = null; this.menu = false; this.smart = null; this.showAll = false; this.pasteNote = ''; this.keep = null; this.closing = false;
+                this.wide = false; this.detSession = null; clearTimeout(this._detTimer);
                 this.$nextTick(() => {
                     this.place(open);
                     this.grow(); this.measureClamp();
@@ -242,12 +265,26 @@ const EventCard = (() => {
             },
             onDetInput() {
                 this.grow();
-                if (this.isNew) this.$emit('change', { description: this.detText }, '');
+                this.fit();
+                if (this.isNew) { this.$emit('change', { description: this.detText }, ''); return; }
+                // Saved while typing (800 ms after the last key) and again when the box is left: typing is never lost.
+                clearTimeout(this._detTimer);
+                this._detTimer = setTimeout(() => this.saveDetails(false), 800);
             },
-            commitDetails() {
-                if (this.closing || this.isNew || this.detText === (this.card.value.description || '')) return;
-                this.change({ description: this.detText }, 'Details saved');
+            onDetFocus() {
+                this.detFocus = true;
+                if (!this.detSession) this.detSession = { id: Date.now() + Math.random(), base: this.card.value.description || '' };
             },
+            /** One editing session of the box: saves while typing are one Undo step; the last one says "Details saved". */
+            saveDetails(final) {
+                clearTimeout(this._detTimer);
+                const sess = this.detSession;
+                if (this.isNew || !sess) return;
+                const changed = this.detText !== (this.card.value.description || '');
+                if (changed || final) this.$emit('change', changed ? { description: this.detText } : {}, final ? 'Details saved' : '', { details: { id: sess.id, base: sess.base, final } });
+                if (final) this.detSession = null;
+            },
+            commitDetails() { if (!this.closing) this.saveDetails(true); },
             onPaste(e) {
                 const text = e.clipboardData && e.clipboardData.getData('text');
                 const ta = e.target;
@@ -260,15 +297,34 @@ const EventCard = (() => {
                 this.pasteNote = `Details are limited to ${MAX.toLocaleString('en-US')} characters; the end of the paste was left out.`;
                 this.$nextTick(() => { ta.selectionStart = ta.selectionEnd = before.length + fit.length; this.onDetInput(); });
             },
+            // Long details: past about five lines the card widens to a comfortable line (416 -> 600px, ~75 characters),
+            // moving left only as far as it must to stay on screen. It never narrows again while open.
+            widen() {
+                const ta = this.$refs.det, c = this.$refs.card;
+                if (!ta || !c || this.wide || this.phone || window.innerWidth < 720) return;
+                const lh = parseFloat(getComputedStyle(ta).lineHeight) || 21;
+                if (ta.scrollHeight < lh * 5 + 20) return;
+                this.wide = true;
+                const left = parseFloat(this.pos.left || 0) - window.scrollX, over = left + Math.min(600, window.innerWidth - 2 * M) - (window.innerWidth - M);
+                if (over > 0) this.pos = { ...this.pos, left: `${left - over + window.scrollX}px` };
+                this.$nextTick(() => this.fit());
+            },
+            // The box fits its text, up to 40% of the screen's height (60% once wide), then scrolls inside with the
+            // caret in view. Growing never resets the height first, so the browser keeps the caret where it was.
             grow() {
+                this.widen();
                 const ta = this.$refs.det;
                 if (!ta) return;
-                const top = this.$refs.card ? this.$refs.card.scrollTop : 0;
-                ta.style.height = 'auto';
-                const cap = Math.round(window.innerHeight * 0.4);
-                ta.style.height = `${Math.max(72, Math.min(cap, ta.scrollHeight + 2))}px`;
-                ta.style.overflowY = ta.scrollHeight + 2 > cap ? 'auto' : 'hidden';
-                if (this.$refs.card) this.$refs.card.scrollTop = top;
+                const c = this.$refs.card, top = c ? c.scrollTop : 0;
+                const cap = Math.max(120, Math.round(window.innerHeight * (this.wide ? 0.6 : 0.4)));
+                if (ta.scrollHeight > ta.clientHeight + 2) ta.style.height = `${Math.min(cap, Math.max(72, ta.scrollHeight + 2))}px`;
+                else {
+                    ta.style.height = 'auto';
+                    ta.style.height = `${Math.min(cap, Math.max(72, ta.scrollHeight + 2))}px`;
+                    if (ta.scrollHeight > cap && document.activeElement === ta) ta.scrollTop = ta.scrollHeight * (ta.selectionEnd / Math.max(1, ta.value.length)) - ta.clientHeight / 2;
+                }
+                ta.style.overflowY = ta.scrollHeight > cap + 2 ? 'auto' : 'hidden';
+                if (c) c.scrollTop = top;
             },
             // A time typed into a new event's title ("Practice Thu 5-6") moves it as you type; deleting the words
             // puts it back; Done keeps the time and drops the words.
@@ -299,7 +355,7 @@ const EventCard = (() => {
             done() {
                 if (this.picker) this.closePicker(false);
                 this.commitTitle();
-                this.commitDetails();
+                this.saveDetails(true);
                 const hit = this.isNew && this.smart && this.smart.hit;
                 const title = hit ? this.titleText.slice(0, hit.at).trim() : this.titleText;
                 this.closing = true;   // the blur as it closes saves nothing more
@@ -309,6 +365,15 @@ const EventCard = (() => {
             // Focus moving to Done, Cancel, Delete or the menu saves when that button acts: a question opening on
             // the blur would cover the button mid-click.
             blurSave(e, save) { const to = e.relatedTarget; if (to && this.$refs.card && this.$refs.card.contains(to) && to.matches('.nk-done, .nk-cancel, .nk-del, .nk-ovf')) return; save(); },
+            /** The caret's line in view inside the sheet (above the keyboard). */
+            keepCaret(ta) {
+                const c = this.$refs.card;
+                if (!c) return;
+                const lh = parseFloat(getComputedStyle(ta).lineHeight) || 21;
+                const line = ta.value.slice(0, ta.selectionEnd).split('\n').length;
+                const y = ta.getBoundingClientRect().top + Math.min(ta.clientHeight, line * lh - ta.scrollTop), r = c.getBoundingClientRect();
+                if (y > r.bottom - 60) c.scrollTop += y - (r.bottom - 60);
+            },
             blurInside() { const el = this.$refs.card; if (el && el.contains(document.activeElement)) document.activeElement.blur(); },
             toggleAllDay() {
                 const v = this.v;
@@ -583,7 +648,7 @@ const EventCard = (() => {
       <span class="nk-gi" title="Details"><nc-icon name="text-align-start" :size="18"></nc-icon></span>
       <div class="nk-detwrap">
         <textarea ref="det" v-model="detText" class="nk-det" rows="1" placeholder="Place, notes, links" aria-label="Details" :maxlength="max" data-testid="card-details"
-          @input="onDetInput" @paste="onPaste" @focus="detFocus = true" @blur="detFocus = false; blurSave($event, commitDetails)"></textarea>
+          @input="onDetInput" @paste="onPaste" @focus="onDetFocus" @blur="detFocus = false; blurSave($event, commitDetails)"></textarea>
         <div v-if="detCount || pasteNote" class="nk-count" data-testid="card-details-count" aria-live="polite">{{ pasteNote ? pasteNote + ' ' : '' }}{{ detCount }}</div>
       </div>
     </div>

@@ -776,7 +776,7 @@
                 <event-popover v-if="nativeCal" :visible="!!nativePopover" :event="nativePopover && nativePopover.event" :occurrence="nativePopover && nativePopover.occurrence"
                     :top="nativePopover ? nativePopover.top : 0" :left="nativePopover ? nativePopover.left : 0" :time-format="globalSettings.timeFormat"
                     :colors="COLORS" :read-only="isReadOnly || !nativeEdit" :text-on="eventTextOn" @close="nativePopover = null"
-                    @edit="onNativePopoverEdit" @delete="onNativePopoverDelete"></event-popover>
+                    @edit="onNativePopoverEdit" @delete="onNativePopoverDelete" @resize="fitNativePopover"></event-popover>
                 <template v-if="nativeEdit">
                     <!-- The event card: quick view, grows into every field; saves as you go (app.js nativeCardChange). -->
                     <event-card v-if="nativeCard" :card="nativeCard" :colors="COLORS" :labels="displayTypeLabels" :time-format="globalSettings.timeFormat"

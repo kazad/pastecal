@@ -652,7 +652,7 @@ test('long details: the quick card shows four lines and Show all, links open saf
     await page.getByTestId('card-more').click();
     const ta = page.getByTestId('card-details');
     const tb = await ta.boundingBox();
-    expect(tb.height).toBeLessThanOrEqual((phone ? 844 : 900) * 0.4 + 2);
+    expect(tb.height).toBeLessThanOrEqual((phone ? 844 : 900) * (phone ? 0.4 : 0.6) + 2);   // 60% once the card is wide
     {
       // Up to the limit: the counter shows past 90%; a paste over the limit is trimmed with a note.
       await ta.evaluate((el, n) => { el.focus(); el.value = 'y'.repeat(n); el.dispatchEvent(new Event('input', { bubbles: true })); }, 18900);
@@ -665,6 +665,134 @@ test('long details: the quick card shows four lines and Show all, links open saf
     }
     expect(errors).toEqual([]);
     await ctx.close();
+  }
+});
+
+
+// ---- details: never lose typing, one Undo per session, two people at once, long text, paste, read views ------
+test('details save while typing (800 ms after the last key) and once more when left; one Undo for the session; nothing lost on leaving the page', async ({ browser }) => {
+  const id = await seed([timed('p', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00', { description: 'Lincoln Field' })]);
+  const { ctx, page, errors } = await open(browser, id, '&view=week&date=2026-10-22');
+  const desc = async () => (await stored(id))[0].description;
+  await openCard(page, ev(page, 'p'), true);
+  const ta = page.getByTestId('card-details');
+  await ta.click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(', bring water', { delay: 10 });
+  // No blur: the pause alone saves it.
+  await soon(desc, 4000).toBe('Lincoln Field, bring water');
+  await expect(toast(page)).toHaveCount(0);
+  await page.keyboard.type('. Cleats.', { delay: 10 });
+  await soon(desc, 4000).toBe('Lincoln Field, bring water. Cleats.');
+  // Leaving the box: one "Details saved", and its Undo takes the whole session back.
+  await page.getByTestId('card-title').click();
+  await expect(toast(page)).toContainText('Details saved');
+  await toast(page).getByRole('button', { name: 'Undo' }).click();
+  await soon(desc).toBe('Lincoln Field');
+  await expect(ta).toHaveValue('Lincoln Field');
+  // Typing, then leaving the page a second later: kept.
+  await ta.click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(' (north gate)', { delay: 10 });
+  await page.waitForTimeout(1000);
+  await page.goto('about:blank');
+  await soon(desc, 6000).toBe('Lincoln Field (north gate)');
+  expect(errors).toEqual([]);
+  await ctx.close();
+});
+
+test('two people: details typed here are not overwritten by a change from another browser; other fields update live; the save says theirs was replaced, with Undo', async ({ browser }) => {
+  const id = await seed([timed('p', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00', { description: 'Lincoln Field' })]);
+  const A = await open(browser, id, '&view=week&date=2026-10-22');
+  const B = await open(browser, id, '&view=week&date=2026-10-22');
+  await openCard(A.page, ev(A.page, 'p'), true);
+  const ta = A.page.getByTestId('card-details');
+  await ta.click();
+  await ta.fill('Bring snacks for 12');
+  await soon(async () => (await stored(id))[0].description).toBe('Bring snacks for 12');   // saved while typing
+  // B, meanwhile: new details and a new title, saved.
+  await openCard(B.page, ev(B.page, 'p'), true);
+  await B.page.getByTestId('card-details').fill('Field moved to Oak Park');
+  await B.page.getByTestId('card-title').fill('Practice (Oak Park)');
+  await B.page.getByTestId('card-done').click();
+  await soon(async () => (await stored(id))[0].title).toBe('Practice (Oak Park)');
+  // A's card: the title follows, the box keeps what A is typing.
+  await expect(A.page.getByTestId('card-title')).toHaveValue('Practice (Oak Park)');
+  await expect(ta).toHaveValue('Bring snacks for 12');
+  await expect(ta).toBeFocused();
+  await ta.press('End'); await ta.pressSequentially(' and juice', { delay: 10 });   // and keeps typing
+  // A leaves the box: A's details win, and A is told.
+  await A.page.getByTestId('card-done').click();
+  await soon(async () => (await stored(id))[0].description).toBe('Bring snacks for 12 and juice');
+  expect((await stored(id))[0].title).toBe('Practice (Oak Park)');
+  await expect(toast(A.page)).toContainText('Someone else edited these details too');
+  await toast(A.page).getByRole('button', { name: 'Undo' }).click();
+  await soon(async () => (await stored(id))[0].description).toBe('Field moved to Oak Park');
+  expect(A.errors).toEqual([]); expect(B.errors).toEqual([]);
+  await A.ctx.close(); await B.ctx.close();
+});
+
+test('long details: the card widens to 600px past five lines (never narrows while open, back to 416 when reopened), stays on screen, Done stays visible; a 1 MB paste is trimmed fast', async ({ browser }) => {
+  const id = await seed([timed('r', 'Right edge', '2026-10-23T10:00:00-07:00', '2026-10-23T11:00:00-07:00')]);
+  const { ctx, page, errors } = await open(browser, id, '&view=week&date=2026-10-22');
+  await openCard(page, ev(page, 'r'), true);
+  expect(Math.round((await card(page).boundingBox()).width)).toBe(416);
+  const ta = page.getByTestId('card-details');
+  await ta.click();
+  for (let i = 0; i < 7; i++) await page.keyboard.type(`Line ${i + 1}: who brings what, where we meet, and when.\n`);
+  await page.waitForTimeout(300);
+  let b = await card(page).boundingBox();
+  expect(Math.round(b.width)).toBe(600);
+  expect(within(b, 1280, 900)).toBe(true);
+  await expect(page.getByTestId('card-done')).toBeInViewport();
+  // Deleting most of it does not narrow it again.
+  await ta.fill('Short.');
+  await ta.dispatchEvent('input');
+  await page.waitForTimeout(250);
+  expect(Math.round((await card(page).boundingBox()).width)).toBe(600);
+  // A 1 MB paste: trimmed to the limit in well under 100 ms, with the note.
+  const ms = await ta.evaluate((el) => {
+    el.focus(); el.selectionStart = el.selectionEnd = el.value.length;
+    const dt = new DataTransfer(); dt.setData('text/plain', 'p'.repeat(1024 * 1024));
+    const t0 = performance.now();
+    el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+    return performance.now() - t0;
+  });
+  expect(ms).toBeLessThan(100);
+  expect((await ta.inputValue()).length).toBe(20000);
+  await expect(page.getByTestId('card-details-count')).toContainText('the end of the paste was left out');
+  await page.getByTestId('card-done').click();
+  await soon(async () => (await stored(id))[0].description.length).toBe(20000);
+  // Reopened: the normal width again.
+  await openCard(page, ev(page, 'r'));
+  expect(Math.round((await card(page).boundingBox()).width)).toBe(416);
+  expect(errors).toEqual([]);
+  await ctx.close();
+});
+
+test('read views: a view link\'s popup clamps long details with Show all and stays on screen with 20,000 characters; links are safe', async ({ browser }) => {
+  const long = 'Directions: https://example.org/' + 'a'.repeat(200) + '\nLine two.\n' + 'Carpool notes and more. '.repeat(900);
+  const id = await seed([timed('n', 'Season', '2026-10-22T10:00:00-07:00', '2026-10-22T11:00:00-07:00', { description: long.slice(0, 20000) })]);
+  const view = await (await fetch(`${BASE}/api/create-view`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sourceCalendarId: id }) })).json();
+  for (const phone of [false, true]) {
+    const v = await browser.newContext(phone ? { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, timezoneId: 'America/Los_Angeles' } : { viewport: { width: 1280, height: 800 }, timezoneId: 'America/Los_Angeles' });
+    await v.addInitScript(() => { window.__TEST__ = true; try { localStorage.setItem('pastecal_backend', 'cf'); } catch (e) { /* blocked */ } });
+    const vp = await v.newPage();
+    await vp.clock.install({ time: new Date(NOW) });
+    await vp.goto(`${BASE}/view/${view.publicViewId}?backend=cf&cal=native&view=day&date=2026-10-22`);
+    await expect(vp.locator('.nc')).toBeVisible({ timeout: 15_000 });
+    await vp.locator('.nc [data-testid="event-n"]').first().click();
+    const pop = vp.getByTestId('event-popover');
+    await expect(pop).toBeVisible();
+    const W = phone ? 390 : 1280, H = phone ? 844 : 800;
+    await expect(vp.getByTestId('popover-description')).toHaveClass(/fade/);
+    const a = vp.getByTestId('popover-description').locator('a').first();
+    expect([await a.getAttribute('target'), /noopener/.test(await a.getAttribute('rel'))]).toEqual(['_blank', true]);
+    await vp.getByTestId('popover-show-all').click();
+    await vp.waitForTimeout(200);
+    expect(within(await pop.boundingBox(), W, H, 0), `${phone ? 'phone' : 'desktop'}: the popup stays on screen`).toBe(true);
+    expect(await vp.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(W);
+    await v.close();
   }
 });
 

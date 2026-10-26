@@ -17,8 +17,19 @@ const EventPopover = {
         // The main app: the header's text dark or white by contrast with the event color (app.js eventTextOn).
         textOn: { type: Function, default: null },
     },
-    emits: ['close', 'edit', 'delete'],
-    data() { return { v2: typeof NcUx !== 'undefined' && NcUx.v2() }; },
+    // 'resize': its height changed (Show all), so the app can keep it on screen.
+    emits: ['close', 'edit', 'delete', 'resize'],
+    data() { return { v2: typeof NcUx !== 'undefined' && NcUx.v2(), showAll: false, clamped: false }; },
+    watch: {
+        // Each event opens with its details clamped to four lines (the event card's quick view reads the same way).
+        event() { this.showAll = false; this.$nextTick(() => this.measure()); },
+        visible(v) { if (v) { this.showAll = false; this.$nextTick(() => this.measure()); } },
+    },
+    mounted() { this.$nextTick(() => this.measure()); },
+    methods: {
+        measure() { const d = this.$refs.desc; this.clamped = !!d && !this.showAll && d.scrollHeight > d.clientHeight + 2; },
+        toggleAll() { this.showAll = !this.showAll; this.$nextTick(() => { this.measure(); this.$emit('resize'); }); },
+    },
     computed: {
         headerColor() {
             const p = this.colors.length ? this.colors : ['#3f51b5'];
@@ -85,7 +96,8 @@ const EventPopover = {
     <!-- The date line opens the editor, as the pencil does (people click it to change the time; classic does the same). -->
     <div class="np-line" :class="{ 'np-when-edit': !readOnly }" data-testid="popover-when" :title="readOnly ? null : 'Change date or time'" @click="!readOnly && $emit('edit', event)"><nc-icon class="np-glyph" name="calendar-clock"></nc-icon><span>{{ when }}<span v-if="repeats" class="np-sub" data-testid="popover-repeats">{{ repeats }}</span></span></div>
     <div v-if="event.description" class="np-line"><nc-icon class="np-glyph" name="text-align-start"></nc-icon>
-      <span class="np-desc" data-testid="popover-description" v-html="linkified"></span></div>
+      <span class="np-descwrap"><span ref="desc" class="np-desc" :class="{ all: showAll, fade: clamped }" data-testid="popover-description" v-html="linkified"></span>
+        <button v-if="clamped || showAll" type="button" class="np-showall" data-testid="popover-show-all" @click="toggleAll">{{ showAll ? 'Show less' : 'Show all' }}</button></span></div>
   </div>
 </div>`,
 };

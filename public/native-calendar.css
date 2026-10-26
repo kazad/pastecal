@@ -169,7 +169,14 @@
 .np-line { display: flex; gap: var(--pc-space-3); align-items: flex-start; font-size: var(--pc-fs-md); line-height: 20px; padding: var(--pc-space-1) 0; }
 .np-glyph { flex: none; color: var(--pc-text-muted); }
 .np-sub { display: block; color: var(--pc-text-muted); font-size: var(--pc-fs-xs); margin-top: 2px; }
-.np-desc { white-space: pre-wrap; word-break: break-word; max-height: 40vh; overflow-y: auto; user-select: text; }
+/* Details read the same as in the event card: line breaks kept, links wrap anywhere, four lines then Show all. */
+.np { max-height: calc(100vh - 16px); overflow-y: auto; }
+.np-descwrap { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; flex: 1; }
+.np-desc { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; user-select: text; align-self: stretch;
+    display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.np-desc.fade { -webkit-mask-image: linear-gradient(to bottom, black 60%, transparent); mask-image: linear-gradient(to bottom, black 60%, transparent); }
+.np-desc.all { display: block; -webkit-line-clamp: unset; max-height: 40vh; overflow-y: auto; }
+.np-showall { border: 0; background: none; color: var(--pc-link); font-size: var(--pc-fs-sm); font-weight: var(--pc-fw-semibold); cursor: pointer; padding: var(--pc-space-1) 0; min-height: var(--pc-h-xs); }
 .np-desc a { color: var(--pc-link); text-decoration: underline; }
 
 /* ---- editing (a native edit link: NativeCalendar appEdits) -------------------------------- */
@@ -275,7 +282,11 @@
 .nk-det:hover { border-color: color-mix(in srgb, var(--pc-primary) 45%, var(--pc-field-strong)); }
 .nk-card .nk-det:focus { border-color: var(--pc-primary); outline: none; background: var(--pc-bg); box-shadow: var(--pc-focus-ring); }
 .nk-count { font-size: var(--pc-fs-xs); color: var(--pc-text-muted); text-align: right; }
-.nk-foot { display: flex; align-items: center; gap: var(--pc-space-1); margin-left: 60px; }
+.nk-foot { display: flex; align-items: center; gap: var(--pc-space-1); margin-left: 60px; position: sticky; bottom: 0; z-index: 2; background: var(--pc-raised);
+    padding-bottom: var(--pc-space-3); margin-bottom: calc(-1 * var(--pc-space-3)); }   /* pinned when the card scrolls inside: Done stays in view */
+/* Writing long details: the card widens to a comfortable line (EventCard widen); it never narrows while open. */
+.nk-card.wide { width: 600px; }
+.nk-card { transition: width .18s ease; }
 .nk-card.quick .nk-foot { margin-left: 0; }
 .nk-sp { flex: 1; }
 .nk-icon { width: var(--pc-h-md); height: var(--pc-h-md); padding: 0; display: inline-grid; place-items: center; border: 0; background: none; border-radius: var(--pc-radius-control);
@@ -368,7 +379,7 @@
     background: color-mix(in srgb, var(--c) 8%, transparent); border: 1.5px dashed color-mix(in srgb, var(--pc-text-muted) 70%, transparent); }
 @media (prefers-reduced-motion: reduce) {
     .nk-card.entering, .nk-card.expanding .nk-when, .nk-card.expanding .nk-tz, .nk-card.expanding .nk-row, .nc-settle, .nc-glow, .nc-ghost, .nk-pick, .nk-menu, .nk-qline.nk-pulse { animation: none !important; }
-    .nk-card::after, .nk-cat i, .nk-switch i, .nk-switch i::after, .nk-qs, .nk-tp, .nk-sel, .nk-cat, .nk-durb, .nk-done, .nk-cancel, .nk-icon, .nk-more { transition: none; }
+    .nk-card, .nk-card::after, .nk-cat i, .nk-switch i, .nk-switch i::after, .nk-qs, .nk-tp, .nk-sel, .nk-cat, .nk-durb, .nk-done, .nk-cancel, .nk-icon, .nk-more { transition: none; }
     .nk-tp:active, .nk-sel:active, .nk-cat:active, .nk-durb:active, .nk-done:active, .nk-cancel:active, .nk-icon:active, .nk-more:active, .nk-qs:active { transform: none; }
 }
 /* touch: 44px targets */
@@ -383,6 +394,7 @@
 @media (max-width: 760px) {
     .nk-card.sheet { position: fixed; left: 0 !important; right: 0; top: auto !important; bottom: 0; width: auto; max-width: none; max-height: 82vh; overflow-y: auto;
         border-radius: var(--pc-radius-dialog) var(--pc-radius-dialog) 0 0; padding-bottom: env(safe-area-inset-bottom, 0px); transition: transform .18s ease; overscroll-behavior: contain; }
+    .nk-card.sheet.writing { max-height: 94vh; }
     .nk-card.sheet::before { content: ""; display: block; width: 36px; height: 5px; border-radius: var(--pc-radius-xs); background: var(--pc-line); margin: var(--pc-space-2) auto 0; }
     .nk-card.sheet::after { width: 100%; height: 4px; bottom: auto; border-radius: var(--pc-radius-dialog) var(--pc-radius-dialog) 0 0; }
     .nk-typed, .nk-det { font-size: var(--pc-fs-lg); }   /* no zoom on focus */
