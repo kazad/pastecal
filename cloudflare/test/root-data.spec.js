@@ -60,10 +60,11 @@ async function open(browser, id, query = '', { classic = false, timezoneId = 'Am
 const card = (page) => page.getByTestId('event-card');
 const picker = (page) => page.getByTestId('card-picker');
 const ev = (page, id) => page.locator(`.nc [data-testid="event-${id}"]`);
-async function openCard(page, locator) {
+async function openCard(page, locator, full = false) {
   await locator.first().click();
   await expect(card(page)).toBeVisible();
   await page.waitForTimeout(300);
+  if (full) { await page.getByTestId('card-more').click(); await expect(page.getByTestId('card-start-date')).toBeVisible(); await page.waitForTimeout(300); }
 }
 async function pickScope(page, scope) {
   const dlg = page.getByTestId('confirm-dialog');
@@ -88,10 +89,10 @@ async function bRename(B, locator, title, series = false) {
   if (series) await pickScope(B.page, 'all');
   await done(B.page);
 }
-/** A mouse drag of an element's point by dy pixels, with `between` run while the button is down. */
-async function drag(page, box, dy, between = async () => {}) {
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await page.mouse.down();
-  for (let i = 1; i <= 6; i++) await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + dy * i / 6);
+/** A mouse drag from point (x, y) by dy pixels, with `between` run while the button is down. */
+async function drag(page, { x, y }, dy, between = async () => {}) {
+  await page.mouse.move(x, y); await page.mouse.down();
+  for (let i = 1; i <= 6; i++) await page.mouse.move(x, y + dy * i / 6);
   await between();
   await page.mouse.up();
 }
@@ -186,7 +187,7 @@ for (const mode of ['online', 'offline']) {
       const A = await open(browser, id, '&view=week&date=2026-10-22'), B = await open(browser, id, '&view=week&date=2026-10-22');
       await race(mode, A, async (between = async () => {}) => {
         const box = how === 'drag' ? await ev(A.page, 'p').first().boundingBox() : await ev(A.page, 'p').getByTestId('resize-bottom').first().boundingBox();
-        await drag(A.page, how === 'drag' ? { ...box, y: box.y + 8 - box.height / 2 + 1, height: 2 } : box, HOUR, between);   // B renames mid-drag
+        await drag(A.page, { x: box.x + box.width / 2, y: how === 'drag' ? box.y + 8 : box.y + box.height / 2 }, HOUR, between);   // B renames mid-drag
         await expect(A.page.getByTestId('confirm-dialog')).toHaveCount(0);
       }, () => bRename(B, ev(B.page, 'p'), 'Practice (gym)'), async () => (await byId(id, 'p')).title === 'Practice (gym)');
       const want = how === 'drag' ? [iso('2026-10-22T16:00:00-07:00'), iso('2026-10-22T17:00:00-07:00')] : [iso('2026-10-22T15:00:00-07:00'), iso('2026-10-22T17:00:00-07:00')];
@@ -200,9 +201,10 @@ for (const mode of ['online', 'offline']) {
     const id = await seed([timed('p', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00', { type: 3 })]);
     const A = await open(browser, id, '&view=week&date=2026-10-22'), B = await open(browser, id, '&view=week&date=2026-10-22');
     await race(mode, A, async (between = async () => {}) => {
-      await openCard(A.page, ev(A.page, 'p'));
+      await openCard(A.page, ev(A.page, 'p'), true);
       await between();
-      await A.page.keyboard.press('ControlOrMeta+d');
+      await A.page.getByTestId('card-more-actions').click();
+      await A.page.getByTestId('card-duplicate').click();
       await expect.poll(async () => A.page.evaluate(() => document.querySelector('#app')._vnode.component.proxy.calendar.events.length)).toBe(2);
       await done(A.page);
     }, () => bRename(B, ev(B.page, 'p'), 'Practice (gym)'), async () => (await byId(id, 'p')).title === 'Practice (gym)');
@@ -237,8 +239,9 @@ for (const mode of ['online', 'offline']) {
 // =====================================================================================================
 // ROOT 3: a copy keeps every field.
 // =====================================================================================================
-const FULL = () => timed('jp', 'Tokyo standup', '2026-10-27T17:00:00Z', '2026-10-27T18:00:00Z',
-  { tz: 'Asia/Tokyo', type: 6, description: 'Agenda: <b>notes</b> & "links" https://example.com', repeat: 'Weekly', recurrencerule: WEEKLY, recurrenceException: '20261110T170000Z' });
+// Every Tuesday 10 AM in Tokyo (Monday 6 PM in Los Angeles), one date skipped.
+const FULL = () => timed('jp', 'Tokyo standup', '2026-10-27T01:00:00Z', '2026-10-27T02:00:00Z',
+  { tz: 'Asia/Tokyo', type: 6, description: 'Agenda: <b>notes</b> & "links" https://example.com', repeat: 'Weekly', recurrencerule: WEEKLY, recurrenceException: '20261110T010000Z' });
 /** Every field of the copy is the original's, except the ones a copy resets (a copy is one event) and its times. */
 function expectCopy(copy, original, start) {
   const resets = { recurrencerule: '', recurrenceID: null, recurrenceException: null, repeat: '' };
@@ -253,7 +256,8 @@ function expectCopy(copy, original, start) {
 test('ROOT3: Duplicate and an Option-drag copy of a fully populated event keep every field (S03)', async ({ browser }) => {
   const id = await seed([FULL()]);
   const { ctx, page, errors } = await open(browser, id, '&view=week&date=2026-10-27');
-  // Option-drag the Tuesday occurrence 2h later.
+  // Option-drag the occurrence (Monday 6 PM here) 2h later.
+  await ev(page, 'jp').first().scrollIntoViewIfNeeded();
   const b = await ev(page, 'jp').first().boundingBox();
   await page.keyboard.down('Alt');
   await page.mouse.move(b.x + b.width / 2, b.y + 8); await page.mouse.down();
@@ -262,13 +266,14 @@ test('ROOT3: Duplicate and an Option-drag copy of a fully populated event keep e
   await page.keyboard.up('Alt');
   await soon(async () => (await stored(id)).length).toBe(2);
   const dragged = (await stored(id)).find((e) => e.id !== 'jp');
-  expectCopy(dragged, FULL(), '2026-10-27T19:00:00Z');
+  expectCopy(dragged, FULL(), '2026-10-27T03:00:00Z');
   // Duplicate the copy (Cmd/Ctrl+D): the next day, every field again.
-  await openCard(page, ev(page, dragged.id));
-  await page.keyboard.press('ControlOrMeta+d');
+  await openCard(page, ev(page, dragged.id), true);
+  await page.getByTestId('card-more-actions').click();
+  await page.getByTestId('card-duplicate').click();
   await soon(async () => (await stored(id)).length).toBe(3);
   const dup = (await stored(id)).find((e) => e.id !== 'jp' && e.id !== dragged.id);
-  expectCopy(dup, { ...FULL(), recurrencerule: '', recurrenceException: null, repeat: '' }, '2026-10-28T19:00:00Z');
+  expectCopy(dup, { ...FULL(), recurrencerule: '', recurrenceException: null, repeat: '' }, '2026-10-28T03:00:00Z');
   expect(errors).toEqual([]);
   await ctx.close();
 });
@@ -287,7 +292,7 @@ test('ROOT2 classic: a Tokyo weekly series is on Tokyo\'s days for an LA viewer,
   await C.page.locator('.e-appointment', { hasText: 'Tokyo standup' }).first().click();
   await C.page.locator('button.e-delete').locator('visible=true').first().click();
   const yes = C.page.locator('.e-quick-dialog.e-popup-open .e-quick-dialog-delete');
-  if (await yes.count()) await yes.click();
+  await yes.click({ timeout: 3000 }).catch(() => {});   // (a confirm, when classic asks one)
   await soon(async () => (await byId(id, 'jp')).recurrenceException || '').toBe('20261103T010000Z');
   expect((await stored(id)).length).toBe(1);
   expect(C.errors).toEqual([]);
