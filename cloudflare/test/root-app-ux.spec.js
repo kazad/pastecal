@@ -238,30 +238,42 @@ test('shots: the messages and markers this pass added', async ({ browser }) => {
         await shot(b.page, `view-notes-open-${tag}`);
       }
       await b.ctx.close();
+      // Share: Rename to its own name; Activity that failed to load; search for a series; 24-hour settings.
+      const app = (m) => b.page.evaluate(`document.querySelector('#app')._vnode.component.proxy.${m}`);
+      b = await open(browser, `/${id}?backend=cf`, { device, colorScheme, now: NOW, settings: { timeFormat: '24' } });
+      await app("openSideTab('share')");
+      await b.page.getByTestId('share-group').getByRole('button', { name: 'Rename' }).click();
+      await b.page.getByLabel('New name for the view-only link').fill(viewId);
+      await b.page.getByLabel('New name for the view-only link').press('Enter');
+      await b.page.waitForTimeout(300);
+      await shot(b.page, `rename-own-${tag}`);
+      await b.page.route(/\/history$/, (r) => r.fulfill({ status: 503, body: 'x' }));
+      await app('openRecentChanges()');
+      await b.page.waitForTimeout(500);
+      await shot(b.page, `activity-failed-${tag}`);
+      await app('toggleSearch()');
+      await b.page.locator('input[type=search]:visible').first().fill('practice');
+      await b.page.waitForTimeout(400);
+      await shot(b.page, `search-series-${tag}`);
+      await app("openSideTab('settings')");
+      await b.page.locator('#set-start-hour').scrollIntoViewIfNeeded();
+      await b.page.waitForTimeout(300);
+      await shot(b.page, `settings-24h-${tag}`);
+      await b.ctx.close();
+      b = await open(browser, `/${id}?backend=cf&view=week&date=2026-10-24`, { device, colorScheme, now: NOW, cal: 'native' });
+      await shot(b.page, `now-label-${tag}`);
+      await b.ctx.close();
       if (device === 'desk') {
-        // Share: Rename to its own name; Activity that failed to load; search for a series; 24-hour settings.
-        b = await open(browser, `/${id}?backend=cf`, { device, colorScheme, now: NOW, settings: { timeFormat: '24' } });
-        await b.page.getByTestId('share-pill-more').click();
-        await b.page.getByTestId('share-group').getByRole('button', { name: 'Rename' }).click();
-        await b.page.getByLabel('New name for the view-only link').fill(viewId);
-        await b.page.getByLabel('New name for the view-only link').press('Enter');
+        // The embed at 300px, notes open.
+        b = await browserFor(browser, { colorScheme, now: NOW });
+        await b.page.setViewportSize({ width: 360, height: 540 });
+        await b.page.goto(`${BASE}/about.html`);
+        await b.page.setContent(`<body style="margin:20px;background:${colorScheme === 'dark' ? '#111' : '#fff'}"><iframe id="f" src="${BASE}/view/${viewId}?backend=cf" title="cal" width="300" height="480" style="border:0"></iframe></body>`);
+        await expect(b.page.frameLocator('#f').getByTestId('embed-bar')).toBeVisible({ timeout: 20_000 });
+        await b.page.waitForTimeout(800);
+        await b.page.frameLocator('#f').getByTestId('embed-notes-btn').click();
         await b.page.waitForTimeout(300);
-        await shot(b.page, `rename-own-${tag}`);
-        await b.page.route(/\/history$/, (r) => r.fulfill({ status: 503, body: 'x' }));
-        await b.page.getByTestId('last-edit-link').click().catch(() => {});
-        await b.page.evaluate(() => document.querySelector('#app')._vnode.component.proxy.openRecentChanges());
-        await b.page.waitForTimeout(500);
-        await shot(b.page, `activity-failed-${tag}`);
-        await b.page.getByTestId('search-button-desktop').click();
-        await b.page.locator('input[type=search]:visible').first().fill('practice');
-        await b.page.waitForTimeout(400);
-        await shot(b.page, `search-series-${tag}`);
-        await b.page.locator('[data-testid=settings-button-desktop]').click();
-        await b.page.waitForTimeout(300);
-        await shot(b.page, `settings-24h-${tag}`);
-        await b.ctx.close();
-        b = await open(browser, `/${id}?backend=cf&view=week&date=2026-10-24`, { device, colorScheme, now: NOW, cal: 'native' });
-        await shot(b.page, `now-label-${tag}`);
+        await shot(b.page, `embed-300-${colorScheme}`);
         await b.ctx.close();
       }
     }

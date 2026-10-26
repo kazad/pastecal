@@ -1364,7 +1364,7 @@ const CalendarVueApp = {
         'calendar.events'() { if (this.nativeCard) this.$nextTick(() => this.nativeCardRefresh()); },
         'calendar.id'() { this.$nextTick(() => this.fitSlugBox()); },
         // The save status, heard as well as seen (the page's one live region).
-        offlineNotice(on, was) { if (on) Utils.announce('Offline. Changes will save when you reconnect.'); else if (was) Utils.announce('Back online. Changes saved.'); },
+        offlineNotice(on, was) { if (on) Utils.announce('Offline. Changes will save when you reconnect.'); else if (was) Utils.announce('Back online.'); },   // (not "saved": the waiting edits are sent now, and a failed save says so itself)
         // The footer line appears once loading ends (or changes with Pro): give the month grid its room.
         pageFooter() { this.$nextTick(() => { if (this._refitMonthRows) this._refitMonthRows(); }); },
         // The homepage pitch is an experiment: pick (or recall) this browser's variant
