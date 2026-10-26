@@ -773,7 +773,7 @@
                     :initial-view="nativeView" :initial-date="nativeLink.date" :custom-duration="nativeCustomDuration" :custom-unit="nativeCustomUnit"
                     :month-row-height="nativeRowHeight" open-day-on-click app-look :app-edits="nativeEdit" :draft="nativeDraft"
                     @event-click="onNativeEventClick" @range-change="onNativeRange" @event-create="onNativeCreate"
-                    @drag-start="onNativeDragStart" @event-move="onNativeMoveSaved" @event-open="onNativeOpen"></native-calendar>
+                    @drag-start="onNativeDragStart" @event-move="onNativeMoveSaved" @event-open="onNativeOpen" @event-menu="onNativeEventMenu"></native-calendar>
                 <div v-else id="Schedule" data-testid="schedule-container"></div>
                 <event-popover v-if="nativeCal" :visible="!!nativePopover" :event="nativePopover && nativePopover.event" :occurrence="nativePopover && nativePopover.occurrence"
                     :top="nativePopover ? nativePopover.top : 0" :left="nativePopover ? nativePopover.left : 0" :time-format="globalSettings.timeFormat"
@@ -781,9 +781,30 @@
                     @edit="onNativePopoverEdit" @delete="onNativePopoverDelete" @resize="fitNativePopover"></event-popover>
                 <template v-if="nativeEdit">
                     <!-- The event card: quick view, grows into every field; saves as you go (app.js nativeCardChange). -->
-                    <event-card v-if="nativeCard" :card="nativeCard" :colors="COLORS" :labels="displayTypeLabels" :time-format="globalSettings.timeFormat"
+                    <event-card v-if="nativeCard" ref="eventCard" :card="nativeCard" :colors="COLORS" :labels="displayTypeLabels" :time-format="globalSettings.timeFormat"
                         :first-day-of-week="globalSettings.firstDayOfWeek" :calendar-zone="(calendar.options && calendar.options.tz) || ''" :blocked="!!nativeAsk" @change="nativeCardChange" @done="nativeCardDone"
                         @cancel="nativeCardCancel" @delete="nativeCardDelete" @duplicate="nativeCardDuplicate" @labels="nativeCardLabels"></event-card>
+                    <!-- ? on an edit link: the few keys there are. -->
+                    <div v-if="nativeKeys" class="pc-native-ask" @mousedown.self="nativeKeys = false">
+                        <div class="pc-native-ask-panel pc-native-keys" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" data-testid="shortcuts" @keydown.esc.stop="nativeKeys = false">
+                            <h2 class="pc-native-ask-title">Keyboard shortcuts</h2>
+                            <dl>
+                                <dt><kbd>N</kbd></dt><dd>New event</dd>
+                                <dt><kbd>Enter</kbd></dt><dd>Open the focused event</dd>
+                                <dt><kbd>↑</kbd> <kbd>↓</kbd></dt><dd>Move it 15 minutes</dd>
+                                <dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Move it a day</dd>
+                                <dt><kbd>⇧</kbd> <kbd>↑</kbd> <kbd>↓</kbd></dt><dd>Make it shorter or longer</dd>
+                                <dt><kbd>⌘D</kbd></dt><dd>Duplicate</dd>
+                                <dt><kbd>⌫</kbd></dt><dd>Delete</dd>
+                                <dt><kbd>⌘Z</kbd></dt><dd>Undo</dd>
+                                <dt><kbd>⌥</kbd> drag</dt><dd>Copy an event</dd>
+                                <dt><kbd>T</kbd></dt><dd>Today</dd>
+                                <dt><kbd>D</kbd> <kbd>W</kbd> <kbd>M</kbd> <kbd>A</kbd></dt><dd>Day, week, month, agenda</dd>
+                                <dt><kbd>Esc</kbd></dt><dd>Close</dd>
+                            </dl>
+                            <div class="pc-native-ask-foot"><button type="button" class="pc-btn pc-btn--primary" data-testid="shortcuts-close" @click="nativeKeys = false">Done</button></div>
+                        </div>
+                    </div>
                     <!-- "This event / All events" for a repeating event, and classic's other questions (Yes / No). -->
                     <div v-if="nativeAsk" class="pc-native-ask" @mousedown.self="nativeAnswer(null)">
                         <div class="pc-native-ask-panel" role="dialog" aria-modal="true" :aria-label="nativeAsk.title" data-testid="confirm-dialog" @keydown="nativeAskTrap">

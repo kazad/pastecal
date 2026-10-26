@@ -614,6 +614,13 @@ const EventCard = (() => {
                 this.menu = true;
                 this.$nextTick(() => { const b = this.$refs.menu && this.$refs.menu.querySelector('button'); if (b) b.focus(); });
             },
+            /** The same menu at a point: a right-click on the event in the grid. */
+            menuAt(x, y) {
+                this.closePicker(false);
+                this.menuStyle = { left: `${Math.max(M, Math.min(x, window.innerWidth - 210 - M))}px`, top: `${Math.max(M, Math.min(y, window.innerHeight - 96 - M))}px` };
+                this.menu = true;
+                this.$nextTick(() => { const b = this.$refs.menu && this.$refs.menu.querySelector('button'); if (b) b.focus(); });
+            },
             menuAct(what) { this.menu = false; if (what === 'delete') this.closing = true; this.$emit(what); },
             say(t) { this.smartSaid = t; },
             // ---- keys: Escape closes one layer, Tab stays inside -------------------------------------------

@@ -369,6 +369,9 @@ test('F22 right-click on an event opens the same menu (Duplicate, Delete)', asyn
   await ev(page, 'short').click({ button: 'right' });
   await expect(page.getByRole('menuitem', { name: /Duplicate/ })).toBeVisible();
   await expect(page.getByRole('menuitem', { name: /Delete/ })).toBeVisible();
+  await shot(page, 'F22-right-click');
+  await page.getByRole('menuitem', { name: /Duplicate/ }).click();
+  await soon(async () => (await stored(id)).filter((e) => e.title === 'Dentist').length).toBe(2);
   await ctx.close();
 });
 
@@ -431,6 +434,9 @@ test('F27 the ? key shows the keyboard shortcuts', async ({ browser }) => {
   const { ctx, page } = await open(browser, id);
   await page.keyboard.press('?');
   await expect(page.getByRole('dialog', { name: /shortcut/i })).toBeVisible();
+  await shot(page, 'F27-shortcuts');
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: /shortcut/i })).toHaveCount(0);
   await ctx.close();
 });
 
@@ -485,6 +491,7 @@ test('F31 Option/Alt-drag duplicates: the original stays, the copy lands where y
   await page.keyboard.down('Alt');
   await page.mouse.move(b.x + b.width / 2, b.y + 8); await page.mouse.down();
   for (let i = 1; i <= 8; i++) await page.mouse.move(b.x + b.width / 2, b.y + 8 + HOUR * i / 8);
+  await shot(page, 'F31-copy-drag');
   await page.mouse.up();
   await page.keyboard.up('Alt');
   await soon(async () => (await stored(id)).map((e) => local(e.start)).sort()).toEqual(['2026-10-21 15:00', '2026-10-21 16:00']);

@@ -655,7 +655,15 @@ const NativeCalendar = (() => {
             },
             // A long press on an event lifts it (appEdits): no context menu over it.
             onContextMenu(e) {
-                if (this.appEdits && !this.readOnly && (this.drag || this._press || (e.target.closest && e.target.closest('.nc-timed, .nc-bar')))) e.preventDefault();
+                if (!(this.appEdits && !this.readOnly)) return;
+                const on = e.target.closest && e.target.closest('.nc-timed, .nc-bar');
+                if (this.drag || this._press || on) e.preventDefault();
+            },
+            /** Right-click on an event (a mouse): its menu, Duplicate and Delete, where the pointer is. */
+            eventMenu(e, occ) {
+                if (!this.appEdits || this.readOnly || this.isPhone || this.drag || this._press || occ.event.__draft) return;
+                e.preventDefault();
+                this.$emit('event-menu', { event: occ.event, occurrence: { start: occ.start, end: occ.end, recurring: occ.recurring }, x: e.clientX, y: e.clientY });
             },
             cancelDrag() {
                 this.drag = null;
@@ -740,7 +748,8 @@ const NativeCalendar = (() => {
                 if (this.readOnly || this.isPhone || e.button !== 0 || occ.event.__draft) return;
                 // A repeating occurrence (or an edited one) only where the app asks "this event / all events".
                 if (occ.recurring && !this.appEdits) return;
-                this.drag = { key: occ.key, occ, mode, x0: e.clientX, y0: e.clientY, moved: false, ...extra };
+                // Option/Alt held at the start of a move: the drop makes a copy and the original stays.
+                this.drag = { key: occ.key, occ, mode, x0: e.clientX, y0: e.clientY, moved: false, copy: !!e.altKey && (mode === 'move' || mode === 'month'), ...extra };
             },
             onDragMove(e) {
                 const d = this.drag; if (!d) return;
@@ -819,7 +828,7 @@ const NativeCalendar = (() => {
                 const { start, end } = this.dragRange(d);
                 if (start.getTime() === d.occ.start.getTime() && end.getTime() === d.occ.end.getTime()) return;
                 if (this.appEdits) {
-                    this.$emit('event-move', { event: ev, occurrence: d.occ, start, end, allDay: !!d.occ.allDay, mode: d.mode });
+                    this.$emit('event-move', { event: ev, occurrence: d.occ, start, end, allDay: !!d.occ.allDay, mode: d.mode, copy: d.copy });
                     return;
                 }
                 // An all-day end goes out in the display shape (through 23:59:59.999 of the last day), the
@@ -887,7 +896,7 @@ const NativeCalendar = (() => {
         </div>
         <div v-for="b in w.bars" :key="b.occ.key + w.key" class="nc-bar" :style="barStyle(b)"
           :class="{ long: b.occ.allDay || isMultiDayTimed(b.occ), tint: isTint(b), 'clip-l': b.clippedLeft, 'clip-r': b.clippedRight, 'nc-draft': b.occ.event.__draft, lifted: isLifted(b.occ) }"
-          :data-testid="tid(b.occ)" :title="b.occ.title"
+          :data-testid="tid(b.occ)" @contextmenu="eventMenu($event, b.occ)" :title="b.occ.title"
           @mousedown="startDrag($event, b.occ, 'month')" @touchstart="touchStart($event, b.occ, 'month')" @click.stop="clickEvent(b.occ, $event)" @dblclick.stop="openEvent(b.occ)" tabindex="0" role="button" :aria-label="ariaLabel(b.occ)" @keydown.enter.prevent="clickEvent(b.occ, $event)" @keydown="keyMove($event, b.occ)" @keydown.space.prevent="clickEvent(b.occ, $event)">
           <template v-if="b.occ.allDay || isMultiDayTimed(b.occ)">
             <span v-if="!b.occ.allDay && !b.clippedLeft" class="nc-bar-time">{{ time(b.occ.start) }}</span>
@@ -920,7 +929,7 @@ const NativeCalendar = (() => {
             @mousedown="startDayCreate($event, d)" @click="clickCell(d, $event)" @dblclick="clickCell(d, $event, undefined, true)"></div>
           <div v-for="b in gridLayout.allDay" :key="b.occ.key" class="nc-bar long" :style="gridBarStyle(b, gridDays.length)"
             :class="{ 'nc-draft': b.occ.event.__draft, lifted: isLifted(b.occ) }"
-            :data-testid="tid(b.occ)" @mousedown="startDrag($event, b.occ, 'month')" @touchstart="touchStart($event, b.occ, 'month')" @click.stop="clickEvent(b.occ, $event)" @dblclick.stop="openEvent(b.occ)" tabindex="0" role="button" :aria-label="ariaLabel(b.occ)" @keydown.enter.prevent="clickEvent(b.occ, $event)" @keydown="keyMove($event, b.occ)" @keydown.space.prevent="clickEvent(b.occ, $event)">
+            :data-testid="tid(b.occ)" @contextmenu="eventMenu($event, b.occ)" @mousedown="startDrag($event, b.occ, 'month')" @touchstart="touchStart($event, b.occ, 'month')" @click.stop="clickEvent(b.occ, $event)" @dblclick.stop="openEvent(b.occ)" tabindex="0" role="button" :aria-label="ariaLabel(b.occ)" @keydown.enter.prevent="clickEvent(b.occ, $event)" @keydown="keyMove($event, b.occ)" @keydown.space.prevent="clickEvent(b.occ, $event)">
             <span v-if="!b.occ.allDay && !b.clippedLeft" class="nc-bar-time">{{ time(b.occ.start) }}</span>
             <span class="nc-bar-title center">{{ b.occ.title }}</span>
             <span v-if="!b.occ.allDay && !b.clippedRight" class="nc-bar-time">{{ time(b.occ.end) }}</span>
@@ -943,9 +952,9 @@ const NativeCalendar = (() => {
               data-testid="create-preview" :style="{ top: drag.top + 'px', height: drag.height + 'px' }">{{ createLabel() }}</div>
             <!-- Where a dragged event came from, while it is being moved: a dashed outline, nothing to read or click. -->
             <div v-for="it in gridLayout.timed[i].filter((x) => drag && drag.moved && drag.mode === 'move' && drag.key === x.occ.key)" :key="'origin' + it.occ.key"
-              class="nc-origin" aria-hidden="true" :style="{ top: it.top + 'px', height: it.height + 'px', left: 'calc(' + (it.col * 100 / it.cols) + '% + 1px)', width: 'calc(' + (100 / it.cols) + '% - 3px)', '--c': color(it.occ.type) }"></div>
+              class="nc-origin" :class="{ copy: drag.copy }" aria-hidden="true" :style="{ top: it.top + 'px', height: it.height + 'px', left: 'calc(' + (it.col * 100 / it.cols) + '% + 1px)', width: 'calc(' + (100 / it.cols) + '% - 3px)', '--c': color(it.occ.type), ...(drag.copy ? ink(it.occ.type) : {}) }"><template v-if="drag.copy"><div class="nc-timed-title">{{ it.occ.title }}</div><div v-if="it.height > 34" class="nc-timed-time">{{ time(it.occ.start) }} - {{ time(it.occ.end) }}</div></template></div>
             <div v-for="it in gridLayout.timed[i]" :key="it.occ.key" class="nc-timed" :style="timedStyle(it)"
-              :class="{ 'nc-draft': it.occ.event.__draft, lifted: isLifted(it.occ) }" :data-testid="tid(it.occ)"
+              :class="{ 'nc-draft': it.occ.event.__draft, lifted: isLifted(it.occ) }" :data-testid="tid(it.occ)" @contextmenu="eventMenu($event, it.occ)"
               @mousedown="startDrag($event, it.occ, 'move', { top0: it.top, top: it.top, height: it.height })"
               @touchstart="touchStart($event, it.occ, 'move', { top0: it.top, top: it.top, height: it.height })" @click.stop="clickEvent(it.occ, $event)" @dblclick.stop="openEvent(it.occ)" tabindex="0" role="button" :aria-label="ariaLabel(it.occ)" @keydown.enter.prevent="clickEvent(it.occ, $event)" @keydown="keyMove($event, it.occ)" @keydown.space.prevent="clickEvent(it.occ, $event)">
               <div class="nc-timed-title">{{ it.occ.title }} <nc-icon v-if="it.occ.recurring" class="nc-recur" name="repeat" :size="11" :stroke-width="2.5"></nc-icon></div>
@@ -981,7 +990,7 @@ const NativeCalendar = (() => {
       <div class="nc-agenda-date" :class="{ today: isToday(day.d) }"><div class="n">{{ day.d.getDate() }}</div><div class="w">{{ weekdayName(day.d.getDay(), true) }}</div></div>
       <div class="nc-agenda-items">
         <div v-for="it in day.items" :key="it.key" class="nc-agenda-item" :style="{ borderLeftColor: color(it.occ.type) }"
-          :data-testid="tid(it.occ)" @click="clickEvent(it.occ, $event)" tabindex="0" role="button" :aria-label="ariaLabel(it.occ)" @keydown.enter.prevent="clickEvent(it.occ, $event)" @keydown.space.prevent="clickEvent(it.occ, $event)">
+          :data-testid="tid(it.occ)" @contextmenu="eventMenu($event, it.occ)" @click="clickEvent(it.occ, $event)" tabindex="0" role="button" :aria-label="ariaLabel(it.occ)" @keydown.enter.prevent="clickEvent(it.occ, $event)" @keydown.space.prevent="clickEvent(it.occ, $event)">
           <div class="t">{{ it.occ.title }} <nc-icon v-if="it.occ.recurring" class="nc-recur dark" name="repeat" :size="11" :stroke-width="2.5"></nc-icon></div>
           <div class="w">{{ it.when }}</div>
         </div>

@@ -324,6 +324,7 @@ const CalendarVueApp = {
             nativeEdit: !!window.pcNativeEdit,
             nativeQuick: null,        // { start, end, isAllDay, title, top, left }: the new event in the quick box
             nativeEditor: null,       // { event (what the form shows, frozen at open), mode, series, occurrence }
+            nativeKeys: false,        // the ? keyboard shortcuts sheet (native edit links)
             nativeAsk: null,          // { title, message, options: [{ label, testid, action }], choice, ok, buttons }
             nativeCard: null,         // the event card (nativecal/components/EventCard.js): see openNativeCard
             isLoading: true, // set to false when calendar status is determined
@@ -2468,7 +2469,25 @@ const CalendarVueApp = {
             this.openNativePopover(payload);
         },
         /** A drop, a resize or an arrow key: saved as before (onNativeMove), then said in a toast with Undo, and the event settles. */
+        /** Right-click on an event: its card opens, and the card's menu (Duplicate, Delete) at the pointer. */
+        onNativeEventMenu(payload) {
+            if (!(this.nativeEdit && this.canEdit && !this.isReadOnly)) return;
+            this.openNativeCard(payload);
+            this.$nextTick(() => this.$refs.eventCard && this.$refs.eventCard.menuAt(payload.x, payload.y));
+        },
+        /** Option/Alt-drag: a copy where it was dropped, as one event (a repeating event's copy doesn't repeat); the original stays. */
+        nativeDropCopy(payload) {
+            const row = this.nativeStored({ id: payload.event.id, recurrenceID: payload.event.recurrenceID });
+            if (!row) return;
+            const ids = new Set((this.calendar.events || []).map((e) => e && String(e.id)));
+            const rec = this.nativeRecord(row);
+            const ok = this.nativeAction('eventCreate', { addedRecords: [{ Subject: rec.Subject || '(No title)', StartTime: new Date(payload.start), EndTime: new Date(payload.end),
+                IsAllDay: !!rec.IsAllDay, Type: Number(rec.Type) || 1, Description: rec.Description || '', RecurrenceRule: '' }] }, { action: 'Add' });
+            const copy = ok && (this.calendar.events || []).find((e) => e && !ids.has(String(e.id)));
+            if (copy) this._nativeGlow = `event-${copy.id}`;
+        },
         onNativeMoveSaved(payload) {
+            if (payload.copy) return this.nativeDropCopy(payload);
             const len = this.store().undoStack.length;
             const f = this.globalSettings.timeFormat === '24' ? '24' : '12';
             const s = new Date(payload.start), e = new Date(payload.end);
@@ -2505,6 +2524,7 @@ const CalendarVueApp = {
             if ((e.metaKey || e.ctrlKey) && k === 'd' && c && !c.isNew) { e.preventDefault(); this.nativeCardDuplicate(); return; }
             if (e.metaKey || e.ctrlKey || e.altKey) return;
             if ((e.key === 'Delete' || e.key === 'Backspace') && c && !c.isNew) { e.preventDefault(); this.nativeCardDelete(); return; }
+            if (e.key === '?') { e.preventDefault(); this.nativeKeys = true; this.$nextTick(() => document.querySelector('[data-testid="shortcuts-close"]')?.focus()); return; }
             if (c || !cal) return;
             if (k === 'n') {
                 e.preventDefault();
