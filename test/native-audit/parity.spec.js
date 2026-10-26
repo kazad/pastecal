@@ -316,7 +316,7 @@ for (const r of RENDERERS) {
       const vid = j.viewId || j.publicViewId || j.id || j.slug;
       const src = r === nat ? `/beta/view/${vid}` : `/view/${vid}`;
       await page.goto('/robots.txt');
-      await page.setContent(`<html><body style="margin:0"><iframe src="http://127.0.0.1:8900${src}" style="width:100%;height:600px;border:0"></iframe></body></html>`);
+      await page.setContent(`<html><body style="margin:0"><iframe src="${f.BASE}${src}" style="width:100%;height:600px;border:0"></iframe></body></html>`);
       const frame = page.frameLocator('iframe');
       await expect(frame.locator('.nc-bar, .e-appointment', { hasText: 'Lunch with Sam' }).first()).toBeVisible({ timeout: 15_000 });
       await shot(page, `embed-${r.name}`, info);
