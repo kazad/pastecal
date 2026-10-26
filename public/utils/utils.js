@@ -509,7 +509,8 @@ function escapeHtml(text) {
 // addresses become links, found in ONE pass (the old three passes could match inside an href the
 // previous pass had just written, nesting tags into an attribute). Nothing else -- javascript:,
 // data:, ftp: -- is ever made a link. Trailing punctuation stays outside the link.
-const LINKIFY_PATTERN = /\bhttps?:\/\/[^\s<>"'`]+|\bwww\.[^\s<>"'`]+|[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/gi;
+// "mailto:" and "tel:" typed before an address or a number link it, and are not shown (a person reads the address).
+const LINKIFY_PATTERN = /\bhttps?:\/\/[^\s<>"'`]+|\bwww\.[^\s<>"'`]+|\btel:\+?[0-9][0-9 ().-]{4,}[0-9]|(?:\bmailto:)?[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/gi;
 function linkify(inputText, { style = true } = {}) {
     const text = String(inputText ?? '');
     const css = style ? ` style="${LINKIFY_LINK_STYLE}"` : '';
@@ -519,9 +520,11 @@ function linkify(inputText, { style = true } = {}) {
         const trail = /[).,!?;:]+$/.exec(link);
         if (trail) link = link.slice(0, -trail[0].length);
         if (!link) continue;
-        const href = /^www\./i.test(link) ? `http://${link}` : (link.includes('@') && !/^https?:/i.test(link) ? `mailto:${link}` : link);
+        const tel = /^tel:/i.test(link), shown = link.replace(/^(mailto|tel):/i, '');
+        const href = tel ? `tel:${shown.replace(/[^0-9+]/g, '')}` : /^www\./i.test(link) ? `http://${link}`
+            : (link.includes('@') && !/^https?:/i.test(link) ? `mailto:${shown}` : link);
         out += escapeHtml(text.slice(last, m.index))
-            + `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer nofollow ugc"${css}>${escapeHtml(link)}</a>`;
+            + `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer nofollow ugc"${css}>${escapeHtml(shown)}</a>`;
         last = m.index + link.length;
     }
     return out + escapeHtml(text.slice(last));

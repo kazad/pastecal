@@ -80,6 +80,8 @@ test('F1 a click opens the quick card: title, time line, details preview, "Edite
 test('F2 links in the details are clickable, in the quick card AND the full card, and open safely in a new tab', async ({ browser }) => {
   const id = await seed();
   const { ctx, page, errors } = await open(browser, id);
+  // The link's own page, served here (the test never reaches the internet).
+  await ctx.route('https://example.com/**', (r) => r.fulfill({ contentType: 'text/html', body: '<title>linked</title>' }));
   await openCard(page, 'links');
   const quick = page.getByTestId('card-details-preview').locator('a[href^="https://zoom.us/"]');
   await expect(quick).toBeVisible();
