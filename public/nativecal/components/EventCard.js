@@ -45,7 +45,7 @@ const EventCard = (() => {
                 month: null, focusDay: null, custom: null, customError: '', labelNames: null, typed: '', typedBad: false,
                 smart: null, smartSaid: '', showAll: false, clamped: false, pasteNote: '',
                 pos: {}, entering: false, expanding: false, phone: typeof window !== 'undefined' && window.innerWidth <= PHONE,
-                sheetDy: 0, keep: null,
+                sheetDy: 0, keep: null, closing: false,
             };
         },
         computed: {
@@ -140,7 +140,7 @@ const EventCard = (() => {
             reset(open) {
                 this.v = clone(this.card.value); this.full = !!this.card.full;
                 this.titleText = this.card.value.title || ''; this.detText = this.card.value.description || '';
-                this.picker = null; this.menu = false; this.smart = null; this.showAll = false; this.pasteNote = ''; this.keep = null;
+                this.picker = null; this.menu = false; this.smart = null; this.showAll = false; this.pasteNote = ''; this.keep = null; this.closing = false;
                 this.$nextTick(() => {
                     this.place(open);
                     this.grow(); this.measureClamp();
@@ -232,7 +232,7 @@ const EventCard = (() => {
                 if (this.isNew) this.$emit('change', { title: this.titleText }, '');
             },
             commitTitle() {
-                if (this.isNew || this.titleText === (this.card.value.title || '')) return;
+                if (this.closing || this.isNew || this.titleText === (this.card.value.title || '')) return;
                 this.change({ title: this.titleText }, `Renamed ${this.titleText.trim() || '(No title)'}`);
             },
             titleEnter() {
@@ -245,7 +245,7 @@ const EventCard = (() => {
                 if (this.isNew) this.$emit('change', { description: this.detText }, '');
             },
             commitDetails() {
-                if (this.isNew || this.detText === (this.card.value.description || '')) return;
+                if (this.closing || this.isNew || this.detText === (this.card.value.description || '')) return;
                 this.change({ description: this.detText }, 'Details saved');
             },
             onPaste(e) {
@@ -302,10 +302,13 @@ const EventCard = (() => {
                 this.commitDetails();
                 const hit = this.isNew && this.smart && this.smart.hit;
                 const title = hit ? this.titleText.slice(0, hit.at).trim() : this.titleText;
-                this.blurInside();
+                this.closing = true;   // the blur as it closes saves nothing more
                 this.$emit('done', { title, description: this.detText, smart: hit ? { raw: this.titleText, base: this.smart.base } : null });
             },
-            cancel() { this.blurInside(); this.$emit('cancel'); },
+            cancel() { this.closing = true; this.$emit('cancel'); },
+            // Focus moving to Done, Cancel, Delete or the menu saves when that button acts: a question opening on
+            // the blur would cover the button mid-click.
+            blurSave(e, save) { const to = e.relatedTarget; if (to && this.$refs.card && this.$refs.card.contains(to) && to.matches('.nk-done, .nk-cancel, .nk-del, .nk-ovf')) return; save(); },
             blurInside() { const el = this.$refs.card; if (el && el.contains(document.activeElement)) document.activeElement.blur(); },
             toggleAllDay() {
                 const v = this.v;
@@ -478,7 +481,7 @@ const EventCard = (() => {
                 this.menu = true;
                 this.$nextTick(() => { const b = this.$refs.menu && this.$refs.menu.querySelector('button'); if (b) b.focus(); });
             },
-            menuAct(what) { this.menu = false; this.blurInside(); this.$emit(what); },
+            menuAct(what) { this.menu = false; if (what === 'delete') this.closing = true; this.$emit(what); },
             say(t) { this.smartSaid = t; },
             // ---- keys: Escape closes one layer, Tab stays inside -------------------------------------------
             onKey(e) {
@@ -530,7 +533,7 @@ const EventCard = (() => {
   @touchstart="sheetStart" @touchmove="sheetMove" @touchend="sheetEnd" @touchcancel="sheetEnd">
   <div class="nk-h">
     <input ref="title" v-model="titleText" class="nk-title" placeholder="Add a title" aria-label="Title" autocomplete="off" maxlength="500" data-testid="card-title"
-      aria-describedby="nk-said" @input="onTitleInput" @focus="titleFocus = true" @blur="titleFocus = false; commitTitle()" @keydown.enter.prevent="titleEnter">
+      aria-describedby="nk-said" @input="onTitleInput" @focus="titleFocus = true" @blur="titleFocus = false; blurSave($event, commitTitle)" @keydown.enter.prevent="titleEnter">
     <button type="button" class="nk-cat" aria-haspopup="listbox" :aria-expanded="String(!!picker && picker.kind === 'cat')" :aria-label="'Type: ' + typeName"
       data-testid="card-type" @click="openPicker('cat', $event)"><i></i><span>{{ typeName }}</span><nc-icon name="chevron-down" :size="13" :stroke-width="2.2"></nc-icon></button>
   </div>
@@ -580,12 +583,12 @@ const EventCard = (() => {
       <span class="nk-gi" title="Details"><nc-icon name="text-align-start" :size="18"></nc-icon></span>
       <div class="nk-detwrap">
         <textarea ref="det" v-model="detText" class="nk-det" rows="3" placeholder="Place, notes, links" aria-label="Details" :maxlength="max" data-testid="card-details"
-          @input="onDetInput" @paste="onPaste" @focus="detFocus = true" @blur="detFocus = false; commitDetails()"></textarea>
+          @input="onDetInput" @paste="onPaste" @focus="detFocus = true" @blur="detFocus = false; blurSave($event, commitDetails)"></textarea>
         <div v-if="detCount || pasteNote" class="nk-count" data-testid="card-details-count" aria-live="polite">{{ pasteNote ? pasteNote + ' ' : '' }}{{ detCount }}</div>
       </div>
     </div>
     <div class="nk-foot">
-      <button v-if="!isNew" type="button" class="nk-icon nk-del" aria-label="Delete" title="Delete" data-testid="card-delete" @click="blurInside(); $emit('delete')"><nc-icon name="trash-2" :size="18"></nc-icon></button>
+      <button v-if="!isNew" type="button" class="nk-icon nk-del" aria-label="Delete" title="Delete" data-testid="card-delete" @click="closing = true; $emit('delete')"><nc-icon name="trash-2" :size="18"></nc-icon></button>
       <button v-if="full && !isNew" type="button" class="nk-icon nk-ovf" aria-label="More actions" title="More actions" aria-haspopup="menu" :aria-expanded="String(menu)" data-testid="card-more-actions" @click="toggleMenu"><nc-icon name="ellipsis" :size="18"></nc-icon></button>
       <button v-if="!full" type="button" class="nk-more" data-testid="card-more" @click="expand()">More details</button>
       <span class="nk-sp"></span>

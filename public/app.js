@@ -1651,9 +1651,11 @@ const CalendarVueApp = {
             const ask = this.nativeAsk;
             this.nativeAsk = null;
             if (!ask) return;
-            if (button === null) { if (ask.cancel) ask.cancel(); this._nativeMoveToast = null; return; }
-            (button || ask.options[ask.choice]).action();
+            const c = this.nativeCard;
+            if (button === null) { if (ask.cancel) ask.cancel(); this._nativeMoveToast = null; }
+            else (button || ask.options[ask.choice]).action();
             if (this._nativeMoveToast) this.nativeMoveToast();   // a drop that asked first: its toast now
+            if (c && c.closeAfterAsk && this.nativeCard === c && !this.nativeAsk) this.closeNativeCard();
         },
 
         // The quick box: a click (or a drag) on an empty part of the grid. A double-click opens the full editor.
@@ -1919,6 +1921,13 @@ const CalendarVueApp = {
             return out;
         },
         nativeCardClone(v) { return { ...v, start: new Date(v.start), end: new Date(v.end) }; },
+        /** A record with the card's fields on it. Switching All day changes what its stored times mean, so the stored
+         *  text they were read from (_storedStart/_storedEnd, kept verbatim when the meaning is unchanged) goes. */
+        nativeCardApply(rec, fields) {
+            const out = { ...rec, ...fields };
+            if ('IsAllDay' in fields && !!fields.IsAllDay !== !!rec.IsAllDay) { delete out._storedStart; delete out._storedEnd; delete out._shownEnd; }
+            return out;
+        },
 
         /** Open the card on an event that was clicked (or double-clicked: full). */
         openNativeCard({ event, occurrence, jsEvent }, full = false) {
@@ -1999,14 +2008,16 @@ const CalendarVueApp = {
                 const rec = this.nativeRecord(row);
                 ScheduleAdapter.noteStart(rec);
                 if (this.nativeKind(row) === 'edited') delete fields.RecurrenceRule;   // an occurrence's rule is the series'
-                ok = this.nativeAction('eventChange', { changedRecords: [{ ...rec, ...fields }] }, { action: 'Save' });
+                ok = this.nativeAction('eventChange', { changedRecords: [this.nativeCardApply(rec, fields)] }, { action: 'Save' });
             } else if (scope === 'this') {
                 const series = this.nativeStored({ id: c.target.seriesId });
                 if (!series) return this.nativeCardGone();
-                const rec = this.nativeRecord(series);
+                let rec = this.nativeRecord(series);
                 delete fields.RecurrenceRule;
-                Object.assign(rec, { Subject: after.title, Type: Number(after.type) || 1, Description: after.description, IsAllDay: !!after.isAllDay },
-                    this.nativeCardTimes(after), fields, { Id: NATIVE_OCCURRENCE_ID, RecurrenceID: rec.Id });
+                const seriesId = rec.Id;
+                rec = this.nativeCardApply(rec, { Subject: after.title, Type: Number(after.type) || 1, Description: after.description, IsAllDay: !!after.isAllDay,
+                    ...this.nativeCardTimes(after), ...fields });
+                Object.assign(rec, { Id: NATIVE_OCCURRENCE_ID, RecurrenceID: seriesId });
                 ok = this.nativeAction('eventChange', { changedRecords: [rec] }, { action: 'EditOccurrence', occurrenceStart: c.target.occurrence.start });
                 if (ok) {
                     const child = (this.calendar.events || []).find((e) => e && !ids.has(String(e.id)) && String(e.recurrenceID) === String(series.id));
@@ -2029,7 +2040,7 @@ const CalendarVueApp = {
                         const sv = this.nativeCardValue(series), shift = nativeShift(before.start, after.start), stretch = nativeShift(before.end, after.end);
                         const nv = { ...sv, isAllDay: !!after.isAllDay, start: shift(sv.start), end: stretch(sv.end) };
                         if (before.isAllDay !== after.isAllDay) nv.end = new Date(nv.start.getTime() + (after.end - after.start));
-                        Object.assign(moved, { IsAllDay: nv.isAllDay }, this.nativeCardTimes(nv));
+                        Object.assign(moved, this.nativeCardApply(rec, { IsAllDay: nv.isAllDay, ...this.nativeCardTimes(nv) }));
                         if (!('RecurrenceRule' in fields)) moved.RecurrenceRule = nativeShiftRule(rec.RecurrenceRule, before.start, after.start);
                     }
                     const done = this.nativeAction('eventChange', { changedRecords: [moved] }, { action: 'EditSeries', keepOccurrences });
@@ -2086,6 +2097,9 @@ const CalendarVueApp = {
         nativeCardDone({ title, description, smart } = {}) {
             const c = this.nativeCard;
             if (!c) return;
+            // The last change (a title saved as the card closes) is still asking "this event / all events": close
+            // once it is answered.
+            if (!c.isNew && this.nativeAsk) { c.closeAfterAsk = true; return; }
             if (!c.isNew) return this.closeNativeCard();
             const v = c.value;
             const name = (title != null ? title : v.title || '').trim();

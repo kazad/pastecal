@@ -385,7 +385,7 @@
         border-radius: var(--pc-radius-dialog) var(--pc-radius-dialog) 0 0; padding-bottom: env(safe-area-inset-bottom, 0px); transition: transform .18s ease; overscroll-behavior: contain; }
     .nk-card.sheet::before { content: ""; display: block; width: 36px; height: 5px; border-radius: var(--pc-radius-xs); background: var(--pc-line); margin: var(--pc-space-2) auto 0; }
     .nk-card.sheet::after { width: 100%; height: 4px; bottom: auto; border-radius: var(--pc-radius-dialog) var(--pc-radius-dialog) 0 0; }
-    .nk-title, .nk-typed, .nk-det { font-size: var(--pc-fs-lg); }   /* no zoom on focus */
+    .nk-typed, .nk-det { font-size: var(--pc-fs-lg); }   /* no zoom on focus */
 }
 @media (max-width: 480px) {
     .nk-when { grid-template-columns: 42px 104px 86px 1fr; gap: var(--pc-space-2) 6px; }
