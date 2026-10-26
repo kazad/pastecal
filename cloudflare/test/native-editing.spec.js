@@ -178,7 +178,8 @@ test('quick add in week view: the card opens on the slot, the live "New event" b
   await expect(block).toHaveCount(0);
   await page.waitForTimeout(800);
   expect((await stored(id)).map((x) => x.title).sort()).toEqual(['Dentist', 'Lunch with Sam']);
-  expect(await tracked(page)).toEqual(['event_added:grid']);
+  // Analytics as classic sends them: one add, and a new event closed without adding is "abandoned" (twice here).
+  expect(await tracked(page)).toEqual(['event_added:grid', 'editor_abandoned', 'editor_abandoned']);
   expect(errors).toEqual([]);
   await ctx.close();
 });
@@ -351,6 +352,7 @@ test('the card edits as you go: title, time (clicked and typed), type, details, 
     .toEqual(['Practice', 1, 'Lincoln Field', false, '2026-10-22 17:00', '2026-10-22 18:00']);
   await expect(toast(page)).toContainText('Changes undone');
   await expect(toast(page).getByRole('button', { name: 'Undo' })).toHaveCount(0);
+  expect(await tracked(page), 'a type change is reported; editing an existing event is never "abandoned"').toEqual(['feature_used:event_type']);
   expect(errors).toEqual([]);
   await ctx.close();
 });
@@ -651,7 +653,7 @@ test('long details: the quick card shows four lines and Show all, links open saf
     const ta = page.getByTestId('card-details');
     const tb = await ta.boundingBox();
     expect(tb.height).toBeLessThanOrEqual((phone ? 844 : 900) * 0.4 + 2);
-    if (!phone) {
+    {
       // Up to the limit: the counter shows past 90%; a paste over the limit is trimmed with a note.
       await ta.evaluate((el, n) => { el.focus(); el.value = 'y'.repeat(n); el.dispatchEvent(new Event('input', { bubbles: true })); }, 18900);
       await expect(page.getByTestId('card-details-count')).toHaveText('18,900 / 20,000');

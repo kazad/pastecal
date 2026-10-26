@@ -1984,6 +1984,8 @@ const CalendarVueApp = {
             const c = this.nativeCard;
             if (!c) return;
             const before = this.nativeCardClone(c.value), after = { ...before, ...patch };
+            // Whether people categorize events at all (classic sends it too).
+            if ('type' in patch && Number(patch.type) !== Number(before.type)) this.onNativeColor();
             if (c.isNew || !message) { c.value = after; return; }
             if (!Object.keys(this.nativeCardFields(before, after)).length) { c.value = after; return; }
             if (c.target.kind === 'occ') {
@@ -2103,7 +2105,7 @@ const CalendarVueApp = {
             if (!c.isNew) return this.closeNativeCard();
             const v = c.value;
             const name = (title != null ? title : v.title || '').trim();
-            if (!name && !smart) return this.closeNativeCard();   // no title, never saved: nothing was meant
+            if (!name && !smart) { track(a => a.editorAbandoned()); return this.closeNativeCard(); }   // no title: nothing was meant
             const ids = new Set((this.calendar.events || []).map((e) => e && String(e.id)));
             const ok = this.nativeAction('eventCreate', { addedRecords: [{ Subject: name || '(No title)', ...this.nativeCardTimes(v), IsAllDay: !!v.isAllDay,
                 Type: Number(v.type) || 1, Description: description != null ? description : v.description || '', RecurrenceRule: v.rule || '' }] }, { action: 'Add' });
@@ -2134,6 +2136,8 @@ const CalendarVueApp = {
         nativeCardCancel() {
             const c = this.nativeCard;
             if (!c) return;
+            // A new event closed without adding is the "this was confusing or fiddly" signal (as classic's popupClose).
+            if (c.isNew) track(a => a.editorAbandoned());
             let undid = 0;
             const stack = this.store().undoStack;
             while (c.entries.length && stack.length && stack[stack.length - 1] === c.entries[c.entries.length - 1].entry) {

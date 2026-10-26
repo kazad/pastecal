@@ -165,8 +165,8 @@ undo, the Undo toast, Recent changes and analytics (`event_added` add_via grid, 
 
 | Classic (Syncfusion) | Native |
 |---|---|
-| quick popup + "New event" draft on `.e-selected-cell` (`showDraftBlock`) | `QuickCreatePopover` + NativeCalendar `draft` prop: a real block on the grid, labelled as you type |
-| editor (`ej.splitbuttons` type picker, recurrence editor) | `EventEditor` `app-look`: title, color by name, start/end, all day, repeat (daily, weekly days, monthly by day or Nth weekday, yearly by month, until / count), description |
+| quick popup + "New event" draft on `.e-selected-cell` (`showDraftBlock`) | the event card for a new event + NativeCalendar `draft` prop: a real block on the grid, labelled as you type |
+| editor (`ej.splitbuttons` type picker, recurrence editor) | `EventCard` (the editing prototype): a quick card beside the event (title, type, one clickable time line, details, "Edited 5m ago") that grows into Starts / Ends, All day, the length, the time zone line, repeat (one-tap choices and Custom…: every N days / weeks on days / months by day or Nth weekday / years, until / count), details. Each change is saved as it is made (`nativeCardChange` -> `commitScheduleAction`, noteStart from the row as it is then), with a toast and Undo; Cancel or Escape undoes the session; a new event is a draft until Done; a time typed in a new title ("Practice Thu 5-6") moves it. Pure helpers in `cardKit.js` (unit-tested). `EventEditor` and `QuickCreatePopover` stay for /beta only |
 | drag / resize (desktop only) | drag, resize from either edge, Esc cancels; drag to create a duration (week) or a run of days (month, all-day row); long-press on touch |
 | dragging an occurrence: moves only it, no question | asks "This event / All events"; this event = classic's stored shape; all events moves the series and its repeat days (`CalendarView.edits.shiftRule`) |
 | delete: Syncfusion's confirm pressed unseen, then the Undo toast | no confirm, the Undo toast |
