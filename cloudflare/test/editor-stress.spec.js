@@ -95,11 +95,14 @@ async function pickScope(page, scope) {
   await dlg.getByTestId('confirm-ok').click();
   await expect(dlg.getByTestId('scope-this')).toHaveCount(0);
 }
+/** Repeat > Custom…: the repeat's settings open inside the card (each change saved as it is made). */
 async function openCustom(page) {
   await page.getByTestId('card-repeat').click();
   await picker(page).getByTestId('picker-custom').click();
-  await expect(picker(page).getByTestId('custom-apply')).toBeVisible();
+  await expect(picker(page)).toHaveCount(0);
+  await expect(page.getByTestId('card-custom')).toBeVisible();
 }
+const custom = (page) => page.getByTestId('card-custom');
 /** Local wall-clock "YYYY-MM-DD HH:MM" of a stored instant, in the browser's zone. */
 const local = (page, v) => page.evaluate((x) => { const d = new Date(x); const p = (k) => String(k).padStart(2, '0');
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; }, v);
@@ -128,8 +131,7 @@ const inside = (b, w, h) => !!b && b.x >= -0.5 && b.y >= -0.5 && b.right <= w + 
 // Findings, worst first. Each: test.fail() + the finding id; the assertion is what a person expects.
 // =====================================================================================================
 
-test('F01 [card] data-loss: someone else renames an event while my card is open; my Done (no edits) puts the old title back', async ({ browser }) => {
-  finding('F01: the focused title never takes the remote rename, and Done/blur commits the stale text over it');
+test('F01 [card] data-loss: someone else renames an event while my card is open; my Done (no edits) keeps their title, and my card shows it', async ({ browser }) => {
   const id = await seed([timed('p', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00')]);
   const A = await open(browser, id, '&view=week&date=2026-10-22');
   const B = await open(browser, id, '&view=week&date=2026-10-22');
@@ -140,7 +142,7 @@ test('F01 [card] data-loss: someone else renames an event while my card is open;
   await B.page.getByTestId('card-title').press('Enter');
   await B.page.getByTestId('card-done').click();
   await soon(async () => (await stored(id))[0].title).toBe('Practice MOVED to gym');
-  await A.page.waitForTimeout(1500);
+  await expect(A.page.getByTestId('card-title'), "A's open, untouched card follows B's rename").toHaveValue('Practice MOVED to gym');
   await shot(A.page, 'F01-stale-title-in-open-card');
   await A.page.getByTestId('card-done').click();   // A changed nothing
   await A.page.waitForTimeout(1500);
@@ -148,8 +150,7 @@ test('F01 [card] data-loss: someone else renames an event while my card is open;
   await A.ctx.close(); await B.ctx.close();
 });
 
-test('F02 [card] data-loss: an occurrence card left open while another browser moves the series "all events" saves "this event" at the OLD time', async ({ browser }) => {
-  finding('F02: nativeCardRefresh copies only title/type/details/rule into an occurrence card, so its times and occurrenceStart go stale');
+test('F02 [card] data-loss: an occurrence card left open while another browser moves the series "all events" saves "this event" at the series\' new time', async ({ browser }) => {
   const id = await seed([timed('w', 'Weekly sync', '2026-10-06T10:00:00-07:00', '2026-10-06T11:00:00-07:00', { recurrencerule: WEEKLY })]);
   const C = await open(browser, id, '&view=week&date=2026-10-20');
   const D = await open(browser, id, '&view=week&date=2026-10-20');
@@ -158,7 +159,7 @@ test('F02 [card] data-loss: an occurrence card left open while another browser m
   await typeInto(D.page, 'card-q-s', '12p');
   await pickScope(D.page, 'all');
   await soon(async () => local(D.page, (await stored(id)).find((e) => e.id === 'w').start)).toBe('2026-10-06 12:00');
-  await C.page.waitForTimeout(1500);
+  await expect(C.page.getByTestId('card-q-s'), "C's card follows the series to 12 PM").toHaveText('12 PM');
   await C.page.getByTestId('card-title').fill('Weekly sync (room 4)');
   await C.page.getByTestId('card-title').press('Enter');
   await pickScope(C.page, 'this');
@@ -167,11 +168,13 @@ test('F02 [card] data-loss: an occurrence card left open while another browser m
   await shot(C.page, 'F02-occurrence-saved-at-old-time');
   const child = (await stored(id)).find((e) => e.recurrenceID === 'w');
   expect(await local(C.page, child.start), 'the renamed Oct 20 occurrence keeps the series\' new 12 PM time').toBe('2026-10-20 12:00');
+  expect(await local(C.page, child.end)).toBe('2026-10-20 13:00');
+  const series = (await stored(id)).find((e) => e.id === 'w');
+  expect(series.recurrenceException, 'the series skips Oct 20 at 12 PM, where the occurrence now is').toBe('20261020T190000Z');
   await C.ctx.close(); await D.ctx.close();
 });
 
-test('F03 [card] data-loss: a new event with details but no title is thrown away on Done, without a word', async ({ browser }) => {
-  finding('F03: nativeCardDone drops a new event whose title is empty even when details, type or repeat were set');
+test('F03 [card] data-loss: a new event with details but no title is kept on Done, as "(No title)"', async ({ browser }) => {
   const id = await seed([]);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-27');
   const at = await slot(page, '2026-10-27', 9);
@@ -183,48 +186,49 @@ test('F03 [card] data-loss: a new event with details but no title is thrown away
   await page.waitForTimeout(1200);
   await shot(page, 'F03-untitled-event-discarded');
   const rows = await stored(id);
-  expect(rows.map((e) => e.description), 'Done keeps what was typed (as "(No title)", like quick add)').toEqual(['Room 204, bring the signed forms']);
+  expect(rows.map((e) => [e.title, e.description]), 'Done keeps what was typed (as "(No title)", like quick add)').toEqual([['(No title)', 'Room 204, bring the signed forms']]);
   await ctx.close();
 });
 
-test('F04 [repeat] broken: Custom… "Ends On" shows an empty mm/dd/yyyy field, and Apply quietly stores a date two weeks out', async ({ browser }) => {
-  finding('F04: openCustom fills `until` only when the rule already ends on a date; applyCustom invents start + 14 days');
+test('F04 [repeat] Custom… "Ends On" shows the date it will end on, and stores exactly that date', async ({ browser }) => {
   const id = await seed([timed('p', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00')]);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-22');
   await openCard(page, ev(page, 'p'), true);
   await openCustom(page);
-  await picker(page).getByTestId('custom-end-until').check();
-  await shot(page, 'F04-ends-on-empty-date');
-  await expect(picker(page).getByTestId('custom-until'), 'choosing "On" shows the date it will end on').not.toHaveValue('');
+  await custom(page).getByTestId('custom-end-until').check();
+  await shot(page, 'F04-ends-on-date');
+  const shown = (await custom(page).getByTestId('custom-until').innerText()).trim();
+  expect(shown, 'choosing "On" shows the date it will end on').toMatch(/^[A-Z][a-z]{2} \d{1,2}, \d{4}$/);
+  // What is stored ends on that very date (UNTIL is the chosen day's local midnight, classic's form).
+  const until = async () => { const r = (await stored(id))[0].recurrencerule || ''; const m = /UNTIL=(\d{8}T\d{6}Z)/.exec(r);
+    return m && page.evaluate((u) => new Date(Date.UTC(+u.slice(0, 4), +u.slice(4, 6) - 1, +u.slice(6, 8), +u.slice(9, 11), +u.slice(11, 13))).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }), m[1]); };
+  await soon(until).toBe(shown);
+  await expect(page.getByTestId('card-repeat')).toContainText(`until ${shown.replace(/, \d{4}$/, '')}`);
   await ctx.close();
 });
 
-test('F07 [card] broken: a new event titled "Black Friday" is saved as "Black" on next Friday', async ({ browser }) => {
-  finding('F07: smartParse takes a trailing day name as a date and done() cuts it from the title');
+test('F07-F10 [card] titles stay exactly as typed and the event stays where it was made ("Black Friday", "Party 9pm-1am", "John 3:16", "Mass Sat 5:30", ...)', async ({ browser }) => {
+  // The card reads no times out of a title (typed times are the quick add's, Cmd/Ctrl+E).
   const id = await seed([]);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-27');
-  await quickAdd(page, '2026-10-27', 9, 'Black Friday');
-  await soon(async () => (await stored(id)).length).toBe(1);
-  await shot(page, 'F07-black-friday');
-  const [e] = await stored(id);
-  expect([e.title, await local(page, e.start)]).toEqual(['Black Friday', '2026-10-27 09:00']);
+  const titles = ['Black Friday', 'Cyber Monday', 'Here comes the sun', 'Party 9pm-1am', 'Night shift 10p-6a', 'Bible study John 3:16', 'Room 4a', 'Mass Sat 5:30'];
+  const at = titles.map((t, i) => [['2026-10-26', '2026-10-27', '2026-10-28', '2026-10-29'][i % 4], i < 4 ? 9 : 13]);
+  for (const [i, t] of titles.entries()) {
+    await quickAdd(page, at[i][0], at[i][1], t);
+    await soon(async () => (await stored(id)).length).toBe(i + 1);
+  }
+  await shot(page, 'F07-titles-as-typed');
+  const rows = await stored(id);
+  for (const [i, t] of titles.entries()) {
+    const e = rows.find((r) => r.title === t);
+    expect(e, `"${t}" is stored as typed`).toBeTruthy();
+    expect(await local(page, e.start), t).toBe(`${at[i][0]} ${String(at[i][1]).padStart(2, '0')}:00`);
+    expect(new Date(e.end) - new Date(e.start), `${t}: the length it was made with`).toBe(new Date(rows[0].end) - new Date(rows[0].start));
+  }
   await ctx.close();
 });
 
-test('F08 [card] broken: "Party 9pm-1am" is saved 9-10 PM; a range past midnight loses its end', async ({ browser }) => {
-  finding('F08: smartParse clamps an end before the start to start + 1h (or midnight) instead of the next day');
-  const id = await seed([]);
-  const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-27');
-  await quickAdd(page, '2026-10-28', 9, 'Party 9pm-1am');
-  await soon(async () => (await stored(id)).length).toBe(1);
-  await shot(page, 'F08-party-9pm-1am');
-  const [e] = await stored(id);
-  expect([e.title, await local(page, e.start), await local(page, e.end)]).toEqual(['Party', '2026-10-28 21:00', '2026-10-29 01:00']);
-  await ctx.close();
-});
-
-test('F11 [card] broken: typing an end time before the start ("1a" for an 11 PM event) is refused instead of meaning after midnight', async ({ browser }) => {
-  finding('F11: typedTime marks any same-day end <= start as bad; only the list\'s "12:00 AM (midnight)" or the end-date picker crosses midnight');
+test('F11 [card] typing an end time before the start ("1a" for an 11 PM event) means after midnight, the next day', async ({ browser }) => {
   const id = await seed([timed('l', 'Late show', '2026-10-27T23:00:00-07:00', '2026-10-27T23:30:00-07:00')]);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-27');
   await openCard(page, ev(page, 'l'), true);
@@ -236,8 +240,7 @@ test('F11 [card] broken: typing an end time before the start ("1a" for an 11 PM 
   await ctx.close();
 });
 
-test('F12 [card] broken: "jan 5" typed in the start date (in October) moves the event nine months into the past', async ({ browser }) => {
-  finding('F12: parseDate gives a month and day the shown year even when that date has passed');
+test('F12 [card] "jan 5" typed in the start date (in October) moves the event to the coming January', async ({ browser }) => {
   const id = await seed([timed('p', 'Practice', '2026-10-22T17:00:00-07:00', '2026-10-22T18:00:00-07:00')]);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-22');
   await openCard(page, ev(page, 'p'), true);
@@ -248,8 +251,7 @@ test('F12 [card] broken: "jan 5" typed in the start date (in October) moves the 
   await ctx.close();
 });
 
-test('F13 [card] broken: on the spring-forward day the time list offers 2:00-2:45 AM, which do not exist; picking 2:00 AM stores 3:00 AM', async ({ browser }) => {
-  finding('F13: timeList steps minutes 0..1440 without skipping the missing hour; at() rolls 2:xx to 3:xx');
+test('F13 [card] on the spring-forward day the time list does not offer 2:00-2:45 AM, which do not exist', async ({ browser }) => {
   const id = await seed([timed('m', 'Spring', '2026-03-08T01:00:00-08:00', '2026-03-08T01:30:00-08:00')]);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-03-08');
   await page.getByTestId('early-hours').click();
@@ -274,8 +276,7 @@ test('F14 [card] ugly: deleting an event with a long title makes a toast ten lin
   await ctx.close();
 });
 
-test('F15 [card] nit: a 2,000-character title is cut to 500 without a word (details say when they trim a paste)', async ({ browser }) => {
-  finding('F15: the title input has maxlength=500 and no note; the server takes 20,000');
+test('F15 [card] a 2,000-character title cut to 500 says so (as details do when they trim a paste)', async ({ browser }) => {
   const id = await seed([]);
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-27');
   const at = await slot(page, '2026-10-27', 11);
@@ -498,12 +499,19 @@ test('look sweep: desktop and phone, light and dark, en-US and de-DE (24-hour, M
       expect(inside(await box(page, '.nk-pick'), W, H), `${tag}: ${f} picker on screen`).toBe(true);
       if (f === 'card-start-date' && loc === 'de') await expect(picker(page).locator('.nk-month b').first()).toHaveText('M');
       if (f === 'card-repeat') {
+        // Custom… opens the repeat's settings inside the card; Escape closes them (and only them).
         await picker(page).getByTestId('picker-custom').click();
+        await expect(custom(page)).toBeVisible();
         await page.waitForTimeout(150);
         await shot(page, `${tag}-custom`);
-        expect(inside(await box(page, '.nk-pick'), W, H), `${tag}: Custom on screen`).toBe(true);
-        if (loc === 'de') expect(await picker(page).locator('.nk-wd button').first().getAttribute('aria-label')).toBe('Monday');
-        expect(await page.evaluate(() => [...document.querySelectorAll('.nk-pick select, .nk-pick input')].map((e) => getComputedStyle(e).colorScheme).filter((c) => !c.includes(document.documentElement.dataset.theme))), `${tag}: form controls follow the theme`).toEqual([]);
+        expect(inside(await box(page, '.nk-card'), W, H), `${tag}: card with Custom on screen`).toBe(true);
+        expect(inside(await box(page, '[data-testid="card-custom"]'), W, H), `${tag}: Custom on screen`).toBe(true);
+        if (loc === 'de') expect(await custom(page).locator('.nk-wd button').first().getAttribute('aria-label')).toBe('Monday');
+        expect(await page.evaluate(() => [...document.querySelectorAll('.nk-cust select, .nk-cust input')].map((e) => getComputedStyle(e).colorScheme).filter((c) => !c.includes(document.documentElement.dataset.theme))), `${tag}: form controls follow the theme`).toEqual([]);
+        await page.keyboard.press('Escape');
+        await expect(custom(page)).toHaveCount(0);
+        await expect(card(page), `${tag}: Escape closed only the repeat settings`).toBeVisible();
+        continue;
       }
       await page.keyboard.press('Escape');
       await expect(picker(page)).toHaveCount(0);
@@ -641,8 +649,8 @@ test('keyboard: Tab stays in the card through every control (each with a name); 
   }
   expect(seen).not.toContain('OUTSIDE');
   expect(seen.filter((s) => !s)).toEqual([]);
-  expect(seen.slice(0, 14)).toEqual(['Title', 'Type: Practice', 'Start date: Tue, Oct 20', 'Start time: 10 AM', 'All day', 'End date: same day, Tue, Oct 20', 'End time: 11 AM',
-    'Length: 1h', 'Repeats: Every Tuesday', 'Details', 'Delete', 'More actions', 'Cancel', 'Done']);
+  expect(seen.slice(0, 15)).toEqual(['Title', 'Type: Practice', 'Start date: Tue, Oct 20', 'Start time: 10 AM', 'All day', 'End date: same day, Tue, Oct 20', 'End time: 11 AM',
+    'Length: 1h', 'Time zone: Pacific Time', 'Repeats: Every Tuesday', 'Details', 'Delete', 'More actions', 'Cancel', 'Done']);
   await page.getByTestId('card-more-actions').click();
   await expect(page.getByTestId('card-menu')).toBeVisible();
   await page.keyboard.press('Escape');
@@ -650,7 +658,7 @@ test('keyboard: Tab stays in the card through every control (each with a name); 
   await expect(card(page)).toBeVisible();
   await openCustom(page);
   await page.keyboard.press('Escape');
-  await expect(picker(page)).toHaveCount(0);
+  await expect(custom(page)).toHaveCount(0);
   await expect(card(page)).toBeVisible();
   await page.getByTestId('card-title').fill('Weekly sync X');
   await page.getByTestId('card-title').press('Enter');
@@ -709,25 +717,34 @@ test('Custom… limits: 0 becomes 1, 5000 becomes 999, an end before the start i
   const rule = async () => (await stored(id))[0].recurrencerule;
   await openCard(page, ev(page, 'p'), true);
   await openCustom(page);
-  expect(await picker(page).locator('.nk-wd button').evaluateAll((bs) => bs.map((b) => b.getAttribute('aria-label')))).toEqual(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']);
-  await picker(page).getByTestId('custom-interval').fill('0');
-  await picker(page).getByTestId('custom-end-count').check();
-  await picker(page).getByTestId('custom-count').fill('0');
-  await picker(page).getByTestId('custom-apply').click();
+  expect(await custom(page).locator('.nk-wd button').evaluateAll((bs) => bs.map((b) => b.getAttribute('aria-label')))).toEqual(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']);
+  // (Number fields are saved when they are left.)
+  await custom(page).getByTestId('custom-interval').fill('0');
+  await custom(page).getByTestId('custom-interval').press('Tab');
+  await custom(page).getByTestId('custom-end-count').check();
+  await custom(page).getByTestId('custom-count').fill('0');
+  await custom(page).getByTestId('custom-count').press('Tab');
   await soon(rule).toBe('FREQ=WEEKLY;BYDAY=TH;INTERVAL=1;COUNT=1;');
-  await openCustom(page);
-  await picker(page).getByTestId('custom-end-until').check();
-  await picker(page).getByTestId('custom-until').fill('2026-10-01');
-  await picker(page).getByTestId('custom-apply').click();
-  await expect(picker(page).getByTestId('custom-error')).toHaveText('The repeat ends before the event starts.');
+  await expect(page.getByTestId('card-repeat')).toHaveText(/Every Thursday, 1 time$/);
+  // An end before the start: the date picker refuses it and says why; nothing is stored.
+  await custom(page).getByTestId('custom-until').click();
+  await expect(picker(page)).toBeVisible();
+  await picker(page).getByTestId('picker-input').fill('10/1');
+  await picker(page).getByTestId('picker-input').press('Enter');
+  await expect(custom(page).getByTestId('custom-error')).toHaveText('The repeat ends before the event starts.');
+  if (!(await picker(page).locator('[data-d="2026-10-01"]').count())) await picker(page).getByTestId('picker-prev').click();
+  await expect(picker(page).locator('[data-d="2026-10-01"]'), 'days before the start cannot be picked').toBeDisabled();
   await page.keyboard.press('Escape');
-  await openCustom(page);
-  await picker(page).getByTestId('custom-unit').selectOption('MONTHLY');
-  await picker(page).getByTestId('custom-month-day').fill('31');
-  await picker(page).getByTestId('custom-interval').fill('5000');
-  await picker(page).getByTestId('custom-end-never').check();
-  await picker(page).getByTestId('custom-apply').click();
+  await expect(picker(page)).toHaveCount(0);
+  expect(await rule()).toBe('FREQ=WEEKLY;BYDAY=TH;INTERVAL=1;COUNT=1;');
+  await custom(page).getByTestId('custom-unit').selectOption('MONTHLY');
+  await custom(page).getByTestId('custom-month-day').fill('31');
+  await custom(page).getByTestId('custom-month-day').press('Tab');
+  await custom(page).getByTestId('custom-interval').fill('5000');
+  await custom(page).getByTestId('custom-interval').press('Tab');
+  await custom(page).getByTestId('custom-end-never').check();
   await soon(rule).toBe('FREQ=MONTHLY;BYMONTHDAY=31;INTERVAL=999;');
+  await expect(custom(page).getByTestId('custom-error')).toHaveCount(0);
   expect(errors).toEqual([]);
   await ctx.close();
 });

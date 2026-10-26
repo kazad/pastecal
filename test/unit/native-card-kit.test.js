@@ -32,20 +32,7 @@ test('parseDate: words, weekdays after today, month names, numbers, the referenc
   assert.equal(ymd(K.parseDate('2/3/27', SAT)), '2027-02-03');
   assert.equal(ymd(K.parseDate('2026-12-01', SAT)), '2026-12-01');
   assert.equal(ymd(K.parseDate('5', SAT, new Date(2026, 11, 9))), '2026-12-05', 'a lone day is in the month shown');
-  for (const bad of ['', 'feb 30', 'someday', '13/1']) assert.equal(K.parseDate(bad, SAT), null, bad);
-});
-
-test('smartParse: times typed into a new title move the event; titles that only look like times do not', () => {
-  const p = (t) => { const r = K.smartParse(t, SAT); return r && { title: t.slice(0, r.at).trim(), day: ymd(r.day), start: hm(r.start), end: hm(r.end) }; };
-  assert.deepEqual(p('Practice Thu 5-6'), { title: 'Practice', day: '2026-10-29', start: '17:00', end: '18:00' });
-  assert.deepEqual(p('Snack run tomorrow 3:30pm'), { title: 'Snack run', day: '2026-10-25', start: '15:30', end: null });
-  assert.deepEqual(p('Game fri 10-11:30'), { title: 'Game', day: '2026-10-30', start: '10:00', end: '11:30' });
-  assert.deepEqual(p('Call 7-9pm'), { title: 'Call', day: null, start: '19:00', end: '21:00' });
-  assert.deepEqual(p('Brunch 11-1pm'), { title: 'Brunch', day: null, start: '11:00', end: '13:00' });
-  assert.deepEqual(p('Lunch at noon'), { title: 'Lunch', day: null, start: '12:00', end: null });
-  assert.deepEqual(p('Practice Thu'), { title: 'Practice', day: '2026-10-29', start: null, end: null });
-  assert.deepEqual(p('Pickup tue 9-1'), { title: 'Pickup', day: '2026-10-27', start: '09:00', end: '13:00' }, 'a day word and no AM/PM: an end before the start is 12 hours on');
-  for (const plain of ['Room 5', 'Grades 3-5', 'Game 7-9', 'Monica', 'Saturn trip', 'Meet Monica', 'Thu', '5pm']) assert.equal(p(plain), null, plain);
+  for (const bad of ['', 'feb 30', 'someday', '13/13']) assert.equal(K.parseDate(bad, SAT), null, bad);
 });
 
 test('words: times, lengths, ages, ordinals', () => {

@@ -1,7 +1,6 @@
 /**
  * cardKit -- the pure parts of the native event card (EventCard.js): reading what people type into the
- * time and date pickers ("5p", "17:30", "fri", "oct 20"), times typed into a new event's title
- * ("Practice Thu 5-6"), the words the card shows ("5:30 PM", "1h 30m", "Monthly on the 21st", "5m ago"),
+ * time and date pickers ("5p", "17:30", "fri", "oct 20"), the words the card shows ("5:30 PM", "1h 30m", "Monthly on the 21st", "5m ago"),
  * and repeat rules in Syncfusion's own form and key order (the same rules EventEditor.js writes, so both
  * calendars keep reading each other's events).
  *
@@ -81,7 +80,9 @@
     /**
      * "today", "tomorrow", "fri" (the next Friday after today), "oct 20", "20 oct", "10/20", "10/20/2027",
      * "2026-10-20", "20" (that day of `ref`'s month) -> a local midnight Date, or null.
-     * A month and day without a year take `ref`'s year.
+     * A month and day without a year are the nearest such date to `ref` (the month shown): "jan 5" typed in October
+     * is the coming January, "oct 20" typed on Oct 24 is four days ago. A day-first "13/10" is read as day/month
+     * when it cannot be month/day.
      */
     function parseDate(s, today = new Date(), ref = today) {
         const t = String(s || '').trim().toLowerCase().replace(/[.,]/g, ' ').replace(/\s+/g, ' ');
@@ -93,62 +94,27 @@
         const w = /^(sun|mon|tue|wed|thu|fri|sat)[a-z]*$/.exec(t);
         if (w) { const want = WD[w[1]]; let d = addDays(T, 1); while (d.getDay() !== want) d = addDays(d, 1); return d; }
         const ok = (y, mo, d) => { const x = new Date(y, mo, d); return x.getMonth() === mo && x.getDate() === d ? x : null; };
+        // No year: the nearest of last year's, this year's and next year's to the month shown.
+        const near = (mo, d) => {
+            const all = [-1, 0, 1].map((k) => ok(R.getFullYear() + k, mo, d)).filter(Boolean);
+            return all.length ? all.sort((a, b) => Math.abs(a - R) - Math.abs(b - R))[0] : null;
+        };
+        const at = (y, mo, d) => (y ? ok(y, mo, d) : near(mo, d));
         let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t);
         if (m) return ok(+m[1], +m[2] - 1, +m[3]);
         m = /^(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?$/.exec(t);
-        if (m) return ok(m[3] ? (m[3].length === 2 ? 2000 + +m[3] : +m[3]) : R.getFullYear(), +m[1] - 1, +m[2]);
+        if (m) {
+            const y = m[3] ? (m[3].length === 2 ? 2000 + +m[3] : +m[3]) : 0;
+            const [a, b] = [+m[1], +m[2]];
+            return a > 12 && b <= 12 ? at(y, b - 1, a) : at(y, a - 1, b);   // (13/10: only day-first makes sense)
+        }
         m = /^([a-z]{3})[a-z]* (\d{1,2})(?: (\d{4}))?$/.exec(t) || null;
-        if (m && m[1] in MON) return ok(m[3] ? +m[3] : R.getFullYear(), MON[m[1]], +m[2]);
+        if (m && m[1] in MON) return at(m[3] ? +m[3] : 0, MON[m[1]], +m[2]);
         m = /^(\d{1,2}) ([a-z]{3})[a-z]*(?: (\d{4}))?$/.exec(t);
-        if (m && m[2] in MON) return ok(m[3] ? +m[3] : R.getFullYear(), MON[m[2]], +m[1]);
+        if (m && m[2] in MON) return at(m[3] ? +m[3] : 0, MON[m[2]], +m[1]);
         m = /^(\d{1,2})$/.exec(t);
         if (m) return ok(R.getFullYear(), R.getMonth(), +m[1]);
         return null;
-    }
-
-    // ---- a time typed into a new event's title ---------------------------------------------------
-    const DAYWORD = '(today|tomorrow|tmrw|sun(?:day)?|mon(?:day)?|tue(?:s|sday)?|wed(?:nesday)?|thu(?:r|rs|rsday)?|fri(?:day)?|sat(?:urday)?)';
-    const TIME = '(\\d{1,2}(?::\\d{2})?(?:\\s*(?:am|pm|a|p)(?![a-z]))?|noon)';
-    const SMART = new RegExp(`(?:^|\\s)(?:${DAYWORD}(?![a-z]))?\\s*(?:at\\s+)?(?:${TIME}(?:\\s*(?:-|–|to)\\s*${TIME})?)?\\s*$`, 'i');
-    /**
-     * "Practice Thu 5-6", "Snack run tomorrow 3:30pm", "Game fri 10-11:30", "Call 7-9pm" -> { at, day, start, end }
-     * (at: where the words begin; day: a Date or null; start/end: minutes or null), else null.
-     * Day words count only as whole words ("Monica", "Saturn" are titles). A number or a range with no day word and
-     * no am/pm, colon or "noon" is not a time ("Room 5", "Grades 3-5", "Game 7-9").
-     */
-    function smartParse(title, today = new Date(), fmt = '12') {
-        const txt = String(title || '');
-        const m = SMART.exec(txt);
-        if (!m || (!m[1] && !m[2])) return null;
-        const at = m.index + (/^\s/.test(m[0]) ? 1 : 0);
-        if (!txt.slice(0, at).trim()) return null;   // nothing left for a title
-        const marked = (x) => !!x && /[ap:]|noon/i.test(x);
-        if (!m[1] && !marked(m[2]) && !marked(m[3])) return null;
-        let day = null;
-        if (m[1]) { day = parseDate(m[1].toLowerCase().replace(/^(tue|thu)[a-z]*/, '$1'), today); if (!day) return null; }
-        let start = null, end = null;
-        if (m[2]) {
-            const endAp = m[3] && /(am|pm|a|p)\s*$/i.exec(m[3].trim());
-            const startHasAp = /(am|pm|a|p)\s*$/i.test(m[2].trim()) || /noon/i.test(m[2]);
-            if (m[3]) {
-                end = parseTime(m[3], fmt);
-                if (end == null) return null;
-                if (!startHasAp && endAp) {
-                    // "7-9pm": both PM. "11-1pm": 11 AM to 1 PM (the start takes the end's half of the day if that
-                    // keeps it before the end, else the other half).
-                    const raw = parseTime(m[2] + endAp[1], fmt), other = parseTime(m[2] + (endAp[1][0] === 'p' ? 'am' : 'pm'), fmt);
-                    start = raw != null && raw < end ? raw : other;
-                } else start = parseTime(m[2], fmt);
-                if (start == null) return null;
-                if (end <= start) end += 720;
-                if (end <= start) end = start + 60;
-                end = Math.min(end, 1440);
-            } else {
-                start = parseTime(m[2], fmt);
-                if (start == null) return null;
-            }
-        }
-        return { at, day, start, end };
     }
 
     // ---- repeat rules (Syncfusion's form: "FREQ=WEEKLY;BYDAY=TU;INTERVAL=1;") ---------------------
@@ -235,14 +201,18 @@
         if (!rule) return "Doesn't repeat";
         const s = parseRule(rule, d);
         const n = s.interval, every = (u) => (n === 1 ? `Every ${u}` : `Every ${n} ${u}s`);
+        // The days a rule names: "Tuesday", "Mon and Wed", "Sun, Mon, Thu".
+        const days = [...new Set(s.byDay)].sort(), short = days.map((x) => DAY_NAMES[x].slice(0, 3));
+        const dayList = days.length === 1 ? DAY_NAMES[days[0]] : short.join(days.length === 2 ? ' and ' : ', ');
+        const weekdays = days.join() === '1,2,3,4,5';
         let t;
-        if (s.freq === 'DAILY') t = n === 1 ? 'Every day' : `Every ${n} days`;
+        // (A daily rule limited to some weekdays, as imports write it, is those days each week.)
+        const dailyDays = s.freq === 'DAILY' && /(^|;)BYDAY=/i.test(String(rule)) && days.length < 7;
+        if (dailyDays) t = n === 1 ? (weekdays ? 'Every weekday' : `Every ${dayList}`) : `Every ${n} days, on ${weekdays ? 'weekdays' : dayList}`;
+        else if (s.freq === 'DAILY') t = n === 1 ? 'Every day' : `Every ${n} days`;
         else if (s.freq === 'WEEKLY') {
-            const days = [...s.byDay].sort();
-            const names = days.map((x) => DAY_NAMES[x]);
-            if (days.join() === '1,2,3,4,5') t = n === 1 ? 'Every weekday' : `Every ${n} weeks on weekdays`;
-            else if (n === 1) t = `Every ${names.length > 1 ? names.map((x) => x.slice(0, 3)).join(', ') : names[0]}`;
-            else t = `Every ${n} weeks on ${names.length > 1 ? names.map((x) => x.slice(0, 3)).join(', ') : names[0]}`;
+            if (weekdays) t = n === 1 ? 'Every weekday' : `Every ${n} weeks on weekdays`;
+            else t = n === 1 ? `Every ${dayList}` : `Every ${n} weeks on ${dayList}`;
         } else if (s.freq === 'MONTHLY' || s.freq === 'YEARLY') {
             const pos = { 1: 'first', 2: 'second', 3: 'third', 4: 'fourth', '-1': 'last' }[s.setPos] || 'first';
             const on = s.monthMode === 'weekday' ? `the ${pos} ${DAY_NAMES[s.posDay]}` : `the ${ordinal(s.monthDay)}`;
@@ -250,7 +220,7 @@
             else t = `${n === 1 ? 'Yearly' : every('year')} on ${s.monthMode === 'weekday' ? `${on} of ${MONTH_NAMES[s.month - 1]}` : `${MONTH_NAMES[s.month - 1]} ${s.monthDay}`}`;
         } else t = 'Repeats';
         if (s.endMode === 'until' && s.until) { const [y, m, dd] = s.until.split('-').map(Number); t += `, until ${fmtDate(new Date(y, m - 1, dd), { month: 'short', day: 'numeric' })}`; }
-        if (s.endMode === 'count') t += `, ${s.count} times`;
+        if (s.endMode === 'count') t += `, ${s.count} time${s.count === 1 ? '' : 's'}`;
         return t;
     }
     /** Syncfusion's checks on a repeat (its recurrenceValidation, as EventEditor makes them): a message, or ''. */
@@ -272,7 +242,7 @@
     }
 
     const cardKit = { DAYS, DAY_NAMES, MONTH_NAMES, fmtMinutes, fmtTime, fmtDate, fmtLen, fmtDays, ago, ordinal, minutesOf,
-        parseTime, parseDate, smartParse, parseRule, buildRule, presets, presetOf, describeRule, ruleProblem, monthCells,
+        parseTime, parseDate, parseRule, buildRule, presets, presetOf, describeRule, ruleProblem, monthCells,
         startOfDay, addDays, dayDiff, dateStr };
     if (typeof module !== 'undefined' && module.exports) module.exports = cardKit;
     else root.cardKit = cardKit;

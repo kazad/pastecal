@@ -185,7 +185,8 @@ test('quick add in week view: the card opens on the slot, the live "New event" b
   await ctx.close();
 });
 
-test('a time typed in a new title moves the event live; the words go on save; Undo puts back the title and time; "Room 5" is a title', async ({ browser }) => {
+test('a new title is saved exactly as typed: a time in it ("Practice Thu 5-6") does not move the event; no toast for a plain add', async ({ browser }) => {
+  // (Times typed as words are the quick add's, Cmd/Ctrl+E; the card's event is where it was clicked or dragged.)
   const id = await seed([]);
   const { ctx, page, errors } = await open(browser, id, '&view=week&date=2026-10-27');
   const at = await slot(page, '2026-10-27', 9);
@@ -193,29 +194,20 @@ test('a time typed in a new title moves the event live; the words go on save; Un
   await expect(page.getByTestId('card-title')).toBeFocused();
   const line = page.getByTestId('card-time-line');
   await page.keyboard.type('Practice Thu 5-6');
-  await expect(line).toHaveText(/Thu, Oct 29\s*·\s*5 PM\s*–\s*6 PM/);
-  await expect(line).toHaveClass(/hit/);
-  await expect(page.locator('#nk-said')).toHaveText(/Time set: Thu, Oct 29 · 5 PM – 6 PM/);
-  const thu = await page.evaluate(() => new Date(2026, 9, 29).getTime());
-  await expect(page.locator(`.nc-col[data-day="${thu}"] [data-testid="draft-block"]`)).toBeVisible();
-  // Deleting the words puts the time back.
-  for (let i = 0; i < ' Thu 5-6'.length; i++) await page.keyboard.press('Backspace');
+  await page.waitForTimeout(300);
   await expect(line).toHaveText(/Tue, Oct 27\s*·\s*9 AM\s*–\s*10 AM/);
   await expect(line).not.toHaveClass(/hit/);
-  await page.keyboard.type(' Thu 5-6');
+  const tue = await page.evaluate(() => new Date(2026, 9, 27).getTime());
+  await expect(page.locator(`.nc-col[data-day="${tue}"] [data-testid="draft-block"]`)).toBeVisible();
   await page.getByTestId('card-done').click();
   await soon(async () => (await stored(id)).length).toBe(1);
-  let [e] = await stored(id);
-  expect([e.title, await local(page, e.start), await local(page, e.end)]).toEqual(['Practice', '2026-10-29 17:00', '2026-10-29 18:00']);
-  await expect(toast(page)).toContainText('Added Practice · Thu 5 – 6 PM');
-  await toast(page).getByRole('button', { name: 'Undo' }).click();
-  await soon(async () => (await stored(id))[0].title).toBe('Practice Thu 5-6');
-  [e] = await stored(id);
-  expect([await local(page, e.start), await local(page, e.end)]).toEqual(['2026-10-27 09:00', '2026-10-27 10:00']);
-  await expect(toast(page)).toContainText('Undone');
+  const [e] = await stored(id);
+  expect([e.title, await local(page, e.start), await local(page, e.end)]).toEqual(['Practice Thu 5-6', '2026-10-27 09:00', '2026-10-27 10:00']);
+  await page.waitForTimeout(500);
+  await expect(toast(page)).toHaveCount(0);
 
-  // Titles that only look like times stay titles.
-  for (const t of ['Room 5', 'Grades 3-5', 'Monica']) {
+  // Titles that look like times stay where they were made too.
+  for (const t of ['Room 5', 'Grades 3-5', 'Monica', 'Lunch at noon']) {
     const noon = await slot(page, "2026-10-27", 12);
     await page.mouse.click(noon.x, noon.y + 6);
     await expect(page.getByTestId('card-title')).toBeFocused();

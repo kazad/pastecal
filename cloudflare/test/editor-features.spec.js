@@ -500,13 +500,16 @@ test('F31 Option/Alt-drag duplicates: the original stays, the copy lands where y
   await ctx.close();
 });
 
-test('F32 a new event: a time typed in the title moves it live ("lunch fri 12-1")', async ({ browser }) => {
+test('F32 a new event: a title is saved exactly as typed ("Lunch fri 12-1" stays the title; the event keeps the slot it was made on)', async ({ browser }) => {
   const id = await seed([]);
   const { ctx, page } = await open(browser, id);
   await page.keyboard.press('n');
+  await expect(page.getByTestId('card-title')).toBeFocused();
+  // Where N put the new event, before any typing.
+  const made = await page.evaluate(() => { const v = document.querySelector('#app')._vnode.component.proxy.nativeCard.value; return [new Date(v.start).toISOString(), new Date(v.end).toISOString()]; });
   await page.keyboard.type('Lunch fri 12-1');
   await page.keyboard.press('Enter');
-  await soon(async () => { const [e] = await stored(id); return e && [e.title, local(e.start), local(e.end)]; }).toEqual(['Lunch', '2026-10-30 12:00', '2026-10-30 13:00']);   // "fri" on Saturday Oct 24: the coming Friday
+  await soon(async () => { const [e] = await stored(id); return e && [e.title, new Date(e.start).toISOString(), new Date(e.end).toISOString()]; }).toEqual(['Lunch fri 12-1', ...made]);
   await ctx.close();
 });
 

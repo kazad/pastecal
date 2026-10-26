@@ -15,7 +15,7 @@
  *                tz: the event's own time zone ('' = each person's own). With one, start and end read that zone's
  *                wall clock in their local fields (app.js nativeCardValue), so every picker here edits its time.
  *   props.calendarZone  the calendar's zone (offered in the time zone list when it is not yours)
- *   emits        'change' (patch, message)   'done' ({ title, smart })   'cancel'   'delete'   'duplicate'
+ *   emits        'change' (patch, message)   'done' ({ title, description })   'cancel'   'delete'   'duplicate'
  *                'labels' (names)            'expand'
  */
 const EventCard = (() => {
@@ -47,9 +47,12 @@ const EventCard = (() => {
                 v: clone(this.card.value), full: !!this.card.full,
                 titleText: this.card.value.title || '', detText: this.card.value.description || '',
                 titleFocus: false, detFocus: false, detEditing: false,
+                // Typed in this card since it opened (or last saved): only these are ever written. An untouched field
+                // follows the event as it changes elsewhere, even with the focus in it (stress F01).
+                titleDirty: false, detDirty: false, titleNote: '',
                 picker: null, pickStyle: {}, menu: false, menuStyle: {},
                 month: null, focusDay: null, custom: null, customError: '', labelNames: null, typed: '', typedBad: false,
-                smart: null, smartSaid: '', showAll: false, clamped: false, pasteNote: '',
+                said: '', showAll: false, clamped: false, pasteNote: '',
                 pos: {}, entering: false, expanding: false, phone: typeof window !== 'undefined' && window.innerWidth <= PHONE,
                 sheetDy: 0, keep: null, closing: false, wide: false, detSession: null, vv: null,
             };
@@ -121,7 +124,9 @@ const EventCard = (() => {
                 if (kind === 'e') out.push(1440);
                 const startMin = K.minutesOf(this.v.start);
                 const endMin = K.minutesOf(this.v.end);
-                return out.filter((m) => kind === 's' || !this.sameDay || m > startMin).map((m) => {
+                // Only clock times that happen that day (the spring-forward day has no 2:00-2:59 AM).
+                const day = kind === 's' ? this.v.start : this.v.end;
+                return out.filter((m) => (kind === 's' || !this.sameDay || m > startMin) && (m === 1440 || K.minutesOf(at(day, m)) === m)).map((m) => {
                     const cur = kind === 's' ? m === startMin : m === endMin && m !== 1440;
                     // The end on its own date (midnight at the end of a same-day event is the next day's 0:00).
                     const len = kind === 'e' ? Math.round((at(this.v.end, m) - this.v.start) / 60000) : 0;
@@ -141,12 +146,12 @@ const EventCard = (() => {
             'card.value'(val, old) {
                 const was = old || {};
                 this.v = clone(val);
-                // What is being typed stays, unless the value itself changed underneath it (an undo, another save).
-                if (!this.titleFocus) this.titleText = val.title || '';   // (nor the title while it is being typed)
+                // What is being typed stays; a title not typed in follows the event (an undo, another browser's rename).
+                if (!this.titleDirty) this.titleText = val.title || '';
                 this.$nextTick(() => this.growTitle());
-                // The details box is never touched while it has the focus: a change from another browser waits (the
-                // save then keeps what is typed here, and says so: app.js nativeCardChange).
-                if (!this.detFocus) this.detText = val.description || '';
+                // The details box is never touched while it is being typed in: a change from another browser waits (the
+                // save then keeps what is typed here, and says so: app.js nativeCardDetails). Untouched, it follows.
+                if (!this.detFocus || !this.detDirty) this.detText = val.description || '';
                 // The rule changed, not from the Custom section (an Undo, another browser, a question answered No): read it.
                 if (this.custom && (val.rule || '') !== (was.rule || '') && (val.rule || '') !== this._customSent) this.readCustom();
                 this.$nextTick(() => { this.grow(); this.fit(); this.measureClamp(); });
@@ -224,7 +229,8 @@ const EventCard = (() => {
                 this._anchorEl = null;
                 this.v = clone(this.card.value); this.full = !!this.card.full;
                 this.titleText = this.card.value.title || ''; this.detText = this.card.value.description || '';
-                this.picker = null; this.menu = false; this.smart = null; this.showAll = false; this.pasteNote = ''; this.keep = null; this.closing = false;
+                this.titleDirty = false; this.detDirty = false; this.titleNote = '';
+                this.picker = null; this.menu = false; this.showAll = false; this.pasteNote = ''; this.keep = null; this.closing = false;
                 this.wide = false; this.detSession = null; this.detEditing = false; clearTimeout(this._detTimer); this.custom = null; this.customError = '';
                 this.$nextTick(() => {
                     this.growTitle();
@@ -321,6 +327,10 @@ const EventCard = (() => {
                 this.$nextTick(() => { this.grow(); this.fit(); });
             },
             onTitleInput(e) {
+                this.titleDirty = true;
+                // The server keeps far more, but a title is a line or three: past 500 characters the rest is left out, and said.
+                if (this.titleText.length > 500) this.titleText = this.titleText.slice(0, 500);
+                this.titleNote = this.titleText.length >= 500 ? 'Titles are limited to 500 characters; the rest was left out.' : '';
                 // One line of text that wraps: a newline (pasted, or dropped in) is a space.
                 if (/[\r\n]/.test(this.titleText)) {
                     const ta = e && e.target, at = ta ? ta.selectionEnd : null;
@@ -328,11 +338,12 @@ const EventCard = (() => {
                     if (ta && at != null) this.$nextTick(() => { ta.selectionStart = ta.selectionEnd = Math.min(at, this.titleText.length); });
                 }
                 this.$nextTick(() => this.growTitle());
-                if (this.isNew) this.smartApply();
                 if (this.isNew) this.$emit('change', { title: this.titleText }, '');
             },
             commitTitle() {
-                if (this.closing || this.isNew || this.titleText === (this.card.value.title || '')) return;
+                if (this.closing || this.isNew || !this.titleDirty) return;
+                this.titleDirty = false;
+                if (this.titleText === (this.card.value.title || '')) return;
                 this.change({ title: this.titleText }, `Renamed ${this.titleText.trim() || '(No title)'}`);
             },
             titleEnter() {
@@ -341,6 +352,7 @@ const EventCard = (() => {
                 if (this.$refs.title) this.$refs.title.blur();
             },
             onDetInput() {
+                this.detDirty = true;
                 this.grow();
                 this.fit();
                 if (this.isNew) { this.$emit('change', { description: this.detText }, ''); return; }
@@ -357,9 +369,9 @@ const EventCard = (() => {
                 clearTimeout(this._detTimer);
                 const sess = this.detSession;
                 if (this.isNew || !sess) return;
-                const changed = this.detText !== (this.card.value.description || '');
+                const changed = this.detDirty && this.detText !== (this.card.value.description || '');
                 if (changed || final) this.$emit('change', changed ? { description: this.detText } : {}, final ? 'Details saved' : '', { details: { id: sess.id, base: sess.base, final } });
-                if (final) this.detSession = null;
+                if (final) { this.detSession = null; this.detDirty = false; }
             },
             commitDetails() { if (!this.closing) this.saveDetails(true); },
             /**
@@ -451,40 +463,12 @@ const EventCard = (() => {
                 ta.style.overflowY = ta.scrollHeight > cap + 2 ? 'auto' : 'hidden';
                 if (c) c.scrollTop = top;
             },
-            // A time typed into a new event's title ("Practice Thu 5-6") moves it as you type; deleting the words
-            // puts it back; Done keeps the time and drops the words.
-            smartApply() {
-                if (this.v.isAllDay) { this.smart = null; return; }
-                if (!this.smart) this.smart = { base: { start: new Date(this.v.start), end: new Date(this.v.end) }, hit: null, key: '' };
-                const hit = K.smartParse(this.titleText, new Date(), this.fmt);
-                const b = this.smart.base, L = b.end - b.start;
-                let start = new Date(b.start), end = new Date(b.end);
-                if (hit) {
-                    const day = hit.day || b.start;
-                    if (hit.start != null) {
-                        start = at(day, hit.start);
-                        end = hit.end != null ? at(day, hit.end) : new Date(start.getTime() + L);
-                    } else { start = at(day, K.minutesOf(b.start)); end = new Date(start.getTime() + L); }
-                }
-                this.smart.hit = hit;
-                const key = hit ? `${start.getTime()}/${end.getTime()}` : '';
-                Object.assign(this.v, { start, end });
-                this.$emit('change', { start, end }, '');
-                if (key && key !== this.smart.key) {
-                    this.smartSaid = `Time set: ${this.summary()}`;
-                    const q = this.$refs.qline;
-                    if (q && !reduced()) { q.classList.remove('nk-pulse'); void q.offsetWidth; q.classList.add('nk-pulse'); }
-                }
-                this.smart.key = key;
-            },
             done() {
                 if (this.picker) this.closePicker(false);
                 this.commitTitle();
                 this.saveDetails(true);
-                const hit = this.isNew && this.smart && this.smart.hit;
-                const title = hit ? this.titleText.slice(0, hit.at).trim() : this.titleText;
                 this.closing = true;   // the blur as it closes saves nothing more
-                this.$emit('done', { title, description: this.detText, smart: hit ? { raw: this.titleText, base: this.smart.base } : null });
+                this.$emit('done', { title: this.titleText, description: this.detText });
             },
             cancel() { this.closing = true; this.$emit('cancel'); },
             // Focus moving to Done, Cancel, Delete or the menu saves when that button acts: a question opening on
@@ -580,8 +564,14 @@ const EventCard = (() => {
             typedTime() {
                 const m = K.parseTime(this.typed, this.fmt);
                 if (m == null) { this.typedBad = true; return; }
-                const kind = this.picker.kind;
-                if (kind === 'e' && this.sameDay && m <= K.minutesOf(this.v.start)) { this.typedBad = true; return; }
+                const kind = this.picker.kind, startMin = K.minutesOf(this.v.start);
+                if (kind === 'e' && this.sameDay && m === startMin) { this.typedBad = true; return; }
+                // An end typed before the start ("1a" for an 11 PM event) is after midnight, the next day.
+                if (kind === 'e' && this.sameDay && m < startMin) {
+                    const end = at(K.addDays(K.startOfDay(this.v.start), 1), m);
+                    this.setAndClose({ end }, `Ends ${this.t(end)} the next day`);
+                    return;
+                }
                 this.pickTime(m);
             },
             listKey(e) {
@@ -595,7 +585,7 @@ const EventCard = (() => {
             pickDate(day) {
                 const v = this.v, kind = this.picker.kind;
                 if (kind === 'until') {
-                    if (day < K.startOfDay(v.start)) { this.typedBad = true; return; }
+                    if (day < K.startOfDay(v.start)) { this.typedBad = true; this.customError = 'The repeat ends before the event starts.'; return; }
                     this.closePicker();
                     Object.assign(this.custom, { endMode: 'until', until: K.dateStr(day) });
                     return;
@@ -723,13 +713,14 @@ const EventCard = (() => {
                 this.$nextTick(() => { const b = this.$refs.menu && this.$refs.menu.querySelector('button'); if (b) b.focus(); });
             },
             menuAct(what) { this.menu = false; if (what === 'delete') this.closing = true; this.$emit(what); },
-            say(t) { this.smartSaid = t; },
+            say(t) { this.said = t; },
             // ---- keys: Escape closes one layer, Tab stays inside -------------------------------------------
             onKey(e) {
                 if (this.blocked) return;
                 if (e.key === 'Escape') {
                     if (this.menu) { this.menu = false; e.stopImmediatePropagation(); e.preventDefault(); return; }
                     if (this.picker) { this.closePicker(); e.stopImmediatePropagation(); e.preventDefault(); return; }
+                    if (this.custom) { this.closeCustom(); e.stopImmediatePropagation(); e.preventDefault(); return; }   // (the repeat settings, then the card)
                     e.stopImmediatePropagation(); e.preventDefault();
                     this.cancel();
                     return;
@@ -778,9 +769,10 @@ const EventCard = (() => {
     <button type="button" class="nk-cat" aria-haspopup="listbox" :aria-expanded="String(!!picker && picker.kind === 'cat')" :aria-label="'Type: ' + typeName"
       data-testid="card-type" @click="openPicker('cat', $event)"><i></i><span>{{ typeName }}</span><nc-icon name="chevron-down" :size="13" :stroke-width="2.2"></nc-icon></button>
   </div>
-  <div id="nk-said" class="nk-sr" aria-live="polite">{{ smartSaid }}</div>
+  <div id="nk-said" class="nk-sr" aria-live="polite">{{ said }}</div>
   <div class="nk-b">
-    <div v-if="!full" ref="qline" class="nk-qline" :class="{ hit: smart && smart.hit }" data-testid="card-time-line">
+    <div v-if="titleNote" class="nk-count" data-testid="card-title-note" aria-live="polite">{{ titleNote }}</div>
+    <div v-if="!full" class="nk-qline" data-testid="card-time-line">
       <template v-if="v.isAllDay">
         <button type="button" class="nk-qs" data-testid="card-q-sd" aria-expanded="false" :aria-label="'Start date: ' + d(v.start)" @click="openPicker('sd', $event)">{{ d(v.start) }}</button>
         <template v-if="!sameDayAllDay"> – <button type="button" class="nk-qs" data-testid="card-q-ed" aria-expanded="false" :aria-label="'End date: ' + d(v.end)" @click="openPicker('ed', $event)">{{ d(v.end) }}</button></template>
@@ -802,7 +794,7 @@ const EventCard = (() => {
     </div>
     <div v-if="!full && !isNew" class="nk-meta" data-testid="card-edited">{{ card.edited || '\u00a0' }}</div>
 
-    <div v-if="full" class="nk-when" :class="{ hit: smart && smart.hit }">
+    <div v-if="full" class="nk-when">
       <span class="nk-gi" title="Time"><nc-icon name="clock" :size="18"></nc-icon></span>
       <button type="button" class="nk-tp nk-dp" data-testid="card-start-date" aria-expanded="false" :aria-label="'Start date: ' + d(v.start)" @click="openPicker('sd', $event)">{{ d(v.start) }}</button>
       <span v-if="v.isAllDay" class="nk-tp off" aria-hidden="true">–</span>
@@ -850,7 +842,7 @@ const EventCard = (() => {
             :aria-label="'Last date: ' + d(untilDate(), { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })" data-testid="custom-until"
             @click="openPicker('until', $event)">{{ d(untilDate(), { month: 'short', day: 'numeric', year: 'numeric' }) }}</button></div>
         <label class="nk-cl"><input type="radio" value="count" v-model="custom.endMode" data-testid="custom-end-count"> After
-          <input type="number" min="1" max="999" class="pc-field pc-field--sm nk-num" v-model.lazy.number="custom.count" aria-label="Times" data-testid="custom-count" @focus="custom.endMode = 'count'"> times</label>
+          <input type="number" min="1" max="999" class="pc-field pc-field--sm nk-num" v-model.lazy.number="custom.count" aria-label="Times" data-testid="custom-count" @focus="custom.endMode = 'count'"> {{ custom.count === 1 ? 'time' : 'times' }}</label>
       </div>
       <p v-if="customError" class="nk-err" role="alert" data-testid="custom-error">{{ customError }}</p>
     </div>

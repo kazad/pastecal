@@ -2110,10 +2110,10 @@ const CalendarVueApp = {
             const kind = this.nativeKind(row), series = this.nativeSeriesOf(row);
             let target, value;
             if (kind === 'series' && series && occurrence && occurrence.start) {
-                target = { kind: 'occ', id: series.id, recurrenceID: null, seriesId: series.id, occurrence: { start: new Date(occurrence.start), end: new Date(occurrence.end) } };
+                target = { kind: 'occ', id: series.id, recurrenceID: null, seriesId: series.id, occurrence: { start: new Date(occurrence.start), end: new Date(occurrence.end) }, series: this.nativeSeriesTimes(series) };
                 value = { ...this.nativeCardValue(series, occurrence), rule: series.recurrencerule || '' };
             } else if (kind === 'series') {
-                target = { kind: 'series', id: row.id, recurrenceID: null, seriesId: row.id, occurrence: null };
+                target = { kind: 'series', id: row.id, recurrenceID: null, seriesId: row.id, occurrence: null, series: this.nativeSeriesTimes(row) };
                 value = this.nativeCardValue(row);
                 target.occurrence = this.nativeCardInstants(value);
             } else {
@@ -2236,6 +2236,11 @@ const CalendarVueApp = {
                 if (k) Object.assign(k.wrote, u.wrote);
             }
         },
+        /** A series' own start and end (ms), as the card last saw them: how far another browser moved it since. */
+        nativeSeriesTimes(series) {
+            const r = this.nativeCardInstants(this.nativeCardValue(series));
+            return { start: r.start.getTime(), end: r.end.getTime() };
+        },
         /** The event changed in another browser while the card is open: the card shows it (the box being typed in waits). */
         nativeCardRefresh() {
             const c = this.nativeCard;
@@ -2244,7 +2249,17 @@ const CalendarVueApp = {
             const row = this.nativeStored(t.kind === 'row' ? { id: t.id, recurrenceID: t.recurrenceID } : { id: t.seriesId });
             if (!row) return this.nativeCardGone(t.kind !== 'row' || (t.seriesId != null && !this.nativeStored({ id: t.seriesId })));
             const v = this.nativeCardValue(row), cur = c.value;
-            const next = t.kind === 'row' ? v : { ...this.nativeCardRezone(cur, v.tz), title: v.title, type: v.type, description: v.description, rule: v.rule };
+            let next = t.kind === 'row' ? v : { ...this.nativeCardRezone(cur, v.tz), title: v.title, type: v.type, description: v.description, rule: v.rule };
+            const was = t.series, now = t.kind === 'row' ? null : this.nativeSeriesTimes(row);
+            if (now && was && t.occurrence && (was.start !== now.start || was.end !== now.end)) {
+                // The whole series was moved elsewhere ("all events"): the occurrence on the card moves with it, by as
+                // much on the clock (as nativeSeriesMoved moves it), so a save lands on its slot as it is now (stress F02).
+                const z = this.nativeCardZone(v);
+                const W = (d) => (z ? EventZone.toWallDate(new Date(d), z) : new Date(d)), U = (d) => (z ? EventZone.fromWallDate(d, z) : d);
+                t.occurrence = { start: U(nativeShift(W(was.start), W(now.start))(W(t.occurrence.start))), end: U(nativeShift(W(was.end), W(now.end))(W(t.occurrence.end))) };
+                next = { ...this.nativeCardValue(row, t.occurrence), rule: v.rule };
+            }
+            if (now) t.series = now;
             if (Object.keys(this.nativeCardFields(cur, next)).length) c.value = next;
         },
         nativeCardWrite(scope, before, after, message) {
@@ -2309,7 +2324,8 @@ const CalendarVueApp = {
                     if (this.nativeCard !== c) return;
                     if (asked) c.keepOccurrences = keepOccurrences;   // asked once per card
                     if (done) {
-                        c.target = { kind: 'series', id: series.id, recurrenceID: null, seriesId: series.id, occurrence: this.nativeCardInstants(after) };
+                        const saved = this.nativeStored({ id: series.id }) || series;
+                        c.target = { kind: 'series', id: series.id, recurrenceID: null, seriesId: series.id, occurrence: this.nativeCardInstants(after), series: this.nativeSeriesTimes(saved) };
                         this.nativeCardSaved(c, snapshot, after, message);
                     } else c.value = before;
                 });
@@ -2354,7 +2370,7 @@ const CalendarVueApp = {
             }
         },
         /** Done (or a click outside): a new event is added; an existing one keeps what was saved. */
-        nativeCardDone({ title, description, smart } = {}) {
+        nativeCardDone({ title, description } = {}) {
             const c = this.nativeCard;
             if (!c) return;
             // The last change (a title saved as the card closes) is still asking "this event / all events": close
@@ -2363,33 +2379,17 @@ const CalendarVueApp = {
             if (!c.isNew) return this.closeNativeCard();
             const v = c.value;
             const name = (title != null ? title : v.title || '').trim();
-            if (!name && !smart) { track(a => a.editorAbandoned()); return this.closeNativeCard(); }   // no title: nothing was meant
+            const details = description != null ? description : v.description || '';
+            // Nothing entered at all: nothing was meant. Anything entered (details, a type, a repeat) is kept, untitled
+            // as "(No title)", as the editor and quick add save it (stress F03).
+            if (!name && !details.trim() && !v.rule && (Number(v.type) || 1) === 1) { track(a => a.editorAbandoned()); return this.closeNativeCard(); }
             const ids = new Set((this.calendar.events || []).map((e) => e && String(e.id)));
             const ok = this.nativeAction('eventCreate', { addedRecords: [{ Subject: name || '(No title)', ...this.nativeCardTimes(v), IsAllDay: !!v.isAllDay,
-                Type: Number(v.type) || 1, Description: description != null ? description : v.description || '', RecurrenceRule: v.rule || '', ...(v.tz ? { Tz: v.tz } : {}) }] }, { action: 'Add' });
+                Type: Number(v.type) || 1, Description: details, RecurrenceRule: v.rule || '', ...(v.tz ? { Tz: v.tz } : {}) }] }, { action: 'Add' });
             this.closeNativeCard();
             if (!ok) return;
             const row = (this.calendar.events || []).find((e) => e && !ids.has(String(e.id)));
             this._nativeGlow = row ? `event-${row.id}` : null;
-            if (smart && row) {
-                // The time came from the title: say so, and Undo puts back the title as typed and the time it had.
-                const when = v.isAllDay ? '' : ` · ${cardKit.fmtDate(v.start, { weekday: 'short' })} ${this.nativeRange(v.start, v.end)}`;
-                this.showToast(`Added ${name}${when}`, 'success', { actionLabel: 'Undo', action: () => {
-                    const now = this.nativeStored({ id: row.id, recurrenceID: row.recurrenceID });
-                    if (!now) return;
-                    const rec = this.nativeRecord(now);
-                    ScheduleAdapter.noteStart(rec);
-                    const base = this.nativeCardInstants({ ...v, start: smart.base.start, end: smart.base.end });
-                    if (this.nativeAction('eventChange', { changedRecords: [{ ...rec, Subject: smart.raw.trim(), StartTime: base.start, EndTime: base.end }] }, { action: 'Save' })) this.showToast('Undone', 'success');
-                } });
-            }
-        },
-        /** "5 – 6 PM", "11 AM – 1 PM", "17:00 – 18:00". */
-        nativeRange(a, b) {
-            const f = this.globalSettings.timeFormat === '24' ? '24' : '12';
-            const s = cardKit.fmtTime(a, f, true), e = cardKit.fmtTime(b, f, true);
-            if (f === '12' && s.slice(-2) === e.slice(-2)) return `${s.slice(0, -3)} – ${e}`;
-            return `${s} – ${e}`;
         },
         /** Cancel (or Escape): every change since the card opened is taken back; a new event is dropped. No Undo for that. */
         nativeCardCancel() {
