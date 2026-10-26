@@ -153,19 +153,24 @@
          new one is fetched, so the page was briefly unstyled (the FOUC) and any event chip
          Syncfusion laid out in that gap was sized against a shrink-wrapped grid (16px wide
          chips that stayed wrong until an edit). Dark-mode users also got a light flash. -->
-    <!-- Which calendar draws this page (docs/native-switch.md). View links (/view/<id>, /@handle/<name>) may use
-         pastecal's own calendar (NativeCalendar) instead of Syncfusion's: ?cal=native|classic, else this browser's
-         choice (localStorage pc_cal), else the server's default (<meta name="pc-cal">, the Worker's NATIVE_VIEW_LINKS).
-         Edit links stay classic. Decided here, before anything loads: in native mode no Syncfusion file is fetched. -->
+    <!-- Which calendar draws this page (docs/native-switch.md). View links (/view/<id>, /@handle/<name>) and edit links
+         (/<id>) may use pastecal's own calendar (NativeCalendar) instead of Syncfusion's: ?cal=native|classic, else this
+         browser's choice (localStorage pc_cal), else -- view links only -- the server's default (<meta name="pc-cal">,
+         the Worker's NATIVE_VIEW_LINKS). The homepage stays classic, and so does every page by default. Decided here,
+         before anything loads: in native mode no Syncfusion file is fetched. window.pcNativeEdit: an edit link. -->
     <script>
+        window.pcNativeEdit = false;
         window.pcNativeCal = (function () {
             try {
                 var p = location.pathname;
-                if (!/^\/view\/[^/]+\/?$/.test(p) && !(/^\/@/.test(p) && document.querySelector('meta[name="pc-view"]'))) return false;
+                var view = /^\/view\/[^/]+\/?$/.test(p) || (/^\/@/.test(p) && !!document.querySelector('meta[name="pc-view"]'));
+                var edit = !view && /^\/[^/@.][^/.]*\/?$/.test(p);
+                if (!view && !edit) return false;
                 var q = new URLSearchParams(location.search).get('cal');
                 var pick = q === 'native' || q === 'classic' ? q : null;
                 if (!pick) { try { pick = localStorage.getItem('pc_cal'); } catch (e) { pick = null; } }
-                if (pick !== 'native' && pick !== 'classic') { var m = document.querySelector('meta[name="pc-cal"]'); pick = m && m.getAttribute('content'); }
+                if (view && pick !== 'native' && pick !== 'classic') { var m = document.querySelector('meta[name="pc-cal"]'); pick = m && m.getAttribute('content'); }
+                window.pcNativeEdit = edit && pick === 'native';
                 return pick === 'native';
             } catch (e) { return false; }
         })();
@@ -203,7 +208,10 @@
             + '<script src="/nativecal/components/ncUx.js?v=1792797113"><\/script>'
             + '<script src="/nativecal/components/NcIcon.js?v=1792797113"><\/script>'
             + '<script src="/nativecal/components/NativeCalendar.js?v=1792797113"><\/script>'
-            + '<script src="/nativecal/components/EventPopover.js?v=1792797113"><\/script>');
+            + '<script src="/nativecal/components/EventPopover.js?v=1792797113"><\/script>'
+            // Edit links: the editor and the quick box (a view link never edits, so never downloads them).
+            + (window.pcNativeEdit ? '<script src="/nativecal/components/EventEditor.js?v=1792797113"><\/script>'
+                + '<script src="/nativecal/components/QuickCreatePopover.js?v=1792797113"><\/script>' : ''));
         else document.write('<script src="/vendor/syncfusion-23.2.6/ej2-calendar.min.js?v=1792797113" type="text/javascript"><\/script>');
     </script>
     <!-- Firebase is retired on pastecal.com (Oct 25 2026): the app runs on Cloudflare only, and these four
@@ -755,16 +763,48 @@
                 </div>
             </div>
             <div id="cal2_wrap" style="width: 100%; height: 100%; position: relative;">
-                <!-- The calendar: pastecal's own on a native view link (app.js nativeCal), else Syncfusion's (#Schedule). -->
+                <!-- The calendar: pastecal's own on a native page (app.js nativeCal), else Syncfusion's (#Schedule). On a native
+                     edit link (nativeEdit) it edits too: the quick box, drag to create / move / resize, the editor. -->
                 <native-calendar v-if="nativeCal" ref="nativeCal" class="pc-native-cal" data-testid="schedule-container"
-                    :events="nativeEvents" :read-only="isReadOnly" :colors="COLORS" :hidden-slots="hiddenColorSlots" :text-on="eventTextOn"
+                    :events="nativeEvents" :read-only="isReadOnly || !nativeEdit" :colors="COLORS" :hidden-slots="hiddenColorSlots" :text-on="eventTextOn"
                     :time-format="globalSettings.timeFormat" :first-day-of-week="globalSettings.firstDayOfWeek" :start-hour="nativeStartHour"
                     :initial-view="nativeView" :initial-date="nativeLink.date" :custom-duration="nativeCustomDuration" :custom-unit="nativeCustomUnit"
-                    :month-row-height="nativeRowHeight" open-day-on-click app-look @event-click="openNativePopover" @range-change="onNativeRange"></native-calendar>
+                    :month-row-height="nativeRowHeight" open-day-on-click app-look :app-edits="nativeEdit" :draft="nativeDraft"
+                    @event-click="openNativePopover" @range-change="onNativeRange" @event-create="onNativeCreate"
+                    @drag-start="onNativeDragStart" @event-move="onNativeMove"></native-calendar>
                 <div v-else id="Schedule" data-testid="schedule-container"></div>
                 <event-popover v-if="nativeCal" :visible="!!nativePopover" :event="nativePopover && nativePopover.event" :occurrence="nativePopover && nativePopover.occurrence"
                     :top="nativePopover ? nativePopover.top : 0" :left="nativePopover ? nativePopover.left : 0" :time-format="globalSettings.timeFormat"
-                    :colors="COLORS" :read-only="true" :text-on="eventTextOn" @close="nativePopover = null"></event-popover>
+                    :colors="COLORS" :read-only="isReadOnly || !nativeEdit" :text-on="eventTextOn" @close="nativePopover = null"
+                    @edit="onNativePopoverEdit" @delete="onNativePopoverDelete"></event-popover>
+                <template v-if="nativeEdit">
+                    <quick-create-popover :visible="!!nativeQuick" :start="nativeQuick && nativeQuick.start" :end="nativeQuick && nativeQuick.end"
+                        :is-all-day="!!(nativeQuick && nativeQuick.isAllDay)" :top="nativeQuick ? nativeQuick.top : 0" :left="nativeQuick ? nativeQuick.left : 0"
+                        :time-format="globalSettings.timeFormat" app-look @title="(t) => { if (nativeQuick) nativeQuick.title = t; }"
+                        @save="saveNativeQuick" @more-details="moreNativeQuick" @close="nativeQuick = null"></quick-create-popover>
+                    <event-editor :visible="!!nativeEditor" :event="nativeEditor && nativeEditor.event" :colors="COLORS" :labels="displayTypeLabels"
+                        :time-format="globalSettings.timeFormat" app-look @save="saveNativeEditor" @delete="onNativeEditorDelete"
+                        @color="onNativeColor" @update:visible="(v) => { if (!v) closeNativeEditor(); }"></event-editor>
+                    <!-- "This event / All events" for a repeating event, and classic's other questions (Yes / No). -->
+                    <div v-if="nativeAsk" class="pc-native-ask" @mousedown.self="nativeAnswer(null)">
+                        <div class="pc-native-ask-panel" role="dialog" aria-modal="true" :aria-label="nativeAsk.title" data-testid="confirm-dialog">
+                            <h2 class="pc-native-ask-title">{{ nativeAsk.title }}</h2>
+                            <p v-if="nativeAsk.message" class="pc-native-ask-text">{{ nativeAsk.message }}</p>
+                            <div v-if="nativeAsk.options" class="pc-native-ask-options" role="radiogroup">
+                                <label v-for="(o, i) in nativeAsk.options" :key="o.testid" class="pc-native-ask-option">
+                                    <input type="radio" name="pc-native-scope" :value="i" v-model="nativeAsk.choice" :data-testid="o.testid"> {{ o.label }}</label>
+                            </div>
+                            <div class="pc-native-ask-foot">
+                                <button type="button" class="pc-btn pc-btn--secondary" data-testid="confirm-cancel" @click="nativeAnswer(null)">Cancel</button>
+                                <template v-if="nativeAsk.buttons">
+                                    <button v-for="b in nativeAsk.buttons" :key="b.testid" type="button" class="pc-btn" :class="b.primary ? 'pc-btn--primary' : 'pc-btn--secondary'"
+                                        :data-testid="b.testid" @click="nativeAnswer(b)">{{ b.label }}</button>
+                                </template>
+                                <button v-else type="button" class="pc-btn pc-btn--primary" data-testid="confirm-ok" @click="nativeAnswer()">{{ nativeAsk.ok }}</button>
+                            </div>
+                        </div>
+                    </div>
+                </template>
                 <!-- Whenever a color filter is on, say so on the calendar itself, not only in the search panel:
                      in #41 an event "went missing" after the panel was closed. A floating bar at the bottom of
                      the screen, so turning a filter on never pushes the calendar down. -->

@@ -167,8 +167,10 @@ const COMPONENT_REGISTRY = {
     'pro-beta-join': ProBetaJoin,              // "Join the beta" while billing is off (Go Pro card, Stats)
     'pro-stats': ProStats,                     // Pro owner: views, visitors, followers, places
     'pro-history': ProHistory,                 // Pro owner: saved versions, preview, restore
-    // pastecal's own calendar and its event popup: loaded only on a native view link (index.html, window.pcNativeCal).
+    // pastecal's own calendar and its event popup: loaded only on a native page (index.html, window.pcNativeCal);
+    // its editor and quick box only on a native edit link (window.pcNativeEdit).
     ...(typeof NativeCalendar !== 'undefined' ? { 'native-calendar': NativeCalendar, 'event-popover': EventPopover } : {}),
+    ...(typeof EventEditor !== 'undefined' ? { 'event-editor': EventEditor, 'quick-create-popover': QuickCreatePopover } : {}),
 };
 
 // A native view link's ?view= / ?date= (the classic calendar reads the same ones in mountSyncfusion):
@@ -190,6 +192,28 @@ function nativeLinkView() {
         }
     } catch (e) { /* a bad link opens the default view */ }
     return out;
+}
+
+// ---- Helpers for editing on the native calendar (app.nativeAction and friends) ----------------------------------
+// The temporary Id of "this event" on a repeating series: classic's EditOccurrence record, which the store turns
+// into a new row (ScheduleAdapter.toCommand adds it only when no row has this Id).
+const NATIVE_OCCURRENCE_ID = '__native_occurrence__';
+const isBlankId = (v) => v === undefined || v === null || v === '';
+// An end as classic's grid records carry it: an all-day end is the next local midnight (exclusive). The native grid
+// and editor send the last day's 23:59:59.999 (their display shape); that end stored as is would lose the last day.
+function nativeEnd(end, allDay) {
+    const d = new Date(end);
+    if (!allDay || isNaN(d.getTime())) return d;
+    if (d.getHours() || d.getMinutes() || d.getSeconds() || d.getMilliseconds()) return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+    return d;
+}
+// Moving `from` to `to` as wall-clock days and minutes, applied to another time (a series moved with one occurrence):
+// across a DST change the clock time stays the same.
+function nativeShift(from, to) {
+    const a = new Date(from), b = new Date(to);
+    const days = Math.round((new Date(b.getFullYear(), b.getMonth(), b.getDate()) - new Date(a.getFullYear(), a.getMonth(), a.getDate())) / 864e5);
+    const minutes = (b.getHours() * 60 + b.getMinutes()) - (a.getHours() * 60 + a.getMinutes());
+    return (t) => { const x = new Date(t); x.setDate(x.getDate() + days); x.setMinutes(x.getMinutes() + minutes); return x; };
 }
 
 const CAL_BASE = (typeof window !== 'undefined' && window.CAL_BASE) ? window.CAL_BASE : '/';
@@ -279,6 +303,12 @@ const CalendarVueApp = {
             nativeLink: window.pcNativeCal ? nativeLinkView() : null,
             nativePopover: null,      // the event popup on the native calendar: { event, occurrence, top, left }
             nativeRowHeight: 100,     // its month rows, taller on a wide window (fitNativeMonthRows)
+            // A native edit link (index.html, window.pcNativeEdit): the quick box, the editor and the "this event /
+            // all events" question. Each is null when closed.
+            nativeEdit: !!window.pcNativeEdit,
+            nativeQuick: null,        // { start, end, isAllDay, title, top, left }: the new event in the quick box
+            nativeEditor: null,       // { event (what the form shows, frozen at open), mode, series, occurrence }
+            nativeAsk: null,          // { title, message, options: [{ label, testid, action }], choice, ok, buttons }
             isLoading: true, // set to false when calendar status is determined
             isExisting: false, // set by callback
             editTitle: false,
@@ -425,6 +455,8 @@ const CalendarVueApp = {
         // ---- The native calendar's props (a native view link). The classic calendar gets the same settings
         // imperatively (mountSyncfusion, applyGlobalSettings); these are reactive, so they need no re-apply.
         nativeEvents() { return this.nativeCal ? CalendarView.displayEvents(this.calendar.events) : []; },
+        // The quick box's new event, drawn on the grid as the "New event" block (labelled with the title typed).
+        nativeDraft() { const q = this.nativeQuick; return q ? { start: q.start, end: q.end, isAllDay: q.isAllDay, title: q.title } : null; },
         nativeView() { return this.nativeLink.view || this.calendar?.options?.defaultView || this.globalSettings.defaultView || 'Month'; },
         nativeCustomDuration() { return this.nativeLink.dur || this.calendar?.options?.customViewDuration || this.globalSettings.customViewDuration || 3; },
         nativeCustomUnit() { return this.nativeLink.unit || this.calendar?.options?.customViewUnit || this.globalSettings.customViewUnit || 'Months'; },
@@ -1226,6 +1258,10 @@ const CalendarVueApp = {
         // in the order the user entered.
         this._escapeHandler = (e) => {
             if (e.key !== 'Escape') return;
+            // The native calendar's own boxes first: the question, the editor, the quick box (innermost first).
+            if (this.nativeAsk) { this.nativeAnswer(null); return; }
+            if (this.nativeEditor) { this.closeNativeEditor(); return; }
+            if (this.nativeQuick) { this.nativeQuick = null; return; }
             if (this.showRecentChanges) { this.showRecentChanges = false; return; }
             if (this.showProStats || this.showProHistory || this.showStatsInfo) { this.closeAllPanels(); return; }
             if (this.showNotes && this.notesEditing) { this.notesEditing = false; return; }
@@ -1342,6 +1378,10 @@ const CalendarVueApp = {
         // for the moment the panel docks or undocks.
         sideDocked() {
             this.$nextTick(() => { if (this.calView) this.calView.refreshLayout(); });
+        },
+        // A question on the native calendar: its main button takes the focus, so Enter answers and Escape cancels.
+        nativeAsk(ask) {
+            if (ask) this.$nextTick(() => { const b = document.querySelector('.pc-native-ask .pc-btn--primary'); if (b) b.focus(); });
         },
         // The native month fills the window once the page around it (title, footer line) is in.
         isLoading(loading) {
@@ -1504,14 +1544,23 @@ const CalendarVueApp = {
         watchNativeCalendar() {
             let closedAtPress = false;
             document.addEventListener('pointerdown', (e) => {
-                closedAtPress = !!this.nativePopover && !(e.target.closest && e.target.closest('.np'));
+                const inside = (sel) => !!(e.target.closest && e.target.closest(sel));
+                // The quick box closes the same way (its "New event" block goes with it), unless the press is in the
+                // question or the editor it may have opened.
+                const quick = !!this.nativeQuick && !inside('.nq, .ne-overlay, .pc-native-ask');
+                closedAtPress = (!!this.nativePopover && !inside('.np, .pc-native-ask, .ne-overlay')) || quick;
                 if (closedAtPress) this.nativePopover = null;
+                if (quick) this.nativeQuick = null;
             }, true);
             document.addEventListener('click', (e) => {
                 if (closedAtPress && e.target.closest && e.target.closest('.nc') && !e.target.closest('[data-testid^="event-"]')) { e.stopPropagation(); e.preventDefault(); }
                 closedAtPress = false;
             }, true);
             document.addEventListener('keydown', (e) => { if (e.key === 'Escape') this.nativePopover = null; });
+            // A locked calendar ignores a double-click on a day: say why (as classic does).
+            document.addEventListener('dblclick', (e) => {
+                if (this.lockedOut && e.target.closest && e.target.closest('.nc-cell, .nc-col, .nc-allday-cell')) this.showToast(this.lockedOutMessage, 'info');
+            });
             let fitTimer = null;
             window.addEventListener('resize', () => { clearTimeout(fitTimer); fitTimer = setTimeout(() => this.fitNativeMonthRows(), 150); });
         },
@@ -1537,7 +1586,252 @@ const CalendarVueApp = {
         onNativeRange() {
             this.viewTick++;
             this.nativePopover = null;
+            this.nativeQuick = null;
             this.$nextTick(() => this.fitNativeMonthRows());
+        },
+
+        // ---- Editing on the native calendar (a native edit link) ------------------------------------------------
+        // Every write goes through commitScheduleAction in the record shapes classic's grid produces
+        // (ScheduleAdapter.toView / toCommand), so the repeat-exception stamps, all-day dates, "this event / all
+        // events", the merge that saves only the fields the person changed (noteStart, when they began), undo,
+        // Recent changes and analytics are classic's own. Nothing here writes the event list itself.
+
+        /** The stored row an event on the grid stands for (the grid may hold a display copy of it). */
+        nativeStored(ev) {
+            if (!ev) return null;
+            return (this.calendar.events || []).find((e) => e && String(e.id) === String(ev.id)
+                && String(e.recurrenceID ?? '') === String(ev.recurrenceID ?? '')) || null;
+        },
+        /** The series a row belongs to: itself for a repeating event, its parent for an edited occurrence. */
+        nativeSeriesOf(row) {
+            if (!row) return null;
+            const id = !isBlankId(row.recurrenceID) ? row.recurrenceID : (row.recurrencerule ? row.id : null);
+            if (id === null) return null;
+            return (this.calendar.events || []).find((e) => e && String(e.id) === String(id) && isBlankId(e.recurrenceID)) || null;
+        },
+        /** 'single', 'series' (a repeating event) or 'edited' (one occurrence edited on its own, a row of its own). */
+        nativeKind(row) { return !row ? null : !isBlankId(row.recurrenceID) ? 'edited' : row.recurrencerule ? 'series' : 'single'; },
+        /** A stored row as classic's grid record (an edited occurrence is read beside its series, whose grid its slot is in). */
+        nativeRecord(row) {
+            const series = this.nativeKind(row) === 'edited' ? this.nativeSeriesOf(row) : null;
+            return { ...ScheduleAdapter.toView(series ? [row, series] : [row])[0] };
+        },
+        /** One native action -> the shared write path. */
+        nativeAction(requestType, records, context) {
+            return this.commitScheduleAction({ requestType, addedRecords: [], changedRecords: [], deletedRecords: [], ...records }, context);
+        },
+        /** The calendar can't be changed here: say why (as classic does on a locked calendar). */
+        nativeCanEdit() {
+            if (this.canEdit && !this.isReadOnly) return true;
+            if (this.lockedOut) this.showToast(this.lockedOutMessage, 'info');
+            return false;
+        },
+        /** "This event / All events" for a repeating event (classic asks the same before it edits, moves or deletes one). */
+        nativeAskScope(title, onThis, onAll, ok = 'OK', onCancel = null) {
+            this.nativeAsk = { title, choice: 0, ok, cancel: onCancel, options: [
+                { label: 'This event', testid: 'scope-this', action: onThis },
+                { label: 'All events', testid: 'scope-all', action: onAll },
+            ] };
+        },
+        /** The open question's answer: an option and OK, a button, or (null) Cancel. */
+        nativeAnswer(button) {
+            const ask = this.nativeAsk;
+            this.nativeAsk = null;
+            if (!ask) return;
+            if (button === null) { if (ask.cancel) ask.cancel(); return; }
+            (button || ask.options[ask.choice]).action();
+        },
+
+        // The quick box: a click (or a drag) on an empty part of the grid. A double-click opens the full editor.
+        onNativeCreate({ start, end, isAllDay, event: jsEvent, full }) {
+            if (!this.nativeEdit || !this.nativeCanEdit()) return;
+            this.nativePopover = null;
+            if (full) { this.nativeQuick = null; this.openNativeEditor({ mode: 'Add', fresh: { start, end, isAllDay, title: '' } }); return; }
+            const w = Math.min(364, window.innerWidth - 16), h = 190;
+            const x = jsEvent && jsEvent.clientX != null ? jsEvent.clientX : window.innerWidth / 2;
+            const y = jsEvent && jsEvent.clientY != null ? jsEvent.clientY : 120;
+            const left = Math.max(8, Math.min(x - 24, window.innerWidth - w - 8));
+            const top = y + 16 + h < window.innerHeight ? y + 16 : Math.max(8, y - h - 16);
+            this.nativeQuick = { start, end, isAllDay, title: '', top, left };
+        },
+        saveNativeQuick(title) {
+            const q = this.nativeQuick;
+            if (!q) return;
+            this.nativeQuick = null;
+            this.nativeAction('eventCreate', { addedRecords: [{ Subject: title || '', StartTime: new Date(q.start), EndTime: nativeEnd(q.end, q.isAllDay),
+                IsAllDay: !!q.isAllDay, Type: 1, Description: '', RecurrenceRule: '' }] }, { action: 'Add' });
+        },
+        moreNativeQuick(title) {
+            const q = this.nativeQuick;
+            if (!q) return;
+            this.nativeQuick = null;
+            this.openNativeEditor({ mode: 'Add', fresh: { ...q, title } });
+        },
+
+        /**
+         * The full editor. mode: 'Add' (fresh: { start, end, isAllDay, title }), 'Save' (row: a single event or an
+         * edited occurrence), 'EditOccurrence' (row: the series; occurrence: { start, end } of the one clicked), or
+         * 'EditSeries' (row: the series). The record it starts from is noted (ScheduleAdapter.noteStart), so Save
+         * writes only what changed since now: a field someone else changes meanwhile is kept (finding D1).
+         */
+        openNativeEditor({ mode, row = null, occurrence = null, fresh = null }) {
+            if (!this.nativeCanEdit()) return;
+            this.nativePopover = null;
+            this.nativeQuick = null;
+            let record;
+            if (mode === 'Add') {
+                record = { Subject: fresh.title || '', StartTime: new Date(fresh.start), EndTime: nativeEnd(fresh.end, fresh.isAllDay),
+                    IsAllDay: !!fresh.isAllDay, Type: 1, Description: '', RecurrenceRule: '' };
+            } else {
+                if (!row) return;
+                record = this.nativeRecord(row);
+                // One occurrence: a new row pointing at the series, at the occurrence's time (classic's EditOccurrence).
+                if (mode === 'EditOccurrence') Object.assign(record, { Id: NATIVE_OCCURRENCE_ID, RecurrenceID: record.Id,
+                    StartTime: new Date(occurrence.start), EndTime: new Date(occurrence.end) });
+                // The whole series, as classic's record has it: RecurrenceID = its own id.
+                if (mode === 'EditSeries') record.RecurrenceID = record.Id;
+                ScheduleAdapter.noteStart(record);
+            }
+            const shown = { id: mode === 'Add' ? null : record.Id, title: record.Subject || '', description: record.Description || '',
+                type: record.Type || 1, isAllDay: !!record.IsAllDay, start: record.StartTime, end: record.EndTime,
+                recurrencerule: record.RecurrenceRule || '', recurrenceID: mode === 'Save' ? (record.RecurrenceID || null) : null,
+                ...(mode === 'EditOccurrence' ? { _occurrenceOf: record.RecurrenceID } : {}) };
+            // Frozen: the form loads once, and a live update from another browser never resets what is being typed.
+            this.nativeEditor = { mode, record, occurrence, event: Object.freeze(shown) };
+            this.editorSaved = false;
+        },
+        closeNativeEditor() {
+            if (!this.nativeEditor) return;
+            // An editor that closes without a save is the "this was confusing or fiddly" signal (as classic's popupClose).
+            if (!this.editorSaved) track(a => a.editorAbandoned());
+            this.editorSaved = false;
+            this.nativeEditor = null;
+        },
+        saveNativeEditor(data) {
+            const ed = this.nativeEditor;
+            if (!ed) return;
+            const allDay = !!data.isAllDay;
+            const record = { ...ed.record, Subject: data.title, Description: data.description, Type: Number(data.type) || 1,
+                IsAllDay: allDay, StartTime: new Date(data.start), EndTime: nativeEnd(data.end, allDay) };
+            if (ed.mode !== 'EditOccurrence') record.RecurrenceRule = data.recurrencerule || '';
+            const finish = (ok) => { if (ok) { this.editorSaved = true; this.closeNativeEditor(); } };
+            if (ed.mode === 'Add') return finish(this.nativeAction('eventCreate', { addedRecords: [record] }, { action: 'Add' }));
+            if (ed.mode === 'Save') return finish(this.nativeAction('eventChange', { changedRecords: [record] }, { action: 'Save' }));
+            if (ed.mode === 'EditOccurrence') {
+                return finish(this.nativeAction('eventChange', { changedRecords: [record] }, { action: 'EditOccurrence', occurrenceStart: ed.occurrence.start }));
+            }
+            // The whole series. Classic asks first whenever the series has skipped dates or separately edited
+            // occurrences, and the answer decides whether they survive (ScheduleAdapter.toCommand, keepOccurrences).
+            const series = this.nativeSeriesOf(this.nativeStored({ id: ed.record.Id }));
+            const own = series && (!isBlankId(series.recurrenceException)
+                || (this.calendar.events || []).some((e) => e && !isBlankId(e.recurrenceID) && String(e.recurrenceID) === String(series.id)));
+            const save = (keepOccurrences) => finish(this.nativeAction('eventChange', { changedRecords: [record] }, { action: 'EditSeries', keepOccurrences }));
+            if (!own) return save(false);
+            this.nativeAsk = { title: 'Edit event', message: 'Do you want to cancel the changes made to specific instances of this series and match it to the whole series again?',
+                buttons: [
+                    { label: 'No', testid: 'confirm-no', action: () => save(true) },
+                    { label: 'Yes', testid: 'confirm-yes', primary: true, action: () => save(false) },
+                ] };
+        },
+
+        // The popup's pencil (or its date line), the editor of a search result: which event, and for a repeating one
+        // which part of it (classic's "Edit event / Entire series" question).
+        nativeEditEvent(ev, occurrence) {
+            const row = this.nativeStored(ev);
+            if (!row || !this.nativeCanEdit()) return;
+            this.nativePopover = null;
+            const kind = this.nativeKind(row), series = this.nativeSeriesOf(row);
+            if (kind === 'single' || ((kind === 'edited') && !series)) return this.openNativeEditor({ mode: 'Save', row });
+            if (kind === 'series' && !occurrence) return this.openNativeEditor({ mode: 'EditSeries', row });
+            const forThis = kind === 'edited' ? () => this.openNativeEditor({ mode: 'Save', row })
+                : () => this.openNativeEditor({ mode: 'EditOccurrence', row, occurrence });
+            this.nativeAskScope('Edit recurring event', forThis, () => this.openNativeEditor({ mode: 'EditSeries', row: series }));
+        },
+        // The popup's or the editor's Delete: no "Are you sure?" (the Undo toast covers it), but a repeating event asks
+        // which part, as classic does.
+        nativeDeleteEvent(ev, occurrence, fromEditor = null) {
+            const row = this.nativeStored(ev) || (fromEditor && fromEditor.mode === 'EditOccurrence' ? this.nativeStored({ id: fromEditor.record.RecurrenceID }) : null);
+            if (!row || !this.nativeCanEdit()) return;
+            this.nativePopover = null;
+            const kind = this.nativeKind(row), series = this.nativeSeriesOf(row);
+            const done = () => { if (fromEditor) { this.editorSaved = true; this.closeNativeEditor(); } };
+            const removeRow = () => { this.nativeAction('eventRemove', { deletedRecords: [this.nativeRecord(row)] }, { action: 'Delete' }); done(); };
+            const removeSeries = () => {
+                const rec = this.nativeRecord(series);
+                rec.RecurrenceID = rec.Id;
+                this.nativeAction('eventRemove', { deletedRecords: [rec] }, { action: 'DeleteSeries' });
+                done();
+            };
+            const removeOne = (when) => {
+                const rec = this.nativeRecord(series);
+                rec.RecurrenceID = rec.Id;
+                rec.StartTime = new Date(when);
+                this.nativeAction('eventRemove', { changedRecords: [rec] }, { action: 'DeleteOccurrence', occurrenceStart: new Date(when) });
+                done();
+            };
+            if (kind === 'single' || !series) return removeRow();
+            // From the editor the question was already answered when it opened.
+            if (fromEditor) {
+                if (fromEditor.mode === 'EditOccurrence') return removeOne(fromEditor.occurrence.start);
+                if (fromEditor.mode === 'EditSeries') return removeSeries();
+                return removeRow();
+            }
+            if (kind === 'series' && !occurrence) return removeSeries();
+            this.nativeAskScope('Delete recurring event', kind === 'edited' ? removeRow : () => removeOne(occurrence.start), removeSeries, 'Delete');
+        },
+        // Whether people categorise events at all decides if type labels are worth building on (classic sends it too).
+        onNativeColor() { track(a => a.featureUsed('event_type', 'popup')); },
+        onNativePopoverEdit() {
+            const p = this.nativePopover;
+            if (p) this.nativeEditEvent(p.event, p.occurrence);
+        },
+        onNativePopoverDelete() {
+            const p = this.nativePopover;
+            if (p) this.nativeDeleteEvent(p.event, p.occurrence);
+        },
+        onNativeEditorDelete() {
+            const ed = this.nativeEditor;
+            if (!ed) return;
+            const ev = ed.mode === 'EditOccurrence' ? { id: ed.record.RecurrenceID } : { id: ed.record.Id, recurrenceID: ed.mode === 'EditSeries' ? null : ed.record.RecurrenceID };
+            this.nativeDeleteEvent(ev, ed.occurrence, ed);
+        },
+
+        // Drag and resize. The event as it was when the drag began is the merge's starting point.
+        onNativeDragStart({ event }) {
+            const row = this.nativeStored(event);
+            this._nativeDragFrom = row ? { ...row } : null;
+        },
+        onNativeMove({ event, occurrence, start, end }) {
+            const row = this.nativeStored(event);
+            const from = this._nativeDragFrom && row && String(this._nativeDragFrom.id) === String(row.id)
+                && String(this._nativeDragFrom.recurrenceID ?? '') === String(row.recurrenceID ?? '') ? this._nativeDragFrom : row;
+            this._nativeDragFrom = null;
+            if (!row || !this.nativeCanEdit()) return;
+            const kind = this.nativeKind(row), series = this.nativeSeriesOf(row);
+            const moveRow = () => {
+                const rec = this.nativeRecord(from);
+                ScheduleAdapter.noteStart(rec);
+                this.nativeAction('eventChange', { changedRecords: [{ ...rec, StartTime: start, EndTime: end }] }, { action: 'Save' });
+            };
+            if (kind === 'single' || !series) return moveRow();
+            const moveOne = () => {
+                const rec = this.nativeRecord(series);
+                Object.assign(rec, { Id: NATIVE_OCCURRENCE_ID, RecurrenceID: rec.Id, StartTime: start, EndTime: end });
+                this.nativeAction('eventChange', { changedRecords: [rec] }, { action: 'EditOccurrence', occurrenceStart: occurrence.start });
+            };
+            // All events: the series moves by as much as this occurrence did (wall-clock days and minutes, so a
+            // DST change in between keeps the clock time), as classic's "Entire series" does.
+            const moveAll = () => {
+                const rec = this.nativeRecord(series);
+                rec.RecurrenceID = rec.Id;
+                ScheduleAdapter.noteStart(rec);
+                const shift = nativeShift(occurrence.start, start), stretch = nativeShift(occurrence.end, end);
+                const keep = !isBlankId(series.recurrenceException)
+                    || (this.calendar.events || []).some((e) => e && !isBlankId(e.recurrenceID) && String(e.recurrenceID) === String(series.id));
+                this.nativeAction('eventChange', { changedRecords: [{ ...rec, StartTime: shift(rec.StartTime), EndTime: stretch(rec.EndTime) }] },
+                    { action: 'EditSeries', keepOccurrences: keep });
+            };
+            this.nativeAskScope('Edit recurring event', kind === 'edited' ? moveRow : moveOne, moveAll);
         },
 
         // Syncfusion's Schedule, built and wired as it always was: the classic calendar. Returns its
@@ -2744,24 +3038,36 @@ const CalendarVueApp = {
         /** A grid action (Syncfusion's add / change / remove, cancelled in actionBegin) -> the store. */
         applyScheduleAction(args) {
             const active = window.scheduleObj && window.scheduleObj.activeEventData && window.scheduleObj.activeEventData.event;
+            const ui = (window.scheduleObj && window.scheduleObj.uiStateValues) || {};
+            const context = {
+                action: window.scheduleObj && window.scheduleObj.currentAction,
+                occurrenceStart: active && active.StartTime,
+                keepOccurrences: !!ui.isIgnoreOccurrence,
+            };
+            // Syncfusion clears this flag in the step we cancel; clear it so a "No" here
+            // cannot leak into the next series edit.
+            ui.isIgnoreOccurrence = false;
+            return this.commitScheduleAction(args, context);
+        },
+
+        /**
+         * One calendar action, in Syncfusion's record shapes (ScheduleAdapter), -> the store: the one write path both
+         * calendars share. The classic grid hands its own actionBegin args here (applyScheduleAction); the native one
+         * builds the same args from what the person did (nativeAction). context: { action ('Add' | 'Save' | 'Delete' |
+         * 'EditOccurrence' | 'DeleteOccurrence' | 'EditSeries' | 'DeleteSeries'), occurrenceStart, keepOccurrences }.
+         * Returns true when something was saved.
+         */
+        commitScheduleAction(args, context) {
             let command;
             try {
-                const ui = (window.scheduleObj && window.scheduleObj.uiStateValues) || {};
-                command = ScheduleAdapter.toCommand(args, this.store(), {
-                    action: window.scheduleObj && window.scheduleObj.currentAction,
-                    occurrenceStart: active && active.StartTime,
-                    keepOccurrences: !!ui.isIgnoreOccurrence,
-                });
-                // Syncfusion clears this flag in the step we cancel; clear it so a "No" here
-                // cannot leak into the next series edit.
-                ui.isIgnoreOccurrence = false;
+                command = ScheduleAdapter.toCommand(args, this.store(), context);
             } catch (err) {
                 // An action the adapter cannot map safely: nothing is saved, the person is
                 // told, and it is logged with the action name (command_failed).
-                this.store().onError(err, { type: 'schedule', label: `${args.requestType}/${window.scheduleObj && window.scheduleObj.currentAction}` });
-                return;
+                this.store().onError(err, { type: 'schedule', label: `${args.requestType}/${context && context.action}` });
+                return false;
             }
-            if (!command.commands.length) return;
+            if (!command.commands.length) return false;
             const deleting = args.requestType === 'eventRemove';
             const subject = (r) => r && r.Subject ? `"${String(r.Subject).trim()}"` : 'event';
             const records = [...(args.deletedRecords || []), ...(args.changedRecords || [])];
@@ -2770,12 +3076,13 @@ const CalendarVueApp = {
                 : (args.deletedRecords || []).length ? `Deleted ${subject(args.deletedRecords[0])}`
                 : `Deleted one ${subject(records[0])}`;
             const r = this.store().dispatch(command, { label });
-            if (!r.ok) return;
+            if (!r.ok) return false;
             // A real, user-initiated change to this calendar (sync() also runs for other
             // people's edits echoing back, so it cannot be recorded there).
             if (this.isExisting && typeof AuthorSignal !== 'undefined') AuthorSignal.touch(this.calendar.id);
             if (args.requestType === 'eventCreate') { track(a => a.eventAdded('grid', this.calendar)); this.noteHomepageEvent(); }
             if (deleting) this.offerUndo(label);
+            return true;
         },
 
         // ============================================================
@@ -5550,6 +5857,7 @@ const CalendarVueApp = {
                 this.setIsReadOnly(out || this.viewRoute);
                 if (out) this.editTitle = false;
                 try {
+                    if (out && this.calView && this.calView.kind === 'native') this.calView.closePopups();
                     if (window.scheduleObj) {
                         if (out && typeof scheduleObj.closeEditor === 'function') scheduleObj.closeEditor();
                         if (out && typeof scheduleObj.closeQuickInfoPopup === 'function') scheduleObj.closeQuickInfoPopup();

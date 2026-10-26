@@ -172,7 +172,131 @@
 .np-desc { white-space: pre-wrap; word-break: break-word; max-height: 40vh; overflow-y: auto; user-select: text; }
 .np-desc a { color: var(--pc-link); text-decoration: underline; }
 
+/* ---- editing (a native edit link: NativeCalendar appEdits) -------------------------------- */
+/* Drag an event, drag its top or bottom edge, drag out a new one; long-press on a touch screen. */
+.nc-editable .nc-resize { display: block; position: absolute; left: 0; right: 0; bottom: 0; height: 6px; cursor: ns-resize; }
+.nc-editable .nc-resize-top { top: 0; bottom: auto; }
+.nc-editable .nc-timed, .nc-editable .nc-bar { -webkit-touch-callout: none; touch-action: manipulation; }
+.nc-editable .nc-col, .nc-editable .nc-allday-cell { cursor: default; }
+.nc-dragging, .nc-dragging * { cursor: grabbing !important; }
+.nc-timed.lifted, .nc-bar.lifted { box-shadow: var(--pc-shadow-md); }
+.nc-bar.lifted { opacity: .6; }
+.nc-cell.drop, .nc-allday-cell.drop { background: var(--pc-primary-soft); }
+.nc-cell.creating, .nc-allday-cell.creating { background: var(--pc-primary-soft); }
+/* The new event while the quick box is open (and the duration being dragged out): where it will land. */
+.nc-draft { pointer-events: none; box-shadow: var(--pc-shadow-md); outline: 2px solid var(--pc-bg); z-index: 4 !important; }
+.nc-create-preview { position: absolute; left: 2px; right: 4px; z-index: 4; pointer-events: none; padding: 2px var(--pc-space-1);
+    border-radius: var(--pc-radius-sm); background: var(--pc-primary); color: var(--pc-on-primary); font-size: var(--pc-fs-xs); font-weight: var(--pc-fw-semibold);
+    box-shadow: var(--pc-shadow-md); box-sizing: border-box; }
+
+/* The popup's date line opens the editor. */
+.np-when-edit { cursor: pointer; border-radius: var(--pc-radius-sm); }
+.np-when-edit:hover { background: var(--pc-hover); }
+
+/* ---- the quick box (QuickCreatePopover appLook) ------------------------------------------- */
+.nq { position: fixed; z-index: var(--pc-z-popover); width: 364px; max-width: calc(100vw - 16px); box-sizing: border-box; padding: var(--pc-space-4) var(--pc-space-5) var(--pc-space-3);
+    background: var(--pc-bg); color: var(--pc-text); border: 1px solid var(--pc-line); border-radius: var(--pc-radius-card); box-shadow: var(--pc-shadow-lg);
+    font-family: var(--pc-font); font-size: var(--pc-fs-md); }
+.nq-x { position: absolute; top: var(--pc-space-2); right: var(--pc-space-2); width: var(--pc-h-sm); height: var(--pc-h-sm); border: 0; background: none; color: var(--pc-text-muted);
+    border-radius: var(--pc-radius-control); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.nq-x:hover { background: var(--pc-hover); color: var(--pc-text); }
+.nq-title { width: calc(100% - 32px); box-sizing: border-box; border: 0; border-bottom: 2px solid var(--pc-primary); padding: var(--pc-space-1) 0; background: transparent;
+    color: var(--pc-text); font: var(--pc-fw-semibold) var(--pc-fs-xl) var(--pc-font); outline: none; }
+.nq-title::placeholder { color: var(--pc-text-muted); font-weight: var(--pc-fw-medium); }
+.nq-line { display: flex; gap: var(--pc-space-3); align-items: center; margin: var(--pc-space-3) 0 var(--pc-space-2); color: var(--pc-text-2); }
+.nq-foot { display: flex; justify-content: flex-end; gap: var(--pc-space-2); }
+
+/* ---- the editor (EventEditor appLook) ----------------------------------------------------- */
+.ne-overlay { position: fixed; inset: 0; z-index: var(--pc-z-dialog); background: var(--pc-scrim); display: flex; align-items: center; justify-content: center; padding: var(--pc-space-4); }
+.ne-dialog { width: 540px; max-width: 100%; max-height: calc(100vh - 32px); display: flex; flex-direction: column; box-sizing: border-box;
+    background: var(--pc-bg); color: var(--pc-text); border-radius: var(--pc-radius-dialog); box-shadow: var(--pc-shadow-xl); font-family: var(--pc-font); font-size: var(--pc-fs-md); }
+.ne-head { display: flex; align-items: center; justify-content: space-between; padding: var(--pc-space-4) var(--pc-space-4) var(--pc-space-1) var(--pc-space-6); }
+.ne-head h2 { margin: 0; font-size: var(--pc-fs-2xl); font-weight: var(--pc-fw-bold); }
+.ne-x { width: var(--pc-h-md); height: var(--pc-h-md); border: 0; background: none; color: var(--pc-text-muted); border-radius: var(--pc-radius-control); cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; }
+.ne-x:hover { background: var(--pc-hover); color: var(--pc-text); }
+.ne-body { padding: var(--pc-space-1) var(--pc-space-6) var(--pc-space-2); overflow-y: auto; min-height: 0; }
+.ne-row { display: flex; gap: var(--pc-space-4); align-items: flex-end; }
+.ne-grow { flex: 1; min-width: 0; }
+.ne-field { display: block; margin: var(--pc-space-3) 0; min-width: 0; }
+.ne-field > span { display: block; margin-bottom: var(--pc-space-1); font-size: var(--pc-fs-sm); font-weight: var(--pc-fw-medium); color: var(--pc-text-2); }
+.ne-field input, .ne-field select, .ne-field textarea, .ne-radio select, .ne-radio input[type=number], .ne-month-pick select {
+    box-sizing: border-box; width: 100%; height: var(--pc-h-md); padding: 0 var(--pc-space-3); border: 1px solid var(--pc-field); border-radius: var(--pc-radius-control);
+    background: var(--pc-bg); color: var(--pc-text); font: var(--pc-fw-regular) var(--pc-fs-md) var(--pc-font); }
+.ne-field textarea { height: auto; min-height: 72px; padding: var(--pc-space-2) var(--pc-space-3); resize: vertical; line-height: var(--pc-lh-body); }
+.ne-field input:focus, .ne-field select:focus, .ne-field textarea:focus, .ne-radio select:focus, .ne-radio input:focus, .ne-month-pick select:focus {
+    outline: none; border-color: var(--pc-primary); box-shadow: var(--pc-focus-ring); }
+.ne-title-row .ne-field input { height: var(--pc-h-lg); font-size: var(--pc-fs-lg); font-weight: var(--pc-fw-semibold); }
+.ne-dt { display: flex; gap: var(--pc-space-2); }
+.ne-dt input[type=date] { flex: 1.3; min-width: 0; }
+.ne-dt input[type=time] { flex: 1; min-width: 0; }
+.ne-check { display: inline-flex; align-items: center; gap: var(--pc-space-2); margin: var(--pc-space-1) 0; cursor: pointer; }
+.ne-check input, .ne-radio input[type=radio] { width: 18px; height: 18px; accent-color: var(--pc-primary); margin: 0; flex: none; }
+.ne-select { position: relative; display: block; }
+.ne-select select { appearance: none; -webkit-appearance: none; padding-right: var(--pc-space-8); cursor: pointer; }
+.ne-select::after { content: ""; position: absolute; right: var(--pc-space-3); top: 50%; width: 7px; height: 7px; margin-top: -6px; pointer-events: none;
+    border-right: 2px solid var(--pc-text-muted); border-bottom: 2px solid var(--pc-text-muted); transform: rotate(45deg); }
+.ne-repeat { margin: 0 0 var(--pc-space-2); padding: var(--pc-space-1) var(--pc-space-4); border-radius: var(--pc-radius-card); background: var(--pc-surface); border: 1px solid var(--pc-line); }
+.ne-inline { display: flex; align-items: center; gap: var(--pc-space-2); }
+.ne-num { width: 84px !important; flex: none; }
+.ne-days { display: flex; flex-wrap: wrap; gap: var(--pc-space-2); }
+.ne-days button { width: var(--pc-h-md); height: var(--pc-h-md); border-radius: 50%; border: 1px solid var(--pc-field); background: var(--pc-bg); color: var(--pc-text-2);
+    font: var(--pc-fw-semibold) var(--pc-fs-sm) var(--pc-font); cursor: pointer; }
+.ne-days button:hover { background: var(--pc-hover); }
+.ne-days button.on { background: var(--pc-primary); border-color: var(--pc-primary); color: var(--pc-on-primary); }
+.ne-rep-month { display: flex; flex-direction: column; gap: var(--pc-space-2); }
+.ne-rep-month > span { margin-bottom: 0; }
+.ne-radio { display: flex; align-items: center; gap: var(--pc-space-2); flex-wrap: wrap; cursor: pointer; }
+.ne-radio .ne-select { flex: 1; min-width: 110px; }
+.ne-month-pick { max-width: 220px; }
+.ne-month-pick .ne-select { flex: 1; }
+.ne-rep-end { display: flex; gap: var(--pc-space-3); flex-wrap: wrap; }
+.ne-rep-end .ne-field { flex: 1; min-width: 140px; }
+.ne-colorfield .ne-color { position: relative; }
+.ne-color2 { display: flex; align-items: center; gap: var(--pc-space-2); width: 100%; height: var(--pc-h-md); padding: 0 var(--pc-space-3); box-sizing: border-box;
+    border: 1px solid var(--pc-field); border-radius: var(--pc-radius-control); background: var(--pc-bg); color: var(--pc-text); font: var(--pc-fw-regular) var(--pc-fs-md) var(--pc-font); cursor: pointer; }
+.ne-color2:hover { background: var(--pc-hover); }
+.ne-color2-label { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ne-color2 .sw, .ne-color-menu .sw { width: 14px; height: 14px; border-radius: 50%; flex: none; }
+.ne-color-menu { z-index: var(--pc-z-menu); overflow-y: auto; padding: var(--pc-space-1); background: var(--pc-bg); border: 1px solid var(--pc-line);
+    border-radius: var(--pc-radius-card); box-shadow: var(--pc-shadow-md); box-sizing: border-box; }
+.ne-color-menu button { display: flex; align-items: center; gap: var(--pc-space-2); width: 100%; min-height: var(--pc-h-md); padding: 0 var(--pc-space-3); border: 0;
+    border-radius: var(--pc-radius-sm); background: none; color: var(--pc-text); font: var(--pc-fw-regular) var(--pc-fs-md) var(--pc-font); text-align: left; cursor: pointer; }
+.ne-color-menu button:hover, .ne-color-menu button[aria-selected="true"] { background: var(--pc-hover); }
+.ne-color-menu .lbl { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ne-color-menu .ck { color: var(--pc-primary); }
+.ne-color-hint { padding: var(--pc-space-2) var(--pc-space-3); border-top: 1px solid var(--pc-line); margin-top: var(--pc-space-1); font-size: var(--pc-fs-xs); color: var(--pc-text-muted); }
+.ne-error { margin: var(--pc-space-2) 0 0; color: var(--pc-danger); font-size: var(--pc-fs-sm); }
+.ne-foot { display: flex; align-items: center; gap: var(--pc-space-2); padding: var(--pc-space-3) var(--pc-space-6) var(--pc-space-5); border-top: 1px solid var(--pc-line); }
+.ne-spacer { flex: 1; }
+.ne-delete { color: var(--pc-danger); }
+
+/* ---- "This event / All events" and classic's other questions ------------------------------ */
+.pc-native-ask { position: fixed; inset: 0; z-index: var(--pc-z-snackbar); background: var(--pc-scrim); display: flex; align-items: center; justify-content: center; padding: var(--pc-space-4); }
+.pc-native-ask-panel { width: 380px; max-width: 100%; box-sizing: border-box; padding: var(--pc-space-5) var(--pc-space-6); background: var(--pc-bg); color: var(--pc-text);
+    border-radius: var(--pc-radius-dialog); box-shadow: var(--pc-shadow-xl); font-family: var(--pc-font); }
+.pc-native-ask-title { margin: 0 0 var(--pc-space-3); font-size: var(--pc-fs-xl); font-weight: var(--pc-fw-bold); }
+.pc-native-ask-text { margin: 0 0 var(--pc-space-3); font-size: var(--pc-fs-md); line-height: var(--pc-lh-body); color: var(--pc-text-2); }
+.pc-native-ask-options { display: flex; flex-direction: column; gap: var(--pc-space-1); margin-bottom: var(--pc-space-4); }
+.pc-native-ask-option { display: flex; align-items: center; gap: var(--pc-space-3); min-height: var(--pc-h-md); font-size: var(--pc-fs-md); cursor: pointer; }
+.pc-native-ask-option input { width: 18px; height: 18px; margin: 0; accent-color: var(--pc-primary); }
+.pc-native-ask-foot { display: flex; justify-content: flex-end; gap: var(--pc-space-2); flex-wrap: wrap; }
+
+/* ---- phones: the quick box and the editor as sheets from the bottom ---------------------- */
+@media (max-width: 600px) {
+    .nq-app { top: auto !important; left: 0 !important; right: 0; bottom: 0; width: 100%; max-width: none; border-radius: var(--pc-radius-dialog) var(--pc-radius-dialog) 0 0;
+        padding-bottom: calc(var(--pc-space-4) + env(safe-area-inset-bottom)); }
+    .nq-title { font-size: var(--pc-fs-lg); }
+    .ne-app { align-items: flex-end; padding: 0; }
+    .ne-app .ne-dialog { width: 100%; max-height: 92dvh; border-radius: var(--pc-radius-dialog) var(--pc-radius-dialog) 0 0; }
+    .ne-app .ne-head { padding: var(--pc-space-3) var(--pc-space-2) 0 var(--pc-space-4); }
+    .ne-app .ne-body { padding: 0 var(--pc-space-4) var(--pc-space-2); }
+    .ne-app .ne-foot { padding: var(--pc-space-3) var(--pc-space-4) calc(var(--pc-space-3) + env(safe-area-inset-bottom)); }
+    .ne-app .ne-when { flex-direction: column; gap: 0; align-items: stretch; }
+    .ne-app .ne-field input, .ne-app .ne-field select, .ne-app .ne-field textarea { font-size: var(--pc-fs-lg); }   /* no iOS zoom on focus */
+}
+
 /* ---- the page around it ----------------------------------------------------------------- */
 .pc-native-cal { min-height: 0; }
 .pc-native-cal:has(.nc-agenda, .nc-grid) { min-height: 70vh; }
-@media print { .pc-native-cal, .np { display: none !important } }
+@media print { .pc-native-cal, .np, .nq, .ne-overlay, .pc-native-ask { display: none !important } }

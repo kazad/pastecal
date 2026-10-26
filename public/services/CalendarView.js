@@ -71,8 +71,14 @@
             render() { /* reactive: the grid reads calendar.events and the color filter as props */ },
             refreshLayout() { if (typeof vm.fitNativeMonthRows === 'function') vm.$nextTick(() => vm.fitNativeMonthRows()); },
             setReadOnly() { /* the read-only prop follows isReadOnly */ },
-            closePopups() { vm.nativePopover = null; },
-            openEditor() { /* milestone 2: the native editor */ },
+            closePopups() {
+                vm.nativePopover = null;
+                vm.nativeQuick = null;
+                vm.nativeAsk = null;
+                if (vm.nativeEditor && typeof vm.closeNativeEditor === 'function') vm.closeNativeEditor();
+            },
+            // A search result's Edit: the event itself, a repeating one as the whole series (as classic opens it).
+            openEditor(event) { if (typeof vm.nativeEditEvent === 'function') vm.nativeEditEvent(event, null); },
         };
     }
 

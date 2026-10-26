@@ -82,7 +82,8 @@ const EventPopover = {
     <div class="np-title" data-testid="popover-title">{{ event.title || '(No title)' }}</div>
   </div>
   <div class="np-body">
-    <div class="np-line"><nc-icon class="np-glyph" name="calendar-clock"></nc-icon><span>{{ when }}<span v-if="repeats" class="np-sub" data-testid="popover-repeats">{{ repeats }}</span></span></div>
+    <!-- The date line opens the editor, as the pencil does (people click it to change the time; classic does the same). -->
+    <div class="np-line" :class="{ 'np-when-edit': !readOnly }" data-testid="popover-when" :title="readOnly ? null : 'Change date or time'" @click="!readOnly && $emit('edit', event)"><nc-icon class="np-glyph" name="calendar-clock"></nc-icon><span>{{ when }}<span v-if="repeats" class="np-sub" data-testid="popover-repeats">{{ repeats }}</span></span></div>
     <div v-if="event.description" class="np-line"><nc-icon class="np-glyph" name="text-align-start"></nc-icon>
       <span class="np-desc" data-testid="popover-description" v-html="linkified"></span></div>
   </div>

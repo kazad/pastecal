@@ -79,6 +79,22 @@ const NativeCalendar = (() => {
     const toFloating = (d) => new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds()));
     const fromFloating = (u) => new Date(u.getUTCFullYear(), u.getUTCMonth(), u.getUTCDate(), u.getUTCHours(), u.getUTCMinutes(), u.getUTCSeconds());
     const utcStamp = (d) => d.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+    const ymdKey = (y, m, d) => `${y}${pad(m + 1)}${pad(d)}`;
+    // The DATE an all-day series' skipped-date stamp names, as 'YYYYMMDD' (or null): the same reading as
+    // Event.allDayStampDate and Syncfusion's (ScheduleAdapter.toView). Stamps are written as the WRITER's local
+    // midnight ("20261012T150000Z" is Tokyo's Oct 13), so comparing them raw with this viewer's occurrence
+    // instants brought a date skipped in Tokyo back in Los Angeles (finding D2). A floating stamp (no Z) is
+    // already a wall-clock date. Rounding the instant to its date also reads a stamp the app has already
+    // moved to this viewer's midnight (CalendarView.displayEvents), so both inputs give the same answer.
+    const allDayStampKey = (s) => {
+        const m = /^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z?))?$/i.exec(String(s).trim());
+        if (!m) return null;
+        if (!m[4] || !m[7]) return m[1] + m[2] + m[3];
+        const ms = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+        // floor((ms + 13h + 1s) / day): a writer's local midnight, from just east of UTC-11 to UTC+13 (models/Event.js)
+        const d = new Date(Math.floor((ms + 13 * 3600000 + 1000) / DAY_MS) * DAY_MS);
+        return ymdKey(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    };
 
     // ---- events -> occurrences ---------------------------------------------------------
     function isLong(o) { return o.allDay || (o.end - o.start) >= DAY_MS; }
@@ -100,8 +116,10 @@ const NativeCalendar = (() => {
             // CARRIES A COPY of the series' rule (that is how Syncfusion stores it). Expanding
             // it would draw a second series; it is one event, at its own time.
             if (ev.recurrencerule && !ev.recurrenceID && RR.RRule) {
-                const excluded = new Set(String(ev.recurrenceException || '').split(',').map(s => s.trim()).filter(Boolean)
-                    .map(s => s.replace(/(\d{8}T\d{4})\d{2}Z?$/, '$1')));  // compare to the minute
+                const stamps = String(ev.recurrenceException || '').split(',').map(s => s.trim()).filter(Boolean);
+                // Timed: the occurrence's UTC start, compared to the minute. All-day: the date (see allDayStampKey).
+                const excluded = new Set(allDay ? stamps.map(allDayStampKey).filter(Boolean)
+                    : stamps.map(s => s.replace(/(\d{8}T\d{4})\d{2}Z?$/, '$1')));
                 let rule;
                 try {
                     const clean = String(ev.recurrencerule).replace(/^RRULE:/i, '').split(';').filter(p => p.includes('=')).join(';');
@@ -116,8 +134,8 @@ const NativeCalendar = (() => {
                     const from = toFloating(new Date(rangeStart.getTime() - duration)), to = toFloating(rangeEnd);
                     for (const f of rule.between(from, to, true)) {
                         const s = fromFloating(f);
-                        const stamp = utcStamp(allDay ? s : s).replace(/(\d{8}T\d{4})\d{2}Z$/, '$1');
-                        if (excluded.has(stamp) || excluded.has(stamp.slice(0, 8))) continue;
+                        const key = allDay ? ymdKey(s.getFullYear(), s.getMonth(), s.getDate()) : utcStamp(s).replace(/(\d{8}T\d{4})\d{2}Z$/, '$1');
+                        if (excluded.has(key) || excluded.has(key.slice(0, 8))) continue;
                         out.push({ ...base, start: s, end: new Date(s.getTime() + duration), recurring: true, key: `${ev.id}@${s.getTime()}` });
                     }
                     continue;
@@ -185,9 +203,20 @@ const NativeCalendar = (() => {
             textOn: { type: Function, default: null },
             // Month rows taller than the 100px default (the main app fills a wide window with the month, as before).
             monthRowHeight: { type: Number, default: MONTH_ROW_PX },
+            // The main app's edit links: drag to create in every look (a duration on the time grid, a run of days
+            // on the month grid and the all-day row), drag and resize a repeating occurrence too (the app asks
+            // "this event / all events"), long-press to drag on a touch screen. A drop goes out as 'event-move'
+            // for the app to save, never as a rewritten list.
+            appEdits: { type: Boolean, default: false },
+            // The event being added while the quick box is open, { start, end, isAllDay, title } (display shape, as
+            // 'event-create' sends it): drawn on the grid as a "New event" block whose label follows the title.
+            draft: { type: Object, default: null },
         },
         // 'range-change' { view, date, start, end }: whenever the dates on screen change (view or navigation).
-        emits: ['update:events', 'event-click', 'event-create', 'view-change', 'range-change'],
+        // 'drag-start' { event, occurrence }: a drag or resize of an event began (appEdits).
+        // 'event-move' { event, occurrence, start, end, allDay, mode }: an event was dropped or resized (appEdits).
+        //     start/end are Dates; an all-day end is exclusive (the next local midnight).
+        emits: ['update:events', 'event-click', 'event-create', 'view-change', 'range-change', 'drag-start', 'event-move'],
         data() {
             return {
                 view: normView(this.initialView) || 'Month',
@@ -213,10 +242,16 @@ const NativeCalendar = (() => {
             // What is drawn: the events minus the filtered-out colors. Drags still edit `events`,
             // so a hidden event is never dropped from the list the grid hands back.
             shownEvents() {
-                if (!this.hiddenSlots.length) return this.events;
-                const n = this.palette.length;
-                const slot = (e) => { const t = parseInt(e.type || 1, 10); return Number.isFinite(t) && t >= 1 && t <= n ? t - 1 : 0; };
-                return this.events.filter(e => !this.hiddenSlots.includes(slot(e)));
+                let list = this.events;
+                if (this.hiddenSlots.length) {
+                    const n = this.palette.length;
+                    const slot = (e) => { const t = parseInt(e.type || 1, 10); return Number.isFinite(t) && t >= 1 && t <= n ? t - 1 : 0; };
+                    list = list.filter(e => !this.hiddenSlots.includes(slot(e)));
+                }
+                const d = this.draft;
+                if (d && d.start && d.end) list = [...list, { id: '__draft', __draft: true, title: (d.title || '').trim() || 'New event',
+                    start: d.start, end: d.end, isAllDay: !!d.isAllDay, type: d.type || 1 }];
+                return list;
             },
             customN() { const n = parseInt(this.customDuration, 10); const max = this.customWeeks ? 52 : 24; return n >= 1 ? Math.min(n, max) : 3; },
             customWeeks() { return /^week/i.test(String(this.customUnit || '')); },
@@ -353,6 +388,16 @@ const NativeCalendar = (() => {
             this._onUp = (e) => this.onDragEnd(e);
             window.addEventListener('mousemove', this._onMove);
             window.addEventListener('mouseup', this._onUp);
+            // Touch: a long press lifts an event (appEdits); moving the finger first is a scroll and cancels it.
+            // Only a lifted drag stops the page from scrolling (this listener must not be passive for that).
+            this._onTouchMove = (e) => this.onTouchMove(e);
+            this._onTouchEnd = (e) => this.onTouchEnd(e);
+            window.addEventListener('touchmove', this._onTouchMove, { passive: false });
+            window.addEventListener('touchend', this._onTouchEnd);
+            window.addEventListener('touchcancel', this._onTouchEnd);
+            // Escape drops a drag where it started (and the click that ends it does nothing).
+            this._onKey = (e) => { if (e.key === 'Escape' && this.drag) { e.stopPropagation(); e.preventDefault(); this.cancelDrag(); } };
+            window.addEventListener('keydown', this._onKey, true);
             this._onDocClick = (e) => { if (this.pickerOpen && !e.target.closest('.nc-picker, .nc-title')) this.pickerOpen = false; };
             document.addEventListener('mousedown', this._onDocClick);
             this.$nextTick(() => this.scrollToWorkHours());
@@ -363,6 +408,11 @@ const NativeCalendar = (() => {
             window.removeEventListener('resize', this._onResize);
             window.removeEventListener('mousemove', this._onMove);
             window.removeEventListener('mouseup', this._onUp);
+            window.removeEventListener('touchmove', this._onTouchMove);
+            window.removeEventListener('touchend', this._onTouchEnd);
+            window.removeEventListener('touchcancel', this._onTouchEnd);
+            window.removeEventListener('keydown', this._onKey, true);
+            clearTimeout(this._press);
             document.removeEventListener('mousedown', this._onDocClick);
         },
         methods: {
@@ -464,13 +514,34 @@ const NativeCalendar = (() => {
             // Crosses midnight at all -- Syncfusion draws even a 10pm-2am flight as a
             // spanning bar with a time at each end.
             isMultiDayTimed(o) { return !o.allDay && dayIndex(o.start) !== dayIndex(new Date(o.end.getTime() - 1)); },
+            // The test id of an event on the grid; the "New event" block has its own.
+            tid(o) { return o.event.__draft ? 'draft-block' : 'event-' + o.event.id; },
+            // The day cell under a point (the month grid's, the all-day row's or a time column: `sel`), by geometry,
+            // since an event bar can sit over the cell.
+            dayAt(x, y, sel) {
+                for (const c of this.$el.querySelectorAll(sel)) {
+                    const r = c.getBoundingClientRect();
+                    if (x >= r.left && x < r.right && y >= r.top && y < r.bottom) return new Date(Number(c.dataset.day));
+                }
+                return null;
+            },
+            // A run of days being dragged out for a new all-day event (month grid, all-day row).
+            inDayRun(d) {
+                const g = this.drag;
+                if (!g || g.mode !== 'days' || !g.moved) return false;
+                const a = Math.min(g.day0.getTime(), g.day1.getTime()), b = Math.max(g.day0.getTime(), g.day1.getTime());
+                return d.getTime() >= a && d.getTime() <= b;
+            },
+            isDropDay(d) { const g = this.drag; return !!(g && g.mode === 'month' && g.moved && g.targetDay && sameDay(g.targetDay, d)); },
+            isLifted(o) { const g = this.drag; return !!(g && g.moved && g.key === o.key); },
             // ---- clicks ------------------------------------------------------------------
             clickEvent(occ, jsEvent) {
-                if (this.drag && this.drag.moved) return;
+                if ((this.drag && this.drag.moved) || this._swallowClick || occ.event.__draft) return;
                 this.selectedCell = null;
                 this.$emit('event-click', { event: occ.event, occurrence: { start: occ.start, end: occ.end, recurring: occ.recurring }, jsEvent });
             },
             clickCell(day, jsEvent, hour, full) {
+                if (this._swallowClick || this._afterCreateDrag) return;
                 if (this.readOnly && this.openDayOnClick && hour === undefined && (this.view === 'Month' || this.view === 'Custom')) { this.openDay(day); return; }
                 if (this.readOnly) return;
                 this.selectedCell = (hour === undefined ? 'd' : 'h' + hour) + day.getTime();
@@ -479,13 +550,13 @@ const NativeCalendar = (() => {
                 else {
                     // v1: Syncfusion's 30-minute slot. v2: an hour, the length most events are.
                     start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), Math.floor(hour), (hour % 1) * 60);
-                    end = new Date(start.getTime() + (this.v2 ? 3600000 : 1800000)); isAllDay = false;
+                    end = new Date(start.getTime() + (this.v2 || this.appEdits ? 3600000 : 1800000)); isAllDay = false;
                 }
                 // Same storage as Syncfusion: all-day is LOCAL midnight, end exclusive.
                 this.$emit('event-create', { start: start.toISOString(), end: end.toISOString(), isAllDay, event: jsEvent, full: !!full });
             },
             clickSlot(day, jsEvent, full) {
-                if (this._afterCreateDrag) return;   // the click that ends a drag-to-create
+                if (this._afterCreateDrag || this._swallowClick) return;   // the click that ends a drag-to-create (or an Escaped drag)
                 const rect = jsEvent.currentTarget.getBoundingClientRect();
                 const hour = this.firstHour + Math.floor(((jsEvent.clientY - rect.top) / HOUR_PX) * 2) / 2;
                 this.clickCell(day, jsEvent, hour, full);
@@ -495,7 +566,7 @@ const NativeCalendar = (() => {
             // end in one gesture, snapped to 15 minutes (Google, Apple). A press without a
             // drag stays an ordinary click.
             startCreate(e, day) {
-                if (!this.v2 || this.readOnly || this.isPhone || e.button !== 0 || e.target.closest('.nc-timed')) return;
+                if (!(this.v2 || this.appEdits) || this.readOnly || this.isPhone || e.button !== 0 || e.target.closest('.nc-timed')) return;
                 const rect = e.currentTarget.getBoundingClientRect(), q = HOUR_PX / 4;
                 const y = Math.max(0, Math.floor((e.clientY - rect.top) / q) * q);
                 this.drag = { mode: 'create', day, x0: e.clientX, y0: e.clientY, rectTop: rect.top, top0: y, top: y, height: q, moved: false };
@@ -506,29 +577,80 @@ const NativeCalendar = (() => {
                 return { start: at(mins(d.top)), end: at(mins(d.top + d.height)) };
             },
             createLabel() { const r = this.createRange(this.drag); return `${this.time(r.start)} - ${this.time(r.end)}`; },
+            // Month grid and all-day row (appEdits): press on a day and drag across others for a multi-day all-day event.
+            startDayCreate(e, day) {
+                if (!this.appEdits || this.readOnly || this.isPhone || e.button !== 0 || e.target.closest('.nc-bar, .nc-date, .nc-more')) return;
+                const sel = e.currentTarget.classList.contains('nc-allday-cell') ? '.nc-allday-cell' : '.nc-cell';
+                this.drag = { mode: 'days', day0: day, day1: day, sel, x0: e.clientX, y0: e.clientY, moved: false };
+            },
+            cancelDrag() {
+                this.drag = null;
+                clearTimeout(this._press); this._press = null;
+                // The mouse button (or finger) is still down: its click must not open the quick box or a popup.
+                this._swallowClick = true;
+                setTimeout(() => { this._swallowClick = false; }, 400);
+            },
+            // ---- touch: long-press to drag (appEdits) ----------------------------------------
+            touchStart(e, occ, mode, extra) {
+                if (!this.appEdits || this.readOnly || occ.event.__draft || !e.touches || e.touches.length !== 1) return;
+                const t = e.touches[0];
+                clearTimeout(this._press);
+                this._pressAt = { x: t.clientX, y: t.clientY };
+                this._press = setTimeout(() => {
+                    this._press = null;
+                    this.drag = { key: occ.key, occ, mode, x0: t.clientX, y0: t.clientY, moved: false, touch: true, ...extra };
+                    try { if (navigator.vibrate) navigator.vibrate(10); } catch (err) { /* no haptics */ }
+                }, 450);
+            },
+            onTouchMove(e) {
+                const t = e.touches && e.touches[0];
+                if (!t) return;
+                // Moving before the press is long enough means scrolling: never lift the event then.
+                if (this._press && Math.abs(t.clientX - this._pressAt.x) + Math.abs(t.clientY - this._pressAt.y) > 10) { clearTimeout(this._press); this._press = null; }
+                if (this.drag && this.drag.touch) { if (e.cancelable) e.preventDefault(); this.onDragMove({ clientX: t.clientX, clientY: t.clientY }); }
+            },
+            onTouchEnd(e) {
+                clearTimeout(this._press); this._press = null;
+                const d = this.drag;
+                if (!d || !d.touch) return;
+                const t = (e.changedTouches && e.changedTouches[0]) || { clientX: d.x0, clientY: d.y0 };
+                if (d.moved) { this._swallowClick = true; setTimeout(() => { this._swallowClick = false; }, 400); if (e.cancelable) e.preventDefault(); }
+                this.onDragEnd({ clientX: t.clientX, clientY: t.clientY });
+            },
             // ---- drag & resize (mouse; timed and month) ------------------------------------
             startDrag(e, occ, mode, extra) {
-                if (this.readOnly || this.isPhone || e.button !== 0 || occ.recurring) return;
+                if (this.readOnly || this.isPhone || e.button !== 0 || occ.event.__draft) return;
+                // A repeating occurrence (or an edited one) only where the app asks "this event / all events".
+                if (occ.recurring && !this.appEdits) return;
                 this.drag = { key: occ.key, occ, mode, x0: e.clientX, y0: e.clientY, moved: false, ...extra };
             },
             onDragMove(e) {
                 const d = this.drag; if (!d) return;
                 if (!d.moved && Math.abs(e.clientX - d.x0) + Math.abs(e.clientY - d.y0) < 5) return;
+                if (!d.moved && d.occ && this.appEdits) this.$emit('drag-start', { event: d.occ.event, occurrence: d.occ });
                 d.moved = true;
                 if (d.mode === 'create') {
                     const q = HOUR_PX / 4, y = Math.max(0, Math.round((e.clientY - d.rectTop) / q) * q);
                     d.top = Math.min(d.top0, y); d.height = Math.max(q, Math.abs(y - d.top0));
                     return;
                 }
+                if (d.mode === 'days') {
+                    const day = this.dayAt(e.clientX, e.clientY, d.sel);
+                    if (day) d.day1 = day;
+                    return;
+                }
                 if (d.mode === 'month') {
-                    const cell = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-day]');
-                    if (cell) d.targetDay = new Date(Number(cell.dataset.day));
+                    const day = this.dayAt(e.clientX, e.clientY, '.nc-cell[data-day], .nc-allday-cell[data-day]');
+                    if (day) d.targetDay = day;
                 } else {
                     const dy = Math.round((e.clientY - d.y0) / (HOUR_PX / 2)) * (HOUR_PX / 2);
                     if (d.mode === 'move') {
                         d.top = d.top0 + dy;
-                        const col = document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-day]');
-                        if (col) d.targetDay = new Date(Number(col.dataset.day));
+                        const day = this.dayAt(e.clientX, e.clientY, '.nc-col[data-day]');
+                        if (day) d.targetDay = day;
+                    } else if (d.mode === 'resize-top') {
+                        d.top = Math.min(d.top0 + dy, d.top0 + d.height0 - HOUR_PX / 2);
+                        d.height = d.height0 - (d.top - d.top0);
                     } else d.height = Math.max(HOUR_PX / 2, d.height0 + dy);
                 }
             },
@@ -542,6 +664,13 @@ const NativeCalendar = (() => {
                     this.$emit('event-create', { start: r.start.toISOString(), end: r.end.toISOString(), isAllDay: false, event: e, full: false });
                     return;
                 }
+                if (d.mode === 'days') {
+                    this._afterCreateDrag = true; setTimeout(() => { this._afterCreateDrag = false; }, 0);
+                    const a = d.day0 <= d.day1 ? d.day0 : d.day1, b = d.day0 <= d.day1 ? d.day1 : d.day0;
+                    const start = startOfDay(a), end = new Date(addDays(startOfDay(b), 1).getTime() - 1);   // display shape, as clickCell sends it
+                    this.$emit('event-create', { start: start.toISOString(), end: end.toISOString(), isAllDay: true, event: e, full: false });
+                    return;
+                }
                 const ev = d.occ.event; let start = new Date(d.occ.start), end = new Date(d.occ.end);
                 if (d.mode === 'month') {
                     if (!d.targetDay) return;
@@ -553,10 +682,17 @@ const NativeCalendar = (() => {
                     // The grid is drawn in wall-clock hours, so a drag moves the clock time (DST-safe).
                     const wall = (t) => { const x = addDays(t, shift); x.setMinutes(x.getMinutes() + Math.round(minutes)); return x; };
                     start = wall(start); end = wall(end);
+                } else if (d.mode === 'resize-top') {
+                    start = new Date(start); start.setMinutes(start.getMinutes() + Math.round(((d.top - d.top0) / HOUR_PX) * 60));
                 } else {
-                    end = new Date(start); end.setMinutes(end.getMinutes() + Math.round((d.height / HOUR_PX) * 60));
+                    // By how much the bottom edge moved (an event starting above the first hour shown is drawn clipped).
+                    end = new Date(end); end.setMinutes(end.getMinutes() + Math.round(((d.height - d.height0) / HOUR_PX) * 60));
                 }
                 if (start.getTime() === d.occ.start.getTime() && end.getTime() === d.occ.end.getTime()) return;
+                if (this.appEdits) {
+                    this.$emit('event-move', { event: ev, occurrence: d.occ, start, end, allDay: !!d.occ.allDay, mode: d.mode });
+                    return;
+                }
                 // An all-day end goes out in the display shape (through 23:59:59.999 of the last day), the
                 // one app.js toStoredEvent expects; the grid itself works with the exclusive end above.
                 const out = d.occ.allDay ? new Date(end.getTime() - 1) : end;
@@ -570,7 +706,7 @@ const NativeCalendar = (() => {
             },
         },
         template: /* html */ `
-<div class="nc" :class="{ 'nc-phone': isPhone, 'nc-v2': v2 }">
+<div class="nc" :class="{ 'nc-phone': isPhone, 'nc-v2': v2, 'nc-readonly': readOnly, 'nc-editable': appEdits && !readOnly, 'nc-dragging': !!(drag && drag.moved) }">
   <!-- Toolbar: prev / next, title with chevron | DAY WEEK MONTH 3 MONTHS YEAR AGENDA -->
   <div class="nc-toolbar">
     <div class="nc-toolbar-left">
@@ -615,15 +751,15 @@ const NativeCalendar = (() => {
     <div class="nc-month-body">
       <div v-for="w in monthWeeks" :key="w.key" class="nc-week-row" :style="monthRowHeight > 100 ? { height: monthRowHeight + 'px' } : null">
         <div v-for="(d, c) in w.days" :key="c" class="nc-cell" :data-day="d.getTime()"
-          :class="{ out: !w.inMonth(d), weekend: isWeekend(d), selected: selectedCell === 'd' + d.getTime() }"
-          @click="clickCell(d, $event)" @dblclick="clickCell(d, $event, undefined, true)">
+          :class="{ out: !w.inMonth(d), weekend: isWeekend(d), selected: selectedCell === 'd' + d.getTime(), creating: inDayRun(d), drop: isDropDay(d) }"
+          @mousedown="startDayCreate($event, d)" @click="clickCell(d, $event)" @dblclick="clickCell(d, $event, undefined, true)">
           <span class="nc-date" :class="{ today: isToday(d), first: d.getDate() === 1 }" @click.stop="openDay(d)">{{ dayLabel(d) }}</span>
           <button v-if="w.hidden[c]" class="nc-more" data-testid="more-events" @click.stop="openDay(d)">+{{ w.hidden[c] }}<span class="nc-more-word"> more</span></button>
         </div>
         <div v-for="b in w.bars" :key="b.occ.key + w.key" class="nc-bar" :style="barStyle(b)"
-          :class="{ long: b.occ.allDay || isMultiDayTimed(b.occ), tint: isTint(b), 'clip-l': b.clippedLeft, 'clip-r': b.clippedRight }"
-          :data-testid="'event-' + b.occ.event.id" :title="b.occ.title"
-          @mousedown="startDrag($event, b.occ, 'month')" @click.stop="clickEvent(b.occ, $event)" tabindex="0" role="button" :aria-label="ariaLabel(b.occ)" @keydown.enter.prevent="clickEvent(b.occ, $event)" @keydown.space.prevent="clickEvent(b.occ, $event)">
+          :class="{ long: b.occ.allDay || isMultiDayTimed(b.occ), tint: isTint(b), 'clip-l': b.clippedLeft, 'clip-r': b.clippedRight, 'nc-draft': b.occ.event.__draft, lifted: isLifted(b.occ) }"
+          :data-testid="tid(b.occ)" :title="b.occ.title"
+          @mousedown="startDrag($event, b.occ, 'month')" @touchstart="touchStart($event, b.occ, 'month')" @click.stop="clickEvent(b.occ, $event)" tabindex="0" role="button" :aria-label="ariaLabel(b.occ)" @keydown.enter.prevent="clickEvent(b.occ, $event)" @keydown.space.prevent="clickEvent(b.occ, $event)">
           <template v-if="b.occ.allDay || isMultiDayTimed(b.occ)">
             <span v-if="!b.occ.allDay && !b.clippedLeft" class="nc-bar-time">{{ time(b.occ.start) }}</span>
             <span class="nc-bar-title center">{{ b.occ.title }}</span>
@@ -651,9 +787,11 @@ const NativeCalendar = (() => {
           </div>
         </div>
         <div class="nc-allday" :style="{ height: (8 + gridLayout.allDayLanes * (22)) + 'px' }">
-          <div v-for="d in gridDays" :key="d.getTime()" class="nc-allday-cell" :data-day="d.getTime()" @click="clickCell(d, $event)" @dblclick="clickCell(d, $event, undefined, true)"></div>
+          <div v-for="d in gridDays" :key="d.getTime()" class="nc-allday-cell" :data-day="d.getTime()" :class="{ creating: inDayRun(d), drop: isDropDay(d) }"
+            @mousedown="startDayCreate($event, d)" @click="clickCell(d, $event)" @dblclick="clickCell(d, $event, undefined, true)"></div>
           <div v-for="b in gridLayout.allDay" :key="b.occ.key" class="nc-bar long" :style="gridBarStyle(b, gridDays.length)"
-            :data-testid="'event-' + b.occ.event.id" @click.stop="clickEvent(b.occ, $event)" tabindex="0" role="button" :aria-label="ariaLabel(b.occ)" @keydown.enter.prevent="clickEvent(b.occ, $event)" @keydown.space.prevent="clickEvent(b.occ, $event)">
+            :class="{ 'nc-draft': b.occ.event.__draft, lifted: isLifted(b.occ) }"
+            :data-testid="tid(b.occ)" @mousedown="startDrag($event, b.occ, 'month')" @touchstart="touchStart($event, b.occ, 'month')" @click.stop="clickEvent(b.occ, $event)" tabindex="0" role="button" :aria-label="ariaLabel(b.occ)" @keydown.enter.prevent="clickEvent(b.occ, $event)" @keydown.space.prevent="clickEvent(b.occ, $event)">
             <span v-if="!b.occ.allDay && !b.clippedLeft" class="nc-bar-time">{{ time(b.occ.start) }}</span>
             <span class="nc-bar-title center">{{ b.occ.title }}</span>
             <span v-if="!b.occ.allDay && !b.clippedRight" class="nc-bar-time">{{ time(b.occ.end) }}</span>
@@ -675,11 +813,13 @@ const NativeCalendar = (() => {
             <div v-if="drag && drag.mode === 'create' && drag.moved && drag.day.getTime() === d.getTime()" class="nc-create-preview"
               data-testid="create-preview" :style="{ top: drag.top + 'px', height: drag.height + 'px' }">{{ createLabel() }}</div>
             <div v-for="it in gridLayout.timed[i]" :key="it.occ.key" class="nc-timed" :style="timedStyle(it)"
-              :data-testid="'event-' + it.occ.event.id"
-              @mousedown="startDrag($event, it.occ, 'move', { top0: it.top, top: it.top, height: it.height })" @click.stop="clickEvent(it.occ, $event)" tabindex="0" role="button" :aria-label="ariaLabel(it.occ)" @keydown.enter.prevent="clickEvent(it.occ, $event)" @keydown.space.prevent="clickEvent(it.occ, $event)">
+              :class="{ 'nc-draft': it.occ.event.__draft, lifted: isLifted(it.occ) }" :data-testid="tid(it.occ)"
+              @mousedown="startDrag($event, it.occ, 'move', { top0: it.top, top: it.top, height: it.height })"
+              @touchstart="touchStart($event, it.occ, 'move', { top0: it.top, top: it.top, height: it.height })" @click.stop="clickEvent(it.occ, $event)" tabindex="0" role="button" :aria-label="ariaLabel(it.occ)" @keydown.enter.prevent="clickEvent(it.occ, $event)" @keydown.space.prevent="clickEvent(it.occ, $event)">
               <div class="nc-timed-title">{{ it.occ.title }} <nc-icon v-if="it.occ.recurring" class="nc-recur" name="repeat" :size="11" :stroke-width="2.5"></nc-icon></div>
               <div v-if="it.height > 34" class="nc-timed-time">{{ time(it.occ.start) }} - {{ time(it.occ.end) }}</div>
-              <div class="nc-resize" @mousedown.stop="startDrag($event, it.occ, 'resize', { height0: it.height, height: it.height, top: it.top, top0: it.top })"></div>
+              <div class="nc-resize" data-testid="resize-bottom" @mousedown.stop="startDrag($event, it.occ, 'resize', { height0: it.height, height: it.height, top: it.top, top0: it.top })"></div>
+              <div v-if="appEdits" class="nc-resize nc-resize-top" data-testid="resize-top" @mousedown.stop="startDrag($event, it.occ, 'resize-top', { height0: it.height, height: it.height, top: it.top, top0: it.top })"></div>
             </div>
             <div v-if="isToday(d) && nowTop >= 0" class="nc-now-line" :style="{ top: nowTop + 'px' }"></div>
           </div>
@@ -709,7 +849,7 @@ const NativeCalendar = (() => {
       <div class="nc-agenda-date" :class="{ today: isToday(day.d) }"><div class="n">{{ day.d.getDate() }}</div><div class="w">{{ weekdayName(day.d.getDay(), true) }}</div></div>
       <div class="nc-agenda-items">
         <div v-for="it in day.items" :key="it.key" class="nc-agenda-item" :style="{ borderLeftColor: color(it.occ.type) }"
-          :data-testid="'event-' + it.occ.event.id" @click="clickEvent(it.occ, $event)" tabindex="0" role="button" :aria-label="ariaLabel(it.occ)" @keydown.enter.prevent="clickEvent(it.occ, $event)" @keydown.space.prevent="clickEvent(it.occ, $event)">
+          :data-testid="tid(it.occ)" @click="clickEvent(it.occ, $event)" tabindex="0" role="button" :aria-label="ariaLabel(it.occ)" @keydown.enter.prevent="clickEvent(it.occ, $event)" @keydown.space.prevent="clickEvent(it.occ, $event)">
           <div class="t">{{ it.occ.title }} <nc-icon v-if="it.occ.recurring" class="nc-recur dark" name="repeat" :size="11" :stroke-width="2.5"></nc-icon></div>
           <div class="w">{{ it.when }}</div>
         </div>
