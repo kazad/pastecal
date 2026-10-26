@@ -344,7 +344,9 @@ for (const viewport of [DESKTOP, PHONE]) {
     await page.keyboard.type('soccer-fall');
     await expect(input).toHaveValue('soccer-fall');
     // Clicking the name itself does the same (the mouse up must not undo the selection).
-    await page.locator('body').click({ position: { x: 5, y: 600 } });
+    // Click off it at the top corner: (5, 600) landed on a calendar day, whose quick popup opened a moment
+    // later and took the focus mid-typing.
+    await page.locator('body').click({ position: { x: 5, y: 5 } });
     await input.click();
     await page.keyboard.type('soccer-spring');
     await expect(input).toHaveValue('soccer-spring');
