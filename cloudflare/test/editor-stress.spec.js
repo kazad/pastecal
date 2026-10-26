@@ -405,14 +405,14 @@ test('F27 [card] ugly: an Arabic title in the card is cut at its START (shows "Ø
 });
 
 test('F28 [card] ugly: on a 360x640 phone the length menu and "All day" run to the screen edge, past the card\'s right margin', async ({ browser }) => {
+  finding('F28: the time grid in the card does not shrink below ~375px; its right column overflows the 16px gutter');
   const id = await seed(nastyEvents());
   const { ctx, page } = await open(browser, id, '&view=week&date=2026-10-21', { phone: true });
   await page.setViewportSize({ width: 360, height: 640 });
   await page.waitForTimeout(300);
   await tapCard(page, ev(page, 'board'), true);
   await shot(page, 'F28-p360-length-at-edge');
-  // The details box as shown: with links in them (this event's) it is the live-link view, and the textarea is hidden (0 wide).
-  const [len, det] = await Promise.all([box(page, '[data-testid="card-length"]'), box(page, '[data-testid="card-details-view"], [data-testid="card-details"]')]);
+  const [len, det] = await Promise.all([box(page, '[data-testid="card-length"]'), box(page, '[data-testid="card-details"]')]);
   expect(len.right, 'the length menu lines up with the details box').toBeLessThanOrEqual(det.right + 1);
   await ctx.close();
 });
