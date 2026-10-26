@@ -518,7 +518,11 @@ const EventCard = (() => {
                 if (dy > 0 && keep && keep !== el && c.contains(keep)) dy = Math.min(dy, Math.max(0, keep.getBoundingClientRect().top - top));
                 if (dy) c.scrollTop += dy;
             },
-            onFocusIn(e) { const t = e.target; this.$nextTick(() => { if (document.activeElement === t) this.reveal(t); }); },
+            // A field focused inside the card is scrolled into its view -- not the pinned footer (always in view) or the
+            // menu and pickers floating over the card. Revealing the ⋯ button as it was clicked scrolled a phone's sheet
+            // (reveal measures the footer as the bottom of the view), and a scroll under an open menu closes it: on a
+            // phone the ⋯ menu shut the moment it opened.
+            onFocusIn(e) { const t = e.target; if (t.closest && t.closest('.nk-foot, .nk-menu, .nk-pick')) return; this.$nextTick(() => { if (document.activeElement === t) this.reveal(t); }); },
             blurInside() { const el = this.$refs.card; if (el && el.contains(document.activeElement)) document.activeElement.blur(); },
             toggleAllDay() {
                 const v = this.v;
@@ -692,7 +696,7 @@ const EventCard = (() => {
                 this.$nextTick(() => {
                     this.fit();
                     const sec = this.$refs.cust;
-                    if (sec && sec.scrollIntoView) sec.scrollIntoView({ block: 'nearest' });
+                    if (sec) this.reveal(sec, this.$refs.title);   // (as much of it as fits under the title: S10)
                     // The unit first (a phone gets no keyboard sliding up over the sheet for it).
                     const f = sec && !this.phone && sec.querySelector('select');
                     if (f) f.focus({ preventScroll: true });
@@ -906,7 +910,7 @@ const EventCard = (() => {
 
 <div v-if="menu" ref="menu" class="nk-menu" role="menu" :style="menuStyle" data-testid="card-menu" @keydown="pickKey">
   <button type="button" role="menuitem" data-testid="card-duplicate" @click="menuAct('duplicate')">Duplicate <kbd>{{ pcKeys.mod('D') }}</kbd></button>
-  <button type="button" role="menuitem" class="red" data-testid="card-menu-delete" @click="menuAct('delete')">Delete <kbd>⌫</kbd></button>
+  <button type="button" role="menuitem" class="red" data-testid="card-menu-delete" @click="menuAct('delete')">Delete <kbd>{{ pcKeys.del }}</kbd></button>
 </div>
 
 <div v-if="picker" ref="pick" class="nk-pick" :class="'nk-pick-' + picker.kind" role="dialog" :aria-label="{ s: 'Start time', e: 'End time', sd: 'Start date', ed: 'End date', dur: 'Length', cat: 'Type', rep: 'Repeats', until: 'Last date', tz: 'Time zone' }[picker.kind]"

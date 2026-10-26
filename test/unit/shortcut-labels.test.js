@@ -3,7 +3,7 @@
  * Ctrl and Alt elsewhere -- by one helper, public/utils/keys.js (pcKeys.mod('D'), pcKeys.alt, pcKeys.del).
  *
  * Why: the shortcuts sheet and the event menu were written on a Mac with ⌘D, ⌘Z and ⌥ typed in, and said so on
- * Windows and Linux too (editor-stress-2 S14), while "+ Add event" had its own platform check. So: no ⌘ or ⌥ typed
+ * Windows and Linux too (editor-stress-2 S14; the menu's Delete said ⌫), while "+ Add event" had its own platform check. So: no ⌘ or ⌥ typed
  * into the app outside keys.js (code comments aside; a sentence naming both keyboards, "⌘C or Ctrl+C", is fine).
  * The browser half (editor-stress-2 S14, with a Windows platform) reads the sheet and the menu.
  * Run: node --test test/unit/shortcut-labels.test.js
@@ -23,14 +23,14 @@ function files(dir) {
   });
 }
 
-test('no ⌘ or ⌥ typed into the app outside utils/keys.js', () => {
+test('no ⌘, ⌥ or ⌫ typed into the app outside utils/keys.js', () => {
   const found = [];
   for (const f of files(PUB)) {
     if (f.endsWith(path.join('utils', 'keys.js'))) continue;
     fs.readFileSync(f, 'utf8').split('\n').forEach((line, i) => {
       const code = line.replace(/\/\/.*$/, '').replace(/^\s*\*.*$/, '').replace(/<!--.*?-->/g, '');
-      if (!/[⌘⌥]/.test(code)) return;
-      if (/[⌘⌥]/.test(code) && /\bCtrl\b/.test(code)) return;   // (a static page naming both keyboards: "⌘C or Ctrl+C")
+      if (!/[⌘⌥⌫]/.test(code)) return;
+      if (/[⌘⌥⌫]/.test(code) && /\bCtrl\b/.test(code)) return;   // (a static page naming both keyboards: "⌘C or Ctrl+C")
       found.push(`${path.relative(PUB, f)}:${i + 1}: ${code.trim().slice(0, 100)}`);
     });
   }

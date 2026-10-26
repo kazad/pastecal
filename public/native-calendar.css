@@ -470,13 +470,17 @@ html.nk-sheet-open, html.nk-sheet-open body { overflow: hidden; }
 /* ---- "This event / All events" and classic's other questions ------------------------------ */
 .pc-native-ask { position: fixed; inset: 0; z-index: var(--pc-z-snackbar); background: var(--pc-scrim); display: flex; align-items: center; justify-content: center; padding: var(--pc-space-4); }
 .pc-native-ask-panel { width: 380px; max-width: 100%; box-sizing: border-box; padding: var(--pc-space-5) var(--pc-space-6); background: var(--pc-bg); color: var(--pc-text);
-    border-radius: var(--pc-radius-dialog); box-shadow: var(--pc-shadow-xl); font-family: var(--pc-font); }
+    border-radius: var(--pc-radius-dialog); box-shadow: var(--pc-shadow-xl); font-family: var(--pc-font);
+    max-height: 100%; overflow-y: auto; overscroll-behavior: contain; }   /* never taller than the window (the ? sheet at 640x400 ran off both ends) */
 .pc-native-ask-title { margin: 0 0 var(--pc-space-3); font-size: var(--pc-fs-xl); font-weight: var(--pc-fw-bold); }
 .pc-native-ask-text { margin: 0 0 var(--pc-space-3); font-size: var(--pc-fs-md); line-height: var(--pc-lh-body); color: var(--pc-text-2); }
 .pc-native-ask-options { display: flex; flex-direction: column; gap: var(--pc-space-1); margin-bottom: var(--pc-space-4); }
 .pc-native-ask-option { display: flex; align-items: center; gap: var(--pc-space-3); min-height: var(--pc-h-md); font-size: var(--pc-fs-md); cursor: pointer; }
 .pc-native-ask-option input { width: 18px; height: 18px; margin: 0; accent-color: var(--pc-primary); }
-.pc-native-ask-foot { display: flex; justify-content: flex-end; gap: var(--pc-space-2); flex-wrap: wrap; }
+.pc-native-ask-foot { display: flex; justify-content: flex-end; gap: var(--pc-space-2); flex-wrap: wrap;
+    /* Pinned to the panel's bottom when it scrolls (a short window): the buttons in view with the title, never a
+       scroll away -- focusing Done scrolled the ? sheet's title out of a 640x400 window. */
+    position: sticky; bottom: calc(-1 * var(--pc-space-5)); margin-bottom: calc(-1 * var(--pc-space-5)); padding: var(--pc-space-2) 0 var(--pc-space-5); background: var(--pc-bg); }
 
 /* ---- the page around it ----------------------------------------------------------------- */
 .pc-native-cal { min-height: 0; }

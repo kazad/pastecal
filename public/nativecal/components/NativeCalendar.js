@@ -377,7 +377,7 @@ const NativeCalendar = (() => {
                 // Overlapping events never narrower than 40px: the columns that fit, then "+N". A day too narrow for
                 // two (a phone's week: 49px) shows overlapping events as one "+N" across it, never a sliver beside it.
                 const colPx = ((this.gridW || 1000) - (this.isPhone ? 48 : 72)) / days.length;
-                const cap = Math.max(1, Math.floor(colPx / 40));
+                const cap = Math.max(1, Math.floor(colPx / 43));   // (40px each, and the 3px between: timedStyle's "- 3px")
                 const more = [];
                 const timed = days.map((day, i) => {
                     const dayEnd = addDays(day, 1); const items = [];
