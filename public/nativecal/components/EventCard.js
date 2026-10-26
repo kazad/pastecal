@@ -688,7 +688,7 @@ const EventCard = (() => {
       </div>
     </div>
     <div class="nk-foot">
-      <button v-if="!isNew" type="button" class="nk-icon nk-del" aria-label="Delete" title="Delete" data-testid="card-delete" @click="closing = true; $emit('delete')"><nc-icon name="trash-2" :size="18"></nc-icon></button>
+      <button v-if="!isNew" type="button" class="nk-icon nk-del" aria-label="Delete" title="Delete" data-testid="card-delete" @click="closing = true; $emit('delete')"><nc-icon name="trash" :size="18"></nc-icon></button>
       <button v-if="full && !isNew" type="button" class="nk-icon nk-ovf" aria-label="More actions" title="More actions" aria-haspopup="menu" :aria-expanded="String(menu)" data-testid="card-more-actions" @click="toggleMenu"><nc-icon name="ellipsis" :size="18"></nc-icon></button>
       <button v-if="!full" type="button" class="nk-more" data-testid="card-more" @click="expand()">More details</button>
       <span class="nk-sp"></span>
@@ -706,7 +706,7 @@ const EventCard = (() => {
 <div v-if="picker" ref="pick" class="nk-pick" :class="'nk-pick-' + picker.kind" role="dialog" :aria-label="{ s: 'Start time', e: 'End time', sd: 'Start date', ed: 'End date', dur: 'Length', cat: 'Type', rep: 'Repeats' }[picker.kind]"
   :style="pickStyle" :data-kind="picker.kind" data-testid="card-picker" @keydown="pickKey">
   <template v-if="picker.kind === 's' || picker.kind === 'e'">
-    <input v-model="typed" class="nk-typed" :class="{ bad: typedBad }" aria-label="Type a time" :placeholder="fmt === '24' ? 'Type a time: 17:30' : 'Type a time: 5p, 5:30pm'" data-testid="picker-input"
+    <input v-model="typed" class="nk-typed" :class="{ bad: typedBad }" aria-label="Type a time" placeholder="Type a time" data-testid="picker-input"
       @input="typedBad = false" @keydown.enter.prevent="typedTime" @keydown.down.prevent="$refs.tlist && ($refs.tlist.querySelector('.cur') || $refs.tlist.querySelector('button')).focus()">
     <div ref="tlist" class="nk-plist" @keydown="listKey">
       <button v-for="o in timeList" :key="o.m" type="button" :class="{ cur: o.cur }" :data-m="o.m" @click="pickTime(o.m)">{{ o.label }}<small v-if="o.len">{{ o.len }}</small></button>
