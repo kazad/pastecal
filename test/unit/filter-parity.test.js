@@ -26,8 +26,13 @@ const INDEX = fs.readFileSync(path.join(__dirname, '../../public/index.html'), '
 test('the grid is filtered with the same predicate the count uses', () => {
   // The bug class behind #41 was two definitions of "visible" that had to agree and
   // repeatedly did not. There must be exactly one, and the scheduler must be fed by it.
-  assert.match(APP, /dataSource:\s*this\.syncFusionEvents\.filter\(\s*e\s*=>\s*this\.isEventVisible\(e\)\s*\)/,
-    'updateCalendarView should hand the scheduler a list filtered by isEventVisible');
+  // The calendar on screen is reached through services/CalendarView.js: Syncfusion's render() hands the scheduler
+  // the list filtered by isEventVisible, and the native calendar's occurrences (print) use the same predicate.
+  const VIEW = fs.readFileSync(path.join(__dirname, '../../public/services/CalendarView.js'), 'utf8');
+  assert.match(VIEW, /dataSource:\s*vm\.syncFusionEvents\.filter\(\(?\s*e\s*\)?\s*=>\s*vm\.isEventVisible\(e\)\s*\)/,
+    'CalendarView.syncfusion render() should hand the scheduler a list filtered by isEventVisible');
+  assert.match(VIEW, /filter\(\(e\) => vm\.isEventVisible\(e\)\), start, end\)/, 'the native occurrences use the same predicate');
+  assert.match(APP, /updateCalendarView\(\) \{[\s\S]{0,900}this\.calView\.render\(\)/, 'updateCalendarView redraws through the calendar interface');
 
   const start = APP.indexOf('hiddenEventCount() {');
   assert.ok(start !== -1, 'hiddenEventCount should exist');

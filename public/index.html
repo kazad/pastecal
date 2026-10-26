@@ -153,13 +153,32 @@
          new one is fetched, so the page was briefly unstyled (the FOUC) and any event chip
          Syncfusion laid out in that gap was sized against a shrink-wrapped grid (16px wide
          chips that stayed wrong until an edit). Dark-mode users also got a light flash. -->
+    <!-- Which calendar draws this page (docs/native-switch.md). View links (/view/<id>, /@handle/<name>) may use
+         pastecal's own calendar (NativeCalendar) instead of Syncfusion's: ?cal=native|classic, else this browser's
+         choice (localStorage pc_cal), else the server's default (<meta name="pc-cal">, the Worker's NATIVE_VIEW_LINKS).
+         Edit links stay classic. Decided here, before anything loads: in native mode no Syncfusion file is fetched. -->
+    <script>
+        window.pcNativeCal = (function () {
+            try {
+                var p = location.pathname;
+                if (!/^\/view\/[^/]+\/?$/.test(p) && !(/^\/@/.test(p) && document.querySelector('meta[name="pc-view"]'))) return false;
+                var q = new URLSearchParams(location.search).get('cal');
+                var pick = q === 'native' || q === 'classic' ? q : null;
+                if (!pick) { try { pick = localStorage.getItem('pc_cal'); } catch (e) { pick = null; } }
+                if (pick !== 'native' && pick !== 'classic') { var m = document.querySelector('meta[name="pc-cal"]'); pick = m && m.getAttribute('content'); }
+                return pick === 'native';
+            } catch (e) { return false; }
+        })();
+        document.documentElement.setAttribute('data-cal', window.pcNativeCal ? 'native' : 'classic');
+    </script>
     <script>
         (function () {
             var mode = 'auto';
             try { mode = (JSON.parse(localStorage.getItem('pastecal_global_settings')) || {}).darkMode || 'auto'; } catch (e) { }
             var dark = mode === 'dark' || (mode === 'auto' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
             document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-            document.write('<link id="syncfusion-theme" rel="stylesheet" type="text/css" href="/vendor/syncfusion-23.2.6/' +
+            if (window.pcNativeCal) document.write('<link rel="stylesheet" href="/native-calendar.css?v=1792797113">');
+            else document.write('<link id="syncfusion-theme" rel="stylesheet" type="text/css" href="/vendor/syncfusion-23.2.6/' +
                 (dark ? 'material-dark' : 'material') + '.css?v=1792797113">');
         })();
     </script>
@@ -177,7 +196,16 @@
     <!-- Vue, self-hosted and pinned: it was unpkg's floating vue@3 (a third-party hop, and a new minor could ship to
          production unseen). Same-origin also lets it be cached for a year (public/_headers /vendor/*). -->
     <script src="/vendor/vue-3.5.44/vue.global.prod.js"></script>
-    <script src="/vendor/syncfusion-23.2.6/ej2-calendar.min.js?v=1792797113" type="text/javascript"></script>
+    <!-- The calendar: Syncfusion's Schedule, or (native view links, above) pastecal's own and rrule for repeats. -->
+    <script>
+        if (window.pcNativeCal) document.write(''
+            + '<script src="https://cdn.jsdelivr.net/npm/rrule@2.8.1/dist/es5/rrule.min.js" integrity="sha384-/841P5sCxcfR/THAcUhWr9d8zrIF1TPFzXRz8YhqxlPKvyL3tA/Ns4ytyfN5/hZh" crossorigin="anonymous"><\/script>'
+            + '<script src="/nativecal/components/ncUx.js?v=1792797113"><\/script>'
+            + '<script src="/nativecal/components/NcIcon.js?v=1792797113"><\/script>'
+            + '<script src="/nativecal/components/NativeCalendar.js?v=1792797113"><\/script>'
+            + '<script src="/nativecal/components/EventPopover.js?v=1792797113"><\/script>');
+        else document.write('<script src="/vendor/syncfusion-23.2.6/ej2-calendar.min.js?v=1792797113" type="text/javascript"><\/script>');
+    </script>
     <!-- Firebase is retired on pastecal.com (Oct 25 2026): the app runs on Cloudflare only, and these four
          scripts (92 KB, plus an anonymous sign-in chain) no longer load there. A local copy can still choose
          the old Firebase backend (?backend=firebase, CloudCalendarService.enabled), and only then are they written in. -->
@@ -215,7 +243,7 @@
             firebase.auth().signInAnonymously().catch(function (err) { console.warn('[auth] anonymous sign-in unavailable:', err && err.code); });
             if (location.search.includes('?local')) firebase.functions().useEmulator('localhost', 5001);
         }
-        ej.base.registerLicense('Ngo9BigBOggjHTQxAR8/V1NHaF1cW2hIfEx1RHxQdld5ZFRHallYTnNWUj0eQnxTdEZiW39fcXJXR2JUV0NyWg==');
+        if (typeof ej !== 'undefined') ej.base.registerLicense('Ngo9BigBOggjHTQxAR8/V1NHaF1cW2hIfEx1RHxQdld5ZFRHallYTnNWUj0eQnxTdEZiW39fcXJXR2JUV0NyWg==');
     </script>
 
     <!-- Cloudflare Web Analytics (real-user load times; auto-injection wasn't reaching Worker-served HTML) -->
@@ -238,6 +266,8 @@
     <script src="/services/EditorKeys.js?v=1792797113"></script>
     <script src="/services/CloudCalendarService.js?v=1792797113"></script>
     <script src="/services/ScheduleAdapter.js?v=1792797113"></script>
+    <!-- The calendar interface (Syncfusion or native); app.js reaches the calendar on screen only through it. -->
+    <script src="/services/CalendarView.js?v=1792797113"></script>
     <script src="/directives/clickOutside.js?v=1792797113"></script>
     <!-- Components -->
     <script src="/components/icons.js?v=1792797113"></script>
@@ -725,7 +755,16 @@
                 </div>
             </div>
             <div id="cal2_wrap" style="width: 100%; height: 100%; position: relative;">
-                <div id="Schedule" data-testid="schedule-container"></div>
+                <!-- The calendar: pastecal's own on a native view link (app.js nativeCal), else Syncfusion's (#Schedule). -->
+                <native-calendar v-if="nativeCal" ref="nativeCal" class="pc-native-cal" data-testid="schedule-container"
+                    :events="nativeEvents" :read-only="isReadOnly" :colors="COLORS" :hidden-slots="hiddenColorSlots" :text-on="eventTextOn"
+                    :time-format="globalSettings.timeFormat" :first-day-of-week="globalSettings.firstDayOfWeek" :start-hour="nativeStartHour"
+                    :initial-view="nativeView" :initial-date="nativeLink.date" :custom-duration="nativeCustomDuration" :custom-unit="nativeCustomUnit"
+                    :month-row-height="nativeRowHeight" open-day-on-click app-look @event-click="openNativePopover" @range-change="onNativeRange"></native-calendar>
+                <div v-else id="Schedule" data-testid="schedule-container"></div>
+                <event-popover v-if="nativeCal" :visible="!!nativePopover" :event="nativePopover && nativePopover.event" :occurrence="nativePopover && nativePopover.occurrence"
+                    :top="nativePopover ? nativePopover.top : 0" :left="nativePopover ? nativePopover.left : 0" :time-format="globalSettings.timeFormat"
+                    :colors="COLORS" :read-only="true" :text-on="eventTextOn" @close="nativePopover = null"></event-popover>
                 <!-- Whenever a color filter is on, say so on the calendar itself, not only in the search panel:
                      in #41 an event "went missing" after the panel was closed. A floating bar at the bottom of
                      the screen, so turning a filter on never pushes the calendar down. -->

@@ -166,8 +166,31 @@ const COMPONENT_REGISTRY = {
     'pro-panel': ProPanel,                     // Share dialog: Lock this calendar / owner panel
     'pro-beta-join': ProBetaJoin,              // "Join the beta" while billing is off (Go Pro card, Stats)
     'pro-stats': ProStats,                     // Pro owner: views, visitors, followers, places
-    'pro-history': ProHistory                  // Pro owner: saved versions, preview, restore
+    'pro-history': ProHistory,                 // Pro owner: saved versions, preview, restore
+    // pastecal's own calendar and its event popup: loaded only on a native view link (index.html, window.pcNativeCal).
+    ...(typeof NativeCalendar !== 'undefined' ? { 'native-calendar': NativeCalendar, 'event-popover': EventPopover } : {}),
 };
+
+// A native view link's ?view= / ?date= (the classic calendar reads the same ones in mountSyncfusion):
+// { view: 'Day' | 'Week' | 'Month' | 'Custom' | 'Year' | 'Agenda' | null, date: Date | null, dur, unit }.
+function nativeLinkView() {
+    const out = { view: null, date: null, dur: null, unit: null };
+    try {
+        const q = new URL(Utils.sanitizeUrl(window.location.href.toLowerCase())).searchParams;
+        out.date = Utils.parseDate(q.get('d') || q.get('date'));
+        const v = (q.get('v') || q.get('view') || '').toLowerCase();
+        const views = { d: 'Day', day: 'Day', w: 'Week', week: 'Week', m: 'Month', month: 'Month', y: 'Year', year: 'Year', a: 'Agenda', agenda: 'Agenda' };
+        if (views[v]) out.view = views[v];
+        else if (v === '12w' || v === '12weeks') Object.assign(out, { view: 'Custom', dur: 12, unit: 'Weeks' });
+        else if (v === 'q' || v === 'quarter') Object.assign(out, { view: 'Custom', dur: 3, unit: 'Months' });
+        else if (v === 'c' || v === 'custom') {
+            out.view = 'Custom';
+            const dur = parseInt(q.get('dur') || q.get('duration'), 10), unit = /^week/.test(q.get('unit') || '') ? 'Weeks' : /^month/.test(q.get('unit') || '') ? 'Months' : null;
+            if (dur >= 1 && unit && dur <= (unit === 'Weeks' ? 52 : 24)) Object.assign(out, { dur, unit });
+        }
+    } catch (e) { /* a bad link opens the default view */ }
+    return out;
+}
 
 const CAL_BASE = (typeof window !== 'undefined' && window.CAL_BASE) ? window.CAL_BASE : '/';
 const stripBase = (path) => {
@@ -251,6 +274,11 @@ const CalendarVueApp = {
             lockedOut: false,
             lockKnown: false,   // a lock state has arrived for this calendar (the default above is a guess)
             viewRoute: false,   // /view/<slug>: read-only for its own reason, whatever the lock says
+            // pastecal's own calendar draws this page instead of Syncfusion's (a view link with the flag on: index.html).
+            nativeCal: !!window.pcNativeCal,
+            nativeLink: window.pcNativeCal ? nativeLinkView() : null,
+            nativePopover: null,      // the event popup on the native calendar: { event, occurrence, top, left }
+            nativeRowHeight: 100,     // its month rows, taller on a wide window (fitNativeMonthRows)
             isLoading: true, // set to false when calendar status is determined
             isExisting: false, // set by callback
             editTitle: false,
@@ -394,6 +422,15 @@ const CalendarVueApp = {
     },
 
     computed: {
+        // ---- The native calendar's props (a native view link). The classic calendar gets the same settings
+        // imperatively (mountSyncfusion, applyGlobalSettings); these are reactive, so they need no re-apply.
+        nativeEvents() { return this.nativeCal ? CalendarView.displayEvents(this.calendar.events) : []; },
+        nativeView() { return this.nativeLink.view || this.calendar?.options?.defaultView || this.globalSettings.defaultView || 'Month'; },
+        nativeCustomDuration() { return this.nativeLink.dur || this.calendar?.options?.customViewDuration || this.globalSettings.customViewDuration || 3; },
+        nativeCustomUnit() { return this.nativeLink.unit || this.calendar?.options?.customViewUnit || this.globalSettings.customViewUnit || 'Months'; },
+        nativeStartHour() { return this.calendar?.options?.extended ? '00:00' : (this.globalSettings.startHour || '05:00'); },
+        // The color filter, as the color slots it hides (the same isEventVisible rule: filterSlotFor).
+        hiddenColorSlots() { return this.COLORS.map((_, i) => i).filter(i => this.colorFilters[i] === false); },
         // "Week of Oct 18": what Share's "This view" link opens, read back from its own URL.
         viewLinkTag() {
             try {
@@ -1000,781 +1037,10 @@ const CalendarVueApp = {
             track(a => a.slugPromptShown('homepage_bar', this.calendar));
         }
 
-        // Sentence case for Syncfusion's own words ("More Details", "New Event", "Repeat
-        // On"...), like the rest of pastecal. Keys missing here keep Syncfusion's text.
-        ej.base.L10n.load({
-            'en-US': {
-                schedule: {
-                    newEvent: 'New event', editEvent: 'Edit event', deleteEvent: 'Delete event',
-                    deleteTitle: 'Delete event', editTitle: 'Edit event',
-                    deleteMultipleEvent: 'Delete multiple events', moreDetails: 'More details',
-                    editSeries: 'Entire series', deleteSeries: 'Entire series',
-                    editFollowingEvent: 'Following events', recurringEvent: 'Recurring event',
-                    editRecurrence: 'Edit recurrence', startTimezone: 'Start timezone',
-                    endTimezone: 'End timezone', searchTimezone: 'Search timezone',
-                    beginFrom: 'Begin from', endAt: 'Ends at', noTitle: '(No title)',
-                },
-                recurrenceeditor: { on: 'Repeat on' },
-            },
-        });
-        const scheduleObj = window.scheduleObj = new ej.schedule.Schedule();
-        const scheduleInitTimestamp = performance.now();
-        console.log('[schedule-init] Schedule constructed at', scheduleInitTimestamp.toFixed(1), 'ms');
-        scheduleObj.on('actionComplete', (args) => {
-            if (args?.requestType === 'toolBarRendered') {
-                console.log('[schedule-init] toolBarRendered at', (performance.now() - scheduleInitTimestamp).toFixed(1), 'ms since init');
-            }
-        });
-        scheduleObj.addEventListener('dataBound', () => {
-            console.log('[schedule-init] dataBound at', (performance.now() - scheduleInitTimestamp).toFixed(1), 'ms since init');
-        });
-        scheduleObj.on('eventsLoaded', () => {
-            console.log('[schedule-init] eventsLoaded at', (performance.now() - scheduleInitTimestamp).toFixed(1), 'ms since init');
-        });
-
-        // Apply globalSettings BEFORE appendTo — these properties bake into Syncfusion's
-        // first render and won't reactively update if set later. (See applyGlobalSettings
-        // for the post-render path used when settings change at runtime.)
-        scheduleObj.startHour = this.calendar?.options?.extended ? "00:00" : (this.globalSettings.startHour || "05:00");
-        scheduleObj.timeFormat = this.globalSettings.timeFormat === '24' ? 'HH:mm' : 'h:mm a';
-        scheduleObj.firstDayOfWeek = parseInt(this.globalSettings.firstDayOfWeek) || 0;
-        // Phones: Week/Day hour labels like "5:00 AM" clip to "5:00…" in the narrow time column,
-        // so label hours compactly ("5a", "12p", or "17" in 24-hour time). window.pcHourLabel reads
-        // the format live, so a settings change applies on the next render.
-        if (typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 639px)').matches) {
-            const vm = this;
-            window.pcHourLabel = (date) => {
-                const h = date.getHours();
-                if (vm.globalSettings.timeFormat === '24') return String(h);
-                return (h % 12 || 12) + (h < 12 ? 'a' : 'p');
-            };
-            scheduleObj.timeScale.majorSlotTemplate = '<span class="pc-hour">${pcHourLabel(data.date)}</span>';
-        }
-
-        // Build custom view configuration dynamically
-        const customViewDuration = this.calendar?.options?.customViewDuration || this.globalSettings.customViewDuration;
-        const customViewUnit = this.calendar?.options?.customViewUnit || this.globalSettings.customViewUnit;
-        const customViewConfig = this.buildCustomViewConfig(customViewDuration, customViewUnit);
-
-        scheduleObj.views = [
-            'Day',
-            'Week',
-            'Month',
-            customViewConfig,
-            'Year',
-            'Agenda'
-        ];
-        scheduleObj.enableAdaptiveUI = false;
-
-        scheduleObj.readonly = this.isReadOnly;
-
-
-        // Set up scheduler first, then apply settings after initialization
-        // set params from URL
-        let sanitizedUrl = Utils.sanitizeUrl(window.location.href.toLowerCase());
-        let url = new URL(sanitizedUrl);
-        let date_param = url.searchParams.get("d") || url.searchParams.get("date");
-        let view_param = url.searchParams.get("v") || url.searchParams.get("view");
-
-        let d;
-        if (d = Utils.parseDate(date_param)) {
-            scheduleObj.selectedDate = d;
-        }
-
-        if (view_param) {
-            switch (view_param.toLowerCase()) {
-                case "d":
-                case "day":
-                    scheduleObj.currentView = "Day"; break;
-                case "w":
-                case "week":
-                    scheduleObj.currentView = "Week"; break;
-                case "12w":
-                case "12weeks":
-                    // Map to custom 12 weeks view
-                    const twelveWeeksView = this.buildCustomViewConfig(12, 'Weeks');
-                    const twelveWeeksIndex = scheduleObj.views.findIndex(v =>
-                        typeof v === 'object' && (v === customViewConfig)
-                    );
-                    if (twelveWeeksIndex !== -1) {
-                        scheduleObj.views[twelveWeeksIndex] = twelveWeeksView;
-                    }
-                    scheduleObj.currentView = twelveWeeksView.displayName;
-                    break;
-                case "m":
-                case "month":
-                    scheduleObj.currentView = "Month"; break;
-                case "c":
-                case "custom":
-                    // Check for URL parameter overrides for custom view
-                    const durParam = url.searchParams.get("dur") || url.searchParams.get("duration");
-                    const unitParam = url.searchParams.get("unit");
-
-                    let customViewToUse = customViewConfig;
-
-                    if (durParam && unitParam) {
-                        // Temporarily override custom view config from URL
-                        const duration = parseInt(durParam);
-                        const unit = unitParam.charAt(0).toUpperCase() + unitParam.slice(1).toLowerCase();
-
-                        if (this.validateCustomView(duration, unit)) {
-                            // Rebuild the custom view with URL parameters
-                            customViewToUse = this.buildCustomViewConfig(duration, unit);
-                            // Replace the custom view in the views array
-                            const customViewIndex = scheduleObj.views.findIndex(v =>
-                                typeof v === 'object' && (v === customViewConfig)
-                            );
-                            if (customViewIndex !== -1) {
-                                scheduleObj.views[customViewIndex] = customViewToUse;
-                            }
-                        }
-                    }
-
-                    // Set currentView to the display name
-                    scheduleObj.currentView = customViewToUse.displayName;
-                    break;
-                case "q":
-                case "quarter":
-                    // Map to custom 3 months view
-                    const quarterView = this.buildCustomViewConfig(3, 'Months');
-                    const quarterIndex = scheduleObj.views.findIndex(v =>
-                        typeof v === 'object' && (v === customViewConfig)
-                    );
-                    if (quarterIndex !== -1) {
-                        scheduleObj.views[quarterIndex] = quarterView;
-                    }
-                    scheduleObj.currentView = quarterView.displayName;
-                    break;
-                case "y":
-                case "year":
-                    scheduleObj.currentView = "Year"; break;
-                case "a":
-                case "agenda":
-                    scheduleObj.currentView = "Agenda"; break;
-                default:
-                    break;
-            }
-        }
-
-        // disable drag and drop / resizing for touch devices
-        let touchDevice = ('ontouchstart' in document.documentElement);
-        scheduleObj.allowDragAndDrop = !touchDevice;
-        scheduleObj.allowResizing = !touchDevice;
-
-        // live binding to events
-        scheduleObj.eventSettings.dataSource = this.syncFusionEvents;
-
-        // Syncfusion is a VIEW. When the user adds, changes or removes an event on the grid,
-        // Syncfusion's own change is cancelled here and the user's intent goes to the
-        // EventStore as a command; the grid is then redrawn from the store (the calendar
-        // watcher calls updateCalendarView). Syncfusion never edits our data itself, so its
-        // internal records -- their id kinds, escaped text, stale fields -- never become it.
-        scheduleObj.actionBegin = (args) => {
-            if (!['eventCreate', 'eventChange', 'eventRemove'].includes(args.requestType)) return;
-            args.cancel = true;
-            this.editorSaved = true;
-            this.applyScheduleAction(args);
-        };
-        // An editor that closes without a save is the "this was confusing or fiddly" signal.
-        scheduleObj.popupClose = (args) => {
-            this.hideDraftBlock();
-            if (args.type !== 'Editor') return;
-            if (!this.editorSaved) track(a => a.editorAbandoned());
-            this.editorSaved = false;
-        };
-        // The user's change is measured from the event as it was when they started (see
-        // ScheduleAdapter.noteStart), so a field someone else changed meanwhile is kept.
-        scheduleObj.dragStart = (args) => ScheduleAdapter.noteStart(args.data);
-        scheduleObj.resizeStart = (args) => ScheduleAdapter.noteStart(args.data);
-
-        // color events based on type
-        // Month view day names ("Monday") get a short form ("Mon") that phones show instead
-        // (style.css swaps them); the full name was clipped to "Mond..." at phone width.
-        scheduleObj.renderCell = (args) => {
-            // Week/Day: the corner above the time column toggles the hours before the
-            // start hour (calendar.options.extended; click handler below). It used to say
-            // "12-4 AM" whatever the start hour was, and the same when they were showing.
-            if (args.elementType === 'emptyCells' && args.element
-                && args.element.classList.contains('e-header-cells')) {
-                const label = this.earlyHoursLabel();
-                args.element.setAttribute('data-pc-label', label.text);
-                if (label.title) args.element.title = label.title;
-                return;
-            }
-            if (args.elementType !== 'monthDay' || !args.element) return;
-            const label = args.element.querySelector('span') || args.element;
-            const full = (label.textContent || '').trim();
-            if (full) label.setAttribute('data-short', Array.from(full).slice(0, 3).join(''));
-        };
-
-        scheduleObj.eventRendered = (args) => {
-            // change color as needed
-            categoryColor = app.COLORS[args.data.Type - 1] || app.COLORS[0];
-            if (scheduleObj.currentView === 'Agenda') {
-                args.element.firstChild.style.borderLeftColor = categoryColor;
-            } else {
-                args.element.style.backgroundColor = categoryColor;
-                // Its text: dark on light colors, white on dark (style.css reads the variable).
-                args.element.style.setProperty('--pc-on-event', ScheduleAdapter.onColor(categoryColor));
-            }
-            ScheduleAdapter.showTitle(args.element, args.data);
-        }
-
-        // custom display for types
-        scheduleObj.popupOpen = (args) => {
-            // Deleting needs no "Are you sure?": the Undo toast that follows covers it. Syncfusion's
-            // confirm is pressed for the person, unseen, so its own delete path (one occurrence, the
-            // series, several selected) runs unchanged. The "this event or the series?" choice stays.
-            if (args.type === 'DeleteAlert') {
-                document.body.classList.add('pc-skip-confirm');
-                requestAnimationFrame(() => {
-                    const del = args.element && args.element.querySelector('.e-quick-dialog-delete');
-                    if (del) del.click();
-                    setTimeout(() => document.body.classList.remove('pc-skip-confirm'), 400);
-                });
-                return;
-            }
-            if (args.type === 'QuickInfo' && args.data) ScheduleAdapter.showTitle(args.element, args.data);
-            // A new event: the chosen slot shows as a "New event" block while the quick box is open, and its
-            // label follows the title being typed (as Google Calendar does), so you see where it will land.
-            if (args.type === 'QuickInfo' && args.data && args.data.Id === undefined && !scheduleObj.readonly) app.showDraftBlock(args.element);
-            // The popup header takes the event's color; its title and icons take the matching text color.
-            if (args.type === 'QuickInfo' && args.data && args.data.Id !== undefined) {
-                args.element.style.setProperty('--pc-on-event', ScheduleAdapter.onColor(app.getTypeColor(args.data.Type)));
-            }
-            // The date line opens the editor (click handler by appendTo below); say so on hover.
-            if (args.type === 'QuickInfo' && args.data && !scheduleObj.readonly) {
-                const when = args.element.querySelector('.e-event-popup .e-date-time');
-                if (when) when.title = 'Change date or time';
-            }
-
-
-            // One popup at a time. A double-click on a day fires Syncfusion's quick
-            // popup twice and THEN the editor, and Syncfusion never closes that quick
-            // popup: it stays open behind the editor, and when its open animation
-            // finishes it focuses its own title box. Whatever the user was typing in
-            // the editor -- usually the description -- carries on into that invisible
-            // box, and the editor then saves with no title ("Add title"). That is the
-            // second half of #32: "no way to save once you've written a description".
-            //
-            // So a quick popup may not open over an editor, and opening the editor
-            // closes any quick popup already up.
-            if (args.type === 'QuickInfo' && document.querySelector('.e-schedule-dialog.e-popup-open')) {
-                args.cancel = true;
-                return;
-            }
-            if (args.type === 'Editor' && typeof scheduleObj.closeQuickInfoPopup === 'function') {
-                scheduleObj.closeQuickInfoPopup();
-            }
-
-            if (args.type === 'Editor' && this.lockedOut) {
-                args.cancel = true;
-                this.showToast(this.lockedOutMessage, 'info');
-                return;
-            }
-            if (args.type === 'Editor') {
-                this.editorSaved = false;
-                ScheduleAdapter.noteStart(args.data);
-
-                // Configure datetime pickers with strictMode and the user's chosen date format.
-                // Syncfusion's default is en-US (M/d/yy) which is ambiguous internationally
-                // (1/7/26 = Jan 7 in US, July 1 elsewhere). resolveDateFormat() picks a
-                // pattern from globalSettings.dateFormat, falling back to navigator.language.
-                const startElement = args.element.querySelector('[name="StartTime"]');
-                const endElement = args.element.querySelector('[name="EndTime"]');
-                const dateFmt = this.resolveDateFormat();
-                const timeFmt = this.globalSettings.timeFormat === '24' ? 'HH:mm' : 'hh:mm a';
-                const dateTimeFmt = `${dateFmt} ${timeFmt}`;
-
-                if (startElement && startElement.ej2_instances && startElement.ej2_instances[0]) {
-                    const startPicker = startElement.ej2_instances[0];
-                    startPicker.strictMode = true;
-                    startPicker.format = dateTimeFmt;
-                }
-
-                if (endElement && endElement.ej2_instances && endElement.ej2_instances[0]) {
-                    const endPicker = endElement.ej2_instances[0];
-                    endPicker.strictMode = true;
-                    endPicker.format = dateTimeFmt;
-                }
-
-                function setColor(id) {
-                    if (!window.btnObj) {
-                        return;
-                    }
-
-                    window.btnObj.element.style.background = app.COLORS[id - 1];
-                    // The color is a form field (name="Type", class e-field): Syncfusion reads
-                    // it into the record it hands actionBegin, and the store saves that. Nothing
-                    // writes into Syncfusion's own event objects.
-                    window.inputEle.setAttribute('value', id);
-                    window.inputEle.value = id;
-                    // Whether people categorise events at all decides if type
-                    // labels/colors are worth building on (see pro.md).
-                    track(a => a.featureUsed('event_type', 'popup'));
-                    // console.log("Color set to:", id, "for event:", args.data);
-                }
-
-                // Initial setup
-                if (!args.element.querySelector('.custom-field-row-color')) {
-
-                    // console.log("Initial args", args);
-
-                    // button dropdown
-                    // TODO: allow live edit (vs reload for types)
-                    let items = app.getTypes();
-
-                    window.btnObj = new ej.splitbuttons.DropDownButton({
-                        items: items,
-                        iconCss: 'e-type',
-                        select: (button_args) => {
-                            // console.log("select type args", button_args);
-                            let type = button_args.item.value;
-                            // Only the form field changes; the record Syncfusion builds from
-                            // the form on Save carries it (see setColor).
-                            setColor(type);
-                        },
-                        open: () => {
-                            app.dropdownOpen = true;
-                            updateTooltipVisibility();
-                        },
-                        close: () => {
-                            app.dropdownOpen = false;
-                            // Take the hint out of the popup on every close. Syncfusion drops
-                            // its item list on close and, on the next open, renders the items
-                            // into the popup's FIRST CHILD -- which, with the list gone, was
-                            // this hint. On phones the hint is hidden, so the colors rendered
-                            // inside a hidden div: a 0x0 menu, and no way to change an event's
-                            // color after the first time per visit (#32: "impossible de
-                            // changer les couleurs"). open re-appends it after the list.
-                            if (window.typeTooltip && window.typeTooltip.parentElement) window.typeTooltip.remove();
-                            updateTooltipVisibility();
-                        }
-                    });
-
-                    var createElement = ej.base.createElement;
-                    let row = createElement('div', { className: 'custom-field-row-color group' });
-                    let formElement = args.element.querySelector('.e-schedule-form');
-                    formElement.firstChild.insertBefore(row, args.element.querySelector('.e-description-row'));
-                    let container = createElement('div', { className: 'custom-field-container', attrs: { name: 'Type' } });
-
-                    window.inputEle = createElement('input', {
-                        className: 'e-type e-field', attrs: { name: 'Type' }
-                    });
-                    container.appendChild(window.inputEle);
-                    row.appendChild(container);
-
-                    btnObj.appendTo(container);
-                    window.inputEle.setAttribute('name', 'Type');
-                    window.inputEle.style.display = "none";
-                    window.inputEle.setAttribute('value', args.data.Type);
-
-                    // Add tooltip for customizing labels (shown in dropdown when opened)
-                    let tooltip = createElement('div', {
-                        id: 'type-label-hint',
-                        className: 'w-full px-4 py-2 text-xs text-center italic hidden flex items-center justify-center gap-1',
-                        innerHTML: `Name these colors in Settings`
-                    });
-                    tooltip.style.background = 'var(--panel-bg)';
-                    tooltip.style.color = 'var(--text-color-1)';
-                    tooltip.style.borderTop = '1px solid var(--border-color)';
-                    // Will be appended to dropdown after it's rendered
-                    window.typeTooltip = tooltip;
-                }
-
-                // Function to update tooltip visibility based on dropdown state
-                window.updateTooltipVisibility = () => {
-                    const isDefaultLabels = app.localSettings.typeLabels.every((label, i) => label === `Type ${i + 1}`);
-                    const shouldShow = app.dropdownOpen && isDefaultLabels && window.innerWidth >= 768;
-
-                    if (window.typeTooltip) {
-                        // Append tooltip to dropdown popup if not already there
-                        if (app.dropdownOpen && !window.typeTooltip.parentElement) {
-                            const dropdownPopup = document.querySelector('.e-dropdown-popup.e-popup-open ul');
-                            if (dropdownPopup) {
-                                dropdownPopup.parentElement.appendChild(window.typeTooltip);
-                            }
-                        }
-
-                        window.typeTooltip.classList.toggle('hidden', !shouldShow);
-                    }
-                };
-
-                // Initialize dropdown state
-                app.dropdownOpen = false;
-                updateTooltipVisibility();
-
-                // Initialize with existing type or default to Type 1
-                const initialType = args.data.Type || 1;
-                setColor(initialType);
-
-                // Make sure the event has a Type property even if not selected
-                if (!args.data.Type) {
-                    args.data.Type = 1; // Default to first type if not set
-                }
-
-                //setColor(args.data.Type);
-            }
-
-            // Syncfusion positions the popup (top/left) based on its natural,
-            // pre-clamp height -- our CSS max-height on .e-quick-popup-wrapper then
-            // shrinks a long-description popup without updating that position, so a
-            // popup meant to be vertically centered near the click target can end up
-            // with its top or bottom pushed outside the viewport, with no way to scroll
-            // back to the clipped part.
-            //
-            // A JS fix that rewrites style.top after the fact was tried and reverted: it
-            // reliably broke the header icon buttons' icon-font glyph paint (edit/delete/
-            // close rendered blank) even though DOM and computed styles were identical to
-            // the working case -- a genuine paint bug from mutating position mid-transition,
-            // not a layout bug. The .pc-clamp-top class (see style.css) instead forces
-            // position: fixed + vertical centering via pure CSS, which sidesteps that
-            // entirely since it participates in Syncfusion's own layout/paint pass instead
-            // of fighting it after the fact.
-            //
-            // The class must only apply when the popup actually overflows -- applying it
-            // unconditionally force-centers every popup regardless of size, dragging a
-            // short popup (e.g. a one-line description) away from the event it belongs to
-            // even when it would have fit fine at Syncfusion's own position.
-            const wrapper = args.element.closest('.e-quick-popup-wrapper');
-            if (wrapper) {
-                // Widen the popup for long descriptions -- narrow-column wrapping makes a
-                // multi-paragraph description feel cramped. 480px was chosen (not something
-                // wider, like 700px) specifically to keep collision risk low: on a month view
-                // packed with events, a much wider popup routinely covers a neighboring day's
-                // event, and clicking what looks like that event actually lands on the
-                // popup's own content -- Syncfusion doesn't see it as an event click at all,
-                // so the popup silently keeps showing the wrong title/content at the wrong
-                // position. Rather than chase that with active collision-avoidance (tried:
-                // pushing the popup down until clear doesn't converge on a busy grid, and
-                // shrinking-until-it-fits makes width inconsistent/unpredictable), the fix is
-                // to stay narrow enough that overlap is rare in the first place -- matching
-                // how other calendar apps (e.g. Google Calendar) handle this same tension.
-                // Must run before the overflow clamp below, since widening changes how the
-                // text wraps and therefore how tall (and whether it overflows) the popup ends up.
-                const LONG_DESCRIPTION_THRESHOLD = 140;
-                wrapper.classList.toggle('pc-wide', (args.data.Description || '').length > LONG_DESCRIPTION_THRESHOLD);
-
-                const applyClampIfOverflowing = () => {
-                    const margin = 10;
-
-                    // Syncfusion's own horizontal centering can be wildly wrong -- confirmed
-                    // 1000px+ off on a wide viewport, worse right after a different popup was
-                    // open and closed (its clamped/offset state seems to leak into the next
-                    // centering calculation), but present even on a cold click. Rather than
-                    // chase Syncfusion's internal math, anchor to args.target -- the actual
-                    // clicked .e-appointment element -- which is ground truth for where the
-                    // popup should visually appear, regardless of what Syncfusion computed.
-                    if (args.target) {
-                        const targetRect = args.target.getBoundingClientRect();
-                        const wrapperRect = wrapper.getBoundingClientRect();
-                        const offsetParentRect = wrapper.offsetParent
-                            ? wrapper.offsetParent.getBoundingClientRect()
-                            : { left: 0, top: 0 };
-
-                        let desiredLeft = targetRect.left - offsetParentRect.left;
-                        let desiredTop = targetRect.bottom - offsetParentRect.top + margin;
-
-                        // Keep it on-screen: clamp horizontally, and flip above the target if
-                        // there's no room below.
-                        const viewportLeft = desiredLeft + offsetParentRect.left;
-                        if (viewportLeft + wrapperRect.width > window.innerWidth - margin) {
-                            desiredLeft -= (viewportLeft + wrapperRect.width) - (window.innerWidth - margin);
-                        }
-                        if (desiredLeft + offsetParentRect.left < margin) {
-                            desiredLeft = margin - offsetParentRect.left;
-                        }
-                        const viewportTop = desiredTop + offsetParentRect.top;
-                        if (viewportTop + wrapperRect.height > window.innerHeight - margin) {
-                            desiredTop = (targetRect.top - offsetParentRect.top) - wrapperRect.height - margin;
-                        }
-
-                        wrapper.style.left = `${desiredLeft}px`;
-                        wrapper.style.top = `${desiredTop}px`;
-                    }
-
-                    const rect = wrapper.getBoundingClientRect();
-                    const overflowsVertically = rect.top < margin || rect.bottom > window.innerHeight - margin;
-                    wrapper.classList.toggle('pc-clamp-top', overflowsVertically);
-                };
-
-                // popupOpen fires while the wrapper still carries its closed-state class
-                // (e-popup-close) and pre-open position -- Syncfusion applies its final
-                // position asynchronously as part of the open transition. Wait for the
-                // class to flip to e-popup-open before measuring for overflow.
-                if (wrapper.classList.contains('e-popup-open')) {
-                    applyClampIfOverflowing();
-                } else {
-                    const classObserver = new MutationObserver(() => {
-                        if (wrapper.classList.contains('e-popup-open')) {
-                            classObserver.disconnect();
-                            requestAnimationFrame(applyClampIfOverflowing);
-                        }
-                    });
-                    classObserver.observe(wrapper, { attributes: true, attributeFilter: ['class'] });
-                }
-            }
-        }
-
-        // Belt to the braces above. Syncfusion can leave a quick popup alive behind the
-        // editor (a double-click opens two of them before the editor), and that popup
-        // pulls focus into its own title box when the user clicks into the editor's
-        // Description -- measured at 3ms after the click. Closing it through the API is
-        // not reliable against its own timers, so enforce the rule at the only place
-        // that matters: while an editor is open, focus may not enter a quick popup. It
-        // goes straight back to the field the user was in, so no keystroke is lost.
-        document.addEventListener('focusin', (e) => {
-            const target = e.target;
-            if (!target || !target.closest || !target.closest('.e-quick-popup-wrapper')) return;
-            if (!document.querySelector('.e-schedule-dialog.e-popup-open')) return;
-            const back = e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('.e-schedule-dialog')
-                ? e.relatedTarget
-                : document.querySelector('.e-schedule-dialog.e-popup-open input[name="Subject"]');
-            if (back) back.focus();
-            if (typeof scheduleObj.closeQuickInfoPopup === 'function') scheduleObj.closeQuickInfoPopup();
-        }, true);
-
-        // The date line in an event's popup ("Friday, October 10 (9:00 AM - 10:00 AM)") opens the
-        // editor, as the pencil does. People clicked it expecting to change the time, and the
-        // click did nothing (Clarity, Oct 2026). Only where the pencil is there to click: view
-        // links and locked calendars have none, so their date line stays plain text.
-        document.addEventListener('click', (e) => {
-            const when = e.target && e.target.closest && e.target.closest('.e-quick-popup-wrapper .e-event-popup .e-date-time');
-            if (!when) return;
-            const edit = when.closest('.e-quick-popup-wrapper').querySelector('.e-event-popup .e-edit');
-            if (edit && !edit.disabled && edit.offsetParent) edit.click();
-        });
-
-        scheduleObj.appendTo('#Schedule');
-
-        // A locked calendar's grid is read-only, so a double-click on a day opens nothing at all.
-        // Say why, instead of leaving people clicking at a calendar that ignores them.
-        try {
-            const el = document.getElementById('Schedule');
-            if (el) el.addEventListener('dblclick', (e) => {
-                if (this.lockedOut && e.target && e.target.closest && e.target.closest('.e-work-cells, .e-all-day-cells')) {
-                    this.showToast(this.lockedOutMessage, 'info');
-                }
-            });
-        } catch (e) { /* no grid: nothing to explain */ }
-
-        // View links: a click on a day opens that day, as a click on its date number already
-        // does. Syncfusion's own day click opens the new-event box, which read-only mode
-        // turns off, so on a view link the click did nothing: a third of the day clicks there
-        // were dead clicks (Clarity, Oct 2026). Events and "+N more" keep their own popups.
-        // A click made while an event popup or "+N more" list is open only closes it (as on an
-        // edit link); the popup is already gone by the click, so look at the press.
-        let popupAtPress = false;
-        scheduleObj.element.addEventListener('pointerdown', () => {
-            popupAtPress = !!document.querySelector('.e-quick-popup-wrapper.e-popup-open, .e-more-popup-wrapper.e-popup-open');
-        }, true);
-        scheduleObj.element.addEventListener('click', (e) => {
-            if (!scheduleObj.readonly || scheduleObj.currentView !== 'Month') return;
-            if (popupAtPress) {
-                // Read-only mode leaves "+N more" open on an outside click; close it like the event popup.
-                const more = document.querySelector('.e-more-popup-wrapper.e-popup-open');
-                if (more && !more.contains(e.target)) more.querySelector('.e-more-event-close')?.click();
-                return;
-            }
-            const cell = e.target && e.target.closest && e.target.closest('.e-work-cells');
-            if (!cell || e.target.closest('.e-appointment, .e-more-indicator, .e-date-header')) return;
-            const day = scheduleObj.getCellDetails(cell);
-            if (!day || !day.startTime) return;
-            scheduleObj.selectedDate = day.startTime;
-            scheduleObj.currentView = 'Day';
-        });
-
-        // Syncfusion sizes month-view event chips in pixels from the cell widths it measures
-        // while it renders. On first load the grid is still being built (and fonts/styles may
-        // still be landing) when events are laid out, so chips can come out ~30px wide until
-        // something forces a layout (an edit did). Re-lay-out once after the first events
-        // render has settled, and whenever the container's width changes.
-        let settleTimer;
-        const relayout = () => {
-            clearTimeout(settleTimer);
-            settleTimer = setTimeout(() => scheduleObj.refreshLayout(), 50);
-        };
-        // A month-view chip is never narrower than one cell, so a narrower one is stale.
-        // Checked after every render (not on a timer, which was a guess about when the grid
-        // is done); capped so a view that can't satisfy it can't loop.
-        let staleRetries = 0;
-        scheduleObj.addEventListener('dataBound', () => {
-            requestAnimationFrame(() => {
-                const cell = document.querySelector('.e-schedule .e-month-view .e-work-cells');
-                const chip = document.querySelector('.e-schedule .e-month-view .e-appointment');
-                if (!cell || !chip) { staleRetries = 0; return; }
-                if (chip.getBoundingClientRect().width >= cell.getBoundingClientRect().width * 0.9) { staleRetries = 0; return; }
-                if (staleRetries++ < 3) relayout();
-            });
-        });
-        // Wide screens: the month grid fills the window instead of stopping at 5-6 rows of 100px
-        // with empty page below, and the side panel (same grid row) follows. Rows grow, never
-        // shrink below 100px; a change re-lays out once so chips sit in the taller cells.
-        const fitMonthRows = () => {
-            const sched = document.getElementById('Schedule');
-            const rows = sched ? sched.querySelectorAll('.e-month-view .e-content-table tbody tr') : [];
-            if (!rows.length) return false;
-            let h = 100;
-            if (window.innerWidth >= 1100) {
-                const rect = sched.getBoundingClientRect();
-                const chrome = rect.height - rows[0].getBoundingClientRect().height * rows.length;
-                // The one line under the calendar (pageFooter) fits in the window too, or every page scrolls.
-                const foot = document.querySelector('.pc-home-cal > .pc-view-footer, .pc-home-cal > .pc-edit-footer, .pc-home-cal > .pc-hosted-note');
-                const cs = foot && getComputedStyle(foot);
-                const footH = foot ? foot.offsetHeight + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom) : 0;
-                h = Math.max(100, Math.floor((window.innerHeight - (rect.top + window.scrollY) - 12 - chrome - footH) / rows.length));
-                // The homepage has "How pastecal works" below: keep rows modest so it peeks into view.
-                if (document.getElementById('how')) h = Math.min(h, 116);
-            }
-            const now = parseFloat(sched.style.getPropertyValue('--month-cell-h')) || 100;
-            if (Math.abs(now - h) < 2) return false;
-            sched.style.setProperty('--month-cell-h', h + 'px');
-            return true;
-        };
-        scheduleObj.addEventListener('dataBound', () => {
-            requestAnimationFrame(() => { if (fitMonthRows()) relayout(); });
-        });
-        this._refitMonthRows = () => { if (fitMonthRows()) relayout(); };
-        let fitTimer = null;
-        window.addEventListener('resize', () => {
-            clearTimeout(fitTimer);
-            fitTimer = setTimeout(() => { if (fitMonthRows()) relayout(); }, 150);
-        });
-        const calWrap = document.getElementById('cal2_wrap');
-        if (calWrap && window.ResizeObserver) {
-            let lastWidth = calWrap.offsetWidth;
-            new ResizeObserver(() => {
-                const w = calWrap.offsetWidth;
-                if (w && w !== lastWidth) { lastWidth = w; relayout(); }
-            }).observe(calWrap);
-        }
-
-        // Add event listener to mark month-start dates and colorize year view dots
-        scheduleObj.dataBound = function () {
-            // hiddenEventCount is scoped to the dates on screen, and the scheduler's view
-            // is not a Vue dependency -- without this the count would go stale the moment
-            // the user changed week or switched view.
-            app.viewTick++;
-
-            // Find all date headers and mark ones with month names (contain space)
-            const dateHeaders = document.querySelectorAll('.e-schedule .e-month-view .e-date-header.e-navigate');
-            dateHeaders.forEach(header => {
-                const text = header.textContent.trim();
-                // If the text contains a space, it's a month-start date like "Jul 1", "Aug 1"
-                if (text.includes(' ')) {
-                    header.classList.add('month-start');
-                } else {
-                    header.classList.remove('month-start');
-                }
-            });
-
-            // Colorize year view dots based on event types
-            if (scheduleObj.currentView === 'Year') {
-                const cells = document.querySelectorAll('.e-year-view td.e-cell[data-date]');
-                const allEvents = scheduleObj.eventsData || [];
-
-                // Helper to check if a recurring event occurs on a given date
-                const eventOccursOnDate = (event, targetDate) => {
-                    const eventStart = new Date(event.StartTime);
-                    const eventEnd = new Date(event.EndTime);
-                    const targetStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
-                    const targetEnd = new Date(targetStart.getTime() + 24 * 60 * 60 * 1000);
-
-                    // Event must have started on or before target date
-                    const eventStartDay = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate());
-                    if (eventStartDay > targetStart) return false;
-
-                    // For non-recurring events, check if date overlaps
-                    if (!event.RecurrenceRule) {
-                        return eventStart < targetEnd && eventEnd > targetStart;
-                    }
-
-                    // For recurring events, parse the RecurrenceRule
-                    const rule = event.RecurrenceRule;
-                    const dayNames = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
-                    const targetDayName = dayNames[targetDate.getDay()];
-
-                    // Check BYDAY constraint
-                    const bydayMatch = rule.match(/BYDAY=([^;]+)/);
-                    if (bydayMatch) {
-                        const allowedDays = bydayMatch[1].split(',');
-                        if (!allowedDays.includes(targetDayName)) return false;
-                    }
-
-                    // Check FREQ and INTERVAL
-                    const freqMatch = rule.match(/FREQ=(\w+)/);
-                    const intervalMatch = rule.match(/INTERVAL=(\d+)/);
-                    const freq = freqMatch ? freqMatch[1] : 'DAILY';
-                    const interval = intervalMatch ? parseInt(intervalMatch[1]) : 1;
-
-                    // Calculate if target date matches the recurrence pattern
-                    const daysDiff = Math.floor((targetStart - eventStartDay) / (24 * 60 * 60 * 1000));
-
-                    if (freq === 'DAILY') {
-                        return daysDiff % interval === 0;
-                    } else if (freq === 'WEEKLY') {
-                        // For weekly with BYDAY, just check if day is in BYDAY (already done above)
-                        // and target is at least interval weeks from a valid occurrence
-                        const weeksDiff = Math.floor(daysDiff / 7);
-                        return weeksDiff % interval === 0 || bydayMatch; // BYDAY takes precedence
-                    } else if (freq === 'MONTHLY') {
-                        // Check if same day of month
-                        return eventStart.getDate() === targetDate.getDate();
-                    } else if (freq === 'YEARLY') {
-                        // Check if same month and day
-                        return eventStart.getMonth() === targetDate.getMonth() &&
-                               eventStart.getDate() === targetDate.getDate();
-                    }
-
-                    return true; // Default: assume it occurs
-                };
-
-                cells.forEach(cell => {
-                    const appointmentDiv = cell.querySelector('.e-appointment');
-                    if (!appointmentDiv) return;
-
-                    // Get the date for this cell
-                    const dateMs = parseInt(cell.getAttribute('data-date'));
-                    const cellDate = new Date(dateMs);
-
-                    // Find all events that occur on this date
-                    const eventsOnDate = allEvents.filter(event => eventOccursOnDate(event, cellDate));
-
-                    if (eventsOnDate.length > 0) {
-                        // Get unique event types for this day
-                        const types = [...new Set(eventsOnDate.map(e => e.Type || 1))];
-
-                        if (types.length === 1) {
-                            // Single type: color the dot with that type's color
-                            const color = app.COLORS[types[0] - 1] || app.COLORS[0];
-                            appointmentDiv.style.backgroundColor = color;
-                        } else {
-                            // Multiple types: show multiple dots
-                            appointmentDiv.style.display = 'none';
-
-                            // Remove any existing color dots
-                            cell.querySelectorAll('.color-dot').forEach(d => d.remove());
-
-                            // Create a container for multiple dots
-                            const dotsContainer = document.createElement('div');
-                            dotsContainer.className = 'color-dots-container';
-                            dotsContainer.style.cssText = 'display: flex; gap: 2px; justify-content: center; margin-top: 2px;';
-
-                            // Add a dot for each type (max 3 to avoid overflow)
-                            types.slice(0, 3).forEach(type => {
-                                const dot = document.createElement('div');
-                                dot.className = 'color-dot';
-                                const color = app.COLORS[type - 1] || app.COLORS[0];
-                                dot.style.cssText = `width: 4px; height: 4px; border-radius: 50%; background-color: ${color};`;
-                                dotsContainer.appendChild(dot);
-                            });
-
-                            cell.appendChild(dotsContainer);
-                        }
-                    }
-                });
-            }
-        };
+        // The calendar on screen: pastecal's own on a native view link (index.html, window.pcNativeCal), else
+        // Syncfusion's. The rest of the app reaches it through this.calView (services/CalendarView.js).
+        this.calView = this.nativeCal ? CalendarView.native(this, () => this.$refs.nativeCal || null) : this.mountSyncfusion();
+        if (this.nativeCal) this.watchNativeCalendar();
 
         // Settings were already loaded at the top of mounted() and applied to scheduleObj
         // pre-appendTo. Call applyGlobalSettings again here as a safety net for settings that
@@ -2075,7 +1341,11 @@ const CalendarVueApp = {
         // The grid re-lays out on any container resize (mounted); this is the explicit nudge
         // for the moment the panel docks or undocks.
         sideDocked() {
-            this.$nextTick(() => { try { scheduleObj.refreshLayout(); } catch (e) { /* not rendered yet */ } });
+            this.$nextTick(() => { if (this.calView) this.calView.refreshLayout(); });
+        },
+        // The native month fills the window once the page around it (title, footer line) is in.
+        isLoading(loading) {
+            if (!loading && this.nativeCal) this.$nextTick(() => this.fitNativeMonthRows());
         },
         viewerNotesPinnable: {
             immediate: true,
@@ -2216,6 +1486,841 @@ const CalendarVueApp = {
 
 
     methods: {
+        // ============================================================
+        // REGION: The calendar on screen (services/CalendarView.js)
+        // ============================================================
+
+        // The native calendar's event popup: beside the event that was clicked, kept on screen.
+        openNativePopover({ event, occurrence, jsEvent }) {
+            const el = jsEvent && jsEvent.target && jsEvent.target.closest ? jsEvent.target.closest('[data-testid^="event-"]') : null;
+            const r = el ? el.getBoundingClientRect() : { left: 16, right: 16, top: 80, bottom: 80 };
+            const w = Math.min(360, window.innerWidth - 16), h = 200;
+            const left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8));
+            const top = r.bottom + h + 8 < window.innerHeight ? r.bottom + 6 : Math.max(8, r.top - h - 6);
+            this.nativePopover = { event, occurrence, top, left };
+        },
+        // The native calendar's page wiring. A press outside the open popup closes it and does nothing else (as on
+        // the classic calendar), unless it lands on another event; Escape closes it too. The month fills the window.
+        watchNativeCalendar() {
+            let closedAtPress = false;
+            document.addEventListener('pointerdown', (e) => {
+                closedAtPress = !!this.nativePopover && !(e.target.closest && e.target.closest('.np'));
+                if (closedAtPress) this.nativePopover = null;
+            }, true);
+            document.addEventListener('click', (e) => {
+                if (closedAtPress && e.target.closest && e.target.closest('.nc') && !e.target.closest('[data-testid^="event-"]')) { e.stopPropagation(); e.preventDefault(); }
+                closedAtPress = false;
+            }, true);
+            document.addEventListener('keydown', (e) => { if (e.key === 'Escape') this.nativePopover = null; });
+            let fitTimer = null;
+            window.addEventListener('resize', () => { clearTimeout(fitTimer); fitTimer = setTimeout(() => this.fitNativeMonthRows(), 150); });
+        },
+        // Wide screens: the month grid fills the window instead of stopping at 5-6 rows of 100px with empty page
+        // below (the classic calendar's fitMonthRows). Rows grow, never shrink below 100px.
+        fitNativeMonthRows() {
+            const cal = document.querySelector('.pc-native-cal');
+            const rows = cal ? cal.querySelectorAll('.nc-week-row') : [];
+            if (!rows.length) return;
+            let h = 100;
+            if (window.innerWidth >= 1100) {
+                const rect = cal.getBoundingClientRect();
+                const chrome = rect.height - rows[0].getBoundingClientRect().height * rows.length;
+                const foot = document.querySelector('.pc-home-cal > .pc-view-footer, .pc-home-cal > .pc-edit-footer, .pc-home-cal > .pc-hosted-note');
+                const cs = foot && getComputedStyle(foot);
+                const footH = foot ? foot.offsetHeight + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom) : 0;
+                h = Math.max(100, Math.floor((window.innerHeight - (rect.top + window.scrollY) - 12 - chrome - footH) / rows.length));
+            }
+            if (Math.abs(this.nativeRowHeight - h) >= 2) this.nativeRowHeight = h;
+        },
+        eventTextOn(color) { return ScheduleAdapter.onColor(color); },
+        // The dates on the native calendar changed: what depends on them recomputes (hidden-events count).
+        onNativeRange() {
+            this.viewTick++;
+            this.nativePopover = null;
+            this.$nextTick(() => this.fitNativeMonthRows());
+        },
+
+        // Syncfusion's Schedule, built and wired as it always was: the classic calendar. Returns its
+        // CalendarView; nothing else in the app touches scheduleObj except through that or a guard.
+        mountSyncfusion() {
+            // Sentence case for Syncfusion's own words ("More Details", "New Event", "Repeat
+            // On"...), like the rest of pastecal. Keys missing here keep Syncfusion's text.
+            ej.base.L10n.load({
+                'en-US': {
+                    schedule: {
+                        newEvent: 'New event', editEvent: 'Edit event', deleteEvent: 'Delete event',
+                        deleteTitle: 'Delete event', editTitle: 'Edit event',
+                        deleteMultipleEvent: 'Delete multiple events', moreDetails: 'More details',
+                        editSeries: 'Entire series', deleteSeries: 'Entire series',
+                        editFollowingEvent: 'Following events', recurringEvent: 'Recurring event',
+                        editRecurrence: 'Edit recurrence', startTimezone: 'Start timezone',
+                        endTimezone: 'End timezone', searchTimezone: 'Search timezone',
+                        beginFrom: 'Begin from', endAt: 'Ends at', noTitle: '(No title)',
+                    },
+                    recurrenceeditor: { on: 'Repeat on' },
+                },
+            });
+            const scheduleObj = window.scheduleObj = new ej.schedule.Schedule();
+            const scheduleInitTimestamp = performance.now();
+            console.log('[schedule-init] Schedule constructed at', scheduleInitTimestamp.toFixed(1), 'ms');
+            scheduleObj.on('actionComplete', (args) => {
+                if (args?.requestType === 'toolBarRendered') {
+                    console.log('[schedule-init] toolBarRendered at', (performance.now() - scheduleInitTimestamp).toFixed(1), 'ms since init');
+                }
+            });
+            scheduleObj.addEventListener('dataBound', () => {
+                console.log('[schedule-init] dataBound at', (performance.now() - scheduleInitTimestamp).toFixed(1), 'ms since init');
+            });
+            scheduleObj.on('eventsLoaded', () => {
+                console.log('[schedule-init] eventsLoaded at', (performance.now() - scheduleInitTimestamp).toFixed(1), 'ms since init');
+            });
+
+            // Apply globalSettings BEFORE appendTo — these properties bake into Syncfusion's
+            // first render and won't reactively update if set later. (See applyGlobalSettings
+            // for the post-render path used when settings change at runtime.)
+            scheduleObj.startHour = this.calendar?.options?.extended ? "00:00" : (this.globalSettings.startHour || "05:00");
+            scheduleObj.timeFormat = this.globalSettings.timeFormat === '24' ? 'HH:mm' : 'h:mm a';
+            scheduleObj.firstDayOfWeek = parseInt(this.globalSettings.firstDayOfWeek) || 0;
+            // Phones: Week/Day hour labels like "5:00 AM" clip to "5:00…" in the narrow time column,
+            // so label hours compactly ("5a", "12p", or "17" in 24-hour time). window.pcHourLabel reads
+            // the format live, so a settings change applies on the next render.
+            if (typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 639px)').matches) {
+                const vm = this;
+                window.pcHourLabel = (date) => {
+                    const h = date.getHours();
+                    if (vm.globalSettings.timeFormat === '24') return String(h);
+                    return (h % 12 || 12) + (h < 12 ? 'a' : 'p');
+                };
+                scheduleObj.timeScale.majorSlotTemplate = '<span class="pc-hour">${pcHourLabel(data.date)}</span>';
+            }
+
+            // Build custom view configuration dynamically
+            const customViewDuration = this.calendar?.options?.customViewDuration || this.globalSettings.customViewDuration;
+            const customViewUnit = this.calendar?.options?.customViewUnit || this.globalSettings.customViewUnit;
+            const customViewConfig = this.buildCustomViewConfig(customViewDuration, customViewUnit);
+
+            scheduleObj.views = [
+                'Day',
+                'Week',
+                'Month',
+                customViewConfig,
+                'Year',
+                'Agenda'
+            ];
+            scheduleObj.enableAdaptiveUI = false;
+
+            scheduleObj.readonly = this.isReadOnly;
+
+
+            // Set up scheduler first, then apply settings after initialization
+            // set params from URL
+            let sanitizedUrl = Utils.sanitizeUrl(window.location.href.toLowerCase());
+            let url = new URL(sanitizedUrl);
+            let date_param = url.searchParams.get("d") || url.searchParams.get("date");
+            let view_param = url.searchParams.get("v") || url.searchParams.get("view");
+
+            let d;
+            if (d = Utils.parseDate(date_param)) {
+                scheduleObj.selectedDate = d;
+            }
+
+            if (view_param) {
+                switch (view_param.toLowerCase()) {
+                    case "d":
+                    case "day":
+                        scheduleObj.currentView = "Day"; break;
+                    case "w":
+                    case "week":
+                        scheduleObj.currentView = "Week"; break;
+                    case "12w":
+                    case "12weeks":
+                        // Map to custom 12 weeks view
+                        const twelveWeeksView = this.buildCustomViewConfig(12, 'Weeks');
+                        const twelveWeeksIndex = scheduleObj.views.findIndex(v =>
+                            typeof v === 'object' && (v === customViewConfig)
+                        );
+                        if (twelveWeeksIndex !== -1) {
+                            scheduleObj.views[twelveWeeksIndex] = twelveWeeksView;
+                        }
+                        scheduleObj.currentView = twelveWeeksView.displayName;
+                        break;
+                    case "m":
+                    case "month":
+                        scheduleObj.currentView = "Month"; break;
+                    case "c":
+                    case "custom":
+                        // Check for URL parameter overrides for custom view
+                        const durParam = url.searchParams.get("dur") || url.searchParams.get("duration");
+                        const unitParam = url.searchParams.get("unit");
+
+                        let customViewToUse = customViewConfig;
+
+                        if (durParam && unitParam) {
+                            // Temporarily override custom view config from URL
+                            const duration = parseInt(durParam);
+                            const unit = unitParam.charAt(0).toUpperCase() + unitParam.slice(1).toLowerCase();
+
+                            if (this.validateCustomView(duration, unit)) {
+                                // Rebuild the custom view with URL parameters
+                                customViewToUse = this.buildCustomViewConfig(duration, unit);
+                                // Replace the custom view in the views array
+                                const customViewIndex = scheduleObj.views.findIndex(v =>
+                                    typeof v === 'object' && (v === customViewConfig)
+                                );
+                                if (customViewIndex !== -1) {
+                                    scheduleObj.views[customViewIndex] = customViewToUse;
+                                }
+                            }
+                        }
+
+                        // Set currentView to the display name
+                        scheduleObj.currentView = customViewToUse.displayName;
+                        break;
+                    case "q":
+                    case "quarter":
+                        // Map to custom 3 months view
+                        const quarterView = this.buildCustomViewConfig(3, 'Months');
+                        const quarterIndex = scheduleObj.views.findIndex(v =>
+                            typeof v === 'object' && (v === customViewConfig)
+                        );
+                        if (quarterIndex !== -1) {
+                            scheduleObj.views[quarterIndex] = quarterView;
+                        }
+                        scheduleObj.currentView = quarterView.displayName;
+                        break;
+                    case "y":
+                    case "year":
+                        scheduleObj.currentView = "Year"; break;
+                    case "a":
+                    case "agenda":
+                        scheduleObj.currentView = "Agenda"; break;
+                    default:
+                        break;
+                }
+            }
+
+            // disable drag and drop / resizing for touch devices
+            let touchDevice = ('ontouchstart' in document.documentElement);
+            scheduleObj.allowDragAndDrop = !touchDevice;
+            scheduleObj.allowResizing = !touchDevice;
+
+            // live binding to events
+            scheduleObj.eventSettings.dataSource = this.syncFusionEvents;
+
+            // Syncfusion is a VIEW. When the user adds, changes or removes an event on the grid,
+            // Syncfusion's own change is cancelled here and the user's intent goes to the
+            // EventStore as a command; the grid is then redrawn from the store (the calendar
+            // watcher calls updateCalendarView). Syncfusion never edits our data itself, so its
+            // internal records -- their id kinds, escaped text, stale fields -- never become it.
+            scheduleObj.actionBegin = (args) => {
+                if (!['eventCreate', 'eventChange', 'eventRemove'].includes(args.requestType)) return;
+                args.cancel = true;
+                this.editorSaved = true;
+                this.applyScheduleAction(args);
+            };
+            // An editor that closes without a save is the "this was confusing or fiddly" signal.
+            scheduleObj.popupClose = (args) => {
+                this.hideDraftBlock();
+                if (args.type !== 'Editor') return;
+                if (!this.editorSaved) track(a => a.editorAbandoned());
+                this.editorSaved = false;
+            };
+            // The user's change is measured from the event as it was when they started (see
+            // ScheduleAdapter.noteStart), so a field someone else changed meanwhile is kept.
+            scheduleObj.dragStart = (args) => ScheduleAdapter.noteStart(args.data);
+            scheduleObj.resizeStart = (args) => ScheduleAdapter.noteStart(args.data);
+
+            // color events based on type
+            // Month view day names ("Monday") get a short form ("Mon") that phones show instead
+            // (style.css swaps them); the full name was clipped to "Mond..." at phone width.
+            scheduleObj.renderCell = (args) => {
+                // Week/Day: the corner above the time column toggles the hours before the
+                // start hour (calendar.options.extended; click handler below). It used to say
+                // "12-4 AM" whatever the start hour was, and the same when they were showing.
+                if (args.elementType === 'emptyCells' && args.element
+                    && args.element.classList.contains('e-header-cells')) {
+                    const label = this.earlyHoursLabel();
+                    args.element.setAttribute('data-pc-label', label.text);
+                    if (label.title) args.element.title = label.title;
+                    return;
+                }
+                if (args.elementType !== 'monthDay' || !args.element) return;
+                const label = args.element.querySelector('span') || args.element;
+                const full = (label.textContent || '').trim();
+                if (full) label.setAttribute('data-short', Array.from(full).slice(0, 3).join(''));
+            };
+
+            scheduleObj.eventRendered = (args) => {
+                // change color as needed
+                categoryColor = app.COLORS[args.data.Type - 1] || app.COLORS[0];
+                if (scheduleObj.currentView === 'Agenda') {
+                    args.element.firstChild.style.borderLeftColor = categoryColor;
+                } else {
+                    args.element.style.backgroundColor = categoryColor;
+                    // Its text: dark on light colors, white on dark (style.css reads the variable).
+                    args.element.style.setProperty('--pc-on-event', ScheduleAdapter.onColor(categoryColor));
+                }
+                ScheduleAdapter.showTitle(args.element, args.data);
+            }
+
+            // custom display for types
+            scheduleObj.popupOpen = (args) => {
+                // Deleting needs no "Are you sure?": the Undo toast that follows covers it. Syncfusion's
+                // confirm is pressed for the person, unseen, so its own delete path (one occurrence, the
+                // series, several selected) runs unchanged. The "this event or the series?" choice stays.
+                if (args.type === 'DeleteAlert') {
+                    document.body.classList.add('pc-skip-confirm');
+                    requestAnimationFrame(() => {
+                        const del = args.element && args.element.querySelector('.e-quick-dialog-delete');
+                        if (del) del.click();
+                        setTimeout(() => document.body.classList.remove('pc-skip-confirm'), 400);
+                    });
+                    return;
+                }
+                if (args.type === 'QuickInfo' && args.data) ScheduleAdapter.showTitle(args.element, args.data);
+                // A new event: the chosen slot shows as a "New event" block while the quick box is open, and its
+                // label follows the title being typed (as Google Calendar does), so you see where it will land.
+                if (args.type === 'QuickInfo' && args.data && args.data.Id === undefined && !scheduleObj.readonly) app.showDraftBlock(args.element);
+                // The popup header takes the event's color; its title and icons take the matching text color.
+                if (args.type === 'QuickInfo' && args.data && args.data.Id !== undefined) {
+                    args.element.style.setProperty('--pc-on-event', ScheduleAdapter.onColor(app.getTypeColor(args.data.Type)));
+                }
+                // The date line opens the editor (click handler by appendTo below); say so on hover.
+                if (args.type === 'QuickInfo' && args.data && !scheduleObj.readonly) {
+                    const when = args.element.querySelector('.e-event-popup .e-date-time');
+                    if (when) when.title = 'Change date or time';
+                }
+
+
+                // One popup at a time. A double-click on a day fires Syncfusion's quick
+                // popup twice and THEN the editor, and Syncfusion never closes that quick
+                // popup: it stays open behind the editor, and when its open animation
+                // finishes it focuses its own title box. Whatever the user was typing in
+                // the editor -- usually the description -- carries on into that invisible
+                // box, and the editor then saves with no title ("Add title"). That is the
+                // second half of #32: "no way to save once you've written a description".
+                //
+                // So a quick popup may not open over an editor, and opening the editor
+                // closes any quick popup already up.
+                if (args.type === 'QuickInfo' && document.querySelector('.e-schedule-dialog.e-popup-open')) {
+                    args.cancel = true;
+                    return;
+                }
+                if (args.type === 'Editor' && typeof scheduleObj.closeQuickInfoPopup === 'function') {
+                    scheduleObj.closeQuickInfoPopup();
+                }
+
+                if (args.type === 'Editor' && this.lockedOut) {
+                    args.cancel = true;
+                    this.showToast(this.lockedOutMessage, 'info');
+                    return;
+                }
+                if (args.type === 'Editor') {
+                    this.editorSaved = false;
+                    ScheduleAdapter.noteStart(args.data);
+
+                    // Configure datetime pickers with strictMode and the user's chosen date format.
+                    // Syncfusion's default is en-US (M/d/yy) which is ambiguous internationally
+                    // (1/7/26 = Jan 7 in US, July 1 elsewhere). resolveDateFormat() picks a
+                    // pattern from globalSettings.dateFormat, falling back to navigator.language.
+                    const startElement = args.element.querySelector('[name="StartTime"]');
+                    const endElement = args.element.querySelector('[name="EndTime"]');
+                    const dateFmt = this.resolveDateFormat();
+                    const timeFmt = this.globalSettings.timeFormat === '24' ? 'HH:mm' : 'hh:mm a';
+                    const dateTimeFmt = `${dateFmt} ${timeFmt}`;
+
+                    if (startElement && startElement.ej2_instances && startElement.ej2_instances[0]) {
+                        const startPicker = startElement.ej2_instances[0];
+                        startPicker.strictMode = true;
+                        startPicker.format = dateTimeFmt;
+                    }
+
+                    if (endElement && endElement.ej2_instances && endElement.ej2_instances[0]) {
+                        const endPicker = endElement.ej2_instances[0];
+                        endPicker.strictMode = true;
+                        endPicker.format = dateTimeFmt;
+                    }
+
+                    function setColor(id) {
+                        if (!window.btnObj) {
+                            return;
+                        }
+
+                        window.btnObj.element.style.background = app.COLORS[id - 1];
+                        // The color is a form field (name="Type", class e-field): Syncfusion reads
+                        // it into the record it hands actionBegin, and the store saves that. Nothing
+                        // writes into Syncfusion's own event objects.
+                        window.inputEle.setAttribute('value', id);
+                        window.inputEle.value = id;
+                        // Whether people categorise events at all decides if type
+                        // labels/colors are worth building on (see pro.md).
+                        track(a => a.featureUsed('event_type', 'popup'));
+                        // console.log("Color set to:", id, "for event:", args.data);
+                    }
+
+                    // Initial setup
+                    if (!args.element.querySelector('.custom-field-row-color')) {
+
+                        // console.log("Initial args", args);
+
+                        // button dropdown
+                        // TODO: allow live edit (vs reload for types)
+                        let items = app.getTypes();
+
+                        window.btnObj = new ej.splitbuttons.DropDownButton({
+                            items: items,
+                            iconCss: 'e-type',
+                            select: (button_args) => {
+                                // console.log("select type args", button_args);
+                                let type = button_args.item.value;
+                                // Only the form field changes; the record Syncfusion builds from
+                                // the form on Save carries it (see setColor).
+                                setColor(type);
+                            },
+                            open: () => {
+                                app.dropdownOpen = true;
+                                updateTooltipVisibility();
+                            },
+                            close: () => {
+                                app.dropdownOpen = false;
+                                // Take the hint out of the popup on every close. Syncfusion drops
+                                // its item list on close and, on the next open, renders the items
+                                // into the popup's FIRST CHILD -- which, with the list gone, was
+                                // this hint. On phones the hint is hidden, so the colors rendered
+                                // inside a hidden div: a 0x0 menu, and no way to change an event's
+                                // color after the first time per visit (#32: "impossible de
+                                // changer les couleurs"). open re-appends it after the list.
+                                if (window.typeTooltip && window.typeTooltip.parentElement) window.typeTooltip.remove();
+                                updateTooltipVisibility();
+                            }
+                        });
+
+                        var createElement = ej.base.createElement;
+                        let row = createElement('div', { className: 'custom-field-row-color group' });
+                        let formElement = args.element.querySelector('.e-schedule-form');
+                        formElement.firstChild.insertBefore(row, args.element.querySelector('.e-description-row'));
+                        let container = createElement('div', { className: 'custom-field-container', attrs: { name: 'Type' } });
+
+                        window.inputEle = createElement('input', {
+                            className: 'e-type e-field', attrs: { name: 'Type' }
+                        });
+                        container.appendChild(window.inputEle);
+                        row.appendChild(container);
+
+                        btnObj.appendTo(container);
+                        window.inputEle.setAttribute('name', 'Type');
+                        window.inputEle.style.display = "none";
+                        window.inputEle.setAttribute('value', args.data.Type);
+
+                        // Add tooltip for customizing labels (shown in dropdown when opened)
+                        let tooltip = createElement('div', {
+                            id: 'type-label-hint',
+                            className: 'w-full px-4 py-2 text-xs text-center italic hidden flex items-center justify-center gap-1',
+                            innerHTML: `Name these colors in Settings`
+                        });
+                        tooltip.style.background = 'var(--panel-bg)';
+                        tooltip.style.color = 'var(--text-color-1)';
+                        tooltip.style.borderTop = '1px solid var(--border-color)';
+                        // Will be appended to dropdown after it's rendered
+                        window.typeTooltip = tooltip;
+                    }
+
+                    // Function to update tooltip visibility based on dropdown state
+                    window.updateTooltipVisibility = () => {
+                        const isDefaultLabels = app.localSettings.typeLabels.every((label, i) => label === `Type ${i + 1}`);
+                        const shouldShow = app.dropdownOpen && isDefaultLabels && window.innerWidth >= 768;
+
+                        if (window.typeTooltip) {
+                            // Append tooltip to dropdown popup if not already there
+                            if (app.dropdownOpen && !window.typeTooltip.parentElement) {
+                                const dropdownPopup = document.querySelector('.e-dropdown-popup.e-popup-open ul');
+                                if (dropdownPopup) {
+                                    dropdownPopup.parentElement.appendChild(window.typeTooltip);
+                                }
+                            }
+
+                            window.typeTooltip.classList.toggle('hidden', !shouldShow);
+                        }
+                    };
+
+                    // Initialize dropdown state
+                    app.dropdownOpen = false;
+                    updateTooltipVisibility();
+
+                    // Initialize with existing type or default to Type 1
+                    const initialType = args.data.Type || 1;
+                    setColor(initialType);
+
+                    // Make sure the event has a Type property even if not selected
+                    if (!args.data.Type) {
+                        args.data.Type = 1; // Default to first type if not set
+                    }
+
+                    //setColor(args.data.Type);
+                }
+
+                // Syncfusion positions the popup (top/left) based on its natural,
+                // pre-clamp height -- our CSS max-height on .e-quick-popup-wrapper then
+                // shrinks a long-description popup without updating that position, so a
+                // popup meant to be vertically centered near the click target can end up
+                // with its top or bottom pushed outside the viewport, with no way to scroll
+                // back to the clipped part.
+                //
+                // A JS fix that rewrites style.top after the fact was tried and reverted: it
+                // reliably broke the header icon buttons' icon-font glyph paint (edit/delete/
+                // close rendered blank) even though DOM and computed styles were identical to
+                // the working case -- a genuine paint bug from mutating position mid-transition,
+                // not a layout bug. The .pc-clamp-top class (see style.css) instead forces
+                // position: fixed + vertical centering via pure CSS, which sidesteps that
+                // entirely since it participates in Syncfusion's own layout/paint pass instead
+                // of fighting it after the fact.
+                //
+                // The class must only apply when the popup actually overflows -- applying it
+                // unconditionally force-centers every popup regardless of size, dragging a
+                // short popup (e.g. a one-line description) away from the event it belongs to
+                // even when it would have fit fine at Syncfusion's own position.
+                const wrapper = args.element.closest('.e-quick-popup-wrapper');
+                if (wrapper) {
+                    // Widen the popup for long descriptions -- narrow-column wrapping makes a
+                    // multi-paragraph description feel cramped. 480px was chosen (not something
+                    // wider, like 700px) specifically to keep collision risk low: on a month view
+                    // packed with events, a much wider popup routinely covers a neighboring day's
+                    // event, and clicking what looks like that event actually lands on the
+                    // popup's own content -- Syncfusion doesn't see it as an event click at all,
+                    // so the popup silently keeps showing the wrong title/content at the wrong
+                    // position. Rather than chase that with active collision-avoidance (tried:
+                    // pushing the popup down until clear doesn't converge on a busy grid, and
+                    // shrinking-until-it-fits makes width inconsistent/unpredictable), the fix is
+                    // to stay narrow enough that overlap is rare in the first place -- matching
+                    // how other calendar apps (e.g. Google Calendar) handle this same tension.
+                    // Must run before the overflow clamp below, since widening changes how the
+                    // text wraps and therefore how tall (and whether it overflows) the popup ends up.
+                    const LONG_DESCRIPTION_THRESHOLD = 140;
+                    wrapper.classList.toggle('pc-wide', (args.data.Description || '').length > LONG_DESCRIPTION_THRESHOLD);
+
+                    const applyClampIfOverflowing = () => {
+                        const margin = 10;
+
+                        // Syncfusion's own horizontal centering can be wildly wrong -- confirmed
+                        // 1000px+ off on a wide viewport, worse right after a different popup was
+                        // open and closed (its clamped/offset state seems to leak into the next
+                        // centering calculation), but present even on a cold click. Rather than
+                        // chase Syncfusion's internal math, anchor to args.target -- the actual
+                        // clicked .e-appointment element -- which is ground truth for where the
+                        // popup should visually appear, regardless of what Syncfusion computed.
+                        if (args.target) {
+                            const targetRect = args.target.getBoundingClientRect();
+                            const wrapperRect = wrapper.getBoundingClientRect();
+                            const offsetParentRect = wrapper.offsetParent
+                                ? wrapper.offsetParent.getBoundingClientRect()
+                                : { left: 0, top: 0 };
+
+                            let desiredLeft = targetRect.left - offsetParentRect.left;
+                            let desiredTop = targetRect.bottom - offsetParentRect.top + margin;
+
+                            // Keep it on-screen: clamp horizontally, and flip above the target if
+                            // there's no room below.
+                            const viewportLeft = desiredLeft + offsetParentRect.left;
+                            if (viewportLeft + wrapperRect.width > window.innerWidth - margin) {
+                                desiredLeft -= (viewportLeft + wrapperRect.width) - (window.innerWidth - margin);
+                            }
+                            if (desiredLeft + offsetParentRect.left < margin) {
+                                desiredLeft = margin - offsetParentRect.left;
+                            }
+                            const viewportTop = desiredTop + offsetParentRect.top;
+                            if (viewportTop + wrapperRect.height > window.innerHeight - margin) {
+                                desiredTop = (targetRect.top - offsetParentRect.top) - wrapperRect.height - margin;
+                            }
+
+                            wrapper.style.left = `${desiredLeft}px`;
+                            wrapper.style.top = `${desiredTop}px`;
+                        }
+
+                        const rect = wrapper.getBoundingClientRect();
+                        const overflowsVertically = rect.top < margin || rect.bottom > window.innerHeight - margin;
+                        wrapper.classList.toggle('pc-clamp-top', overflowsVertically);
+                    };
+
+                    // popupOpen fires while the wrapper still carries its closed-state class
+                    // (e-popup-close) and pre-open position -- Syncfusion applies its final
+                    // position asynchronously as part of the open transition. Wait for the
+                    // class to flip to e-popup-open before measuring for overflow.
+                    if (wrapper.classList.contains('e-popup-open')) {
+                        applyClampIfOverflowing();
+                    } else {
+                        const classObserver = new MutationObserver(() => {
+                            if (wrapper.classList.contains('e-popup-open')) {
+                                classObserver.disconnect();
+                                requestAnimationFrame(applyClampIfOverflowing);
+                            }
+                        });
+                        classObserver.observe(wrapper, { attributes: true, attributeFilter: ['class'] });
+                    }
+                }
+            }
+
+            // Belt to the braces above. Syncfusion can leave a quick popup alive behind the
+            // editor (a double-click opens two of them before the editor), and that popup
+            // pulls focus into its own title box when the user clicks into the editor's
+            // Description -- measured at 3ms after the click. Closing it through the API is
+            // not reliable against its own timers, so enforce the rule at the only place
+            // that matters: while an editor is open, focus may not enter a quick popup. It
+            // goes straight back to the field the user was in, so no keystroke is lost.
+            document.addEventListener('focusin', (e) => {
+                const target = e.target;
+                if (!target || !target.closest || !target.closest('.e-quick-popup-wrapper')) return;
+                if (!document.querySelector('.e-schedule-dialog.e-popup-open')) return;
+                const back = e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('.e-schedule-dialog')
+                    ? e.relatedTarget
+                    : document.querySelector('.e-schedule-dialog.e-popup-open input[name="Subject"]');
+                if (back) back.focus();
+                if (typeof scheduleObj.closeQuickInfoPopup === 'function') scheduleObj.closeQuickInfoPopup();
+            }, true);
+
+            // The date line in an event's popup ("Friday, October 10 (9:00 AM - 10:00 AM)") opens the
+            // editor, as the pencil does. People clicked it expecting to change the time, and the
+            // click did nothing (Clarity, Oct 2026). Only where the pencil is there to click: view
+            // links and locked calendars have none, so their date line stays plain text.
+            document.addEventListener('click', (e) => {
+                const when = e.target && e.target.closest && e.target.closest('.e-quick-popup-wrapper .e-event-popup .e-date-time');
+                if (!when) return;
+                const edit = when.closest('.e-quick-popup-wrapper').querySelector('.e-event-popup .e-edit');
+                if (edit && !edit.disabled && edit.offsetParent) edit.click();
+            });
+
+            scheduleObj.appendTo('#Schedule');
+
+            // A locked calendar's grid is read-only, so a double-click on a day opens nothing at all.
+            // Say why, instead of leaving people clicking at a calendar that ignores them.
+            try {
+                const el = document.getElementById('Schedule');
+                if (el) el.addEventListener('dblclick', (e) => {
+                    if (this.lockedOut && e.target && e.target.closest && e.target.closest('.e-work-cells, .e-all-day-cells')) {
+                        this.showToast(this.lockedOutMessage, 'info');
+                    }
+                });
+            } catch (e) { /* no grid: nothing to explain */ }
+
+            // View links: a click on a day opens that day, as a click on its date number already
+            // does. Syncfusion's own day click opens the new-event box, which read-only mode
+            // turns off, so on a view link the click did nothing: a third of the day clicks there
+            // were dead clicks (Clarity, Oct 2026). Events and "+N more" keep their own popups.
+            // A click made while an event popup or "+N more" list is open only closes it (as on an
+            // edit link); the popup is already gone by the click, so look at the press.
+            let popupAtPress = false;
+            scheduleObj.element.addEventListener('pointerdown', () => {
+                popupAtPress = !!document.querySelector('.e-quick-popup-wrapper.e-popup-open, .e-more-popup-wrapper.e-popup-open');
+            }, true);
+            scheduleObj.element.addEventListener('click', (e) => {
+                if (!scheduleObj.readonly || scheduleObj.currentView !== 'Month') return;
+                if (popupAtPress) {
+                    // Read-only mode leaves "+N more" open on an outside click; close it like the event popup.
+                    const more = document.querySelector('.e-more-popup-wrapper.e-popup-open');
+                    if (more && !more.contains(e.target)) more.querySelector('.e-more-event-close')?.click();
+                    return;
+                }
+                const cell = e.target && e.target.closest && e.target.closest('.e-work-cells');
+                if (!cell || e.target.closest('.e-appointment, .e-more-indicator, .e-date-header')) return;
+                const day = scheduleObj.getCellDetails(cell);
+                if (!day || !day.startTime) return;
+                scheduleObj.selectedDate = day.startTime;
+                scheduleObj.currentView = 'Day';
+            });
+
+            // Syncfusion sizes month-view event chips in pixels from the cell widths it measures
+            // while it renders. On first load the grid is still being built (and fonts/styles may
+            // still be landing) when events are laid out, so chips can come out ~30px wide until
+            // something forces a layout (an edit did). Re-lay-out once after the first events
+            // render has settled, and whenever the container's width changes.
+            let settleTimer;
+            const relayout = () => {
+                clearTimeout(settleTimer);
+                settleTimer = setTimeout(() => scheduleObj.refreshLayout(), 50);
+            };
+            // A month-view chip is never narrower than one cell, so a narrower one is stale.
+            // Checked after every render (not on a timer, which was a guess about when the grid
+            // is done); capped so a view that can't satisfy it can't loop.
+            let staleRetries = 0;
+            scheduleObj.addEventListener('dataBound', () => {
+                requestAnimationFrame(() => {
+                    const cell = document.querySelector('.e-schedule .e-month-view .e-work-cells');
+                    const chip = document.querySelector('.e-schedule .e-month-view .e-appointment');
+                    if (!cell || !chip) { staleRetries = 0; return; }
+                    if (chip.getBoundingClientRect().width >= cell.getBoundingClientRect().width * 0.9) { staleRetries = 0; return; }
+                    if (staleRetries++ < 3) relayout();
+                });
+            });
+            // Wide screens: the month grid fills the window instead of stopping at 5-6 rows of 100px
+            // with empty page below, and the side panel (same grid row) follows. Rows grow, never
+            // shrink below 100px; a change re-lays out once so chips sit in the taller cells.
+            const fitMonthRows = () => {
+                const sched = document.getElementById('Schedule');
+                const rows = sched ? sched.querySelectorAll('.e-month-view .e-content-table tbody tr') : [];
+                if (!rows.length) return false;
+                let h = 100;
+                if (window.innerWidth >= 1100) {
+                    const rect = sched.getBoundingClientRect();
+                    const chrome = rect.height - rows[0].getBoundingClientRect().height * rows.length;
+                    // The one line under the calendar (pageFooter) fits in the window too, or every page scrolls.
+                    const foot = document.querySelector('.pc-home-cal > .pc-view-footer, .pc-home-cal > .pc-edit-footer, .pc-home-cal > .pc-hosted-note');
+                    const cs = foot && getComputedStyle(foot);
+                    const footH = foot ? foot.offsetHeight + parseFloat(cs.marginTop) + parseFloat(cs.marginBottom) : 0;
+                    h = Math.max(100, Math.floor((window.innerHeight - (rect.top + window.scrollY) - 12 - chrome - footH) / rows.length));
+                    // The homepage has "How pastecal works" below: keep rows modest so it peeks into view.
+                    if (document.getElementById('how')) h = Math.min(h, 116);
+                }
+                const now = parseFloat(sched.style.getPropertyValue('--month-cell-h')) || 100;
+                if (Math.abs(now - h) < 2) return false;
+                sched.style.setProperty('--month-cell-h', h + 'px');
+                return true;
+            };
+            scheduleObj.addEventListener('dataBound', () => {
+                requestAnimationFrame(() => { if (fitMonthRows()) relayout(); });
+            });
+            this._refitMonthRows = () => { if (fitMonthRows()) relayout(); };
+            let fitTimer = null;
+            window.addEventListener('resize', () => {
+                clearTimeout(fitTimer);
+                fitTimer = setTimeout(() => { if (fitMonthRows()) relayout(); }, 150);
+            });
+            const calWrap = document.getElementById('cal2_wrap');
+            if (calWrap && window.ResizeObserver) {
+                let lastWidth = calWrap.offsetWidth;
+                new ResizeObserver(() => {
+                    const w = calWrap.offsetWidth;
+                    if (w && w !== lastWidth) { lastWidth = w; relayout(); }
+                }).observe(calWrap);
+            }
+
+            // Add event listener to mark month-start dates and colorize year view dots
+            scheduleObj.dataBound = function () {
+                // hiddenEventCount is scoped to the dates on screen, and the scheduler's view
+                // is not a Vue dependency -- without this the count would go stale the moment
+                // the user changed week or switched view.
+                app.viewTick++;
+
+                // Find all date headers and mark ones with month names (contain space)
+                const dateHeaders = document.querySelectorAll('.e-schedule .e-month-view .e-date-header.e-navigate');
+                dateHeaders.forEach(header => {
+                    const text = header.textContent.trim();
+                    // If the text contains a space, it's a month-start date like "Jul 1", "Aug 1"
+                    if (text.includes(' ')) {
+                        header.classList.add('month-start');
+                    } else {
+                        header.classList.remove('month-start');
+                    }
+                });
+
+                // Colorize year view dots based on event types
+                if (scheduleObj.currentView === 'Year') {
+                    const cells = document.querySelectorAll('.e-year-view td.e-cell[data-date]');
+                    const allEvents = scheduleObj.eventsData || [];
+
+                    // Helper to check if a recurring event occurs on a given date
+                    const eventOccursOnDate = (event, targetDate) => {
+                        const eventStart = new Date(event.StartTime);
+                        const eventEnd = new Date(event.EndTime);
+                        const targetStart = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
+                        const targetEnd = new Date(targetStart.getTime() + 24 * 60 * 60 * 1000);
+
+                        // Event must have started on or before target date
+                        const eventStartDay = new Date(eventStart.getFullYear(), eventStart.getMonth(), eventStart.getDate());
+                        if (eventStartDay > targetStart) return false;
+
+                        // For non-recurring events, check if date overlaps
+                        if (!event.RecurrenceRule) {
+                            return eventStart < targetEnd && eventEnd > targetStart;
+                        }
+
+                        // For recurring events, parse the RecurrenceRule
+                        const rule = event.RecurrenceRule;
+                        const dayNames = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+                        const targetDayName = dayNames[targetDate.getDay()];
+
+                        // Check BYDAY constraint
+                        const bydayMatch = rule.match(/BYDAY=([^;]+)/);
+                        if (bydayMatch) {
+                            const allowedDays = bydayMatch[1].split(',');
+                            if (!allowedDays.includes(targetDayName)) return false;
+                        }
+
+                        // Check FREQ and INTERVAL
+                        const freqMatch = rule.match(/FREQ=(\w+)/);
+                        const intervalMatch = rule.match(/INTERVAL=(\d+)/);
+                        const freq = freqMatch ? freqMatch[1] : 'DAILY';
+                        const interval = intervalMatch ? parseInt(intervalMatch[1]) : 1;
+
+                        // Calculate if target date matches the recurrence pattern
+                        const daysDiff = Math.floor((targetStart - eventStartDay) / (24 * 60 * 60 * 1000));
+
+                        if (freq === 'DAILY') {
+                            return daysDiff % interval === 0;
+                        } else if (freq === 'WEEKLY') {
+                            // For weekly with BYDAY, just check if day is in BYDAY (already done above)
+                            // and target is at least interval weeks from a valid occurrence
+                            const weeksDiff = Math.floor(daysDiff / 7);
+                            return weeksDiff % interval === 0 || bydayMatch; // BYDAY takes precedence
+                        } else if (freq === 'MONTHLY') {
+                            // Check if same day of month
+                            return eventStart.getDate() === targetDate.getDate();
+                        } else if (freq === 'YEARLY') {
+                            // Check if same month and day
+                            return eventStart.getMonth() === targetDate.getMonth() &&
+                                   eventStart.getDate() === targetDate.getDate();
+                        }
+
+                        return true; // Default: assume it occurs
+                    };
+
+                    cells.forEach(cell => {
+                        const appointmentDiv = cell.querySelector('.e-appointment');
+                        if (!appointmentDiv) return;
+
+                        // Get the date for this cell
+                        const dateMs = parseInt(cell.getAttribute('data-date'));
+                        const cellDate = new Date(dateMs);
+
+                        // Find all events that occur on this date
+                        const eventsOnDate = allEvents.filter(event => eventOccursOnDate(event, cellDate));
+
+                        if (eventsOnDate.length > 0) {
+                            // Get unique event types for this day
+                            const types = [...new Set(eventsOnDate.map(e => e.Type || 1))];
+
+                            if (types.length === 1) {
+                                // Single type: color the dot with that type's color
+                                const color = app.COLORS[types[0] - 1] || app.COLORS[0];
+                                appointmentDiv.style.backgroundColor = color;
+                            } else {
+                                // Multiple types: show multiple dots
+                                appointmentDiv.style.display = 'none';
+
+                                // Remove any existing color dots
+                                cell.querySelectorAll('.color-dot').forEach(d => d.remove());
+
+                                // Create a container for multiple dots
+                                const dotsContainer = document.createElement('div');
+                                dotsContainer.className = 'color-dots-container';
+                                dotsContainer.style.cssText = 'display: flex; gap: 2px; justify-content: center; margin-top: 2px;';
+
+                                // Add a dot for each type (max 3 to avoid overflow)
+                                types.slice(0, 3).forEach(type => {
+                                    const dot = document.createElement('div');
+                                    dot.className = 'color-dot';
+                                    const color = app.COLORS[type - 1] || app.COLORS[0];
+                                    dot.style.cssText = `width: 4px; height: 4px; border-radius: 50%; background-color: ${color};`;
+                                    dotsContainer.appendChild(dot);
+                                });
+
+                                cell.appendChild(dotsContainer);
+                            }
+                        }
+                    });
+                }
+            };
+            return CalendarView.syncfusion(scheduleObj, this);
+        },
+
         // ============================================================
         // REGION: Calendar Initialization & Setup
         // ============================================================
@@ -2595,30 +2700,13 @@ const CalendarVueApp = {
         },
 
         updateCalendarView() {
-            // Step 1: Ensure this.syncFusionEvents is up-to-date from the master store (this.calendar.events).
-            // This creates a new array instance for this.syncFusionEvents if this.calendar.events has changed.
-            this.syncFusionEvents = this.calendar.getSyncFusionEvents();
-
-            // Step 2: Hand the scheduler only the events the color filter admits.
-            //
-            // This filters the array rather than passing a DataManager plus an ej.data.Query
-            // predicate. The query built an allow-list of `Type == n` clauses, which is a
-            // second, separate definition of "visible" alongside isEventVisible() -- and
-            // every round of issue #41 was those two definitions disagreeing (first about
-            // whether the search panel was open, then about types with no color slot, then
-            // about how `type` is normalized). One predicate, used here and by
-            // hiddenEventCount, makes that whole class of bug unrepresentable.
-            scheduleObj.setProperties({
-                eventSettings: {
-                    dataSource: this.syncFusionEvents.filter(e => this.isEventVisible(e)),
-                    query: new ej.data.Query()
-                }
-            });
-
-            // Step 3: Re-bind the data to ensure the Scheduler reflects the changes.
-            // While setProperties might sometimes trigger a refresh, explicitly calling dataBind is safer
-            // when dataSource changes significantly.
-            scheduleObj.dataBind();
+            if (!this.calView) return;   // before mounted() built the calendar: it draws the events when it mounts
+            // Syncfusion is handed display records (ScheduleAdapter.toView); the native calendar reads
+            // calendar.events itself. Either way the color filter is one predicate, isEventVisible (#41):
+            // a second definition of "visible" (Syncfusion's ej.data.Query allow-list) is how every round
+            // of #41 happened. CalendarView.render() hands the grid only what it admits.
+            if (this.calView.kind === 'syncfusion') this.syncFusionEvents = this.calendar.getSyncFusionEvents();
+            this.calView.render();
         },
 
         /**
@@ -2701,7 +2789,7 @@ const CalendarVueApp = {
             try { localStorage.setItem('pc_home_aside', this.homeAsideHidden ? 'hidden' : 'shown'); } catch (e) { /* this visit only */ }
             track(a => a.track('feature_used', { feature: this.homeAsideHidden ? 'home_aside_hidden' : 'home_aside_shown' }));
             // The calendar measures its width only on window resize; tell it the column moved.
-            this.$nextTick(() => { try { scheduleObj.refreshLayout(); } catch (e) { /* not rendered yet */ } });
+            this.$nextTick(() => { if (this.calView) this.calView.refreshLayout(); });
         },
 
         // One tour_seen per section per page view, when half of it is on screen.
@@ -3018,11 +3106,11 @@ const CalendarVueApp = {
         // The month being looked at, as weeks of days with their events (repeats expanded), for the printed page.
         // As many events as fit in a day on paper; the rest are "+N more".
         buildPrintMonth() {
-            const sch = window.scheduleObj;
-            if (!sch || !sch.getEvents) return null;
-            const sel = new Date(sch.selectedDate || Date.now());
+            const cal = this.calView;
+            if (!cal) return null;
+            const sel = cal.selectedDate();
             const first = new Date(sel.getFullYear(), sel.getMonth(), 1);
-            const fdow = Number(sch.firstDayOfWeek) || 0;
+            const fdow = Number(this.globalSettings.firstDayOfWeek) || 0;
             const start = new Date(first); start.setDate(1 - ((first.getDay() - fdow + 7) % 7));
             const last = new Date(sel.getFullYear(), sel.getMonth() + 1, 0);
             const weeks = Math.ceil(((last - start) / 864e5 + 1) / 7);
@@ -3030,7 +3118,8 @@ const CalendarVueApp = {
             const loc = navigator.language || 'en-US';
             const en = /^en/i.test(loc);
             const time = (d) => { const t = d.toLocaleTimeString(loc, { hour: 'numeric', minute: '2-digit' }); return en ? t.replace(':00', '').replace(/\s?([AP])M/i, (m, x) => x.toLowerCase() + 'm') : t; };
-            const evs = (sch.getEvents(start, end, true) || []).map((e) => ({ s: new Date(e.StartTime), e: new Date(e.EndTime), all: !!e.IsAllDay, title: e.Subject || '(No title)', type: e.Type }))
+            // Repeats expanded, as the grid draws them (CalendarView.occurrences: the color filter applies).
+            const evs = (cal.occurrences(start, end) || []).map((e) => ({ s: e.start, e: e.end, all: e.allDay, title: e.title || '(No title)', type: e.type }))
                 .sort((a, b) => (b.all - a.all) || (a.s - b.s));
             const day0 = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
             const out = [];
@@ -3274,8 +3363,9 @@ const CalendarVueApp = {
 
 
         updateCurrentViewURL() {
-            const currentView = scheduleObj.currentView;
-            const currentDate = scheduleObj.selectedDate.toISOString().slice(0, 10);
+            if (!this.calView) return;
+            const currentView = this.calView.currentView();
+            const currentDate = this.calView.selectedDate().toISOString().slice(0, 10);
 
             // Map display name to URL parameter
             let viewParam;
@@ -3548,14 +3638,7 @@ const CalendarVueApp = {
         // Syncfusion exposes it as getCurrentViewDates(); falling back to null means the
         // count degrades to "all events" rather than throwing.
         visibleDateRange() {
-            if (typeof scheduleObj === 'undefined' || !scheduleObj) return null;
-            const dates = typeof scheduleObj.getCurrentViewDates === 'function'
-                ? scheduleObj.getCurrentViewDates() : null;
-            if (!dates || !dates.length) return null;
-            const first = new Date(dates[0]).getTime();
-            const last = new Date(dates[dates.length - 1]).getTime();
-            if (isNaN(first) || isNaN(last)) return null;
-            return { start: first, end: last + 86400000 }; // through the end of the last day
+            return this.calView ? this.calView.visibleRange() : null;
         },
 
         // Does this series actually put an occurrence inside the window? The stored start
@@ -3568,10 +3651,9 @@ const CalendarVueApp = {
         recurrenceOccursInRange(event, range) {
             // The live scheduler cannot answer this: hidden events are filtered out of its
             // dataSource, so it would report "no occurrences" for precisely the events
-            // being counted. Expand the rule in isolation instead.
-            // An all-day series is expanded from the same values the grid is given
-            // (Calendar.getSyncFusionEvents): start, UNTIL and EXDATEs at the viewer's
-            // local midnight of their stored dates.
+            // being counted. The rule is expanded in isolation (CalendarView.occursInRange),
+            // from the values the grid is given: an all-day series' start, UNTIL and EXDATEs
+            // at the viewer's local midnight of their stored dates.
             const allDay = !!event.isAllDay;
             const ms = (v) => {
                 const d = allDay ? Event.allDayToLocal(v) : new Date(v);
@@ -3579,32 +3661,17 @@ const CalendarVueApp = {
             };
             const start = ms(event.start);
             if (isNaN(start)) return true;
-            const end = ms(event.end);
-            const duration = isNaN(end) ? 0 : Math.max(0, end - start);
             const rule = String((allDay ? Event.allDayRuleToLocal(event.recurrencerule) : event.recurrencerule) || '');
-            const exceptions = (allDay ? Event.allDayExceptionsToLocal(event.recurrenceException)
-                : event.recurrenceException) || null;
 
-            try {
-                if (typeof ej.schedule.generate === 'function') {
-                    // Same call the scheduler makes when it renders a view: begin one event
-                    // length before the window, so an occurrence spilling in from the day
-                    // before is caught, and cap the walk at the window's length in days.
-                    const viewDate = new Date(range.start - duration);
-                    const days = Math.ceil((range.end - viewDate.getTime()) / 864e5) + 1;
-                    const firstDay = parseInt(this.globalSettings?.firstDayOfWeek) || 0;
-                    const dates = ej.schedule.generate(new Date(start), rule,
-                        exceptions, firstDay, days, viewDate);
-                    return dates.some(d => this.spansRange(d, d + duration, range));
-                }
-            } catch (err) {
-                // Fall through to the estimate: over-reporting is safer than not counting.
-            }
+            // The calendar's own expansion (Syncfusion's ej.schedule.generate, or the native grid's rrule), the
+            // same one that draws the grid; null when it cannot answer, and then the estimate below.
+            const known = this.calView ? this.calView.occursInRange(event, range) : null;
+            if (known === true || known === false) return known;
 
             try {
                 const until = /UNTIL=([0-9TZ]+)/.exec(rule);
                 if (until) {
-                    const u = ej.schedule.getDateFromRecurrenceDateString(until[1]);
+                    const u = typeof ej !== 'undefined' ? ej.schedule.getDateFromRecurrenceDateString(until[1]) : null;
                     if (u && !isNaN(u.getTime()) && u.getTime() < range.start) return false;
                 }
                 const count = /COUNT=(\d+)/.exec(rule);
@@ -3663,14 +3730,11 @@ const CalendarVueApp = {
 
         // Edit from a search result: the same editor a double-click opens (a repeating event opens its series).
         editSearchResult(event) {
-            const data = (scheduleObj.eventsData || []).find(e => String(e.Id) === String(event.id) && !e.RecurrenceID);
-            if (data) scheduleObj.openEditor(data, data.RecurrenceRule ? 'EditSeries' : 'Save');
+            if (this.calView) this.calView.openEditor(event);
         },
 
         jumpToEvent(event) {
-            let startDate = new Date(event.start);
-            scheduleObj.selectedDate = startDate;
-            scheduleObj.currentView = 'Week';
+            if (this.calView) this.calView.goTo({ date: new Date(event.start), view: 'Week' });
         },
 
         toggleRecents() {
@@ -5739,6 +5803,8 @@ vueApp.config.errorHandler = (err, instance, info) => {
     console.error(err);
     try { window.pcReportError && window.pcReportError(err, `vue:${info}`); } catch (e) { /* never the failure */ }
 };
+// The native calendar's icons, used inside its own templates (a native view link only).
+if (typeof NcIcon !== 'undefined') vueApp.component('nc-icon', NcIcon);
 const app = vueApp
     .component('quick-add-button', QuickAddButton)
     .component('quick-add-dialog', QuickAddDialog)
