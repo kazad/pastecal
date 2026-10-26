@@ -217,7 +217,7 @@ const EventCard = (() => {
                 // Layout sizes, not the box on screen: the card may be mid-animation (scaled).
                 const h = c.offsetHeight, top = parseFloat(this.pos.top || 0) - window.scrollY;
                 let room = window.innerHeight - top - M;
-                if (h > room && room < 320) {
+                if (h > room && (room < 320 || this.detFocus)) {   // (writing long details: up as far as it takes)
                     const need = Math.min(h, window.innerHeight - 2 * M), up = Math.max(0, Math.min(top - M, need - room));
                     this.pos = { ...this.pos, top: `${parseFloat(this.pos.top || 0) - up}px` };
                     c.style.top = this.pos.top;
@@ -316,7 +316,9 @@ const EventCard = (() => {
                 const ta = this.$refs.det;
                 if (!ta) return;
                 const c = this.$refs.card, top = c ? c.scrollTop : 0;
-                const cap = Math.max(120, Math.round(window.innerHeight * (this.wide ? 0.6 : 0.4)));
+                // Never taller than the screen leaves for it beside the rest of the card (so the card itself need not scroll).
+                const rest = c && !this.phone ? c.scrollHeight - ta.offsetHeight : 0;
+                const cap = Math.max(120, Math.min(Math.round(window.innerHeight * (this.wide ? 0.6 : 0.4)), this.phone ? Infinity : window.innerHeight - 2 * M - rest));
                 if (ta.scrollHeight > ta.clientHeight + 2) ta.style.height = `${Math.min(cap, Math.max(72, ta.scrollHeight + 2))}px`;
                 else {
                     ta.style.height = 'auto';
