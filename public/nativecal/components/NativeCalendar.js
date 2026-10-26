@@ -630,18 +630,39 @@ const NativeCalendar = (() => {
                 setTimeout(() => { this._swallowClick = false; }, 400);
             },
             // ---- touch: long-press to drag (appEdits) ----------------------------------------
+            // A finger scrolls; a tap opens the event (or adds one); holding still for 350 ms picks the event up
+            // (a small buzz), then it follows the finger. On an empty part of the time grid, the same hold drags
+            // out a new event. Touch events keep going to the element the finger first touched, even after a
+            // redraw takes it out of the page, so once lifted they are heard there and on the window as well.
             touchStart(e, occ, mode, extra) {
-                if (!this.appEdits || this.readOnly || occ.event.__draft || !e.touches || e.touches.length !== 1) return;
-                const t = e.touches[0];
+                if (!this.appEdits || this.readOnly || (occ && occ.event.__draft) || !e.touches || e.touches.length !== 1) return;
+                const t = e.touches[0], target = e.target;
                 clearTimeout(this._press);
                 this._pressAt = { x: t.clientX, y: t.clientY };
                 this._press = setTimeout(() => {
                     this._press = null;
-                    this.drag = { key: occ.key, occ, mode, x0: t.clientX, y0: t.clientY, moved: false, touch: true, ...extra };
-                    try { if (navigator.vibrate) navigator.vibrate(10); } catch (err) { /* no haptics */ }
-                }, 450);
+                    if (mode === 'create') {
+                        const rect = extra.col.getBoundingClientRect(), q = HOUR_PX / 4;
+                        const y = Math.max(0, Math.floor((t.clientY - rect.top) / q) * q);
+                        this.drag = { mode: 'create', day: extra.day, x0: t.clientX, y0: t.clientY, rectTop: rect.top, top0: y, top: y, height: q, moved: false, touch: true };
+                    } else this.drag = { key: occ.key, occ, mode, x0: t.clientX, y0: t.clientY, moved: false, touch: true, ...extra };
+                    this.buzz(10);
+                    this.followTouch(target);
+                }, 350);
+            },
+            // Hold on an empty slot of the time grid (not on an event): drag out a new event.
+            touchCreate(e, day) {
+                if (e.target.closest && e.target.closest('.nc-timed')) return;
+                this.touchStart(e, null, 'create', { day, col: e.currentTarget });
+            },
+            buzz(ms) { try { if (navigator.vibrate) navigator.vibrate(ms); } catch (err) { /* no haptics */ } },
+            followTouch(target) {
+                const on = [window, target].filter(Boolean);
+                const move = (e) => this.onTouchMove(e), end = (e) => { on.forEach((o) => { o.removeEventListener('touchmove', move); o.removeEventListener('touchend', end); o.removeEventListener('touchcancel', end); }); this.onTouchEnd(e); };
+                on.forEach((o) => { o.addEventListener('touchmove', move, { passive: false }); o.addEventListener('touchend', end); o.addEventListener('touchcancel', end); });
             },
             onTouchMove(e) {
+                if (e._ncSeen) return; e._ncSeen = true;   // heard on the calendar, its first target and the window
                 const t = e.touches && e.touches[0];
                 if (!t) return;
                 // Moving before the press is long enough means scrolling: never lift the event then.
@@ -649,12 +670,35 @@ const NativeCalendar = (() => {
                 if (this.drag && this.drag.touch) { if (e.cancelable) e.preventDefault(); this.onDragMove({ clientX: t.clientX, clientY: t.clientY }); }
             },
             onTouchEnd(e) {
+                if (e._ncSeen) return; e._ncSeen = true;
                 clearTimeout(this._press); this._press = null;
                 const d = this.drag;
-                if (!d || !d.touch) return;
+                if (!d || !d.touch || d.ended) return;
+                d.ended = true;
                 const t = (e.changedTouches && e.changedTouches[0]) || { clientX: d.x0, clientY: d.y0 };
-                if (d.moved) { this._swallowClick = true; setTimeout(() => { this._swallowClick = false; }, 400); if (e.cancelable) e.preventDefault(); }
+                if (d.moved) { this._swallowClick = true; setTimeout(() => { this._swallowClick = false; }, 400); if (e.cancelable) e.preventDefault(); this.buzz(6); }
                 this.onDragEnd({ clientX: t.clientX, clientY: t.clientY });
+            },
+            // ---- keyboard (appEdits): a focused event moves with the arrows -----------------------
+            // Up / Down: 15 minutes earlier or later; Shift+Up / Shift+Down: end 15 minutes earlier or later;
+            // Left / Right: a day. Each goes out as an 'event-move', like a drag (the app saves it, with Undo).
+            keyMove(e, occ) {
+                if (!this.appEdits || this.readOnly || occ.event.__draft || e.altKey || e.metaKey || e.ctrlKey) return;
+                const k = e.key;
+                if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(k)) return;
+                const vertical = k === 'ArrowUp' || k === 'ArrowDown';
+                if (vertical && (occ.allDay || this.view === 'Month' || this.view === 'Custom' || this.view === 'Agenda')) return;
+                e.preventDefault();
+                let start = new Date(occ.start), end = new Date(occ.end), mode = 'move';
+                const by = k === 'ArrowUp' || k === 'ArrowLeft' ? -1 : 1;
+                if (!vertical) { start = addDays(start, by); end = addDays(end, by); }
+                else if (e.shiftKey) {
+                    mode = 'resize';
+                    end = new Date(end.getTime() + by * 15 * 60000);
+                    if (end - start < 15 * 60000) return;
+                } else { start = new Date(start.getTime() + by * 15 * 60000); end = new Date(end.getTime() + by * 15 * 60000); }
+                this.$emit('drag-start', { event: occ.event, occurrence: occ });
+                this.$emit('event-move', { event: occ.event, occurrence: occ, start, end, allDay: !!occ.allDay, mode, key: true });
             },
             // ---- drag & resize (mouse; timed and month) ------------------------------------
             startDrag(e, occ, mode, extra) {
@@ -798,7 +842,7 @@ const NativeCalendar = (() => {
         <div v-for="b in w.bars" :key="b.occ.key + w.key" class="nc-bar" :style="barStyle(b)"
           :class="{ long: b.occ.allDay || isMultiDayTimed(b.occ), tint: isTint(b), 'clip-l': b.clippedLeft, 'clip-r': b.clippedRight, 'nc-draft': b.occ.event.__draft, lifted: isLifted(b.occ) }"
           :data-testid="tid(b.occ)" :title="b.occ.title"
-          @mousedown="startDrag($event, b.occ, 'month')" @touchstart="touchStart($event, b.occ, 'month')" @click.stop="clickEvent(b.occ, $event)" @dblclick.stop="openEvent(b.occ)" tabindex="0" role="button" :aria-label="ariaLabel(b.occ)" @keydown.enter.prevent="clickEvent(b.occ, $event)" @keydown.space.prevent="clickEvent(b.occ, $event)">
+          @mousedown="startDrag($event, b.occ, 'month')" @touchstart="touchStart($event, b.occ, 'month')" @click.stop="clickEvent(b.occ, $event)" @dblclick.stop="openEvent(b.occ)" tabindex="0" role="button" :aria-label="ariaLabel(b.occ)" @keydown.enter.prevent="clickEvent(b.occ, $event)" @keydown="keyMove($event, b.occ)" @keydown.space.prevent="clickEvent(b.occ, $event)">
           <template v-if="b.occ.allDay || isMultiDayTimed(b.occ)">
             <span v-if="!b.occ.allDay && !b.clippedLeft" class="nc-bar-time">{{ time(b.occ.start) }}</span>
             <span class="nc-bar-title center">{{ b.occ.title }}</span>
@@ -830,7 +874,7 @@ const NativeCalendar = (() => {
             @mousedown="startDayCreate($event, d)" @click="clickCell(d, $event)" @dblclick="clickCell(d, $event, undefined, true)"></div>
           <div v-for="b in gridLayout.allDay" :key="b.occ.key" class="nc-bar long" :style="gridBarStyle(b, gridDays.length)"
             :class="{ 'nc-draft': b.occ.event.__draft, lifted: isLifted(b.occ) }"
-            :data-testid="tid(b.occ)" @mousedown="startDrag($event, b.occ, 'month')" @touchstart="touchStart($event, b.occ, 'month')" @click.stop="clickEvent(b.occ, $event)" @dblclick.stop="openEvent(b.occ)" tabindex="0" role="button" :aria-label="ariaLabel(b.occ)" @keydown.enter.prevent="clickEvent(b.occ, $event)" @keydown.space.prevent="clickEvent(b.occ, $event)">
+            :data-testid="tid(b.occ)" @mousedown="startDrag($event, b.occ, 'month')" @touchstart="touchStart($event, b.occ, 'month')" @click.stop="clickEvent(b.occ, $event)" @dblclick.stop="openEvent(b.occ)" tabindex="0" role="button" :aria-label="ariaLabel(b.occ)" @keydown.enter.prevent="clickEvent(b.occ, $event)" @keydown="keyMove($event, b.occ)" @keydown.space.prevent="clickEvent(b.occ, $event)">
             <span v-if="!b.occ.allDay && !b.clippedLeft" class="nc-bar-time">{{ time(b.occ.start) }}</span>
             <span class="nc-bar-title center">{{ b.occ.title }}</span>
             <span v-if="!b.occ.allDay && !b.clippedRight" class="nc-bar-time">{{ time(b.occ.end) }}</span>
@@ -847,14 +891,17 @@ const NativeCalendar = (() => {
         <div class="nc-grid-cols">
           <div v-for="(d, i) in gridDays" :key="d.getTime()" class="nc-col" :data-day="d.getTime()"
             :class="{ weekend: isWeekend(d) && gridDays.length > 1 }"
-            @mousedown="startCreate($event, d)" @click="clickSlot(d, $event)" @dblclick="clickSlot(d, $event, true)">
+            @mousedown="startCreate($event, d)" @touchstart="touchCreate($event, d)" @click="clickSlot(d, $event)" @dblclick="clickSlot(d, $event, true)">
             <div v-for="h in hours" :key="h" class="nc-slot"></div>
             <div v-if="drag && drag.mode === 'create' && drag.moved && drag.day.getTime() === d.getTime()" class="nc-create-preview"
               data-testid="create-preview" :style="{ top: drag.top + 'px', height: drag.height + 'px' }">{{ createLabel() }}</div>
+            <!-- Where a dragged event came from, while it is being moved: a dashed outline, nothing to read or click. -->
+            <div v-for="it in gridLayout.timed[i].filter((x) => drag && drag.moved && drag.mode === 'move' && drag.key === x.occ.key)" :key="'origin' + it.occ.key"
+              class="nc-origin" aria-hidden="true" :style="{ top: it.top + 'px', height: it.height + 'px', left: 'calc(' + (it.col * 100 / it.cols) + '% + 1px)', width: 'calc(' + (100 / it.cols) + '% - 3px)', '--c': color(it.occ.type) }"></div>
             <div v-for="it in gridLayout.timed[i]" :key="it.occ.key" class="nc-timed" :style="timedStyle(it)"
               :class="{ 'nc-draft': it.occ.event.__draft, lifted: isLifted(it.occ) }" :data-testid="tid(it.occ)"
               @mousedown="startDrag($event, it.occ, 'move', { top0: it.top, top: it.top, height: it.height })"
-              @touchstart="touchStart($event, it.occ, 'move', { top0: it.top, top: it.top, height: it.height })" @click.stop="clickEvent(it.occ, $event)" @dblclick.stop="openEvent(it.occ)" tabindex="0" role="button" :aria-label="ariaLabel(it.occ)" @keydown.enter.prevent="clickEvent(it.occ, $event)" @keydown.space.prevent="clickEvent(it.occ, $event)">
+              @touchstart="touchStart($event, it.occ, 'move', { top0: it.top, top: it.top, height: it.height })" @click.stop="clickEvent(it.occ, $event)" @dblclick.stop="openEvent(it.occ)" tabindex="0" role="button" :aria-label="ariaLabel(it.occ)" @keydown.enter.prevent="clickEvent(it.occ, $event)" @keydown="keyMove($event, it.occ)" @keydown.space.prevent="clickEvent(it.occ, $event)">
               <div class="nc-timed-title">{{ it.occ.title }} <nc-icon v-if="it.occ.recurring" class="nc-recur" name="repeat" :size="11" :stroke-width="2.5"></nc-icon></div>
               <div v-if="it.height > 34" class="nc-timed-time">{{ time(it.occ.start) }} - {{ time(it.occ.end) }}</div>
               <div class="nc-resize" data-testid="resize-bottom" @mousedown.stop="startDrag($event, it.occ, 'resize', { height0: it.height, height: it.height, top: it.top, top0: it.top })"></div>

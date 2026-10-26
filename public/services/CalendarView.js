@@ -75,10 +75,14 @@
                 vm.nativePopover = null;
                 vm.nativeQuick = null;
                 vm.nativeAsk = null;
+                vm.nativeCard = null;
                 if (vm.nativeEditor && typeof vm.closeNativeEditor === 'function') vm.closeNativeEditor();
             },
             // A search result's Edit: the event itself, a repeating one as the whole series (as classic opens it).
-            openEditor(event) { if (typeof vm.nativeEditEvent === 'function') vm.nativeEditEvent(event, null); },
+            openEditor(event) {
+                if (typeof vm.openNativeCard === 'function' && typeof root.EventCard !== 'undefined') vm.openNativeCard({ event }, true);
+                else if (typeof vm.nativeEditEvent === 'function') vm.nativeEditEvent(event, null);
+            },
         };
     }
 

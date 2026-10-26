@@ -193,7 +193,7 @@ const COMPONENT_REGISTRY = {
     // pastecal's own calendar and its event popup: loaded only on a native page (index.html, window.pcNativeCal);
     // its editor and quick box only on a native edit link (window.pcNativeEdit).
     ...(typeof NativeCalendar !== 'undefined' ? { 'native-calendar': NativeCalendar, 'event-popover': EventPopover } : {}),
-    ...(typeof EventEditor !== 'undefined' ? { 'event-editor': EventEditor, 'quick-create-popover': QuickCreatePopover } : {}),
+    ...(typeof EventCard !== 'undefined' ? { 'event-card': EventCard } : {}),
 };
 
 // A native view link's ?view= / ?date= (the classic calendar reads the same ones in mountSyncfusion):
@@ -325,6 +325,7 @@ const CalendarVueApp = {
             nativeQuick: null,        // { start, end, isAllDay, title, top, left }: the new event in the quick box
             nativeEditor: null,       // { event (what the form shows, frozen at open), mode, series, occurrence }
             nativeAsk: null,          // { title, message, options: [{ label, testid, action }], choice, ok, buttons }
+            nativeCard: null,         // the event card (nativecal/components/EventCard.js): see openNativeCard
             isLoading: true, // set to false when calendar status is determined
             isExisting: false, // set by callback
             editTitle: false,
@@ -472,7 +473,13 @@ const CalendarVueApp = {
         // imperatively (mountSyncfusion, applyGlobalSettings); these are reactive, so they need no re-apply.
         nativeEvents() { return this.nativeCal ? CalendarView.displayEvents(this.calendar.events) : []; },
         // The quick box's new event, drawn on the grid as the "New event" block (labelled with the title typed).
-        nativeDraft() { const q = this.nativeQuick; return q ? { start: q.start, end: q.end, isAllDay: q.isAllDay, title: q.title } : null; },
+        // A new event in the card, drawn on the grid as the "New event" block (its label follows the title typed).
+        nativeDraft() {
+            const c = this.nativeCard;
+            if (!c || !c.isNew) return null;
+            const v = c.value, end = v.isAllDay ? new Date(v.end.getFullYear(), v.end.getMonth(), v.end.getDate(), 23, 59, 59, 999) : v.end;
+            return { start: new Date(v.start).toISOString(), end: new Date(end).toISOString(), isAllDay: !!v.isAllDay, title: v.title, type: v.type };
+        },
         nativeView() { return this.nativeLink.view || this.calendar?.options?.defaultView || this.globalSettings.defaultView || 'Month'; },
         nativeCustomDuration() { return this.nativeLink.dur || this.calendar?.options?.customViewDuration || this.globalSettings.customViewDuration || 3; },
         nativeCustomUnit() { return this.nativeLink.unit || this.calendar?.options?.customViewUnit || this.globalSettings.customViewUnit || 'Months'; },
@@ -1285,6 +1292,7 @@ const CalendarVueApp = {
             if (this.nativeAsk) { this.nativeAnswer(null); return; }
             if (this.nativeEditor) { this.closeNativeEditor(); return; }
             if (this.nativeQuick) { this.nativeQuick = null; return; }
+            if (this.nativeCard) { this.nativeCardCancel(); return; }   // (the card takes its own Escape first: EventCard onKey)
             if (this.showRecentChanges) { this.showRecentChanges = false; return; }
             if (this.showProStats || this.showProHistory || this.showStatsInfo) { this.closeAllPanels(); return; }
             if (this.showNotes && this.notesEditing) { this.notesEditing = false; return; }
@@ -1311,6 +1319,8 @@ const CalendarVueApp = {
     },
 
     watch: {
+        // The event card follows changes made in other browsers (nativeCardRefresh).
+        'calendar.events'() { if (this.nativeCard) this.$nextTick(() => this.nativeCardRefresh()); },
         'calendar.id'() { this.$nextTick(() => this.fitSlugBox()); },
         // The footer line appears once loading ends (or changes with Pro): give the month grid its room.
         pageFooter() { this.$nextTick(() => { if (this._refitMonthRows) this._refitMonthRows(); }); },
@@ -1403,6 +1413,12 @@ const CalendarVueApp = {
             this.$nextTick(() => { if (this.calView) this.calView.refreshLayout(); });
         },
         // A question on the native calendar: its main button takes the focus, so Enter answers and Escape cancels.
+        // A phone's sheet: the calendar behind it is out of reach until it closes (the scrim closes it).
+        nativeCard(c) {
+            const cal = document.querySelector('.pc-native-cal');
+            if (!cal) return;
+            if (c && window.innerWidth <= 760) cal.setAttribute('inert', ''); else cal.removeAttribute('inert');
+        },
         nativeAsk(ask) {
             if (ask) this.$nextTick(() => { const b = document.querySelector('.pc-native-ask .pc-btn--primary'); if (b) b.focus(); });
         },
@@ -1561,6 +1577,14 @@ const CalendarVueApp = {
             const left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8));
             const top = r.bottom + h + 8 < window.innerHeight ? r.bottom + 6 : Math.max(8, r.top - h - 6);
             this.nativePopover = { event, occurrence, top, left };
+            this.$nextTick(() => this.fitNativePopover());
+        },
+        /** The popup kept inside the window, whatever its details' length (Show all can make it taller). */
+        fitNativePopover() {
+            const p = this.nativePopover, el = document.querySelector('.np');
+            if (!p || !el) return;
+            const h = el.offsetHeight;
+            if (p.top + h > window.innerHeight - 8) p.top = Math.max(8, window.innerHeight - 8 - h);
         },
         // The native calendar's page wiring. A press outside the open popup closes it and does nothing else (as on
         // the classic calendar), unless it lands on another event; Escape closes it too. The month fills the window.
@@ -1568,6 +1592,15 @@ const CalendarVueApp = {
             let closedAtPress = false;
             document.addEventListener('pointerdown', (e) => {
                 const inside = (sel) => !!(e.target.closest && e.target.closest(sel));
+                // The event card: a press outside it (and its pickers, the question, the toast) closes it, keeping
+                // what was saved, and does nothing else: no new event, no drag (the press's mouse events never reach
+                // the calendar, and its click is swallowed below).
+                if (this.nativeCard && !inside('.nk-card, .nk-pick, .nk-menu, .pc-native-ask, .pc-toast-wrap')) {
+                    const cal = inside('.nc') || inside('.nk-scrim');
+                    this.nativeCardDone();
+                    if (cal) { closedAtPress = true; this._nativeCardClosedAt = true; e.preventDefault(); e.stopPropagation(); }
+                    return;
+                }
                 // The quick box closes the same way (its "New event" block goes with it), unless the press is in the
                 // question or the editor it may have opened.
                 const quick = !!this.nativeQuick && !inside('.nq, .ne-overlay, .pc-native-ask');
@@ -1576,10 +1609,12 @@ const CalendarVueApp = {
                 if (quick) this.nativeQuick = null;
             }, true);
             document.addEventListener('click', (e) => {
-                if (closedAtPress && e.target.closest && e.target.closest('.nc') && !e.target.closest('[data-testid^="event-"]')) { e.stopPropagation(); e.preventDefault(); }
+                if (closedAtPress && e.target.closest && e.target.closest('.nc, .nk-scrim') && (this._nativeCardClosedAt === true || !e.target.closest('[data-testid^="event-"]'))) { e.stopPropagation(); e.preventDefault(); }
+                this._nativeCardClosedAt = false;
                 closedAtPress = false;
             }, true);
             document.addEventListener('keydown', (e) => { if (e.key === 'Escape') this.nativePopover = null; });
+            if (this.nativeEdit) document.addEventListener('keydown', (e) => this.onNativeKey(e));
             // A locked calendar ignores a double-click on a day: say why (as classic does).
             document.addEventListener('dblclick', (e) => {
                 if (this.lockedOut && e.target.closest && e.target.closest('.nc-cell, .nc-col, .nc-allday-cell')) this.showToast(this.lockedOutMessage, 'info');
@@ -1688,7 +1723,12 @@ const CalendarVueApp = {
             return (this.calendar.events || []).find((e) => e && String(e.id) === String(id) && isBlankId(e.recurrenceID)) || null;
         },
         /** 'single', 'series' (a repeating event) or 'edited' (one occurrence edited on its own, a row of its own). */
-        nativeKind(row) { return !row ? null : !isBlankId(row.recurrenceID) ? 'edited' : row.recurrencerule ? 'series' : 'single'; },
+        /** A rule too big to expand (EventStore.unsafeRecurrence) is drawn once, so it is edited and deleted as one event. */
+        nativeKind(row) {
+            if (!row) return null;
+            if (!isBlankId(row.recurrenceID)) return 'edited';
+            return row.recurrencerule && !(typeof EventStore !== 'undefined' && EventStore.unsafeRecurrence?.(row.recurrencerule)) ? 'series' : 'single';
+        },
         /** A stored row as classic's grid record (an edited occurrence is read beside its series, whose grid its slot is in). */
         nativeRecord(row) {
             const series = this.nativeKind(row) === 'edited' ? this.nativeSeriesOf(row) : null;
@@ -1716,14 +1756,19 @@ const CalendarVueApp = {
             const ask = this.nativeAsk;
             this.nativeAsk = null;
             if (!ask) return;
-            if (button === null) { if (ask.cancel) ask.cancel(); return; }
-            (button || ask.options[ask.choice]).action();
+            const c = this.nativeCard;
+            if (button === null) { if (ask.cancel) ask.cancel(); this._nativeMoveToast = null; }
+            else (button || ask.options[ask.choice]).action();
+            if (this._nativeMoveToast) this.nativeMoveToast();   // a drop that asked first: its toast now
+            if (c && c.closeAfterAsk && this.nativeCard === c && !this.nativeAsk) this.closeNativeCard();
         },
 
         // The quick box: a click (or a drag) on an empty part of the grid. A double-click opens the full editor.
         onNativeCreate({ start, end, isAllDay, event: jsEvent, full }) {
             if (!this.nativeEdit || !this.nativeCanEdit()) return;
             this.nativePopover = null;
+            // The event card (EventCard.js): beside the new event's block, a sheet on a phone.
+            if (typeof EventCard !== 'undefined') { this.openNativeNewCard({ start, end, isAllDay, jsEvent, full }); return; }
             if (full) { this.nativeQuick = null; this.openNativeEditor({ mode: 'Add', fresh: { start, end, isAllDay, title: '' } }); return; }
             // Beside the day (time grid) or under it (month), so the "New event" block stays in view; a phone shows
             // the box as a sheet along the bottom instead (native-calendar.css).
@@ -1820,20 +1865,45 @@ const CalendarVueApp = {
             // The whole series. Classic asks first whenever the series has skipped dates or separately edited
             // occurrences, and the answer decides whether they survive (ScheduleAdapter.toCommand, keepOccurrences).
             const series = this.nativeSeriesOf(this.nativeStored({ id: ed.record.Id }));
-            const save = (keepOccurrences) => finish(this.nativeAction('eventChange', { changedRecords: [record] }, { action: 'EditSeries', keepOccurrences }));
-            if (!this.nativeHasOwn(series)) return save(false);
-            // A change that leaves the dates alone (a rename, a color, the details) cannot make the skipped dates or
-            // edited occurrences wrong: keep them without asking. (Asking let "rename, Enter, Enter" wipe them.)
             const time = (v) => new Date(v).getTime();
             const timing = time(record.StartTime) !== time(ed.record.StartTime) || time(record.EndTime) !== time(ed.record.EndTime)
                 || !!record.IsAllDay !== !!ed.record.IsAllDay || String(record.RecurrenceRule || '') !== String(ed.record.RecurrenceRule || '');
+            this.nativeSaveSeries(series, record, { timing }, finish);
+        },
+        // ---- "All events": the one path every series change takes (a drag, the card, the editor) ----
+        /**
+         * The series' record moved as one of its occurrences moved (from / to: { start, end }): by as much, in
+         * wall-clock days and minutes (a DST change in between keeps the clock time), from the series' own start (an
+         * earlier occurrence is never dropped), its repeat days and UNTIL moving with it (CalendarView.edits.shiftRule).
+         */
+        nativeSeriesMoved(series, from, to) {
+            const rec = this.nativeRecord(series);
+            rec.RecurrenceID = rec.Id;
+            ScheduleAdapter.noteStart(rec);
+            const shift = nativeShift(from.start, to.start), stretch = nativeShift(from.end, to.end);
+            return { ...rec, StartTime: shift(rec.StartTime), EndTime: stretch(rec.EndTime),
+                RecurrenceRule: nativeShiftRule(rec.RecurrenceRule, from.start, to.start) };
+        },
+        /**
+         * Save an "all events" change (record: the series' record as it should be). A series with skipped dates or
+         * edited occurrences keeps them without asking when its dates are untouched (a rename, a color, the details:
+         * asking let "rename, Enter, Enter" wipe them); a time or repeat change (timing) asks classic's question,
+         * keep focused. shift ({ from, to }, the series moved): kept stamps and UNTIL move with it (ScheduleAdapter).
+         * keep: an answer already given (the card asks once). done(ok, keepOccurrences, asked) runs once saved;
+         * cancel if the question is cancelled.
+         */
+        nativeSaveSeries(series, record, { timing, shift = null, keep = null, cancel = null }, done = () => {}) {
+            const save = (keepOccurrences, asked = false) => done(this.nativeAction('eventChange', { changedRecords: [record] },
+                { action: 'EditSeries', keepOccurrences, ...(shift ? { shift } : {}) }), keepOccurrences, asked);
+            if (!this.nativeHasOwn(series)) return save(false);
             if (!timing) return save(true);
-            this.nativeAskSeriesChange(save);
+            if (keep !== null) return save(keep);
+            this.nativeAskSeriesChange((k) => save(k, true), cancel);
         },
         // Classic's "match every occurrence to the series again?". Keeping them ("No") is the primary, focused
         // answer, so Enter never deletes anyone's edits; clearing them takes a deliberate click.
-        nativeAskSeriesChange(save) {
-            this.nativeAsk = { title: 'Edit event', message: NATIVE_SERIES_CHANGE,
+        nativeAskSeriesChange(save, cancel = null) {
+            this.nativeAsk = { title: 'Edit event', message: NATIVE_SERIES_CHANGE, cancel,
                 buttons: [
                     { label: 'Yes', testid: 'confirm-yes', action: () => save(false) },
                     { label: 'No', testid: 'confirm-no', primary: true, action: () => save(true) },
@@ -1888,7 +1958,7 @@ const CalendarVueApp = {
         // Whether people categorise events at all decides if type labels are worth building on (classic sends it too).
         onNativeColor() { track(a => a.featureUsed('event_type', 'popup')); },
         // A double-click on an event opens its editor (classic's grid does the same).
-        onNativeOpen({ event, occurrence }) { this.nativeEditEvent(event, occurrence); },
+        onNativeOpen({ event, occurrence }) { if (typeof EventCard !== 'undefined') return this.openNativeCard({ event, occurrence }, true); this.nativeEditEvent(event, occurrence); },
         onNativePopoverEdit() {
             const p = this.nativePopover;
             if (p) this.nativeEditEvent(p.event, p.occurrence);
@@ -1906,6 +1976,7 @@ const CalendarVueApp = {
 
         // Drag and resize. The event as it was when the drag began is the merge's starting point.
         onNativeDragStart({ event }) {
+            if (this.nativeCard) this.nativeCardDone();
             const row = this.nativeStored(event);
             this._nativeDragFrom = row ? { ...row } : null;
         },
@@ -1933,22 +2004,14 @@ const CalendarVueApp = {
             // Wednesdays). A series with skipped dates or edited occurrences asks classic's own question first, as
             // its editor does for any series change: they match the series again, or they are kept.
             const moveAll = () => {
-                const rec = this.nativeRecord(series);
-                rec.RecurrenceID = rec.Id;
-                ScheduleAdapter.noteStart(rec);
                 // An edited occurrence is drawn at its edited time; the series moves from the slot it stands for (its
                 // exception stamp, read in the grid's frame as toView reads it).
                 const slot = kind === 'edited' ? ScheduleAdapter.stampDate(series.isAllDay
                     ? Event.allDayExceptionsToLocal(row.recurrenceException) : row.recurrenceException) : null;
                 const fromStart = slot || new Date(occurrence.start);
                 const fromEnd = slot ? new Date(slot.getTime() + (new Date(occurrence.end) - new Date(occurrence.start))) : occurrence.end;
-                const shift = nativeShift(fromStart, start), stretch = nativeShift(fromEnd, end);
-                const moved = { ...rec, StartTime: shift(rec.StartTime), EndTime: stretch(rec.EndTime),
-                    RecurrenceRule: nativeShiftRule(rec.RecurrenceRule, fromStart, start) };
-                const save = (keepOccurrences) => this.nativeAction('eventChange', { changedRecords: [moved] },
-                    { action: 'EditSeries', keepOccurrences, shift: { from: fromStart, to: start } });
-                if (!this.nativeHasOwn(series)) return save(false);
-                this.nativeAskSeriesChange(save);
+                const moved = this.nativeSeriesMoved(series, { start: fromStart, end: fromEnd }, { start, end });
+                this.nativeSaveSeries(series, moved, { timing: true, shift: { from: fromStart, to: start } });
             };
             this.nativeAskScope('Edit recurring event', kind === 'edited' ? moveRow : moveOne, moveAll);
         },
@@ -1956,6 +2019,478 @@ const CalendarVueApp = {
         nativeHasOwn(series) {
             return !!series && (!isBlankId(series.recurrenceException)
                 || (this.calendar.events || []).some((e) => e && !isBlankId(e.recurrenceID) && String(e.recurrenceID) === String(series.id)));
+        },
+        // ---- The event card (nativecal/components/EventCard.js), a native edit link's editor ----------------------
+        // One card for a new event and an existing one. Changes to an existing event are saved the moment they are
+        // made, each through the write path above (commitScheduleAction, in classic's record shapes), from the row
+        // as it is just then (noteStart), so only the field that changed is written and someone else's change made
+        // meanwhile is kept. Each change gets a toast with Undo (the store's own inverse). Cancel (or Escape) takes
+        // back every change made since the card opened; a new event is a draft until Done.
+        //
+        // nativeCard: { key, isNew, full, canRepeat, value, anchor, edited, place,
+        //               target: { kind: 'new' | 'row' | 'occ' | 'series', id, recurrenceID, seriesId, occurrence },
+        //               keepOccurrences, entries: [{ entry (a store undo entry), before: { target, value, canRepeat } }] }
+        //   kind 'row': a single event or an edited occurrence (its own row); 'occ': one occurrence of a series, not yet
+        //   asked "this event / all events"; 'series': the whole series (asked, or opened from a search result).
+
+        /** A stored row (or one occurrence of it) as the card's value. All day: the first and the LAST day, at local midnight. */
+        nativeCardValue(row, occurrence) {
+            const rec = this.nativeRecord(row);
+            const allDay = !!rec.IsAllDay;
+            let start = new Date(occurrence ? occurrence.start : rec.StartTime), end = new Date(occurrence ? occurrence.end : rec.EndTime);
+            if (allDay) {
+                start = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+                const exclusive = !end.getHours() && !end.getMinutes() && !end.getSeconds() && !end.getMilliseconds();
+                end = new Date(end.getFullYear(), end.getMonth(), end.getDate() - (exclusive ? 1 : 0));
+                if (end < start) end = new Date(start);
+            }
+            return { title: rec.Subject || '', type: Number(rec.Type) || 1, description: rec.Description || '', isAllDay: allDay, start, end, rule: rec.RecurrenceRule || '' };
+        },
+        /** The card's start / end in the shapes classic's records carry (an all-day end: the next local midnight). */
+        nativeCardTimes(v) {
+            if (!v.isAllDay) return { StartTime: new Date(v.start), EndTime: new Date(v.end) };
+            const s = new Date(v.start), e = new Date(v.end);
+            return { StartTime: new Date(s.getFullYear(), s.getMonth(), s.getDate()), EndTime: nativeEnd(new Date(e.getFullYear(), e.getMonth(), e.getDate(), 23, 59, 59, 999), true) };
+        },
+        /** The fields a change touched, as record fields. */
+        nativeCardFields(before, after) {
+            const same = (a, b) => (a instanceof Date || b instanceof Date) ? new Date(a).getTime() === new Date(b).getTime() : a === b;
+            const out = {};
+            if (!same(before.title, after.title)) out.Subject = after.title;
+            if (!same(before.type, after.type)) out.Type = Number(after.type) || 1;
+            if (!same(before.description, after.description)) out.Description = after.description;
+            if (!same(before.rule, after.rule)) out.RecurrenceRule = after.rule || '';
+            if (!same(before.start, after.start) || !same(before.end, after.end) || before.isAllDay !== after.isAllDay) Object.assign(out, { IsAllDay: !!after.isAllDay }, this.nativeCardTimes(after));
+            return out;
+        },
+        nativeCardClone(v) { return { ...v, start: new Date(v.start), end: new Date(v.end) }; },
+        /** A record with the card's fields on it. Switching All day changes what its stored times mean, so the stored
+         *  text they were read from (_storedStart/_storedEnd, kept verbatim when the meaning is unchanged) goes. */
+        nativeCardApply(rec, fields) {
+            const out = { ...rec, ...fields };
+            if ('IsAllDay' in fields && !!fields.IsAllDay !== !!rec.IsAllDay) { delete out._storedStart; delete out._storedEnd; delete out._shownEnd; }
+            return out;
+        },
+
+        /** Open the card on an event that was clicked (or double-clicked: full). */
+        openNativeCard({ event, occurrence, jsEvent }, full = false) {
+            const row = this.nativeStored(event);
+            if (!row || !this.nativeCanEdit()) return;
+            this.nativePopover = null;
+            const kind = this.nativeKind(row), series = this.nativeSeriesOf(row);
+            let target, value;
+            if (kind === 'series' && series && occurrence && occurrence.start) {
+                target = { kind: 'occ', id: series.id, recurrenceID: null, seriesId: series.id, occurrence: { start: new Date(occurrence.start), end: new Date(occurrence.end) } };
+                value = { ...this.nativeCardValue(series, occurrence), rule: series.recurrencerule || '' };
+            } else if (kind === 'series') {
+                target = { kind: 'series', id: row.id, recurrenceID: null, seriesId: row.id, occurrence: null };
+                value = this.nativeCardValue(row);
+                target.occurrence = { start: new Date(value.start), end: new Date(value.end) };
+            } else {
+                target = { kind: 'row', id: row.id, recurrenceID: row.recurrenceID ?? null, seriesId: kind === 'edited' && series ? series.id : null, occurrence: null };
+                value = this.nativeCardValue(row);
+            }
+            const el = jsEvent && jsEvent.target && jsEvent.target.closest ? jsEvent.target.closest('[data-testid^="event-"]') : null;
+            this.showNativeCard({ isNew: false, full, target, value, canRepeat: kind !== 'edited',
+                anchor: { testid: `event-${row.id}`, rect: el ? el.getBoundingClientRect().toJSON() : null }, returnTo: el });
+            this.nativeCardEdited(row);
+        },
+        /** A new event from a click or drag on the grid (or N): a draft until Done. */
+        openNativeNewCard({ start, end, isAllDay, jsEvent, full = false }) {
+            const s = new Date(start), e = new Date(end);
+            const value = { title: '', type: 1, description: '', isAllDay: !!isAllDay, rule: '',
+                start: isAllDay ? new Date(s.getFullYear(), s.getMonth(), s.getDate()) : s,
+                end: isAllDay ? (() => { const x = new Date(e.getTime() - 1); return new Date(x.getFullYear(), x.getMonth(), x.getDate()); })() : e };
+            if (value.isAllDay && value.end < value.start) value.end = new Date(value.start);
+            const r = jsEvent && jsEvent.clientX != null ? { left: jsEvent.clientX, top: jsEvent.clientY, width: 1, height: 1, right: jsEvent.clientX + 1, bottom: jsEvent.clientY + 1 } : null;
+            this.showNativeCard({ isNew: true, full, target: { kind: 'new' }, value, canRepeat: true, anchor: { testid: 'draft-block', rect: r }, returnTo: null });
+        },
+        showNativeCard({ isNew, full, target, value, canRepeat, anchor, returnTo }) {
+            this.nativeQuick = null;
+            this._nativeCardSeq = (this._nativeCardSeq || 0) + 1;
+            this._nativeCardReturn = returnTo && returnTo.dataset ? returnTo.dataset.testid : null;
+            this.nativeCard = { key: this._nativeCardSeq, isNew, full, canRepeat, target, value, opened: this.nativeCardClone(value), anchor, edited: '', place: 0,
+                keepOccurrences: null, entries: [] };
+        },
+        /** "Edited 5m ago": the newest change to this event in the history the app already reads (one read per card). */
+        nativeCardEdited(row) {
+            const c = this.nativeCard, key = this.eventKey(row);
+            const label = () => {
+                const hit = (this.undoEntries || []).find((u) => (u.keys || []).includes(key));
+                if (hit && this.nativeCard === c) c.edited = `Edited ${cardKit.ago(hit.savedAt, this.serverNow ? this.serverNow() : Date.now())}`;
+            };
+            label();
+            if (this.isExisting && Date.now() - (this._nativeHistoryAt || 0) > 60000) { this._nativeHistoryAt = Date.now(); this.loadUndoEntries().then(label).catch(() => {}); }
+        },
+        /** One change from the card (patch: the fields it changed; message: what the toast says). */
+        nativeCardChange(patch, message, meta = null) {
+            const c = this.nativeCard;
+            if (!c) return;
+            if (meta && meta.details && !c.isNew) return this.nativeCardDetails(patch, meta.details);
+            const before = this.nativeCardClone(c.value), after = { ...before, ...patch };
+            // Whether people categorize events at all (classic sends it too).
+            if ('type' in patch && Number(patch.type) !== Number(before.type)) this.onNativeColor();
+            if (c.isNew || !message) { c.value = after; return; }
+            if (!Object.keys(this.nativeCardFields(before, after)).length) { c.value = after; return; }
+            if (c.target.kind === 'occ') {
+                // A repeat belongs to the whole series; anything else asks first, once ("this event" is the default).
+                if ('rule' in patch) return this.nativeCardWrite('all', before, after, message);
+                this.nativeAskScope('Edit recurring event', () => this.nativeCardWrite('this', before, after, message),
+                    () => this.nativeCardWrite('all', before, after, message), 'OK', () => { if (this.nativeCard === c) c.value = before; });
+                return;
+            }
+            this.nativeCardWrite(c.target.kind === 'series' ? 'all' : 'row', before, after, message);
+        },
+        /**
+         * The details box, saved while typing and when it is left (EventCard saveDetails). One session of the box is one
+         * Undo step: each later save in it folds into the first (its own undo entry is dropped, so Undo puts back what was
+         * there before the session). Only the last save says "Details saved". If someone else changed the details while
+         * they were being typed, these win, and a toast says so with an Undo that puts theirs back.
+         */
+        nativeCardDetails(patch, d) {
+            const c = this.nativeCard;
+            const row = c.target.kind === 'occ' ? null : this.nativeStored({ id: c.target.kind === 'series' ? c.target.seriesId : c.target.id, recurrenceID: c.target.kind === 'series' ? null : c.target.recurrenceID });
+            // One occurrence of a series not yet asked "this event / all events": ask once, when the box is left.
+            if (c.target.kind === 'occ') { if (d.final && 'description' in patch) this.nativeCardChange(patch, 'Details saved'); return; }
+            // Kept off the reactive card (a store undo entry must stay the very object in the store's stack).
+            const prev = this._nativeDetSession;
+            const sess = prev && prev.card === c.key && prev.id === d.id ? prev : (this._nativeDetSession = { card: c.key, id: d.id, entry: null, mine: d.base, theirs: null });
+            if ('description' in patch && row) {
+                const now = row.description || '';
+                if (now !== sess.mine && now !== patch.description) sess.theirs = now;   // changed elsewhere meanwhile
+                const stack = this.store().undoStack, len = stack.length;
+                this._nativeDetailsQuiet = true;
+                this.nativeCardWrite(c.target.kind === 'series' ? 'all' : 'row', this.nativeCardClone(c.value), { ...this.nativeCardClone(c.value), description: patch.description }, 'Details saved');
+                this._nativeDetailsQuiet = false;
+                if (stack.length > len) {
+                    if (sess.entry && stack.includes(sess.entry)) {
+                        // Fold into the session's first save: drop this undo entry (and the card's record of it).
+                        const mineEntry = stack.pop();
+                        this.nativeFoldWrote(sess.entry, mineEntry);
+                        const i = c.entries.findIndex((e) => e.entry === mineEntry);
+                        if (i >= 0) c.entries.splice(i, 1);
+                    } else sess.entry = stack[stack.length - 1];
+                }
+                sess.mine = patch.description;
+            }
+            if (!d.final) return;
+            this._nativeDetSession = null;
+            if (!sess.entry) return;
+            if (sess.theirs !== null) {
+                const theirs = sess.theirs;
+                this.showToast('Someone else edited these details too', 'info', { actionLabel: 'Undo', action: () => {
+                    if (this.nativeCard === c) this.nativeCardWrite(c.target.kind === 'series' ? 'all' : 'row', this.nativeCardClone(c.value), { ...this.nativeCardClone(c.value), description: theirs }, 'Their details are back');
+                    else {
+                        const r = this.nativeStored({ id: row.id, recurrenceID: row.recurrenceID });
+                        if (!r) return;
+                        const rec = this.nativeRecord(r);
+                        ScheduleAdapter.noteStart(rec);
+                        if (this.nativeAction('eventChange', { changedRecords: [{ ...rec, Description: theirs }] }, { action: 'Save' })) this.showToast('Their details are back', 'success');
+                    }
+                } });
+            } else this.showToast('Details saved', 'success', { actionLabel: 'Undo', action: () => this.nativeUndo() });
+        },
+        /**
+         * A details session's first undo entry takes on what each later save in it wrote: an undo takes back only what
+         * this tab wrote and the row still holds (EventStore undoOnly), so it must know the session's last words.
+         */
+        nativeFoldWrote(into, from) {
+            const flat = (inv) => !inv ? [] : inv.type === 'batch' ? (inv.commands || []).flatMap(flat) : [inv];
+            const kept = flat(into && into.inverse);
+            for (const u of flat(from && from.inverse)) {
+                if (u.type !== 'update' || !u.wrote) continue;
+                const k = kept.find((x) => x.type === 'update' && x.wrote && x.key === u.key);
+                if (k) Object.assign(k.wrote, u.wrote);
+            }
+        },
+        /** The event changed in another browser while the card is open: the card shows it (the box being typed in waits). */
+        nativeCardRefresh() {
+            const c = this.nativeCard;
+            if (!c || c.isNew || this.nativeAsk) return;
+            const t = c.target;
+            const row = this.nativeStored(t.kind === 'row' ? { id: t.id, recurrenceID: t.recurrenceID } : { id: t.seriesId });
+            if (!row) return this.nativeCardGone(t.kind !== 'row' || (t.seriesId != null && !this.nativeStored({ id: t.seriesId })));
+            const v = this.nativeCardValue(row), cur = c.value;
+            const next = t.kind === 'row' ? v : { ...cur, title: v.title, type: v.type, description: v.description, rule: v.rule };
+            if (Object.keys(this.nativeCardFields(cur, next)).length) c.value = next;
+        },
+        nativeCardWrite(scope, before, after, message) {
+            const c = this.nativeCard;
+            if (!c || !this.nativeCanEdit()) return;
+            const snapshot = { target: { ...c.target }, value: before, canRepeat: c.canRepeat };
+            const ids = new Set((this.calendar.events || []).map((e) => e && String(e.id)));
+            const fields = this.nativeCardFields(before, after);
+            let ok = false;
+            if (scope === 'row') {
+                const row = this.nativeStored({ id: c.target.id, recurrenceID: c.target.recurrenceID });
+                if (!row) return this.nativeCardGone();
+                const rec = this.nativeRecord(row);
+                ScheduleAdapter.noteStart(rec);
+                if (this.nativeKind(row) === 'edited') delete fields.RecurrenceRule;   // an occurrence's rule is the series'
+                ok = this.nativeAction('eventChange', { changedRecords: [this.nativeCardApply(rec, fields)] }, { action: 'Save' });
+            } else if (scope === 'this') {
+                const series = this.nativeStored({ id: c.target.seriesId });
+                if (!series) return this.nativeCardGone();
+                let rec = this.nativeRecord(series);
+                delete fields.RecurrenceRule;
+                const seriesId = rec.Id;
+                rec = this.nativeCardApply(rec, { Subject: after.title, Type: Number(after.type) || 1, Description: after.description, IsAllDay: !!after.isAllDay,
+                    ...this.nativeCardTimes(after), ...fields });
+                Object.assign(rec, { Id: NATIVE_OCCURRENCE_ID, RecurrenceID: seriesId });
+                ok = this.nativeAction('eventChange', { changedRecords: [rec] }, { action: 'EditOccurrence', occurrenceStart: c.target.occurrence.start });
+                if (ok) {
+                    // Its new row, or (someone else saved "This event" on this slot first) the slot's row it updated.
+                    const own = (e) => e && !isBlankId(e.recurrenceID) && String(e.recurrenceID) === String(series.id);
+                    const stamp = ScheduleAdapter.stamp(c.target.occurrence.start);
+                    const child = (this.calendar.events || []).find((e) => own(e) && !ids.has(String(e.id)))
+                        || (this.calendar.events || []).find((e) => own(e) && String(e.recurrenceException || '').trim() === stamp);
+                    if (child) { c.target = { kind: 'row', id: child.id, recurrenceID: child.recurrenceID, seriesId: series.id, occurrence: null }; c.canRepeat = false; }
+                }
+            } else {
+                const series = this.nativeStored({ id: c.target.seriesId });
+                if (!series) return this.nativeCardGone();
+                // The shared "all events" path (nativeSeriesMoved, nativeSaveSeries), the one a drag of the series takes:
+                // a time change moves the series, and the stamps it keeps, by as much as this occurrence moved.
+                const timed = 'StartTime' in fields;
+                const from = this.nativeCardTimes(before), to = this.nativeCardTimes(after);
+                let moved = this.nativeRecord(series);
+                moved.RecurrenceID = moved.Id;
+                ScheduleAdapter.noteStart(moved);
+                if (timed) {
+                    moved = this.nativeCardApply(this.nativeSeriesMoved(series, { start: from.StartTime, end: from.EndTime }, { start: to.StartTime, end: to.EndTime }),
+                        { IsAllDay: !!after.isAllDay });
+                }
+                for (const f of ['Subject', 'Type', 'Description', 'RecurrenceRule']) if (f in fields) moved[f] = fields[f];
+                this.nativeSaveSeries(series, moved, {
+                    timing: timed || 'RecurrenceRule' in fields,
+                    // (Switching All day changes what a stamp names: kept stamps stay as they are.)
+                    shift: timed && !!before.isAllDay === !!after.isAllDay ? { from: from.StartTime, to: to.StartTime } : null,
+                    keep: c.keepOccurrences,
+                    cancel: () => { if (this.nativeCard === c) c.value = before; },
+                }, (done, keepOccurrences, asked) => {
+                    if (this.nativeCard !== c) return;
+                    if (asked) c.keepOccurrences = keepOccurrences;   // asked once per card
+                    if (done) {
+                        c.target = { kind: 'series', id: series.id, recurrenceID: null, seriesId: series.id, occurrence: { start: new Date(after.start), end: new Date(after.end) } };
+                        this.nativeCardSaved(c, snapshot, after, message);
+                    } else c.value = before;
+                });
+                return;
+            }
+            if (ok) this.nativeCardSaved(c, snapshot, after, message);
+            else c.value = before;
+        },
+        /** A change was saved: remember how to take it back, show it, offer Undo. */
+        nativeCardSaved(c, snapshot, after, message) {
+            const stack = this.store().undoStack;
+            // Raw (never a reactive proxy), so it can be found in the store's stack by identity.
+            c.entries.push(Vue.markRaw({ entry: stack[stack.length - 1], before: snapshot }));
+            c.value = this.nativeCardClone(after);
+            c.edited = 'Edited just now';
+            this._nativeGlow = `event-${c.target.id}`;
+            if (!this._nativeDetailsQuiet) this.showToast(message, 'success', { actionLabel: 'Undo', action: () => this.nativeUndo() });
+        },
+        /** The event (or its whole series) went away under the card (deleted in another browser): close it. */
+        nativeCardGone(series = false) {
+            this.nativeCard = null;
+            this.showToast(series ? "This event's series was deleted." : 'This event was deleted elsewhere', 'info');
+        },
+        nativeUndo() { if (this.store().canUndo) this.undoLastLocal(); },
+        /** After an undo (the toast, Cmd+Z): the card follows the event back, and the event glows once. */
+        nativeAfterUndo() {
+            const c = this.nativeCard;
+            if (c) {
+                const stack = this.store().undoStack;
+                let moved = false;
+                while (c.entries.length && !stack.includes(c.entries[c.entries.length - 1].entry)) {
+                    const { before } = c.entries.pop();
+                    c.target = before.target; c.canRepeat = before.canRepeat; c.value = this.nativeCardClone(before.value);
+                    moved = true;
+                }
+                if (moved) this.$nextTick(() => { c.place++; });
+            }
+            const id = this._nativeGlow;
+            if (id && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                setTimeout(() => document.querySelectorAll(`.nc [data-testid="${id}"]`).forEach((el) => { el.classList.remove('nc-glow'); void el.offsetWidth; el.classList.add('nc-glow'); }), 50);
+            }
+        },
+        /** Done (or a click outside): a new event is added; an existing one keeps what was saved. */
+        nativeCardDone({ title, description, smart } = {}) {
+            const c = this.nativeCard;
+            if (!c) return;
+            // The last change (a title saved as the card closes) is still asking "this event / all events": close
+            // once it is answered.
+            if (!c.isNew && this.nativeAsk) { c.closeAfterAsk = true; return; }
+            if (!c.isNew) return this.closeNativeCard();
+            const v = c.value;
+            const name = (title != null ? title : v.title || '').trim();
+            if (!name && !smart) { track(a => a.editorAbandoned()); return this.closeNativeCard(); }   // no title: nothing was meant
+            const ids = new Set((this.calendar.events || []).map((e) => e && String(e.id)));
+            const ok = this.nativeAction('eventCreate', { addedRecords: [{ Subject: name || '(No title)', ...this.nativeCardTimes(v), IsAllDay: !!v.isAllDay,
+                Type: Number(v.type) || 1, Description: description != null ? description : v.description || '', RecurrenceRule: v.rule || '' }] }, { action: 'Add' });
+            this.closeNativeCard();
+            if (!ok) return;
+            const row = (this.calendar.events || []).find((e) => e && !ids.has(String(e.id)));
+            this._nativeGlow = row ? `event-${row.id}` : null;
+            if (smart && row) {
+                // The time came from the title: say so, and Undo puts back the title as typed and the time it had.
+                const when = v.isAllDay ? '' : ` · ${cardKit.fmtDate(v.start, { weekday: 'short' })} ${this.nativeRange(v.start, v.end)}`;
+                this.showToast(`Added ${name}${when}`, 'success', { actionLabel: 'Undo', action: () => {
+                    const now = this.nativeStored({ id: row.id, recurrenceID: row.recurrenceID });
+                    if (!now) return;
+                    const rec = this.nativeRecord(now);
+                    ScheduleAdapter.noteStart(rec);
+                    if (this.nativeAction('eventChange', { changedRecords: [{ ...rec, Subject: smart.raw.trim(), StartTime: new Date(smart.base.start), EndTime: new Date(smart.base.end) }] }, { action: 'Save' })) this.showToast('Undone', 'success');
+                } });
+            } else this.showToast(`Added ${name || '(No title)'}`, 'success', { actionLabel: 'Undo', action: () => this.nativeUndo() });
+        },
+        /** "5 – 6 PM", "11 AM – 1 PM", "17:00 – 18:00". */
+        nativeRange(a, b) {
+            const f = this.globalSettings.timeFormat === '24' ? '24' : '12';
+            const s = cardKit.fmtTime(a, f, true), e = cardKit.fmtTime(b, f, true);
+            if (f === '12' && s.slice(-2) === e.slice(-2)) return `${s.slice(0, -3)} – ${e}`;
+            return `${s} – ${e}`;
+        },
+        /** Cancel (or Escape): every change since the card opened is taken back; a new event is dropped. No Undo for that. */
+        nativeCardCancel() {
+            const c = this.nativeCard;
+            if (!c) return;
+            // A new event closed without adding is the "this was confusing or fiddly" signal (as classic's popupClose).
+            if (c.isNew) track(a => a.editorAbandoned());
+            let undid = 0;
+            const stack = this.store().undoStack;
+            while (c.entries.length && stack.length && stack[stack.length - 1] === c.entries[c.entries.length - 1].entry) {
+                c.entries.pop();
+                if (!this.undoLastLocal({ quiet: true })) break;
+                undid++;
+            }
+            this.closeNativeCard();
+            if (undid) this.showToast('Changes undone', 'info');
+        },
+        closeNativeCard() {
+            const c = this.nativeCard;
+            if (!c) return;
+            const card = document.querySelector('.nk-card');
+            const hadFocus = !!card && card.contains(document.activeElement);
+            if (hadFocus) document.activeElement.blur();
+            this.nativeCard = null;
+            const back = this._nativeCardReturn || (c.target && c.target.id != null ? `event-${c.target.id}` : null);
+            if (hadFocus && back) this.$nextTick(() => { const el = document.querySelector(`.nc [data-testid="${back}"]`); if (el) el.focus({ preventScroll: true }); });
+        },
+        nativeCardDelete() {
+            const c = this.nativeCard;
+            if (!c) return;
+            if (c.isNew) return this.closeNativeCard();
+            const t = c.target;
+            this.closeNativeCard();
+            // The event shrinks and fades where it was.
+            const el = document.querySelector(`.nc [data-testid="event-${t.id}"]`);
+            const ghost = () => {
+                if (!el || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+                const r = el.getBoundingClientRect(), g = document.createElement('div');
+                g.className = 'nc-ghost';
+                Object.assign(g.style, { left: `${r.left + window.scrollX}px`, top: `${r.top + window.scrollY}px`, width: `${r.width}px`, height: `${r.height}px`, background: getComputedStyle(el).backgroundColor });
+                document.body.appendChild(g);
+                setTimeout(() => g.remove(), 220);
+            };
+            this._nativeGlow = `event-${t.id}`;
+            if (t.kind === 'row') this.nativeDeleteEvent({ id: t.id, recurrenceID: t.recurrenceID }, null);
+            else if (t.kind === 'occ') this.nativeDeleteEvent({ id: t.seriesId }, t.occurrence);
+            else this.nativeDeleteEvent({ id: t.seriesId }, t.occurrence, { mode: 'EditSeries' });
+            if (!this.nativeAsk) ghost();
+        },
+        /** Duplicate: a copy the next day (a repeating event's copy is one event), and the card follows the copy. */
+        nativeCardDuplicate() {
+            const c = this.nativeCard;
+            if (!c || c.isNew) return;
+            const v = this.nativeCardClone(c.value);
+            const next = { ...v, start: cardKit.addDays(v.start, 1), end: cardKit.addDays(v.end, 1), rule: '' };
+            const ids = new Set((this.calendar.events || []).map((e) => e && String(e.id)));
+            const snapshot = { target: { ...c.target }, value: v, canRepeat: c.canRepeat };
+            const ok = this.nativeAction('eventCreate', { addedRecords: [{ Subject: v.title || '(No title)', ...this.nativeCardTimes(next), IsAllDay: !!v.isAllDay,
+                Type: Number(v.type) || 1, Description: v.description || '', RecurrenceRule: '' }] }, { action: 'Add' });
+            const row = ok && (this.calendar.events || []).find((e) => e && !ids.has(String(e.id)));
+            if (!row) return;
+            c.target = { kind: 'row', id: row.id, recurrenceID: null, seriesId: null, occurrence: null };
+            c.canRepeat = true;
+            c.anchor = { testid: `event-${row.id}`, rect: null };
+            const when = v.isAllDay ? cardKit.fmtDate(next.start) : `${cardKit.fmtDate(next.start, { weekday: 'short' })} ${cardKit.fmtTime(next.start, this.globalSettings.timeFormat === '24' ? '24' : '12', true)}`;
+            this.nativeCardSaved(c, snapshot, next, `Duplicated to ${when}`);
+            this.$nextTick(() => { c.place++; });
+        },
+        /** Edit types…: names for the colors, for the whole calendar (as Settings saves them). */
+        nativeCardLabels(names) {
+            let changed = 0;
+            (names || []).forEach((n, i) => { if (typeof n === 'string' && n.trim() !== (this.displayTypeLabels[i] || '')) { this.updateTypeLabel(i + 1, n); changed++; } });
+            if (changed) this.showToast('Types saved for everyone', 'success');
+        },
+        /** The calendar's own clicks on an edit link: the card, else (locked, view-only) the read-only popup. */
+        onNativeEventClick(payload) {
+            if (this.nativeEdit && this.canEdit && !this.isReadOnly) return this.openNativeCard(payload);
+            this.openNativePopover(payload);
+        },
+        /** A drop, a resize or an arrow key: saved as before (onNativeMove), then said in a toast with Undo, and the event settles. */
+        onNativeMoveSaved(payload) {
+            const len = this.store().undoStack.length;
+            const f = this.globalSettings.timeFormat === '24' ? '24' : '12';
+            const s = new Date(payload.start), e = new Date(payload.end);
+            const msg = payload.mode === 'resize' ? (payload.allDay ? `Ends ${cardKit.fmtDate(new Date(e.getTime() - 1))}` : `Ends ${cardKit.fmtTime(e, f, true)}`)
+                : payload.mode === 'resize-top' ? `Starts ${cardKit.fmtTime(s, f, true)}`
+                    : `Moved to ${cardKit.fmtDate(s, { weekday: 'short' })}${payload.allDay ? '' : ' ' + cardKit.fmtTime(s, f, true)}`;
+            const id = payload.event && payload.event.id;
+            this._nativeMoveToast = { len, msg, id, key: !!payload.key };
+            this.onNativeMove(payload);
+            this.nativeMoveToast();
+        },
+        nativeMoveToast() {
+            const p = this._nativeMoveToast;
+            if (!p || this.nativeAsk) return;   // still asking "this event / all events": checked again on the answer
+            this._nativeMoveToast = null;
+            if (this.store().undoStack.length <= p.len) return;
+            this._nativeGlow = `event-${p.id}`;
+            this.showToast(p.msg, 'success', { actionLabel: 'Undo', action: () => this.nativeUndo() });
+            this.$nextTick(() => {
+                const els = document.querySelectorAll(`.nc [data-testid="event-${p.id}"]`);
+                if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) els.forEach((el) => { el.classList.remove('nc-settle'); void el.offsetWidth; el.classList.add('nc-settle'); });
+                if (p.key && els[0]) els[0].focus({ preventScroll: true });
+            });
+        },
+        /** Keys on a native edit link: N new, Cmd/Ctrl+D duplicate, Delete, T today, arrows previous / next, D W M A views. */
+        onNativeKey(e) {
+            if (!this.nativeEdit || this.isReadOnly || !this.canEdit || e.defaultPrevented) return;
+            const el = document.activeElement;
+            const typing = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+            if (typing || this.nativeAsk) return;
+            const open = [...document.querySelectorAll('[aria-modal="true"], .pc-modal')].some((m) => m.getClientRects().length > 0);
+            if (open) return;
+            const c = this.nativeCard, cal = this.$refs.nativeCal;
+            const k = e.key.toLowerCase();
+            if ((e.metaKey || e.ctrlKey) && k === 'd' && c && !c.isNew) { e.preventDefault(); this.nativeCardDuplicate(); return; }
+            if (e.metaKey || e.ctrlKey || e.altKey) return;
+            if ((e.key === 'Delete' || e.key === 'Backspace') && c && !c.isNew) { e.preventDefault(); this.nativeCardDelete(); return; }
+            if (c || !cal) return;
+            if (k === 'n') {
+                e.preventDefault();
+                const r = cal.visibleRange(), now = new Date();
+                const day = now.getTime() >= r.start && now.getTime() < r.end ? now : new Date(r.start);
+                const start = new Date(day.getFullYear(), day.getMonth(), day.getDate(), Math.min(23, now.getHours() + 1));
+                this.openNativeNewCard({ start, end: new Date(start.getTime() + 3600000), isAllDay: false });
+                return;
+            }
+            if (el && el.closest && el.closest('.nc [data-testid^="event-"]')) return;   // arrows move a focused event (NativeCalendar keyMove)
+            const views = { d: 'Day', w: 'Week', m: 'Month', a: 'Agenda' };
+            if (k === 't') { e.preventDefault(); cal.goToday(); }
+            else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); cal.step(e.key === 'ArrowLeft' ? -1 : 1); }
+            else if (views[k]) { e.preventDefault(); cal.setView(views[k]); }
+        },
+        /** Tab stays inside the open question. */
+        nativeAskTrap(e) {
+            if (e.key !== 'Tab') return;
+            const items = [...e.currentTarget.querySelectorAll('button, input')].filter((x) => x.offsetParent !== null);
+            if (!items.length) return;
+            const i = items.indexOf(document.activeElement);
+            if (e.shiftKey && i <= 0) { e.preventDefault(); items[items.length - 1].focus(); }
+            else if (!e.shiftKey && i === items.length - 1) { e.preventDefault(); items[0].focus(); }
         },
 
         // Syncfusion's Schedule, built and wired as it always was: the classic calendar. Returns its
@@ -3119,6 +3654,7 @@ const CalendarVueApp = {
 
         updateCalendarView() {
             if (!this.calView) return;   // before mounted() built the calendar: it draws the events when it mounts
+            if (this.nativeCard) this.$nextTick(() => this.nativeCardRefresh());   // the open card follows a change from elsewhere
             // Syncfusion is handed display records (ScheduleAdapter.toView); the native calendar reads
             // calendar.events itself. Either way the color filter is one predicate, isEventVisible (#41):
             // a second definition of "visible" (Syncfusion's ej.data.Query allow-list) is how every round
@@ -6171,7 +6707,7 @@ const CalendarVueApp = {
          * The server logs the undo as a change of its own, so it is remembered here too:
          * otherwise the /history fallback of the next Cmd+Z would offer to undo the undo.
          */
-        undoLastLocal() {
+        undoLastLocal({ quiet = false } = {}) {
             const before = this.calendar.events.map(e => new Event(e));
             const stack = this.store().undoStack;
             const tpl = this._templateUndo && this._templateUndo[this._templateUndo.length - 1];
@@ -6186,7 +6722,9 @@ const CalendarVueApp = {
             }
             if (!undone) return null;
             this._handledUndo.push({ at: this.serverNow(), delta: this.deltaBetween(before, this.calendar.events) });
-            this.showToast(`Undid: ${undone}`, 'success');
+            // The native edit link's card follows the event back (EventCard), and says only "Undone" (no button).
+            if (this.nativeEdit) this.nativeAfterUndo();
+            if (!quiet) this.showToast(this.nativeEdit ? 'Undone' : `Undid: ${undone}`, 'success');
             return undone;
         },
 

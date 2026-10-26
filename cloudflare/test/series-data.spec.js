@@ -47,6 +47,29 @@ async function open(browser, id, query = '', { timezoneId = 'America/Los_Angeles
   await page.evaluate(() => { window.__tracked = []; Analytics.track = function (name, params) { window.__tracked.push({ name, ...this.baseParams(), ...params }); }; });
   return { ctx, page, errors };
 }
+/** The event card (EventCard.js) on an event the grid draws; "this event" / "all events" when it asks. */
+async function openCard(page, locator) {
+  await locator.click();
+  await expect(page.getByTestId('event-card')).toBeVisible();
+  await page.waitForTimeout(250);   // past the card's entrance
+}
+async function pickScope(page, scope) {
+  const dlg = page.getByTestId('confirm-dialog');
+  await dlg.getByTestId(`scope-${scope}`).check();
+  await dlg.getByTestId('confirm-ok').click();
+  await expect(dlg.getByTestId('scope-this')).toHaveCount(0);   // (a follow-up question may take its place)
+}
+/** Open a card field's picker, type into it ("9:30a"), Enter. */
+async function typeInto(page, field, text) {
+  await page.getByTestId(field).click();
+  const picker = page.getByTestId('card-picker');
+  await expect(picker).toBeVisible();
+  await picker.getByTestId('picker-input').fill(text);
+  await picker.getByTestId('picker-input').press('Enter');
+  await expect(picker).toHaveCount(0);
+}
+const closeCard = async (page) => { if (await page.getByTestId('card-done').isVisible()) await page.getByTestId('card-done').click(); await expect(page.getByTestId('event-card')).toHaveCount(0); };
+
 /** The occurrences the native grid draws for these stored events, Oct 1 - Nov 15, as "Mon Oct 26 09:00 Title". */
 const expand = (page, events) => page.evaluate((evs) => NativeCalendar.occurrencesBetween(CalendarView.displayEvents(evs), new Date(2026, 9, 1), new Date(2026, 10, 15))
   .map((o) => `${o.start.toDateString().slice(0, 10)} ${o.start.toTimeString().slice(0, 5)} ${o.title}`), events);
@@ -63,30 +86,26 @@ const PIANO = () => [
 test('renaming a series "All events" then Enter, Enter keeps its skipped and edited dates; when asked, keeping is the focused answer', async ({ browser }) => {
   const id = await seed(PIANO());
   const { ctx, page, errors } = await open(browser, id, '&view=week&date=2026-10-26');
-  const editAll = async () => {
-    await page.locator('.nc [data-testid="event-s1"]').first().click();
-    await page.getByTestId('popover-edit').click();
-    const dlg = page.getByTestId('confirm-dialog');
-    await dlg.getByTestId('scope-all').check();
-    await dlg.getByTestId('confirm-ok').click();
-    await expect(page.getByTestId('event-editor')).toBeVisible();
-  };
+  const occ = () => page.locator('.nc [data-testid="event-s1"]').first();   // Mon Oct 26
 
-  // A rename touches nothing the exceptions depend on: no question, nothing lost.
-  await editAll();
-  await page.getByTestId('editor-title').fill('Piano lesson');
-  await page.getByTestId('editor-title').press('Enter');
-  await page.waitForTimeout(300);
+  // A rename (in the event card, "all events") touches nothing the exceptions depend on: no question, nothing lost.
+  await openCard(page, occ());
+  await page.getByTestId('card-title').fill('Piano lesson');
+  await page.getByTestId('card-title').press('Enter');
+  await pickScope(page, 'all');
+  await expect(page.getByTestId('confirm-dialog')).toHaveCount(0);
   await page.keyboard.press('Enter');
   await soon(async () => (await stored(id)).find((e) => e.id === 's1').title).toBe('Piano lesson');
   await page.waitForTimeout(800);
   let rows = await stored(id);
   expect(rows.map((e) => [e.id, e.recurrenceException]).sort()).toEqual([['o1', '20261019T160000Z'], ['s1', '20261012T160000Z,20261019T160000Z']]);
+  await closeCard(page);
 
-  // A time change asks; "keep" is the primary, focused button, so Enter keeps.
-  await editAll();
-  await page.getByTestId('editor-start-time').fill('09:30');
-  await page.getByTestId('editor-title').press('Enter');
+  // A time change asks; "keep" is the primary, focused button, so Enter keeps (and the kept dates move with it:
+  // the card's "all events" takes the drag's path).
+  await openCard(page, occ());
+  await typeInto(page, 'card-q-s', '9:30a');
+  await pickScope(page, 'all');
   const dlg = page.getByTestId('confirm-dialog');
   await expect(dlg).toContainText('match it to the whole series again?');
   await expect(dlg.getByTestId('confirm-no')).toHaveClass(/pc-btn--primary/);
@@ -96,7 +115,8 @@ test('renaming a series "All events" then Enter, Enter keeps its skipped and edi
   await soon(async () => (await stored(id)).find((e) => e.id === 's1').start).toBe(iso('2026-10-05T09:30:00-07:00'));
   rows = await stored(id);
   expect(rows).toHaveLength(2);
-  expect(rows.find((e) => e.id === 's1').recurrenceException).toBeTruthy();
+  expect(rows.find((e) => e.id === 's1').recurrenceException).toBe('20261012T163000Z,20261019T163000Z');
+  expect(rows.find((e) => e.id === 'o1').recurrenceException).toBe('20261019T163000Z');
   expect(errors).toEqual([]);
   await ctx.close();
 });
@@ -175,15 +195,17 @@ test('two browsers saving "This event" on the same occurrence keep one row for t
   const B = await open(browser, id, '&view=week&date=2026-10-21');
   const occ = { start: iso('2026-10-21T09:00:00-07:00'), end: iso('2026-10-21T09:30:00-07:00') };
   for (const P of [A, B]) {
-    await vm(P.page, (v, o) => v.openNativeEditor({ mode: 'EditOccurrence', row: v.calendar.events[0], occurrence: { start: new Date(o.start), end: new Date(o.end) } }), occ);
-    await expect(P.page.getByTestId('event-editor')).toBeVisible();
+    await vm(P.page, (v, o) => v.openNativeCard({ event: v.calendar.events[0], occurrence: { start: new Date(o.start), end: new Date(o.end) } }), occ);
+    await expect(P.page.getByTestId('event-card')).toBeVisible();
   }
-  await B.page.getByTestId('editor-title').fill('Standup (B: room 4)');
-  await B.page.getByTestId('editor-save').click();
+  await B.page.getByTestId('card-title').fill('Standup (B: room 4)');
+  await B.page.getByTestId('card-title').press('Enter');
+  await pickScope(B.page, 'this');
   await soon(async () => (await stored(id)).length).toBe(2);
   await soon(() => vm(A.page, (v) => v.calendar.events.length)).toBe(2);
-  await A.page.getByTestId('editor-title').fill('Standup (A: moved online)');
-  await A.page.getByTestId('editor-save').click();
+  await A.page.getByTestId('card-title').fill('Standup (A: moved online)');
+  await A.page.getByTestId('card-title').press('Enter');
+  await pickScope(A.page, 'this');
   await soon(async () => (await stored(id)).map((e) => e.title).sort()).toEqual(['Standup', 'Standup (A: moved online)']);
   const rows = await stored(id);
   expect(rows).toHaveLength(2);
@@ -220,20 +242,23 @@ test('Undo of an occurrence delete takes back only its own skipped date, not one
 });
 
 // =====================================================================================================
-test('saving an occurrence whose series was deleted meanwhile: the editor closes, nothing is saved, analytics gets no event text', async ({ browser }) => {
+test('an occurrence whose series was deleted meanwhile: the card closes and says so; a save that still arrives saves nothing, analytics gets no event text', async ({ browser }) => {
   const id = await seed([timed('s1', 'Standup', '2026-10-19T09:00:00-07:00', '2026-10-19T09:30:00-07:00', { recurrencerule: 'FREQ=DAILY;INTERVAL=1;' })]);
   const A = await open(browser, id, '&view=week&date=2026-10-21');
   const B = await open(browser, id, '&view=week&date=2026-10-21');
-  await vm(A.page, (v) => v.openNativeEditor({ mode: 'EditOccurrence', row: v.calendar.events[0],
-    occurrence: { start: new Date('2026-10-21T09:00:00-07:00'), end: new Date('2026-10-21T09:30:00-07:00') } }));
-  await expect(A.page.getByTestId('event-editor')).toBeVisible();
+  await vm(A.page, (v) => {
+    v.openNativeCard({ event: v.calendar.events[0], occurrence: { start: new Date('2026-10-21T09:00:00-07:00'), end: new Date('2026-10-21T09:30:00-07:00') } });
+    window.__rec = v.nativeRecord(v.calendar.events[0]);   // the series' record as the card had it
+  });
+  await expect(A.page.getByTestId('event-card')).toBeVisible();
   await vm(B.page, (v) => v.store().dispatch({ type: 'remove', key: { id: 's1', recurrenceID: null } }, { label: 'remote delete' }));
   await soon(async () => (await stored(id)).length).toBe(0);
   await soon(() => vm(A.page, (v) => v.calendar.events.length)).toBe(0);
-  await A.page.getByTestId('editor-title').fill('Dr. Patel - biopsy results for Maria');
-  await A.page.getByTestId('editor-save').click();
-  await expect(A.page.getByTestId('event-editor')).toHaveCount(0);
+  await expect(A.page.getByTestId('event-card')).toHaveCount(0);
   await expect(A.page.getByText("This event's series was deleted.")).toBeVisible();
+  // "This event" saved just as the series went (the write path's own check): refused with a code, nothing saved.
+  await vm(A.page, (v) => v.nativeAction('eventChange', { changedRecords: [{ ...window.__rec, Subject: 'Dr. Patel - biopsy results for Maria',
+    Id: '__native_occurrence__', RecurrenceID: 's1' }] }, { action: 'EditOccurrence', occurrenceStart: new Date('2026-10-21T09:00:00-07:00') }));
   await A.page.waitForTimeout(800);
   expect(await stored(id)).toEqual([]);
   const sent = JSON.stringify(await A.page.evaluate(() => window.__tracked));
@@ -272,12 +297,12 @@ for (const zone of ['America/Phoenix', 'America/New_York', 'Asia/Tokyo', 'Europe
 }
 
 // =====================================================================================================
-test('a description full of markup and odd links shows as text in the popup: no injected elements, only safe hrefs', async ({ browser }) => {
+test('a description full of markup and odd links shows as text in the event card on an edit link: no injected elements, only safe hrefs', async ({ browser }) => {
   const nasty = 'http://a.co/"onmouseover="alert(1) www.a.co\'><img src=x onerror=alert(1)> javascript:alert(1) a"b@x.co &lt;script&gt;';
   const id = await seed([{ ...PIANO()[0], description: nasty }]);
   const { ctx, page, errors } = await open(browser, id, '&view=week&date=2026-10-26');
   await page.locator('.nc [data-testid="event-s1"]').first().click();
-  const d = page.getByTestId('popover-description');
+  const d = page.getByTestId('card-details-preview');
   await expect(d).toBeVisible();
   expect(await d.evaluate((el) => el.querySelectorAll('img,script,iframe,[onmouseover],[onerror]').length)).toBe(0);
   const hrefs = await d.evaluate((el) => [...el.querySelectorAll('a')].map((a) => a.getAttribute('href')));

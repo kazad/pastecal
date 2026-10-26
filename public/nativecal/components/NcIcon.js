@@ -18,6 +18,9 @@ const NC_ICONS = {
     'repeat': '<path d="m17 2 4 4-4 4" /> <path d="M3 11v-1a4 4 0 0 1 4-4h14" /> <path d="m7 22-4-4 4-4" /> <path d="M21 13v1a4 4 0 0 1-4 4H3" />',
     'ellipsis-vertical': '<circle cx="12" cy="12" r="1" /> <circle cx="12" cy="5" r="1" /> <circle cx="12" cy="19" r="1" />',
     'check': '<path d="M20 6 9 17l-5-5" />',
+    'clock': '<circle cx="12" cy="12" r="10" /> <path d="M12 6v6l4 2" />',
+    'globe': '<circle cx="12" cy="12" r="10" /> <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" /> <path d="M2 12h20" />',
+    'ellipsis': '<circle cx="12" cy="12" r="1" /> <circle cx="19" cy="12" r="1" /> <circle cx="5" cy="12" r="1" />',
 };
 const NcIcon = {
     props: { name: { type: String, required: true }, size: { type: [Number, String], default: 18 }, strokeWidth: { type: [Number, String], default: 2 } },

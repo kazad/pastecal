@@ -44,6 +44,82 @@ const stamp = (when) => new Date(when).toISOString().replace(/[-:]/g, '').replac
 
 const withBackend = (q) => { const p = new URLSearchParams(q.replace(/^\?/, '')); p.set('backend', 'cf'); return '?' + p.toString(); };
 
+// ------------------------------------------------------------------------------------- the native card
+/**
+ * The main app's native edit link edits in the event card (nativecal/components/EventCard.js): a click opens it, each
+ * change to an existing event is saved as it is made, and a repeating event asks "this event / all events" on its first
+ * change. These steps drive it like a person, with the same names as the audit harness's steps (nat), so every journey
+ * reads the same in either renderer. /beta (NATIVE_URL=beta) keeps its own editor and the harness's steps.
+ */
+const card = {
+  ...nat,
+  _scope: null,
+  dialog: (page) => page.locator('[data-testid="event-card"]'),
+  async answerScope(page) {
+    const dlg = page.locator('[data-testid="confirm-dialog"]');
+    if (!(await dlg.isVisible().catch(() => false)) && !(await dlg.waitFor({ state: 'visible', timeout: 600 }).then(() => true, () => false))) return;
+    if (await dlg.locator('[data-testid="scope-this"]').count()) await nat.pickScope(page, card._scope || 'this');
+  },
+  async full(page) { const more = page.locator('[data-testid="card-more"]'); if (await more.count()) await more.click(); await expect(page.locator('[data-testid="card-start-date"]')).toBeVisible(); },
+  async quickCreate(page, ymd, title) {
+    const c = await nat.cellByDate(page, ymd);
+    await c.click({ position: { x: 40, y: 60 } });
+    await expect(card.dialog(page)).toBeVisible();
+    await page.locator('[data-testid="card-title"]').pressSequentially(title, { delay: 20 });
+    await page.locator('[data-testid="card-done"]').click();
+    await expect(card.dialog(page)).toHaveCount(0);
+  },
+  async openNewEditor(page, ymd) {
+    const c = await nat.cellByDate(page, ymd);
+    await c.click({ position: { x: 40, y: 60 } });
+    await expect(card.dialog(page)).toBeVisible();
+    await card.full(page);
+    card._scope = null;
+  },
+  async openPopover(page, title) { await nat.event(page, title).first().click(); await expect(card.dialog(page)).toBeVisible(); await page.waitForTimeout(250); },
+  async editFromPopover(page, scope) { card._scope = scope || null; await card.full(page); },
+  async deleteFromPopover(page, scope) {
+    await page.locator('[data-testid="card-delete"]').click();
+    if (scope) await nat.pickScope(page, scope);
+    await expect(card.dialog(page)).toHaveCount(0);
+  },
+  async setTitle(page, text) { const i = page.locator('[data-testid="card-title"]'); await i.fill(''); await i.pressSequentially(text, { delay: 20 }); },
+  async setAllDay(page, on) {
+    await card.full(page);
+    const sw = page.locator('[data-testid="card-allday"]');
+    if (((await sw.getAttribute('aria-checked')) === 'true') !== on) { await sw.click(); await card.answerScope(page); }
+  },
+  async setTime(page, which, hhmm) {
+    await card.full(page);
+    await page.locator(`[data-testid="card-${which}-time"]`).click();
+    const input = page.locator('[data-testid="card-picker"] [data-testid="picker-input"]');
+    await input.fill(hhmm); await input.press('Enter');
+    await expect(page.locator('[data-testid="card-picker"]')).toHaveCount(0);
+    await card.answerScope(page);
+  },
+  async setDate(page, which, ymd) {
+    await card.full(page);
+    await page.locator(`[data-testid="card-${which}-date"]`).click();
+    const input = page.locator('[data-testid="card-picker"] [data-testid="picker-input"]');
+    await input.fill(ymd); await input.press('Enter');
+    await card.answerScope(page);
+  },
+  async setRepeatWeekly(page) {
+    await card.full(page);
+    await page.locator('[data-testid="card-repeat"]').click();
+    await page.locator('[data-testid="card-picker"] [data-r="week"]').click();
+  },
+  async save(page) {
+    await page.locator('[data-testid="card-done"]').click();
+    await card.answerScope(page);
+    await expect(card.dialog(page)).toHaveCount(0);
+  },
+  async cancelEditor(page) {
+    await page.locator('[data-testid="card-cancel"]').click();
+    await expect(card.dialog(page)).toHaveCount(0);
+  },
+};
+
 // ------------------------------------------------------------------------------------- renderers
 /** How to open a calendar in each renderer. The UI steps (popover, editor, save) come from the audit harness. */
 const RENDERERS = {
@@ -86,7 +162,7 @@ const RENDERERS = {
     timeText: (page, title) => sf.event(page, title).first().innerText(),
   },
   native: {
-    name: 'native', ui: nat,
+    name: 'native', ui: BETA ? nat : card,
     async open(page, id, query = '') {
       const main = !BETA;
       await page.goto(main ? `/${id}${withBackend(query)}&cal=native` : `/beta/${id}${withBackend(query)}`);
@@ -96,9 +172,10 @@ const RENDERERS = {
     },
     cellSel: '.nc-cell[data-day]', cellAttr: 'data-day',
     async events(page) { return page.evaluate(() => document.querySelector('#app')._vnode.component.proxy.calendar.events.map((e) => ({ ...e }))); },
-    async setRepeatWeekly(page) { await page.locator('[data-testid="editor-repeat"]').selectOption('WEEKLY'); },
-    async setDate(page, which, ymd) { await page.locator(`[data-testid="editor-${which}-date"]`).fill(ymd); },
+    async setRepeatWeekly(page) { if (!BETA) return card.setRepeatWeekly(page); await page.locator('[data-testid="editor-repeat"]').selectOption('WEEKLY'); },
+    async setDate(page, which, ymd) { if (!BETA) return card.setDate(page, which, ymd); await page.locator(`[data-testid="editor-${which}-date"]`).fill(ymd); },
     async cancelEditor(page) {
+      if (!BETA) return card.cancelEditor(page);
       await page.locator('[data-testid="editor-cancel"]').click();
       await expect(nat.dialog(page)).toHaveCount(0);
     },
