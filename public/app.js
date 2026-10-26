@@ -1495,7 +1495,7 @@ const CalendarVueApp = {
                 // edit is real and must be published -- suppressing it would trade the
                 // echo bug for a silent lost edit.
                 if (this.isApplyingRemote
-                    && JSON.stringify(this.calendar.events || []) === this.remoteAppliedSignature) {
+                    && this.calendarSignature() === this.remoteAppliedSignature) {
                     this.updateCalendarView();
                     return;
                 }
@@ -4371,6 +4371,11 @@ const CalendarVueApp = {
         // would let the echo through anyway.
         // `replace` skips the merge: used when local is known to be wrong (a refused
         // write's recovery), where merging would keep exactly the damage being undone.
+        // What the calendar watcher compares to tell a remote apply from a local edit in the same batch: the events AND the
+        // calendar's own fields (a keystroke in the notes landing with a snapshot is an edit too).
+        calendarSignature() {
+            return JSON.stringify([this.calendar.events || [], this.calendar.title ?? '', this.calendar.options || {}]);
+        },
         applyRemoteCalendar(c, { replace = false } = {}) {
             this.isApplyingRemote = true;
             try {
@@ -4394,6 +4399,13 @@ const CalendarVueApp = {
                     c = { ...c, events: CalendarDataService._mergeEvents(
                         base, this.calendar.events, incoming) };
                 }
+                // The title and every option the same way, field by field: the notes being typed (unsaved, inside the
+                // save debounce) are never replaced by another person's snapshot (stress A01).
+                const baseMeta = CalendarDataService._previousSeenMeta && CalendarDataService._previousSeenMeta[this.calendar.id];
+                if (!replace && baseMeta && typeof CalendarDataService.mergeMeta === 'function') {
+                    const merged = CalendarDataService.mergeMeta(baseMeta, { title: this.calendar.title, options: this.calendar.options }, { title: c.title, options: c.options });
+                    c = { ...c, title: merged.title, options: merged.options };
+                }
                 this.calendar.import(c);
             } finally {
                 // Record what the calendar looks like immediately after the import. The
@@ -4401,7 +4413,7 @@ const CalendarVueApp = {
                 // local edit landing in the same batch as a remote snapshot would
                 // otherwise be skipped along with it and never reach the server -- a new
                 // data-loss bug in the fix for the old one.
-                this.remoteAppliedSignature = JSON.stringify(this.calendar.events || []);
+                this.remoteAppliedSignature = this.calendarSignature();
                 this.$nextTick(() => { this.isApplyingRemote = false; });
             }
         },
