@@ -17,7 +17,6 @@ const path = require('node:path');
 
 const root = path.join(__dirname, '../..');
 const EXEMPT = {
-  'nk-title': "the event card's title is its heading: one underline under large text, not a boxed field",
   'nq-title': "the quick-create popover's title, the same heading treatment",
 };
 const NOT_FIELDS = /^(radio|checkbox|hidden|color)$/i;

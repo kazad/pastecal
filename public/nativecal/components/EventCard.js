@@ -40,7 +40,7 @@ const EventCard = (() => {
             return {
                 v: clone(this.card.value), full: !!this.card.full,
                 titleText: this.card.value.title || '', detText: this.card.value.description || '',
-                titleFocus: false, detFocus: false,
+                titleFocus: false, detFocus: false, detEditing: false,
                 picker: null, pickStyle: {}, menu: false, menuStyle: {},
                 month: null, focusDay: null, custom: null, customError: '', labelNames: null, typed: '', typedBad: false,
                 smart: null, smartSaid: '', showAll: false, clamped: false, pasteNote: '',
@@ -65,6 +65,8 @@ const EventCard = (() => {
                 } catch (e) { return 'Your time zone'; }
             },
             linked() { return typeof Utils !== 'undefined' && Utils.linkify ? Utils.linkify(this.detText || '', { style: false }) : ''; },
+            /** The full card's details show their links (live) whenever the box is not being edited (no links: the box). */
+            detView() { return this.full && !this.detEditing && !this.detFocus && /<a /.test(this.linked); },
             detCount() { return this.detText.length >= MAX * 0.9 ? `${this.detText.length.toLocaleString('en-US')} / ${MAX.toLocaleString('en-US')}` : ''; },
             max() { return MAX; },
             cls() {
@@ -112,6 +114,7 @@ const EventCard = (() => {
                 this.v = clone(val);
                 // What is being typed stays, unless the value itself changed underneath it (an undo, another save).
                 if (!this.titleFocus) this.titleText = val.title || '';   // (nor the title while it is being typed)
+                this.$nextTick(() => this.growTitle());
                 // The details box is never touched while it has the focus: a change from another browser waits (the
                 // save then keeps what is typed here, and says so: app.js nativeCardChange).
                 if (!this.detFocus) this.detText = val.description || '';
@@ -193,8 +196,9 @@ const EventCard = (() => {
                 this.v = clone(this.card.value); this.full = !!this.card.full;
                 this.titleText = this.card.value.title || ''; this.detText = this.card.value.description || '';
                 this.picker = null; this.menu = false; this.smart = null; this.showAll = false; this.pasteNote = ''; this.keep = null; this.closing = false;
-                this.wide = false; this.detSession = null; clearTimeout(this._detTimer); this.custom = null; this.customError = '';
+                this.wide = false; this.detSession = null; this.detEditing = false; clearTimeout(this._detTimer); this.custom = null; this.customError = '';
                 this.$nextTick(() => {
+                    this.growTitle();
                     this.place(open);
                     this.grow(); this.measureClamp();
                     // A new event: type the title right away. An existing one: the title too, but not on a phone,
@@ -254,7 +258,7 @@ const EventCard = (() => {
                 // Layout sizes, not the box on screen: the card may be mid-animation (scaled).
                 const h = c.offsetHeight, top = parseFloat(this.pos.top || 0) - window.scrollY;
                 let room = window.innerHeight - top - M;
-                if (h > room && (room < 320 || this.detFocus || this.custom)) {   // (writing long details, or the repeat's settings open: up as far as it takes)
+                if (h > room) {   // (the whole card in view when the window has room for it: details and Done never hidden below the edge)
                     const need = Math.min(h, window.innerHeight - 2 * M), up = Math.max(0, Math.min(top - M, need - room));
                     this.pos = { ...this.pos, top: `${parseFloat(this.pos.top || 0) - up}px` };
                     c.style.top = this.pos.top;
@@ -267,7 +271,7 @@ const EventCard = (() => {
                 this.full = true;
                 this.$emit('expand');
                 if (!reduced()) { this.expanding = true; setTimeout(() => { this.expanding = false; }, 260); }
-                this.$nextTick(() => { this.grow(); this.fit(); if (focus && this.$refs[focus]) this.$refs[focus].focus(); });
+                this.$nextTick(() => { this.grow(); this.fit(); if (focus === 'det' && this.detView) this.editDetails(null); else if (focus && this.$refs[focus]) this.$refs[focus].focus(); });
             },
             measureClamp() {
                 const d = this.$refs.qdet;
@@ -287,7 +291,14 @@ const EventCard = (() => {
                 this.$emit('change', { ...patch }, msg || this.summary());
                 this.$nextTick(() => { this.grow(); this.fit(); });
             },
-            onTitleInput() {
+            onTitleInput(e) {
+                // One line of text that wraps: a newline (pasted, or dropped in) is a space.
+                if (/[\r\n]/.test(this.titleText)) {
+                    const ta = e && e.target, at = ta ? ta.selectionEnd : null;
+                    this.titleText = this.titleText.replace(/\r\n?|\n/g, ' ');
+                    if (ta && at != null) this.$nextTick(() => { ta.selectionStart = ta.selectionEnd = Math.min(at, this.titleText.length); });
+                }
+                this.$nextTick(() => this.growTitle());
                 if (this.isNew) this.smartApply();
                 if (this.isNew) this.$emit('change', { title: this.titleText }, '');
             },
@@ -322,6 +333,33 @@ const EventCard = (() => {
                 if (final) this.detSession = null;
             },
             commitDetails() { if (!this.closing) this.saveDetails(true); },
+            /**
+             * The details with live links -> the box, to edit: a click on text puts the caret there, focus (Tab) at the
+             * end. A click on a link only opens it (a new tab; the link's own target and rel).
+             */
+            detDown(e) { if (!(e.target.closest && e.target.closest('a'))) e.preventDefault(); },
+            editDetails(e) {
+                if (e && e.target.closest && e.target.closest('a')) return;
+                const view = this.$refs.detView;
+                let at = null;
+                if (e && view) {
+                    let node = null, off = 0;
+                    if (document.caretPositionFromPoint) { const p = document.caretPositionFromPoint(e.clientX, e.clientY); if (p) { node = p.offsetNode; off = p.offset; } }
+                    else if (document.caretRangeFromPoint) { const r = document.caretRangeFromPoint(e.clientX, e.clientY); if (r) { node = r.startContainer; off = r.startOffset; } }
+                    if (node && view.contains(node)) { const r = document.createRange(); r.setStart(view, 0); r.setEnd(node, off); at = r.toString().length; }
+                }
+                const scroll = view ? view.scrollTop : 0;
+                this.detEditing = true;
+                this.$nextTick(() => {
+                    const ta = this.$refs.det;
+                    if (!ta) return;
+                    this.grow();
+                    ta.focus({ preventScroll: true });
+                    const i = at == null ? ta.value.length : Math.min(at, ta.value.length);
+                    ta.setSelectionRange(i, i);
+                    ta.scrollTop = scroll;
+                });
+            },
             onPaste(e) {
                 const text = e.clipboardData && e.clipboardData.getData('text');
                 const ta = e.target;
@@ -334,32 +372,51 @@ const EventCard = (() => {
                 this.pasteNote = `Details are limited to ${MAX.toLocaleString('en-US')} characters; the end of the paste was left out.`;
                 this.$nextTick(() => { ta.selectionStart = ta.selectionEnd = before.length + fit.length; this.onDetInput(); });
             },
-            // Long details: past about five lines the card widens to a comfortable line (416 -> 600px, ~75 characters),
+            // Long details: past about five lines the card widens to a comfortable line (560 -> 680px, ~75 characters),
             // moving left only as far as it must to stay on screen. It never narrows again while open.
             widen() {
-                const ta = this.$refs.det, c = this.$refs.card;
+                const ta = this.detBox(), c = this.$refs.card;
                 if (!ta || !c || this.wide || this.phone || window.innerWidth < 720) return;
                 const lh = parseFloat(getComputedStyle(ta).lineHeight) || 21;
                 if (ta.scrollHeight < lh * 5 + 20) return;
                 this.wide = true;
-                const left = parseFloat(this.pos.left || 0) - window.scrollX, over = left + Math.min(600, window.innerWidth - 2 * M) - (window.innerWidth - M);
+                const left = parseFloat(this.pos.left || 0) - window.scrollX, over = left + Math.min(680, window.innerWidth - 2 * M) - (window.innerWidth - M);
                 if (over > 0) this.pos = { ...this.pos, left: `${left - over + window.scrollX}px` };
                 this.$nextTick(() => this.fit());
             },
+            /** The title shows all of itself, up to three lines, then scrolls (a long title never hides its end). */
+            growTitle() {
+                const ta = this.$refs.title;
+                if (!ta) return;
+                const lh = parseFloat(getComputedStyle(ta).lineHeight) || 28, pad = ta.offsetHeight - ta.clientHeight + parseFloat(getComputedStyle(ta).paddingTop) + parseFloat(getComputedStyle(ta).paddingBottom);
+                ta.style.height = 'auto';
+                const want = ta.scrollHeight + (ta.offsetHeight - ta.clientHeight), cap = Math.round(lh * 3 + pad);
+                ta.style.height = `${Math.min(want, cap)}px`;
+                ta.style.overflowY = want > cap + 1 ? 'auto' : 'hidden';
+            },
             // The box fits its text, up to 40% of the screen's height (60% once wide), then scrolls inside with the
             // caret in view. Growing never resets the height first, so the browser keeps the caret where it was.
+            /** The details as they are shown: the box being edited, or its text with live links. */
+            detBox() { return this.detView ? this.$refs.detView : this.$refs.det; },
             grow() {
                 this.widen();
-                const ta = this.$refs.det;
+                const ta = this.detBox();
                 if (!ta) return;
                 const c = this.$refs.card, top = c ? c.scrollTop : 0;
                 // Never taller than the screen leaves for it beside the rest of the card (so the card itself need not scroll).
                 const rest = c && !this.phone ? c.scrollHeight - ta.offsetHeight : 0;
                 const cap = Math.max(120, Math.min(Math.round(window.innerHeight * (this.wide ? 0.6 : 0.4)), this.phone ? Infinity : window.innerHeight - 2 * M - rest));
-                if (ta.scrollHeight > ta.clientHeight + 2) ta.style.height = `${Math.min(cap, Math.max(72, ta.scrollHeight + 2))}px`;
+                // At least four lines on a desktop before it grows (a phone's sheet keeps its 72px).
+                const lh = parseFloat(getComputedStyle(ta).lineHeight) || 21, base = this.phone ? 72 : Math.round(lh * 4 + 18);
+                if (ta === this.$refs.detView) {
+                    ta.style.minHeight = `${Math.min(cap, base)}px`; ta.style.maxHeight = `${cap}px`;
+                    if (c) c.scrollTop = top;
+                    return;
+                }
+                if (ta.scrollHeight > ta.clientHeight + 2) ta.style.height = `${Math.min(cap, Math.max(base, ta.scrollHeight + 2))}px`;
                 else {
                     ta.style.height = 'auto';
-                    ta.style.height = `${Math.min(cap, Math.max(72, ta.scrollHeight + 2))}px`;
+                    ta.style.height = `${Math.min(cap, Math.max(base, ta.scrollHeight + 2))}px`;
                     if (ta.scrollHeight > cap && document.activeElement === ta) ta.scrollTop = ta.scrollHeight * (ta.selectionEnd / Math.max(1, ta.value.length)) - ta.clientHeight / 2;
                 }
                 ta.style.overflowY = ta.scrollHeight > cap + 2 ? 'auto' : 'hidden';
@@ -677,8 +734,8 @@ const EventCard = (() => {
 <div ref="card" class="nk-card" :class="cls" :style="cardStyle" role="dialog" :aria-label="isNew ? 'New event' : 'Event'" data-testid="event-card"
   @touchstart="sheetStart" @touchmove="sheetMove" @touchend="sheetEnd" @touchcancel="sheetEnd">
   <div class="nk-h">
-    <input ref="title" v-model="titleText" class="nk-title" placeholder="Add a title" aria-label="Title" autocomplete="off" maxlength="500" data-testid="card-title"
-      aria-describedby="nk-said" @input="onTitleInput" @focus="titleFocus = true" @blur="titleFocus = false; blurSave($event, commitTitle)" @keydown.enter.prevent="titleEnter">
+    <textarea ref="title" v-model="titleText" class="nk-title" rows="1" placeholder="Add a title" aria-label="Title" autocomplete="off" maxlength="500" data-testid="card-title"
+      aria-describedby="nk-said" @input="onTitleInput" @focus="titleFocus = true" @blur="titleFocus = false; blurSave($event, commitTitle)" @keydown.enter.prevent="titleEnter"></textarea>
     <button type="button" class="nk-cat" aria-haspopup="listbox" :aria-expanded="String(!!picker && picker.kind === 'cat')" :aria-label="'Type: ' + typeName"
       data-testid="card-type" @click="openPicker('cat', $event)"><i></i><span>{{ typeName }}</span><nc-icon name="chevron-down" :size="13" :stroke-width="2.2"></nc-icon></button>
   </div>
@@ -718,7 +775,7 @@ const EventCard = (() => {
       <button v-else type="button" class="nk-tp" data-testid="card-end-time" aria-expanded="false" :aria-label="'End time: ' + t(v.end)" @click="openPicker('e', $event)">{{ t(v.end, false) }}</button>
       <button type="button" class="nk-durb" data-testid="card-length" aria-expanded="false" :aria-label="'Length: ' + lengthText" @click="openPicker('dur', $event)">{{ lengthText }}<nc-icon name="chevron-down" :size="13" :stroke-width="2.2"></nc-icon></button>
     </div>
-    <div v-if="full" class="nk-tz" :style="{ visibility: v.isAllDay ? 'hidden' : 'visible' }" data-testid="card-tz" :aria-label="'Time zone: ' + zone" title="Times are shown in your time zone">
+    <div v-if="full" v-show="!v.isAllDay" class="nk-tz" data-testid="card-tz" :aria-label="'Time zone: ' + zone" title="Times are shown in your time zone">
       <span class="nk-gi"><nc-icon name="globe" :size="18"></nc-icon></span><span>{{ zone }}</span></div>
     <div v-if="full && card.canRepeat" class="nk-row">
       <span class="nk-gi" title="Repeats"><nc-icon name="repeat" :size="18"></nc-icon></span>
@@ -756,8 +813,10 @@ const EventCard = (() => {
     <div v-if="full" class="nk-row">
       <span class="nk-gi" title="Details"><nc-icon name="text-align-start" :size="18"></nc-icon></span>
       <div class="nk-detwrap">
-        <textarea ref="det" v-model="detText" class="nk-det" rows="1" placeholder="Place, notes, links" aria-label="Details" :maxlength="max" data-testid="card-details"
-          @input="onDetInput" @paste="onPaste" @focus="onDetFocus" @blur="detFocus = false; blurSave($event, commitDetails)"></textarea>
+        <div v-if="detView" ref="detView" class="nk-det nk-det-view" tabindex="0" role="textbox" aria-multiline="true" aria-label="Details" data-testid="card-details-view"
+          v-html="linked" @mousedown="detDown" @click="editDetails" @focus="editDetails(null)"></div>
+        <textarea v-show="!detView" ref="det" v-model="detText" class="nk-det" rows="1" placeholder="Place, notes, links" aria-label="Details" :maxlength="max" data-testid="card-details"
+          @input="onDetInput" @paste="onPaste" @focus="onDetFocus" @blur="detFocus = false; detEditing = false; blurSave($event, commitDetails)"></textarea>
         <div v-if="detCount || pasteNote" class="nk-count" data-testid="card-details-count" aria-live="polite">{{ pasteNote ? pasteNote + ' ' : '' }}{{ detCount }}</div>
       </div>
     </div>

@@ -204,21 +204,22 @@
    Sizes in em follow the card's --pc-fs-md (14px): the title 22px, times and details 15px, as the prototype has them.
    The editing prototype (docs/native-switch.md, Decisions), on tokens: one content column with icons in a 60px
    gutter, an 8/16 rhythm, regular-weight values, the event's exact color as a stripe down the left edge. */
-.nk-card { position: absolute; z-index: var(--pc-z-popover); width: 416px; max-width: calc(100vw - 24px); box-sizing: border-box; background: var(--pc-raised); color: var(--pc-text);
+.nk-card { position: absolute; z-index: var(--pc-z-popover); width: 560px; max-width: calc(100vw - 24px); box-sizing: border-box; background: var(--pc-raised); color: var(--pc-text);
     border-radius: var(--pc-radius-card); box-shadow: var(--pc-shadow-lg), 0 0 0 1px var(--pc-line); font-family: var(--pc-font); font-size: var(--pc-fs-md);
     transform-origin: var(--from-x, 0) var(--from-y, 0); -webkit-user-select: text; user-select: text; }
 .nk-card::after { content: ""; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 5px 0 0 var(--evc); pointer-events: none; transition: box-shadow var(--pc-dur) ease; }
 .nk-card :where(button) { font: inherit; color: inherit; }
 .nk-card :focus-visible, .nk-pick :focus-visible, .nk-menu :focus-visible { outline: var(--pc-focus-outline); outline-offset: 2px; }
 .nk-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.nk-h { padding: var(--pc-space-4) var(--pc-space-4) 0; display: flex; align-items: center; gap: 10px; }
+.nk-h { padding: var(--pc-space-4) var(--pc-space-4) 0; display: flex; align-items: flex-start; gap: 10px; }   /* a title that wraps keeps the type at the top right */
 .nk-title { flex: 1; min-width: 0; min-height: 42px; box-sizing: border-box; border: 0; border-bottom: 1px solid var(--pc-field-strong); background: transparent; color: var(--pc-text);
-    font: var(--pc-fw-semibold) var(--pc-fs-md)/1.3 var(--pc-font); font-size: 1.5715em; letter-spacing: var(--pc-tracking-tight); padding: var(--pc-space-1) 0; border-radius: 0; }
+    font: var(--pc-fw-semibold) var(--pc-fs-md)/1.3 var(--pc-font); font-size: 1.5715em; letter-spacing: var(--pc-tracking-tight); padding: var(--pc-space-1) 0; border-radius: 0;
+    display: block; resize: none; overflow: hidden; overflow-wrap: anywhere; }   /* a textarea of one line that wraps (EventCard growTitle) */
 .nk-title::placeholder { color: var(--pc-text-muted); font-weight: var(--pc-fw-medium); }
 .nk-title:hover { border-bottom-color: var(--pc-text-muted); }
 .nk-card .nk-title:focus, .nk-card .nk-title:focus-visible { outline: none; border-bottom: 2px solid var(--pc-primary); padding-bottom: 3px; }
 .nk-cat { display: inline-flex; align-items: center; gap: 6px; flex: none; max-width: 45%; border: 0; background: var(--pc-soft); border-radius: var(--pc-radius-pill); min-height: var(--pc-h-sm);
-    padding: 0 10px 0 9px; font-size: .9643em; font-weight: var(--pc-fw-semibold); color: var(--pc-text-2); cursor: pointer; }   /* 13.5px */
+    padding: 0 10px 0 9px; margin-top: 5px; font-size: .9643em; font-weight: var(--pc-fw-semibold); color: var(--pc-text-2); cursor: pointer; }   /* 13.5px; centered on the title's first line */
 .nk-cat span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nk-cat:hover, .nk-cat[aria-expanded="true"] { background: var(--pc-hover); }
 .nk-cat i { width: 10px; height: 10px; border-radius: 50%; background: var(--evc); flex: none; transition: background-color var(--pc-dur) ease; }
@@ -281,11 +282,14 @@
 .nk-det::placeholder { color: var(--pc-text-muted); }
 .nk-det:hover { border-color: color-mix(in srgb, var(--pc-primary) 45%, var(--pc-field-strong)); }
 .nk-card .nk-det:focus { border-color: var(--pc-primary); outline: none; background: var(--pc-bg); box-shadow: var(--pc-focus-ring); }
+/* The details with live links, until they are clicked (EventCard detView): the box's look, the text as typed. */
+.nk-det-view { white-space: pre-wrap; word-break: break-word; overflow-y: auto; cursor: text; }
+.nk-det-view a { color: var(--pc-link); text-decoration: underline; cursor: pointer; }
 .nk-count { font-size: var(--pc-fs-xs); color: var(--pc-text-muted); text-align: right; }
 .nk-foot { display: flex; align-items: center; gap: var(--pc-space-1); margin-left: 60px; position: sticky; bottom: 0; z-index: 2; background: var(--pc-raised);
     padding-bottom: var(--pc-space-3); margin-bottom: calc(-1 * var(--pc-space-3)); }   /* pinned when the card scrolls inside: Done stays in view */
 /* Writing long details: the card widens to a comfortable line (EventCard widen); it never narrows while open. */
-.nk-card.wide { width: 600px; }
+.nk-card.wide { width: 680px; }
 /* Scrolling inside the card (or its details, or a picker's list) never carries on into the calendar or the page. */
 .nk-card, .nk-card .nk-det, .nk-pick, .nk-pick *, .nk-menu { overscroll-behavior: contain; }
 /* A phone's sheet is open: the page behind it does not scroll (the calendar is inert; app.js watch nativeCard). */

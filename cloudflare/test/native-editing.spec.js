@@ -770,9 +770,14 @@ test('long details: the quick card shows four lines and Show all, links open saf
     expect((await card(page).boundingBox()).width, 'long links never widen the card').toBeLessThanOrEqual(w0 + 0.5);
     expect(within(await card(page).boundingBox(), phone ? 390 : 1280, phone ? 844 : 900, phone ? 0 : 12)).toBe(true);
     await page.getByTestId('card-more').click();
-    const ta = page.getByTestId('card-details');
-    const tb = await ta.boundingBox();
+    // The full card shows the details with live links until they are clicked (then the box, to edit).
+    const view = page.getByTestId('card-details-view');
+    const tb = await view.boundingBox();
     expect(tb.height).toBeLessThanOrEqual((phone ? 844 : 900) * (phone ? 0.4 : 0.6) + 2);   // 60% once the card is wide
+    expect((await card(page).boundingBox()).width, 'long links never widen the full card past its wide width').toBeLessThanOrEqual(phone ? 390 : 680);
+    await view.click({ position: { x: 20, y: 10 } });
+    const ta = page.getByTestId('card-details');
+    await expect(ta).toBeFocused();
     {
       // Up to the limit: the counter shows past 90%; a paste over the limit is trimmed with a note.
       await ta.evaluate((el, n) => { el.focus(); el.value = 'y'.repeat(n); el.dispatchEvent(new Event('input', { bubbles: true })); }, 18900);
@@ -853,24 +858,24 @@ test('two people: details typed here are not overwritten by a change from anothe
   await A.ctx.close(); await B.ctx.close();
 });
 
-test('long details: the card widens to 600px past five lines (never narrows while open, back to 416 when reopened), stays on screen, Done stays visible; a 1 MB paste is trimmed fast', async ({ browser }) => {
+test('long details: the card widens to 680px past five lines (never narrows while open, back to 560 when reopened), stays on screen, Done stays visible; a 1 MB paste is trimmed fast', async ({ browser }) => {
   const id = await seed([timed('r', 'Right edge', '2026-10-23T10:00:00-07:00', '2026-10-23T11:00:00-07:00')]);
   const { ctx, page, errors } = await open(browser, id, '&view=week&date=2026-10-22');
   await openCard(page, ev(page, 'r'), true);
-  expect(Math.round((await card(page).boundingBox()).width)).toBe(416);
+  expect(Math.round((await card(page).boundingBox()).width)).toBe(560);
   const ta = page.getByTestId('card-details');
   await ta.click();
   for (let i = 0; i < 7; i++) await page.keyboard.type(`Line ${i + 1}: who brings what, where we meet, and when.\n`);
   await page.waitForTimeout(300);
   let b = await card(page).boundingBox();
-  expect(Math.round(b.width)).toBe(600);
+  expect(Math.round(b.width)).toBe(680);
   expect(within(b, 1280, 900)).toBe(true);
   await expect(page.getByTestId('card-done')).toBeInViewport();
   // Deleting most of it does not narrow it again.
   await ta.fill('Short.');
   await ta.dispatchEvent('input');
   await page.waitForTimeout(250);
-  expect(Math.round((await card(page).boundingBox()).width)).toBe(600);
+  expect(Math.round((await card(page).boundingBox()).width)).toBe(680);
   // A 1 MB paste: trimmed to the limit in well under 100 ms, with the note.
   const ms = await ta.evaluate((el) => {
     el.focus(); el.selectionStart = el.selectionEnd = el.value.length;
@@ -886,7 +891,7 @@ test('long details: the card widens to 600px past five lines (never narrows whil
   await soon(async () => (await stored(id))[0].description.length).toBe(20000);
   // Reopened: the normal width again.
   await openCard(page, ev(page, 'r'));
-  expect(Math.round((await card(page).boundingBox()).width)).toBe(416);
+  expect(Math.round((await card(page).boundingBox()).width)).toBe(560);
   expect(errors).toEqual([]);
   await ctx.close();
 });
@@ -1320,3 +1325,93 @@ test('week view: dragging to another day draws the event in that day\'s column, 
   expect(errors).toEqual([]);
   await ctx.close();
 });
+
+// The owner: "make sure links show up". The full card's details show live links whenever the box is not being edited
+// (the quick card's linkify: http/https/mailto only, text escaped); a click on a link opens it in a new tab and never
+// starts editing; a click on text edits right there. Long URLs wrap inside the card. test/fixtures/long-descriptions.json.
+test('details: links are live in the full card until it is edited; a link opens in a new tab, a click on text edits there', async ({ browser }) => {
+  const fx = require('../../test/fixtures/long-descriptions.json').events.find((e) => e.id === 'links');
+  const id = await seed([timed('l', fx.title, `${fx.when[0]}:00-07:00`, `${fx.when[1]}:00-07:00`, { description: fx.description })]);
+  const { ctx, page, errors } = await open(browser, id, '&view=month&date=2026-10-15');
+  await openCard(page, page.locator('.nc-bar', { hasText: fx.title }).first(), true);
+  const view = page.getByTestId('card-details-view');
+  await expect(view).toBeVisible();
+  await expect(page.getByTestId('card-details')).toBeHidden();
+  expect(await view.evaluate((el) => el.textContent), 'the text exactly as stored').toBe(fx.description);
+  const hrefs = await view.locator('a').evaluateAll((as) => as.map((a) => [a.getAttribute('href'), a.target, a.rel]));
+  expect(hrefs.length).toBeGreaterThanOrEqual(4);
+  for (const [href, target, rel] of hrefs) { expect(href).toMatch(/^(https?:|mailto:)/); expect(target).toBe('_blank'); expect(rel).toContain('noopener'); }
+  expect(await view.evaluate((el) => el.scrollWidth <= el.clientWidth + 1), 'a long URL wraps').toBe(true);
+  expect((await card(page).boundingBox()).width).toBeLessThanOrEqual(680);
+  // A link: a new tab at that address, and the box stays as it is (no editing).
+  const [tab, req] = await Promise.all([ctx.waitForEvent('page'), ctx.waitForEvent('request', (r) => r.url().startsWith('https://zoom.us/j/1234567890')),
+    view.locator('a[href^="https://zoom.us/"]').click()]);
+  expect(req.url()).toBe('https://zoom.us/j/1234567890?pwd=abc123');
+  expect(tab, 'opened in a new tab').not.toBe(page);
+  await page.bringToFront();
+  await expect(view).toBeVisible();
+  // Text: the second line ("Agenda:") -> editing, the caret where it was clicked.
+  const lh = await view.evaluate((el) => parseFloat(getComputedStyle(el).lineHeight));
+  await view.click({ position: { x: 14, y: 8 + lh * 1.5 } });
+  const box = page.getByTestId('card-details');
+  await expect(box).toBeFocused();
+  const at = await box.evaluate((ta) => ta.selectionStart), agenda = fx.description.indexOf('Agenda');
+  expect(at, `caret at "Agenda" (${agenda}), got ${at}`).toBeGreaterThanOrEqual(agenda);
+  expect(at).toBeLessThanOrEqual(agenda + 3);
+  // Leaving the box: the links again.
+  await page.getByTestId('card-title').click();
+  await expect(view).toBeVisible();
+  expect(errors).toEqual([]);
+  await ctx.close();
+});
+
+// The owner: long titles were cut off in a one-line field. The title wraps (up to three lines, then scrolls), beside
+// the type button, never under it; Enter saves; a pasted newline is a space.
+test('a long title wraps beside the type button; Enter saves it; newlines become spaces', async ({ browser }) => {
+  const fx = require('../../test/fixtures/long-descriptions.json').events.find((e) => e.id === 'longtitle');
+  const id = await seed([timed('t', fx.title, `${fx.when[0]}:00-07:00`, `${fx.when[1]}:00-07:00`, { description: fx.description })]);
+  const { ctx, page, errors } = await open(browser, id, '&view=month&date=2026-10-15');
+  await openCard(page, page.locator('.nc-bar', { hasText: 'Quarterly planning' }).first());
+  const title = page.getByTestId('card-title'), type = page.getByTestId('card-type');
+  await expect(title).toHaveValue(fx.title);
+  const t = await title.boundingBox(), b = await type.boundingBox();
+  expect(t.height, 'more than one line').toBeGreaterThan(60);
+  expect(t.x + t.width <= b.x, 'the title stays left of the type button').toBe(true);
+  expect(b.y - t.y, 'the type button at the top').toBeLessThan(12);
+  expect(await title.evaluate((ta) => ta.scrollHeight <= ta.clientHeight + 1), 'the whole title shows').toBe(true);
+  await title.click();
+  await page.keyboard.press('ControlOrMeta+End');
+  await page.keyboard.insertText(' (moved\nto Friday)');
+  await expect(title).toHaveValue(`${fx.title} (moved to Friday)`);
+  await page.keyboard.press('Enter');
+  await soon(async () => (await stored(id))[0].title).toBe(`${fx.title} (moved to Friday)`);
+  expect(errors).toEqual([]);
+  await ctx.close();
+});
+
+// The card: 560px on a desktop (the details box about 60 characters a line, four lines before it grows), 680px once
+// the details pass five lines, always 12px inside the window, on 1280x800 and on 1024x600.
+for (const [w, h] of [[1280, 800], [1024, 600]]) {
+  test(`card width and placement at ${w}x${h}: 560px, 680px for long details, 12px inside the window`, async ({ browser }) => {
+    const fxs = require('../../test/fixtures/long-descriptions.json').events;
+    const id = await seed(fxs.map((e) => timed(e.id, e.title, `${e.when[0]}:00-07:00`, `${e.when[1]}:00-07:00`, { description: e.description, type: e.type || 1 })));
+    const { ctx, page, errors } = await open(browser, id, '&view=month&date=2026-10-15');
+    await page.setViewportSize({ width: w, height: h });
+    for (const [title, width] of [['Dentist', 560], ['Saturday tournament', 680], ['Meeting minutes', 680]]) {
+      await openCard(page, page.locator('.nc-bar', { hasText: title }).first(), true);
+      await page.waitForTimeout(300);
+      const r = await card(page).boundingBox();
+      expect(Math.round(r.width), title).toBe(width);
+      expect(r.x, `${title}: left edge`).toBeGreaterThanOrEqual(12 - 0.5);
+      expect(r.y, `${title}: top edge`).toBeGreaterThanOrEqual(12 - 0.5);
+      expect(r.x + r.width, `${title}: right edge`).toBeLessThanOrEqual(w - 12 + 0.5);
+      expect(r.y + r.height, `${title}: bottom edge`).toBeLessThanOrEqual(h - 12 + 0.5);
+      await expect(page.getByTestId('card-done')).toBeInViewport();
+      if (width === 560) expect((await page.getByTestId('card-details').boundingBox()).height, 'four lines before it grows').toBeGreaterThanOrEqual(100);
+      await page.keyboard.press('Escape');
+      await expect(card(page)).toHaveCount(0);
+    }
+    expect(errors).toEqual([]);
+    await ctx.close();
+  });
+}
