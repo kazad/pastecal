@@ -82,9 +82,17 @@ const sf = {
     return page.locator(`.e-work-cells[data-date="${ms}"]`).first();
   },
   async quickCreate(page, ymd, title) {
+    if (isPhone(page)) {
+      // Phones get no quick box: the first tap marks the day "+ New event", the second opens the editor.
+      await this.openNewEditor(page, ymd);
+      await this.setTitle(page, title);
+      await this.setAllDay(page, true);
+      await this.save(page);
+      return;
+    }
     const c = await this.cellByDate(page, ymd);
     const b = await c.boundingBox();
-    if (isPhone(page)) await page.touchscreen.tap(b.x + b.width / 2, b.y + b.height - 8); else await page.mouse.click(b.x + b.width / 2, b.y + b.height - 8);
+    await page.mouse.click(b.x + b.width / 2, b.y + b.height - 8);
     const subj = page.locator('.e-quick-popup-wrapper input.e-subject, .e-quick-popup-wrapper input[name="Subject"]').locator('visible=true').first();
     await expect(subj).toBeVisible();
     await subj.pressSequentially(title, { delay: 20 });
@@ -116,11 +124,9 @@ const sf = {
     await tap(page, page.locator('button.e-delete').locator('visible=true').first());
     if (scope === 'this') await tap(page, page.locator('.e-quick-dialog-occurrence-event').locator('visible=true').first());
     else if (scope === 'all') await tap(page, page.locator('.e-quick-dialog-series-event').locator('visible=true').first());
-    else {
-      const ok = page.locator('.e-quick-dialog-delete').locator('visible=true');
-      await ok.first().waitFor({ timeout: 2500 }).catch(() => {});
-      if (await ok.count()) await tap(page, ok.first());
-    }
+    // No "Are you sure?" any more: app.js popupOpen presses Syncfusion's DeleteAlert for the person
+    // (the Undo toast covers it), so the confirm only flashes. Wait for it to be gone.
+    await expect(page.locator('.e-quick-dialog.e-popup-open')).toHaveCount(0, { timeout: 4000 });
   },
   async setTitle(page, text) {
     const i = sf.dialog(page).locator('input[name="Subject"]');
@@ -158,6 +164,9 @@ const sf = {
   },
 };
 
+// A phone month cell is small: tap its empty lower edge, not a fixed spot an event bar may cover.
+const natTapEmpty = async (c) => { const b = await c.boundingBox(); await c.tap({ position: { x: b.width / 2, y: b.height - 4 } }); };
+
 const nat = {
   name: 'native',
   path: (id) => `/beta/${id}`,
@@ -179,14 +188,14 @@ const nat = {
   async cellByDate(page, ymd) { const ms = await localMidnight(page, ymd); return page.locator(`.nc-cell[data-day="${ms}"]`); },
   async quickCreate(page, ymd, title) {
     const c = await this.cellByDate(page, ymd);
-    if (isPhone(page)) await c.tap({ position: { x: 20, y: 40 } }); else await c.click({ position: { x: 40, y: 60 } });
+    if (isPhone(page)) await natTapEmpty(c); else await c.click({ position: { x: 40, y: 60 } });
     await expect(page.locator('[data-testid="quick-create"]')).toBeVisible();
     await page.locator('[data-testid="quick-create-title"]').pressSequentially(title, { delay: 20 });
     await tap(page, page.locator('[data-testid="quick-create-save"]'));
   },
   async openNewEditor(page, ymd) {
     const c = await this.cellByDate(page, ymd);
-    if (isPhone(page)) { await c.tap({ position: { x: 20, y: 40 } }); await tap(page, page.locator('[data-testid="quick-create-more"]')); }
+    if (isPhone(page)) { await natTapEmpty(c); await tap(page, page.locator('[data-testid="quick-create-more"]')); }
     else await c.dblclick({ position: { x: 40, y: 60 } });
     await expect(page.locator('[data-testid="event-editor"]')).toBeVisible();
   },
