@@ -5,6 +5,15 @@ The plan is in [native-switch.md](native-switch.md). Measured Oct 25 2026 on bra
 (pro + `native-audit`), against a local wrangler dev. Native means `/beta/<id>`, which opens in the v2 look
 (`public/nativecal/index.html:101`; `?ux=1` gives v1).
 
+**Update, milestone 2 (branch `native-editing`):** the main app's edit link now edits on the native calendar
+(`/<id>?cal=native`, docs/native-inventory.md "Milestone 2"), through classic's own write path. The data-parity
+spec opens it by default (`NATIVE_URL=beta` for /beta): all 17 journeys pass there. Gap status in the main app:
+D1 fixed (saves go through `noteStart` / `changesFrom`; /beta still has it, still `test.fail` with
+`NATIVE_URL=beta`); D2 fixed in NativeCalendar itself, so /beta draws skipped all-day dates right too; gap 3
+(drag one occurrence), 4 (long-press on phones) and 5 (drag to create, now also a run of days in month view) are
+done on the main app's edit link and covered by `cloudflare/test/native-editing.spec.js`. /beta is unchanged
+(its own shell does not turn on `appEdits`).
+
 ## The numbers
 
 | Suite | Before | After the test fixes |

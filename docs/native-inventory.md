@@ -111,7 +111,7 @@ events in, `{ event, start, end, allDay, title, type }` out), never Syncfusion's
 | `render()` | the events or the color filter changed |
 | `refreshLayout()` | side panel docked, homepage aside |
 | `setReadOnly(on)`, `closePopups()` | lock state |
-| `openEditor(event)` | search result's Edit (native: milestone 2) |
+| `openEditor(event)` | search result's Edit |
 
 ## Milestone 1: view links on the native calendar
 
@@ -145,4 +145,30 @@ About 1 MB less, two thirds of the page. The rest of the native page is fonts, V
   view is replaced when the calendar loads); native opens the view the link names. Day/Week/Month/Year/Agenda
   links open the same view and dates in both (tested).
 - No `location` field exists in the event model, so neither popup shows one.
-- The native editor, drag-to-create, Undo and Recent changes are milestone 2 (edit links); `openEditor` is a no-op.
+- The native editor, drag-to-create, Undo and Recent changes are milestone 2 (edit links), below.
+
+## Milestone 2: edit links on the native calendar
+
+The same flag, extended to edit links (`/<id>`): `?cal=native`, else `localStorage pc_cal`. The server's
+`pc-cal` meta stays view-links-only, the homepage stays classic, and classic is the default everywhere
+(index.html `window.pcNativeEdit`). An edit link in native mode also loads `EventEditor.js` and
+`QuickCreatePopover.js`; a view link does not.
+
+**One write path.** Classic's actionBegin now hands its args to `commitScheduleAction(args, context)`; the native
+calendar builds the same args (app.js `nativeAction`): records from `ScheduleAdapter.toView` (an edited
+occurrence beside its series), `noteStart` when the editor opens or a drag starts, then `toCommand` with
+`Add`, `Save`, `Delete`, `EditOccurrence` (a temporary id + `RecurrenceID`, `occurrenceStart` = the occurrence's
+original start), `DeleteOccurrence`, `EditSeries` (with classic's "match the series again?" question, Yes / No,
+whenever the series has skipped or edited dates) or `DeleteSeries`. So stamps, all-day dates, the merge (D1),
+undo, the Undo toast, Recent changes and analytics (`event_added` add_via grid, `editor_abandoned`,
+`feature_used` event_type) are classic's. Nothing on the native path writes the event list itself.
+
+| Classic (Syncfusion) | Native |
+|---|---|
+| quick popup + "New event" draft on `.e-selected-cell` (`showDraftBlock`) | `QuickCreatePopover` + NativeCalendar `draft` prop: a real block on the grid, labelled as you type |
+| editor (`ej.splitbuttons` type picker, recurrence editor) | `EventEditor` `app-look`: title, color by name, start/end, all day, repeat (daily, weekly days, monthly by day or Nth weekday, yearly by month, until / count), description |
+| drag / resize (desktop only) | drag, resize from either edge, Esc cancels; drag to create a duration (week) or a run of days (month, all-day row); long-press on touch |
+| dragging an occurrence: moves only it, no question | asks "This event / All events"; this event = classic's stored shape; all events moves the series and its repeat days (`CalendarView.edits.shiftRule`) |
+| delete: Syncfusion's confirm pressed unseen, then the Undo toast | no confirm, the Undo toast |
+| `openEditor` | `nativeEditEvent` (a search result's Edit opens the series) |
+| locked: `readonly`, double-click toast | `read-only` prop, no affordances, the same toast |
