@@ -11,11 +11,12 @@
  *      both changes survive (the merge measured from where each editor started, ScheduleAdapter.noteStart)
  *   d. drag an event in native: classic shows the new time; stored start/end are ISO, duration kept
  *
- * The renderer is a parameter: RENDERERS.native.open(page, id, query) opens a calendar in it. Today
- * "native" is /beta/<id> (its own copy of the save path); NATIVE_URL=main points it at the main app
- * (/<id>?cal=native) once that integration lands. A journey that fails today is a finding: it is
- * marked test.fail() with a comment naming the gap (docs/native-gaps.md), so the suite stays green
- * and the gap stays recorded. When the gap is fixed the test "unexpectedly passes" -- remove the mark.
+ * The renderer is a parameter: RENDERERS.native.open(page, id, query) opens a calendar in it. "native" is the
+ * main app's edit link with ?cal=native (/<id>, milestone 2), which saves through classic's own write path;
+ * NATIVE_URL=main says so explicitly, and NATIVE_URL=beta points it at /beta/<id> instead (the old fork, with
+ * its own copy of the save path). A journey that fails is a finding: it is marked test.fail() with a comment
+ * naming the gap (docs/native-gaps.md), so the suite stays green and the gap stays recorded. When the gap is
+ * fixed the test "unexpectedly passes" -- remove the mark.
  *
  * LOCAL ONLY (a wrangler dev with its own data folder):
  *   cd cloudflare && node node_modules/.bin/wrangler dev --port 8882 --persist-to $(mktemp -d) \
@@ -28,6 +29,9 @@ const { test, expect } = require('@playwright/test');
 const { sf, nat, localHM, localYMD } = require('../../test/native-audit/harness');
 
 const BASE = process.env.BASE_URL || 'http://localhost:8787';
+// Which native: the main app (default) or the /beta fork (NATIVE_URL=beta).
+const BETA = process.env.NATIVE_URL === 'beta';
+if (process.env.NATIVE_URL && !['main', 'beta'].includes(process.env.NATIVE_URL)) throw new Error('NATIVE_URL is main or beta: ' + process.env.NATIVE_URL);
 if (!/^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(BASE)) throw new Error('native-data-parity only runs against a local server: ' + BASE);
 const SECRET = process.env.IMPORT_SECRET || 'dev-secret';
 const ALLOW = new Set(['localhost', '127.0.0.1', 'fonts.googleapis.com', 'fonts.gstatic.com', 'www.gstatic.com', 'unpkg.com', 'cdn.jsdelivr.net']);
@@ -84,7 +88,7 @@ const RENDERERS = {
   native: {
     name: 'native', ui: nat,
     async open(page, id, query = '') {
-      const main = process.env.NATIVE_URL === 'main';
+      const main = !BETA;
       await page.goto(main ? `/${id}${withBackend(query)}&cal=native` : `/beta/${id}${withBackend(query)}`);
       await page.waitForFunction(() => { const p = document.querySelector('#app')?._vnode?.component?.proxy; return p && p.isLoading === false; }, null, { timeout: 20_000 });
       await expect(page.locator('.nc')).toBeVisible({ timeout: 15_000 });
@@ -334,15 +338,12 @@ for (const r of [classic, native]) {
 // local midnight (UTC+9) for the dates, the skipped date's stamp at Tokyo midnight (Event.allDayStampFromLocal).
 const tokyoWeekly = () => [{ ...timed('tw-1', 'Tokyo weekly', '2026-10-05T15:00:00Z', '2026-10-06T15:00:00Z'), isAllDay: true,
   recurrencerule: 'FREQ=WEEKLY;BYDAY=TU;INTERVAL=1;COUNT=4', recurrenceException: '20261012T150000Z' }];   // Tue Oct 6, (13), 20, 27
-// FINDING D2 (docs/native-gaps.md): native draws a skipped date of an all-day repeating event again
-// when the viewer's zone differs from the zone it was skipped in (LA and London see Oct 13; Tokyo sees
-// the Oct 20 an LA classic user skipped). It compares the stored stamps raw (NativeCalendar.js
-// expandEvents, the `excluded` set) and app.js displayEvents maps the rule but not
-// recurrenceException; classic maps them (ScheduleAdapter.toView -> Event.allDayExceptionsToLocal).
-// What native WRITES is right, so the write checks are ordinary tests; only native's drawing is test.fail.
+// Finding D2 (docs/native-gaps.md), fixed: native drew a skipped date of an all-day repeating event again when
+// the viewer's zone differed from the zone it was skipped in, because it compared the stored stamps raw.
+// NativeCalendar now reads each stamp as the date it names (allDayStampKey), as classic does
+// (ScheduleAdapter.toView -> Event.allDayExceptionsToLocal), in the main app and in /beta.
 for (const r of [classic, native]) {
   test(`b3. ${r.name}: an all-day weekly series from Tokyo with a skipped date skips it in every zone`, async ({ browser }) => {
-    test.fail(r === native, 'D2: native shows skipped all-day occurrences again in other time zones');
     const id = `dp-b3-show-${r.name}`;
     await reset(id, tokyoWeekly());
     for (const z of ZONES) {
@@ -356,7 +357,6 @@ for (const r of [classic, native]) {
 for (const deleter of [classic, native]) {
   const reader = other(deleter);
   test(`b3. ${deleter.name} in Los Angeles skips another date of the Tokyo series: stamps stored as classic writes them; ${reader.name} in Tokyo agrees`, async ({ browser }) => {
-    test.fail(reader === native, 'D2: native in Tokyo draws the date skipped from Los Angeles');
     const id = `dp-b3-${deleter.name}`;
     await reset(id, tokyoWeekly());
     const la = await openBrowser(browser, 'America/Los_Angeles');
@@ -382,11 +382,12 @@ for (const deleter of [classic, native]) {
 // =====================================================================================================
 for (const [titler, timer] of [[classic, native], [native, classic]]) {
   test(`c. ${titler.name} renames while ${timer.name} moves the time, both editors open at once: both changes survive`, async ({ browser }) => {
-    // FINDING D1 (docs/native-gaps.md): native's editor Save writes its whole form over the row
+    // FINDING D1 (docs/native-gaps.md), /beta only: its editor Save writes its whole form over the row
     // ({ ...events[i], ...data } in public/nativecal/app.js handleSaveEvent), not the fields the user
     // changed since the editor opened -- so a title changed elsewhere while the editor was open is
-    // silently put back. Classic keeps both (ScheduleAdapter.noteStart / changesFrom).
-    test.fail(timer === native, 'D1: native editor save overwrites fields changed elsewhere while it was open');
+    // silently put back. Classic keeps both (ScheduleAdapter.noteStart / changesFrom), and so does the main
+    // app's native calendar, which saves through classic's path.
+    test.fail(BETA && timer === native, 'D1: /beta editor save overwrites fields changed elsewhere while it was open');
     const id = `dp-c-${titler.name}-${timer.name}`;
     await reset(id, [timed('shared-1', 'Planning', '2026-10-22T09:00:00-07:00', '2026-10-22T10:00:00-07:00', { description: 'Room 4' })]);
     const A = await openBrowser(browser), B = await openBrowser(browser);

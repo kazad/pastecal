@@ -199,22 +199,10 @@ function nativeLinkView() {
 // into a new row (ScheduleAdapter.toCommand adds it only when no row has this Id).
 const NATIVE_OCCURRENCE_ID = '__native_occurrence__';
 const isBlankId = (v) => v === undefined || v === null || v === '';
-// An end as classic's grid records carry it: an all-day end is the next local midnight (exclusive). The native grid
-// and editor send the last day's 23:59:59.999 (their display shape); that end stored as is would lose the last day.
-function nativeEnd(end, allDay) {
-    const d = new Date(end);
-    if (!allDay || isNaN(d.getTime())) return d;
-    if (d.getHours() || d.getMinutes() || d.getSeconds() || d.getMilliseconds()) return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
-    return d;
-}
-// Moving `from` to `to` as wall-clock days and minutes, applied to another time (a series moved with one occurrence):
-// across a DST change the clock time stays the same.
-function nativeShift(from, to) {
-    const a = new Date(from), b = new Date(to);
-    const days = Math.round((new Date(b.getFullYear(), b.getMonth(), b.getDate()) - new Date(a.getFullYear(), a.getMonth(), a.getDate())) / 864e5);
-    const minutes = (b.getHours() * 60 + b.getMinutes()) - (a.getHours() * 60 + a.getMinutes());
-    return (t) => { const x = new Date(t); x.setDate(x.getDate() + days); x.setMinutes(x.getMinutes() + minutes); return x; };
-}
+// Classic's question (Syncfusion's seriesChangeAlert) before a change to a whole series with skipped or edited dates.
+const NATIVE_SERIES_CHANGE = 'Do you want to cancel the changes made to specific instances of this series and match it to the whole series again?';
+// Dates of an edit on the native calendar, in the shapes classic's records carry (services/CalendarView.js).
+const { endOf: nativeEnd, shiftBy: nativeShift, shiftRule: nativeShiftRule } = CalendarView.edits;
 
 const CAL_BASE = (typeof window !== 'undefined' && window.CAL_BASE) ? window.CAL_BASE : '/';
 const stripBase = (path) => {
@@ -1723,11 +1711,9 @@ const CalendarVueApp = {
             // The whole series. Classic asks first whenever the series has skipped dates or separately edited
             // occurrences, and the answer decides whether they survive (ScheduleAdapter.toCommand, keepOccurrences).
             const series = this.nativeSeriesOf(this.nativeStored({ id: ed.record.Id }));
-            const own = series && (!isBlankId(series.recurrenceException)
-                || (this.calendar.events || []).some((e) => e && !isBlankId(e.recurrenceID) && String(e.recurrenceID) === String(series.id)));
             const save = (keepOccurrences) => finish(this.nativeAction('eventChange', { changedRecords: [record] }, { action: 'EditSeries', keepOccurrences }));
-            if (!own) return save(false);
-            this.nativeAsk = { title: 'Edit event', message: 'Do you want to cancel the changes made to specific instances of this series and match it to the whole series again?',
+            if (!this.nativeHasOwn(series)) return save(false);
+            this.nativeAsk = { title: 'Edit event', message: NATIVE_SERIES_CHANGE,
                 buttons: [
                     { label: 'No', testid: 'confirm-no', action: () => save(true) },
                     { label: 'Yes', testid: 'confirm-yes', primary: true, action: () => save(false) },
@@ -1819,19 +1805,31 @@ const CalendarVueApp = {
                 Object.assign(rec, { Id: NATIVE_OCCURRENCE_ID, RecurrenceID: rec.Id, StartTime: start, EndTime: end });
                 this.nativeAction('eventChange', { changedRecords: [rec] }, { action: 'EditOccurrence', occurrenceStart: occurrence.start });
             };
-            // All events: the series moves by as much as this occurrence did (wall-clock days and minutes, so a
-            // DST change in between keeps the clock time), as classic's "Entire series" does.
+            // All events (classic's drag moves only the one occurrence and never asks; Google asks): the series moves
+            // by as much as this occurrence did, in wall-clock days and minutes (a DST change in between keeps the
+            // clock time), and its repeat days move with it (weekly on Tuesdays dragged to a Wednesday repeats on
+            // Wednesdays). A series with skipped dates or edited occurrences asks classic's own question first, as
+            // its editor does for any series change: they match the series again, or they are kept.
             const moveAll = () => {
                 const rec = this.nativeRecord(series);
                 rec.RecurrenceID = rec.Id;
                 ScheduleAdapter.noteStart(rec);
                 const shift = nativeShift(occurrence.start, start), stretch = nativeShift(occurrence.end, end);
-                const keep = !isBlankId(series.recurrenceException)
-                    || (this.calendar.events || []).some((e) => e && !isBlankId(e.recurrenceID) && String(e.recurrenceID) === String(series.id));
-                this.nativeAction('eventChange', { changedRecords: [{ ...rec, StartTime: shift(rec.StartTime), EndTime: stretch(rec.EndTime) }] },
-                    { action: 'EditSeries', keepOccurrences: keep });
+                const moved = { ...rec, StartTime: shift(rec.StartTime), EndTime: stretch(rec.EndTime),
+                    RecurrenceRule: nativeShiftRule(rec.RecurrenceRule, occurrence.start, start) };
+                const save = (keepOccurrences) => this.nativeAction('eventChange', { changedRecords: [moved] }, { action: 'EditSeries', keepOccurrences });
+                if (!this.nativeHasOwn(series)) return save(false);
+                this.nativeAsk = { title: 'Edit event', message: NATIVE_SERIES_CHANGE, buttons: [
+                    { label: 'No', testid: 'confirm-no', action: () => save(true) },
+                    { label: 'Yes', testid: 'confirm-yes', primary: true, action: () => save(false) },
+                ] };
             };
             this.nativeAskScope('Edit recurring event', kind === 'edited' ? moveRow : moveOne, moveAll);
+        },
+        /** Skipped dates or separately edited occurrences: what an "all events" change can reset. */
+        nativeHasOwn(series) {
+            return !!series && (!isBlankId(series.recurrenceException)
+                || (this.calendar.events || []).some((e) => e && !isBlankId(e.recurrenceID) && String(e.recurrenceID) === String(series.id)));
         },
 
         // Syncfusion's Schedule, built and wired as it always was: the classic calendar. Returns its

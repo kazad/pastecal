@@ -583,6 +583,10 @@ const NativeCalendar = (() => {
                 const sel = e.currentTarget.classList.contains('nc-allday-cell') ? '.nc-allday-cell' : '.nc-cell';
                 this.drag = { mode: 'days', day0: day, day1: day, sel, x0: e.clientX, y0: e.clientY, moved: false };
             },
+            // A long press on an event lifts it (appEdits): no context menu over it.
+            onContextMenu(e) {
+                if (this.appEdits && !this.readOnly && (this.drag || this._press || (e.target.closest && e.target.closest('.nc-timed, .nc-bar')))) e.preventDefault();
+            },
             cancelDrag() {
                 this.drag = null;
                 clearTimeout(this._press); this._press = null;
@@ -706,7 +710,7 @@ const NativeCalendar = (() => {
             },
         },
         template: /* html */ `
-<div class="nc" :class="{ 'nc-phone': isPhone, 'nc-v2': v2, 'nc-readonly': readOnly, 'nc-editable': appEdits && !readOnly, 'nc-dragging': !!(drag && drag.moved) }">
+<div class="nc" :class="{ 'nc-phone': isPhone, 'nc-v2': v2, 'nc-readonly': readOnly, 'nc-editable': appEdits && !readOnly, 'nc-dragging': !!(drag && drag.moved) }" @contextmenu="onContextMenu">
   <!-- Toolbar: prev / next, title with chevron | DAY WEEK MONTH 3 MONTHS YEAR AGENDA -->
   <div class="nc-toolbar">
     <div class="nc-toolbar-left">
@@ -861,6 +865,7 @@ const NativeCalendar = (() => {
     // The same expansion the grid draws, for the app's other readers of "what is on these days" (print, the
     // hidden-events count): occurrencesBetween(events, rangeStart, rangeEnd) -> [{ event, start, end, allDay, ... }].
     component.occurrencesBetween = occurrencesBetween;
+    component.allDayStampKey = allDayStampKey;   // (unit tests: test/unit/native-editing.test.js)
     return component;
 })();
 

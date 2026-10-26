@@ -158,7 +158,50 @@
         };
     }
 
-    const CalendarView = { native, syncfusion, displayEvents };
+    // ---- Editing on the native calendar: its dates in the shapes classic's grid records carry (app.js nativeAction).
+    // A repeat rule for a series moved from `from` to `to` (dragging "all events" to another day): the weekdays,
+    // day of the month and month it names move with it. Anything else, and a move within the same day, keeps it.
+    function shiftRule(rule, from, to) {
+        const a = new Date(from), b = new Date(to);
+        const days = Math.round((new Date(b.getFullYear(), b.getMonth(), b.getDate()) - new Date(a.getFullYear(), a.getMonth(), a.getDate())) / 864e5);
+        if (!rule || !days) return rule;
+        const DAYS = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+        const parts = String(rule).split(';');
+        const get = (k) => { const p = parts.find((x) => x.toUpperCase().startsWith(k + '=')); return p ? p.slice(k.length + 1) : null; };
+        const set = (k, v) => { const i = parts.findIndex((x) => x.toUpperCase().startsWith(k + '=')); if (i >= 0) parts[i] = `${k}=${v}`; };
+        const freq = (get('FREQ') || '').toUpperCase();
+        const byDay = get('BYDAY');
+        if (byDay) {
+            const shifted = byDay.split(',').map((d) => {
+                const m = /^([+-]?\d*)(SU|MO|TU|WE|TH|FR|SA)$/i.exec(d.trim());
+                return m ? m[1] + DAYS[(DAYS.indexOf(m[2].toUpperCase()) + days % 7 + 7) % 7] : d;
+            });
+            set('BYDAY', shifted.join(','));
+            // "The 2nd Tuesday" dragged to another week: the position of the new date in its month.
+            if (get('BYSETPOS') && (freq === 'MONTHLY' || freq === 'YEARLY')) set('BYSETPOS', Math.ceil(b.getDate() / 7) > 4 ? -1 : Math.ceil(b.getDate() / 7));
+        }
+        if (get('BYMONTHDAY') && (freq === 'MONTHLY' || freq === 'YEARLY')) set('BYMONTHDAY', b.getDate());
+        if (get('BYMONTH') && freq === 'YEARLY') set('BYMONTH', b.getMonth() + 1);
+        return parts.join(';');
+    }
+    // An end as classic's grid records carry it: an all-day end is the next local midnight (exclusive). The native grid
+    // and editor send the last day's 23:59:59.999 (their display shape); that end stored as is would lose the last day.
+    function endOf(end, allDay) {
+        const d = new Date(end);
+        if (!allDay || isNaN(d.getTime())) return d;
+        if (d.getHours() || d.getMinutes() || d.getSeconds() || d.getMilliseconds()) return new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1);
+        return d;
+    }
+    // Moving `from` to `to` as wall-clock days and minutes, applied to another time (a series moved with one occurrence):
+    // across a DST change the clock time stays the same.
+    function shiftBy(from, to) {
+        const a = new Date(from), b = new Date(to);
+        const days = Math.round((new Date(b.getFullYear(), b.getMonth(), b.getDate()) - new Date(a.getFullYear(), a.getMonth(), a.getDate())) / 864e5);
+        const minutes = (b.getHours() * 60 + b.getMinutes()) - (a.getHours() * 60 + a.getMinutes());
+        return (t) => { const x = new Date(t); x.setDate(x.getDate() + days); x.setMinutes(x.getMinutes() + minutes); return x; };
+    }
+
+    const CalendarView = { native, syncfusion, displayEvents, edits: { endOf, shiftBy, shiftRule } };
     if (typeof module !== 'undefined' && module.exports) module.exports = CalendarView;
     else root.CalendarView = CalendarView;
 })(typeof window !== 'undefined' ? window : globalThis);
