@@ -194,3 +194,28 @@ test('two browsers saving "This event" on the same occurrence keep one row for t
   await A.ctx.close(); await B.ctx.close();
 });
 
+// =====================================================================================================
+test('Undo of an occurrence delete takes back only its own skipped date, not one another person added since', async ({ browser }) => {
+  const id = await seed([timed('s1', 'Standup', '2026-10-19T09:00:00-07:00', '2026-10-19T09:30:00-07:00', { recurrencerule: 'FREQ=DAILY;INTERVAL=1;' })]);
+  const A = await open(browser, id, '&view=week&date=2026-10-21');
+  const B = await open(browser, id, '&view=week&date=2026-10-21');
+  const del = (P, day) => vm(P.page, (v, d) => {
+    const s = new Date(`2026-10-${d}T09:00:00-07:00`);
+    v.nativeDeleteEvent(v.calendar.events[0], { start: s, end: new Date(s.getTime() + 1800000), recurring: true });
+  }, day);
+  await del(A, 20);
+  await A.page.getByTestId('confirm-dialog').getByTestId('confirm-ok').click();   // "This event" is preselected
+  await soon(async () => (await stored(id))[0].recurrenceException).toBe('20261020T160000Z');
+  await soon(() => vm(B.page, (v) => v.calendar.events[0].recurrenceException)).toBe('20261020T160000Z');
+  await del(B, 22);
+  await B.page.getByTestId('confirm-dialog').getByTestId('confirm-ok').click();
+  await soon(async () => (await stored(id))[0].recurrenceException).toBe('20261020T160000Z,20261022T160000Z');
+  await soon(() => vm(A.page, (v) => v.calendar.events[0].recurrenceException)).toBe('20261020T160000Z,20261022T160000Z');
+  await A.page.getByRole('button', { name: 'Undo' }).click();
+  await soon(async () => (await stored(id))[0].recurrenceException).toBe('20261022T160000Z');
+  await A.page.waitForTimeout(800);
+  expect((await stored(id))[0].recurrenceException).toBe('20261022T160000Z');
+  expect([...A.errors, ...B.errors]).toEqual([]);
+  await A.ctx.close(); await B.ctx.close();
+});
+

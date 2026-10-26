@@ -100,6 +100,32 @@
         return out;
     }
 
+    const stampsOf = (v) => String(v || '').split(',').map((x) => x.trim()).filter(Boolean);
+
+    /**
+     * An undo (an update carrying `wrote`, what the undone change wrote) takes back only this tab's own change,
+     * measured against the row as it is NOW, so it never reverts what someone else changed since:
+     *   - recurrenceException: remove exactly the stamps the change added and put back the ones it removed; a
+     *     date someone else skipped meanwhile stays skipped.
+     *   - any other field: undone only while it still holds what this change wrote.
+     * Edits `changes` in place.
+     */
+    function undoOnly(current, changes, wrote) {
+        for (const f of Object.keys(changes)) {
+            if (!(f in wrote)) continue;
+            if (f === 'recurrenceException') {
+                const was = stampsOf(changes[f]), put = stampsOf(wrote[f]);
+                const added = new Set(put.filter((s) => !was.includes(s)));
+                const removed = was.filter((s) => !put.includes(s));
+                const now = stampsOf(current[f]).filter((s) => !added.has(s));
+                for (const s of removed) if (!now.includes(s)) now.push(s);
+                changes[f] = now.length ? now.join(',') : null;
+            } else if (!sameField(f, current[f], wrote[f])) {
+                delete changes[f];
+            }
+        }
+    }
+
     class CommandError extends Error {
         constructor(message, command) { super(message); this.name = 'CommandError'; this.command = command; }
     }
@@ -141,6 +167,7 @@
                 // occurrences arrived with the occurrence's RecurrenceID, turned the series
                 // into an orphan "edited occurrence" of itself, and it vanished.)
                 const { id: _id, recurrenceID: _rid, ...fieldChanges } = c.changes || {};
+                if (c.wrote) undoOnly(prev, fieldChanges, c.wrote);
                 const changes = diff(prev, normalize({ ...prev, ...fieldChanges }));
                 if (!Object.keys(changes).length) return { events: list, inverse: null, added: [], changed: [], removed: [] };
                 const next = { ...prev, ...changes };
@@ -148,7 +175,8 @@
                 if (why) throw new CommandError(`update: ${why}`, c);
                 const before = {}; for (const f of Object.keys(changes)) before[f] = prev[f];
                 list[i] = next;
-                return { events: list, inverse: { type: 'update', key: keyOf(next), changes: before }, added: [], changed: [next], removed: [] };
+                // The inverse remembers what this change wrote, so an undo can take back only that (undoOnly).
+                return { events: list, inverse: { type: 'update', key: keyOf(next), changes: before, wrote: changes }, added: [], changed: [next], removed: [] };
             }
             case 'remove': {
                 const k = findKey(c.key);

@@ -197,6 +197,33 @@ test('delete one occurrence: only the series stamp changes; nothing is removed',
     assert.equal(s.events[0].recurrenceException, '20261012T210000Z', 'undo takes the stamp back off');
 });
 
+test('undo of an occurrence delete takes back only its own stamp: a date someone else skipped since stays skipped', () => {
+    const s = storeOf([ev(9, 'Weekly', 5, { recurrencerule: 'FREQ=DAILY;' })]);
+    const del = (iso) => ScheduleAdapter.toCommand({ requestType: 'eventRemove', changedRecords: [{ Id: '9', Subject: 'Weekly', RecurrenceID: '9',
+        StartTime: new Date(iso), RecurrenceRule: 'FREQ=DAILY;' }] }, s.store, { action: 'DeleteOccurrence', occurrenceStart: new Date(iso) });
+    s.store.dispatch(del('2026-10-20T16:00:00Z'));
+    // Another browser skips Oct 22; this tab receives it.
+    s.events = s.events.map((e) => ({ ...e, recurrenceException: e.recurrenceException + ',20261022T160000Z' }));
+    s.store.undo();
+    assert.equal(s.events[0].recurrenceException, '20261022T160000Z');
+});
+
+test('undo of "match the series again" puts back the cleared stamps beside any added since', () => {
+    const s = storeOf([ev(9, 'Weekly', 5, { recurrencerule: 'FREQ=DAILY;', recurrenceException: '20261012T210000Z' })]);
+    s.store.dispatch({ type: 'update', key: { id: 9 }, changes: { recurrenceException: null } });
+    s.events = s.events.map((e) => ({ ...e, recurrenceException: '20261030T210000Z' }));
+    s.store.undo();
+    assert.equal(s.events[0].recurrenceException, '20261030T210000Z,20261012T210000Z');
+});
+
+test('undo leaves a field alone once someone else has changed it; undoes the fields still as this tab wrote them', () => {
+    const s = storeOf([ev('a', 'Lunch', 5, { description: 'Room 1' })]);
+    s.store.dispatch({ type: 'update', key: { id: 'a' }, changes: { title: 'Team lunch', description: 'Room 2' } });
+    s.events = s.events.map((e) => ({ ...e, description: 'Room 3 (from B)' }));
+    s.store.undo();
+    assert.deepEqual([s.events[0].title, s.events[0].description], ['Lunch', 'Room 3 (from B)']);
+});
+
 // Sep 26, live: editing a WHOLE series from one of its occurrences. Syncfusion's record at
 // actionBegin (EditSeries) carries the occurrence's RecurrenceID = the series' own id.
 test('edit a whole series from an occurrence: the series stays a series (#series-vanished)', () => {
