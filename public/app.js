@@ -3581,6 +3581,8 @@ const CalendarVueApp = {
             if (isNaN(start)) return true;
             const end = ms(event.end);
             const duration = isNaN(end) ? 0 : Math.max(0, end - start);
+            // A rule too big to expand is shown once (ScheduleAdapter.toView): count it the same way.
+            if (typeof EventStore !== 'undefined' && EventStore.unsafeRecurrence?.(event.recurrencerule)) return this.spansRange(start, start + duration, range);
             const rule = String((allDay ? Event.allDayRuleToLocal(event.recurrencerule) : event.recurrencerule) || '');
             const exceptions = (allDay ? Event.allDayExceptionsToLocal(event.recurrenceException)
                 : event.recurrenceException) || null;

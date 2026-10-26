@@ -17,6 +17,7 @@
  * floor((ms + 13h + 1s) / 1 day).
  */
 import rrulePkg from '../vendor/rrule-2.8.1.esm.js';
+import EventStore from '../../../public/services/EventStore.js';
 const { RRule } = rrulePkg;
 
 export const DAY_MS = 86400000;
@@ -157,7 +158,8 @@ export function occurrences(events, fromMs, toMs, tz, { perSeries = 400 } = {}) 
         const rFrom = allDay ? dayOf(fromMs, tz) : fromMs;
         const rTo = allDay ? dayOf(toMs - 1, tz) + DAY_MS : toMs;
 
-        if (ev.recurrencerule && !ev.recurrenceID) {
+        // A rule too big to expand (FREQ=SECONDLY walks millions of steps from its start) shows once, as in the app.
+        if (ev.recurrencerule && !ev.recurrenceID && !EventStore.unsafeRecurrence(ev.recurrencerule)) {
             const occ = expand(ev, start, end, allDay, rFrom, rTo, tz, perSeries);
             if (occ) { for (const o of occ) out.push({ ...base, ...o }); continue; }
         }

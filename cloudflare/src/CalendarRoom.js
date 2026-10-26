@@ -769,10 +769,20 @@ export class CalendarRoom extends DurableObject {
     // `rows` are the events to check one by one: by default all of them, but a save checks only
     // the rows it adds or changes, so an old row that predates a rule never locks a calendar out.
     // The count and the total size always cover the whole calendar.
-    tooBig(events, { title = this.state.title, options = this.state.options, rows = events } = {}) {
+    // `rules`: also refuse a repeat rule that would freeze a browser expanding it (EventStore.unsafeRecurrence)
+    // and a title or description that is not text. Off only for /import, the secret-holding whole-calendar
+    // copy (and a restore from backup): refusing a whole calendar over one old row would stop it syncing, and the views cap such rows.
+    tooBig(events, { title = this.state.title, options = this.state.options, rows = events, rules = true } = {}) {
         if (events.length > LIMITS.maxEvents) return `more than ${LIMITS.maxEvents} events`;
         for (const e of rows) {
             if (!e || typeof e !== 'object') return 'an event is not an object';
+            if (rules) {
+                for (const f of ['title', 'description']) {
+                    if (e[f] !== undefined && e[f] !== null && typeof e[f] !== 'string') return `an event ${f} is not text`;
+                }
+                const bad = EventStore.unsafeRecurrence(e.recurrencerule);
+                if (bad) return `an event ${bad}`;
+            }
             if ((e.title || '').length > LIMITS.maxTitle) return 'an event title is too long';
             for (const f of ['description', 'recurrenceException', 'recurrencerule', 'repeat']) {
                 if ((e[f] || '').length > LIMITS.maxField) return `an event ${f} is too long`;
@@ -975,7 +985,7 @@ export class CalendarRoom extends DurableObject {
             cal.options = stored && !('tz' in cal.options) ? { ...cal.options, tz: stored } : withTz(cal.options, this.state.options);
         }
         const { events, renamed } = this.dedupe(cal);
-        const why = this.tooBig(events, { title: cal.title ?? '', options: cal.options || {} });
+        const why = this.tooBig(events, { title: cal.title ?? '', options: cal.options || {}, rules: source !== 'import' });
         if (why) return { ok: false, error: why };
         // Identical to what is stored: do nothing. This is what stops a two-way copy with
         // Firebase from bouncing one write back and forth forever (the Sep 26 shape).

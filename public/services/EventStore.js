@@ -77,6 +77,32 @@
         return out;
     }
 
+    /**
+     * Why a repeat rule is unsafe to expand, or null. A browser expands a rule into every
+     * occurrence it shows: FREQ=SECONDLY is 3.6 million in a month view (the native view froze
+     * then ran out of memory), COUNT=10000000 froze the classic view, INTERVAL=0 hung its
+     * Agenda. No real calendar repeats by the minute or second, more than 5000 times, or every
+     * 0 days. The server refuses these on save; the views show such a stored event once,
+     * unrepeated. DAILY to YEARLY with BYDAY/BYMONTHDAY/BYSETPOS/UNTIL/COUNT/INTERVAL, and
+     * HOURLY, stay allowed.
+     */
+    function unsafeRecurrence(rule) {
+        if (blank(rule)) return null;
+        if (typeof rule !== 'string') return 'repeat rule is not text';
+        const parts = {};
+        for (const p of rule.replace(/^\s*RRULE:/i, '').split(';')) {
+            const i = p.indexOf('=');
+            if (i > 0) parts[p.slice(0, i).trim().toUpperCase()] = p.slice(i + 1).trim();
+        }
+        const freq = String(parts.FREQ || '').toUpperCase();
+        if (freq === 'SECONDLY' || freq === 'MINUTELY') return `repeats every ${freq === 'SECONDLY' ? 'second' : 'minute'}`;
+        if ('BYSECOND' in parts) return 'repeats by the second';
+        if ('BYMINUTE' in parts && parts.BYMINUTE.split(',').length > 4) return 'repeats too often in an hour';
+        if ('COUNT' in parts && !(/^\d+$/.test(parts.COUNT) && +parts.COUNT >= 1 && +parts.COUNT <= 5000)) return 'repeats more than 5000 times';
+        if ('INTERVAL' in parts && !/^[1-9]\d*$/.test(parts.INTERVAL)) return 'repeat interval is not a positive number';
+        return null;
+    }
+
     /** Why this event cannot be stored, or null. */
     function invalid(e) {
         if (!e.start) return 'start is not a date';
@@ -279,6 +305,7 @@
     EventStore.diff = diff;
     EventStore.CommandError = CommandError;
     EventStore.FIELDS = FIELDS;
+    EventStore.unsafeRecurrence = unsafeRecurrence;
 
     if (typeof module !== 'undefined' && module.exports) module.exports = EventStore;
     else root.EventStore = EventStore;

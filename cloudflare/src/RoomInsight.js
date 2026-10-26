@@ -401,7 +401,7 @@ async function restoreNow(room, version, onRecord) {
     const cal = snap && snap.calendar;
     if (!cal || typeof cal !== 'object') return no(422, 'bad-snapshot');
     const { events } = room.dedupe(cal);
-    const why = room.tooBig(events);
+    const why = room.tooBig(events, { rules: false });   // a backup holds what was once stored: legacy rows restore as they were
     const title = typeof cal.title === 'string' ? cal.title : '';
     if (why || title.length > 2000) return no(422, why || 'title too long');
     const notes = cal.options && typeof cal.options === 'object' ? cal.options.notes : undefined;

@@ -943,7 +943,8 @@ const CalendarVueApp = {
             this.showPopover = true;
         },
 
-        _isSeries(event) { return !!(event && event.recurrencerule && !event.recurrenceID); },
+        // A rule too big to expand is drawn once (NativeCalendar), so it is edited and deleted as one event.
+        _isSeries(event) { return !!(event && event.recurrencerule && !event.recurrenceID && !EventStore.unsafeRecurrence(event.recurrencerule)); },
         _stamp(d) { return new Date(d).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, ''); },
 
         // Popup / editor -> Edit
