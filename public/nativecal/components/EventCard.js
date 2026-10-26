@@ -111,7 +111,7 @@ const EventCard = (() => {
                 const was = old || {};
                 this.v = clone(val);
                 // What is being typed stays, unless the value itself changed underneath it (an undo, another save).
-                if (!this.titleFocus || val.title !== was.title) this.titleText = val.title || '';
+                if (!this.titleFocus) this.titleText = val.title || '';   // (nor the title while it is being typed)
                 // The details box is never touched while it has the focus: a change from another browser waits (the
                 // save then keeps what is typed here, and says so: app.js nativeCardChange).
                 if (!this.detFocus) this.detText = val.description || '';
