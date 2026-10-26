@@ -417,7 +417,52 @@
         return out;
     }
 
+    /**
+     * What changed between two versions of an event, in the words a person uses ("renamed to "Game"", "one date
+     * skipped"), or null if nothing they would see differs. One entry per field of THE list (RECORD): a field added
+     * there without words here fails at load (and test/unit/event-fields.test.js), so Activity can never again list a
+     * change it has no words for as a nameless "1 event edited" (a deleted occurrence and a zone change were, stress
+     * A16: Activity kept its own field list, which had neither). `when(event)` says when an event is ("Thu, Sep 17").
+     */
+    const zoneWords = (tz) => (root.EventZone && root.EventZone.zoneCity ? root.EventZone.zoneCity(tz) : String(tz).split('/').pop().replace(/_/g, ' '));
+    const CHANGE_WORDS = {
+        title: (a, b) => (b.title && String(b.title).trim() ? `renamed to "${b.title}"` : 'title cleared'),
+        description: () => 'notes changed',
+        start: (a, b, when) => `moved to ${when(b)}`,
+        end: (a, b, when) => `moved to ${when(b)}`,
+        type: () => 'color changed',
+        isAllDay: (a, b) => (b.isAllDay ? 'made all-day' : 'given a time'),
+        repeat: () => 'repeat changed',
+        recurrencerule: () => 'repeat changed',
+        recurrenceID: (a, b) => (blank(b.recurrenceID) ? 'made its own event' : 'made part of a series'),
+        recurrenceException: (a, b) => {
+            const was = new Set(stampsOf(a.recurrenceException)), now = new Set(stampsOf(b.recurrenceException));
+            const skipped = [...now].filter((x) => !was.has(x)).length, back = [...was].filter((x) => !now.has(x)).length;
+            const out = [];
+            if (skipped) out.push(skipped === 1 ? 'one date skipped' : `${skipped} dates skipped`);
+            if (back) out.push(back === 1 ? 'a skipped date back' : `${back} skipped dates back`);
+            return out.join(', ') || 'skipped dates changed';
+        },
+        tz: (a, b) => (validZone(b.tz) ? `time zone set to ${zoneWords(validZone(b.tz))}` : 'time zone removed'),
+    };
+    for (const f of FIELDS) if (typeof CHANGE_WORDS[f] !== 'function') throw new Error(`EventStore: no words for a change of "${f}" (CHANGE_WORDS)`);
+    function describeChange(from, to, when = () => '') {
+        if (!from || !to) return null;
+        const a = normalize(from), b = normalize(to);
+        if (!('tz' in a)) a.tz = null;
+        if (!('tz' in b)) b.tz = null;
+        const words = [];
+        for (const f of FIELDS) {
+            if (sameField(f, a[f], b[f])) continue;
+            const w = CHANGE_WORDS[f](a, b, when);
+            if (w && !words.includes(w)) words.push(w);
+        }
+        return words.length ? words.join(', ') : null;
+    }
+
     EventStore.apply = applyAny;
+    EventStore.CHANGE_WORDS = CHANGE_WORDS;
+    EventStore.describeChange = describeChange;
     EventStore.changesBetween = changesBetween;
     EventStore.normalize = normalize;
     EventStore.keyOf = keyOf;

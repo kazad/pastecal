@@ -5885,19 +5885,8 @@ const CalendarVueApp = {
          * meaningful differs. Firebase drops empty values, so compare normalized.
          */
         describeEventDiff(from, to) {
-            const norm = (v) => (v === undefined || v === null || v === '') ? null : v;
-            const parts = [];
-            if (norm(from.title) !== norm(to.title)) {
-                parts.push(to.title && to.title.trim() ? `renamed to "${to.title}"` : 'title cleared');
-            }
-            if (norm(from.start) !== norm(to.start) || norm(from.end) !== norm(to.end)) {
-                parts.push(`moved to ${this.describeEventTime(to)}`);
-            }
-            if (norm(from.description) !== norm(to.description)) parts.push('notes changed');
-            if (String(from.type ?? 1) !== String(to.type ?? 1)) parts.push('color changed');
-            if (!!from.isAllDay !== !!to.isAllDay) parts.push(to.isAllDay ? 'made all-day' : 'given a time');
-            if (norm(from.recurrencerule) !== norm(to.recurrencerule)) parts.push('repeat changed');
-            return parts.length ? parts.join(', ') : null;
+            // Every field of the one list (EventStore.RECORD) has its words there (EventStore.CHANGE_WORDS).
+            return EventStore.describeChange(from, to, (e) => this.describeEventTime(e));
         },
 
         /**
