@@ -455,6 +455,9 @@ html.nk-sheet-open, html.nk-sheet-open body { overflow: hidden; }
     .nk-card.sheet { position: fixed; left: 0 !important; right: 0; top: auto !important; bottom: 0; width: auto; max-width: none; max-height: 82vh; overflow-y: auto;
         border-radius: var(--pc-radius-dialog) var(--pc-radius-dialog) 0 0; padding-bottom: env(safe-area-inset-bottom, 0px); transition: transform .18s ease; overscroll-behavior: contain; }
     .nk-card.sheet.writing { max-height: 94vh; }
+    /* A short window (a laptop at 200% zoom, 640x400): 82vh leaves the sheet too little for its title, fields and two
+       lines of details together (F22 with S10); a fixed strip of dimmed calendar above it is enough. */
+    @media (max-height: 480px) { .nk-card.sheet { max-height: calc(100vh - 56px); } }
     .nk-card.sheet::before { content: ""; display: block; width: 36px; height: 5px; border-radius: var(--pc-radius-xs); background: var(--pc-line); margin: var(--pc-space-2) auto 0; }
     .nk-card.sheet::after { box-shadow: inset 0 4px 0 var(--evc); }
     .nk-pick .nk-typed, .nk-det, .nk-card .pc-field { font-size: var(--pc-fs-lg); }   /* no zoom on focus */

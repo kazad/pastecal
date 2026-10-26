@@ -82,12 +82,13 @@ const inspect = (page, o) => page.evaluate((o) => {
   const fmt = (r) => `${Math.round(r.l)},${Math.round(r.t)} ${Math.round(r.w)}x${Math.round(r.h)}`;
   const panel = last(o.panel);
   if (!panel) return [`not open (${o.panel})`];
-  // A panel in the page's flow (docked, or Syncfusion's popups inside the calendar) moves with the page: scrolled to.
+  // A panel in the page's flow (docked, or Syncfusion's popups inside the calendar) moves with the page: it must fit
+  // the window and lie within the page, which scrolls to it. (Not scrolled here: a scroll closes Syncfusion's popups.)
   let fixed = false;
   for (let a = panel; a && a !== document.documentElement; a = a.parentElement) if (getComputedStyle(a).position === 'fixed') { fixed = true; break; }
-  if (!fixed) panel.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-  const p = R(panel);
-  if (p.l < -0.5 || p.t < -0.5 || p.r > W + 0.5 || p.b > H + 0.5) out.push(`off screen: ${fmt(p)} in ${W}x${H}`);
+  const p = R(panel), docH = document.documentElement.scrollHeight;
+  if (fixed ? (p.l < -0.5 || p.t < -0.5 || p.r > W + 0.5 || p.b > H + 0.5)
+    : (p.l < -0.5 || p.r > W + 0.5 || p.h > H + 0.5 || p.t + scrollY < -0.5 || p.b + scrollY > docH + 0.5)) out.push(`off screen: ${fmt(p)} in ${W}x${H}`);
   // What of the panel can be seen: the panel, the window, and every ancestor that clips.
   const view = (e) => { let v = { l: 0, t: 0, r: W, b: H }; for (let a = e.parentElement; a; a = a.parentElement) { const cs = getComputedStyle(a); if (cs.overflowY !== 'visible' || cs.overflowX !== 'visible') { const r = R(a); v = { l: Math.max(v.l, r.l), t: Math.max(v.t, r.t), r: Math.min(v.r, r.r), b: Math.min(v.b, r.b) }; } } return v; };
   const seen = (e) => { const r = R(e), v = view(e); return r.t >= v.t - 1 && r.b <= v.b + 1 && r.l >= v.l - 1 && r.r <= v.r + 1; };
@@ -265,8 +266,11 @@ for (const vp of Object.keys(VIEWPORTS)) for (const scheme of ['light', 'dark'])
     if (await range.isVisible()) {
       const popup = page.locator('.e-header-popup.e-popup-open, .e-schedule-popup.e-popup-open').first();
       await page.waitForTimeout(400);   // (Syncfusion's editor finishing its close: a click then can land on its way out)
+      // Scrolled to first, and settled: a scroll event that lands after the click closes Syncfusion's popup (the
+      // click's own scroll-into-view did exactly that, the frame after it opened).
+      await range.scrollIntoViewIfNeeded();
+      await page.waitForTimeout(300);
       await tapOrClick(page, range);
-      if (!(await popup.isVisible({ timeout: 1500 }).catch(() => false))) await tapOrClick(page, range);
       await expect(popup).toBeVisible();
       await check(page, found, tag, 'date-picker', { panel: '.e-header-popup.e-popup-open, .e-schedule-popup.e-popup-open' });
       await esc(page);

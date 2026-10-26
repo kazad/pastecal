@@ -541,7 +541,9 @@ const EventCard = (() => {
                     const y = r.top + Math.min(el.clientHeight, line * lh - el.scrollTop) + 4;
                     dy = y > bottom ? y - bottom : Math.min(0, y - lh - top);
                 } else dy = r.top - top;
-                if (dy > 0 && keep && keep !== el && c.contains(keep)) dy = Math.min(dy, Math.max(0, keep.getBoundingClientRect().top - top));
+                // (keep may reach the card's very top: the margin above it scrolls away, the field or title stays whole --
+                // on a 640x400 sheet those 8px are what let two lines of details show under the title, F22 with S10.)
+                if (dy > 0 && keep && keep !== el && c.contains(keep)) dy = Math.min(dy, Math.max(0, keep.getBoundingClientRect().top - cr.top));
                 if (dy) c.scrollTop += dy;
             },
             // A field focused inside the card is scrolled into its view -- not the pinned footer (always in view) or the
