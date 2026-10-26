@@ -4440,7 +4440,7 @@ const CalendarVueApp = {
         updateCurrentViewURL() {
             if (!this.calView) return;
             const currentView = this.calView.currentView();
-            const currentDate = this.calView.selectedDate().toISOString().slice(0, 10);
+            const currentDate = Utils.localDay(this.calView.selectedDate());   // the day on screen, not its UTC date (A06)
 
             // Map display name to URL parameter
             let viewParam;

@@ -76,6 +76,15 @@ function parseDate(str) {
     return date.toString() == 'Invalid Date' ? null : date;
 }
 
+// A Date's LOCAL calendar date as 'YYYY-MM-DD' (what parseDate reads back). Never toISOString().slice(0, 10): that is
+// the UTC date, the day before east of UTC at local midnight ("This view" on Sat Oct 24 in Tokyo linked Oct 23, A06).
+function localDay(date) {
+    const d = date instanceof Date ? date : new Date(date);
+    if (isNaN(d.getTime())) return null;
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
 // Expose as a single shared object
 const Utils = window.Utils || {};
 Object.assign(Utils, {
@@ -86,6 +95,7 @@ Object.assign(Utils, {
     beforeUnmount,
     sanitizeUrl,
     parseDate,
+    localDay,
 });
 window.Utils = Utils;
 

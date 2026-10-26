@@ -102,7 +102,8 @@ const TrialUsage = {
             localStorage.setItem(TRIAL_USAGE_KEY, JSON.stringify(Object.fromEntries(keep)));
         } catch (e) { /* storage blocked: may count again */ }
     },
-    today() { return new Date().toISOString().slice(0, 10); },
+    // This browser's own day (not the UTC one, which turns at 5 PM in Los Angeles).
+    today() { const d = new Date(), p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; },
     once(id, feature) {
         const all = this._all(), k = String(id).toLowerCase() + '|' + feature, d = this.today();
         if (all[k] === d) return false;
